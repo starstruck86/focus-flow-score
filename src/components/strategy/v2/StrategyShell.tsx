@@ -830,8 +830,9 @@ export function StrategyShell() {
 
   // ---------- Custom pills (programmable shortcuts) ----------
   // Create / edit / manage live on the /strategy/settings page now (no
-  // modals). The sidebar "Add Mode" / "Manage Strategy" entries and the
-  // per-workspace "+ New pill" / pencil actions all navigate there.
+  // modals). The sidebar's "Manage Strategy" entry and the per-workspace
+  // "+ New pill" / pencil actions all navigate there. ("Add Mode" was
+  // removed from the sidebar — workspace creation is settings-only.)
   const [pillsVersion, setPillsVersion] = useState(0);
 
   const handleAddPill = useCallback((surface: StrategySurfaceKey) => {

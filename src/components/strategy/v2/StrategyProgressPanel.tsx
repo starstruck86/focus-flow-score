@@ -59,7 +59,7 @@ export function StrategyProgressPanel({ active }: Props) {
   return (
     <div
       className="mx-auto sv-enter-fade"
-      style={{ maxWidth: 760, width: '100%', padding: '8px 24px 0' }}
+      style={{ maxWidth: 860, width: '100%', padding: '8px 24px 0' }}
     >
       <div
         className="rounded-[8px] px-3.5 py-2.5"

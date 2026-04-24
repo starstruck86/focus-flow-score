@@ -56,7 +56,7 @@ export function BlockedComposer({
       <div
         className="mx-auto"
         style={{
-          maxWidth: 760,
+          maxWidth: 860,
           borderRadius: 'var(--sv-radius-composer)',
           border: '1px solid hsl(var(--sv-hairline))',
           background: 'hsl(var(--sv-paper))',
