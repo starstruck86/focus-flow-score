@@ -9,6 +9,10 @@ export function SystemHealthBadge() {
 
   if (isLoading || !health) return null;
 
+  // Only surface the badge when something is actually wrong. Healthy state
+  // is invisible — system status is internal noise unless it affects the user.
+  if (health.status === 'ok') return null;
+
   const color = health.status === 'ok'
     ? 'text-green-400'
     : health.status === 'partial_failure'
