@@ -157,7 +157,24 @@ export function StrategyShell() {
   // from a surface stores the new thread under that surface's bucket so it
   // becomes the surface's "current conversation" without bleeding to others.
   // The 'work' bucket is the global all-threads view.
+  //
+  // CRITICAL: We hold this in **state** (not just a ref) so the render
+  // pipeline can synchronously derive the workspace-visible thread from
+  // `surfaceThreads[activeSurface]` — without waiting for the global
+  // `setActiveThreadId` to flush. This is what prevents a previous
+  // workspace's thread (e.g. the Work/Sephora thread) from "bleeding"
+  // into a workspace on first entry.
+  const [surfaceThreads, setSurfaceThreads] = useState<Record<string, string | null>>({});
+  // Mirror ref kept in sync so callbacks (handleSend, etc.) can read the
+  // latest mapping without re-binding on every change.
   const surfaceThreadsRef = useRef<Record<string, string | null>>({});
+  useEffect(() => { surfaceThreadsRef.current = surfaceThreads; }, [surfaceThreads]);
+  const setSurfaceThread = useCallback((key: DraftKey, id: string | null) => {
+    setSurfaceThreads((prev) => {
+      if (prev[key] === id) return prev;
+      return { ...prev, [key]: id };
+    });
+  }, []);
   // Surface that initiated the in-flight thread creation. The pending-thread
   // resolution effect uses it to bind the new thread to the right surface
   // bucket, so "send from Brainstorm" → Brainstorm owns this thread.
@@ -202,14 +219,33 @@ export function StrategyShell() {
       surfaceDraftsRef.current[prevKey] = ta.getValue();
     }
     // Snapshot the live active thread under the *previous* surface bucket.
-    // (We use the threads-hook ref via setActiveThreadId below — read here.)
-    surfaceThreadsRef.current[prevKey] = activeThreadIdRef.current;
+    // For 'work' (the global view), this captures whatever thread the user
+    // had open in the all-threads list. For mode surfaces, it's whatever
+    // they were chatting with inside that workspace.
+    setSurfaceThread(prevKey, activeThreadIdRef.current);
 
     // 2. Restore the next surface's draft + active thread.
     const incomingDraft = surfaceDraftsRef.current[nextKey] ?? '';
     if (ta?.setValue) ta.setValue(incomingDraft);
-    const incomingThread = surfaceThreadsRef.current[nextKey] ?? null;
+    // CRITICAL: only restore a thread if this surface has *previously* owned
+    // one. First entry into a workspace must NEVER inherit the previous
+    // surface's (or global Work's) active thread — it should land on the
+    // launcher/empty state. `Object.prototype.hasOwnProperty` guards against
+    // the `?? null` falling through to the global thread by accident.
+    const hasOwnThread = Object.prototype.hasOwnProperty.call(
+      surfaceThreadsRef.current, nextKey,
+    );
+    const incomingThread = hasOwnThread
+      ? (surfaceThreadsRef.current[nextKey] ?? null)
+      : null;
+    // Always set the global thread id to match what THIS surface owns
+    // (which may be null on first entry). The canvas + composer follow it.
     setActiveThreadId(incomingThread);
+    // Mirror to state so render-time isolation works without depending
+    // on the async global setActiveThreadId.
+    if (!hasOwnThread) {
+      setSurfaceThread(nextKey, null);
+    }
 
     lastSurfaceKeyRef.current = nextKey;
     // Clear any in-flight slash query so we don't carry "/library" between surfaces.
@@ -363,7 +399,7 @@ export function StrategyShell() {
     // (independent) thread.
     const boundSurface = pendingThreadSurfaceRef.current;
     if (boundSurface) {
-      surfaceThreadsRef.current[boundSurface] = pendingThreadId;
+      setSurfaceThread(boundSurface, pendingThreadId);
       pendingThreadSurfaceRef.current = null;
     }
     const queued = queuedInitialMessageRef.current;
@@ -688,10 +724,10 @@ export function StrategyShell() {
     // Thread already exists — make sure the *current* surface owns it so
     // the next surface-switch round-trip restores the right conversation.
     if (sendingFrom) {
-      surfaceThreadsRef.current[sendingFrom] = threadId;
+      setSurfaceThread(sendingFrom, threadId);
     }
     sendMessage(text, sidecar ? { pickedResourceIds: sidecar } : undefined);
-  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds]);
+  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread]);
 
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {
     setLinkPickerOpen(false);
@@ -960,6 +996,20 @@ export function StrategyShell() {
   const showSurfaceWorkspace = activeSurface !== null;
   const showInlineArtifactCard = !showSurfaceWorkspace && !!latestCompleted;
 
+  // The thread id the *current surface* owns (synchronously, from state).
+  // For mode surfaces we look it up explicitly: if the surface has never
+  // owned a thread (`hasOwnProperty` is false), the workspace must show its
+  // launcher — even if the global `threadId` is still resolving from a
+  // prior surface. For 'work' (or no surface) we fall back to the global
+  // `threadId` so the all-threads view continues to render normally.
+  const currentSurfaceKey: DraftKey = activeSurface ?? 'work';
+  const surfaceOwnsThread = currentSurfaceKey !== 'work'
+    ? Object.prototype.hasOwnProperty.call(surfaceThreads, currentSurfaceKey)
+    : true;
+  const displayThreadId: string | null = currentSurfaceKey === 'work'
+    ? threadId
+    : (surfaceOwnsThread ? (surfaceThreads[currentSurfaceKey] ?? null) : null);
+
   return (
     <div
       className="strategy-v2 flex flex-col flex-1 min-h-0 w-full"
@@ -1069,14 +1119,14 @@ export function StrategyShell() {
             onLaunchWorkflow={handleLaunchWorkflow}
             onClose={() => { setActiveSurface(null); }}
             threads={threads}
-            activeThreadId={threadId}
+            activeThreadId={displayThreadId}
             onSelectThread={(id) => {
               // Picking from within a surface's recents binds that thread
               // to the surface. The user stays in the workspace; the chat
               // for the selected thread renders in place.
               const key = lastSurfaceKeyRef.current;
               if (key && key !== 'work') {
-                surfaceThreadsRef.current[key] = id;
+                setSurfaceThread(key, id);
               }
               setActiveThreadId(id);
             }}
@@ -1085,11 +1135,11 @@ export function StrategyShell() {
             onEditPill={handleEditPill}
             runningThreadIds={runningThreadIds}
             artifactThreadIds={artifactThreadIds}
-            hasActiveThread={!!threadId}
+            hasActiveThread={!!displayThreadId}
             onNewThreadInSurface={() => {
               // Clear this surface's active thread → empty state w/ pills
               const key = lastSurfaceKeyRef.current;
-              if (key) surfaceThreadsRef.current[key] = null;
+              if (key) setSurfaceThread(key, null);
               setActiveThreadId(null);
             }}
           />
@@ -1111,8 +1161,11 @@ export function StrategyShell() {
 
         {/* Default thread canvas — shows the active conversation. Renders
             for the global Work view AND inside any surface that has its own
-            active thread, so each workspace contains its own chat. */}
-        {(!showSurfaceWorkspace || !!threadId) && (
+            active thread, so each workspace contains its own chat. We gate
+            on `displayThreadId` (not the global `threadId`) so a surface
+            entered for the first time never inherits the previous Work
+            conversation while the global state is still flushing. */}
+        {(!showSurfaceWorkspace || !!displayThreadId) && (
           <StrategyCanvas
             messages={messages}
             isLoading={isLoading}
