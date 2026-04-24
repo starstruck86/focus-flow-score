@@ -40,6 +40,24 @@ import { getAllThreadTags } from '@/lib/strategy/threadTags';
 import type { StrategySurfaceKey } from './StrategyNavSidebar';
 import type { StrategyThread } from '@/types/strategy';
 
+/** A thread enriched with explainability metadata for display. */
+interface AnnotatedThread {
+  thread: StrategyThread;
+  /** Short reason chip — e.g. "Structured artifact". */
+  reason: string;
+  /** Light grouping bucket — e.g. "Structured work". */
+  group: string;
+}
+
+/** Short label for a surface key (used by Work origin tags). */
+const SURFACE_SHORT_LABEL: Partial<Record<string, string>> = {
+  brainstorm: 'Brainstorm',
+  deep_research: 'Deep Research',
+  refine: 'Refine',
+  library: 'Library',
+  artifacts: 'Artifacts',
+};
+
 interface Props {
   surface: StrategySurfaceKey;
   onLaunchWorkflow: (def: WorkflowDef) => void;
@@ -91,6 +109,15 @@ const ARTIFACT_ICON_BY_ID: Record<string, React.ComponentType<{ className?: stri
   'artifact.custom': FilePlus,
 };
 
+/** Mode-specific forward guidance — subtle nudge for next action. */
+const SURFACE_GUIDANCE: Partial<Record<StrategySurfaceKey, string>> = {
+  brainstorm:    'Start with an idea or pick a direction above.',
+  deep_research: 'Start with a company, competitor, or question.',
+  refine:        'Paste something to improve, or pick a draft above.',
+  library:       'Pick a workflow above to draw from your knowledge.',
+  artifacts:     'Pick a template above to start a structured doc.',
+};
+
 export function SurfacePanel({
   surface, onLaunchWorkflow, onClose,
   threads, activeThreadId, onSelectThread,
@@ -118,13 +145,11 @@ export function SurfacePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threads, surface, pillsVersion]);
 
-  // ── Relevant fallback (strict, per-surface) ─────────────────────
+  // ── Relevant fallback (strict, per-surface, with reasons & groups) ──
   // Only show threads that *clearly belong* to this workspace's intent.
-  // Empty is acceptable — we never pad with random work.
-  //
-  // Strategy: keyword/structure matching against thread titles + artifact
-  // signal. Excludes debug/test/regression threads everywhere.
-  const relevantFallbackWork = useMemo(() => {
+  // Each thread carries a `reason` (why it surfaced) and a `group` (light
+  // bucket for visual organization). Empty is acceptable.
+  const relevantFallbackWork = useMemo<AnnotatedThread[]>(() => {
     if (surface === 'work' || surface === 'projects') return [];
     if (recentThreadsForSurface.length > 0) return [];
 
@@ -142,51 +167,99 @@ export function SurfacePanel({
     // Already-tagged threads belong to their own surface — don't borrow.
     const candidates = threads.filter((t) => !isExcluded(t) && !tags[t.id]);
     const hasArtifact = (t: StrategyThread) => artifactThreadIds?.has(t.id) ?? false;
+    const ageDays = (t: StrategyThread) =>
+      (Date.now() - new Date(t.updated_at).getTime()) / 86_400_000;
 
-    // Per-surface relevance keywords. A thread must MATCH to be eligible.
-    const matchers: Record<string, (t: StrategyThread) => boolean> = {
+    // Per-surface annotators. Returns null if the thread doesn't qualify;
+    // otherwise returns a `{ reason, group }` annotation.
+    type Annotator = (t: StrategyThread) => { reason: string; group: string } | null;
+    const annotators: Record<string, Annotator> = {
       brainstorm: (t) => {
         const s = (t.title || '').toLowerCase();
-        // Ideation / messaging / POV / hypothesis signals
-        return /\b(idea|ideas|brainstorm|angle|angles|hook|hooks|pov|point of view|hypothes|messaging|campaign|pitch|positioning|narrative|theme)\b/.test(s)
-          // Short, no-artifact, fresh threads also count as ideation
-          || (!hasArtifact(t) && s.length > 0 && s.length < 50);
+        if (/\b(idea|ideas|brainstorm|angle|angles|hook|hooks|pov|point of view|hypothes)\b/.test(s))
+          return { reason: 'Ideation language', group: 'Ideation' };
+        if (/\b(messaging|campaign|pitch|positioning|narrative|theme)\b/.test(s))
+          return { reason: 'Messaging direction', group: 'Messaging' };
+        if (!hasArtifact(t) && (t.title || '').length > 0 && (t.title || '').length < 50)
+          return { reason: 'Short, no structured output', group: 'Early-stage' };
+        return null;
       },
       deep_research: (t) => {
         const s = (t.title || '').toLowerCase();
-        return /\b(research|analysis|analyze|brief|deep dive|deep-dive|account|company|competitor|competitive|market|industry|risk|risks|gap|gaps|landscape|teardown|profile)\b/.test(s)
-          // Artifact-bearing threads with substantive titles read as research
-          || (hasArtifact(t) && s.length >= 25);
+        if (hasArtifact(t) && (t.title || '').length >= 25)
+          return { reason: 'Structured artifact', group: 'Structured work' };
+        if (/\b(research|analysis|analyze|brief|deep dive|deep-dive|teardown|profile)\b/.test(s))
+          return { reason: 'Long-form analysis', group: 'Structured work' };
+        if (/\b(account|company|competitor|competitive|market|industry|landscape)\b/.test(s))
+          return { reason: 'Account / market focus', group: 'Recent analysis' };
+        if (/\b(risk|risks|gap|gaps)\b/.test(s))
+          return { reason: 'Risk / gap framing', group: 'Recent analysis' };
+        return null;
       },
       refine: (t) => {
         const s = (t.title || '').toLowerCase();
-        return /\b(refine|rewrite|edit|tighten|polish|improve|sharpen|revise|draft|email|follow.?up|exec|executive|tone|shorten|condense)\b/.test(s)
-          // Threads with an artifact attached are typically refinement targets
-          || hasArtifact(t);
+        if (hasArtifact(t) && ageDays(t) < 3)
+          return { reason: 'Recently edited draft', group: 'Drafts to polish' };
+        if (hasArtifact(t))
+          return { reason: 'Draft with artifact', group: 'Drafts to polish' };
+        if (/\b(refine|rewrite|edit|tighten|polish|improve|sharpen|revise)\b/.test(s))
+          return { reason: 'Refinement language', group: 'Edits in progress' };
+        if (/\b(draft|email|follow.?up|exec|executive|tone|shorten|condense)\b/.test(s))
+          return { reason: 'Needs polishing', group: 'Edits in progress' };
+        return null;
       },
       library: (t) => {
         const s = (t.title || '').toLowerCase();
-        return /\b(framework|synthesis|pattern|insight|insights|playbook|library|knowledge|principle|principles|methodology|model)\b/.test(s);
+        if (/\b(framework|methodology|model|playbook)\b/.test(s))
+          return { reason: 'Framework work', group: 'Frameworks' };
+        if (/\b(synthesis|pattern|insight|insights|principle|principles)\b/.test(s))
+          return { reason: 'Synthesis / pattern', group: 'Insights' };
+        if (/\b(library|knowledge)\b/.test(s))
+          return { reason: 'Knowledge work', group: 'Insights' };
+        return null;
       },
       artifacts: (t) => {
+        if (!hasArtifact(t)) return null;
         const s = (t.title || '').toLowerCase();
-        return /\b(template|artifact|discovery prep|deal review|outreach plan|demo plan|follow.?up|prep|plan)\b/.test(s)
-          && hasArtifact(t);
+        if (/\b(template)\b/.test(s))
+          return { reason: 'Template work', group: 'Templates' };
+        if (/\b(discovery prep|deal review|outreach plan|demo plan|follow.?up|prep|plan)\b/.test(s))
+          return { reason: 'Structured artifact', group: 'Generated artifacts' };
+        return { reason: 'Artifact attached', group: 'Generated artifacts' };
       },
     };
 
-    const matcher = matchers[surface];
-    if (!matcher) return [];
+    const annotate = annotators[surface];
+    if (!annotate) return [];
 
-    const matched = candidates.filter(matcher);
-    if (matched.length === 0) return [];
+    const annotated: AnnotatedThread[] = [];
+    for (const t of candidates) {
+      const a = annotate(t);
+      if (!a) continue;
+      annotated.push({ thread: t, reason: a.reason, group: a.group });
+    }
+    if (annotated.length === 0) return [];
 
-    // Sort matched threads by recency for display.
-    return matched
-      .slice()
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-      .slice(0, 4);
+    return annotated
+      .sort((a, b) => new Date(b.thread.updated_at).getTime() - new Date(a.thread.updated_at).getTime())
+      .slice(0, 6);
   }, [threads, surface, recentThreadsForSurface.length, artifactThreadIds]);
+
+  // Annotate the user's *own* tagged threads too, so they get the same
+  // explainability chips/grouping as fallback threads.
+  const annotatedRecentForSurface = useMemo<AnnotatedThread[]>(() => {
+    if (recentThreadsForSurface.length === 0) return [];
+    const hasArtifact = (t: StrategyThread) => artifactThreadIds?.has(t.id) ?? false;
+    const isRunning = (t: StrategyThread) => runningThreadIds?.has(t.id) ?? false;
+    return recentThreadsForSurface.map((t) => {
+      // Light, surface-aware reasoning for owned threads.
+      let reason = 'You ran this here';
+      let group = 'Your work';
+      if (isRunning(t)) { reason = 'Running now'; group = 'Active'; }
+      else if (hasArtifact(t)) { reason = 'Has artifact'; group = 'With artifact'; }
+      return { thread: t, reason, group };
+    });
+  }, [recentThreadsForSurface, artifactThreadIds, runningThreadIds]);
 
   // ── Work surface: all threads, sorted active/ready/recent ─────
   const workThreads = useMemo(() => {
@@ -246,6 +319,15 @@ export function SurfacePanel({
             <p className="text-[12.5px] mt-0.5" style={{ color: 'hsl(var(--sv-muted))' }}>
               {meta.description}
             </p>
+            {SURFACE_GUIDANCE[surface] && (
+              <p
+                className="text-[11.5px] mt-1.5 italic"
+                style={{ color: 'hsl(var(--sv-clay) / 0.85)' }}
+                data-testid={`surface-guidance-${surface}`}
+              >
+                {SURFACE_GUIDANCE[surface]}
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -304,7 +386,7 @@ export function SurfacePanel({
           {surface !== 'work' && surface !== 'projects' && (
             <RecentInSurface
               label={meta.label}
-              threads={recentThreadsForSurface}
+              ownThreads={annotatedRecentForSurface}
               fallbackThreads={relevantFallbackWork}
               surface={surface}
               activeThreadId={activeThreadId}
@@ -466,23 +548,33 @@ function CustomPillsRow({
 // ───────────────── Recent in surface ─────────────────
 
 function RecentInSurface({
-  label, surface, threads, fallbackThreads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
+  label, surface, ownThreads, fallbackThreads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
 }: {
   label: string;
   surface: StrategySurfaceKey;
-  threads: StrategyThread[];
-  fallbackThreads: StrategyThread[];
+  ownThreads: AnnotatedThread[];
+  fallbackThreads: AnnotatedThread[];
   activeThreadId: string | null;
   onSelect: (id: string) => void;
   runningThreadIds?: Set<string>;
   artifactThreadIds?: Set<string>;
 }) {
-  const hasOwn = threads.length > 0;
+  const hasOwn = ownThreads.length > 0;
   const hasFallback = !hasOwn && fallbackThreads.length > 0;
   const heading = hasOwn ? `Recent in ${label}` : (hasFallback ? 'Relevant recent work' : `Recent in ${label}`);
-  const showThreads = hasOwn ? threads : (hasFallback ? fallbackThreads : []);
+  const annotated: AnnotatedThread[] = hasOwn ? ownThreads : (hasFallback ? fallbackThreads : []);
 
-  // Mode-specific microcopy — gives each surface a distinct identity.
+  // Group annotated threads by their `group` field, preserving insertion order.
+  const groups = useMemo(() => {
+    const map = new Map<string, AnnotatedThread[]>();
+    for (const a of annotated) {
+      const arr = map.get(a.group) ?? [];
+      arr.push(a);
+      map.set(a.group, arr);
+    }
+    return Array.from(map.entries());
+  }, [annotated]);
+
   const fallbackHint = (() => {
     if (!hasFallback) return null;
     switch (surface) {
@@ -513,21 +605,35 @@ function RecentInSurface({
           {heading}
         </span>
       </div>
-      {showThreads.length > 0 ? (
-        <>
-          <ThreadRows
-            threads={showThreads}
-            activeThreadId={activeThreadId}
-            onSelect={onSelect}
-            runningThreadIds={runningThreadIds}
-            artifactThreadIds={artifactThreadIds}
-          />
+      {annotated.length > 0 ? (
+        <div className="space-y-3">
+          {groups.map(([groupName, items]) => (
+            <div key={groupName}>
+              {groups.length > 1 && (
+                <div
+                  className="text-[10px] font-medium tracking-[0.08em] mb-1.5"
+                  style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
+                  data-testid={`group-${groupName.toLowerCase().replace(/\s+/g, '-')}`}
+                >
+                  {groupName}
+                </div>
+              )}
+              <ThreadRows
+                items={items}
+                activeThreadId={activeThreadId}
+                onSelect={onSelect}
+                runningThreadIds={runningThreadIds}
+                artifactThreadIds={artifactThreadIds}
+                showReason
+              />
+            </div>
+          ))}
           {fallbackHint && (
-            <p className="mt-1.5 text-[11px]" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
+            <p className="mt-1 text-[11px]" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
               {fallbackHint}
             </p>
           )}
-        </>
+        </div>
       ) : (
         <div
           className="rounded-[8px] px-3 py-2.5 text-[12px]"
@@ -555,6 +661,20 @@ function WorkThreadList({
   runningThreadIds?: Set<string>;
   artifactThreadIds?: Set<string>;
 }) {
+  // Annotate with origin tags so each row can show "→ Deep Research" etc.
+  const items = useMemo<AnnotatedThread[]>(() => {
+    const tags = getAllThreadTags();
+    return threads.map((t) => {
+      const tag = tags[t.id];
+      const origin = tag ? SURFACE_SHORT_LABEL[tag] : null;
+      return {
+        thread: t,
+        reason: origin ? `From ${origin}` : 'Freeform',
+        group: origin ?? 'Freeform',
+      };
+    });
+  }, [threads]);
+
   if (threads.length === 0) {
     return (
       <div
@@ -576,36 +696,45 @@ function WorkThreadList({
   }
   return (
     <ThreadRows
-      threads={threads}
+      items={items}
       activeThreadId={activeThreadId}
       onSelect={onSelect}
       runningThreadIds={runningThreadIds}
       artifactThreadIds={artifactThreadIds}
+      showOriginTag
     />
   );
 }
 
 function ThreadRows({
-  threads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
+  items, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
+  showReason, showOriginTag,
 }: {
-  threads: StrategyThread[];
+  items: AnnotatedThread[];
   activeThreadId: string | null;
   onSelect: (id: string) => void;
   runningThreadIds?: Set<string>;
   artifactThreadIds?: Set<string>;
+  /** Show the "why this surfaced" reason chip below the title. */
+  showReason?: boolean;
+  /** Show the originating mode tag (e.g. "→ Deep Research") inline. */
+  showOriginTag?: boolean;
 }) {
   return (
     <ul className="space-y-1">
-      {threads.map((t) => {
+      {items.map(({ thread: t, reason, group }) => {
         const isActive = activeThreadId === t.id;
         const isRunning = runningThreadIds?.has(t.id) ?? false;
         const hasArtifact = artifactThreadIds?.has(t.id) ?? false;
         const isUntitled = !t.title || /^untitled/i.test(t.title);
+        // Origin tag: only show when group looks like a real surface label
+        // and not the default "Freeform"/"Your work" buckets.
+        const originTag = showOriginTag && group !== 'Freeform' ? group : null;
         return (
           <li key={t.id}>
             <button
               onClick={() => onSelect(t.id)}
-              className="w-full text-left px-3 py-2 rounded-[8px] flex items-center gap-2 transition-colors"
+              className="w-full text-left px-3 py-2 rounded-[8px] flex flex-col gap-0.5 transition-colors"
               style={{
                 background: isActive ? 'hsl(var(--sv-clay) / 0.08)' : 'transparent',
                 border: '1px solid ' + (isActive ? 'hsl(var(--sv-clay) / 0.30)' : 'hsl(var(--sv-hairline))'),
@@ -614,21 +743,46 @@ function ThreadRows({
               }}
               onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
               onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-              title={t.title || 'Untitled thread'}
+              title={reason ? `${t.title || 'Untitled thread'} — ${reason}` : (t.title || 'Untitled thread')}
               data-testid={`surface-thread-${t.id}`}
             >
-              <span className="flex-1 min-w-0 truncate text-[13px]" style={{ fontWeight: isActive ? 600 : 400 }}>
-                {t.title || 'Untitled thread'}
-              </span>
-              {isRunning && (
-                <Loader2 className="h-3 w-3 shrink-0 animate-spin" style={{ color: 'hsl(var(--sv-clay))' }} aria-label="Running" />
+              <div className="flex items-center gap-2 w-full">
+                <span className="flex-1 min-w-0 truncate text-[13px]" style={{ fontWeight: isActive ? 600 : 400 }}>
+                  {t.title || 'Untitled thread'}
+                </span>
+                {originTag && (
+                  <span
+                    className="text-[10px] shrink-0 px-1.5 py-px rounded inline-flex items-center gap-0.5"
+                    style={{
+                      background: 'hsl(var(--sv-clay) / 0.08)',
+                      color: 'hsl(var(--sv-clay))',
+                      fontWeight: 500,
+                    }}
+                    data-testid={`origin-tag-${t.id}`}
+                  >
+                    <ArrowRight className="h-2.5 w-2.5" />
+                    {originTag}
+                  </span>
+                )}
+                {isRunning && (
+                  <Loader2 className="h-3 w-3 shrink-0 animate-spin" style={{ color: 'hsl(var(--sv-clay))' }} aria-label="Running" />
+                )}
+                {hasArtifact && !isRunning && (
+                  <FileText className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-clay) / 0.7)' }} aria-label="Has artifact" />
+                )}
+                <span className="text-[10.5px] shrink-0 tabular-nums" style={{ color: 'hsl(var(--sv-muted))' }}>
+                  {relativeTime(t.updated_at)}
+                </span>
+              </div>
+              {showReason && reason && (
+                <span
+                  className="text-[10.5px] pl-px"
+                  style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
+                  data-testid={`reason-${t.id}`}
+                >
+                  {reason}
+                </span>
               )}
-              {hasArtifact && !isRunning && (
-                <FileText className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-clay) / 0.7)' }} aria-label="Has artifact" />
-              )}
-              <span className="text-[10.5px] shrink-0 tabular-nums" style={{ color: 'hsl(var(--sv-muted))' }}>
-                {relativeTime(t.updated_at)}
-              </span>
             </button>
           </li>
         );
