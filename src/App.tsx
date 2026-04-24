@@ -128,6 +128,20 @@ const App = () => (
                       </Suspense>
                     </ProtectedPage>
                   } />
+                  <Route path="/strategy/settings" element={
+                    <ProtectedPage routeName="Strategy Settings">
+                      <Suspense fallback={<LazyFallback />}>
+                        <StrategySettings />
+                      </Suspense>
+                    </ProtectedPage>
+                  } />
+                  <Route path="/strategy/settings/pill/:pillId" element={
+                    <ProtectedPage routeName="Strategy Settings · Pill">
+                      <Suspense fallback={<LazyFallback />}>
+                        <StrategySettings />
+                      </Suspense>
+                    </ProtectedPage>
+                  } />
                   <Route path="/ops" element={
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback text="Loading diagnostics…" />}>
