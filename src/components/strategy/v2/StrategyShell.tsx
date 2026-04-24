@@ -216,37 +216,32 @@ export function StrategyShell() {
       return;
     }
 
-    // 1. Save the current draft + active thread for the surface we're leaving.
+    // 1. Save the current draft for the surface we're leaving. Drafts are
+    // preserved per surface so a brainstorm half-thought never bleeds into
+    // Deep Research and is still there when the user comes back.
     if (ta?.getValue) {
       surfaceDraftsRef.current[prevKey] = ta.getValue();
     }
-    // Snapshot the live active thread under the *previous* surface bucket.
-    // For 'work' (the global view), this captures whatever thread the user
-    // had open in the all-threads list. For mode surfaces, it's whatever
-    // they were chatting with inside that workspace.
-    setSurfaceThread(prevKey, activeThreadIdRef.current);
+    // We intentionally do NOT persist `activeThreadId` per surface. The
+    // product contract says: workspaces ALWAYS reset to their launcher when
+    // re-entered. The user must explicitly click a thread (from recents or
+    // search) to open one. This keeps the mental model crisp:
+    //   • Workspace = launcher to start something new
+    //   • Thread = something already in progress (selected explicitly)
 
-    // 2. Restore the next surface's draft + active thread.
+    // 2. Restore the next surface's draft. Always reset the active thread to
+    // null on workspace entry — the launcher is the source of truth.
     const incomingDraft = surfaceDraftsRef.current[nextKey] ?? '';
     if (ta?.setValue) ta.setValue(incomingDraft);
-    // CRITICAL: only restore a thread if this surface has *previously* owned
-    // one. First entry into a workspace must NEVER inherit the previous
-    // surface's (or global Work's) active thread — it should land on the
-    // launcher/empty state. `Object.prototype.hasOwnProperty` guards against
-    // the `?? null` falling through to the global thread by accident.
-    const hasOwnThread = Object.prototype.hasOwnProperty.call(
-      surfaceThreadsRef.current, nextKey,
-    );
-    const incomingThread = hasOwnThread
-      ? (surfaceThreadsRef.current[nextKey] ?? null)
-      : null;
-    // Always set the global thread id to match what THIS surface owns
-    // (which may be null on first entry). The canvas + composer follow it.
-    setActiveThreadId(incomingThread);
-    // Mirror to state so render-time isolation works without depending
-    // on the async global setActiveThreadId.
-    if (!hasOwnThread) {
+    if (nextKey !== 'work') {
+      // Force launcher: clear any prior surface→thread binding and detach the
+      // global active thread so the chat canvas does not render.
       setSurfaceThread(nextKey, null);
+      setActiveThreadId(null);
+    } else {
+      // 'work' is the global command center — keep the active thread (if any)
+      // so users returning to Work still see what they were on.
+      setActiveThreadId(activeThreadIdRef.current);
     }
 
     lastSurfaceKeyRef.current = nextKey;
@@ -1378,6 +1373,21 @@ export function StrategyShell() {
         surface={pillEditorSurface}
         onClose={() => { setPillEditorOpen(false); setEditingPill(null); }}
         onSaved={handlePillSaved}
+      />
+      {/* Manage Strategy — full configuration surface for workspaces & pills.
+          Opened from the sidebar (replaces the broken "Add Mode" entry). */}
+      <ManageStrategySheet
+        open={manageOpen}
+        onClose={() => setManageOpen(false)}
+        onAddPill={(surface) => {
+          setManageOpen(false);
+          handleAddPill(surface);
+        }}
+        onEditPill={(pill) => {
+          setManageOpen(false);
+          handleEditPill(pill);
+        }}
+        pillsVersion={pillsVersion}
       />
       {/* Promote-to-Library — explicit, never automatic. Outputs are contextual by default. */}
       <PromoteToLibrarySheet

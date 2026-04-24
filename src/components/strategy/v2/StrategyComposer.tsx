@@ -142,7 +142,7 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
 
   return (
     <div
-      className="w-full px-6 pb-8 pt-2"
+      className="w-full px-6 pb-4 pt-1"
       style={{
         background: 'hsl(var(--sv-paper))',
       }}
