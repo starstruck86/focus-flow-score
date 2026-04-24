@@ -351,6 +351,17 @@ export function StrategyShell() {
     if (!pendingThreadId || activeThread?.id !== pendingThreadId) return;
     setPendingThreadId(null);
     setIsCreatingThread(false);
+    // Bind this fresh thread to whatever surface launched it. The launching
+    // surface key is captured at send-time (see handleSend) and stored under
+    // `pendingThreadSurfaceRef`. This is what makes "send from Brainstorm"
+    // mean "Brainstorm now owns this conversation" — switching surfaces and
+    // coming back returns to it; switching to Refine shows Refine's own
+    // (independent) thread.
+    const boundSurface = pendingThreadSurfaceRef.current;
+    if (boundSurface) {
+      surfaceThreadsRef.current[boundSurface] = pendingThreadId;
+      pendingThreadSurfaceRef.current = null;
+    }
     const queued = queuedInitialMessageRef.current;
     queuedInitialMessageRef.current = null;
     requestAnimationFrame(() => composerRef.current?.focus());
