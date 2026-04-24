@@ -100,8 +100,8 @@ export const StrategyTopBar = forwardRef<HTMLDivElement, Props>(function Strateg
           onClick={onNewThread}
           className="h-7 px-2 rounded-[4px] sv-hover-bg text-[14px] leading-none"
           style={{ color: 'hsl(var(--sv-muted))' }}
-          title="New thread (⌘⇧N)"
-          aria-label="New thread"
+          title="New Work (⌘⇧N)"
+          aria-label="New Work"
         >
           +
         </button>
