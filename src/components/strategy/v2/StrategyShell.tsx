@@ -151,6 +151,18 @@ export function StrategyShell() {
     [],
   );
 
+  // ── Per-surface active thread ────────────────────────────────────────────
+  // Each workspace remembers the thread it last had open. Switching surfaces
+  // restores that surface's thread (or null = empty/launch state). Sending
+  // from a surface stores the new thread under that surface's bucket so it
+  // becomes the surface's "current conversation" without bleeding to others.
+  // The 'work' bucket is the global all-threads view.
+  const surfaceThreadsRef = useRef<Record<string, string | null>>({});
+  // Surface that initiated the in-flight thread creation. The pending-thread
+  // resolution effect uses it to bind the new thread to the right surface
+  // bucket, so "send from Brainstorm" → Brainstorm owns this thread.
+  const pendingThreadSurfaceRef = useRef<DraftKey | null>(null);
+
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
@@ -167,31 +179,42 @@ export function StrategyShell() {
   // in the composer (the composer only ever shows the human title).
   const [pendingResourceIds, setPendingResourceIds] = useState<string[]>([]);
 
-  // ── Surface-switch draft swap ────────────────────────────────────────────
-  // When the user moves between workspaces, save the in-flight draft under
-  // the previous surface and restore the next surface's draft. This makes
-  // each workspace feel like its own independent starting surface — a draft
-  // typed in Brainstorm never bleeds into Deep Research.
+  // ── Surface-switch swap (drafts + active thread) ─────────────────────────
+  // When the user moves between workspaces, save the in-flight draft AND the
+  // currently active thread id under the previous surface, then restore both
+  // for the next surface. This makes each workspace feel like its own
+  // independent starting surface — a draft typed in Brainstorm never bleeds
+  // into Deep Research, and the conversation you opened in Deep Research is
+  // still there when you come back to it.
   useEffect(() => {
     const ta = composerRef.current as
       (HTMLTextAreaElement & { getValue?: () => string; setValue?: (t: string) => void })
       | null;
-    if (!ta?.getValue || !ta?.setValue) {
-      // Composer not mounted yet — just remember the new key.
-      lastSurfaceKeyRef.current = draftKeyOf(activeSurface);
-      return;
-    }
     const prevKey = lastSurfaceKeyRef.current;
     const nextKey = draftKeyOf(activeSurface);
-    if (prevKey === nextKey) return;
-    // Persist the current draft for the surface we're leaving.
-    surfaceDraftsRef.current[prevKey] = ta.getValue();
-    // Load the draft for the surface we're entering (default = empty).
-    const incoming = surfaceDraftsRef.current[nextKey] ?? '';
-    ta.setValue(incoming);
+    if (prevKey === nextKey) {
+      lastSurfaceKeyRef.current = nextKey;
+      return;
+    }
+
+    // 1. Save the current draft + active thread for the surface we're leaving.
+    if (ta?.getValue) {
+      surfaceDraftsRef.current[prevKey] = ta.getValue();
+    }
+    // Snapshot the live active thread under the *previous* surface bucket.
+    // (We use the threads-hook ref via setActiveThreadId below — read here.)
+    surfaceThreadsRef.current[prevKey] = activeThreadIdRef.current;
+
+    // 2. Restore the next surface's draft + active thread.
+    const incomingDraft = surfaceDraftsRef.current[nextKey] ?? '';
+    if (ta?.setValue) ta.setValue(incomingDraft);
+    const incomingThread = surfaceThreadsRef.current[nextKey] ?? null;
+    setActiveThreadId(incomingThread);
+
     lastSurfaceKeyRef.current = nextKey;
     // Clear any in-flight slash query so we don't carry "/library" between surfaces.
     setSlashQuery(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSurface, draftKeyOf]);
 
   // ----- Cycle 1 Canary operator workflow -----
@@ -220,6 +243,10 @@ export function StrategyShell() {
   }, []);
 
   const threadId = activeThread?.id ?? null;
+  // Live ref so the surface-swap effect can read the latest thread id without
+  // re-subscribing or carrying a stale closure.
+  const activeThreadIdRef = useRef<string | null>(threadId);
+  useEffect(() => { activeThreadIdRef.current = threadId; }, [threadId]);
 
   const { messages, isLoading, isSending, sendMessage } = useStrategyMessages(threadId);
   const { linkedContext } = useLinkedObjectContext(activeThread);
@@ -328,6 +355,17 @@ export function StrategyShell() {
     if (!pendingThreadId || activeThread?.id !== pendingThreadId) return;
     setPendingThreadId(null);
     setIsCreatingThread(false);
+    // Bind this fresh thread to whatever surface launched it. The launching
+    // surface key is captured at send-time (see handleSend) and stored under
+    // `pendingThreadSurfaceRef`. This is what makes "send from Brainstorm"
+    // mean "Brainstorm now owns this conversation" — switching surfaces and
+    // coming back returns to it; switching to Refine shows Refine's own
+    // (independent) thread.
+    const boundSurface = pendingThreadSurfaceRef.current;
+    if (boundSurface) {
+      surfaceThreadsRef.current[boundSurface] = pendingThreadId;
+      pendingThreadSurfaceRef.current = null;
+    }
     const queued = queuedInitialMessageRef.current;
     queuedInitialMessageRef.current = null;
     requestAnimationFrame(() => composerRef.current?.focus());
@@ -615,16 +653,13 @@ export function StrategyShell() {
 
   const handleSend = useCallback((text: string) => {
     if (pendingThreadId || isCreatingThread || isSending) return;
-    // Clear the per-surface draft for the workspace we're sending from and
-    // exit that workspace so the conversation/canvas takes focus. This keeps
-    // each workspace as a clean launch surface, never a sticky chat view.
+    // The surface we're sending from. Each workspace owns its own thread —
+    // sending stays in that workspace and binds the resulting thread to it.
     const sendingFrom = lastSurfaceKeyRef.current;
-    if (sendingFrom && sendingFrom !== 'work') {
+    // Clear the per-surface draft for the workspace we're sending from
+    // (the message has just been promoted into the conversation).
+    if (sendingFrom) {
       surfaceDraftsRef.current[sendingFrom] = '';
-      // Re-pin the key so the swap effect doesn't snapshot the (now empty)
-      // composer back into the previous bucket on the way out.
-      lastSurfaceKeyRef.current = 'work';
-      setActiveSurface(null);
     }
     // Snapshot + clear sidecar IDs synchronously so a second send can't
     // accidentally re-attach the same picked resource.
@@ -639,6 +674,9 @@ export function StrategyShell() {
           queuedInitialMessageRef.current = text;
           // Re-stash so the queued send (after thread mounts) still sees them.
           if (sidecar) setPendingResourceIds(sidecar);
+          // Remember which surface owns this new thread so the resolution
+          // effect can bind it to the right bucket.
+          pendingThreadSurfaceRef.current = sendingFrom ?? 'work';
           setPendingThreadId(newId);
         } else {
           setIsCreatingThread(false);
@@ -646,6 +684,11 @@ export function StrategyShell() {
         }
       })();
       return;
+    }
+    // Thread already exists — make sure the *current* surface owns it so
+    // the next surface-switch round-trip restores the right conversation.
+    if (sendingFrom) {
+      surfaceThreadsRef.current[sendingFrom] = threadId;
     }
     sendMessage(text, sidecar ? { pickedResourceIds: sidecar } : undefined);
   }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds]);
@@ -788,8 +831,9 @@ export function StrategyShell() {
     const sendNow = def.runMode === 'send' && !hasUnresolvedPlaceholders(compiled);
 
     if (sendNow) {
-      // Send-immediately: leave the surface so the thread/canvas takes focus.
-      setActiveSurface(null);
+      // Send-immediately: stay in the current workspace. The thread spawned
+      // by this send becomes this surface's active conversation. handleSend
+      // binds the new thread to lastSurfaceKeyRef.current automatically.
       const launchedFrom = launchSurfaceRef.current;
       launchSurfaceRef.current = null;
       if (launchedFrom && launchedFrom !== 'work' && launchedFrom !== 'projects') {
@@ -833,7 +877,7 @@ export function StrategyShell() {
         pendingThreadTagRef.current = launchedFrom;
       }
     }
-    setActiveSurface(null);
+    // Stay in the launching surface — the new thread becomes its own.
     handleSend(compiledPrompt);
     requestAnimationFrame(() => composerRef.current?.focus());
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1015,9 +1059,10 @@ export function StrategyShell() {
         <StrategyProgressPanel active={activeRun} />
 
         {/* Surface panel — direct entry for Brainstorm / Deep Research /
-            Refine / Library / Artifacts / Projects / Work. When active, it
-            owns the main workspace body so default thread chrome does not
-            visually compete with it. */}
+            Refine / Library / Artifacts / Projects / Work. When the surface
+            has an active thread, the panel collapses to a compact header
+            and the chat canvas renders below — keeping the workspace as the
+            container for its own conversation. */}
         {showSurfaceWorkspace && (
           <SurfacePanel
             surface={activeSurface!}
@@ -1025,12 +1070,28 @@ export function StrategyShell() {
             onClose={() => { setActiveSurface(null); }}
             threads={threads}
             activeThreadId={threadId}
-            onSelectThread={(id) => { setActiveThreadId(id); setActiveSurface(null); }}
+            onSelectThread={(id) => {
+              // Picking from within a surface's recents binds that thread
+              // to the surface. The user stays in the workspace; the chat
+              // for the selected thread renders in place.
+              const key = lastSurfaceKeyRef.current;
+              if (key && key !== 'work') {
+                surfaceThreadsRef.current[key] = id;
+              }
+              setActiveThreadId(id);
+            }}
             pillsVersion={pillsVersion}
             onAddPill={handleAddPill}
             onEditPill={handleEditPill}
             runningThreadIds={runningThreadIds}
             artifactThreadIds={artifactThreadIds}
+            hasActiveThread={!!threadId}
+            onNewThreadInSurface={() => {
+              // Clear this surface's active thread → empty state w/ pills
+              const key = lastSurfaceKeyRef.current;
+              if (key) surfaceThreadsRef.current[key] = null;
+              setActiveThreadId(null);
+            }}
           />
         )}
 
@@ -1048,9 +1109,10 @@ export function StrategyShell() {
           </div>
         )}
 
-        {/* Default thread canvas — hidden while a surface workspace is active
-            so the surface fully owns the main body. The composer stays. */}
-        {!showSurfaceWorkspace && (
+        {/* Default thread canvas — shows the active conversation. Renders
+            for the global Work view AND inside any surface that has its own
+            active thread, so each workspace contains its own chat. */}
+        {(!showSurfaceWorkspace || !!threadId) && (
           <StrategyCanvas
             messages={messages}
             isLoading={isLoading}
