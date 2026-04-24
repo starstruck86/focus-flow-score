@@ -11,9 +11,13 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { StrategyMessage as StrategyMessageT } from '@/types/strategy';
+import { MessageActions } from './MessageActions';
 
 interface Props {
   message: StrategyMessageT;
+  /** When provided on assistant messages, renders quick-iteration actions
+   *  (Regenerate / Shorten / Expand / Improve) underneath the response. */
+  onQuickAction?: (prompt: string) => void;
 }
 
 /** Strict text extractor — never renders raw provider/debug payloads. */
