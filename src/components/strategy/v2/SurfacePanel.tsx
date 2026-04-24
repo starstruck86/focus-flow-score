@@ -116,6 +116,20 @@ export function SurfacePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threads, surface, pillsVersion]);
 
+  // ── Fallback: recent Work threads (shown when surface has none) ─
+  // Keeps the workspace from ever feeling empty: if the user hasn't run a
+  // pill in this surface yet, we surface their recent freeform work so
+  // there's always something useful one tap away.
+  const fallbackRecentWork = useMemo(() => {
+    if (surface === 'work' || surface === 'projects') return [];
+    if (recentThreadsForSurface.length > 0) return [];
+    const isTest = (t: StrategyThread) => /^\[benchmark\]/i.test(t.title || '');
+    const tags = getAllThreadTags();
+    return threads
+      .filter((t) => !isTest(t) && !tags[t.id]) // freeform / Work only
+      .slice(0, 4);
+  }, [threads, surface, recentThreadsForSurface.length]);
+
   // ── Work surface: all threads, sorted active/ready/recent ─────
   const workThreads = useMemo(() => {
     if (surface !== 'work') return [];
@@ -218,6 +232,7 @@ export function SurfacePanel({
             <RecentInSurface
               label={meta.label}
               threads={recentThreadsForSurface}
+              fallbackThreads={fallbackRecentWork}
               activeThreadId={activeThreadId}
               onSelect={onSelectThread}
               runningThreadIds={runningThreadIds}
@@ -377,25 +392,30 @@ function CustomPillsRow({
 // ───────────────── Recent in surface ─────────────────
 
 function RecentInSurface({
-  label, threads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
+  label, threads, fallbackThreads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
 }: {
   label: string;
   threads: StrategyThread[];
+  fallbackThreads: StrategyThread[];
   activeThreadId: string | null;
   onSelect: (id: string) => void;
   runningThreadIds?: Set<string>;
   artifactThreadIds?: Set<string>;
 }) {
+  const hasOwn = threads.length > 0;
+  const hasFallback = !hasOwn && fallbackThreads.length > 0;
+  const heading = hasOwn ? `Recent in ${label}` : (hasFallback ? 'From your recent work' : `Recent in ${label}`);
+  const showThreads = hasOwn ? threads : (hasFallback ? fallbackThreads : []);
   return (
     <div>
       <div className="flex items-center gap-1.5 mb-2">
         <span className="text-[10.5px] font-medium uppercase tracking-[0.09em]" style={{ color: 'hsl(var(--sv-muted))' }}>
-          Recent in {label}
+          {heading}
         </span>
       </div>
-      {threads.length > 0 ? (
+      {showThreads.length > 0 ? (
         <ThreadRows
-          threads={threads}
+          threads={showThreads}
           activeThreadId={activeThreadId}
           onSelect={onSelect}
           runningThreadIds={runningThreadIds}
@@ -410,7 +430,7 @@ function RecentInSurface({
             color: 'hsl(var(--sv-muted))',
           }}
         >
-          No recent work here yet.
+          Tap a pill above to start your first {label} thread.
         </div>
       )}
     </div>
