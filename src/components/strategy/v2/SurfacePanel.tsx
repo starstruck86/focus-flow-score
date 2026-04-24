@@ -62,11 +62,13 @@ interface Props {
 const SURFACE_HEADER: Record<StrategySurfaceKey, {
   label: string;
   description: string;
+  /** Short identity tag — communicates the "feel" of the mode. */
+  tag?: string;
   icon: React.ComponentType<{ className?: string }>;
 }> = {
-  brainstorm:    { label: 'Brainstorm',    icon: Lightbulb,    description: 'Generate ideas, angles, hooks, and points of view.' },
-  deep_research: { label: 'Deep Research', icon: Microscope,   description: 'Analyze companies, competitors, and markets in depth.' },
-  refine:        { label: 'Refine',        icon: Wand2,        description: 'Improve, tighten, and elevate existing output.' },
+  brainstorm:    { label: 'Brainstorm',    icon: Lightbulb,    tag: 'Generative',  description: 'Spin up angles, hooks, and points of view fast — quantity over polish.' },
+  deep_research: { label: 'Deep Research', icon: Microscope,   tag: 'Analytical',  description: 'Investigate companies, competitors, and markets with structured rigor.' },
+  refine:        { label: 'Refine',        icon: Wand2,        tag: 'Editorial',   description: 'Tighten, sharpen, and elevate something you\'ve already drafted.' },
   library:       { label: 'Library',       icon: BookOpen,     description: 'Create from your knowledge.' },
   artifacts:     { label: 'Artifacts',     icon: FileText,     description: 'Reusable document templates.' },
   projects:      { label: 'Projects',      icon: FolderKanban, description: 'Promoted long-term work.' },
@@ -116,19 +118,61 @@ export function SurfacePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threads, surface, pillsVersion]);
 
-  // ── Fallback: recent Work threads (shown when surface has none) ─
-  // Keeps the workspace from ever feeling empty: if the user hasn't run a
-  // pill in this surface yet, we surface their recent freeform work so
-  // there's always something useful one tap away.
-  const fallbackRecentWork = useMemo(() => {
+  // ── Relevant fallback (contextual, per-surface scoring) ─────────
+  // When the user hasn't run a pill in this surface yet, we still want the
+  // workspace to feel intentional — show recent work that *matches the kind
+  // of work this surface is for*, not random threads.
+  //
+  // Signals available per thread: artifactThreadIds (structured output),
+  // runningThreadIds (in flight), title length (proxy for depth), updated_at.
+  // We score against simple heuristics defined per surface.
+  const relevantFallbackWork = useMemo(() => {
     if (surface === 'work' || surface === 'projects') return [];
     if (recentThreadsForSurface.length > 0) return [];
     const isTest = (t: StrategyThread) => /^\[benchmark\]/i.test(t.title || '');
     const tags = getAllThreadTags();
-    return threads
-      .filter((t) => !isTest(t) && !tags[t.id]) // freeform / Work only
-      .slice(0, 4);
-  }, [threads, surface, recentThreadsForSurface.length]);
+    const candidates = threads.filter((t) => !isTest(t) && !tags[t.id]);
+
+    const now = Date.now();
+    const recencyBoost = (t: StrategyThread) => {
+      const ageH = Math.max(1, (now - new Date(t.updated_at).getTime()) / 3_600_000);
+      // Smooth decay: ~1.0 for fresh, ~0.4 after a week
+      return 1 / Math.log2(ageH + 2);
+    };
+    const titleLen = (t: StrategyThread) => (t.title || '').trim().length;
+    const isUntitled = (t: StrategyThread) => !t.title || /^untitled/i.test(t.title);
+    const hasArtifact = (t: StrategyThread) => artifactThreadIds?.has(t.id) ?? false;
+
+    const score = (t: StrategyThread) => {
+      const r = recencyBoost(t);
+      const len = titleLen(t);
+      const art = hasArtifact(t) ? 1 : 0;
+      const untitled = isUntitled(t) ? 1 : 0;
+      switch (surface) {
+        case 'brainstorm':
+          // Prefer ideation: short / no-artifact / fresh
+          return (r * 1.2) + (1 - art) * 0.8 + (len > 0 && len < 40 ? 0.5 : 0) - untitled * 0.3;
+        case 'deep_research':
+          // Prefer depth: artifacts + longer titles
+          return art * 1.4 + Math.min(len / 60, 1) * 0.8 + r * 0.6 - untitled * 0.5;
+        case 'refine':
+          // Prefer artifacts and recently-edited drafts
+          return art * 1.6 + r * 1.0 + Math.min(len / 50, 1) * 0.4 - untitled * 0.6;
+        case 'library':
+        case 'artifacts':
+          // Prefer threads that produced artifacts (templates/outputs)
+          return art * 1.5 + r * 0.7 - untitled * 0.4;
+        default:
+          return r;
+      }
+    };
+
+    return [...candidates]
+      .map((t) => ({ t, s: score(t) }))
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 4)
+      .map((x) => x.t);
+  }, [threads, surface, recentThreadsForSurface.length, artifactThreadIds]);
 
   // ── Work surface: all threads, sorted active/ready/recent ─────
   const workThreads = useMemo(() => {
@@ -164,12 +208,27 @@ export function SurfacePanel({
             <HeaderIcon className="h-4 w-4" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2
-              className="text-[18px] leading-tight tracking-tight"
-              style={{ fontFamily: 'var(--sv-serif)', color: 'hsl(var(--sv-ink))', fontWeight: 500 }}
-            >
-              {meta.label}
-            </h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2
+                className="text-[18px] leading-tight tracking-tight"
+                style={{ fontFamily: 'var(--sv-serif)', color: 'hsl(var(--sv-ink))', fontWeight: 500 }}
+              >
+                {meta.label}
+              </h2>
+              {meta.tag && (
+                <span
+                  className="text-[9.5px] uppercase tracking-[0.12em] px-1.5 py-px rounded"
+                  style={{
+                    background: 'hsl(var(--sv-clay) / 0.10)',
+                    color: 'hsl(var(--sv-clay))',
+                    fontWeight: 600,
+                  }}
+                  data-testid={`surface-tag-${surface}`}
+                >
+                  {meta.tag}
+                </span>
+              )}
+            </div>
             <p className="text-[12.5px] mt-0.5" style={{ color: 'hsl(var(--sv-muted))' }}>
               {meta.description}
             </p>
@@ -232,7 +291,8 @@ export function SurfacePanel({
             <RecentInSurface
               label={meta.label}
               threads={recentThreadsForSurface}
-              fallbackThreads={fallbackRecentWork}
+              fallbackThreads={relevantFallbackWork}
+              surface={surface}
               activeThreadId={activeThreadId}
               onSelect={onSelectThread}
               runningThreadIds={runningThreadIds}
@@ -392,9 +452,10 @@ function CustomPillsRow({
 // ───────────────── Recent in surface ─────────────────
 
 function RecentInSurface({
-  label, threads, fallbackThreads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
+  label, surface, threads, fallbackThreads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
 }: {
   label: string;
+  surface: StrategySurfaceKey;
   threads: StrategyThread[];
   fallbackThreads: StrategyThread[];
   activeThreadId: string | null;
@@ -404,8 +465,33 @@ function RecentInSurface({
 }) {
   const hasOwn = threads.length > 0;
   const hasFallback = !hasOwn && fallbackThreads.length > 0;
-  const heading = hasOwn ? `Recent in ${label}` : (hasFallback ? 'From your recent work' : `Recent in ${label}`);
+  const heading = hasOwn ? `Recent in ${label}` : (hasFallback ? 'Relevant recent work' : `Recent in ${label}`);
   const showThreads = hasOwn ? threads : (hasFallback ? fallbackThreads : []);
+
+  // Mode-specific microcopy — gives each surface a distinct identity.
+  const fallbackHint = (() => {
+    if (!hasFallback) return null;
+    switch (surface) {
+      case 'brainstorm':    return 'Lighter, earlier-stage threads from your recent work.';
+      case 'deep_research': return 'Deeper threads and artifacts that match this lens.';
+      case 'refine':        return 'Drafts and outputs you might want to tighten.';
+      case 'library':       return 'Recent work that produced reusable outputs.';
+      case 'artifacts':     return 'Recent threads that generated structured artifacts.';
+      default:              return null;
+    }
+  })();
+
+  const emptyCta = (() => {
+    switch (surface) {
+      case 'brainstorm':    return 'Pick a pill above to spark your first idea.';
+      case 'deep_research': return 'Pick a pill above to start a deep-dive analysis.';
+      case 'refine':        return 'Pick a pill above to sharpen something you\'ve written.';
+      case 'library':       return 'Pick a workflow above to create from your knowledge.';
+      case 'artifacts':     return 'Pick a template above to draft a structured artifact.';
+      default:              return `Tap a pill above to start your first ${label} thread.`;
+    }
+  })();
+
   return (
     <div>
       <div className="flex items-center gap-1.5 mb-2">
@@ -414,13 +500,20 @@ function RecentInSurface({
         </span>
       </div>
       {showThreads.length > 0 ? (
-        <ThreadRows
-          threads={showThreads}
-          activeThreadId={activeThreadId}
-          onSelect={onSelect}
-          runningThreadIds={runningThreadIds}
-          artifactThreadIds={artifactThreadIds}
-        />
+        <>
+          <ThreadRows
+            threads={showThreads}
+            activeThreadId={activeThreadId}
+            onSelect={onSelect}
+            runningThreadIds={runningThreadIds}
+            artifactThreadIds={artifactThreadIds}
+          />
+          {fallbackHint && (
+            <p className="mt-1.5 text-[11px]" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
+              {fallbackHint}
+            </p>
+          )}
+        </>
       ) : (
         <div
           className="rounded-[8px] px-3 py-2.5 text-[12px]"
@@ -430,7 +523,7 @@ function RecentInSurface({
             color: 'hsl(var(--sv-muted))',
           }}
         >
-          Tap a pill above to start your first {label} thread.
+          {emptyCta}
         </div>
       )}
     </div>
