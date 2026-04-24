@@ -495,19 +495,17 @@ export function SurfacePanel({
             />
           )}
 
-          {/* Recent in <surface> */}
+          {/* Jump Back In — last threads from this workspace only */}
           {surface !== 'work' && surface !== 'projects' && (
             <RecentInSurface
               label={meta.label}
               ownThreads={annotatedRecentForSurface}
-              fallbackThreads={relevantFallbackWork}
               surface={surface}
               activeThreadId={activeThreadId}
               onSelect={onSelectThread}
               runningThreadIds={runningThreadIds}
               artifactThreadIds={artifactThreadIds}
               vibe={vibe}
-              onLaunchWorkflow={onLaunchWorkflow}
             />
           )}
         </div>
