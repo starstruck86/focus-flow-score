@@ -986,11 +986,15 @@ const WORK_FILTERS: Array<{ key: WorkFilterKey; label: string }> = [
 
 /** Heuristic: a thread looks like junk (test/debug/regression/benchmark/scratch). */
 function isCleanupThread(t: StrategyThread): boolean {
-  const title = (t.title || '').toLowerCase();
-  if (/^\[benchmark\]/i.test(t.title || '')) return true;
+  const raw = t.title || '';
+  const title = raw.toLowerCase();
   // Bracketed diagnostic / debug / canary tags at the start of the title.
-  if (/^\[(diagnostic|debug|test|qa|canary|regression|benchmark|wip|scratch|tmp|temp)\]/i.test(t.title || '')) return true;
-  if (/\b(test|debug|regression|qa|scratch|tmp|temp|sandbox|wip|benchmark)\b/i.test(title)) return true;
+  if (/^\[(diagnostic|debug|test|qa|canary|regression|benchmark|wip|scratch|tmp|temp)\]/i.test(raw)) return true;
+  // Common dev prefixes: p<digits>- / phase<digits>- / debug- etc.
+  if (/^(p\d+[-_]|phase\d+[-_]|test[-_]|debug[-_]|qa[-_]|canary[-_]|regression[-_]|benchmark[-_]|scratch[-_]|wip[-_])/i.test(title)) return true;
+  // Substring match for clear junk markers — looser than \b...\b so things
+  // like "p26-testB" / "regression-A" / "debugRun" all get hidden.
+  if (/(test|debug|regression|benchmark|scratch|sandbox|wip)/i.test(title)) return true;
   // Untitled-style placeholders that never got a real prompt.
   if (isUntitledTitle(t.title)) return true;
   return false;
