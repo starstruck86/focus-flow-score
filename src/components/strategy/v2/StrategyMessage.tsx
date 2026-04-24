@@ -8,6 +8,8 @@
  *
  * 32px gap to next message is owned by the parent stream.
  */
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { StrategyMessage as StrategyMessageT } from '@/types/strategy';
 
 interface Props {
@@ -34,6 +36,7 @@ function extractText(contentJson: any): string {
 export function StrategyMessage({ message }: Props) {
   const text = extractText(message.content_json);
   const role = message.role;
+  const isUser = role === 'user';
 
   if (!text.trim()) {
     // Streaming placeholder — three soft dots in clay, no bubble
@@ -57,22 +60,53 @@ export function StrategyMessage({ message }: Props) {
     );
   }
 
-  if (role === 'user') {
+  if (isUser) {
     return (
       <div
         data-strategy-selectable
         data-message-id={message.id}
         data-message-role="user"
-        className="text-[15px] whitespace-pre-wrap break-words"
+        className="max-w-[78%] text-[15px] break-words"
         style={{
           fontFamily: 'var(--sv-sans)',
           color: 'hsl(var(--sv-ink))',
           lineHeight: 1.65,
-          marginLeft: 40,
-          maxWidth: '85%',
+          marginLeft: 0,
         }}
       >
-        {text}
+        <div
+          className="rounded-[8px] px-3 py-2"
+          style={{
+            background: 'hsl(var(--sv-hover) / 0.55)',
+            border: '1px solid hsl(var(--sv-hairline))',
+          }}
+        >
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              p: ({ children }) => <p style={{ margin: 0 }}>{children}</p>,
+              ul: ({ children }) => <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem' }}>{children}</ul>,
+              ol: ({ children }) => <ol style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem' }}>{children}</ol>,
+              li: ({ children }) => <li style={{ margin: '0.15rem 0' }}>{children}</li>,
+              strong: ({ children }) => <strong style={{ fontWeight: 650 }}>{children}</strong>,
+              em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
+              code: ({ children }) => (
+                <code
+                  style={{
+                    fontFamily: 'var(--sv-sans)',
+                    background: 'hsl(var(--sv-hover))',
+                    borderRadius: 4,
+                    padding: '0.1rem 0.3rem',
+                  }}
+                >
+                  {children}
+                </code>
+              ),
+            }}
+          >
+            {text}
+          </ReactMarkdown>
+        </div>
       </div>
     );
   }
@@ -83,14 +117,53 @@ export function StrategyMessage({ message }: Props) {
       data-strategy-selectable
       data-message-id={message.id}
       data-message-role="assistant"
-      className="text-[15px] whitespace-pre-wrap break-words"
+      className="text-[15px] break-words"
       style={{
         fontFamily: 'var(--sv-serif)',
         color: 'hsl(var(--sv-ink))',
         lineHeight: 1.65,
       }}
     >
-      {text}
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => <p style={{ margin: 0 }}>{children}</p>,
+          ul: ({ children }) => <ul style={{ margin: '0.55rem 0 0', paddingLeft: '1.2rem' }}>{children}</ul>,
+          ol: ({ children }) => <ol style={{ margin: '0.55rem 0 0', paddingLeft: '1.2rem' }}>{children}</ol>,
+          li: ({ children }) => <li style={{ margin: '0.2rem 0' }}>{children}</li>,
+          strong: ({ children }) => <strong style={{ fontWeight: 700 }}>{children}</strong>,
+          em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
+          h1: ({ children }) => <h1 style={{ fontSize: '1.35rem', margin: '0 0 0.4rem', fontWeight: 700 }}>{children}</h1>,
+          h2: ({ children }) => <h2 style={{ fontSize: '1.1rem', margin: '0.2rem 0 0.35rem', fontWeight: 700 }}>{children}</h2>,
+          h3: ({ children }) => <h3 style={{ fontSize: '1rem', margin: '0.15rem 0 0.3rem', fontWeight: 650 }}>{children}</h3>,
+          code: ({ children }) => (
+            <code
+              style={{
+                fontFamily: 'var(--sv-sans)',
+                background: 'hsl(var(--sv-hover))',
+                borderRadius: 4,
+                padding: '0.1rem 0.3rem',
+              }}
+            >
+              {children}
+            </code>
+          ),
+          blockquote: ({ children }) => (
+            <blockquote
+              style={{
+                margin: '0.55rem 0 0',
+                paddingLeft: '0.85rem',
+                borderLeft: '2px solid hsl(var(--sv-hairline))',
+                color: 'hsl(var(--sv-muted))',
+              }}
+            >
+              {children}
+            </blockquote>
+          ),
+        }}
+      >
+        {text}
+      </ReactMarkdown>
     </div>
   );
 }
