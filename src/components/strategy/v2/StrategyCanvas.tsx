@@ -15,18 +15,19 @@ interface Props {
   messages: StrategyMessageT[];
   isLoading: boolean;
   isSending: boolean;
+  hideEmptyState?: boolean;
   /** Called when a user clicks an empty-state prompt chip. */
   onPickPrompt?: (prompt: string) => void;
 }
 
-export function StrategyCanvas({ messages, isLoading, isSending, onPickPrompt }: Props) {
+export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState = false, onPickPrompt }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
   }, [messages.length, isSending]);
 
-  const showEmptyState = !isLoading && !isSending && messages.length === 0;
+  const showEmptyState = !hideEmptyState && !isLoading && !isSending && messages.length === 0;
 
   return (
     <div
