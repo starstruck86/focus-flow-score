@@ -148,7 +148,19 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
         try { opts.onAssistantComplete(assistantText); } catch (e) { console.warn('[chat] detector hook failed', e); }
       }
     } catch (e: any) {
-      toast.error(e.message || 'Failed to send message');
+      // Translate raw network/provider errors into something a user can act on.
+      // "Failed to fetch" / "Load failed" / TypeError mean the request never
+      // reached our backend (offline, blocked, transient). Anything else falls
+      // through to the original message.
+      const raw = String(e?.message || '');
+      const isNetworkError = /failed to fetch|load failed|networkerror|network request failed|fetch failed/i.test(raw)
+        || e?.name === 'TypeError';
+      const friendly = isNetworkError
+        ? 'Connection hiccup — Strategy couldn\'t reach the AI provider. Check your network and try again.'
+        : raw.includes('Error 5')
+          ? 'The AI provider is having a moment. Please retry — usually clears in a few seconds.'
+          : raw || 'Something went wrong sending your message. Please try again.';
+      toast.error(friendly);
       setMessages(prev => prev.filter(m => m.id !== optimisticId));
     } finally {
       setIsSending(false);

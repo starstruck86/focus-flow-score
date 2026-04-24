@@ -1187,6 +1187,11 @@ export function StrategyShell() {
               ta?.insertText?.(prompt);
               requestAnimationFrame(() => ta?.focus());
             }}
+            onQuickAction={(prompt) => {
+              // One-click iteration: regenerate / shorten / expand / improve
+              // auto-send the follow-up prompt instead of just inserting it.
+              handleSend(prompt);
+            }}
           />
         )}
 
