@@ -294,7 +294,7 @@ export function SurfacePanel({
       if (isRunning(t)) {
         reason = 'Running now'; group = 'Active'; nextAction = 'open to follow'; priority = 100;
       } else if (hasArtifact(t)) {
-        reason = 'Has artifact'; group = 'With artifact'; nextAction = 'expand or refine'; priority = 80;
+        reason = 'Has artifact'; group = 'With artifact'; nextAction = 'expand into a full brief'; priority = 80;
       }
       // First (most recent) gets a slight bump so it earns the "Top match" badge.
       if (idx === 0) priority += 5;
