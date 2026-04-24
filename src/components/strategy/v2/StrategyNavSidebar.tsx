@@ -55,7 +55,7 @@ interface Props {
   onAfterSelect?: () => void;
 }
 
-const MODES: { id: Exclude<StrategyMode, null>; label: string; icon: React.ComponentType<{ className?: string }>; hint: string }[] = [
+const MODES: { id: Exclude<StrategyMode, null>; label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; hint: string }[] = [
   { id: 'brainstorm',    label: 'Brainstorm',    icon: Lightbulb,  hint: 'Brainstorm mode · think out loud, explore angles, no structure required.' },
   { id: 'deep_research', label: 'Deep Research', icon: Microscope, hint: 'Deep Research mode · ask anything, paste notes, or start with an account or company.' },
   { id: 'refine',        label: 'Refine',        icon: Wand2,      hint: 'Refine mode · paste a draft, an output, or a snippet — I will sharpen it.' },
