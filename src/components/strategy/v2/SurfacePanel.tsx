@@ -109,7 +109,16 @@ const ARTIFACT_ICON_BY_ID: Record<string, React.ComponentType<{ className?: stri
   'artifact.custom': FilePlus,
 };
 
-export function SurfacePanel({
+/** Mode-specific forward guidance — subtle nudge for next action. */
+const SURFACE_GUIDANCE: Partial<Record<StrategySurfaceKey, string>> = {
+  brainstorm:    'Start with an idea or pick a direction above.',
+  deep_research: 'Start with a company, competitor, or question.',
+  refine:        'Paste something to improve, or pick a draft above.',
+  library:       'Pick a workflow above to draw from your knowledge.',
+  artifacts:     'Pick a template above to start a structured doc.',
+};
+
+
   surface, onLaunchWorkflow, onClose,
   threads, activeThreadId, onSelectThread,
   pillsVersion, onAddPill, onEditPill,
