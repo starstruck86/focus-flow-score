@@ -81,6 +81,7 @@ import { WorkflowFormSheet } from './workflows/WorkflowFormSheet';
 import type { WorkflowDef } from './workflows/workflowRegistry';
 import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflows/workflowRegistry';
 import { PillEditorSheet } from './PillEditorSheet';
+import { ManageStrategySheet } from './ManageStrategySheet';
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
 import { tagThread } from '@/lib/strategy/threadTags';
@@ -836,6 +837,7 @@ export function StrategyShell() {
   const [pillEditorOpen, setPillEditorOpen] = useState(false);
   const [editingPill, setEditingPill] = useState<CustomPill | null>(null);
   const [pillEditorSurface, setPillEditorSurface] = useState<StrategySurfaceKey>('brainstorm');
+  const [manageOpen, setManageOpen] = useState(false);
 
   const handleAddPill = useCallback((surface: StrategySurfaceKey) => {
     setEditingPill(null);
@@ -1003,6 +1005,7 @@ export function StrategyShell() {
       runningThreadIds={runningThreadIds}
       artifactThreadIds={artifactThreadIds}
       onAfterSelect={onAfterSelect}
+      onOpenManageStrategy={() => setManageOpen(true)}
     />
   );
 

@@ -177,29 +177,33 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
           style={{
             color: 'hsl(var(--sv-ink))',
             fontFamily: serifPlaceholder && !value ? 'var(--sv-serif)' : 'var(--sv-sans)',
-            paddingLeft: onAttachFiles && !value ? 88 : 0,
+            paddingLeft: onAttachFiles ? 32 : 0,
             paddingRight: 40,
             maxHeight: 240,
             transition: 'padding-left 120ms ease',
           }}
         />
-        {/* Phase 1.5: muted "+ Add files" affordance — disappears once typing begins */}
-        {onAttachFiles && !value && (
+        {/* Attach affordance — ALWAYS visible while composing so users can add
+            files mid-thought. Compact icon button (no text) once typing begins. */}
+        {onAttachFiles && (
           <button
             type="button"
             onClick={onAttachFiles}
             disabled={disabled}
-            className="absolute text-[12px] sv-hover-bg rounded-[3px] px-1.5 py-0.5"
+            className="absolute sv-hover-bg rounded-[4px] flex items-center justify-center"
             style={{
-              left: 14,
-              top: '50%',
-              transform: 'translateY(-50%)',
+              left: 10,
+              bottom: 10,
+              width: 22,
+              height: 22,
               color: 'hsl(var(--sv-muted))',
-              opacity: 0.7,
+              opacity: 0.75,
             }}
+            aria-label="Attach files"
             title="Attach files"
+            data-testid="composer-attach"
           >
-            + Add files
+            <span style={{ fontSize: 16, lineHeight: 1, fontWeight: 400 }}>+</span>
           </button>
         )}
         <button

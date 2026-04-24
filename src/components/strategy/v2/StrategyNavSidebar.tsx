@@ -14,10 +14,11 @@ import { useMemo } from 'react';
 import {
   Plus, PanelLeftClose, PanelLeftOpen, Sparkles,
   Lightbulb, Microscope, Wand2, BookOpen, FolderKanban, Loader2, FileText,
-  Briefcase,
+  Briefcase, Settings,
 } from 'lucide-react';
 import type { StrategyThread } from '@/types/strategy';
 import { displayThreadTitle, isUntitledTitle } from '@/lib/strategy/threadNaming';
+import { isCleanupThread } from '@/lib/strategy/threadCleanup';
 import { cn } from '@/lib/utils';
 
 export type StrategyMode = 'brainstorm' | 'deep_research' | 'refine' | null;
@@ -54,6 +55,9 @@ interface Props {
 
   // Mobile
   onAfterSelect?: () => void;
+
+  /** Open the Manage Strategy panel (workspaces + pills). */
+  onOpenManageStrategy?: () => void;
 }
 
 const TOP_NAV: {
@@ -77,11 +81,13 @@ export function StrategyNavSidebar({
   threads, activeThreadId, onSelectThread, onNewWork,
   runningThreadIds, artifactThreadIds,
   onAfterSelect,
+  onOpenManageStrategy,
 }: Props) {
-  // Filter test/benchmark threads out of Work; sort active+ready first.
+  // Hide cleanup/test/debug/regression/benchmark/scratch threads from the
+  // default rail. Use the shared `isCleanupThread` heuristic so the legacy
+  // sidebar matches what the Work command center hides by default.
   const { visibleThreads, hiddenTestCount } = useMemo(() => {
-    const isTest = (t: StrategyThread) => /^\[benchmark\]/i.test(t.title || '');
-    const visible = threads.filter((t) => !isTest(t));
+    const visible = threads.filter((t) => !isCleanupThread(t));
     const hidden = threads.length - visible.length;
     const score = (t: StrategyThread) => {
       if (t.id === activeThreadId) return 0;
@@ -204,16 +210,31 @@ export function StrategyNavSidebar({
         {/* Subtle "+ Add Mode" hint at bottom of mode list (visual only). */}
         <button
           type="button"
-          onClick={() => { /* future: open add-mode flow */ }}
+          onClick={() => { onOpenManageStrategy?.(); onAfterSelect?.(); }}
           className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-[6px] text-[12px] transition-colors text-left"
           style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.5)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-          title="Add a custom mode (coming soon)"
+          title="Add a workspace or pill"
           data-testid="nav-add-mode"
         >
           <Plus className="h-3 w-3 shrink-0" />
           <span>Add Mode</span>
+        </button>
+
+        {/* Manage Strategy — open a settings panel for workspaces and pills. */}
+        <button
+          type="button"
+          onClick={() => { onOpenManageStrategy?.(); onAfterSelect?.(); }}
+          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-[6px] text-[12px] transition-colors text-left"
+          style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.5)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          title="Manage workspaces and pills"
+          data-testid="nav-manage-strategy"
+        >
+          <Settings className="h-3 w-3 shrink-0" />
+          <span>Manage Strategy</span>
         </button>
       </nav>
 

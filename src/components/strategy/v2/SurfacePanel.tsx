@@ -38,6 +38,7 @@ import {
 } from '@/lib/strategy/customPills';
 import { getAllThreadTags } from '@/lib/strategy/threadTags';
 import { displayThreadTitle, isUntitledTitle, WORKSPACE_SHORT } from '@/lib/strategy/threadNaming';
+import { isCleanupThread } from '@/lib/strategy/threadCleanup';
 import type { StrategySurfaceKey } from './StrategyNavSidebar';
 import type { StrategyThread } from '@/types/strategy';
 
@@ -981,21 +982,6 @@ const WORK_FILTERS: Array<{ key: WorkFilterKey; label: string }> = [
 ];
 
 /** Heuristic: a thread looks like junk (test/debug/regression/benchmark/scratch). */
-function isCleanupThread(t: StrategyThread): boolean {
-  const raw = t.title || '';
-  const title = raw.toLowerCase();
-  // Bracketed diagnostic / debug / canary tags at the start of the title.
-  if (/^\[(diagnostic|debug|test|qa|canary|regression|benchmark|wip|scratch|tmp|temp)\]/i.test(raw)) return true;
-  // Common dev prefixes: p<digits>- / phase<digits>- / debug- etc.
-  if (/^(p\d+[-_]|phase\d+[-_]|test[-_]|debug[-_]|qa[-_]|canary[-_]|regression[-_]|benchmark[-_]|scratch[-_]|wip[-_])/i.test(title)) return true;
-  // Substring match for clear junk markers — looser than \b...\b so things
-  // like "p26-testB" / "regression-A" / "debugRun" all get hidden.
-  if (/(test|debug|regression|benchmark|scratch|sandbox|wip)/i.test(title)) return true;
-  // Untitled-style placeholders that never got a real prompt.
-  if (isUntitledTitle(t.title)) return true;
-  return false;
-}
-
 function WorkCommandCenter({
   threads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
 }: {
