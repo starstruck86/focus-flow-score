@@ -156,25 +156,54 @@ export function WorkflowFormSheet({ workflow, onClose, onRun, onEditCustom }: Pr
               </div>
             );
           })}
+
+          {/* Instruction (hidden by default; expand to view/preview) */}
+          {workflow.instruction && (
+            <details className="rounded-[8px]" style={{ border: '1px dashed hsl(var(--sv-hairline))' }}>
+              <summary className="cursor-pointer px-3 py-2 text-[12px] flex items-center gap-1.5" style={{ color: 'hsl(var(--sv-ink) / 0.85)' }}>
+                <ChevronDown className="h-3 w-3" />
+                Instruction
+              </summary>
+              <p className="px-3 pb-3 pt-1 text-[12px] whitespace-pre-wrap" style={{ color: 'hsl(var(--sv-muted))' }}>
+                {workflow.instruction}
+              </p>
+            </details>
+          )}
         </div>
 
         {/* Footer — sticky run button */}
         <div
-          className="shrink-0 px-5 py-3 flex items-center gap-2 justify-end"
+          className="shrink-0 px-5 py-3 flex items-center gap-2 justify-between"
           style={{ borderTop: '1px solid hsl(var(--sv-hairline))' }}
         >
-          <Button variant="ghost" size="sm" onClick={onClose} className="h-9 text-[12.5px]">
-            Cancel
-          </Button>
-          <Button
-            onClick={handleRun}
-            size="sm"
-            className="h-9 text-[12.5px] gap-1.5"
-            style={{ background: 'hsl(var(--sv-clay))', color: 'hsl(var(--sv-paper))' }}
-          >
-            <Play className="h-3.5 w-3.5" />
-            Run
-          </Button>
+          <div>
+            {workflow.isCustom && workflow.customPillId && onEditCustom && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onEditCustom(workflow.customPillId!)}
+                className="h-9 text-[12.5px] gap-1.5"
+                style={{ color: 'hsl(var(--sv-muted))' }}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit pill
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={onClose} className="h-9 text-[12.5px]">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRun}
+              size="sm"
+              className="h-9 text-[12.5px] gap-1.5"
+              style={{ background: 'hsl(var(--sv-clay))', color: 'hsl(var(--sv-paper))' }}
+            >
+              <Play className="h-3.5 w-3.5" />
+              Run
+            </Button>
+          </div>
         </div>
       </SheetContent>
     </Sheet>
