@@ -12,9 +12,11 @@
  *   surface: 'work'       → recent freeform threads (+ active/artifact-ready)
  *
  * Each surface ALSO shows:
- *   • "Recent in <surface>" thread list (driven by threadTags)
- *   • "+ New pill" affordance (opens PillEditorSheet)
- *   • Edit affordance on every custom pill
+ *   • "Jump Back In" — last 3 threads scoped to this workspace (with search if >3)
+ *   • Built-in + saved custom pills (run-only; no creation/edit affordances)
+ *
+ * Pill creation, editing, deletion, duplication, and reordering live exclusively
+ * in /strategy/settings. Workspaces are launchers, not management surfaces.
  *
  * All pills/templates launch the same WorkflowFormSheet (Click → Configure → Run).
  *

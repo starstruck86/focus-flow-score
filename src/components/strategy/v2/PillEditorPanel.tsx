@@ -5,8 +5,8 @@
  * Strategy Settings page at /strategy/settings/pill/:id (or :new). Same
  * fields as the legacy sheet so behavior is identical:
  *
- *   • Identity:    Name, Description, Workspace
- *   • Behavior:    Prompt template, Hidden instructions, Ask clarifying first
+ *   • Identity:    Name, What it does, Workspace
+ *   • Behavior:    Prompt template, How it thinks, Ask clarifying first
  *   • Output:      Output type (chat / artifact / word / pdf / excel / ppt / email / task)
  *   • Run mode:    Insert into composer (default) or Send immediately
  *   • Inputs:      Optional structured fields ({{Token}}); usually unused.
