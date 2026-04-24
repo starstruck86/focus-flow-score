@@ -776,11 +776,9 @@ export function StrategyShell() {
     // Decide: send immediately or insert?
     const sendNow = def.runMode === 'send' && !hasUnresolvedPlaceholders(compiled);
 
-    // Close the surface panel so chat takes focus.
-    setActiveSurface(null);
-
     if (sendNow) {
-      // Apply the pending tag the same way the form path did.
+      // Send-immediately: leave the surface so the thread/canvas takes focus.
+      setActiveSurface(null);
       const launchedFrom = launchSurfaceRef.current;
       launchSurfaceRef.current = null;
       if (launchedFrom && launchedFrom !== 'work' && launchedFrom !== 'projects') {
@@ -792,11 +790,15 @@ export function StrategyShell() {
       return;
     }
 
-    // Default: insert into composer, focus, and let the user edit.
+    // Insert mode: stay in the current workspace. The pill's prompt becomes
+    // *this workspace's* draft — it does not bleed into other surfaces.
+    // The per-surface draft swap effect will persist it on the next switch.
     const ta = composerRef.current as
       (HTMLTextAreaElement & { insertText?: (t: string) => void })
       | null;
     ta?.insertText?.(compiled);
+    // Pin the lastSurfaceKeyRef so a stale value doesn't overwrite this draft.
+    lastSurfaceKeyRef.current = draftKeyOf(activeSurface);
     requestAnimationFrame(() => composerRef.current?.focus());
     // Tag deferred to send time — pendingThreadTagRef handles fresh threads.
     if (launchSurfaceRef.current && launchSurfaceRef.current !== 'work' && launchSurfaceRef.current !== 'projects') {
@@ -807,7 +809,7 @@ export function StrategyShell() {
     }
   // handleSend declared later — safe at call-time.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSurface, threadId]);
+  }, [activeSurface, threadId, draftKeyOf]);
 
   const handleRunWorkflow = useCallback((compiledPrompt: string) => {
     setActiveWorkflow(null);
