@@ -79,6 +79,10 @@ import { StrategyNavSidebar, type StrategyMode, type StrategySurfaceKey } from '
 import { SurfacePanel } from './SurfacePanel';
 import { WorkflowFormSheet } from './workflows/WorkflowFormSheet';
 import type { WorkflowDef } from './workflows/workflowRegistry';
+import { PillEditorSheet } from './PillEditorSheet';
+import type { CustomPill } from '@/lib/strategy/customPills';
+import { listCustomPills } from '@/lib/strategy/customPills';
+import { tagThread } from '@/lib/strategy/threadTags';
 import { PromoteToLibrarySheet, type PromotePayload } from './promote/PromoteToLibrarySheet';
 import { StrategyGlobalNavBar } from './StrategyGlobalNavBar';
 import { StrategyProgressPanel } from './StrategyProgressPanel';
@@ -674,16 +678,61 @@ export function StrategyShell() {
     return s;
   }, [latestCompleted, threadId]);
 
-  // ---------- Workflow launcher (Modes pills · Library · Artifact templates) ----------
+  // ---------- Workflow launcher (Modes pills · Library · Artifact templates · Custom pills) ----------
   // One model: pick a workflow → fill form → Run compiles a prompt → existing send path.
   const [activeWorkflow, setActiveWorkflow] = useState<WorkflowDef | null>(null);
+  // Surface the user launched the workflow from — used to tag the resulting thread.
+  const launchSurfaceRef = useRef<StrategySurfaceKey | null>(null);
+  // Pending tag to apply when the thread becomes active (handles async creation).
+  const pendingThreadTagRef = useRef<StrategySurfaceKey | null>(null);
+
+  // ---------- Custom pills (programmable shortcuts) ----------
+  const [pillsVersion, setPillsVersion] = useState(0);
+  const [pillEditorOpen, setPillEditorOpen] = useState(false);
+  const [editingPill, setEditingPill] = useState<CustomPill | null>(null);
+  const [pillEditorSurface, setPillEditorSurface] = useState<StrategySurfaceKey>('brainstorm');
+
+  const handleAddPill = useCallback((surface: StrategySurfaceKey) => {
+    setEditingPill(null);
+    setPillEditorSurface(surface);
+    setPillEditorOpen(true);
+  }, []);
+
+  const handleEditPill = useCallback((pill: CustomPill) => {
+    setEditingPill(pill);
+    setPillEditorSurface(pill.surface);
+    setPillEditorOpen(true);
+  }, []);
+
+  const handleEditCustomPillById = useCallback((customPillId: string) => {
+    const pill = listCustomPills().find((p) => p.id === customPillId);
+    if (!pill) return;
+    handleEditPill(pill);
+  }, [handleEditPill]);
+
+  const handlePillSaved = useCallback(() => {
+    setPillsVersion((v) => v + 1);
+  }, []);
 
   const handleLaunchWorkflow = useCallback((def: WorkflowDef) => {
+    // Stash the launch surface so the resulting thread can be tagged.
+    launchSurfaceRef.current = activeSurface;
     setActiveWorkflow(def);
-  }, []);
+  }, [activeSurface]);
 
   const handleRunWorkflow = useCallback((compiledPrompt: string) => {
     setActiveWorkflow(null);
+    // If the user launched from a tagged surface, queue the tag for the
+    // thread that handleSend will create (or for the active one).
+    const launchedFrom = launchSurfaceRef.current;
+    launchSurfaceRef.current = null;
+    if (launchedFrom && launchedFrom !== 'work' && launchedFrom !== 'projects') {
+      if (threadId) {
+        tagThread(threadId, launchedFrom);
+      } else {
+        pendingThreadTagRef.current = launchedFrom;
+      }
+    }
     // Close the surface panel so the new conversation gets focus.
     setActiveSurface(null);
     // Route through the same send path freeform typing uses.
@@ -691,7 +740,15 @@ export function StrategyShell() {
     requestAnimationFrame(() => composerRef.current?.focus());
   // handleSend declared later — safe at call-time.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [threadId]);
+
+  // Apply pending thread tag once the new thread becomes active.
+  useEffect(() => {
+    if (threadId && pendingThreadTagRef.current) {
+      tagThread(threadId, pendingThreadTagRef.current);
+      pendingThreadTagRef.current = null;
+    }
+  }, [threadId]);
 
   // ---------- Promote-to-Library (explicit; outputs are NEVER auto-Library) ----------
   const [promotePayload, setPromotePayload] = useState<PromotePayload | null>(null);
@@ -861,6 +918,14 @@ export function StrategyShell() {
             surface={activeSurface}
             onLaunchWorkflow={handleLaunchWorkflow}
             onClose={() => { setActiveSurface(null); }}
+            threads={threads}
+            activeThreadId={threadId}
+            onSelectThread={(id) => { setActiveThreadId(id); setActiveSurface(null); }}
+            pillsVersion={pillsVersion}
+            onAddPill={handleAddPill}
+            onEditPill={handleEditPill}
+            runningThreadIds={runningThreadIds}
+            artifactThreadIds={artifactThreadIds}
           />
         )}
 
@@ -1052,11 +1117,20 @@ export function StrategyShell() {
         readonlyReview={canaryReadonly}
         onSaved={handleCanarySaved}
       />
-      {/* Workflow form — Click → Configure → Run for every Mode pill / Library workflow / Artifact template */}
+      {/* Workflow form — Click → Configure → Run for every Mode pill / Library workflow / Artifact template / Custom pill */}
       <WorkflowFormSheet
         workflow={activeWorkflow}
         onClose={() => setActiveWorkflow(null)}
         onRun={handleRunWorkflow}
+        onEditCustom={handleEditCustomPillById}
+      />
+      {/* Pill editor — create/edit programmable shortcuts (custom GPT-style) */}
+      <PillEditorSheet
+        open={pillEditorOpen}
+        editing={editingPill}
+        surface={pillEditorSurface}
+        onClose={() => { setPillEditorOpen(false); setEditingPill(null); }}
+        onSaved={handlePillSaved}
       />
       {/* Promote-to-Library — explicit, never automatic. Outputs are contextual by default. */}
       <PromoteToLibrarySheet

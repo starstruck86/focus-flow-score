@@ -14,6 +14,7 @@ import { useMemo } from 'react';
 import {
   Plus, PanelLeftClose, PanelLeftOpen, Sparkles,
   Lightbulb, Microscope, Wand2, BookOpen, FolderKanban, Loader2, FileText,
+  Briefcase,
 } from 'lucide-react';
 import type { StrategyThread } from '@/types/strategy';
 import { cn } from '@/lib/utils';
@@ -30,7 +31,8 @@ export type StrategySurfaceKey =
   | 'refine'
   | 'library'
   | 'artifacts'
-  | 'projects';
+  | 'projects'
+  | 'work';
 
 interface Props {
   // Layout
@@ -65,6 +67,7 @@ const TOP_NAV: {
   { key: 'library',       label: 'Library',       icon: BookOpen },
   { key: 'artifacts',     label: 'Artifacts',     icon: FileText },
   { key: 'projects',      label: 'Projects',      icon: FolderKanban, muted: true },
+  { key: 'work',          label: 'Work',          icon: Briefcase },
 ];
 
 export function StrategyNavSidebar({
