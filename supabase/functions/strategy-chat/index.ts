@@ -5119,6 +5119,7 @@ async function handleChat(
   pickedResourceIds: string[] = [],
   v2RequestOverride: boolean = false,
   routingDecision: RoutingDecision | null = null,
+  globalInstructions: CleanGlobalInstructions | null = null,
 ) {
   await supabase.from("strategy_messages").insert({
     thread_id: threadId,
