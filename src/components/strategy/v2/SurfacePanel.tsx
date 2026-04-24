@@ -392,25 +392,30 @@ function CustomPillsRow({
 // ───────────────── Recent in surface ─────────────────
 
 function RecentInSurface({
-  label, threads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
+  label, threads, fallbackThreads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
 }: {
   label: string;
   threads: StrategyThread[];
+  fallbackThreads: StrategyThread[];
   activeThreadId: string | null;
   onSelect: (id: string) => void;
   runningThreadIds?: Set<string>;
   artifactThreadIds?: Set<string>;
 }) {
+  const hasOwn = threads.length > 0;
+  const hasFallback = !hasOwn && fallbackThreads.length > 0;
+  const heading = hasOwn ? `Recent in ${label}` : (hasFallback ? 'From your recent work' : `Recent in ${label}`);
+  const showThreads = hasOwn ? threads : (hasFallback ? fallbackThreads : []);
   return (
     <div>
       <div className="flex items-center gap-1.5 mb-2">
         <span className="text-[10.5px] font-medium uppercase tracking-[0.09em]" style={{ color: 'hsl(var(--sv-muted))' }}>
-          Recent in {label}
+          {heading}
         </span>
       </div>
-      {threads.length > 0 ? (
+      {showThreads.length > 0 ? (
         <ThreadRows
-          threads={threads}
+          threads={showThreads}
           activeThreadId={activeThreadId}
           onSelect={onSelect}
           runningThreadIds={runningThreadIds}
@@ -425,7 +430,7 @@ function RecentInSurface({
             color: 'hsl(var(--sv-muted))',
           }}
         >
-          No recent work here yet.
+          Tap a pill above to start your first {label} thread.
         </div>
       )}
     </div>
