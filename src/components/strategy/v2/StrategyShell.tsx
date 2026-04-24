@@ -399,7 +399,7 @@ export function StrategyShell() {
     // (independent) thread.
     const boundSurface = pendingThreadSurfaceRef.current;
     if (boundSurface) {
-      surfaceThreadsRef.current[boundSurface] = pendingThreadId;
+      setSurfaceThread(boundSurface, pendingThreadId);
       pendingThreadSurfaceRef.current = null;
     }
     const queued = queuedInitialMessageRef.current;
