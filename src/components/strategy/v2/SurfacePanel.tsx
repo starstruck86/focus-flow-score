@@ -435,9 +435,10 @@ function CustomPillsRow({
 // ───────────────── Recent in surface ─────────────────
 
 function RecentInSurface({
-  label, threads, fallbackThreads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
+  label, surface, threads, fallbackThreads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
 }: {
   label: string;
+  surface: StrategySurfaceKey;
   threads: StrategyThread[];
   fallbackThreads: StrategyThread[];
   activeThreadId: string | null;
@@ -447,8 +448,33 @@ function RecentInSurface({
 }) {
   const hasOwn = threads.length > 0;
   const hasFallback = !hasOwn && fallbackThreads.length > 0;
-  const heading = hasOwn ? `Recent in ${label}` : (hasFallback ? 'From your recent work' : `Recent in ${label}`);
+  const heading = hasOwn ? `Recent in ${label}` : (hasFallback ? 'Relevant recent work' : `Recent in ${label}`);
   const showThreads = hasOwn ? threads : (hasFallback ? fallbackThreads : []);
+
+  // Mode-specific microcopy — gives each surface a distinct identity.
+  const fallbackHint = (() => {
+    if (!hasFallback) return null;
+    switch (surface) {
+      case 'brainstorm':    return 'Lighter, earlier-stage threads from your recent work.';
+      case 'deep_research': return 'Deeper threads and artifacts that match this lens.';
+      case 'refine':        return 'Drafts and outputs you might want to tighten.';
+      case 'library':       return 'Recent work that produced reusable outputs.';
+      case 'artifacts':     return 'Recent threads that generated structured artifacts.';
+      default:              return null;
+    }
+  })();
+
+  const emptyCta = (() => {
+    switch (surface) {
+      case 'brainstorm':    return 'Pick a pill above to spark your first idea.';
+      case 'deep_research': return 'Pick a pill above to start a deep-dive analysis.';
+      case 'refine':        return 'Pick a pill above to sharpen something you\'ve written.';
+      case 'library':       return 'Pick a workflow above to create from your knowledge.';
+      case 'artifacts':     return 'Pick a template above to draft a structured artifact.';
+      default:              return `Tap a pill above to start your first ${label} thread.`;
+    }
+  })();
+
   return (
     <div>
       <div className="flex items-center gap-1.5 mb-2">
@@ -457,13 +483,20 @@ function RecentInSurface({
         </span>
       </div>
       {showThreads.length > 0 ? (
-        <ThreadRows
-          threads={showThreads}
-          activeThreadId={activeThreadId}
-          onSelect={onSelect}
-          runningThreadIds={runningThreadIds}
-          artifactThreadIds={artifactThreadIds}
-        />
+        <>
+          <ThreadRows
+            threads={showThreads}
+            activeThreadId={activeThreadId}
+            onSelect={onSelect}
+            runningThreadIds={runningThreadIds}
+            artifactThreadIds={artifactThreadIds}
+          />
+          {fallbackHint && (
+            <p className="mt-1.5 text-[11px]" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
+              {fallbackHint}
+            </p>
+          )}
+        </>
       ) : (
         <div
           className="rounded-[8px] px-3 py-2.5 text-[12px]"
@@ -473,7 +506,7 @@ function RecentInSurface({
             color: 'hsl(var(--sv-muted))',
           }}
         >
-          Tap a pill above to start your first {label} thread.
+          {emptyCta}
         </div>
       )}
     </div>
