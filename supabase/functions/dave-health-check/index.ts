@@ -38,7 +38,7 @@ serve(async (req) => {
         result.error = `Token gen failed: ${JSON.stringify(data)}`;
       }
     } catch (e) {
-      result.error = `Token gen error: ${e.message}`;
+      result.error = `Token gen error: ${(e as Error).message}`;
     }
   }
 
@@ -63,7 +63,7 @@ serve(async (req) => {
         result.error = (result.error ? result.error + "; " : "") + `Agent config fetch failed: ${res.status}`;
       }
     } catch (e) {
-      result.error = (result.error ? result.error + "; " : "") + `Agent config error: ${e.message}`;
+      result.error = (result.error ? result.error + "; " : "") + `Agent config error: ${(e as Error).message}`;
     }
   }
 
