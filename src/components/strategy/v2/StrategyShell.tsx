@@ -138,6 +138,19 @@ export function StrategyShell() {
   const slashFileInputRef = useRef<HTMLInputElement>(null);
   const queuedInitialMessageRef = useRef<string | null>(null);
 
+  // ── Per-surface composer drafts ──────────────────────────────────────────
+  // Each workspace has its own independent composer draft. Switching surfaces
+  // saves the current draft under the previous surface key and restores the
+  // draft for the next surface. The 'work' bucket holds the thread-bound
+  // draft (the global "no surface open" view).
+  type DraftKey = StrategySurfaceKey | 'work';
+  const surfaceDraftsRef = useRef<Record<string, string>>({});
+  const lastSurfaceKeyRef = useRef<DraftKey>('work');
+  const draftKeyOf = useCallback(
+    (s: StrategySurfaceKey | null): DraftKey => (s ?? 'work'),
+    [],
+  );
+
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
