@@ -71,33 +71,23 @@ export function useSystemHealth() {
     // Same result already notified — skip
     if (health.id === lastNotifiedId) return;
 
-    // Degradation notification
+    // Degradation: do NOT toast. The badge in the bottom-right is the
+    // single source of truth for system status. Toasts during normal
+    // usage are scary, interrupt the user, and add noise. We still
+    // record the notification ID so recovery toasts behave correctly
+    // for users who happened to see the badge change state.
     if (health.status !== 'ok') {
-      const failedCount = health.e2e_failed + health.infra_failed;
-      toast.error(`AI System ${health.status === 'failed' ? 'Down' : 'Degraded'}`, {
-        description: `${failedCount} test(s) failing`,
-        duration: 10_000,
-      });
       localStorage.setItem(LS_NOTIFIED_ID, health.id);
       localStorage.setItem(LS_NOTIFIED_STATUS, health.status);
-
-      // Provider-specific alerts
-      for (const [provider, isHealthy] of Object.entries(health.provider_health)) {
-        if (!isHealthy) {
-          toast.error(`${provider} is unhealthy`, {
-            description: 'Fallback may be active',
-            duration: 8_000,
-          });
-        }
-      }
       return;
     }
 
-    // Recovery notification: previous was degraded, now ok
+    // Recovery: only toast if the user previously saw a degraded state
+    // in this session. Quiet by default.
     if (lastNotifiedStatus && lastNotifiedStatus !== 'ok' && health.status === 'ok') {
       toast.success('AI System Recovered', {
         description: 'All systems operational',
-        duration: 6_000,
+        duration: 4_000,
       });
       localStorage.setItem(LS_NOTIFIED_ID, health.id);
       localStorage.setItem(LS_NOTIFIED_STATUS, 'ok');
