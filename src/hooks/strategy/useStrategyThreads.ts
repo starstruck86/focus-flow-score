@@ -29,14 +29,16 @@ export function useStrategyThreads() {
 
   useEffect(() => { fetchThreads(); }, [fetchThreads]);
 
-  /** Legacy simple creation — returns thread id or null */
+  /** Legacy simple creation — returns thread id or null.
+   *  Title falls back to 'New thread' (never 'Untitled') so the UI can
+   *  render a workspace-prefixed display title via `displayThreadTitle`. */
   const createThread = useCallback(async (title?: string, lane?: string, threadType?: string): Promise<string | null> => {
     if (!user) return null;
     const { data, error } = await supabase
       .from('strategy_threads')
       .insert({
         user_id: user.id,
-        title: title || 'Untitled Thread',
+        title: title?.trim() || 'New thread',
         lane: lane || 'research',
         thread_type: threadType || 'freeform',
       })
