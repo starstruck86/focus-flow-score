@@ -380,8 +380,8 @@ export function SurfacePanel({
           </button>
         </div>
 
-        {/* Body */}
-        <div className="mt-5 space-y-5">
+        {/* Body — spacing rhythm comes from per-surface vibe */}
+        <div className={`mt-5 ${vibe.bodySpacing}`}>
           {/* Built-in actions */}
           {(surface === 'brainstorm' || surface === 'deep_research' || surface === 'refine') && (
             <PillGrid
@@ -433,6 +433,7 @@ export function SurfacePanel({
               onSelect={onSelectThread}
               runningThreadIds={runningThreadIds}
               artifactThreadIds={artifactThreadIds}
+              vibe={vibe}
             />
           )}
         </div>
