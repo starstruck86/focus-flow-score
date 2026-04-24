@@ -5027,32 +5027,21 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
   // in <10 seconds. Synthesis-mode and asset templates have their own
   // formatting and are unaffected (they bring their own scaffolds).
   const readabilityContract = `
-═══ RESPONSE FORMAT CONTRACT (MANDATORY) ═══
+═══ RESPONSE FORMAT CONTRACT ═══
 Write like a top-tier strategist: clear, concise, opinionated, no fluff.
-Organize thinking as: Context → Insight → Action.
 
-Every chat response MUST:
-1. Use clear section headers (## Header) — never one long paragraph.
-2. Prefer bullets over prose. Keep any paragraph to ≤ 2 lines.
-3. Leave a blank line between sections.
-4. Convert inline labels into structured bullets:
-   ❌ "Listen actively: do X, then Y"
-   ✅ **Listen actively**
-      - Do X
-      - Then Y
-5. Optimize for scan reading — headers + bullets must convey the answer.
-6. Use real Markdown (## headers, **bold**, - bullets). Do NOT print raw symbols as text.
-7. End with a final line:
+Prefer short sections with clear headers.
+Use bullets wherever possible.
+Keep paragraphs to 1–2 lines.
+Optimize for fast scanning — headers + bullets should convey the answer.
+
+Use real Markdown (## headers, **bold**, - bullets). Never print raw symbols as text.
+End with a single closing line:
    → Next step: <one concrete action>
 
-Forbidden:
-- Walls of prose with no headers
-- Centered or decorative text
-- Long meandering preambles ("Let me walk you through…")
-- Generic closers ("Hope this helps!")
+Avoid: walls of prose, long preambles ("Let me walk you through…"), generic closers ("Hope this helps!").
 
-If the ask is short-form (subject lines, openers, one-liners), keep the
-short-form shape from the mode block — but still finish with "→ Next step:".`;
+If the ask is short-form (subject lines, openers, one-liners), keep the short-form shape from the mode block — still finish with "→ Next step:".`;
 
   // Prepend the MODE LOCK so it's the FIRST thing the model reads,
   // before Strategy Core identity / thinking order / output contract.
