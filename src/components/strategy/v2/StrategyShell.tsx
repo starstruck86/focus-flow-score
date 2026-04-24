@@ -112,10 +112,13 @@ export function StrategyShell() {
   // Artifact workspace (right) — opened via inline card or completion event
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
 
-  // New nav model — selected surface (Modes / Library / Artifacts) and the
-  // sub-mode within Modes. Only ONE surface is open at a time.
+  // New nav model — selected top-level surface. Modes are first-class entries
+  // (brainstorm/deep_research/refine), so the sub-mode is derived directly
+  // from the surface itself. Only ONE surface is open at a time.
   const [activeSurface, setActiveSurface] = useState<StrategySurfaceKey | null>(null);
-  const [activeMode, setActiveMode] = useState<StrategyMode>(null);
+  const activeMode: StrategyMode = (
+    activeSurface === 'brainstorm' || activeSurface === 'deep_research' || activeSurface === 'refine'
+  ) ? activeSurface : null;
 
   const {
     threads,
@@ -731,18 +734,12 @@ export function StrategyShell() {
     });
   }, [latestCompleted, linkedContext, activeThread, buildArtifactMarkdown]);
 
-  // Pick a mode within the Modes surface → keep the surface open so pills appear.
-  const handlePickMode = useCallback((m: StrategyMode) => {
-    setActiveMode(m);
-    requestAnimationFrame(() => composerRef.current?.focus());
-  }, []);
-
-  // Pick a top-level surface (Modes / Library / Artifacts) from the sidebar.
-  // Toggling the same surface closes it. Switching surfaces clears the
-  // sub-mode so we always land on the surface's own picker.
+  // Pick a top-level surface from the flat sidebar (Brainstorm/Deep Research/
+  // Refine/Library/Artifacts/Projects). Toggling the same surface closes it.
+  // Mode is derived directly from the surface — no separate sub-state.
   const handlePickSurface = useCallback((s: StrategySurfaceKey | null) => {
     setActiveSurface(s);
-    if (s !== 'modes') setActiveMode(null);
+    requestAnimationFrame(() => composerRef.current?.focus());
   }, []);
 
   const sidebarNode = (onAfterSelect?: () => void) => (
@@ -857,14 +854,13 @@ export function StrategyShell() {
         {/* Live progress strip */}
         <StrategyProgressPanel active={activeRun} />
 
-        {/* Surface panel — Modes / Library / Artifacts. Pills only appear here. */}
+        {/* Surface panel — direct entry for Brainstorm / Deep Research /
+            Refine / Library / Artifacts / Projects. Pills only appear here. */}
         {activeSurface && (
           <SurfacePanel
             surface={activeSurface}
-            activeMode={activeMode}
-            onPickMode={handlePickMode}
             onLaunchWorkflow={handleLaunchWorkflow}
-            onClose={() => { setActiveSurface(null); setActiveMode(null); }}
+            onClose={() => { setActiveSurface(null); }}
           />
         )}
 

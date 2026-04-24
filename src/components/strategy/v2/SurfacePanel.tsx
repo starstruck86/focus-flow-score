@@ -1,72 +1,47 @@
 /**
- * SurfacePanel — workspace surface for Modes / Library / Artifacts.
+ * SurfacePanel — workspace surface for direct top-level entries.
  *
- * The sidebar is navigation only. When the user clicks Modes, Library, or
- * Artifacts in the sidebar, the workspace switches into that surface and
- * shows tiles (for Modes selection) or pills (for actions). This is the
- * ChatGPT "Apps" interaction model: pick a surface, then pick an action.
+ * The sidebar exposes flat entries (Brainstorm, Deep Research, Refine,
+ * Library, Artifacts, Projects). Clicking one switches the workspace
+ * into that surface and shows its actions/templates inline above the canvas.
  *
- *   surface: 'modes'      → mode tiles  → click tile → mode selected → pills
- *   surface: 'library'    → library pills (creation engine)
+ *   surface: 'brainstorm'|'deep_research'|'refine' → mode pills
+ *   surface: 'library'    → library workflow pills (creation engine)
  *   surface: 'artifacts'  → artifact template tiles
+ *   surface: 'projects'   → placeholder (promoted long-term work)
  *
  * All pills/templates launch the same WorkflowFormSheet (Click → Configure → Run).
  *
  * Pure presentation. No backend/engine changes.
  */
-import { useState } from 'react';
 import {
   X, Lightbulb, Microscope, Wand2, BookOpen, FileText,
   ClipboardList, ClipboardCheck, Send, Presentation, Mail, FilePlus,
-  Layers, MessageSquareQuote, Shapes, ChevronLeft, ArrowRight,
+  Layers, MessageSquareQuote, Shapes, ArrowRight, FolderKanban,
 } from 'lucide-react';
 import {
   MODE_PILLS, LIBRARY_DEFS, ARTIFACT_TEMPLATE_DEFS,
   type WorkflowDef,
 } from './workflows/workflowRegistry';
-import type { StrategyMode } from './StrategyNavSidebar';
-
-export type StrategySurface = 'modes' | 'library' | 'artifacts' | null;
+import type { StrategySurfaceKey } from './StrategyNavSidebar';
 
 interface Props {
-  surface: Exclude<StrategySurface, null>;
-  /** When on 'modes' surface, the currently selected mode (or null = picker view). */
-  activeMode: StrategyMode;
-  onPickMode: (m: StrategyMode) => void;
+  surface: StrategySurfaceKey;
   onLaunchWorkflow: (def: WorkflowDef) => void;
   onClose: () => void;
 }
 
-const MODE_TILES: {
-  id: Exclude<StrategyMode, null>;
+const SURFACE_HEADER: Record<StrategySurfaceKey, {
   label: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
-}[] = [
-  {
-    id: 'brainstorm',
-    label: 'Brainstorm',
-    description: 'Generate ideas, angles, hooks, and points of view.',
-    icon: Lightbulb,
-  },
-  {
-    id: 'deep_research',
-    label: 'Deep Research',
-    description: 'Analyze companies, competitors, and markets in depth.',
-    icon: Microscope,
-  },
-  {
-    id: 'refine',
-    label: 'Refine',
-    description: 'Improve, tighten, and elevate existing output.',
-    icon: Wand2,
-  },
-];
-
-const MODE_HEADER: Record<Exclude<StrategyMode, null>, { label: string; icon: React.ComponentType<{ className?: string }>; description: string }> = {
-  brainstorm:    { label: 'Brainstorm',    icon: Lightbulb,  description: 'Generate ideas, angles, hooks, and points of view.' },
-  deep_research: { label: 'Deep Research', icon: Microscope, description: 'Analyze companies, competitors, and markets in depth.' },
-  refine:        { label: 'Refine',        icon: Wand2,      description: 'Improve, tighten, and elevate existing output.' },
+}> = {
+  brainstorm:    { label: 'Brainstorm',    icon: Lightbulb,    description: 'Generate ideas, angles, hooks, and points of view.' },
+  deep_research: { label: 'Deep Research', icon: Microscope,   description: 'Analyze companies, competitors, and markets in depth.' },
+  refine:        { label: 'Refine',        icon: Wand2,        description: 'Improve, tighten, and elevate existing output.' },
+  library:       { label: 'Library',       icon: BookOpen,     description: 'Create from your knowledge.' },
+  artifacts:     { label: 'Artifacts',     icon: FileText,     description: 'Reusable document templates.' },
+  projects:      { label: 'Projects',      icon: FolderKanban, description: 'Promoted long-term work.' },
 };
 
 const LIBRARY_ICON_BY_ID: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -85,36 +60,9 @@ const ARTIFACT_ICON_BY_ID: Record<string, React.ComponentType<{ className?: stri
   'artifact.custom': FilePlus,
 };
 
-export function SurfacePanel({
-  surface, activeMode, onPickMode, onLaunchWorkflow, onClose,
-}: Props) {
-  // Header by surface
-  let title = '';
-  let subtitle = '';
-  let HeaderIcon: React.ComponentType<{ className?: string }> = BookOpen;
-  let showBackToModes = false;
-
-  if (surface === 'modes') {
-    if (activeMode) {
-      const meta = MODE_HEADER[activeMode];
-      title = meta.label;
-      subtitle = meta.description;
-      HeaderIcon = meta.icon;
-      showBackToModes = true;
-    } else {
-      title = 'Modes';
-      subtitle = 'Choose how Strategy should think.';
-      HeaderIcon = Lightbulb;
-    }
-  } else if (surface === 'library') {
-    title = 'Library';
-    subtitle = 'Create from your knowledge.';
-    HeaderIcon = BookOpen;
-  } else if (surface === 'artifacts') {
-    title = 'Artifacts';
-    subtitle = 'Reusable document templates.';
-    HeaderIcon = FileText;
-  }
+export function SurfacePanel({ surface, onLaunchWorkflow, onClose }: Props) {
+  const meta = SURFACE_HEADER[surface];
+  const HeaderIcon = meta.icon;
 
   return (
     <div
@@ -128,33 +76,21 @@ export function SurfacePanel({
       <div className="mx-auto w-full px-6 pt-5 pb-5" style={{ maxWidth: 920 }}>
         {/* Header row */}
         <div className="flex items-start gap-3">
-          {showBackToModes ? (
-            <button
-              onClick={() => onPickMode(null)}
-              className="h-7 w-7 rounded-[6px] flex items-center justify-center mt-0.5 sv-hover-bg"
-              style={{ color: 'hsl(var(--sv-muted))' }}
-              aria-label="Back to modes"
-              title="Back to modes"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-          ) : (
-            <div
-              className="h-7 w-7 rounded-[6px] flex items-center justify-center mt-0.5 shrink-0"
-              style={{ background: 'hsl(var(--sv-clay) / 0.10)', color: 'hsl(var(--sv-clay))' }}
-            >
-              <HeaderIcon className="h-4 w-4" />
-            </div>
-          )}
+          <div
+            className="h-7 w-7 rounded-[6px] flex items-center justify-center mt-0.5 shrink-0"
+            style={{ background: 'hsl(var(--sv-clay) / 0.10)', color: 'hsl(var(--sv-clay))' }}
+          >
+            <HeaderIcon className="h-4 w-4" />
+          </div>
           <div className="flex-1 min-w-0">
             <h2
               className="text-[18px] leading-tight tracking-tight"
               style={{ fontFamily: 'var(--sv-serif)', color: 'hsl(var(--sv-ink))', fontWeight: 500 }}
             >
-              {title}
+              {meta.label}
             </h2>
             <p className="text-[12.5px] mt-0.5" style={{ color: 'hsl(var(--sv-muted))' }}>
-              {subtitle}
+              {meta.description}
             </p>
           </div>
           <button
@@ -168,13 +104,10 @@ export function SurfacePanel({
           </button>
         </div>
 
-        {/* Body by surface */}
+        {/* Body */}
         <div className="mt-5">
-          {surface === 'modes' && !activeMode && (
-            <ModeTiles onPick={onPickMode} />
-          )}
-          {surface === 'modes' && activeMode && (
-            <PillGrid items={MODE_PILLS[activeMode]} onLaunch={onLaunchWorkflow} />
+          {(surface === 'brainstorm' || surface === 'deep_research' || surface === 'refine') && (
+            <PillGrid items={MODE_PILLS[surface]} onLaunch={onLaunchWorkflow} />
           )}
           {surface === 'library' && (
             <PillGrid
@@ -186,6 +119,9 @@ export function SurfacePanel({
           {surface === 'artifacts' && (
             <TemplateGrid items={ARTIFACT_TEMPLATE_DEFS} onLaunch={onLaunchWorkflow} />
           )}
+          {surface === 'projects' && (
+            <ProjectsPlaceholder />
+          )}
         </div>
 
         {/* Quiet footer hint */}
@@ -196,53 +132,6 @@ export function SurfacePanel({
           Or just type below — the composer is always ready.
         </p>
       </div>
-    </div>
-  );
-}
-
-// ───────────────── Modes tiles ─────────────────
-
-function ModeTiles({ onPick }: { onPick: (m: StrategyMode) => void }) {
-  return (
-    <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-3">
-      {MODE_TILES.map((tile) => {
-        const Icon = tile.icon;
-        return (
-          <button
-            key={tile.id}
-            onClick={() => onPick(tile.id)}
-            className="text-left p-3.5 rounded-[10px] transition-colors group"
-            style={{
-              border: '1px solid hsl(var(--sv-hairline))',
-              background: 'hsl(var(--sv-paper))',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)';
-              e.currentTarget.style.borderColor = 'hsl(var(--sv-clay) / 0.3)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'hsl(var(--sv-paper))';
-              e.currentTarget.style.borderColor = 'hsl(var(--sv-hairline))';
-            }}
-            data-testid={`mode-tile-${tile.id}`}
-          >
-            <div className="flex items-center gap-2">
-              <div
-                className="h-7 w-7 rounded-[6px] flex items-center justify-center shrink-0"
-                style={{ background: 'hsl(var(--sv-clay) / 0.10)', color: 'hsl(var(--sv-clay))' }}
-              >
-                <Icon className="h-4 w-4" />
-              </div>
-              <span className="text-[14px] font-medium" style={{ color: 'hsl(var(--sv-ink))' }}>
-                {tile.label}
-              </span>
-            </div>
-            <p className="mt-2 text-[12px] leading-snug" style={{ color: 'hsl(var(--sv-muted))' }}>
-              {tile.description}
-            </p>
-          </button>
-        );
-      })}
     </div>
   );
 }
@@ -353,6 +242,28 @@ function TemplateGrid({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// ───────────────── Projects placeholder ─────────────────
+
+function ProjectsPlaceholder() {
+  return (
+    <div
+      className="rounded-[10px] p-5 text-center"
+      style={{
+        border: '1px dashed hsl(var(--sv-hairline))',
+        background: 'hsl(var(--sv-hover) / 0.3)',
+      }}
+    >
+      <FolderKanban className="h-5 w-5 mx-auto mb-2" style={{ color: 'hsl(var(--sv-muted))' }} />
+      <p className="text-[13px]" style={{ color: 'hsl(var(--sv-ink))' }}>
+        No projects yet
+      </p>
+      <p className="mt-1 text-[11.5px]" style={{ color: 'hsl(var(--sv-muted))' }}>
+        Promote important threads into Projects to keep working long-term.
+      </p>
     </div>
   );
 }
