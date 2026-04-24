@@ -854,14 +854,13 @@ export function StrategyShell() {
         {/* Live progress strip */}
         <StrategyProgressPanel active={activeRun} />
 
-        {/* Surface panel — Modes / Library / Artifacts. Pills only appear here. */}
+        {/* Surface panel — direct entry for Brainstorm / Deep Research /
+            Refine / Library / Artifacts / Projects. Pills only appear here. */}
         {activeSurface && (
           <SurfacePanel
             surface={activeSurface}
-            activeMode={activeMode}
-            onPickMode={handlePickMode}
             onLaunchWorkflow={handleLaunchWorkflow}
-            onClose={() => { setActiveSurface(null); setActiveMode(null); }}
+            onClose={() => { setActiveSurface(null); }}
           />
         )}
 
