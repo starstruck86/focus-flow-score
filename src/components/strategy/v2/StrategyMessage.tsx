@@ -169,6 +169,7 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
       >
         {text}
       </ReactMarkdown>
+      {onQuickAction && <MessageActions onAction={onQuickAction} />}
     </div>
   );
 }
