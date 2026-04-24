@@ -443,6 +443,7 @@ export function SurfacePanel({
               runningThreadIds={runningThreadIds}
               artifactThreadIds={artifactThreadIds}
               vibe={vibe}
+              onLaunchWorkflow={onLaunchWorkflow}
             />
           )}
         </div>
