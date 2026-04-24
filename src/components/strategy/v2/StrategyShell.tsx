@@ -985,6 +985,12 @@ export function StrategyShell() {
         readonlyReview={canaryReadonly}
         onSaved={handleCanarySaved}
       />
+      {/* Workflow form — Click → Configure → Run for every Mode pill / Library workflow / Artifact template */}
+      <WorkflowFormSheet
+        workflow={activeWorkflow}
+        onClose={() => setActiveWorkflow(null)}
+        onRun={handleRunWorkflow}
+      />
       {/* Validation status drawer (read-only) */}
       <ValidationStatusDrawer
         open={validationDrawerOpen}
