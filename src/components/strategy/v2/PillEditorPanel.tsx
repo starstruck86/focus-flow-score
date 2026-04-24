@@ -268,17 +268,20 @@ export function PillEditorPanel({ editing, surface, onSaved, onCancel }: Props) 
               className="h-9 text-[13px]"
               autoFocus={!isEdit}
             />
+            <p className={helpText} style={{ color: 'hsl(var(--sv-muted))' }}>
+              The label that shows up as a chip in the workspace.
+            </p>
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="pill-desc" className={fieldLabel} style={{ color: 'hsl(var(--sv-ink))' }}>
-              Description <span style={{ color: 'hsl(var(--sv-muted))' }}>(optional)</span>
+              What it does <span style={{ color: 'hsl(var(--sv-muted))' }}>(optional)</span>
             </Label>
             <Input
               id="pill-desc"
               value={pill.description}
               onChange={(e) => setPill((p) => ({ ...p, description: e.target.value }))}
-              placeholder="What this pill does in one line"
+              placeholder="One line — the job this pill is hired to do."
               className="h-9 text-[13px]"
             />
           </div>
@@ -299,25 +302,25 @@ export function PillEditorPanel({ editing, surface, onSaved, onCancel }: Props) 
               ))}
             </select>
             <p className={helpText} style={{ color: 'hsl(var(--sv-muted))' }}>
-              Where this pill appears in the Strategy sidebar.
+              Where this pill lives. Move it any time.
             </p>
           </div>
         </section>
 
-        {/* PROMPT */}
+        {/* PROMPT TEMPLATE */}
         <section className="space-y-3">
-          <div className={sectionLabel} style={{ color: 'hsl(var(--sv-muted))' }}>Prompt</div>
+          <div className={sectionLabel} style={{ color: 'hsl(var(--sv-muted))' }}>Prompt template</div>
 
           <div className="space-y-1.5">
             <Label htmlFor="pill-template" className={fieldLabel} style={{ color: 'hsl(var(--sv-ink))' }}>
-              Prompt template
+              What gets typed for me
             </Label>
             <Textarea
               id="pill-template"
               value={pill.promptTemplate ?? ''}
               onChange={(e) => setPill((p) => ({ ...p, promptTemplate: e.target.value }))}
               placeholder={
-                'What gets inserted into the composer when the pill is clicked.\n' +
+                'The text inserted into the composer when you click this pill.\n' +
                 'Use [Brackets] for things to fill in inline, e.g.\n' +
                 '"Build a defensible POV on [Topic] for [Audience]. Use my prior context."'
               }
@@ -328,24 +331,29 @@ export function PillEditorPanel({ editing, surface, onSaved, onCancel }: Props) 
               Leave blank to auto-build from inputs. Bracketed placeholders stay editable in chat.
             </p>
           </div>
+        </section>
+
+        {/* HOW IT THINKS */}
+        <section className="space-y-3">
+          <div className={sectionLabel} style={{ color: 'hsl(var(--sv-muted))' }}>How it thinks</div>
 
           <div className="space-y-1.5">
             <Label htmlFor="pill-instruction" className={fieldLabel} style={{ color: 'hsl(var(--sv-ink))' }}>
-              Hidden instructions
+              System guidance
             </Label>
             <Textarea
               id="pill-instruction"
               value={pill.instruction}
               onChange={(e) => setPill((p) => ({ ...p, instruction: e.target.value }))}
               placeholder={
-                'How should Strategy think? e.g. "Be terse, executive-ready, no fluff. ' +
-                'Always cite resources. End with one clear ask."'
+                'Teach Strategy the personality and rules for this pill. e.g.\n' +
+                '"Be terse and executive-ready. No fluff. Always cite resources. End with one clear ask."'
               }
-              rows={4}
+              rows={5}
               className="text-[13px] resize-none"
             />
             <p className={helpText} style={{ color: 'hsl(var(--sv-muted))' }}>
-              System-style guidance prepended on every run. Not shown to the user.
+              Hidden from the user. Prepended on every run — this is the pill's "personality".
             </p>
           </div>
         </section>
