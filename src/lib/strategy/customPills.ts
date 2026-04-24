@@ -118,12 +118,14 @@ function familyForSurface(surface: StrategySurfaceKey): WorkflowFamily {
  * launcher / form / compile / send pipeline as built-in pills.
  */
 export function customPillToWorkflowDef(pill: CustomPill): WorkflowDef {
-  // Auto-build a minimal template if user didn't provide one.
+  // Auto-build a minimal template if user didn't provide one. For prompt-first
+  // pills with NO fields, we still want a useful default so the click-to-insert
+  // path produces a meaningful prompt the user can edit.
   const template = pill.promptTemplate?.trim().length
-    ? pill.promptTemplate
+    ? pill.promptTemplate!
     : pill.fields.length
       ? pill.fields.map((f) => `${f.label}: {{${f.label}}}`).join('\n')
-      : '';
+      : pill.name || 'Help me with the following:';
 
   return {
     id: `custom.${pill.id}`,
@@ -135,9 +137,29 @@ export function customPillToWorkflowDef(pill: CustomPill): WorkflowDef {
     fields: pill.fields,
     promptTemplate: template,
     instruction: pill.instruction,
+    outputType: pill.outputType,
+    runMode: pill.runMode ?? 'insert',
+    askClarifying: pill.askClarifying,
     isCustom: true,
     customPillId: pill.id,
   };
+}
+
+/** Clone a pill (new id, "(copy)" suffix). */
+export function duplicateCustomPill(pillId: string): CustomPill | null {
+  const all = safeRead();
+  const src = all.find((p) => p.id === pillId);
+  if (!src) return null;
+  const now = new Date().toISOString();
+  const copy: CustomPill = {
+    ...src,
+    id: newPillId(),
+    name: `${src.name} (copy)`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  safeWrite([...all, copy]);
+  return copy;
 }
 
 export function newPillId(): string {
@@ -155,10 +177,13 @@ export function emptyPillForSurface(surface: StrategySurfaceKey): CustomPill {
     name: '',
     description: '',
     instruction: '',
-    fields: [
-      { key: 'input', label: 'Input', kind: 'textarea', rows: 4, required: true },
-    ],
+    // Prompt-first pills don't need inputs by default — placeholders go in the
+    // prompt template (e.g. `[Company]`) and the user edits them in the composer.
+    fields: [],
     promptTemplate: '',
+    outputType: 'chat',
+    runMode: 'insert',
+    askClarifying: false,
     createdAt: now,
     updatedAt: now,
   };
