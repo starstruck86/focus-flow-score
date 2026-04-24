@@ -1284,7 +1284,7 @@ function WorkCommandCenter({
 function WorkGroup({
   icon: Icon, label, hint, count, children,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   label: string;
   hint?: string;
   count: number;
@@ -1320,7 +1320,7 @@ function WorkGroup({
 function WorkEmptyState({
   icon: Icon, title, body,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   title: string;
   body: string;
 }) {
