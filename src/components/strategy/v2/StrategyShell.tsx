@@ -112,10 +112,13 @@ export function StrategyShell() {
   // Artifact workspace (right) — opened via inline card or completion event
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
 
-  // New nav model — selected surface (Modes / Library / Artifacts) and the
-  // sub-mode within Modes. Only ONE surface is open at a time.
+  // New nav model — selected top-level surface. Modes are first-class entries
+  // (brainstorm/deep_research/refine), so the sub-mode is derived directly
+  // from the surface itself. Only ONE surface is open at a time.
   const [activeSurface, setActiveSurface] = useState<StrategySurfaceKey | null>(null);
-  const [activeMode, setActiveMode] = useState<StrategyMode>(null);
+  const activeMode: StrategyMode = (
+    activeSurface === 'brainstorm' || activeSurface === 'deep_research' || activeSurface === 'refine'
+  ) ? activeSurface : null;
 
   const {
     threads,
