@@ -210,16 +210,31 @@ export function StrategyNavSidebar({
         {/* Subtle "+ Add Mode" hint at bottom of mode list (visual only). */}
         <button
           type="button"
-          onClick={() => { /* future: open add-mode flow */ }}
+          onClick={() => { onOpenManageStrategy?.(); onAfterSelect?.(); }}
           className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-[6px] text-[12px] transition-colors text-left"
           style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.5)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-          title="Add a custom mode (coming soon)"
+          title="Add a workspace or pill"
           data-testid="nav-add-mode"
         >
           <Plus className="h-3 w-3 shrink-0" />
           <span>Add Mode</span>
+        </button>
+
+        {/* Manage Strategy — open a settings panel for workspaces and pills. */}
+        <button
+          type="button"
+          onClick={() => { onOpenManageStrategy?.(); onAfterSelect?.(); }}
+          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-[6px] text-[12px] transition-colors text-left"
+          style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.5)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          title="Manage workspaces and pills"
+          data-testid="nav-manage-strategy"
+        >
+          <Settings className="h-3 w-3 shrink-0" />
+          <span>Manage Strategy</span>
         </button>
       </nav>
 
