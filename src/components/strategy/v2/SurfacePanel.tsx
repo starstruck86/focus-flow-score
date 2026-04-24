@@ -486,23 +486,23 @@ function RecentInSurface({
   const fallbackHint = (() => {
     if (!hasFallback) return null;
     switch (surface) {
-      case 'brainstorm':    return 'Lighter, earlier-stage threads from your recent work.';
-      case 'deep_research': return 'Deeper threads and artifacts that match this lens.';
-      case 'refine':        return 'Drafts and outputs you might want to tighten.';
-      case 'library':       return 'Recent work that produced reusable outputs.';
-      case 'artifacts':     return 'Recent threads that generated structured artifacts.';
+      case 'brainstorm':    return 'Earlier-stage threads from your recent work that read like ideation.';
+      case 'deep_research': return 'Recent threads that look like research, briefs, or analysis.';
+      case 'refine':        return 'Drafts and artifacts you might want to tighten or rewrite.';
+      case 'library':       return 'Recent work that built frameworks, patterns, or reusable insights.';
+      case 'artifacts':     return 'Recent threads that produced structured artifacts.';
       default:              return null;
     }
   })();
 
   const emptyCta = (() => {
     switch (surface) {
-      case 'brainstorm':    return 'Pick a pill above to spark your first idea.';
-      case 'deep_research': return 'Pick a pill above to start a deep-dive analysis.';
-      case 'refine':        return 'Pick a pill above to sharpen something you\'ve written.';
-      case 'library':       return 'Pick a workflow above to create from your knowledge.';
-      case 'artifacts':     return 'Pick a template above to draft a structured artifact.';
-      default:              return `Tap a pill above to start your first ${label} thread.`;
+      case 'brainstorm':    return 'Nothing relevant here yet. Run a pill above to create your first Brainstorm thread.';
+      case 'deep_research': return 'Nothing relevant here yet. Run a pill above to create your first Deep Research thread.';
+      case 'refine':        return 'Nothing relevant here yet. Run a pill above to create your first Refine thread.';
+      case 'library':       return 'Nothing relevant here yet. Run a workflow above to create from your knowledge.';
+      case 'artifacts':     return 'Nothing relevant here yet. Pick a template above to draft a structured artifact.';
+      default:              return `Nothing relevant here yet. Tap a pill above to start your first ${label} thread.`;
     }
   })();
 
