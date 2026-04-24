@@ -988,7 +988,9 @@ const WORK_FILTERS: Array<{ key: WorkFilterKey; label: string }> = [
 function isCleanupThread(t: StrategyThread): boolean {
   const title = (t.title || '').toLowerCase();
   if (/^\[benchmark\]/i.test(t.title || '')) return true;
-  if (/\b(test|debug|regression|qa|scratch|tmp|temp|sandbox|wip)\b/i.test(title)) return true;
+  // Bracketed diagnostic / debug / canary tags at the start of the title.
+  if (/^\[(diagnostic|debug|test|qa|canary|regression|benchmark|wip|scratch|tmp|temp)\]/i.test(t.title || '')) return true;
+  if (/\b(test|debug|regression|qa|scratch|tmp|temp|sandbox|wip|benchmark)\b/i.test(title)) return true;
   // Untitled-style placeholders that never got a real prompt.
   if (isUntitledTitle(t.title)) return true;
   return false;
