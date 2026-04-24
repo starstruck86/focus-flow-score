@@ -53,6 +53,14 @@ interface AnnotatedThread {
   priority?: number;
 }
 
+/** Confidence band derived from priority — drives subtle UI emphasis. */
+type Confidence = 'high' | 'medium' | 'low';
+function confidenceFromPriority(p?: number): Confidence {
+  if ((p ?? 0) >= 85) return 'high';
+  if ((p ?? 0) >= 60) return 'medium';
+  return 'low';
+}
+
 /** Per-mode visual identity — drives density, spacing, and emphasis. */
 type SurfaceVibe = {
   /** Vertical rhythm for body sections. */
