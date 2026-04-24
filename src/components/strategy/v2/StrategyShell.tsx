@@ -157,7 +157,24 @@ export function StrategyShell() {
   // from a surface stores the new thread under that surface's bucket so it
   // becomes the surface's "current conversation" without bleeding to others.
   // The 'work' bucket is the global all-threads view.
+  //
+  // CRITICAL: We hold this in **state** (not just a ref) so the render
+  // pipeline can synchronously derive the workspace-visible thread from
+  // `surfaceThreads[activeSurface]` — without waiting for the global
+  // `setActiveThreadId` to flush. This is what prevents a previous
+  // workspace's thread (e.g. the Work/Sephora thread) from "bleeding"
+  // into a workspace on first entry.
+  const [surfaceThreads, setSurfaceThreads] = useState<Record<string, string | null>>({});
+  // Mirror ref kept in sync so callbacks (handleSend, etc.) can read the
+  // latest mapping without re-binding on every change.
   const surfaceThreadsRef = useRef<Record<string, string | null>>({});
+  useEffect(() => { surfaceThreadsRef.current = surfaceThreads; }, [surfaceThreads]);
+  const setSurfaceThread = useCallback((key: DraftKey, id: string | null) => {
+    setSurfaceThreads((prev) => {
+      if (prev[key] === id) return prev;
+      return { ...prev, [key]: id };
+    });
+  }, []);
   // Surface that initiated the in-flight thread creation. The pending-thread
   // resolution effect uses it to bind the new thread to the right surface
   // bucket, so "send from Brainstorm" → Brainstorm owns this thread.
