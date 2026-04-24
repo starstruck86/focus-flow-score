@@ -251,13 +251,7 @@ export function StrategyNavSidebar({
             muted={n.muted}
             onClick={() => handlePickSurface(n.key)}
             testId={`nav-${n.key}`}
-            trailing={
-              n.key === 'projects' ? (
-                <span className="text-[10px] px-1.5 py-px rounded-full" style={{ background: 'hsl(var(--sv-hover))', color: 'hsl(var(--sv-muted))' }}>
-                  Soon
-                </span>
-              ) : null
-            }
+            trailing={null}
           />
         ))}
 
