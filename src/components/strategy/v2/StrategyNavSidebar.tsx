@@ -17,6 +17,7 @@ import {
   Briefcase,
 } from 'lucide-react';
 import type { StrategyThread } from '@/types/strategy';
+import { displayThreadTitle, isUntitledTitle } from '@/lib/strategy/threadNaming';
 import { cn } from '@/lib/utils';
 
 export type StrategyMode = 'brainstorm' | 'deep_research' | 'refine' | null;
