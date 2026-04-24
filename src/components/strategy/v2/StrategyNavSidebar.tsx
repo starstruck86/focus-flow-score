@@ -14,7 +14,7 @@ import { useMemo } from 'react';
 import {
   Plus, PanelLeftClose, PanelLeftOpen, Sparkles,
   Lightbulb, Microscope, Wand2, BookOpen, FolderKanban, Loader2, FileText,
-  Briefcase,
+  Briefcase, Settings,
 } from 'lucide-react';
 import type { StrategyThread } from '@/types/strategy';
 import { displayThreadTitle, isUntitledTitle } from '@/lib/strategy/threadNaming';
