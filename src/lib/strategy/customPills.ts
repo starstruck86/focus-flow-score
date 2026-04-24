@@ -39,6 +39,20 @@ export interface CustomPill {
   runMode?: PillRunMode;
   /** Ask clarifying questions before generating. */
   askClarifying?: boolean;
+  /** Hide from the surface without deleting. Defaults to true (visible). */
+  isActive?: boolean;
+  /** Sort key inside the surface; lower = earlier. Defaults to createdAt order. */
+  orderIndex?: number;
+  /** Stub: attachment placeholders (resources / templates / files / context). */
+  attachments?: {
+    resourceIds?: string[];
+    templateIds?: string[];
+    fileIds?: string[];
+    /** Predefined context tokens like "account", "opportunity", "prior_threads". */
+    contextTokens?: string[];
+    /** "Use all workspace knowledge" toggle. */
+    useAllWorkspaceKnowledge?: boolean;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -72,8 +86,13 @@ export function listCustomPills(): CustomPill[] {
   return safeRead();
 }
 
-export function listCustomPillsForSurface(surface: StrategySurfaceKey): CustomPill[] {
-  return safeRead().filter((p) => p.surface === surface);
+export function listCustomPillsForSurface(
+  surface: StrategySurfaceKey,
+  opts: { includeHidden?: boolean } = {},
+): CustomPill[] {
+  const pills = safeRead().filter((p) => p.surface === surface);
+  const visible = opts.includeHidden ? pills : pills.filter((p) => p.isActive !== false);
+  return sortPills(visible);
 }
 
 export function upsertCustomPill(pill: CustomPill): CustomPill[] {
@@ -184,7 +203,26 @@ export function emptyPillForSurface(surface: StrategySurfaceKey): CustomPill {
     outputType: 'chat',
     runMode: 'insert',
     askClarifying: false,
+    isActive: true,
+    orderIndex: Date.now(),
+    attachments: {
+      resourceIds: [],
+      templateIds: [],
+      fileIds: [],
+      contextTokens: [],
+      useAllWorkspaceKnowledge: false,
+    },
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/** Sort pills inside a surface using orderIndex (asc), then createdAt (asc). */
+export function sortPills(pills: CustomPill[]): CustomPill[] {
+  return [...pills].sort((a, b) => {
+    const ai = a.orderIndex ?? Number.MAX_SAFE_INTEGER;
+    const bi = b.orderIndex ?? Number.MAX_SAFE_INTEGER;
+    if (ai !== bi) return ai - bi;
+    return (a.createdAt ?? '').localeCompare(b.createdAt ?? '');
+  });
 }

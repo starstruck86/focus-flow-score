@@ -1,14 +1,18 @@
 /**
  * PillEditorSheet — create/edit/delete a programmable pill (custom GPT-style).
  *
- * Surface owners decide which surface the pill belongs to. The editor is
- * intentionally lightweight:
- *   • Name + Description
- *   • Instruction (how Strategy thinks — prepended at run time)
- *   • Fields (label + kind; required toggle)
- *   • Optional prompt template (auto-built from fields if blank)
+ * Pill execution is chat-first (prompt is inserted into the composer).
+ * This editor is the configuration surface — think "Custom GPT settings":
+ *   • Identity:    Name, Description, Workspace
+ *   • Behavior:    Prompt template, Hidden instructions, Ask clarifying first
+ *   • Output:      Output type (chat / artifact / word / pdf / excel / ppt / email / task)
+ *   • Run mode:    Insert into composer (default) or Send immediately
+ *   • Inputs:      Optional structured fields ({{Token}}); usually unused —
+ *                  prompt-first pills use [Bracketed] placeholders inline.
+ *   • Attachments: Resources / templates / files / context placeholders (stub).
+ *   • Lifecycle:   Visibility (active), Order, Duplicate, Delete.
  *
- * Persists to localStorage via lib/strategy/customPills. No backend.
+ * Persists to localStorage via lib/strategy/customPills.
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -19,13 +23,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Trash2, X, Wand2, Save, Copy } from 'lucide-react';
+import { Plus, Trash2, X, Wand2, Save, Copy, Paperclip, Eye, EyeOff, ArrowUp, ArrowDown } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   emptyPillForSurface,
   upsertCustomPill,
   deleteCustomPill,
   duplicateCustomPill,
+  listCustomPillsForSurface,
+  reorderCustomPills,
   type CustomPill,
 } from '@/lib/strategy/customPills';
 import type { StrategySurfaceKey } from './StrategyNavSidebar';
@@ -44,15 +50,23 @@ const SURFACE_OPTIONS: Array<{ value: StrategySurfaceKey; label: string }> = [
   { value: 'artifacts',     label: 'Artifacts' },
 ];
 
-interface Props {
-  open: boolean;
-  /** When non-null, edits this existing pill; when null + open, creates a new one. */
-  editing: CustomPill | null;
-  /** Surface the new pill belongs to (ignored when editing). */
-  surface: StrategySurfaceKey;
-  onClose: () => void;
-  onSaved: () => void;
-}
+const OUTPUT_TYPE_OPTIONS: Array<{ value: PillOutputType; label: string }> = [
+  { value: 'chat',       label: 'Chat response' },
+  { value: 'artifact',   label: 'Structured artifact' },
+  { value: 'word',       label: 'Word document' },
+  { value: 'pdf',        label: 'PDF' },
+  { value: 'excel',      label: 'Excel / CSV' },
+  { value: 'powerpoint', label: 'PowerPoint' },
+  { value: 'email',      label: 'Email draft' },
+  { value: 'task',       label: 'Task / run output' },
+];
+
+const CONTEXT_TOKEN_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'account',       label: 'Active account' },
+  { value: 'opportunity',   label: 'Active opportunity' },
+  { value: 'prior_threads', label: 'Prior threads in this workspace' },
+  { value: 'recent_calls',  label: 'Recent call transcripts' },
+];
 
 const KIND_OPTIONS: Array<{ value: WorkflowField['kind']; label: string }> = [
   { value: 'text',     label: 'Single line' },
@@ -60,8 +74,24 @@ const KIND_OPTIONS: Array<{ value: WorkflowField['kind']; label: string }> = [
   { value: 'select',   label: 'Select' },
 ];
 
+interface Props {
+  open: boolean;
+  /** When non-null, edits this existing pill; when null + open, creates a new one. */
+  editing: CustomPill | null;
+  /** Surface the new pill belongs to (ignored when editing — surface is editable). */
+  surface: StrategySurfaceKey;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
 function fieldKeyFromLabel(label: string): string {
-  return label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || `field_${Math.random().toString(36).slice(2, 6)}`;
+  return label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+    || `field_${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function surfaceLabelOf(s: StrategySurfaceKey): string {
+  return SURFACE_OPTIONS.find((o) => o.value === s)?.label
+    ?? (s.charAt(0).toUpperCase() + s.slice(1));
 }
 
 export function PillEditorSheet({ open, editing, surface, onClose, onSaved }: Props) {
@@ -69,26 +99,54 @@ export function PillEditorSheet({ open, editing, surface, onClose, onSaved }: Pr
 
   useEffect(() => {
     if (open) {
-      setPill(editing ?? emptyPillForSurface(surface));
+      // Normalize legacy pills missing new fields so toggles render correctly.
+      const base = editing ?? emptyPillForSurface(surface);
+      setPill({
+        ...base,
+        outputType: base.outputType ?? 'chat',
+        runMode: base.runMode ?? 'insert',
+        askClarifying: base.askClarifying ?? false,
+        isActive: base.isActive ?? true,
+        attachments: base.attachments ?? {
+          resourceIds: [], templateIds: [], fileIds: [],
+          contextTokens: [], useAllWorkspaceKnowledge: false,
+        },
+      });
     }
   }, [open, editing, surface]);
 
   const isEdit = !!editing;
-  const surfaceLabel = surface === 'deep_research' ? 'Deep Research' : surface.charAt(0).toUpperCase() + surface.slice(1);
+  const currentSurfaceLabel = surfaceLabelOf(pill.surface);
 
-  // Save requires only a name now — fields are optional in prompt-first pills
-  // (the prompt template carries [Bracketed] placeholders the user edits inline).
+  // Save requires only a name. Prompt-first pills work with [Bracketed]
+  // placeholders inline; structured fields are optional.
   const canSave = useMemo(() => {
     if (pill.name.trim().length === 0) return false;
     return pill.fields.every((f) => f.label.trim().length > 0);
   }, [pill]);
 
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  const updateAttach = (patch: Partial<NonNullable<CustomPill['attachments']>>) => {
+    setPill((p) => ({
+      ...p,
+      attachments: { ...(p.attachments ?? {}), ...patch },
+    }));
+  };
+
+  const toggleContextToken = (token: string) => {
+    const current = pill.attachments?.contextTokens ?? [];
+    const next = current.includes(token)
+      ? current.filter((t) => t !== token)
+      : [...current, token];
+    updateAttach({ contextTokens: next });
+  };
+
+  // ── Lifecycle actions ───────────────────────────────────────────────────
   const handleSave = () => {
     if (!canSave) {
-      toast.error('Pill needs a name and at least one named field.');
+      toast.error('Pill needs a name.');
       return;
     }
-    // Re-key fields from labels to keep keys clean and stable on rename.
     const cleaned: CustomPill = {
       ...pill,
       name: pill.name.trim(),
@@ -104,7 +162,7 @@ export function PillEditorSheet({ open, editing, surface, onClose, onSaved }: Pr
     };
     upsertCustomPill(cleaned);
     toast.success(isEdit ? 'Pill updated' : 'Pill created', {
-      description: `${cleaned.name} is now in ${surfaceLabel}.`,
+      description: `${cleaned.name} is now in ${currentSurfaceLabel}.`,
     });
     onSaved();
     onClose();
@@ -119,6 +177,37 @@ export function PillEditorSheet({ open, editing, surface, onClose, onSaved }: Pr
     onClose();
   };
 
+  const handleDuplicate = () => {
+    if (!isEdit) {
+      toast.message('Save the pill first, then duplicate it.');
+      return;
+    }
+    const copy = duplicateCustomPill(pill.id);
+    if (copy) {
+      toast.success('Pill duplicated', { description: `${copy.name} created in ${surfaceLabelOf(copy.surface)}.` });
+      onSaved();
+      onClose();
+    }
+  };
+
+  const moveOrder = (direction: 'up' | 'down') => {
+    if (!isEdit) {
+      toast.message('Save the pill first to set its order.');
+      return;
+    }
+    const siblings = listCustomPillsForSurface(pill.surface, { includeHidden: true });
+    const ids = siblings.map((p) => p.id);
+    const idx = ids.indexOf(pill.id);
+    if (idx < 0) return;
+    const swapWith = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapWith < 0 || swapWith >= ids.length) return;
+    [ids[idx], ids[swapWith]] = [ids[swapWith], ids[idx]];
+    reorderCustomPills(pill.surface, ids);
+    toast.success(`Moved ${direction}`);
+    onSaved();
+  };
+
+  // ── Field editors ────────────────────────────────────────────────────────
   const updateField = (idx: number, patch: Partial<WorkflowField>) => {
     setPill((p) => ({
       ...p,
@@ -140,28 +229,46 @@ export function PillEditorSheet({ open, editing, surface, onClose, onSaved }: Pr
     }));
   };
 
+  // ── Style helpers ────────────────────────────────────────────────────────
+  const sectionLabel = "text-[11px] font-semibold uppercase tracking-[0.06em]";
+  const fieldLabel = "text-[12px] font-medium";
+  const helpText = "text-[11px]";
+  const selectClass = "h-9 w-full px-2 rounded-md text-[12.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  const selectStyle = {
+    border: '1px solid hsl(var(--sv-hairline))',
+    background: 'hsl(var(--sv-paper))',
+    color: 'hsl(var(--sv-ink))',
+  } as const;
+
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <SheetContent
         side="right"
-        className="p-0 flex flex-col w-full sm:max-w-[480px]"
+        className="p-0 flex flex-col w-full sm:max-w-[520px]"
         style={{ background: 'hsl(var(--sv-paper))' }}
       >
+        {/* ── Header ─────────────────────────────────────────────── */}
         <SheetHeader
           className="px-5 pt-5 pb-3 shrink-0"
           style={{ borderBottom: '1px solid hsl(var(--sv-hairline))' }}
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <SheetTitle className="text-[15px] font-semibold tracking-tight flex items-center gap-2" style={{ color: 'hsl(var(--sv-ink))' }}>
+              <SheetTitle
+                className="text-[15px] font-semibold tracking-tight flex items-center gap-2"
+                style={{ color: 'hsl(var(--sv-ink))' }}
+              >
                 <Wand2 className="h-4 w-4" style={{ color: 'hsl(var(--sv-clay))' }} />
                 {isEdit ? 'Edit pill' : 'New pill'}
-                <span className="text-[11px] px-1.5 py-px rounded-full ml-1" style={{ background: 'hsl(var(--sv-hover))', color: 'hsl(var(--sv-muted))' }}>
-                  {surfaceLabel}
+                <span
+                  className="text-[11px] px-1.5 py-px rounded-full ml-1"
+                  style={{ background: 'hsl(var(--sv-hover))', color: 'hsl(var(--sv-muted))' }}
+                >
+                  {currentSurfaceLabel}
                 </span>
               </SheetTitle>
               <SheetDescription className="text-[12px] mt-0.5" style={{ color: 'hsl(var(--sv-muted))' }}>
-                A pill is a programmable shortcut. Define what Strategy should do and what inputs to ask for.
+                A pill is a chat shortcut. Configure how it thinks, what it produces, and how it runs.
               </SheetDescription>
             </div>
             <button
@@ -175,160 +282,393 @@ export function PillEditorSheet({ open, editing, surface, onClose, onSaved }: Pr
           </div>
         </SheetHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-5">
-          {/* Name + Description */}
-          <div className="space-y-1.5">
-            <Label htmlFor="pill-name" className="text-[12px] font-medium" style={{ color: 'hsl(var(--sv-ink))' }}>
-              Name <span style={{ color: 'hsl(var(--sv-clay))' }}>*</span>
-            </Label>
-            <Input
-              id="pill-name"
-              value={pill.name}
-              onChange={(e) => setPill((p) => ({ ...p, name: e.target.value }))}
-              placeholder="e.g. Cold open for VP Marketing"
-              className="h-9 text-[13px]"
-              autoFocus={!isEdit}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="pill-desc" className="text-[12px] font-medium" style={{ color: 'hsl(var(--sv-ink))' }}>
-              Description <span style={{ color: 'hsl(var(--sv-muted))' }}>(optional)</span>
-            </Label>
-            <Input
-              id="pill-desc"
-              value={pill.description}
-              onChange={(e) => setPill((p) => ({ ...p, description: e.target.value }))}
-              placeholder="What this pill does in one line"
-              className="h-9 text-[13px]"
-            />
-          </div>
+        {/* ── Body ───────────────────────────────────────────────── */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-6">
 
-          {/* Instruction */}
-          <div className="space-y-1.5">
-            <Label htmlFor="pill-instruction" className="text-[12px] font-medium" style={{ color: 'hsl(var(--sv-ink))' }}>
-              Instruction
-            </Label>
-            <Textarea
-              id="pill-instruction"
-              value={pill.instruction}
-              onChange={(e) => setPill((p) => ({ ...p, instruction: e.target.value }))}
-              placeholder={
-                'How should Strategy think? e.g. "Be terse, executive-ready, no fluff. Always end with one clear ask."'
-              }
-              rows={4}
-              className="text-[13px] resize-none"
-            />
-            <p className="text-[11px]" style={{ color: 'hsl(var(--sv-muted))' }}>
-              This is prepended to every run of this pill.
-            </p>
-          </div>
+          {/* IDENTITY ─────────────────────────────────── */}
+          <section className="space-y-3">
+            <div className={sectionLabel} style={{ color: 'hsl(var(--sv-muted))' }}>Identity</div>
 
-          {/* Fields */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-[12px] font-medium" style={{ color: 'hsl(var(--sv-ink))' }}>
-                Inputs
+            <div className="space-y-1.5">
+              <Label htmlFor="pill-name" className={fieldLabel} style={{ color: 'hsl(var(--sv-ink))' }}>
+                Name <span style={{ color: 'hsl(var(--sv-clay))' }}>*</span>
               </Label>
-              <button
-                type="button"
-                onClick={addField}
-                className="text-[11.5px] inline-flex items-center gap-1 px-2 py-1 rounded-[6px] sv-hover-bg"
-                style={{ color: 'hsl(var(--sv-clay))' }}
-              >
-                <Plus className="h-3 w-3" /> Add field
-              </button>
+              <Input
+                id="pill-name"
+                value={pill.name}
+                onChange={(e) => setPill((p) => ({ ...p, name: e.target.value }))}
+                placeholder="e.g. Cold open for VP Marketing"
+                className="h-9 text-[13px]"
+                autoFocus={!isEdit}
+              />
             </div>
-            {pill.fields.length === 0 && (
-              <p className="text-[11.5px]" style={{ color: 'hsl(var(--sv-muted))' }}>
-                Add at least one input.
-              </p>
-            )}
-            <div className="space-y-2">
-              {pill.fields.map((f, idx) => (
-                <div
-                  key={`${f.key}-${idx}`}
-                  className="rounded-[8px] p-2.5 space-y-2"
-                  style={{ border: '1px solid hsl(var(--sv-hairline))', background: 'hsl(var(--sv-paper))' }}
-                >
-                  <div className="flex items-start gap-2">
-                    <div className="flex-1 min-w-0 space-y-1.5">
-                      <Input
-                        value={f.label}
-                        onChange={(e) => updateField(idx, { label: e.target.value, key: fieldKeyFromLabel(e.target.value) })}
-                        placeholder="Field label (e.g. Company)"
-                        className="h-8 text-[12.5px]"
-                      />
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={f.kind}
-                          onChange={(e) => updateField(idx, { kind: e.target.value as WorkflowField['kind'] })}
-                          className="h-8 px-2 rounded-md text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          style={{
-                            border: '1px solid hsl(var(--sv-hairline))',
-                            background: 'hsl(var(--sv-paper))',
-                            color: 'hsl(var(--sv-ink))',
-                          }}
-                        >
-                          {KIND_OPTIONS.map((k) => (
-                            <option key={k.value} value={k.value}>{k.label}</option>
-                          ))}
-                        </select>
-                        <label className="inline-flex items-center gap-1 text-[11.5px] cursor-pointer select-none" style={{ color: 'hsl(var(--sv-muted))' }}>
-                          <input
-                            type="checkbox"
-                            checked={!!f.required}
-                            onChange={(e) => updateField(idx, { required: e.target.checked })}
-                            className="h-3 w-3"
-                          />
-                          Required
-                        </label>
-                      </div>
-                      {f.kind === 'select' && (
-                        <Input
-                          value={(f.options ?? []).join(', ')}
-                          onChange={(e) => updateField(idx, { options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
-                          placeholder="Comma-separated options (e.g. Quick, Standard, Deep)"
-                          className="h-8 text-[12px]"
-                        />
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeField(idx)}
-                      className="h-7 w-7 rounded-[6px] sv-hover-bg flex items-center justify-center shrink-0"
-                      style={{ color: 'hsl(var(--sv-muted))' }}
-                      aria-label={`Remove field ${f.label || idx + 1}`}
-                      title="Remove field"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          {/* Optional prompt template */}
-          <details className="rounded-[8px]" style={{ border: '1px dashed hsl(var(--sv-hairline))' }}>
-            <summary className="cursor-pointer px-3 py-2 text-[12px]" style={{ color: 'hsl(var(--sv-ink) / 0.85)' }}>
-              Advanced: prompt template
-            </summary>
-            <div className="px-3 pb-3 pt-1 space-y-1.5">
+            <div className="space-y-1.5">
+              <Label htmlFor="pill-desc" className={fieldLabel} style={{ color: 'hsl(var(--sv-ink))' }}>
+                Description <span style={{ color: 'hsl(var(--sv-muted))' }}>(optional)</span>
+              </Label>
+              <Input
+                id="pill-desc"
+                value={pill.description}
+                onChange={(e) => setPill((p) => ({ ...p, description: e.target.value }))}
+                placeholder="What this pill does in one line"
+                className="h-9 text-[13px]"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="pill-surface" className={fieldLabel} style={{ color: 'hsl(var(--sv-ink))' }}>
+                Workspace
+              </Label>
+              <select
+                id="pill-surface"
+                value={pill.surface}
+                onChange={(e) => setPill((p) => ({ ...p, surface: e.target.value as StrategySurfaceKey }))}
+                className={selectClass}
+                style={selectStyle}
+              >
+                {SURFACE_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+              <p className={helpText} style={{ color: 'hsl(var(--sv-muted))' }}>
+                Where this pill appears in the Strategy sidebar.
+              </p>
+            </div>
+          </section>
+
+          {/* PROMPT + INSTRUCTIONS ──────────────────────── */}
+          <section className="space-y-3">
+            <div className={sectionLabel} style={{ color: 'hsl(var(--sv-muted))' }}>Prompt</div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="pill-template" className={fieldLabel} style={{ color: 'hsl(var(--sv-ink))' }}>
+                Prompt template
+              </Label>
               <Textarea
+                id="pill-template"
                 value={pill.promptTemplate ?? ''}
                 onChange={(e) => setPill((p) => ({ ...p, promptTemplate: e.target.value }))}
-                placeholder="Use {{Field Label}} tokens. Leave blank to auto-build from fields."
-                rows={5}
-                className="text-[12px] resize-none font-mono"
+                placeholder={
+                  'What gets inserted into the composer when the pill is clicked.\n' +
+                  'Use [Brackets] for things to fill in inline, e.g.\n' +
+                  '“Build a defensible POV on [Topic] for [Audience]. Use my prior context.”'
+                }
+                rows={6}
+                className="text-[12.5px] resize-none font-mono"
               />
-              <p className="text-[10.5px]" style={{ color: 'hsl(var(--sv-muted))' }}>
-                Tokens: {pill.fields.map((f) => `{{${f.label || '…'}}}`).join('  ') || 'add fields above'}
+              <p className={helpText} style={{ color: 'hsl(var(--sv-muted))' }}>
+                Leave blank to auto-build from inputs. Bracketed placeholders stay editable in chat.
               </p>
             </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="pill-instruction" className={fieldLabel} style={{ color: 'hsl(var(--sv-ink))' }}>
+                Hidden instructions
+              </Label>
+              <Textarea
+                id="pill-instruction"
+                value={pill.instruction}
+                onChange={(e) => setPill((p) => ({ ...p, instruction: e.target.value }))}
+                placeholder={
+                  'How should Strategy think? e.g. "Be terse, executive-ready, no fluff. ' +
+                  'Always cite resources. End with one clear ask."'
+                }
+                rows={4}
+                className="text-[13px] resize-none"
+              />
+              <p className={helpText} style={{ color: 'hsl(var(--sv-muted))' }}>
+                System-style guidance prepended on every run. Not shown to the user.
+              </p>
+            </div>
+          </section>
+
+          {/* OUTPUT + RUN ──────────────────────────────── */}
+          <section className="space-y-3">
+            <div className={sectionLabel} style={{ color: 'hsl(var(--sv-muted))' }}>Output & run</div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="pill-output" className={fieldLabel} style={{ color: 'hsl(var(--sv-ink))' }}>
+                  Output type
+                </Label>
+                <select
+                  id="pill-output"
+                  value={pill.outputType ?? 'chat'}
+                  onChange={(e) => setPill((p) => ({ ...p, outputType: e.target.value as PillOutputType }))}
+                  className={selectClass}
+                  style={selectStyle}
+                >
+                  {OUTPUT_TYPE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="pill-runmode" className={fieldLabel} style={{ color: 'hsl(var(--sv-ink))' }}>
+                  Run behavior
+                </Label>
+                <select
+                  id="pill-runmode"
+                  value={pill.runMode ?? 'insert'}
+                  onChange={(e) => setPill((p) => ({ ...p, runMode: e.target.value as PillRunMode }))}
+                  className={selectClass}
+                  style={selectStyle}
+                >
+                  <option value="insert">Insert into composer</option>
+                  <option value="send">Send immediately</option>
+                </select>
+              </div>
+            </div>
+            <p className={helpText} style={{ color: 'hsl(var(--sv-muted))' }}>
+              "Send immediately" only fires when the prompt has no <code>[Brackets]</code> left to fill.
+            </p>
+
+            <div
+              className="flex items-center justify-between rounded-[8px] px-3 py-2"
+              style={{ border: '1px solid hsl(var(--sv-hairline))' }}
+            >
+              <div className="min-w-0 pr-3">
+                <Label htmlFor="pill-clarify" className={fieldLabel + ' block'} style={{ color: 'hsl(var(--sv-ink))' }}>
+                  Ask clarifying questions first
+                </Label>
+                <p className={helpText} style={{ color: 'hsl(var(--sv-muted))' }}>
+                  Strategy will ask 1–2 sharp questions before generating.
+                </p>
+              </div>
+              <Switch
+                id="pill-clarify"
+                checked={!!pill.askClarifying}
+                onCheckedChange={(v) => setPill((p) => ({ ...p, askClarifying: v }))}
+              />
+            </div>
+          </section>
+
+          {/* ATTACHMENTS (stub) ────────────────────────── */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className={sectionLabel} style={{ color: 'hsl(var(--sv-muted))' }}>
+                <Paperclip className="h-3 w-3 inline-block mr-1 -mt-0.5" />
+                Attachments & context
+              </div>
+              <span
+                className="text-[10px] px-1.5 py-px rounded-full"
+                style={{ background: 'hsl(var(--sv-hover))', color: 'hsl(var(--sv-muted))' }}
+              >
+                Beta
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className={fieldLabel} style={{ color: 'hsl(var(--sv-ink))' }}>
+                Auto-attach context
+              </Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {CONTEXT_TOKEN_OPTIONS.map((opt) => {
+                  const checked = pill.attachments?.contextTokens?.includes(opt.value) ?? false;
+                  return (
+                    <label
+                      key={opt.value}
+                      className="flex items-center gap-2 rounded-[6px] px-2 py-1.5 cursor-pointer sv-hover-bg"
+                      style={{ border: '1px solid hsl(var(--sv-hairline))' }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleContextToken(opt.value)}
+                        className="h-3.5 w-3.5"
+                      />
+                      <span className="text-[12px]" style={{ color: 'hsl(var(--sv-ink))' }}>
+                        {opt.label}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div
+              className="flex items-center justify-between rounded-[8px] px-3 py-2"
+              style={{ border: '1px solid hsl(var(--sv-hairline))' }}
+            >
+              <div className="min-w-0 pr-3">
+                <Label htmlFor="pill-allknow" className={fieldLabel + ' block'} style={{ color: 'hsl(var(--sv-ink))' }}>
+                  Use all workspace knowledge
+                </Label>
+                <p className={helpText} style={{ color: 'hsl(var(--sv-muted))' }}>
+                  Let Strategy pull from any resource in this workspace when running.
+                </p>
+              </div>
+              <Switch
+                id="pill-allknow"
+                checked={!!pill.attachments?.useAllWorkspaceKnowledge}
+                onCheckedChange={(v) => updateAttach({ useAllWorkspaceKnowledge: v })}
+              />
+            </div>
+
+            <div
+              className="rounded-[8px] px-3 py-2 text-[11.5px] space-y-0.5"
+              style={{ border: '1px dashed hsl(var(--sv-hairline))', color: 'hsl(var(--sv-muted))' }}
+            >
+              <div style={{ color: 'hsl(var(--sv-ink) / 0.85)' }} className="font-medium">Coming next</div>
+              <div>Pin specific library resources, prompt templates, and uploaded files to this pill.</div>
+            </div>
+          </section>
+
+          {/* OPTIONAL STRUCTURED INPUTS ────────────────── */}
+          <details className="rounded-[8px]" style={{ border: '1px dashed hsl(var(--sv-hairline))' }}>
+            <summary
+              className="cursor-pointer px-3 py-2 text-[12px] font-medium"
+              style={{ color: 'hsl(var(--sv-ink) / 0.85)' }}
+            >
+              Advanced: structured inputs ({pill.fields.length})
+            </summary>
+            <div className="px-3 pb-3 pt-1 space-y-2">
+              <p className={helpText} style={{ color: 'hsl(var(--sv-muted))' }}>
+                Most pills don't need this — use <code>[Brackets]</code> in the prompt template instead.
+                Use structured inputs only if you need typed dropdowns or required fields.
+              </p>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={addField}
+                  className="text-[11.5px] inline-flex items-center gap-1 px-2 py-1 rounded-[6px] sv-hover-bg"
+                  style={{ color: 'hsl(var(--sv-clay))' }}
+                >
+                  <Plus className="h-3 w-3" /> Add field
+                </button>
+              </div>
+              <div className="space-y-2">
+                {pill.fields.map((f, idx) => (
+                  <div
+                    key={`${f.key}-${idx}`}
+                    className="rounded-[8px] p-2.5 space-y-2"
+                    style={{ border: '1px solid hsl(var(--sv-hairline))', background: 'hsl(var(--sv-paper))' }}
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        <Input
+                          value={f.label}
+                          onChange={(e) => updateField(idx, { label: e.target.value, key: fieldKeyFromLabel(e.target.value) })}
+                          placeholder="Field label (e.g. Company)"
+                          className="h-8 text-[12.5px]"
+                        />
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={f.kind}
+                            onChange={(e) => updateField(idx, { kind: e.target.value as WorkflowField['kind'] })}
+                            className="h-8 px-2 rounded-md text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            style={selectStyle}
+                          >
+                            {KIND_OPTIONS.map((k) => (
+                              <option key={k.value} value={k.value}>{k.label}</option>
+                            ))}
+                          </select>
+                          <label className="inline-flex items-center gap-1 text-[11.5px] cursor-pointer select-none" style={{ color: 'hsl(var(--sv-muted))' }}>
+                            <input
+                              type="checkbox"
+                              checked={!!f.required}
+                              onChange={(e) => updateField(idx, { required: e.target.checked })}
+                              className="h-3 w-3"
+                            />
+                            Required
+                          </label>
+                        </div>
+                        {f.kind === 'select' && (
+                          <Input
+                            value={(f.options ?? []).join(', ')}
+                            onChange={(e) => updateField(idx, { options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
+                            placeholder="Comma-separated options (e.g. Quick, Standard, Deep)"
+                            className="h-8 text-[12px]"
+                          />
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeField(idx)}
+                        className="h-7 w-7 rounded-[6px] sv-hover-bg flex items-center justify-center shrink-0"
+                        style={{ color: 'hsl(var(--sv-muted))' }}
+                        aria-label={`Remove field ${f.label || idx + 1}`}
+                        title="Remove field"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </details>
+
+          {/* VISIBILITY & ORDER ───────────────────────── */}
+          <section className="space-y-3">
+            <div className={sectionLabel} style={{ color: 'hsl(var(--sv-muted))' }}>Visibility & order</div>
+
+            <div
+              className="flex items-center justify-between rounded-[8px] px-3 py-2"
+              style={{ border: '1px solid hsl(var(--sv-hairline))' }}
+            >
+              <div className="min-w-0 pr-3 flex items-center gap-2">
+                {pill.isActive === false
+                  ? <EyeOff className="h-3.5 w-3.5" style={{ color: 'hsl(var(--sv-muted))' }} />
+                  : <Eye    className="h-3.5 w-3.5" style={{ color: 'hsl(var(--sv-clay))' }} />}
+                <div>
+                  <Label htmlFor="pill-active" className={fieldLabel + ' block'} style={{ color: 'hsl(var(--sv-ink))' }}>
+                    Visible in {currentSurfaceLabel}
+                  </Label>
+                  <p className={helpText} style={{ color: 'hsl(var(--sv-muted))' }}>
+                    Hide a pill from the sidebar without deleting it.
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="pill-active"
+                checked={pill.isActive !== false}
+                onCheckedChange={(v) => setPill((p) => ({ ...p, isActive: v }))}
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => moveOrder('up')}
+                disabled={!isEdit}
+                className="h-8 text-[12px] gap-1"
+              >
+                <ArrowUp className="h-3.5 w-3.5" /> Move up
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => moveOrder('down')}
+                disabled={!isEdit}
+                className="h-8 text-[12px] gap-1"
+              >
+                <ArrowDown className="h-3.5 w-3.5" /> Move down
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleDuplicate}
+                disabled={!isEdit}
+                className="h-8 text-[12px] gap-1 ml-auto"
+              >
+                <Copy className="h-3.5 w-3.5" /> Duplicate
+              </Button>
+            </div>
+          </section>
         </div>
 
-        <div className="shrink-0 px-5 py-3 flex items-center gap-2 justify-between" style={{ borderTop: '1px solid hsl(var(--sv-hairline))' }}>
+        {/* ── Footer ────────────────────────────────────────────── */}
+        <div
+          className="shrink-0 px-5 py-3 flex items-center gap-2 justify-between"
+          style={{ borderTop: '1px solid hsl(var(--sv-hairline))' }}
+        >
           <div>
             {isEdit && (
               <Button
