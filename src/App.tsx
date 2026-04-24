@@ -44,6 +44,7 @@ const LazyFallback = ({ text = "Loading…" }: { text?: string }) => (
 
 const Diagnostics = lazy(() => import("./pages/Diagnostics"));
 const Strategy = lazy(() => import("./pages/Strategy"));
+const StrategySettings = lazy(() => import("./pages/StrategySettings"));
 const EnrichmentVerification = lazy(() => import("./pages/EnrichmentVerification"));
 const ExecuteWorkspace = lazy(() => import("./pages/ExecuteWorkspace"));
 const BulkExtractRunner = lazy(() => import("./pages/BulkExtractRunner"));
