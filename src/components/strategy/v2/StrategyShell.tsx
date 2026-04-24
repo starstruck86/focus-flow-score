@@ -714,16 +714,62 @@ export function StrategyShell() {
     setPillsVersion((v) => v + 1);
   }, []);
 
+  /**
+   * Click a pill → prompt-first behavior.
+   *
+   * Default: compile the pill's template (with `[Bracketed]` placeholders),
+   * insert it into the composer, focus, and let the user edit naturally.
+   * Optional: if `runMode === 'send'` AND there are no unresolved placeholders,
+   * send immediately. Otherwise we still insert + focus so the user can fill
+   * placeholders in the composer (no form sheet ever opens by default).
+   *
+   * The legacy WorkflowFormSheet remains available via `handleConfigurePill`
+   * for advanced "configure before run" flows.
+   */
   const handleLaunchWorkflow = useCallback((def: WorkflowDef) => {
     // Stash the launch surface so the resulting thread can be tagged.
     launchSurfaceRef.current = activeSurface;
-    setActiveWorkflow(def);
-  }, [activeSurface]);
+
+    const compiled = compileTemplateForComposer(def);
+
+    // Decide: send immediately or insert?
+    const sendNow = def.runMode === 'send' && !hasUnresolvedPlaceholders(compiled);
+
+    // Close the surface panel so chat takes focus.
+    setActiveSurface(null);
+
+    if (sendNow) {
+      // Apply the pending tag the same way the form path did.
+      const launchedFrom = launchSurfaceRef.current;
+      launchSurfaceRef.current = null;
+      if (launchedFrom && launchedFrom !== 'work' && launchedFrom !== 'projects') {
+        if (threadId) tagThread(threadId, launchedFrom);
+        else pendingThreadTagRef.current = launchedFrom;
+      }
+      handleSend(compiled);
+      requestAnimationFrame(() => composerRef.current?.focus());
+      return;
+    }
+
+    // Default: insert into composer, focus, and let the user edit.
+    const ta = composerRef.current as
+      (HTMLTextAreaElement & { insertText?: (t: string) => void })
+      | null;
+    ta?.insertText?.(compiled);
+    requestAnimationFrame(() => composerRef.current?.focus());
+    // Tag deferred to send time — pendingThreadTagRef handles fresh threads.
+    if (launchSurfaceRef.current && launchSurfaceRef.current !== 'work' && launchSurfaceRef.current !== 'projects') {
+      const s = launchSurfaceRef.current;
+      launchSurfaceRef.current = null;
+      if (threadId) tagThread(threadId, s);
+      else pendingThreadTagRef.current = s;
+    }
+  // handleSend declared later — safe at call-time.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSurface, threadId]);
 
   const handleRunWorkflow = useCallback((compiledPrompt: string) => {
     setActiveWorkflow(null);
-    // If the user launched from a tagged surface, queue the tag for the
-    // thread that handleSend will create (or for the active one).
     const launchedFrom = launchSurfaceRef.current;
     launchSurfaceRef.current = null;
     if (launchedFrom && launchedFrom !== 'work' && launchedFrom !== 'projects') {
@@ -733,12 +779,9 @@ export function StrategyShell() {
         pendingThreadTagRef.current = launchedFrom;
       }
     }
-    // Close the surface panel so the new conversation gets focus.
     setActiveSurface(null);
-    // Route through the same send path freeform typing uses.
     handleSend(compiledPrompt);
     requestAnimationFrame(() => composerRef.current?.focus());
-  // handleSend declared later — safe at call-time.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId]);
 
