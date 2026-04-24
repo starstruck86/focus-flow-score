@@ -76,7 +76,8 @@ import { MoreHorizontal, PanelLeft } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { StrategyThreadsSidebar } from './StrategyThreadsSidebar';
 import { StrategyNavSidebar, type StrategyMode } from './StrategyNavSidebar';
-import { useUserArtifacts } from '@/hooks/strategy/useUserArtifacts';
+import { WorkflowFormSheet } from './workflows/WorkflowFormSheet';
+import type { WorkflowDef } from './workflows/workflowRegistry';
 import { StrategyGlobalNavBar } from './StrategyGlobalNavBar';
 import { StrategyProgressPanel } from './StrategyProgressPanel';
 import { ArtifactInlineCard } from './ArtifactInlineCard';
@@ -666,19 +667,21 @@ export function StrategyShell() {
     return s;
   }, [latestCompleted, threadId]);
 
-  // User-scoped artifacts feed for the new sidebar Artifacts section
-  const { rows: userArtifacts } = useUserArtifacts(20);
+  // ---------- Workflow launcher (Modes pills · Library · Artifact templates) ----------
+  // One model: pick a workflow → fill form → Run compiles a prompt → existing send path.
+  const [activeWorkflow, setActiveWorkflow] = useState<WorkflowDef | null>(null);
 
-  // Open the /library slash command in the composer (mirrors the slash route).
-  const handleOpenLibraryFromSidebar = useCallback(() => {
-    setSlashQuery('/library ');
-    requestAnimationFrame(() => {
-      composerRef.current?.focus();
-      const ta = composerRef.current as
-        (HTMLTextAreaElement & { insertText?: (t: string) => void })
-        | null;
-      ta?.insertText?.('/library ');
-    });
+  const handleLaunchWorkflow = useCallback((def: WorkflowDef) => {
+    setActiveWorkflow(def);
+  }, []);
+
+  const handleRunWorkflow = useCallback((compiledPrompt: string) => {
+    setActiveWorkflow(null);
+    // Route through the same send path freeform typing uses.
+    handleSend(compiledPrompt);
+    requestAnimationFrame(() => composerRef.current?.focus());
+  // handleSend declared later — safe at call-time.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Pick a mode → set hint state, focus composer (does NOT gate input).
@@ -687,21 +690,13 @@ export function StrategyShell() {
     requestAnimationFrame(() => composerRef.current?.focus());
   }, []);
 
-  // Open an artifact row → switch to its thread + open the workspace panel.
-  const handleOpenArtifactFromSidebar = useCallback((a: { thread_id: string | null }) => {
-    if (a.thread_id) setActiveThreadId(a.thread_id);
-    setArtifactPanelOpen(true);
-  }, [setActiveThreadId]);
-
   const sidebarNode = (onAfterSelect?: () => void) => (
     <StrategyNavSidebar
       collapsed={sidebarCollapsed}
       onToggleCollapsed={toggleSidebar}
       activeMode={activeMode}
       onPickMode={handlePickMode}
-      onOpenLibrary={handleOpenLibraryFromSidebar}
-      artifacts={userArtifacts}
-      onOpenArtifact={handleOpenArtifactFromSidebar}
+      onLaunchWorkflow={handleLaunchWorkflow}
       threads={threads}
       activeThreadId={threadId}
       onSelectThread={(id) => setActiveThreadId(id)}
@@ -989,6 +984,12 @@ export function StrategyShell() {
         onOpenChange={(o) => { setCanaryDrawerOpen(o); if (!o) setCanaryReadonly(null); }}
         readonlyReview={canaryReadonly}
         onSaved={handleCanarySaved}
+      />
+      {/* Workflow form — Click → Configure → Run for every Mode pill / Library workflow / Artifact template */}
+      <WorkflowFormSheet
+        workflow={activeWorkflow}
+        onClose={() => setActiveWorkflow(null)}
+        onRun={handleRunWorkflow}
       />
       {/* Validation status drawer (read-only) */}
       <ValidationStatusDrawer

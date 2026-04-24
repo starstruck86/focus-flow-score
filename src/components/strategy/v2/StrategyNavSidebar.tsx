@@ -1,29 +1,31 @@
 /**
- * StrategyNavSidebar — the new operator sidebar for /strategy.
+ * StrategyNavSidebar — Modes / Library / Artifacts / Projects / Work
  *
- *   ChatGPT: clear sections, fast access
- *   Claude:  calm typography, artifact-first
- *   Strategy: library-grounded, reusable, operator workflow
+ * Each top section follows the same model:
+ *   Click → Configure → Run
  *
- * Locked section order (do not reorder):
- *   1. Modes      → composer hint (Brainstorm / Deep Research / Refine)
- *   2. Library    → opens /library slash command in composer
- *   3. Artifacts  → recent completed task_runs across all threads
- *   4. Projects   → promoted long-term threads (placeholder for now)
- *   5. Work       → active + recent threads
+ * • Modes      → behavior chips that reveal programmable workflow pills
+ * • Library    → workflows that create new outputs from the user's knowledge
+ * • Artifacts  → reusable document-style templates (Discovery Prep, Deal Review…)
+ * • Projects   → placeholder for promoted long-term work
+ * • Work       → active + recent threads (instances live here)
  *
- * UI ONLY. No backend, no engine, no batching, no model changes.
+ * UI ONLY. No backend/engine changes.
  */
 import { useMemo, useState } from 'react';
 import {
   Plus, PanelLeftClose, PanelLeftOpen, Sparkles,
   Lightbulb, Microscope, Wand2,
   BookOpen, FolderKanban, Loader2, FileText, ChevronRight, ChevronDown,
+  ClipboardList, ClipboardCheck, Send, Presentation, Mail, FilePlus,
+  Search, Layers, MessageSquareQuote, Shapes,
 } from 'lucide-react';
 import type { StrategyThread } from '@/types/strategy';
-import type { UserArtifact } from '@/hooks/strategy/useUserArtifacts';
-import { groupForTaskType, shortDate } from '@/hooks/strategy/useUserArtifacts';
 import { cn } from '@/lib/utils';
+import {
+  MODE_PILLS, LIBRARY_DEFS, ARTIFACT_TEMPLATE_DEFS,
+  type WorkflowDef,
+} from './workflows/workflowRegistry';
 
 export type StrategyMode = 'brainstorm' | 'deep_research' | 'refine' | null;
 
@@ -36,12 +38,8 @@ interface Props {
   activeMode: StrategyMode;
   onPickMode: (m: StrategyMode) => void;
 
-  // Library
-  onOpenLibrary: () => void;
-
-  // Artifacts
-  artifacts: UserArtifact[];
-  onOpenArtifact: (a: UserArtifact) => void;
+  // Workflow launcher (used by all three actionable sections)
+  onLaunchWorkflow: (def: WorkflowDef) => void;
 
   // Work (threads)
   threads: StrategyThread[];
@@ -55,47 +53,48 @@ interface Props {
   onAfterSelect?: () => void;
 }
 
-const MODES: { id: Exclude<StrategyMode, null>; label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; hint: string }[] = [
-  { id: 'brainstorm',    label: 'Brainstorm',    icon: Lightbulb,  hint: 'Brainstorm mode · think out loud, explore angles, no structure required.' },
-  { id: 'deep_research', label: 'Deep Research', icon: Microscope, hint: 'Deep Research mode · ask anything, paste notes, or start with an account or company.' },
-  { id: 'refine',        label: 'Refine',        icon: Wand2,      hint: 'Refine mode · paste a draft, an output, or a snippet — I will sharpen it.' },
+const MODE_META: { id: Exclude<StrategyMode, null>; label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; hint: string }[] = [
+  { id: 'brainstorm',    label: 'Brainstorm',    icon: Lightbulb,  hint: 'Brainstorm — angles, ideas, hooks, POVs.' },
+  { id: 'deep_research', label: 'Deep Research', icon: Microscope, hint: 'Deep research — companies, competitors, briefs.' },
+  { id: 'refine',        label: 'Refine',        icon: Wand2,      hint: 'Refine — sharpen drafts, tighten messaging.' },
 ];
 
-const LIBRARY_EXAMPLES = ['Generate ideas', 'Create framework', 'Build messaging', 'Turn resources into content'];
+const LIBRARY_ICON_BY_ID: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
+  'library.ideas': Lightbulb,
+  'library.framework': Shapes,
+  'library.messaging': MessageSquareQuote,
+  'library.synthesis': Layers,
+};
+
+const ARTIFACT_ICON_BY_ID: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
+  'artifact.discovery_prep': ClipboardList,
+  'artifact.deal_review': ClipboardCheck,
+  'artifact.outreach_plan': Send,
+  'artifact.demo_plan': Presentation,
+  'artifact.followup_email': Mail,
+  'artifact.custom': FilePlus,
+};
 
 export function StrategyNavSidebar({
   collapsed, onToggleCollapsed,
   activeMode, onPickMode,
-  onOpenLibrary,
-  artifacts, onOpenArtifact,
+  onLaunchWorkflow,
   threads, activeThreadId, onSelectThread, onNewWork,
   runningThreadIds, artifactThreadIds,
   onAfterSelect,
 }: Props) {
-  // Section open/close state — calm by default, no junk drawer
+  // Section open/close state — calm by default
   const [openModes, setOpenModes] = useState(true);
   const [openLibrary, setOpenLibrary] = useState(true);
   const [openArtifacts, setOpenArtifacts] = useState(true);
   const [openProjects, setOpenProjects] = useState(false);
   const [openWork, setOpenWork] = useState(true);
 
-  // Group artifacts by task type
-  const artifactsGrouped = useMemo(() => {
-    const m = new Map<string, UserArtifact[]>();
-    for (const a of artifacts) {
-      const g = groupForTaskType(a.task_type);
-      if (!m.has(g)) m.set(g, []);
-      m.get(g)!.push(a);
-    }
-    return Array.from(m.entries());
-  }, [artifacts]);
-
   // Filter test/benchmark threads out of Work; sort active+ready first.
   const { visibleThreads, hiddenTestCount } = useMemo(() => {
     const isTest = (t: StrategyThread) => /^\[benchmark\]/i.test(t.title || '');
     const visible = threads.filter((t) => !isTest(t));
     const hidden = threads.length - visible.length;
-    // Stable sort: active > running > artifact-ready > untitled-deprio > rest (by updated_at order which is already DB-sorted)
     const score = (t: StrategyThread) => {
       if (t.id === activeThreadId) return 0;
       if (runningThreadIds?.has(t.id)) return 1;
@@ -107,6 +106,10 @@ export function StrategyNavSidebar({
     return { visibleThreads: sorted, hiddenTestCount: hidden };
   }, [threads, activeThreadId, runningThreadIds, artifactThreadIds]);
 
+  const handleLaunch = (def: WorkflowDef) => {
+    onLaunchWorkflow(def);
+    onAfterSelect?.();
+  };
 
   // ────────────── Collapsed rail ──────────────
   if (collapsed) {
@@ -126,7 +129,8 @@ export function StrategyNavSidebar({
         <RailButton onClick={() => onPickMode('brainstorm')} title="Brainstorm" highlighted={activeMode === 'brainstorm'}><Lightbulb className="h-4 w-4" /></RailButton>
         <RailButton onClick={() => onPickMode('deep_research')} title="Deep Research" highlighted={activeMode === 'deep_research'}><Microscope className="h-4 w-4" /></RailButton>
         <RailButton onClick={() => onPickMode('refine')} title="Refine" highlighted={activeMode === 'refine'}><Wand2 className="h-4 w-4" /></RailButton>
-        <RailButton onClick={onOpenLibrary} title="Library"><BookOpen className="h-4 w-4" /></RailButton>
+        <RailButton onClick={() => handleLaunch(LIBRARY_DEFS[0])} title="Library"><BookOpen className="h-4 w-4" /></RailButton>
+        <RailButton onClick={() => handleLaunch(ARTIFACT_TEMPLATE_DEFS[0])} title="Artifact templates"><FileText className="h-4 w-4" /></RailButton>
       </aside>
     );
   }
@@ -185,7 +189,7 @@ export function StrategyNavSidebar({
 
       {/* ── Sections ── */}
       <div className="flex-1 min-h-0 overflow-y-auto pb-4">
-        {/* 1. Modes */}
+        {/* 1. Modes — chip + revealed pills */}
         <Section
           label="Modes"
           subtitle="How should Strategy think?"
@@ -193,138 +197,125 @@ export function StrategyNavSidebar({
           onToggle={() => setOpenModes(o => !o)}
         >
           <div className="px-2 space-y-px">
-            {MODES.map((m) => {
+            {MODE_META.map((m) => {
               const isActive = activeMode === m.id;
               const Icon = m.icon;
+              const pills = MODE_PILLS[m.id];
               return (
-                <button
-                  key={m.id}
-                  onClick={() => { onPickMode(isActive ? null : m.id); }}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-[12.5px] transition-colors text-left"
-                  style={{
-                    background: isActive ? 'hsl(var(--sv-clay) / 0.10)' : 'transparent',
-                    color: isActive ? 'hsl(var(--sv-ink))' : 'hsl(var(--sv-ink) / 0.85)',
-                    fontWeight: isActive ? 600 : 400,
-                  }}
-                  onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
-                  onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                  title={m.hint}
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: isActive ? 'hsl(var(--sv-clay))' : 'hsl(var(--sv-muted))' }} />
-                  <span className="flex-1 truncate">{m.label}</span>
+                <div key={m.id}>
+                  <button
+                    onClick={() => onPickMode(isActive ? null : m.id)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-[12.5px] transition-colors text-left"
+                    style={{
+                      background: isActive ? 'hsl(var(--sv-clay) / 0.10)' : 'transparent',
+                      color: isActive ? 'hsl(var(--sv-ink))' : 'hsl(var(--sv-ink) / 0.85)',
+                      fontWeight: isActive ? 600 : 400,
+                    }}
+                    onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
+                    onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                    title={m.hint}
+                    aria-expanded={isActive}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: isActive ? 'hsl(var(--sv-clay))' : 'hsl(var(--sv-muted))' }} />
+                    <span className="flex-1 truncate">{m.label}</span>
+                    {isActive
+                      ? <ChevronDown className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-clay))' }} />
+                      : <ChevronRight className="h-3 w-3 shrink-0 opacity-50" />}
+                  </button>
                   {isActive && (
-                    <span className="text-[9px] uppercase tracking-wide" style={{ color: 'hsl(var(--sv-clay))' }}>on</span>
+                    <ul className="pl-7 pr-1 pb-1.5 pt-0.5 space-y-px">
+                      {pills.map((pill) => (
+                        <li key={pill.id}>
+                          <button
+                            onClick={() => handleLaunch(pill)}
+                            className="w-full text-left px-2 py-1 rounded-[5px] text-[11.5px] transition-colors flex items-center gap-1.5"
+                            style={{ color: 'hsl(var(--sv-ink) / 0.78)' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.7)'; e.currentTarget.style.color = 'hsl(var(--sv-ink))'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'hsl(var(--sv-ink) / 0.78)'; }}
+                            title={pill.description}
+                          >
+                            <span className="truncate">{pill.label}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
                   )}
-                </button>
+                </div>
               );
             })}
+            {!activeMode && (
+              <p className="px-2 pt-1 pb-2 text-[10.5px]" style={{ color: 'hsl(var(--sv-muted))' }}>
+                Pick a mode to reveal workflow shortcuts. You can always type freely.
+              </p>
+            )}
           </div>
         </Section>
 
-        {/* 2. Library */}
+        {/* 2. Library — creation workflows */}
         <Section
           label="Library"
           subtitle="Create from your knowledge"
           open={openLibrary}
           onToggle={() => setOpenLibrary(o => !o)}
         >
-          <div className="px-3">
-            <button
-              onClick={() => { onOpenLibrary(); onAfterSelect?.(); }}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-[8px] text-[12.5px] font-medium transition-colors"
-              style={{
-                background: 'hsl(var(--sv-clay) / 0.08)',
-                color: 'hsl(var(--sv-ink))',
-                border: '1px solid hsl(var(--sv-clay) / 0.15)',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-clay) / 0.14)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-clay) / 0.08)'; }}
-            >
-              <BookOpen className="h-3.5 w-3.5" style={{ color: 'hsl(var(--sv-clay))' }} />
-              <span className="flex-1 text-left">Create from Library</span>
-            </button>
-            <ul className="mt-1.5 space-y-px">
-              {LIBRARY_EXAMPLES.map((ex) => (
-                <li key={ex}>
+          <ul className="px-1.5 space-y-px">
+            {LIBRARY_DEFS.map((def) => {
+              const Icon = LIBRARY_ICON_BY_ID[def.id] ?? BookOpen;
+              return (
+                <li key={def.id}>
                   <button
-                    onClick={() => { onOpenLibrary(); onAfterSelect?.(); }}
-                    className="w-full text-left px-2 py-1 rounded-[4px] text-[11.5px] transition-colors"
-                    style={{ color: 'hsl(var(--sv-muted))' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; e.currentTarget.style.color = 'hsl(var(--sv-ink))'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'hsl(var(--sv-muted))'; }}
+                    onClick={() => handleLaunch(def)}
+                    className="w-full text-left px-2 py-1.5 rounded-[6px] flex items-start gap-2 group transition-colors"
+                    style={{ color: 'hsl(var(--sv-ink))' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                    title={def.description}
                   >
-                    · {ex}
+                    <Icon className="h-3.5 w-3.5 shrink-0 mt-[2px]" style={{ color: 'hsl(var(--sv-clay) / 0.75)' }} />
+                    <span className="flex-1 min-w-0 truncate text-[12.5px]">{def.label}</span>
+                    <ChevronRight className="h-3 w-3 shrink-0 mt-[3px] opacity-0 group-hover:opacity-50" />
                   </button>
                 </li>
-              ))}
-            </ul>
-          </div>
+              );
+            })}
+          </ul>
         </Section>
 
-        {/* 3. Artifacts */}
+        {/* 3. Artifacts — reusable templates */}
         <Section
           label="Artifacts"
-          subtitle={artifacts.length === 0 ? 'Outputs land here' : undefined}
-          count={artifacts.length}
+          subtitle="Reusable document templates"
           open={openArtifacts}
           onToggle={() => setOpenArtifacts(o => !o)}
         >
-          {artifacts.length === 0 ? (
-            <p className="px-3 pt-1 pb-2 text-[11.5px]" style={{ color: 'hsl(var(--sv-muted))' }}>
-              No artifacts yet. Discovery preps and deal reviews will appear here.
-            </p>
-          ) : (
-            <div className="px-1.5 space-y-1.5">
-              {artifactsGrouped.map(([groupName, items]) => (
-                <div key={groupName}>
-                  <div
-                    className="px-2 pt-1 pb-0.5 text-[10px] font-medium uppercase tracking-[0.06em]"
-                    style={{ color: 'hsl(var(--sv-muted) / 0.75)' }}
+          <ul className="px-1.5 space-y-px">
+            {ARTIFACT_TEMPLATE_DEFS.map((def) => {
+              const Icon = ARTIFACT_ICON_BY_ID[def.id] ?? FileText;
+              return (
+                <li key={def.id}>
+                  <button
+                    onClick={() => handleLaunch(def)}
+                    className="w-full text-left px-2 py-1.5 rounded-[6px] flex items-start gap-2 group transition-colors"
+                    style={{ color: 'hsl(var(--sv-ink))' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                    title={def.description}
                   >
-                    {groupName}
-                  </div>
-                  <ul className="space-y-px">
-                    {items.slice(0, 3).map((a) => (
-                      <li key={a.id}>
-                        <button
-                          onClick={() => { onOpenArtifact(a); onAfterSelect?.(); }}
-                          className="w-full text-left px-2 py-1.5 rounded-[6px] flex items-start gap-2 group transition-colors"
-                          style={{ color: 'hsl(var(--sv-ink))' }}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                          title={a.title}
-                        >
-                          <FileText className="h-3 w-3 shrink-0 mt-[3px]" style={{ color: 'hsl(var(--sv-clay) / 0.7)' }} />
-                          <div className="flex-1 min-w-0 flex flex-col gap-px">
-                            <span className="truncate text-[12.5px] leading-tight">
-                              {a.context ? a.context : a.type_label}
-                            </span>
-                            <span
-                              className="truncate text-[10.5px] leading-tight"
-                              style={{ color: 'hsl(var(--sv-muted))' }}
-                            >
-                              {a.context ? `${a.type_label} · ${shortDate(a.completed_at ?? a.created_at)}` : shortDate(a.completed_at ?? a.created_at)}
-                            </span>
-                          </div>
-                          <ChevronRight className="h-3 w-3 shrink-0 mt-[3px] opacity-0 group-hover:opacity-50" />
-                        </button>
-                      </li>
-                    ))}
-                    {items.length > 3 && (
-                      <li>
-                        <span
-                          className="block px-2 py-0.5 text-[10.5px]"
-                          style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}
-                        >
-                          +{items.length - 3} more
-                        </span>
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )}
+                    <Icon className="h-3.5 w-3.5 shrink-0 mt-[2px]" style={{ color: 'hsl(var(--sv-clay) / 0.75)' }} />
+                    <div className="flex-1 min-w-0 flex flex-col">
+                      <span className="truncate text-[12.5px] leading-tight">
+                        {def.formTitle ?? def.label.replace(/\s+Template$/i, '')}
+                      </span>
+                      <span className="truncate text-[10.5px] leading-tight" style={{ color: 'hsl(var(--sv-muted))' }}>
+                        Template
+                      </span>
+                    </div>
+                    <ChevronRight className="h-3 w-3 shrink-0 mt-[3px] opacity-0 group-hover:opacity-50" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         </Section>
 
         {/* 4. Projects */}
@@ -350,7 +341,7 @@ export function StrategyNavSidebar({
           </div>
         </Section>
 
-        {/* 5. Work — benchmark/test threads filtered, active/artifact-ready ranked first */}
+        {/* 5. Work — active + recent threads */}
         <Section
           label="Work"
           subtitle={visibleThreads.length === 0 ? 'Active and recent threads' : undefined}
