@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import type { StrategyThread } from '@/types/strategy';
 import type { UserArtifact } from '@/hooks/strategy/useUserArtifacts';
-import { groupForTaskType } from '@/hooks/strategy/useUserArtifacts';
+import { groupForTaskType, shortDate } from '@/hooks/strategy/useUserArtifacts';
 import { cn } from '@/lib/utils';
 
 export type StrategyMode = 'brainstorm' | 'deep_research' | 'refine' | null;
