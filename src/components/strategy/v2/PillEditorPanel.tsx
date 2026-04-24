@@ -420,12 +420,12 @@ export function PillEditorPanel({ editing, surface, onSaved, onCancel }: Props) 
           </div>
         </section>
 
-        {/* ATTACHMENTS */}
+        {/* CONTEXT */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <div className={sectionLabel} style={{ color: 'hsl(var(--sv-muted))' }}>
               <Paperclip className="h-3 w-3 inline-block mr-1 -mt-0.5" />
-              Attachments & context
+              Context
             </div>
             <span
               className="text-[10px] px-1.5 py-px rounded-full"
@@ -437,7 +437,7 @@ export function PillEditorPanel({ editing, surface, onSaved, onCancel }: Props) 
 
           <div className="space-y-1.5">
             <Label className={fieldLabel} style={{ color: 'hsl(var(--sv-ink))' }}>
-              Auto-attach context
+              What this pill knows about
             </Label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {CONTEXT_TOKEN_OPTIONS.map((opt) => {
