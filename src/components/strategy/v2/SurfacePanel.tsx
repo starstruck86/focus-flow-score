@@ -487,9 +487,9 @@ export function SurfacePanel({
             />
           )}
 
-          {/* Work surface: thread list */}
+          {/* Work surface: command center (search + filters + grouping) */}
           {surface === 'work' && (
-            <WorkThreadList
+            <WorkCommandCenter
               threads={workThreads}
               activeThreadId={activeThreadId}
               onSelect={onSelectThread}
