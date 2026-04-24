@@ -151,6 +151,14 @@ export function StrategyShell() {
     [],
   );
 
+  // ── Per-surface active thread ────────────────────────────────────────────
+  // Each workspace remembers the thread it last had open. Switching surfaces
+  // restores that surface's thread (or null = empty/launch state). Sending
+  // from a surface stores the new thread under that surface's bucket so it
+  // becomes the surface's "current conversation" without bleeding to others.
+  // The 'work' bucket is the global all-threads view.
+  const surfaceThreadsRef = useRef<Record<string, string | null>>({});
+
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
@@ -167,31 +175,42 @@ export function StrategyShell() {
   // in the composer (the composer only ever shows the human title).
   const [pendingResourceIds, setPendingResourceIds] = useState<string[]>([]);
 
-  // ── Surface-switch draft swap ────────────────────────────────────────────
-  // When the user moves between workspaces, save the in-flight draft under
-  // the previous surface and restore the next surface's draft. This makes
-  // each workspace feel like its own independent starting surface — a draft
-  // typed in Brainstorm never bleeds into Deep Research.
+  // ── Surface-switch swap (drafts + active thread) ─────────────────────────
+  // When the user moves between workspaces, save the in-flight draft AND the
+  // currently active thread id under the previous surface, then restore both
+  // for the next surface. This makes each workspace feel like its own
+  // independent starting surface — a draft typed in Brainstorm never bleeds
+  // into Deep Research, and the conversation you opened in Deep Research is
+  // still there when you come back to it.
   useEffect(() => {
     const ta = composerRef.current as
       (HTMLTextAreaElement & { getValue?: () => string; setValue?: (t: string) => void })
       | null;
-    if (!ta?.getValue || !ta?.setValue) {
-      // Composer not mounted yet — just remember the new key.
-      lastSurfaceKeyRef.current = draftKeyOf(activeSurface);
-      return;
-    }
     const prevKey = lastSurfaceKeyRef.current;
     const nextKey = draftKeyOf(activeSurface);
-    if (prevKey === nextKey) return;
-    // Persist the current draft for the surface we're leaving.
-    surfaceDraftsRef.current[prevKey] = ta.getValue();
-    // Load the draft for the surface we're entering (default = empty).
-    const incoming = surfaceDraftsRef.current[nextKey] ?? '';
-    ta.setValue(incoming);
+    if (prevKey === nextKey) {
+      lastSurfaceKeyRef.current = nextKey;
+      return;
+    }
+
+    // 1. Save the current draft + active thread for the surface we're leaving.
+    if (ta?.getValue) {
+      surfaceDraftsRef.current[prevKey] = ta.getValue();
+    }
+    // Snapshot the live active thread under the *previous* surface bucket.
+    // (We use the threads-hook ref via setActiveThreadId below — read here.)
+    surfaceThreadsRef.current[prevKey] = activeThreadIdRef.current;
+
+    // 2. Restore the next surface's draft + active thread.
+    const incomingDraft = surfaceDraftsRef.current[nextKey] ?? '';
+    if (ta?.setValue) ta.setValue(incomingDraft);
+    const incomingThread = surfaceThreadsRef.current[nextKey] ?? null;
+    setActiveThreadId(incomingThread);
+
     lastSurfaceKeyRef.current = nextKey;
     // Clear any in-flight slash query so we don't carry "/library" between surfaces.
     setSlashQuery(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSurface, draftKeyOf]);
 
   // ----- Cycle 1 Canary operator workflow -----
