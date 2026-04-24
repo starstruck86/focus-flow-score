@@ -852,7 +852,9 @@ export function StrategyShell() {
               title={`Discovery Prep`}
               result={latestCompleted.result}
               freshlyCompleted={recentlyCompletedRunId === latestCompleted.row.id}
+              contextLabel={entityName}
               onOpen={() => setArtifactPanelOpen(true)}
+              onPromote={handlePromoteCurrentArtifact}
             />
           </div>
         )}
@@ -925,7 +927,9 @@ export function StrategyShell() {
       {showArtifactPanel && latestCompleted && (
         <ArtifactWorkspace
           result={latestCompleted.result}
+          contextLabel={entityName}
           onClose={() => setArtifactPanelOpen(false)}
+          onPromote={handlePromoteCurrentArtifact}
         />
       )}
 
@@ -935,7 +939,9 @@ export function StrategyShell() {
           <SheetContent side="right" className="p-0 w-full sm:w-[480px]">
             <ArtifactWorkspace
               result={latestCompleted.result}
+              contextLabel={entityName}
               onClose={() => setArtifactPanelOpen(false)}
+              onPromote={handlePromoteCurrentArtifact}
             />
           </SheetContent>
         </Sheet>
