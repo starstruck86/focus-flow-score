@@ -1367,29 +1367,9 @@ export function StrategyShell() {
         onRun={handleRunWorkflow}
         onEditCustom={handleEditCustomPillById}
       />
-      {/* Pill editor — create/edit programmable shortcuts (custom GPT-style) */}
-      <PillEditorSheet
-        open={pillEditorOpen}
-        editing={editingPill}
-        surface={pillEditorSurface}
-        onClose={() => { setPillEditorOpen(false); setEditingPill(null); }}
-        onSaved={handlePillSaved}
-      />
-      {/* Manage Strategy — full configuration surface for workspaces & pills.
-          Opened from the sidebar (replaces the broken "Add Mode" entry). */}
-      <ManageStrategySheet
-        open={manageOpen}
-        onClose={() => setManageOpen(false)}
-        onAddPill={(surface) => {
-          setManageOpen(false);
-          handleAddPill(surface);
-        }}
-        onEditPill={(pill) => {
-          setManageOpen(false);
-          handleEditPill(pill);
-        }}
-        pillsVersion={pillsVersion}
-      />
+      {/* Pill editor + Manage Strategy now live on /strategy/settings.
+          Add/Edit Pill and "Manage Strategy" call navigate(...) instead of
+          opening a sheet. See handleAddPill / handleEditPill below. */}
       {/* Promote-to-Library — explicit, never automatic. Outputs are contextual by default. */}
       <PromoteToLibrarySheet
         payload={promotePayload}
