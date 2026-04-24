@@ -79,7 +79,7 @@ export const StrategyTopBar = forwardRef<HTMLDivElement, Props>(function Strateg
             style={{ color: 'hsl(var(--sv-ink))' }}
             title="Click to rename"
           >
-            {title || 'Untitled thread'}
+            {title || 'New thread'}
           </button>
         )}
 
