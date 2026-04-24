@@ -207,7 +207,7 @@ export function SurfacePanel({
       brainstorm: (t) => {
         const s = (t.title || '').toLowerCase();
         if (/\b(idea|ideas|brainstorm|angle|angles|hook|hooks|pov|point of view|hypothes)\b/.test(s))
-          return { reason: 'Strong match for Brainstorm', group: 'Ideation', nextAction: 'expand or branch', priority: 100 };
+          return { reason: 'Strong match for Brainstorm', group: 'Ideation', nextAction: 'expand into a full POV', priority: 100 };
         if (/\b(messaging|campaign|pitch|positioning|narrative|theme)\b/.test(s))
           return { reason: 'Messaging direction', group: 'Messaging', nextAction: 'sharpen or test angles', priority: 80 };
         if (!hasArtifact(t) && (t.title || '').length > 0 && (t.title || '').length < 50)
@@ -217,7 +217,7 @@ export function SurfacePanel({
       deep_research: (t) => {
         const s = (t.title || '').toLowerCase();
         if (hasArtifact(t) && (t.title || '').length >= 25)
-          return { reason: 'Strong match for Deep Research', group: 'Structured work', nextAction: 'expand or refine', priority: 100 };
+          return { reason: 'Strong match for Deep Research', group: 'Structured work', nextAction: 'expand into a full brief', priority: 100 };
         if (/\b(research|analysis|analyze|brief|deep dive|deep-dive|teardown|profile)\b/.test(s))
           return { reason: 'Long-form analysis', group: 'Structured work', nextAction: 'extend or cite', priority: 90 };
         if (/\b(account|company|competitor|competitive|market|industry|landscape)\b/.test(s))
@@ -229,7 +229,7 @@ export function SurfacePanel({
       refine: (t) => {
         const s = (t.title || '').toLowerCase();
         if (hasArtifact(t) && ageDays(t) < 3)
-          return { reason: 'Recently edited draft', group: 'Drafts to polish', nextAction: 'tighten or rewrite', priority: 100 };
+          return { reason: 'Recently edited draft', group: 'Drafts to polish', nextAction: 'refine for exec audience', priority: 100 };
         if (hasArtifact(t))
           return { reason: 'Draft with artifact', group: 'Drafts to polish', nextAction: 'polish or reuse', priority: 85 };
         if (/\b(refine|rewrite|edit|tighten|polish|improve|sharpen|revise)\b/.test(s))
@@ -241,7 +241,7 @@ export function SurfacePanel({
       library: (t) => {
         const s = (t.title || '').toLowerCase();
         if (/\b(framework|methodology|model|playbook)\b/.test(s))
-          return { reason: 'Framework work', group: 'Frameworks', nextAction: 'reuse or extend', priority: 90 };
+          return { reason: 'Framework work', group: 'Frameworks', nextAction: 'turn into outreach', priority: 90 };
         if (/\b(synthesis|pattern|insight|insights|principle|principles)\b/.test(s))
           return { reason: 'Synthesis / pattern', group: 'Insights', nextAction: 'apply elsewhere', priority: 75 };
         if (/\b(library|knowledge)\b/.test(s))
@@ -294,7 +294,7 @@ export function SurfacePanel({
       if (isRunning(t)) {
         reason = 'Running now'; group = 'Active'; nextAction = 'open to follow'; priority = 100;
       } else if (hasArtifact(t)) {
-        reason = 'Has artifact'; group = 'With artifact'; nextAction = 'expand or refine'; priority = 80;
+        reason = 'Has artifact'; group = 'With artifact'; nextAction = 'expand into a full brief'; priority = 80;
       }
       // First (most recent) gets a slight bump so it earns the "Top match" badge.
       if (idx === 0) priority += 5;
@@ -604,7 +604,7 @@ function RecentInSurface({
 }) {
   const hasOwn = ownThreads.length > 0;
   const hasFallback = !hasOwn && fallbackThreads.length > 0;
-  const heading = hasOwn ? `Recent in ${label}` : (hasFallback ? 'Relevant recent work' : `Recent in ${label}`);
+  const heading = hasOwn ? `Recent in ${label}` : (hasFallback ? 'Best starting points' : `Recent in ${label}`);
   const annotated: AnnotatedThread[] = hasOwn ? ownThreads : (hasFallback ? fallbackThreads : []);
 
   // The single highest-priority thread earns a "Top match" badge.
@@ -620,6 +620,14 @@ function RecentInSurface({
     }
     return Array.from(map.entries());
   }, [annotated]);
+
+  // Light contextual hint per group position (most relevant / secondary / etc.).
+  const groupContextHint = (idx: number, total: number): string | null => {
+    if (total <= 1) return null;
+    if (idx === 0) return 'most relevant';
+    if (idx === total - 1) return 'also worth a look';
+    return 'secondary';
+  };
 
   const fallbackHint = (() => {
     if (!hasFallback) return null;
@@ -661,44 +669,56 @@ function RecentInSurface({
       </div>
       {annotated.length > 0 ? (
         <div className={vibe.groupSpacing}>
-          {groups.map(([groupName, items], idx) => (
-            <div key={groupName}>
-              {groups.length > 1 && (
-                <div
-                  className="flex items-center gap-2 mb-2"
-                  data-testid={`group-${groupName.toLowerCase().replace(/\s+/g, '-')}`}
-                >
-                  <span
-                    className="text-[10px] font-semibold uppercase tracking-[0.1em]"
-                    style={{ color: 'hsl(var(--sv-ink) / 0.6)' }}
-                  >
-                    {groupName}
-                  </span>
+          {groups.map(([groupName, items], idx) => {
+            const contextHint = groupContextHint(idx, groups.length);
+            return (
+              <div key={groupName}>
+                {groups.length > 1 && (
                   <div
-                    className="flex-1 h-px"
-                    style={{ background: 'hsl(var(--sv-hairline))' }}
-                  />
-                  <span
-                    className="text-[10px] tabular-nums"
-                    style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}
+                    className="flex items-center gap-2 mb-2"
+                    data-testid={`group-${groupName.toLowerCase().replace(/\s+/g, '-')}`}
                   >
-                    {items.length}
-                  </span>
-                </div>
-              )}
-              <ThreadRows
-                items={items}
-                activeThreadId={activeThreadId}
-                onSelect={onSelect}
-                runningThreadIds={runningThreadIds}
-                artifactThreadIds={artifactThreadIds}
-                showReason
-                showNextAction
-                topMatchId={idx === 0 ? topMatchId : null}
-                vibe={vibe}
-              />
-            </div>
-          ))}
+                    <span
+                      className="text-[10px] font-semibold uppercase tracking-[0.1em]"
+                      style={{ color: 'hsl(var(--sv-ink) / 0.6)' }}
+                    >
+                      {groupName}
+                    </span>
+                    {contextHint && (
+                      <span
+                        className="text-[9.5px] italic lowercase tracking-normal"
+                        style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
+                      >
+                        · {contextHint}
+                      </span>
+                    )}
+                    <div
+                      className="flex-1 h-px"
+                      style={{ background: 'hsl(var(--sv-hairline))' }}
+                    />
+                    <span
+                      className="text-[10px] tabular-nums"
+                      style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}
+                    >
+                      {items.length}
+                    </span>
+                  </div>
+                )}
+                <ThreadRows
+                  items={items}
+                  activeThreadId={activeThreadId}
+                  onSelect={onSelect}
+                  runningThreadIds={runningThreadIds}
+                  artifactThreadIds={artifactThreadIds}
+                  showReason
+                  showNextAction
+                  topMatchId={idx === 0 ? topMatchId : null}
+                  topMatchLabel={label}
+                  vibe={vibe}
+                />
+              </div>
+            );
+          })}
           {fallbackHint && (
             <p className="mt-1 text-[11px]" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
               {fallbackHint}
@@ -779,7 +799,7 @@ function WorkThreadList({
 
 function ThreadRows({
   items, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
-  showReason, showOriginTag, showNextAction, topMatchId, vibe,
+  showReason, showOriginTag, showNextAction, topMatchId, topMatchLabel, vibe,
 }: {
   items: AnnotatedThread[];
   activeThreadId: string | null;
@@ -794,6 +814,8 @@ function ThreadRows({
   showNextAction?: boolean;
   /** ID of the thread that should display the "Top match" badge. */
   topMatchId?: string | null;
+  /** Workspace label used in the top-match badge — e.g. "Deep Research". */
+  topMatchLabel?: string;
   /** Surface vibe — drives row density. */
   vibe?: SurfaceVibe;
 }) {
@@ -842,7 +864,7 @@ function ThreadRows({
                     }}
                     data-testid={`top-match-${t.id}`}
                   >
-                    Top match
+                    {topMatchLabel ? `Top match for ${topMatchLabel}` : 'Top match'}
                   </span>
                 )}
                 {originTag && (
@@ -870,19 +892,28 @@ function ThreadRows({
                 </span>
               </div>
               {showReason && reason && (
-                <span
-                  className="text-[10.5px] pl-px inline-flex items-center gap-1 flex-wrap"
-                  style={{ color: 'hsl(var(--sv-muted) / 0.9)' }}
+                <div
+                  className="pl-px flex flex-col gap-0.5"
                   data-testid={`reason-${t.id}`}
                 >
-                  <span style={{ color: 'hsl(var(--sv-ink) / 0.65)', fontWeight: 500 }}>{reason}</span>
+                  {/* Line 1: the decision / reason. */}
+                  <span
+                    className="text-[10.5px]"
+                    style={{ color: 'hsl(var(--sv-ink) / 0.65)', fontWeight: 500 }}
+                  >
+                    {reason}
+                  </span>
+                  {/* Line 2: the suggested next move. */}
                   {showNextAction && nextAction && (
-                    <>
-                      <span style={{ color: 'hsl(var(--sv-muted) / 0.5)' }}>→</span>
-                      <span style={{ color: 'hsl(var(--sv-clay) / 0.85)' }}>{nextAction}</span>
-                    </>
+                    <span
+                      className="text-[10.5px]"
+                      style={{ color: 'hsl(var(--sv-clay) / 0.9)' }}
+                      data-testid={`next-action-${t.id}`}
+                    >
+                      Next: {nextAction}
+                    </span>
                   )}
-                </span>
+                </div>
               )}
             </button>
           </li>
