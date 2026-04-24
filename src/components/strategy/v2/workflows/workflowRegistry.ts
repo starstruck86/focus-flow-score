@@ -18,38 +18,43 @@
 export type FieldKind = 'text' | 'textarea' | 'select';
 
 export interface WorkflowField {
-  key: string;            // internal key (matches token in promptTemplate)
-  label: string;          // visible field label
+  key: string;
+  label: string;
   placeholder?: string;
   kind: FieldKind;
   required?: boolean;
-  options?: string[];     // for kind === 'select'
-  rows?: number;          // for kind === 'textarea'
+  options?: string[];
+  rows?: number;
 }
 
 export type WorkflowFamily = 'mode' | 'library' | 'artifact';
 
+/** Output shape preferred by this pill - drives engine routing + prompt header. */
+export type PillOutputType =
+  | 'chat' | 'artifact' | 'word' | 'pdf' | 'excel' | 'powerpoint' | 'email' | 'task';
+
+/** What happens when the user clicks a pill. */
+export type PillRunMode = 'insert' | 'send';
+
 export interface WorkflowDef {
   id: string;
   family: WorkflowFamily;
-  /** Section id this workflow lives in (e.g. 'brainstorm', 'library', 'discovery_prep_template'). */
   groupId: string;
   label: string;
   description: string;
-  /** Used in the form sheet header; defaults to label. */
   formTitle?: string;
   fields: WorkflowField[];
   /** Tokens reference field labels in {{Title Case}} form. */
   promptTemplate: string;
-  /**
-   * Optional "system" instruction — how Strategy should think for this pill.
-   * Prepended to the compiled prompt as a leading directive. Editable on
-   * custom pills; read-only for built-ins (none defined today).
-   */
+  /** Hidden "system" instruction - prepended at run time. */
   instruction?: string;
-  /** True when this workflow originates from a user-defined custom pill. */
+  /** Default output shape - surfaced in prompt header so the engine knows. */
+  outputType?: PillOutputType;
+  /** Insert into composer (default) or send immediately on click. */
+  runMode?: PillRunMode;
+  /** Ask clarifying questions before generating. */
+  askClarifying?: boolean;
   isCustom?: boolean;
-  /** When isCustom, the source pill id (lets the form sheet expose Edit/Delete). */
   customPillId?: string;
 }
 
@@ -465,21 +470,72 @@ export const MODE_PILLS: Record<'brainstorm' | 'deep_research' | 'refine', Workf
 export const LIBRARY_DEFS: WorkflowDef[] = LIBRARY_WORKFLOWS;
 export const ARTIFACT_TEMPLATE_DEFS: WorkflowDef[] = ARTIFACT_TEMPLATES;
 
-/** Compile a prompt template using the user-supplied values. */
+// ──────────────────────────── OUTPUT TYPE LABELS ────────────────────────────
+
+export const OUTPUT_TYPE_LABEL: Record<PillOutputType, string> = {
+  chat:        'Chat response',
+  artifact:    'Structured artifact',
+  word:        'Word document',
+  pdf:         'PDF',
+  excel:       'Excel / CSV',
+  powerpoint:  'PowerPoint',
+  email:       'Email draft',
+  task:        'Task / run output',
+};
+
+/** Hidden header line nudging the engine toward the requested output shape. */
+function outputHeader(outputType?: PillOutputType): string {
+  if (!outputType || outputType === 'chat') return '';
+  return `Format the response as a ${OUTPUT_TYPE_LABEL[outputType].toLowerCase()}.`;
+}
+
+// ──────────────────────────── COMPILE HELPERS ────────────────────────────
+
+/**
+ * Compile a prompt template using the user-supplied form values.
+ * Used by the legacy WorkflowFormSheet and any code path that already
+ * collected values up-front. Hidden instruction + output-type header are
+ * prepended when present.
+ */
 export function compileWorkflowPrompt(def: WorkflowDef, values: Record<string, string>): string {
   let body = def.promptTemplate;
   for (const field of def.fields) {
     const raw = values[field.key]?.trim() ?? '';
     const replacement = raw.length > 0 ? raw : '(not specified)';
-    // Replace ALL occurrences of the {{Label}} token.
     body = body.split(`{{${field.label}}}`).join(replacement);
   }
-  body = body.trim();
+  return assemblePrompt(def, body.trim());
+}
 
-  // Prepend instruction (custom-GPT style) when present.
-  const instruction = def.instruction?.trim();
-  if (instruction) {
-    return `Instruction: ${instruction}\n\n${body}`.trim();
+/**
+ * Compile a prompt template for INSERTION into the composer — placeholders
+ * stay as `[Field Label]` tokens the user can type over naturally. No form,
+ * no values collected up-front. This is the prompt-first path.
+ */
+export function compileTemplateForComposer(def: WorkflowDef): string {
+  let body = def.promptTemplate;
+  for (const field of def.fields) {
+    body = body.split(`{{${field.label}}}`).join(`[${field.label}]`);
   }
-  return body;
+  return assemblePrompt(def, body.trim());
+}
+
+/** Detect whether a compiled prompt still has `[Bracketed]` placeholders left. */
+export function hasUnresolvedPlaceholders(text: string): boolean {
+  // Match [Anything Title-cased or with spaces], excluding markdown link syntax `[txt](url)`.
+  return /\[[A-Z][^\]\n]{0,80}\](?!\()/.test(text);
+}
+
+/** Shared assembly: instruction header → output hint → body → clarifying nudge. */
+function assemblePrompt(def: WorkflowDef, body: string): string {
+  const parts: string[] = [];
+  const instruction = def.instruction?.trim();
+  if (instruction) parts.push(`Instruction: ${instruction}`);
+  const out = outputHeader(def.outputType);
+  if (out) parts.push(out);
+  parts.push(body);
+  if (def.askClarifying) {
+    parts.push('Before producing the final answer, ask me 2-3 clarifying questions if anything material is missing.');
+  }
+  return parts.filter(Boolean).join('\n\n').trim();
 }

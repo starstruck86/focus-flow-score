@@ -18,16 +18,31 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, X, Wand2, Save } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Plus, Trash2, X, Wand2, Save, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   emptyPillForSurface,
   upsertCustomPill,
   deleteCustomPill,
+  duplicateCustomPill,
   type CustomPill,
 } from '@/lib/strategy/customPills';
 import type { StrategySurfaceKey } from './StrategyNavSidebar';
-import type { WorkflowField } from './workflows/workflowRegistry';
+import {
+  type WorkflowField,
+  type PillOutputType,
+  type PillRunMode,
+  OUTPUT_TYPE_LABEL,
+} from './workflows/workflowRegistry';
+
+const SURFACE_OPTIONS: Array<{ value: StrategySurfaceKey; label: string }> = [
+  { value: 'brainstorm',    label: 'Brainstorm' },
+  { value: 'deep_research', label: 'Deep Research' },
+  { value: 'refine',        label: 'Refine' },
+  { value: 'library',       label: 'Library' },
+  { value: 'artifacts',     label: 'Artifacts' },
+];
 
 interface Props {
   open: boolean;
@@ -61,9 +76,11 @@ export function PillEditorSheet({ open, editing, surface, onClose, onSaved }: Pr
   const isEdit = !!editing;
   const surfaceLabel = surface === 'deep_research' ? 'Deep Research' : surface.charAt(0).toUpperCase() + surface.slice(1);
 
+  // Save requires only a name now — fields are optional in prompt-first pills
+  // (the prompt template carries [Bracketed] placeholders the user edits inline).
   const canSave = useMemo(() => {
-    return pill.name.trim().length > 0 && pill.fields.length > 0
-      && pill.fields.every((f) => f.label.trim().length > 0);
+    if (pill.name.trim().length === 0) return false;
+    return pill.fields.every((f) => f.label.trim().length > 0);
   }, [pill]);
 
   const handleSave = () => {
