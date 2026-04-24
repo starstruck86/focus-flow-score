@@ -118,60 +118,74 @@ export function SurfacePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threads, surface, pillsVersion]);
 
-  // ── Relevant fallback (contextual, per-surface scoring) ─────────
-  // When the user hasn't run a pill in this surface yet, we still want the
-  // workspace to feel intentional — show recent work that *matches the kind
-  // of work this surface is for*, not random threads.
+  // ── Relevant fallback (strict, per-surface) ─────────────────────
+  // Only show threads that *clearly belong* to this workspace's intent.
+  // Empty is acceptable — we never pad with random work.
   //
-  // Signals available per thread: artifactThreadIds (structured output),
-  // runningThreadIds (in flight), title length (proxy for depth), updated_at.
-  // We score against simple heuristics defined per surface.
+  // Strategy: keyword/structure matching against thread titles + artifact
+  // signal. Excludes debug/test/regression threads everywhere.
   const relevantFallbackWork = useMemo(() => {
     if (surface === 'work' || surface === 'projects') return [];
     if (recentThreadsForSurface.length > 0) return [];
-    const isTest = (t: StrategyThread) => /^\[benchmark\]/i.test(t.title || '');
-    const tags = getAllThreadTags();
-    const candidates = threads.filter((t) => !isTest(t) && !tags[t.id]);
 
-    const now = Date.now();
-    const recencyBoost = (t: StrategyThread) => {
-      const ageH = Math.max(1, (now - new Date(t.updated_at).getTime()) / 3_600_000);
-      // Smooth decay: ~1.0 for fresh, ~0.4 after a week
-      return 1 / Math.log2(ageH + 2);
+    const tags = getAllThreadTags();
+
+    // Universal exclusions — never surface these in mode workspaces.
+    const isExcluded = (t: StrategyThread) => {
+      const title = (t.title || '').toLowerCase();
+      if (/^\[benchmark\]/i.test(t.title || '')) return true;
+      if (/\b(test|debug|regression|qa|scratch|tmp|temp|sandbox|wip)\b/i.test(title)) return true;
+      if (/^untitled/i.test(t.title || '') || !t.title) return true;
+      return false;
     };
-    const titleLen = (t: StrategyThread) => (t.title || '').trim().length;
-    const isUntitled = (t: StrategyThread) => !t.title || /^untitled/i.test(t.title);
+
+    // Already-tagged threads belong to their own surface — don't borrow.
+    const candidates = threads.filter((t) => !isExcluded(t) && !tags[t.id]);
     const hasArtifact = (t: StrategyThread) => artifactThreadIds?.has(t.id) ?? false;
 
-    const score = (t: StrategyThread) => {
-      const r = recencyBoost(t);
-      const len = titleLen(t);
-      const art = hasArtifact(t) ? 1 : 0;
-      const untitled = isUntitled(t) ? 1 : 0;
-      switch (surface) {
-        case 'brainstorm':
-          // Prefer ideation: short / no-artifact / fresh
-          return (r * 1.2) + (1 - art) * 0.8 + (len > 0 && len < 40 ? 0.5 : 0) - untitled * 0.3;
-        case 'deep_research':
-          // Prefer depth: artifacts + longer titles
-          return art * 1.4 + Math.min(len / 60, 1) * 0.8 + r * 0.6 - untitled * 0.5;
-        case 'refine':
-          // Prefer artifacts and recently-edited drafts
-          return art * 1.6 + r * 1.0 + Math.min(len / 50, 1) * 0.4 - untitled * 0.6;
-        case 'library':
-        case 'artifacts':
-          // Prefer threads that produced artifacts (templates/outputs)
-          return art * 1.5 + r * 0.7 - untitled * 0.4;
-        default:
-          return r;
-      }
+    // Per-surface relevance keywords. A thread must MATCH to be eligible.
+    const matchers: Record<string, (t: StrategyThread) => boolean> = {
+      brainstorm: (t) => {
+        const s = (t.title || '').toLowerCase();
+        // Ideation / messaging / POV / hypothesis signals
+        return /\b(idea|ideas|brainstorm|angle|angles|hook|hooks|pov|point of view|hypothes|messaging|campaign|pitch|positioning|narrative|theme)\b/.test(s)
+          // Short, no-artifact, fresh threads also count as ideation
+          || (!hasArtifact(t) && s.length > 0 && s.length < 50);
+      },
+      deep_research: (t) => {
+        const s = (t.title || '').toLowerCase();
+        return /\b(research|analysis|analyze|brief|deep dive|deep-dive|account|company|competitor|competitive|market|industry|risk|risks|gap|gaps|landscape|teardown|profile)\b/.test(s)
+          // Artifact-bearing threads with substantive titles read as research
+          || (hasArtifact(t) && s.length >= 25);
+      },
+      refine: (t) => {
+        const s = (t.title || '').toLowerCase();
+        return /\b(refine|rewrite|edit|tighten|polish|improve|sharpen|revise|draft|email|follow.?up|exec|executive|tone|shorten|condense)\b/.test(s)
+          // Threads with an artifact attached are typically refinement targets
+          || hasArtifact(t);
+      },
+      library: (t) => {
+        const s = (t.title || '').toLowerCase();
+        return /\b(framework|synthesis|pattern|insight|insights|playbook|library|knowledge|principle|principles|methodology|model)\b/.test(s);
+      },
+      artifacts: (t) => {
+        const s = (t.title || '').toLowerCase();
+        return /\b(template|artifact|discovery prep|deal review|outreach plan|demo plan|follow.?up|prep|plan)\b/.test(s)
+          && hasArtifact(t);
+      },
     };
 
-    return [...candidates]
-      .map((t) => ({ t, s: score(t) }))
-      .sort((a, b) => b.s - a.s)
-      .slice(0, 4)
-      .map((x) => x.t);
+    const matcher = matchers[surface];
+    if (!matcher) return [];
+
+    const matched = candidates.filter(matcher);
+    if (matched.length === 0) return [];
+
+    // Sort matched threads by recency for display.
+    return matched
+      .slice()
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .slice(0, 4);
   }, [threads, surface, recentThreadsForSurface.length, artifactThreadIds]);
 
   // ── Work surface: all threads, sorted active/ready/recent ─────
@@ -472,23 +486,23 @@ function RecentInSurface({
   const fallbackHint = (() => {
     if (!hasFallback) return null;
     switch (surface) {
-      case 'brainstorm':    return 'Lighter, earlier-stage threads from your recent work.';
-      case 'deep_research': return 'Deeper threads and artifacts that match this lens.';
-      case 'refine':        return 'Drafts and outputs you might want to tighten.';
-      case 'library':       return 'Recent work that produced reusable outputs.';
-      case 'artifacts':     return 'Recent threads that generated structured artifacts.';
+      case 'brainstorm':    return 'Earlier-stage threads from your recent work that read like ideation.';
+      case 'deep_research': return 'Recent threads that look like research, briefs, or analysis.';
+      case 'refine':        return 'Drafts and artifacts you might want to tighten or rewrite.';
+      case 'library':       return 'Recent work that built frameworks, patterns, or reusable insights.';
+      case 'artifacts':     return 'Recent threads that produced structured artifacts.';
       default:              return null;
     }
   })();
 
   const emptyCta = (() => {
     switch (surface) {
-      case 'brainstorm':    return 'Pick a pill above to spark your first idea.';
-      case 'deep_research': return 'Pick a pill above to start a deep-dive analysis.';
-      case 'refine':        return 'Pick a pill above to sharpen something you\'ve written.';
-      case 'library':       return 'Pick a workflow above to create from your knowledge.';
-      case 'artifacts':     return 'Pick a template above to draft a structured artifact.';
-      default:              return `Tap a pill above to start your first ${label} thread.`;
+      case 'brainstorm':    return 'Nothing relevant here yet. Run a pill above to create your first Brainstorm thread.';
+      case 'deep_research': return 'Nothing relevant here yet. Run a pill above to create your first Deep Research thread.';
+      case 'refine':        return 'Nothing relevant here yet. Run a pill above to create your first Refine thread.';
+      case 'library':       return 'Nothing relevant here yet. Run a workflow above to create from your knowledge.';
+      case 'artifacts':     return 'Nothing relevant here yet. Pick a template above to draft a structured artifact.';
+      default:              return `Nothing relevant here yet. Tap a pill above to start your first ${label} thread.`;
     }
   })();
 
