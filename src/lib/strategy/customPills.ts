@@ -198,7 +198,26 @@ export function emptyPillForSurface(surface: StrategySurfaceKey): CustomPill {
     outputType: 'chat',
     runMode: 'insert',
     askClarifying: false,
+    isActive: true,
+    orderIndex: Date.now(),
+    attachments: {
+      resourceIds: [],
+      templateIds: [],
+      fileIds: [],
+      contextTokens: [],
+      useAllWorkspaceKnowledge: false,
+    },
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/** Sort pills inside a surface using orderIndex (asc), then createdAt (asc). */
+export function sortPills(pills: CustomPill[]): CustomPill[] {
+  return [...pills].sort((a, b) => {
+    const ai = a.orderIndex ?? Number.MAX_SAFE_INTEGER;
+    const bi = b.orderIndex ?? Number.MAX_SAFE_INTEGER;
+    if (ai !== bi) return ai - bi;
+    return (a.createdAt ?? '').localeCompare(b.createdAt ?? '');
+  });
 }
