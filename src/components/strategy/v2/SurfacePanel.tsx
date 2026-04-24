@@ -474,13 +474,12 @@ export function SurfacePanel({
           )}
           {surface === 'projects' && <ProjectsPlaceholder />}
 
-          {/* Custom pills (per surface) — not on Work or Projects */}
-          {surface !== 'projects' && surface !== 'work' && (
+          {/* Custom pills (per surface) — execution only.
+              Creation/editing lives exclusively in /strategy/settings. */}
+          {surface !== 'projects' && surface !== 'work' && customPills.length > 0 && (
             <CustomPillsRow
               pills={customPills}
               onLaunch={(p) => onLaunchWorkflow(customPillToWorkflowDef(p))}
-              onEdit={onEditPill}
-              onAdd={() => onAddPill(surface)}
             />
           )}
 
