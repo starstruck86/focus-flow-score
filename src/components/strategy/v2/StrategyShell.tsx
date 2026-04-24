@@ -1076,7 +1076,7 @@ export function StrategyShell() {
           )}
           <div className="flex-1 min-w-0">
             <StrategyTopBar
-              title={activeThread?.title ?? 'Untitled thread'}
+              title={activeThread ? displayThreadTitle(activeThread) : 'New thread'}
               onTitleChange={(next) => activeThread && updateThread(activeThread.id, { title: next })}
               entityName={entityName}
               trustState={trustState}
