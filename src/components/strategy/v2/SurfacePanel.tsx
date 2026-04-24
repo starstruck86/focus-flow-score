@@ -331,6 +331,72 @@ export function SurfacePanel({
     return [...visible].sort((a, b) => score(a) - score(b)).slice(0, 24);
   }, [surface, threads, activeThreadId, runningThreadIds, artifactThreadIds]);
 
+  // ── Compact mode ──────────────────────────────────────────────
+  // When this surface has an active thread, collapse the launcher into
+  // a slim breadcrumb-style strip so the chat canvas dominates the view.
+  // The user can still tap "+ New" to return to this surface's empty
+  // launch state (pills, recents, etc.).
+  if (hasActiveThread && surface !== 'work' && surface !== 'projects') {
+    return (
+      <div
+        className="shrink-0 border-b"
+        style={{
+          background: 'hsl(var(--sv-paper))',
+          borderColor: 'hsl(var(--sv-hairline))',
+        }}
+        data-testid={`surface-panel-${surface}`}
+      >
+        <div className="mx-auto w-full px-6 py-2 flex items-center gap-2" style={{ maxWidth: 920 }}>
+          <div
+            className="h-5 w-5 rounded-[4px] flex items-center justify-center shrink-0"
+            style={{ background: 'hsl(var(--sv-clay) / 0.10)', color: 'hsl(var(--sv-clay))' }}
+          >
+            <HeaderIcon className="h-3 w-3" />
+          </div>
+          <span
+            className="text-[12px] tracking-tight"
+            style={{ fontFamily: 'var(--sv-serif)', color: 'hsl(var(--sv-ink))', fontWeight: 500 }}
+          >
+            {meta.label}
+          </span>
+          {meta.tag && (
+            <span
+              className="text-[8.5px] uppercase tracking-[0.12em] px-1 py-px rounded"
+              style={{
+                background: 'hsl(var(--sv-clay) / 0.10)',
+                color: 'hsl(var(--sv-clay))',
+                fontWeight: 600,
+              }}
+            >
+              {meta.tag}
+            </span>
+          )}
+          <div className="flex-1" />
+          {onNewThreadInSurface && (
+            <button
+              onClick={onNewThreadInSurface}
+              className="text-[11.5px] px-2 py-1 rounded-[4px] sv-hover-bg"
+              style={{ color: 'hsl(var(--sv-muted))' }}
+              data-testid={`surface-new-thread-${surface}`}
+              title={`New thread in ${meta.label}`}
+            >
+              + New
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="h-6 w-6 rounded-[4px] flex items-center justify-center sv-hover-bg shrink-0"
+            style={{ color: 'hsl(var(--sv-muted))' }}
+            aria-label="Close panel"
+            title="Close"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="flex-1 min-h-0 overflow-y-auto border-b"
