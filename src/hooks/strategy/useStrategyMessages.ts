@@ -6,6 +6,37 @@ import { toast } from 'sonner';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/strategy-chat`;
 
+/**
+ * Map a raw send/streaming error into a friendly user-facing message.
+ * Pure function — exported for unit tests. Never returns the literal
+ * "Failed to fetch" or "TypeError" strings.
+ */
+export function mapSendErrorToFriendlyMessage(e: unknown): string {
+  const err = e as { message?: unknown; name?: unknown } | null | undefined;
+  const raw = String(err?.message ?? '');
+  const name = String(err?.name ?? '');
+
+  const isNetworkError =
+    /failed to fetch|load failed|networkerror|network request failed|fetch failed/i.test(raw)
+    || name === 'TypeError';
+  if (isNetworkError) {
+    return "Connection hiccup — Strategy couldn't reach the AI provider. Check your network and try again.";
+  }
+
+  // Provider/server-side failures: our throw site formats these as "Error 5xx"
+  // (see resp.ok branch), but also catch raw "5xx" / "Internal Server Error".
+  const isProviderError =
+    /\berror\s*5\d{2}\b/i.test(raw)
+    || /\b5\d{2}\b/.test(raw)
+    || /internal server error|bad gateway|service unavailable|gateway timeout/i.test(raw);
+  if (isProviderError) {
+    return 'The AI provider is having a moment. Please retry — usually clears in a few seconds.';
+  }
+
+  if (raw.trim()) return raw;
+  return 'Something went wrong sending your message. Please try again.';
+}
+
 interface UseStrategyMessagesOpts {
   /** Called after an assistant streamed response completes. Receives the final text. */
   onAssistantComplete?: (assistantText: string) => void;
