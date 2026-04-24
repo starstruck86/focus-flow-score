@@ -816,6 +816,8 @@ export function StrategyShell() {
   );
 
   const showArtifactPanel = artifactPanelOpen && latestCompleted && !isMobile;
+  const showSurfaceWorkspace = activeSurface !== null;
+  const showInlineArtifactCard = !showSurfaceWorkspace && !!latestCompleted;
 
   return (
     <div
@@ -916,8 +918,10 @@ export function StrategyShell() {
         <StrategyProgressPanel active={activeRun} />
 
         {/* Surface panel — direct entry for Brainstorm / Deep Research /
-            Refine / Library / Artifacts / Projects. Pills only appear here. */}
-        {activeSurface && (
+            Refine / Library / Artifacts / Projects / Work. When active, it
+            owns the main workspace body so default thread chrome does not
+            visually compete with it. */}
+        {showSurfaceWorkspace && (
           <SurfacePanel
             surface={activeSurface}
             onLaunchWorkflow={handleLaunchWorkflow}
@@ -933,8 +937,8 @@ export function StrategyShell() {
           />
         )}
 
-        {/* Inline artifact card — surfaces completed deep-work without dumping content */}
-        {latestCompleted && (
+        {/* Inline artifact card belongs to Work/thread view, not mode workspaces. */}
+        {showInlineArtifactCard && (
           <div className="mx-auto w-full px-6 pt-3" style={{ maxWidth: 760 }}>
             <ArtifactInlineCard
               title={`Discovery Prep`}
@@ -951,6 +955,7 @@ export function StrategyShell() {
           messages={messages}
           isLoading={isLoading}
           isSending={isSending}
+          hideEmptyState={showSurfaceWorkspace}
           onPickPrompt={(prompt) => {
             const ta = composerRef.current as
               (HTMLTextAreaElement & { insertText?: (t: string) => void })
