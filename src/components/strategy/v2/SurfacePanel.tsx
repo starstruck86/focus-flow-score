@@ -599,7 +599,8 @@ function CustomPillsRow({
 // ───────────────── Recent in surface ─────────────────
 
 function RecentInSurface({
-  label, surface, ownThreads, fallbackThreads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds, vibe,
+  label, surface, ownThreads, fallbackThreads, activeThreadId, onSelect,
+  runningThreadIds, artifactThreadIds, vibe, onLaunchWorkflow,
 }: {
   label: string;
   surface: StrategySurfaceKey;
@@ -610,33 +611,37 @@ function RecentInSurface({
   runningThreadIds?: Set<string>;
   artifactThreadIds?: Set<string>;
   vibe: SurfaceVibe;
+  onLaunchWorkflow: (def: WorkflowDef) => void;
 }) {
   const hasOwn = ownThreads.length > 0;
   const hasFallback = !hasOwn && fallbackThreads.length > 0;
-  const heading = hasOwn ? `Recent in ${label}` : (hasFallback ? 'Best starting points' : `Recent in ${label}`);
   const annotated: AnnotatedThread[] = hasOwn ? ownThreads : (hasFallback ? fallbackThreads : []);
 
-  // The single highest-priority thread earns a "Top match" badge.
-  const topMatchId = annotated.length > 0 ? annotated[0].thread.id : null;
+  // Split: top match becomes its own elevated section; rest are "Other options"
+  // capped at 3 to reduce decision friction.
+  const topMatch = annotated.length > 0 ? annotated[0] : null;
+  const others = annotated.slice(1, 4);
 
-  // Group annotated threads by their `group` field, preserving insertion order.
-  const groups = useMemo(() => {
+  // Resolve the surface's primary workflow def — used by the Top Match action button.
+  const primaryDef: WorkflowDef | null = useMemo(() => {
+    if (surface === 'brainstorm' || surface === 'deep_research' || surface === 'refine') {
+      return MODE_PILLS[surface][0] ?? null;
+    }
+    if (surface === 'library') return LIBRARY_DEFS[0] ?? null;
+    if (surface === 'artifacts') return ARTIFACT_TEMPLATE_DEFS[0] ?? null;
+    return null;
+  }, [surface]);
+
+  // Group "other options" threads by their `group` field, preserving insertion order.
+  const otherGroups = useMemo(() => {
     const map = new Map<string, AnnotatedThread[]>();
-    for (const a of annotated) {
+    for (const a of others) {
       const arr = map.get(a.group) ?? [];
       arr.push(a);
       map.set(a.group, arr);
     }
     return Array.from(map.entries());
-  }, [annotated]);
-
-  // Light contextual hint per group position (most relevant / secondary / etc.).
-  const groupContextHint = (idx: number, total: number): string | null => {
-    if (total <= 1) return null;
-    if (idx === 0) return 'most relevant';
-    if (idx === total - 1) return 'also worth a look';
-    return 'secondary';
-  };
+  }, [others]);
 
   const fallbackHint = (() => {
     if (!hasFallback) return null;
@@ -661,80 +666,17 @@ function RecentInSurface({
     }
   })();
 
-  return (
-    <div>
-      <div className="flex items-center gap-1.5 mb-3">
-        <span
-          className="text-[10.5px] font-semibold uppercase tracking-[0.11em]"
-          style={{ color: 'hsl(var(--sv-ink) / 0.7)' }}
-        >
-          {heading}
-        </span>
-        {annotated.length > 0 && (
-          <span className="text-[10px]" style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}>
-            · {annotated.length}
+  if (annotated.length === 0) {
+    return (
+      <div>
+        <div className="flex items-center gap-1.5 mb-3">
+          <span
+            className="text-[10.5px] font-semibold uppercase tracking-[0.11em]"
+            style={{ color: 'hsl(var(--sv-ink) / 0.7)' }}
+          >
+            Recent in {label}
           </span>
-        )}
-      </div>
-      {annotated.length > 0 ? (
-        <div className={vibe.groupSpacing}>
-          {groups.map(([groupName, items], idx) => {
-            const contextHint = groupContextHint(idx, groups.length);
-            return (
-              <div key={groupName}>
-                {groups.length > 1 && (
-                  <div
-                    className="flex items-center gap-2 mb-2"
-                    data-testid={`group-${groupName.toLowerCase().replace(/\s+/g, '-')}`}
-                  >
-                    <span
-                      className="text-[10px] font-semibold uppercase tracking-[0.1em]"
-                      style={{ color: 'hsl(var(--sv-ink) / 0.6)' }}
-                    >
-                      {groupName}
-                    </span>
-                    {contextHint && (
-                      <span
-                        className="text-[9.5px] italic lowercase tracking-normal"
-                        style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
-                      >
-                        · {contextHint}
-                      </span>
-                    )}
-                    <div
-                      className="flex-1 h-px"
-                      style={{ background: 'hsl(var(--sv-hairline))' }}
-                    />
-                    <span
-                      className="text-[10px] tabular-nums"
-                      style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}
-                    >
-                      {items.length}
-                    </span>
-                  </div>
-                )}
-                <ThreadRows
-                  items={items}
-                  activeThreadId={activeThreadId}
-                  onSelect={onSelect}
-                  runningThreadIds={runningThreadIds}
-                  artifactThreadIds={artifactThreadIds}
-                  showReason
-                  showNextAction
-                  topMatchId={idx === 0 ? topMatchId : null}
-                  topMatchLabel={label}
-                  vibe={vibe}
-                />
-              </div>
-            );
-          })}
-          {fallbackHint && (
-            <p className="mt-1 text-[11px]" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
-              {fallbackHint}
-            </p>
-          )}
         </div>
-      ) : (
         <div
           className="rounded-[8px] px-3 py-2.5 text-[12px]"
           style={{
@@ -745,11 +687,209 @@ function RecentInSurface({
         >
           {emptyCta}
         </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={vibe.groupSpacing}>
+      {/* ── TOP MATCH — elevated, opinionated starting point ───────── */}
+      {topMatch && (
+        <TopMatchCard
+          item={topMatch}
+          label={label}
+          activeThreadId={activeThreadId}
+          onSelect={onSelect}
+          runningThreadIds={runningThreadIds}
+          artifactThreadIds={artifactThreadIds}
+          primaryDef={primaryDef}
+          onLaunchWorkflow={onLaunchWorkflow}
+        />
+      )}
+
+      {/* ── OTHER OPTIONS — quieter, capped at 3 to reduce friction ── */}
+      {others.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span
+              className="text-[10px] font-semibold uppercase tracking-[0.11em]"
+              style={{ color: 'hsl(var(--sv-ink) / 0.55)' }}
+            >
+              Other options
+            </span>
+            <div
+              className="flex-1 h-px"
+              style={{ background: 'hsl(var(--sv-hairline))' }}
+            />
+            <span
+              className="text-[10px] tabular-nums"
+              style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}
+            >
+              {others.length}
+            </span>
+          </div>
+          <div className={vibe.groupSpacing}>
+            {otherGroups.map(([groupName, items]) => (
+              <div key={groupName}>
+                {otherGroups.length > 1 && (
+                  <div
+                    className="text-[9.5px] font-semibold uppercase tracking-[0.1em] mb-1"
+                    style={{ color: 'hsl(var(--sv-ink) / 0.5)' }}
+                    data-testid={`group-${groupName.toLowerCase().replace(/\s+/g, '-')}`}
+                  >
+                    {groupName}
+                  </div>
+                )}
+                <ThreadRows
+                  items={items}
+                  activeThreadId={activeThreadId}
+                  onSelect={onSelect}
+                  runningThreadIds={runningThreadIds}
+                  artifactThreadIds={artifactThreadIds}
+                  showReason
+                  showNextAction
+                  showConfidence
+                  vibe={vibe}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {fallbackHint && (
+        <p className="text-[11px]" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
+          {fallbackHint}
+        </p>
       )}
     </div>
   );
 }
 
+// ───────────────── Top Match card (elevated) ─────────────────
+
+function TopMatchCard({
+  item, label, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
+  primaryDef, onLaunchWorkflow,
+}: {
+  item: AnnotatedThread;
+  label: string;
+  activeThreadId: string | null;
+  onSelect: (id: string) => void;
+  runningThreadIds?: Set<string>;
+  artifactThreadIds?: Set<string>;
+  primaryDef: WorkflowDef | null;
+  onLaunchWorkflow: (def: WorkflowDef) => void;
+}) {
+  const t = item.thread;
+  const isActive = activeThreadId === t.id;
+  const isRunning = runningThreadIds?.has(t.id) ?? false;
+  const hasArtifact = artifactThreadIds?.has(t.id) ?? false;
+  const conf = confidenceFromPriority(item.priority);
+
+  // Action verb — capitalize first letter of nextAction for the button label.
+  const actionLabel = item.nextAction
+    ? item.nextAction.charAt(0).toUpperCase() + item.nextAction.slice(1)
+    : null;
+
+  return (
+    <div data-testid={`top-match-card-${t.id}`}>
+      <div className="flex items-center gap-2 mb-2">
+        <span
+          className="text-[10px] uppercase tracking-[0.12em] px-1.5 py-px rounded"
+          style={{
+            background: 'hsl(var(--sv-clay))',
+            color: 'hsl(var(--sv-paper))',
+            fontWeight: 700,
+          }}
+        >
+          Top match for {label}
+        </span>
+        {conf === 'high' && (
+          <span
+            className="text-[9.5px] uppercase tracking-[0.1em]"
+            style={{ color: 'hsl(var(--sv-clay) / 0.85)', fontWeight: 600 }}
+          >
+            · high confidence
+          </span>
+        )}
+        <div className="flex-1 h-px" style={{ background: 'hsl(var(--sv-hairline))' }} />
+      </div>
+
+      <div
+        className="rounded-[10px] p-3.5 flex flex-col gap-2"
+        style={{
+          background: 'hsl(var(--sv-clay) / 0.06)',
+          border: '1px solid hsl(var(--sv-clay) / 0.30)',
+        }}
+      >
+        <button
+          onClick={() => onSelect(t.id)}
+          className="text-left flex items-center gap-2 w-full"
+          title={t.title || 'Untitled thread'}
+          data-testid={`top-match-open-${t.id}`}
+        >
+          <span
+            className="flex-1 min-w-0 truncate text-[14px]"
+            style={{ color: 'hsl(var(--sv-ink))', fontWeight: 600 }}
+          >
+            {t.title || 'Untitled thread'}
+          </span>
+          {isRunning && (
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" style={{ color: 'hsl(var(--sv-clay))' }} aria-label="Running" />
+          )}
+          {hasArtifact && !isRunning && (
+            <FileText className="h-3.5 w-3.5 shrink-0" style={{ color: 'hsl(var(--sv-clay) / 0.8)' }} aria-label="Has artifact" />
+          )}
+          <span className="text-[10.5px] shrink-0 tabular-nums" style={{ color: 'hsl(var(--sv-muted))' }}>
+            {relativeTime(t.updated_at)}
+          </span>
+        </button>
+
+        <div className="text-[11.5px]" style={{ color: 'hsl(var(--sv-ink) / 0.7)', fontWeight: 500 }}>
+          {item.reason}
+        </div>
+
+        {(actionLabel && primaryDef) || !isActive ? (
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            {actionLabel && primaryDef && (
+              <button
+                onClick={() => onLaunchWorkflow(primaryDef)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] text-[12px] transition-colors"
+                style={{
+                  background: 'hsl(var(--sv-clay))',
+                  color: 'hsl(var(--sv-paper))',
+                  fontWeight: 600,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-clay) / 0.88)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-clay))'; }}
+                data-testid={`top-match-action-${t.id}`}
+              >
+                <Sparkles className="h-3 w-3" />
+                <span>{actionLabel}</span>
+              </button>
+            )}
+            <button
+              onClick={() => onSelect(t.id)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[6px] text-[11.5px] transition-colors"
+              style={{
+                background: 'transparent',
+                color: 'hsl(var(--sv-ink) / 0.75)',
+                border: '1px solid hsl(var(--sv-hairline))',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              data-testid={`top-match-open-btn-${t.id}`}
+            >
+              Open thread
+              <ArrowRight className="h-3 w-3" />
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 // ───────────────── Work thread list ─────────────────
 
 function WorkThreadList({
