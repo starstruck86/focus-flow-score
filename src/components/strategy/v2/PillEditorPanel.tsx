@@ -237,7 +237,7 @@ export function PillEditorPanel({ editing, surface, onSaved, onCancel }: Props) 
             style={{ color: 'hsl(var(--sv-ink))' }}
           >
             <Wand2 className="h-4 w-4" style={{ color: 'hsl(var(--sv-clay))' }} />
-            {isEdit ? 'Edit pill' : 'New pill'}
+            {isEdit ? 'Edit pill' : 'Build a pill'}
             <span
               className="text-[11px] px-1.5 py-px rounded-full ml-1"
               style={{ background: 'hsl(var(--sv-hover))', color: 'hsl(var(--sv-muted))' }}
@@ -246,7 +246,7 @@ export function PillEditorPanel({ editing, surface, onSaved, onCancel }: Props) 
             </span>
           </h2>
           <p className="text-[12.5px] mt-1" style={{ color: 'hsl(var(--sv-muted))' }}>
-            A pill is a chat shortcut. Configure how it thinks, what it produces, and how it runs.
+            Your own custom GPT inside Strategy. Give it an identity, teach it how to think, and decide what it produces.
           </p>
         </div>
       </div>
