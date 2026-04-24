@@ -310,6 +310,15 @@ export function SurfacePanel({
             <p className="text-[12.5px] mt-0.5" style={{ color: 'hsl(var(--sv-muted))' }}>
               {meta.description}
             </p>
+            {SURFACE_GUIDANCE[surface] && (
+              <p
+                className="text-[11.5px] mt-1.5 italic"
+                style={{ color: 'hsl(var(--sv-clay) / 0.85)' }}
+                data-testid={`surface-guidance-${surface}`}
+              >
+                {SURFACE_GUIDANCE[surface]}
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
