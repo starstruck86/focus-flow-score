@@ -1157,7 +1157,7 @@ export function StrategyShell() {
 
         {/* Inline artifact card belongs to Work/thread view, not mode workspaces. */}
         {showInlineArtifactCard && (
-          <div className="mx-auto w-full px-6 pt-3" style={{ maxWidth: 760 }}>
+          <div className="mx-auto w-full px-6 pt-3" style={{ maxWidth: 860 }}>
             <ArtifactInlineCard
               title={`Discovery Prep`}
               result={latestCompleted.result}
