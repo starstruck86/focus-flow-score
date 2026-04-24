@@ -317,19 +317,14 @@ export function SurfacePanel({
     });
   }, [recentThreadsForSurface, artifactThreadIds, runningThreadIds]);
 
-  // ── Work surface: all threads, sorted active/ready/recent ─────
+  // ── Work surface: pass ALL threads through; filtering/grouping happens
+  // inside WorkCommandCenter so the user can search + chip-filter without
+  // losing data. Keeping this hook pure means the command center owns its
+  // own UX state (query/filter) without re-running parent memos.
   const workThreads = useMemo(() => {
     if (surface !== 'work') return [];
-    const isTest = (t: StrategyThread) => /^\[benchmark\]/i.test(t.title || '');
-    const visible = threads.filter((t) => !isTest(t));
-    const score = (t: StrategyThread) => {
-      if (t.id === activeThreadId) return 0;
-      if (runningThreadIds?.has(t.id)) return 1;
-      if (artifactThreadIds?.has(t.id)) return 2;
-      return isUntitledTitle(t.title) ? 4 : 3;
-    };
-    return [...visible].sort((a, b) => score(a) - score(b)).slice(0, 24);
-  }, [surface, threads, activeThreadId, runningThreadIds, artifactThreadIds]);
+    return threads;
+  }, [surface, threads]);
 
   // ── Compact mode ──────────────────────────────────────────────
   // When this surface has an active thread, collapse the launcher into
