@@ -379,8 +379,15 @@ export function StrategyShell() {
   const handleNewThread = useCallback(async () => {
     if (!user || pendingThreadId || isCreatingThread) return;
     setIsCreatingThread(true);
-    const newId = await createThread('Untitled thread', 'strategy', 'freeform');
+    // Empty new thread → label by current surface so it never reads "Untitled".
+    const surface = lastSurfaceKeyRef.current;
+    const placeholder = (surface && surface !== 'work')
+      ? `${WORKSPACE_LABEL[surface]} · New thread`
+      : 'New thread';
+    const newId = await createThread(placeholder, 'strategy', 'freeform');
     if (newId) {
+      // Tag the empty thread to the surface that created it.
+      if (surface && surface !== 'work') tagThread(newId, surface);
       setPendingThreadId(newId);
       return;
     }
