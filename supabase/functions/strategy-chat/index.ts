@@ -5488,6 +5488,18 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     .filter((m, idx, arr) =>
       !(idx === arr.length - 1 && m.role === "user" && m.text === content)
     );
+  // Phase 2 — Append lightweight Global Instructions LAST (after V1 mode-lock
+  // and V2 dispatcher prompt), so they sit closest to the user turn but
+  // never override the core grounding/audit/synthesis machinery above.
+  // Returns "" when payload is null/empty → exact baseline behavior.
+  const giBlock = renderGlobalInstructionsBlock(globalInstructions);
+  if (giBlock) {
+    effectiveSystemPrompt = `${effectiveSystemPrompt}${giBlock}`;
+    console.log(
+      `[global-instructions] injected: tone=${globalInstructions?.outputPreferences.tone} density=${globalInstructions?.outputPreferences.density} format=${globalInstructions?.outputPreferences.format} strict=${globalInstructions?.strictMode} self_correct=${globalInstructions?.selfCorrectOnce} free_text_chars=${globalInstructions?.globalInstructions.length ?? 0}`,
+    );
+  }
+
   const messages = [
     { role: "system" as const, content: effectiveSystemPrompt },
     ...priorMessages.map((m) => ({
