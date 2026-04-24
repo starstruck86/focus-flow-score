@@ -779,7 +779,7 @@ function WorkThreadList({
 
 function ThreadRows({
   items, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
-  showReason, showOriginTag,
+  showReason, showOriginTag, showNextAction, topMatchId, vibe,
 }: {
   items: AnnotatedThread[];
   activeThreadId: string | null;
@@ -790,14 +790,22 @@ function ThreadRows({
   showReason?: boolean;
   /** Show the originating mode tag (e.g. "→ Deep Research") inline. */
   showOriginTag?: boolean;
+  /** Show the suggested next action after the reason. */
+  showNextAction?: boolean;
+  /** ID of the thread that should display the "Top match" badge. */
+  topMatchId?: string | null;
+  /** Surface vibe — drives row density. */
+  vibe?: SurfaceVibe;
 }) {
+  const v = vibe ?? DEFAULT_VIBE;
   return (
-    <ul className="space-y-1">
-      {items.map(({ thread: t, reason, group }) => {
+    <ul className={v.rowSpacing}>
+      {items.map(({ thread: t, reason, group, nextAction }) => {
         const isActive = activeThreadId === t.id;
         const isRunning = runningThreadIds?.has(t.id) ?? false;
         const hasArtifact = artifactThreadIds?.has(t.id) ?? false;
         const isUntitled = !t.title || /^untitled/i.test(t.title);
+        const isTopMatch = !!topMatchId && topMatchId === t.id;
         // Origin tag: only show when group looks like a real surface label
         // and not the default "Freeform"/"Your work" buckets.
         const originTag = showOriginTag && group !== 'Freeform' ? group : null;
@@ -805,22 +813,38 @@ function ThreadRows({
           <li key={t.id}>
             <button
               onClick={() => onSelect(t.id)}
-              className="w-full text-left px-3 py-2 rounded-[8px] flex flex-col gap-0.5 transition-colors"
+              className={`w-full text-left px-3 ${v.rowPadY} rounded-[8px] flex flex-col gap-0.5 transition-colors`}
               style={{
-                background: isActive ? 'hsl(var(--sv-clay) / 0.08)' : 'transparent',
-                border: '1px solid ' + (isActive ? 'hsl(var(--sv-clay) / 0.30)' : 'hsl(var(--sv-hairline))'),
+                background: isActive ? 'hsl(var(--sv-clay) / 0.08)' : (isTopMatch ? 'hsl(var(--sv-clay) / 0.03)' : 'transparent'),
+                border: '1px solid ' + (isActive ? 'hsl(var(--sv-clay) / 0.30)' : (isTopMatch ? 'hsl(var(--sv-clay) / 0.22)' : 'hsl(var(--sv-hairline))')),
                 color: 'hsl(var(--sv-ink))',
                 opacity: isUntitled && !isActive && !isRunning && !hasArtifact ? 0.7 : 1,
               }}
               onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
-              onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+              onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = isTopMatch ? 'hsl(var(--sv-clay) / 0.03)' : 'transparent'; }}
               title={reason ? `${t.title || 'Untitled thread'} — ${reason}` : (t.title || 'Untitled thread')}
               data-testid={`surface-thread-${t.id}`}
             >
               <div className="flex items-center gap-2 w-full">
-                <span className="flex-1 min-w-0 truncate text-[13px]" style={{ fontWeight: isActive ? 600 : 400 }}>
+                <span
+                  className="flex-1 min-w-0 truncate text-[13px]"
+                  style={{ fontWeight: isActive ? 600 : v.titleWeight }}
+                >
                   {t.title || 'Untitled thread'}
                 </span>
+                {isTopMatch && (
+                  <span
+                    className="text-[9.5px] uppercase tracking-[0.1em] shrink-0 px-1.5 py-px rounded"
+                    style={{
+                      background: 'hsl(var(--sv-clay))',
+                      color: 'hsl(var(--sv-paper))',
+                      fontWeight: 600,
+                    }}
+                    data-testid={`top-match-${t.id}`}
+                  >
+                    Top match
+                  </span>
+                )}
                 {originTag && (
                   <span
                     className="text-[10px] shrink-0 px-1.5 py-px rounded inline-flex items-center gap-0.5"
@@ -847,11 +871,17 @@ function ThreadRows({
               </div>
               {showReason && reason && (
                 <span
-                  className="text-[10.5px] pl-px"
-                  style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
+                  className="text-[10.5px] pl-px inline-flex items-center gap-1 flex-wrap"
+                  style={{ color: 'hsl(var(--sv-muted) / 0.9)' }}
                   data-testid={`reason-${t.id}`}
                 >
-                  {reason}
+                  <span style={{ color: 'hsl(var(--sv-ink) / 0.65)', fontWeight: 500 }}>{reason}</span>
+                  {showNextAction && nextAction && (
+                    <>
+                      <span style={{ color: 'hsl(var(--sv-muted) / 0.5)' }}>→</span>
+                      <span style={{ color: 'hsl(var(--sv-clay) / 0.85)' }}>{nextAction}</span>
+                    </>
+                  )}
                 </span>
               )}
             </button>
