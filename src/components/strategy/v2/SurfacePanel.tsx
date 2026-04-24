@@ -43,11 +43,38 @@ import type { StrategyThread } from '@/types/strategy';
 /** A thread enriched with explainability metadata for display. */
 interface AnnotatedThread {
   thread: StrategyThread;
-  /** Short reason chip — e.g. "Structured artifact". */
+  /** Decisive reason — e.g. "Strong match for Deep Research". */
   reason: string;
   /** Light grouping bucket — e.g. "Structured work". */
   group: string;
+  /** Suggested next action — e.g. "expand or refine". */
+  nextAction?: string;
+  /** Priority weight — higher = surfaces first; first item gets a "Top match" badge. */
+  priority?: number;
 }
+
+/** Per-mode visual identity — drives density, spacing, and emphasis. */
+type SurfaceVibe = {
+  /** Vertical rhythm for body sections. */
+  bodySpacing: string;
+  /** Spacing between groups in the recent list. */
+  groupSpacing: string;
+  /** Spacing between rows. */
+  rowSpacing: string;
+  /** Row vertical padding. */
+  rowPadY: string;
+  /** Title font weight (heavier = more editorial). */
+  titleWeight: number;
+};
+const SURFACE_VIBE: Partial<Record<StrategySurfaceKey, SurfaceVibe>> = {
+  // Generative — airy, fast, optimistic. Looser spacing, lighter weight.
+  brainstorm:    { bodySpacing: 'space-y-6',   groupSpacing: 'space-y-4',   rowSpacing: 'space-y-1.5', rowPadY: 'py-2.5', titleWeight: 400 },
+  // Analytical — dense, structured, scannable. Tighter rows, more rigor.
+  deep_research: { bodySpacing: 'space-y-4',   groupSpacing: 'space-y-2.5', rowSpacing: 'space-y-0.5', rowPadY: 'py-2',   titleWeight: 500 },
+  // Editorial — measured, deliberate, focused on craft.
+  refine:        { bodySpacing: 'space-y-5',   groupSpacing: 'space-y-3',   rowSpacing: 'space-y-1',   rowPadY: 'py-2.5', titleWeight: 500 },
+};
+const DEFAULT_VIBE: SurfaceVibe = { bodySpacing: 'space-y-5', groupSpacing: 'space-y-3', rowSpacing: 'space-y-1', rowPadY: 'py-2', titleWeight: 400 };
 
 /** Short label for a surface key (used by Work origin tags). */
 const SURFACE_SHORT_LABEL: Partial<Record<string, string>> = {
