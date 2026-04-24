@@ -799,7 +799,7 @@ function WorkThreadList({
 
 function ThreadRows({
   items, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
-  showReason, showOriginTag, showNextAction, topMatchId, vibe,
+  showReason, showOriginTag, showNextAction, topMatchId, topMatchLabel, vibe,
 }: {
   items: AnnotatedThread[];
   activeThreadId: string | null;
@@ -814,6 +814,8 @@ function ThreadRows({
   showNextAction?: boolean;
   /** ID of the thread that should display the "Top match" badge. */
   topMatchId?: string | null;
+  /** Workspace label used in the top-match badge — e.g. "Deep Research". */
+  topMatchLabel?: string;
   /** Surface vibe — drives row density. */
   vibe?: SurfaceVibe;
 }) {
