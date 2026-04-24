@@ -663,74 +663,51 @@ function CustomPillsRow({
 // ───────────────── Recent in surface ─────────────────
 
 function RecentInSurface({
-  label, surface, ownThreads, fallbackThreads, activeThreadId, onSelect,
-  runningThreadIds, artifactThreadIds, vibe, onLaunchWorkflow,
+  label, surface, ownThreads, activeThreadId, onSelect,
+  runningThreadIds, artifactThreadIds, vibe,
 }: {
   label: string;
   surface: StrategySurfaceKey;
   ownThreads: AnnotatedThread[];
-  fallbackThreads: AnnotatedThread[];
+  /** @deprecated kept for call-site compatibility; intentionally ignored. */
+  fallbackThreads?: AnnotatedThread[];
   activeThreadId: string | null;
   onSelect: (id: string) => void;
   runningThreadIds?: Set<string>;
   artifactThreadIds?: Set<string>;
   vibe: SurfaceVibe;
-  onLaunchWorkflow: (def: WorkflowDef) => void;
+  /** @deprecated unused — launcher no longer auto-launches anything. */
+  onLaunchWorkflow?: (def: WorkflowDef) => void;
 }) {
-  const hasOwn = ownThreads.length > 0;
-  const hasFallback = !hasOwn && fallbackThreads.length > 0;
-  const annotated: AnnotatedThread[] = hasOwn ? ownThreads : (hasFallback ? fallbackThreads : []);
+  const [query, setQuery] = useState('');
 
-  // Split: top match becomes its own elevated section; rest are "Other options"
-  // capped at 3 to reduce decision friction.
-  const topMatch = annotated.length > 0 ? annotated[0] : null;
-  const others = annotated.slice(1, 4);
+  // "Jump Back In" — show ONLY this workspace's own threads. No fallback to
+  // unrelated work threads. The user picks explicitly; we never auto-open.
+  const own = ownThreads;
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return own;
+    return own.filter((a) => {
+      const title = displayThreadTitle(a.thread).toLowerCase();
+      return title.includes(q);
+    });
+  }, [own, query]);
 
-  // Resolve the surface's primary workflow def — used by the Top Match action button.
-  const primaryDef: WorkflowDef | null = useMemo(() => {
-    if (surface === 'brainstorm' || surface === 'deep_research' || surface === 'refine') {
-      return MODE_PILLS[surface][0] ?? null;
-    }
-    if (surface === 'library') return LIBRARY_DEFS[0] ?? null;
-    if (surface === 'artifacts') return ARTIFACT_TEMPLATE_DEFS[0] ?? null;
-    return null;
-  }, [surface]);
-
-  // Group "other options" threads by their `group` field, preserving insertion order.
-  const otherGroups = useMemo(() => {
-    const map = new Map<string, AnnotatedThread[]>();
-    for (const a of others) {
-      const arr = map.get(a.group) ?? [];
-      arr.push(a);
-      map.set(a.group, arr);
-    }
-    return Array.from(map.entries());
-  }, [others]);
-
-  const fallbackHint = (() => {
-    if (!hasFallback) return null;
-    switch (surface) {
-      case 'brainstorm':    return 'Earlier-stage threads from your recent work that read like ideation.';
-      case 'deep_research': return 'Recent threads that look like research, briefs, or analysis.';
-      case 'refine':        return 'Drafts and artifacts you might want to tighten or rewrite.';
-      case 'library':       return 'Recent work that built frameworks, patterns, or reusable insights.';
-      case 'artifacts':     return 'Recent threads that produced structured artifacts.';
-      default:              return null;
-    }
-  })();
+  const visible = query.trim() ? filtered : filtered.slice(0, 3);
+  const showSearch = own.length > 3;
 
   const emptyCta = (() => {
     switch (surface) {
-      case 'brainstorm':    return 'Nothing relevant here yet. Run a pill above to create your first Brainstorm thread.';
-      case 'deep_research': return 'Nothing relevant here yet. Run a pill above to create your first Deep Research thread.';
-      case 'refine':        return 'Nothing relevant here yet. Run a pill above to create your first Refine thread.';
-      case 'library':       return 'Nothing relevant here yet. Run a workflow above to create from your knowledge.';
-      case 'artifacts':     return 'Nothing relevant here yet. Pick a template above to draft a structured artifact.';
-      default:              return `Nothing relevant here yet. Tap a pill above to start your first ${label} thread.`;
+      case 'brainstorm':    return 'Nothing here yet. Tap a pill above or just type below to start.';
+      case 'deep_research': return 'Nothing here yet. Tap a pill above or just type below to start.';
+      case 'refine':        return 'Nothing here yet. Tap a pill above or paste a draft below.';
+      case 'library':       return 'Nothing here yet. Run a workflow above to create from your knowledge.';
+      case 'artifacts':     return 'Nothing here yet. Pick a template above to draft a structured artifact.';
+      default:              return `Nothing here yet. Tap a pill above to start your first ${label} thread.`;
     }
   })();
 
-  if (annotated.length === 0) {
+  if (own.length === 0) {
     return (
       <div>
         <div className="flex items-center gap-1.5 mb-3">
@@ -738,7 +715,7 @@ function RecentInSurface({
             className="text-[10.5px] font-semibold uppercase tracking-[0.11em]"
             style={{ color: 'hsl(var(--sv-ink) / 0.7)' }}
           >
-            Recent in {label}
+            Jump Back In
           </span>
         </div>
         <div
@@ -748,6 +725,7 @@ function RecentInSurface({
             background: 'hsl(var(--sv-paper))',
             color: 'hsl(var(--sv-muted))',
           }}
+          data-testid={`jump-back-empty-${surface}`}
         >
           {emptyCta}
         </div>
@@ -757,78 +735,58 @@ function RecentInSurface({
 
   return (
     <div className={vibe.groupSpacing}>
-      {/* ── TOP MATCH — elevated, opinionated starting point ───────── */}
-      {topMatch && (
-        <TopMatchCard
-          item={topMatch}
-          label={label}
+      <div className="flex items-center gap-2 mb-2">
+        <span
+          className="text-[10.5px] font-semibold uppercase tracking-[0.11em]"
+          style={{ color: 'hsl(var(--sv-ink) / 0.7)' }}
+        >
+          Jump Back In
+        </span>
+        <div className="flex-1 h-px" style={{ background: 'hsl(var(--sv-hairline))' }} />
+        <span
+          className="text-[10px] tabular-nums"
+          style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}
+        >
+          {own.length}
+        </span>
+      </div>
+
+      {showSearch && (
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={`Search ${label} threads…`}
+          className="w-full h-8 px-2.5 rounded-[6px] text-[12.5px] mb-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          style={{
+            border: '1px solid hsl(var(--sv-hairline))',
+            background: 'hsl(var(--sv-paper))',
+            color: 'hsl(var(--sv-ink))',
+          }}
+          data-testid={`jump-back-search-${surface}`}
+        />
+      )}
+
+      <div data-testid={`jump-back-${surface}`}>
+        <ThreadRows
+          items={visible}
           activeThreadId={activeThreadId}
           onSelect={onSelect}
           runningThreadIds={runningThreadIds}
           artifactThreadIds={artifactThreadIds}
-          primaryDef={primaryDef}
-          onLaunchWorkflow={onLaunchWorkflow}
+          vibe={vibe}
         />
-      )}
+      </div>
 
-      {/* ── OTHER OPTIONS — quieter, capped at 3 to reduce friction ── */}
-      {others.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span
-              className="text-[10px] font-semibold uppercase tracking-[0.11em]"
-              style={{ color: 'hsl(var(--sv-ink) / 0.55)' }}
-            >
-              Other options
-            </span>
-            <div
-              className="flex-1 h-px"
-              style={{ background: 'hsl(var(--sv-hairline))' }}
-            />
-            <span
-              className="text-[10px] tabular-nums"
-              style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}
-            >
-              {others.length}
-            </span>
-          </div>
-          <div className={vibe.groupSpacing}>
-            {otherGroups.map(([groupName, items]) => (
-              <div key={groupName}>
-                {otherGroups.length > 1 && (
-                  <div
-                    className="text-[9.5px] font-semibold uppercase tracking-[0.1em] mb-1"
-                    style={{ color: 'hsl(var(--sv-ink) / 0.5)' }}
-                    data-testid={`group-${groupName.toLowerCase().replace(/\s+/g, '-')}`}
-                  >
-                    {groupName}
-                  </div>
-                )}
-                <ThreadRows
-                  items={items}
-                  activeThreadId={activeThreadId}
-                  onSelect={onSelect}
-                  runningThreadIds={runningThreadIds}
-                  artifactThreadIds={artifactThreadIds}
-                  showReason
-                  showNextAction
-                  showConfidence
-                  vibe={vibe}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {fallbackHint && (
-        <p className="text-[11px]" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
-          {fallbackHint}
+      {showSearch && query.trim() && filtered.length === 0 && (
+        <p className="text-[11.5px] mt-2" style={{ color: 'hsl(var(--sv-muted))' }}>
+          No matches in {label}.
         </p>
       )}
     </div>
   );
 }
+
 
 // ───────────────── Top Match card (elevated) ─────────────────
 
