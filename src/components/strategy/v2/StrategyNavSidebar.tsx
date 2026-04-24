@@ -350,24 +350,25 @@ export function StrategyNavSidebar({
           </div>
         </Section>
 
-        {/* 5. Work */}
+        {/* 5. Work — benchmark/test threads filtered, active/artifact-ready ranked first */}
         <Section
           label="Work"
-          subtitle={threads.length === 0 ? 'Active and recent threads' : undefined}
-          count={threads.length}
+          subtitle={visibleThreads.length === 0 ? 'Active and recent threads' : undefined}
+          count={visibleThreads.length}
           open={openWork}
           onToggle={() => setOpenWork(o => !o)}
         >
-          {threads.length === 0 ? (
+          {visibleThreads.length === 0 ? (
             <p className="px-3 pt-1 pb-2 text-[11.5px]" style={{ color: 'hsl(var(--sv-muted))' }}>
               No work yet. Click <span style={{ color: 'hsl(var(--sv-ink))' }}>New Work</span> above to start.
             </p>
           ) : (
             <ul className="px-1.5 space-y-px">
-              {threads.slice(0, 30).map((t) => {
+              {visibleThreads.slice(0, 30).map((t) => {
                 const isActive = activeThreadId === t.id;
                 const isRunning = runningThreadIds?.has(t.id) ?? false;
                 const hasArtifact = artifactThreadIds?.has(t.id) ?? false;
+                const isUntitled = !t.title || /^untitled/i.test(t.title);
                 return (
                   <li key={t.id}>
                     <button
@@ -378,6 +379,7 @@ export function StrategyNavSidebar({
                         color: 'hsl(var(--sv-ink))',
                         paddingLeft: 10,
                         borderLeft: isActive ? '2px solid hsl(var(--sv-clay))' : '2px solid transparent',
+                        opacity: isUntitled && !isActive && !isRunning && !hasArtifact ? 0.65 : 1,
                       }}
                       onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
                       onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
@@ -408,6 +410,13 @@ export function StrategyNavSidebar({
                   </li>
                 );
               })}
+              {hiddenTestCount > 0 && (
+                <li className="px-2 pt-1.5 pb-0.5">
+                  <span className="text-[10.5px]" style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}>
+                    {hiddenTestCount} test thread{hiddenTestCount === 1 ? '' : 's'} hidden
+                  </span>
+                </li>
+              )}
             </ul>
           )}
         </Section>
