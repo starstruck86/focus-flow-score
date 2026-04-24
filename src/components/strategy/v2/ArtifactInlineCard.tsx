@@ -95,6 +95,7 @@ export function ArtifactInlineCard({ title, result, freshlyCompleted, onOpen }: 
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {/* Primary action — the only filled button so the eye lands here */}
           <button
             onClick={onOpen}
             aria-label="Open artifact workspace"
@@ -110,30 +111,35 @@ export function ArtifactInlineCard({ title, result, freshlyCompleted, onOpen }: 
             <ExternalLink className="h-3 w-3" />
             Open artifact
           </button>
+
+          {/* Secondary actions — icon-only, borderless, low weight so they never compete */}
           <button
             onClick={handleCopy}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] text-[12px] font-medium sv-hover-bg"
-            style={{
-              border: '1px solid hsl(var(--sv-hairline))',
-              color: 'hsl(var(--sv-ink))',
-            }}
+            className="inline-flex items-center justify-center h-7 w-7 rounded-[6px] sv-hover-bg transition-colors"
+            style={{ color: 'hsl(var(--sv-muted))' }}
+            aria-label="Copy summary"
+            title="Copy summary"
           >
-            <Copy className="h-3 w-3" />
-            Copy summary
+            <Copy className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={onOpen}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] text-[12px] font-medium sv-hover-bg"
-            style={{
-              border: '1px solid hsl(var(--sv-hairline))',
-              color: 'hsl(var(--sv-ink))',
-            }}
+            className="inline-flex items-center justify-center h-7 w-7 rounded-[6px] sv-hover-bg transition-colors"
+            style={{ color: 'hsl(var(--sv-muted))' }}
+            aria-label="Export"
             title="Export options live in the artifact view"
           >
-            <Download className="h-3 w-3" />
-            Export
+            <Download className="h-3.5 w-3.5" />
           </button>
         </div>
+
+        {/* Momentum line — answers "what should I do next?" the moment the artifact lands */}
+        <p
+          className="mt-2.5 text-[11px]"
+          style={{ color: 'hsl(var(--sv-muted) / 0.85)', fontFamily: 'var(--sv-sans)' }}
+        >
+          ↓ Ask a follow-up below to refine, or open the artifact to read & export.
+        </p>
       </div>
     </div>
   );
