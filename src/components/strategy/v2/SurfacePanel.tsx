@@ -153,6 +153,7 @@ export function SurfacePanel({
 }: Props) {
   const meta = SURFACE_HEADER[surface];
   const HeaderIcon = meta.icon;
+  const vibe: SurfaceVibe = SURFACE_VIBE[surface] ?? DEFAULT_VIBE;
 
   // ── Custom pills (per surface) ────────────────────────────────
   const customPills = useMemo<CustomPill[]>(
