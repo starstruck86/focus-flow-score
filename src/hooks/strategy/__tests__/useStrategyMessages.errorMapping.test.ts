@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Tests for mapSendErrorToFriendlyMessage — the pure helper that translates
  * raw network/provider errors thrown inside useStrategyMessages.sendMessage
