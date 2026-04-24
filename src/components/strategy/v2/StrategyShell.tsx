@@ -615,6 +615,17 @@ export function StrategyShell() {
 
   const handleSend = useCallback((text: string) => {
     if (pendingThreadId || isCreatingThread || isSending) return;
+    // Clear the per-surface draft for the workspace we're sending from and
+    // exit that workspace so the conversation/canvas takes focus. This keeps
+    // each workspace as a clean launch surface, never a sticky chat view.
+    const sendingFrom = lastSurfaceKeyRef.current;
+    if (sendingFrom && sendingFrom !== 'work') {
+      surfaceDraftsRef.current[sendingFrom] = '';
+      // Re-pin the key so the swap effect doesn't snapshot the (now empty)
+      // composer back into the previous bucket on the way out.
+      lastSurfaceKeyRef.current = 'work';
+      setActiveSurface(null);
+    }
     // Snapshot + clear sidecar IDs synchronously so a second send can't
     // accidentally re-attach the same picked resource.
     const sidecar = pendingResourceIds.length > 0 ? pendingResourceIds : undefined;
