@@ -1119,14 +1119,14 @@ export function StrategyShell() {
             onLaunchWorkflow={handleLaunchWorkflow}
             onClose={() => { setActiveSurface(null); }}
             threads={threads}
-            activeThreadId={threadId}
+            activeThreadId={displayThreadId}
             onSelectThread={(id) => {
               // Picking from within a surface's recents binds that thread
               // to the surface. The user stays in the workspace; the chat
               // for the selected thread renders in place.
               const key = lastSurfaceKeyRef.current;
               if (key && key !== 'work') {
-                surfaceThreadsRef.current[key] = id;
+                setSurfaceThread(key, id);
               }
               setActiveThreadId(id);
             }}
@@ -1135,11 +1135,11 @@ export function StrategyShell() {
             onEditPill={handleEditPill}
             runningThreadIds={runningThreadIds}
             artifactThreadIds={artifactThreadIds}
-            hasActiveThread={!!threadId}
+            hasActiveThread={!!displayThreadId}
             onNewThreadInSurface={() => {
               // Clear this surface's active thread → empty state w/ pills
               const key = lastSurfaceKeyRef.current;
-              if (key) surfaceThreadsRef.current[key] = null;
+              if (key) setSurfaceThread(key, null);
               setActiveThreadId(null);
             }}
           />
@@ -1161,8 +1161,11 @@ export function StrategyShell() {
 
         {/* Default thread canvas — shows the active conversation. Renders
             for the global Work view AND inside any surface that has its own
-            active thread, so each workspace contains its own chat. */}
-        {(!showSurfaceWorkspace || !!threadId) && (
+            active thread, so each workspace contains its own chat. We gate
+            on `displayThreadId` (not the global `threadId`) so a surface
+            entered for the first time never inherits the previous Work
+            conversation while the global state is still flushing. */}
+        {(!showSurfaceWorkspace || !!displayThreadId) && (
           <StrategyCanvas
             messages={messages}
             isLoading={isLoading}
