@@ -877,7 +877,7 @@ export function StrategyShell() {
         pendingThreadTagRef.current = launchedFrom;
       }
     }
-    setActiveSurface(null);
+    // Stay in the launching surface — the new thread becomes its own.
     handleSend(compiledPrompt);
     requestAnimationFrame(() => composerRef.current?.focus());
   // eslint-disable-next-line react-hooks/exhaustive-deps
