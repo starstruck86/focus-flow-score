@@ -661,6 +661,20 @@ function WorkThreadList({
   runningThreadIds?: Set<string>;
   artifactThreadIds?: Set<string>;
 }) {
+  // Annotate with origin tags so each row can show "→ Deep Research" etc.
+  const items = useMemo<AnnotatedThread[]>(() => {
+    const tags = getAllThreadTags();
+    return threads.map((t) => {
+      const tag = tags[t.id];
+      const origin = tag ? SURFACE_SHORT_LABEL[tag] : null;
+      return {
+        thread: t,
+        reason: origin ? `From ${origin}` : 'Freeform',
+        group: origin ?? 'Freeform',
+      };
+    });
+  }, [threads]);
+
   if (threads.length === 0) {
     return (
       <div
@@ -682,36 +696,45 @@ function WorkThreadList({
   }
   return (
     <ThreadRows
-      threads={threads}
+      items={items}
       activeThreadId={activeThreadId}
       onSelect={onSelect}
       runningThreadIds={runningThreadIds}
       artifactThreadIds={artifactThreadIds}
+      showOriginTag
     />
   );
 }
 
 function ThreadRows({
-  threads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
+  items, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
+  showReason, showOriginTag,
 }: {
-  threads: StrategyThread[];
+  items: AnnotatedThread[];
   activeThreadId: string | null;
   onSelect: (id: string) => void;
   runningThreadIds?: Set<string>;
   artifactThreadIds?: Set<string>;
+  /** Show the "why this surfaced" reason chip below the title. */
+  showReason?: boolean;
+  /** Show the originating mode tag (e.g. "→ Deep Research") inline. */
+  showOriginTag?: boolean;
 }) {
   return (
     <ul className="space-y-1">
-      {threads.map((t) => {
+      {items.map(({ thread: t, reason, group }) => {
         const isActive = activeThreadId === t.id;
         const isRunning = runningThreadIds?.has(t.id) ?? false;
         const hasArtifact = artifactThreadIds?.has(t.id) ?? false;
         const isUntitled = !t.title || /^untitled/i.test(t.title);
+        // Origin tag: only show when group looks like a real surface label
+        // and not the default "Freeform"/"Your work" buckets.
+        const originTag = showOriginTag && group !== 'Freeform' ? group : null;
         return (
           <li key={t.id}>
             <button
               onClick={() => onSelect(t.id)}
-              className="w-full text-left px-3 py-2 rounded-[8px] flex items-center gap-2 transition-colors"
+              className="w-full text-left px-3 py-2 rounded-[8px] flex flex-col gap-0.5 transition-colors"
               style={{
                 background: isActive ? 'hsl(var(--sv-clay) / 0.08)' : 'transparent',
                 border: '1px solid ' + (isActive ? 'hsl(var(--sv-clay) / 0.30)' : 'hsl(var(--sv-hairline))'),
@@ -720,21 +743,46 @@ function ThreadRows({
               }}
               onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
               onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-              title={t.title || 'Untitled thread'}
+              title={reason ? `${t.title || 'Untitled thread'} — ${reason}` : (t.title || 'Untitled thread')}
               data-testid={`surface-thread-${t.id}`}
             >
-              <span className="flex-1 min-w-0 truncate text-[13px]" style={{ fontWeight: isActive ? 600 : 400 }}>
-                {t.title || 'Untitled thread'}
-              </span>
-              {isRunning && (
-                <Loader2 className="h-3 w-3 shrink-0 animate-spin" style={{ color: 'hsl(var(--sv-clay))' }} aria-label="Running" />
+              <div className="flex items-center gap-2 w-full">
+                <span className="flex-1 min-w-0 truncate text-[13px]" style={{ fontWeight: isActive ? 600 : 400 }}>
+                  {t.title || 'Untitled thread'}
+                </span>
+                {originTag && (
+                  <span
+                    className="text-[10px] shrink-0 px-1.5 py-px rounded inline-flex items-center gap-0.5"
+                    style={{
+                      background: 'hsl(var(--sv-clay) / 0.08)',
+                      color: 'hsl(var(--sv-clay))',
+                      fontWeight: 500,
+                    }}
+                    data-testid={`origin-tag-${t.id}`}
+                  >
+                    <ArrowRight className="h-2.5 w-2.5" />
+                    {originTag}
+                  </span>
+                )}
+                {isRunning && (
+                  <Loader2 className="h-3 w-3 shrink-0 animate-spin" style={{ color: 'hsl(var(--sv-clay))' }} aria-label="Running" />
+                )}
+                {hasArtifact && !isRunning && (
+                  <FileText className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-clay) / 0.7)' }} aria-label="Has artifact" />
+                )}
+                <span className="text-[10.5px] shrink-0 tabular-nums" style={{ color: 'hsl(var(--sv-muted))' }}>
+                  {relativeTime(t.updated_at)}
+                </span>
+              </div>
+              {showReason && reason && (
+                <span
+                  className="text-[10.5px] pl-px"
+                  style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
+                  data-testid={`reason-${t.id}`}
+                >
+                  {reason}
+                </span>
               )}
-              {hasArtifact && !isRunning && (
-                <FileText className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-clay) / 0.7)' }} aria-label="Has artifact" />
-              )}
-              <span className="text-[10.5px] shrink-0 tabular-nums" style={{ color: 'hsl(var(--sv-muted))' }}>
-                {relativeTime(t.updated_at)}
-              </span>
             </button>
           </li>
         );
