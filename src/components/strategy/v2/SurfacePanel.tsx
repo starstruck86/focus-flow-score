@@ -590,7 +590,7 @@ function CustomPillsRow({
 // ───────────────── Recent in surface ─────────────────
 
 function RecentInSurface({
-  label, surface, ownThreads, fallbackThreads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
+  label, surface, ownThreads, fallbackThreads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds, vibe,
 }: {
   label: string;
   surface: StrategySurfaceKey;
@@ -600,11 +600,15 @@ function RecentInSurface({
   onSelect: (id: string) => void;
   runningThreadIds?: Set<string>;
   artifactThreadIds?: Set<string>;
+  vibe: SurfaceVibe;
 }) {
   const hasOwn = ownThreads.length > 0;
   const hasFallback = !hasOwn && fallbackThreads.length > 0;
   const heading = hasOwn ? `Recent in ${label}` : (hasFallback ? 'Relevant recent work' : `Recent in ${label}`);
   const annotated: AnnotatedThread[] = hasOwn ? ownThreads : (hasFallback ? fallbackThreads : []);
+
+  // The single highest-priority thread earns a "Top match" badge.
+  const topMatchId = annotated.length > 0 ? annotated[0].thread.id : null;
 
   // Group annotated threads by their `group` field, preserving insertion order.
   const groups = useMemo(() => {
@@ -642,22 +646,44 @@ function RecentInSurface({
 
   return (
     <div>
-      <div className="flex items-center gap-1.5 mb-2">
-        <span className="text-[10.5px] font-medium uppercase tracking-[0.09em]" style={{ color: 'hsl(var(--sv-muted))' }}>
+      <div className="flex items-center gap-1.5 mb-3">
+        <span
+          className="text-[10.5px] font-semibold uppercase tracking-[0.11em]"
+          style={{ color: 'hsl(var(--sv-ink) / 0.7)' }}
+        >
           {heading}
         </span>
+        {annotated.length > 0 && (
+          <span className="text-[10px]" style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}>
+            · {annotated.length}
+          </span>
+        )}
       </div>
       {annotated.length > 0 ? (
-        <div className="space-y-3">
-          {groups.map(([groupName, items]) => (
+        <div className={vibe.groupSpacing}>
+          {groups.map(([groupName, items], idx) => (
             <div key={groupName}>
               {groups.length > 1 && (
                 <div
-                  className="text-[10px] font-medium tracking-[0.08em] mb-1.5"
-                  style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
+                  className="flex items-center gap-2 mb-2"
                   data-testid={`group-${groupName.toLowerCase().replace(/\s+/g, '-')}`}
                 >
-                  {groupName}
+                  <span
+                    className="text-[10px] font-semibold uppercase tracking-[0.1em]"
+                    style={{ color: 'hsl(var(--sv-ink) / 0.6)' }}
+                  >
+                    {groupName}
+                  </span>
+                  <div
+                    className="flex-1 h-px"
+                    style={{ background: 'hsl(var(--sv-hairline))' }}
+                  />
+                  <span
+                    className="text-[10px] tabular-nums"
+                    style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}
+                  >
+                    {items.length}
+                  </span>
                 </div>
               )}
               <ThreadRows
@@ -667,6 +693,9 @@ function RecentInSurface({
                 runningThreadIds={runningThreadIds}
                 artifactThreadIds={artifactThreadIds}
                 showReason
+                showNextAction
+                topMatchId={idx === 0 ? topMatchId : null}
+                vibe={vibe}
               />
             </div>
           ))}
