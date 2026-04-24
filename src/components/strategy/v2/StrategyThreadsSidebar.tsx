@@ -88,7 +88,7 @@ export function StrategyThreadsSidebar({
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return threads;
-    return threads.filter(t => (t.title ?? '').toLowerCase().includes(needle));
+    return threads.filter(t => displayThreadTitle(t).toLowerCase().includes(needle));
   }, [threads, query]);
 
   const grouped = useMemo(() => {
