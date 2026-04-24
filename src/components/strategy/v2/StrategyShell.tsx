@@ -951,19 +951,22 @@ export function StrategyShell() {
           </div>
         )}
 
-        <StrategyCanvas
-          messages={messages}
-          isLoading={isLoading}
-          isSending={isSending}
-          hideEmptyState={showSurfaceWorkspace}
-          onPickPrompt={(prompt) => {
-            const ta = composerRef.current as
-              (HTMLTextAreaElement & { insertText?: (t: string) => void })
-              | null;
-            ta?.insertText?.(prompt);
-            requestAnimationFrame(() => ta?.focus());
-          }}
-        />
+        {/* Default thread canvas — hidden while a surface workspace is active
+            so the surface fully owns the main body. The composer stays. */}
+        {!showSurfaceWorkspace && (
+          <StrategyCanvas
+            messages={messages}
+            isLoading={isLoading}
+            isSending={isSending}
+            onPickPrompt={(prompt) => {
+              const ta = composerRef.current as
+                (HTMLTextAreaElement & { insertText?: (t: string) => void })
+                | null;
+              ta?.insertText?.(prompt);
+              requestAnimationFrame(() => ta?.focus());
+            }}
+          />
+        )}
 
       {trustState === 'blocked' ? (
         <BlockedComposer
