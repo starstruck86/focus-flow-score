@@ -1374,6 +1374,21 @@ export function StrategyShell() {
         onClose={() => { setPillEditorOpen(false); setEditingPill(null); }}
         onSaved={handlePillSaved}
       />
+      {/* Manage Strategy — full configuration surface for workspaces & pills.
+          Opened from the sidebar (replaces the broken "Add Mode" entry). */}
+      <ManageStrategySheet
+        open={manageOpen}
+        onClose={() => setManageOpen(false)}
+        onAddPill={(surface) => {
+          setManageOpen(false);
+          handleAddPill(surface);
+        }}
+        onEditPill={(pill) => {
+          setManageOpen(false);
+          handleEditPill(pill);
+        }}
+        pillsVersion={pillsVersion}
+      />
       {/* Promote-to-Library — explicit, never automatic. Outputs are contextual by default. */}
       <PromoteToLibrarySheet
         payload={promotePayload}
