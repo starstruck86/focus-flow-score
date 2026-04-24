@@ -386,7 +386,7 @@ export function SurfacePanel({
           {surface !== 'work' && surface !== 'projects' && (
             <RecentInSurface
               label={meta.label}
-              threads={recentThreadsForSurface}
+              ownThreads={annotatedRecentForSurface}
               fallbackThreads={relevantFallbackWork}
               surface={surface}
               activeThreadId={activeThreadId}
