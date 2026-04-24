@@ -438,18 +438,18 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="mt-1 first:mt-0">
+    <section className="mt-0.5 first:mt-0">
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-1.5 px-3 pt-3 pb-1 group"
+        className="w-full flex items-center gap-1.5 px-3 pt-2.5 pb-1 group"
         aria-expanded={open}
       >
         {open ? (
-          <ChevronDown className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-muted) / 0.7)' }} />
+          <ChevronDown className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-muted) / 0.6)' }} />
         ) : (
-          <ChevronRight className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-muted) / 0.7)' }} />
+          <ChevronRight className="h-3 w-3 shrink-0" style={{ color: 'hsl(var(--sv-muted) / 0.6)' }} />
         )}
-        <span className="text-[10.5px] font-semibold uppercase tracking-[0.10em]" style={{ color: 'hsl(var(--sv-muted))' }}>
+        <span className="text-[10.5px] font-medium uppercase tracking-[0.09em]" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
           {label}
         </span>
         {typeof count === 'number' && count > 0 && (
