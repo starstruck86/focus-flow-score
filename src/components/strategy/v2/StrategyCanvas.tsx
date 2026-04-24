@@ -18,9 +18,12 @@ interface Props {
   hideEmptyState?: boolean;
   /** Called when a user clicks an empty-state prompt chip. */
   onPickPrompt?: (prompt: string) => void;
+  /** Called when the user clicks a quick-iteration action under an
+   *  assistant response (Regenerate / Shorten / Expand / Improve). */
+  onQuickAction?: (prompt: string) => void;
 }
 
-export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState = false, onPickPrompt }: Props) {
+export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState = false, onPickPrompt, onQuickAction }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
