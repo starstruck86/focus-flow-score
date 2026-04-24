@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Play, X } from 'lucide-react';
+import { Play, X, Pencil, ChevronDown } from 'lucide-react';
 import {
   type WorkflowDef,
   compileWorkflowPrompt,
@@ -28,9 +28,11 @@ interface Props {
   workflow: WorkflowDef | null;
   onClose: () => void;
   onRun: (compiledPrompt: string, def: WorkflowDef) => void;
+  /** When provided, custom pills show an Edit button that calls this. */
+  onEditCustom?: (customPillId: string) => void;
 }
 
-export function WorkflowFormSheet({ workflow, onClose, onRun }: Props) {
+export function WorkflowFormSheet({ workflow, onClose, onRun, onEditCustom }: Props) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [showErrors, setShowErrors] = useState(false);
 
