@@ -470,21 +470,72 @@ export const MODE_PILLS: Record<'brainstorm' | 'deep_research' | 'refine', Workf
 export const LIBRARY_DEFS: WorkflowDef[] = LIBRARY_WORKFLOWS;
 export const ARTIFACT_TEMPLATE_DEFS: WorkflowDef[] = ARTIFACT_TEMPLATES;
 
-/** Compile a prompt template using the user-supplied values. */
+// ──────────────────────────── OUTPUT TYPE LABELS ────────────────────────────
+
+export const OUTPUT_TYPE_LABEL: Record<PillOutputType, string> = {
+  chat:        'Chat response',
+  artifact:    'Structured artifact',
+  word:        'Word document',
+  pdf:         'PDF',
+  excel:       'Excel / CSV',
+  powerpoint:  'PowerPoint',
+  email:       'Email draft',
+  task:        'Task / run output',
+};
+
+/** Hidden header line nudging the engine toward the requested output shape. */
+function outputHeader(outputType?: PillOutputType): string {
+  if (!outputType || outputType === 'chat') return '';
+  return `Format the response as a ${OUTPUT_TYPE_LABEL[outputType].toLowerCase()}.`;
+}
+
+// ──────────────────────────── COMPILE HELPERS ────────────────────────────
+
+/**
+ * Compile a prompt template using the user-supplied form values.
+ * Used by the legacy WorkflowFormSheet and any code path that already
+ * collected values up-front. Hidden instruction + output-type header are
+ * prepended when present.
+ */
 export function compileWorkflowPrompt(def: WorkflowDef, values: Record<string, string>): string {
   let body = def.promptTemplate;
   for (const field of def.fields) {
     const raw = values[field.key]?.trim() ?? '';
     const replacement = raw.length > 0 ? raw : '(not specified)';
-    // Replace ALL occurrences of the {{Label}} token.
     body = body.split(`{{${field.label}}}`).join(replacement);
   }
-  body = body.trim();
+  return assemblePrompt(def, body.trim());
+}
 
-  // Prepend instruction (custom-GPT style) when present.
-  const instruction = def.instruction?.trim();
-  if (instruction) {
-    return `Instruction: ${instruction}\n\n${body}`.trim();
+/**
+ * Compile a prompt template for INSERTION into the composer — placeholders
+ * stay as `[Field Label]` tokens the user can type over naturally. No form,
+ * no values collected up-front. This is the prompt-first path.
+ */
+export function compileTemplateForComposer(def: WorkflowDef): string {
+  let body = def.promptTemplate;
+  for (const field of def.fields) {
+    body = body.split(`{{${field.label}}}`).join(`[${field.label}]`);
   }
-  return body;
+  return assemblePrompt(def, body.trim());
+}
+
+/** Detect whether a compiled prompt still has `[Bracketed]` placeholders left. */
+export function hasUnresolvedPlaceholders(text: string): boolean {
+  // Match [Anything Title-cased or with spaces], excluding markdown link syntax `[txt](url)`.
+  return /\[[A-Z][^\]\n]{0,80}\](?!\()/.test(text);
+}
+
+/** Shared assembly: instruction header → output hint → body → clarifying nudge. */
+function assemblePrompt(def: WorkflowDef, body: string): string {
+  const parts: string[] = [];
+  const instruction = def.instruction?.trim();
+  if (instruction) parts.push(`Instruction: ${instruction}`);
+  const out = outputHeader(def.outputType);
+  if (out) parts.push(out);
+  parts.push(body);
+  if (def.askClarifying) {
+    parts.push('Before producing the final answer, ask me 2-3 clarifying questions if anything material is missing.');
+  }
+  return parts.filter(Boolean).join('\n\n').trim();
 }
