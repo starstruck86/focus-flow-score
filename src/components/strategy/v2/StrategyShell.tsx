@@ -78,6 +78,7 @@ import { StrategyThreadsSidebar } from './StrategyThreadsSidebar';
 import { StrategyNavSidebar, type StrategyMode } from './StrategyNavSidebar';
 import { WorkflowFormSheet } from './workflows/WorkflowFormSheet';
 import type { WorkflowDef } from './workflows/workflowRegistry';
+import { PromoteToLibrarySheet, type PromotePayload } from './promote/PromoteToLibrarySheet';
 import { StrategyGlobalNavBar } from './StrategyGlobalNavBar';
 import { StrategyProgressPanel } from './StrategyProgressPanel';
 import { ArtifactInlineCard } from './ArtifactInlineCard';
