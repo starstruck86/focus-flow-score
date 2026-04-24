@@ -84,6 +84,7 @@ import { PillEditorSheet } from './PillEditorSheet';
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
 import { tagThread } from '@/lib/strategy/threadTags';
+import { buildWorkspaceTitle, WORKSPACE_LABEL, displayThreadTitle } from '@/lib/strategy/threadNaming';
 import { PromoteToLibrarySheet, type PromotePayload } from './promote/PromoteToLibrarySheet';
 import { StrategyGlobalNavBar } from './StrategyGlobalNavBar';
 import { StrategyProgressPanel } from './StrategyProgressPanel';
@@ -378,8 +379,15 @@ export function StrategyShell() {
   const handleNewThread = useCallback(async () => {
     if (!user || pendingThreadId || isCreatingThread) return;
     setIsCreatingThread(true);
-    const newId = await createThread('Untitled thread', 'strategy', 'freeform');
+    // Empty new thread → label by current surface so it never reads "Untitled".
+    const surface = lastSurfaceKeyRef.current;
+    const placeholder = (surface && surface !== 'work')
+      ? `${WORKSPACE_LABEL[surface]} · New thread`
+      : 'New thread';
+    const newId = await createThread(placeholder, 'strategy', 'freeform');
     if (newId) {
+      // Tag the empty thread to the surface that created it.
+      if (surface && surface !== 'work') tagThread(newId, surface);
       setPendingThreadId(newId);
       return;
     }
@@ -705,8 +713,14 @@ export function StrategyShell() {
       (async () => {
         if (!user) return;
         setIsCreatingThread(true);
-        const newId = await createThread('Untitled thread', 'strategy', 'freeform');
+        // Derive a workspace-prefixed title from the first prompt — never
+        // "Untitled thread". e.g. "Brainstorm · CMO messaging angles".
+        const surfaceForTitle = (sendingFrom && sendingFrom !== 'work') ? sendingFrom : null;
+        const derivedTitle = buildWorkspaceTitle(text, surfaceForTitle);
+        const newId = await createThread(derivedTitle, 'strategy', 'freeform');
         if (newId) {
+          // Tag immediately so display title resolution + recents can rely on it.
+          if (surfaceForTitle) tagThread(newId, surfaceForTitle);
           queuedInitialMessageRef.current = text;
           // Re-stash so the queued send (after thread mounts) still sees them.
           if (sidecar) setPendingResourceIds(sidecar);
@@ -1062,7 +1076,7 @@ export function StrategyShell() {
           )}
           <div className="flex-1 min-w-0">
             <StrategyTopBar
-              title={activeThread?.title ?? 'Untitled thread'}
+              title={activeThread ? displayThreadTitle(activeThread) : 'New thread'}
               onTitleChange={(next) => activeThread && updateThread(activeThread.id, { title: next })}
               entityName={entityName}
               trustState={trustState}

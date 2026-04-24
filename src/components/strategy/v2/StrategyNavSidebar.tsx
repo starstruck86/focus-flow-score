@@ -17,6 +17,7 @@ import {
   Briefcase,
 } from 'lucide-react';
 import type { StrategyThread } from '@/types/strategy';
+import { displayThreadTitle, isUntitledTitle } from '@/lib/strategy/threadNaming';
 import { cn } from '@/lib/utils';
 
 export type StrategyMode = 'brainstorm' | 'deep_research' | 'refine' | null;
@@ -86,8 +87,7 @@ export function StrategyNavSidebar({
       if (t.id === activeThreadId) return 0;
       if (runningThreadIds?.has(t.id)) return 1;
       if (artifactThreadIds?.has(t.id)) return 2;
-      const isUntitled = !t.title || /^untitled/i.test(t.title);
-      return isUntitled ? 4 : 3;
+      return isUntitledTitle(t.title) ? 4 : 3;
     };
     const sorted = [...visible].sort((a, b) => score(a) - score(b));
     return { visibleThreads: sorted, hiddenTestCount: hidden };
@@ -245,7 +245,8 @@ export function StrategyNavSidebar({
               const isActive = activeThreadId === t.id;
               const isRunning = runningThreadIds?.has(t.id) ?? false;
               const hasArtifact = artifactThreadIds?.has(t.id) ?? false;
-              const isUntitled = !t.title || /^untitled/i.test(t.title);
+              const isUntitled = isUntitledTitle(t.title);
+              const displayTitle = displayThreadTitle(t);
               return (
                 <li key={t.id}>
                   <button
@@ -260,11 +261,11 @@ export function StrategyNavSidebar({
                     }}
                     onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
                     onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                    title={t.title || 'Untitled thread'}
+                    title={displayTitle}
                   >
                     <div className="w-full flex items-center gap-2">
                       <span className="flex-1 min-w-0 truncate text-[13px]" style={{ fontWeight: isActive ? 600 : 400 }}>
-                        {t.title || 'Untitled thread'}
+                        {displayTitle}
                       </span>
                       {isRunning && (
                         <Loader2 className="h-3 w-3 shrink-0 animate-spin" style={{ color: 'hsl(var(--sv-clay))' }} aria-label="Running" />
