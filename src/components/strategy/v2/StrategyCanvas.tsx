@@ -35,19 +35,19 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
       style={{ background: 'hsl(var(--sv-paper))' }}
     >
       <div
-        className="mx-auto px-6 pt-6 pb-16"
+        className="mx-auto px-6 pt-4 pb-12"
         style={{ maxWidth: 760 }}
       >
         {showEmptyState && onPickPrompt && (
           <StrategyEmptyState onPickPrompt={onPickPrompt} />
         )}
         {messages.map((m, i) => (
-          <div key={m.id} style={{ marginTop: i === 0 ? 0 : 22 }}>
+          <div key={m.id} style={{ marginTop: i === 0 ? 0 : 16 }}>
             <StrategyMessage message={m} />
           </div>
         ))}
         {isSending && (
-          <div style={{ marginTop: messages.length === 0 ? 0 : 22 }}>
+          <div style={{ marginTop: messages.length === 0 ? 0 : 16 }}>
             <StrategyMessage
               message={{
                 id: '__streaming__',
