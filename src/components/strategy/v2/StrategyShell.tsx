@@ -923,7 +923,7 @@ export function StrategyShell() {
             visually compete with it. */}
         {showSurfaceWorkspace && (
           <SurfacePanel
-            surface={activeSurface}
+            surface={activeSurface!}
             onLaunchWorkflow={handleLaunchWorkflow}
             onClose={() => { setActiveSurface(null); }}
             threads={threads}
