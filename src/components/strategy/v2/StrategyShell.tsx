@@ -1039,6 +1039,11 @@ export function StrategyShell() {
         onClose={() => setActiveWorkflow(null)}
         onRun={handleRunWorkflow}
       />
+      {/* Promote-to-Library — explicit, never automatic. Outputs are contextual by default. */}
+      <PromoteToLibrarySheet
+        payload={promotePayload}
+        onClose={() => setPromotePayload(null)}
+      />
       {/* Validation status drawer (read-only) */}
       <ValidationStatusDrawer
         open={validationDrawerOpen}
