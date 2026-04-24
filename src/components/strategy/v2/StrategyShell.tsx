@@ -918,6 +918,14 @@ export function StrategyShell() {
             surface={activeSurface}
             onLaunchWorkflow={handleLaunchWorkflow}
             onClose={() => { setActiveSurface(null); }}
+            threads={threads}
+            activeThreadId={threadId}
+            onSelectThread={(id) => { setActiveThreadId(id); setActiveSurface(null); }}
+            pillsVersion={pillsVersion}
+            onAddPill={handleAddPill}
+            onEditPill={handleEditPill}
+            runningThreadIds={runningThreadIds}
+            artifactThreadIds={artifactThreadIds}
           />
         )}
 
