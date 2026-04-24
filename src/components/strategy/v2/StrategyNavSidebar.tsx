@@ -90,6 +90,24 @@ export function StrategyNavSidebar({
     return Array.from(m.entries());
   }, [artifacts]);
 
+  // Filter test/benchmark threads out of Work; sort active+ready first.
+  const { visibleThreads, hiddenTestCount } = useMemo(() => {
+    const isTest = (t: StrategyThread) => /^\[benchmark\]/i.test(t.title || '');
+    const visible = threads.filter((t) => !isTest(t));
+    const hidden = threads.length - visible.length;
+    // Stable sort: active > running > artifact-ready > untitled-deprio > rest (by updated_at order which is already DB-sorted)
+    const score = (t: StrategyThread) => {
+      if (t.id === activeThreadId) return 0;
+      if (runningThreadIds?.has(t.id)) return 1;
+      if (artifactThreadIds?.has(t.id)) return 2;
+      const isUntitled = !t.title || /^untitled/i.test(t.title);
+      return isUntitled ? 4 : 3;
+    };
+    const sorted = [...visible].sort((a, b) => score(a) - score(b));
+    return { visibleThreads: sorted, hiddenTestCount: hidden };
+  }, [threads, activeThreadId, runningThreadIds, artifactThreadIds]);
+
+
   // ────────────── Collapsed rail ──────────────
   if (collapsed) {
     return (
