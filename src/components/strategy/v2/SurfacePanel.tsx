@@ -604,7 +604,7 @@ function RecentInSurface({
 }) {
   const hasOwn = ownThreads.length > 0;
   const hasFallback = !hasOwn && fallbackThreads.length > 0;
-  const heading = hasOwn ? `Recent in ${label}` : (hasFallback ? 'Relevant recent work' : `Recent in ${label}`);
+  const heading = hasOwn ? `Recent in ${label}` : (hasFallback ? 'Best starting points' : `Recent in ${label}`);
   const annotated: AnnotatedThread[] = hasOwn ? ownThreads : (hasFallback ? fallbackThreads : []);
 
   // The single highest-priority thread earns a "Top match" badge.
@@ -620,6 +620,14 @@ function RecentInSurface({
     }
     return Array.from(map.entries());
   }, [annotated]);
+
+  // Light contextual hint per group position (most relevant / secondary / etc.).
+  const groupContextHint = (idx: number, total: number): string | null => {
+    if (total <= 1) return null;
+    if (idx === 0) return 'most relevant';
+    if (idx === total - 1) return 'also worth a look';
+    return 'secondary';
+  };
 
   const fallbackHint = (() => {
     if (!hasFallback) return null;
