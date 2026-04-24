@@ -83,7 +83,7 @@ const TOP_NAV: {
   { key: 'refine',        label: 'Refine',        icon: Wand2 },
   { key: 'library',       label: 'Library',       icon: BookOpen },
   { key: 'artifacts',     label: 'Artifacts',     icon: FileText },
-  { key: 'projects',      label: 'Projects',      icon: FolderKanban, muted: true },
+  { key: 'projects',      label: 'Projects',      icon: FolderKanban },
   { key: 'work',          label: 'Work',          icon: Briefcase },
 ];
 
