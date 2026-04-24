@@ -996,6 +996,20 @@ export function StrategyShell() {
   const showSurfaceWorkspace = activeSurface !== null;
   const showInlineArtifactCard = !showSurfaceWorkspace && !!latestCompleted;
 
+  // The thread id the *current surface* owns (synchronously, from state).
+  // For mode surfaces we look it up explicitly: if the surface has never
+  // owned a thread (`hasOwnProperty` is false), the workspace must show its
+  // launcher — even if the global `threadId` is still resolving from a
+  // prior surface. For 'work' (or no surface) we fall back to the global
+  // `threadId` so the all-threads view continues to render normally.
+  const currentSurfaceKey: DraftKey = activeSurface ?? 'work';
+  const surfaceOwnsThread = currentSurfaceKey !== 'work'
+    ? Object.prototype.hasOwnProperty.call(surfaceThreads, currentSurfaceKey)
+    : true;
+  const displayThreadId: string | null = currentSurfaceKey === 'work'
+    ? threadId
+    : (surfaceOwnsThread ? (surfaceThreads[currentSurfaceKey] ?? null) : null);
+
   return (
     <div
       className="strategy-v2 flex flex-col flex-1 min-h-0 w-full"
