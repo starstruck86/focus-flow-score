@@ -133,7 +133,7 @@ export function SurfacePanel({
 
   return (
     <div
-      className="border-b shrink-0"
+      className="flex-1 min-h-0 overflow-y-auto border-b"
       style={{
         background: 'hsl(var(--sv-paper))',
         borderColor: 'hsl(var(--sv-hairline))',
@@ -214,7 +214,7 @@ export function SurfacePanel({
           )}
 
           {/* Recent in <surface> */}
-          {recentThreadsForSurface.length > 0 && (
+          {surface !== 'work' && surface !== 'projects' && (
             <RecentInSurface
               label={meta.label}
               threads={recentThreadsForSurface}
@@ -393,13 +393,26 @@ function RecentInSurface({
           Recent in {label}
         </span>
       </div>
-      <ThreadRows
-        threads={threads}
-        activeThreadId={activeThreadId}
-        onSelect={onSelect}
-        runningThreadIds={runningThreadIds}
-        artifactThreadIds={artifactThreadIds}
-      />
+      {threads.length > 0 ? (
+        <ThreadRows
+          threads={threads}
+          activeThreadId={activeThreadId}
+          onSelect={onSelect}
+          runningThreadIds={runningThreadIds}
+          artifactThreadIds={artifactThreadIds}
+        />
+      ) : (
+        <div
+          className="rounded-[8px] px-3 py-2.5 text-[12px]"
+          style={{
+            border: '1px solid hsl(var(--sv-hairline))',
+            background: 'hsl(var(--sv-paper))',
+            color: 'hsl(var(--sv-muted))',
+          }}
+        >
+          No recent work here yet.
+        </div>
+      )}
     </div>
   );
 }
