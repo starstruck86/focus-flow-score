@@ -830,19 +830,23 @@ export function StrategyShell() {
       {/* Desktop persistent sidebar */}
       {!isMobile && sidebarNode()}
 
-      {/* Mobile sidebar drawer — lighter overlay (CSS override), intentional width (~85vw, max 320px) */}
+      {/* Mobile sidebar drawer — lighter overlay (CSS override), intentional width (~85vw, max 320px).
+          CRITICAL: SheetContent is portaled to <body>, OUTSIDE the .strategy-v2 root. Without
+          re-applying .strategy-v2 here, all --sv-* CSS vars resolve to undefined and the drawer
+          renders transparent (page content bleeds through). Re-applying the class scopes the
+          tokens so backgrounds, hairlines, and text colors all paint correctly. */}
       {isMobile && (
         <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
           <SheetContent
             side="left"
-            className="p-0 flex flex-col strategy-mobile-drawer [&>button]:hidden"
+            className="strategy-v2 p-0 flex flex-col strategy-mobile-drawer [&>button]:hidden"
             style={{
-              background: 'hsl(var(--sv-paper))',
+              background: 'hsl(40 12% 98%)',
               width: 'min(85vw, 320px)',
               boxShadow: '0 0 40px hsl(0 0% 0% / 0.12)',
             }}
           >
-            <div className="flex flex-1 min-h-0">
+            <div className="flex flex-1 min-h-0" style={{ background: 'hsl(40 12% 98%)' }}>
               {sidebarNode(() => setMobileSidebarOpen(false))}
             </div>
           </SheetContent>
