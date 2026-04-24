@@ -21,6 +21,7 @@
  * Pure presentation. No backend/engine changes.
  */
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   X, Lightbulb, Microscope, Wand2, BookOpen, FileText,
   ClipboardList, ClipboardCheck, Send, Presentation, Mail, FilePlus,
