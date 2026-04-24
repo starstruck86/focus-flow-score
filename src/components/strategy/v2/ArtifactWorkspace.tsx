@@ -19,7 +19,7 @@
  * point — the canonical edit flow lives elsewhere.
  */
 import { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, BookmarkPlus, Lock } from 'lucide-react';
 import { TaskOutputViewer } from '@/components/strategy/tasks/TaskOutputViewer';
 import type { TaskRunResult } from '@/hooks/strategy/useTaskExecution';
 import { ArtifactSectionNav } from './ArtifactSectionNav';
@@ -27,10 +27,14 @@ import { toast } from 'sonner';
 
 interface Props {
   result: TaskRunResult;
+  /** Human label for the originating context (e.g. "Sephora"). */
+  contextLabel?: string | null;
   onClose: () => void;
+  /** Open the Promote-to-Library form for this artifact. */
+  onPromote?: () => void;
 }
 
-export function ArtifactWorkspace({ result, onClose }: Props) {
+export function ArtifactWorkspace({ result, contextLabel, onClose, onPromote }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(null);
 
