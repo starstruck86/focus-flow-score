@@ -38,8 +38,8 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
       style={{ background: 'hsl(var(--sv-paper))' }}
     >
       <div
-        className="mx-auto px-6 pt-4 pb-12"
-        style={{ maxWidth: 680 }}
+        className="mx-auto px-6 pt-2 pb-8"
+        style={{ maxWidth: 860 }}
       >
         {showEmptyState && onPickPrompt && (
           <StrategyEmptyState onPickPrompt={onPickPrompt} />
