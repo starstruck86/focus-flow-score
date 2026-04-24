@@ -1049,7 +1049,7 @@ function ThreadRows({
         const isActive = activeThreadId === t.id;
         const isRunning = runningThreadIds?.has(t.id) ?? false;
         const hasArtifact = artifactThreadIds?.has(t.id) ?? false;
-        const isUntitled = !t.title || /^untitled/i.test(t.title);
+        const isUntitled = isUntitledTitle(t.title);
         const isTopMatch = !!topMatchId && topMatchId === t.id;
         const conf = confidenceFromPriority(priority);
         // Subtle opacity step for confidence — high=1, medium=0.92, low=0.78
@@ -1059,6 +1059,7 @@ function ThreadRows({
         // Origin tag: only show when group looks like a real surface label
         // and not the default "Freeform"/"Your work" buckets.
         const originTag = showOriginTag && group !== 'Freeform' ? group : null;
+        const displayTitle = displayThreadTitle(t);
         return (
           <li key={t.id}>
             <button
@@ -1072,7 +1073,7 @@ function ThreadRows({
               }}
               onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
               onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = isTopMatch ? 'hsl(var(--sv-clay) / 0.03)' : 'transparent'; }}
-              title={reason ? `${t.title || 'Untitled thread'} — ${reason}` : (t.title || 'Untitled thread')}
+              title={reason ? `${displayTitle} — ${reason}` : displayTitle}
               data-testid={`surface-thread-${t.id}`}
             >
               <div className="flex items-center gap-2 w-full">
@@ -1080,7 +1081,7 @@ function ThreadRows({
                   className="flex-1 min-w-0 truncate text-[13px]"
                   style={{ fontWeight: isActive ? 600 : v.titleWeight }}
                 >
-                  {t.title || 'Untitled thread'}
+                  {displayTitle}
                 </span>
                 {isTopMatch && (
                   <span
