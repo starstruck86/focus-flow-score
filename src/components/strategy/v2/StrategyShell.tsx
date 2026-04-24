@@ -1069,7 +1069,16 @@ export function StrategyShell() {
             onClose={() => { setActiveSurface(null); }}
             threads={threads}
             activeThreadId={threadId}
-            onSelectThread={(id) => { setActiveThreadId(id); setActiveSurface(null); }}
+            onSelectThread={(id) => {
+              // Picking from within a surface's recents binds that thread
+              // to the surface. The user stays in the workspace; the chat
+              // for the selected thread renders in place.
+              const key = lastSurfaceKeyRef.current;
+              if (key && key !== 'work') {
+                surfaceThreadsRef.current[key] = id;
+              }
+              setActiveThreadId(id);
+            }}
             pillsVersion={pillsVersion}
             onAddPill={handleAddPill}
             onEditPill={handleEditPill}
