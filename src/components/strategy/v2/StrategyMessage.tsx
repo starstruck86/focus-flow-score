@@ -37,7 +37,7 @@ function extractText(contentJson: any): string {
   return '';
 }
 
-export function StrategyMessage({ message }: Props) {
+export function StrategyMessage({ message, onQuickAction }: Props) {
   const text = extractText(message.content_json);
   const role = message.role;
   const isUser = role === 'user';
