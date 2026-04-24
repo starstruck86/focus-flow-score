@@ -43,23 +43,18 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
   const isUser = role === 'user';
 
   if (!text.trim()) {
-    // Streaming placeholder — three pulsing dots + "Thinking…" label.
+    // Streaming placeholder — calm "Thinking…" label, no flashy animation.
     return (
       <div
-        className="flex items-center gap-2 py-1"
-        style={{ paddingLeft: role === 'user' ? 40 : 0 }}
+        className="py-1 text-[14px]"
+        style={{
+          paddingLeft: role === 'user' ? 40 : 0,
+          color: 'hsl(var(--sv-muted))',
+          fontFamily: 'var(--sv-sans)',
+          opacity: 0.6,
+        }}
       >
-        <span className="flex items-center gap-1">
-          <span className="h-1.5 w-1.5 rounded-full animate-bounce" style={{ background: 'hsl(var(--sv-clay) / 0.55)', animationDelay: '0ms' }} />
-          <span className="h-1.5 w-1.5 rounded-full animate-bounce" style={{ background: 'hsl(var(--sv-clay) / 0.55)', animationDelay: '120ms' }} />
-          <span className="h-1.5 w-1.5 rounded-full animate-bounce" style={{ background: 'hsl(var(--sv-clay) / 0.55)', animationDelay: '240ms' }} />
-        </span>
-        <span
-          className="text-[12px]"
-          style={{ color: 'hsl(var(--sv-muted))', fontFamily: 'var(--sv-sans)' }}
-        >
-          Thinking…
-        </span>
+        Thinking…
       </div>
     );
   }
