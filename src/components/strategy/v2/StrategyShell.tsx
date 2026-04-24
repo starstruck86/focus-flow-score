@@ -815,6 +815,17 @@ export function StrategyShell() {
           onSlashChange={setSlashQuery}
           onRectChange={setComposerRect}
           onAttachFiles={() => slashFileInputRef.current?.click()}
+          momentumHint={
+            // Context-aware "what's next?" line under the composer.
+            // Priority: streaming > artifact-just-landed > linked-entity > null (let composer fall back to its empty/typing hints)
+            isSending
+              ? 'Strategy is thinking…'
+              : (latestCompleted && artifactPanelOpen)
+                ? 'Ask a follow-up to refine · / to revise · ⌘S to save'
+                : entityName && messages.length > 0
+                  ? `Grounded on ${entityName} · / for actions · ⌘S save`
+                  : null
+          }
         />
       )}
       </div>
