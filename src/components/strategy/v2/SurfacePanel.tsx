@@ -43,11 +43,38 @@ import type { StrategyThread } from '@/types/strategy';
 /** A thread enriched with explainability metadata for display. */
 interface AnnotatedThread {
   thread: StrategyThread;
-  /** Short reason chip — e.g. "Structured artifact". */
+  /** Decisive reason — e.g. "Strong match for Deep Research". */
   reason: string;
   /** Light grouping bucket — e.g. "Structured work". */
   group: string;
+  /** Suggested next action — e.g. "expand or refine". */
+  nextAction?: string;
+  /** Priority weight — higher = surfaces first; first item gets a "Top match" badge. */
+  priority?: number;
 }
+
+/** Per-mode visual identity — drives density, spacing, and emphasis. */
+type SurfaceVibe = {
+  /** Vertical rhythm for body sections. */
+  bodySpacing: string;
+  /** Spacing between groups in the recent list. */
+  groupSpacing: string;
+  /** Spacing between rows. */
+  rowSpacing: string;
+  /** Row vertical padding. */
+  rowPadY: string;
+  /** Title font weight (heavier = more editorial). */
+  titleWeight: number;
+};
+const SURFACE_VIBE: Partial<Record<StrategySurfaceKey, SurfaceVibe>> = {
+  // Generative — airy, fast, optimistic. Looser spacing, lighter weight.
+  brainstorm:    { bodySpacing: 'space-y-6',   groupSpacing: 'space-y-4',   rowSpacing: 'space-y-1.5', rowPadY: 'py-2.5', titleWeight: 400 },
+  // Analytical — dense, structured, scannable. Tighter rows, more rigor.
+  deep_research: { bodySpacing: 'space-y-4',   groupSpacing: 'space-y-2.5', rowSpacing: 'space-y-0.5', rowPadY: 'py-2',   titleWeight: 500 },
+  // Editorial — measured, deliberate, focused on craft.
+  refine:        { bodySpacing: 'space-y-5',   groupSpacing: 'space-y-3',   rowSpacing: 'space-y-1',   rowPadY: 'py-2.5', titleWeight: 500 },
+};
+const DEFAULT_VIBE: SurfaceVibe = { bodySpacing: 'space-y-5', groupSpacing: 'space-y-3', rowSpacing: 'space-y-1', rowPadY: 'py-2', titleWeight: 400 };
 
 /** Short label for a surface key (used by Work origin tags). */
 const SURFACE_SHORT_LABEL: Partial<Record<string, string>> = {
@@ -126,6 +153,7 @@ export function SurfacePanel({
 }: Props) {
   const meta = SURFACE_HEADER[surface];
   const HeaderIcon = meta.icon;
+  const vibe: SurfaceVibe = SURFACE_VIBE[surface] ?? DEFAULT_VIBE;
 
   // ── Custom pills (per surface) ────────────────────────────────
   const customPills = useMemo<CustomPill[]>(
@@ -171,61 +199,63 @@ export function SurfacePanel({
       (Date.now() - new Date(t.updated_at).getTime()) / 86_400_000;
 
     // Per-surface annotators. Returns null if the thread doesn't qualify;
-    // otherwise returns a `{ reason, group }` annotation.
-    type Annotator = (t: StrategyThread) => { reason: string; group: string } | null;
+    // otherwise returns a `{ reason, group, nextAction, priority }` annotation.
+    // Reasons are written as decisions ("Strong match for X"), not metadata.
+    type Annotation = { reason: string; group: string; nextAction?: string; priority: number };
+    type Annotator = (t: StrategyThread) => Annotation | null;
     const annotators: Record<string, Annotator> = {
       brainstorm: (t) => {
         const s = (t.title || '').toLowerCase();
         if (/\b(idea|ideas|brainstorm|angle|angles|hook|hooks|pov|point of view|hypothes)\b/.test(s))
-          return { reason: 'Ideation language', group: 'Ideation' };
+          return { reason: 'Strong match for Brainstorm', group: 'Ideation', nextAction: 'expand or branch', priority: 100 };
         if (/\b(messaging|campaign|pitch|positioning|narrative|theme)\b/.test(s))
-          return { reason: 'Messaging direction', group: 'Messaging' };
+          return { reason: 'Messaging direction', group: 'Messaging', nextAction: 'sharpen or test angles', priority: 80 };
         if (!hasArtifact(t) && (t.title || '').length > 0 && (t.title || '').length < 50)
-          return { reason: 'Short, no structured output', group: 'Early-stage' };
+          return { reason: 'Ideation-style thread', group: 'Early-stage', nextAction: 'develop further', priority: 50 };
         return null;
       },
       deep_research: (t) => {
         const s = (t.title || '').toLowerCase();
         if (hasArtifact(t) && (t.title || '').length >= 25)
-          return { reason: 'Structured artifact', group: 'Structured work' };
+          return { reason: 'Strong match for Deep Research', group: 'Structured work', nextAction: 'expand or refine', priority: 100 };
         if (/\b(research|analysis|analyze|brief|deep dive|deep-dive|teardown|profile)\b/.test(s))
-          return { reason: 'Long-form analysis', group: 'Structured work' };
+          return { reason: 'Long-form analysis', group: 'Structured work', nextAction: 'extend or cite', priority: 90 };
         if (/\b(account|company|competitor|competitive|market|industry|landscape)\b/.test(s))
-          return { reason: 'Account / market focus', group: 'Recent analysis' };
+          return { reason: 'Account / market focus', group: 'Recent analysis', nextAction: 'go deeper', priority: 70 };
         if (/\b(risk|risks|gap|gaps)\b/.test(s))
-          return { reason: 'Risk / gap framing', group: 'Recent analysis' };
+          return { reason: 'Risk / gap framing', group: 'Recent analysis', nextAction: 'pressure-test', priority: 60 };
         return null;
       },
       refine: (t) => {
         const s = (t.title || '').toLowerCase();
         if (hasArtifact(t) && ageDays(t) < 3)
-          return { reason: 'Recently edited draft', group: 'Drafts to polish' };
+          return { reason: 'Recently edited draft', group: 'Drafts to polish', nextAction: 'tighten or rewrite', priority: 100 };
         if (hasArtifact(t))
-          return { reason: 'Draft with artifact', group: 'Drafts to polish' };
+          return { reason: 'Draft with artifact', group: 'Drafts to polish', nextAction: 'polish or reuse', priority: 85 };
         if (/\b(refine|rewrite|edit|tighten|polish|improve|sharpen|revise)\b/.test(s))
-          return { reason: 'Refinement language', group: 'Edits in progress' };
+          return { reason: 'Strong match for Refine', group: 'Edits in progress', nextAction: 'continue editing', priority: 75 };
         if (/\b(draft|email|follow.?up|exec|executive|tone|shorten|condense)\b/.test(s))
-          return { reason: 'Needs polishing', group: 'Edits in progress' };
+          return { reason: 'Needs polishing', group: 'Edits in progress', nextAction: 'tighten tone', priority: 65 };
         return null;
       },
       library: (t) => {
         const s = (t.title || '').toLowerCase();
         if (/\b(framework|methodology|model|playbook)\b/.test(s))
-          return { reason: 'Framework work', group: 'Frameworks' };
+          return { reason: 'Framework work', group: 'Frameworks', nextAction: 'reuse or extend', priority: 90 };
         if (/\b(synthesis|pattern|insight|insights|principle|principles)\b/.test(s))
-          return { reason: 'Synthesis / pattern', group: 'Insights' };
+          return { reason: 'Synthesis / pattern', group: 'Insights', nextAction: 'apply elsewhere', priority: 75 };
         if (/\b(library|knowledge)\b/.test(s))
-          return { reason: 'Knowledge work', group: 'Insights' };
+          return { reason: 'Knowledge work', group: 'Insights', nextAction: 'reuse', priority: 60 };
         return null;
       },
       artifacts: (t) => {
         if (!hasArtifact(t)) return null;
         const s = (t.title || '').toLowerCase();
         if (/\b(template)\b/.test(s))
-          return { reason: 'Template work', group: 'Templates' };
+          return { reason: 'Template work', group: 'Templates', nextAction: 'edit template', priority: 95 };
         if (/\b(discovery prep|deal review|outreach plan|demo plan|follow.?up|prep|plan)\b/.test(s))
-          return { reason: 'Structured artifact', group: 'Generated artifacts' };
-        return { reason: 'Artifact attached', group: 'Generated artifacts' };
+          return { reason: 'Strong match for Artifacts', group: 'Generated artifacts', nextAction: 'reuse as template', priority: 85 };
+        return { reason: 'Artifact attached', group: 'Generated artifacts', nextAction: 'reuse', priority: 60 };
       },
     };
 
@@ -236,12 +266,17 @@ export function SurfacePanel({
     for (const t of candidates) {
       const a = annotate(t);
       if (!a) continue;
-      annotated.push({ thread: t, reason: a.reason, group: a.group });
+      annotated.push({ thread: t, reason: a.reason, group: a.group, nextAction: a.nextAction, priority: a.priority });
     }
     if (annotated.length === 0) return [];
 
+    // Sort: priority desc, then recency. Top result becomes the "Top match".
     return annotated
-      .sort((a, b) => new Date(b.thread.updated_at).getTime() - new Date(a.thread.updated_at).getTime())
+      .sort((a, b) => {
+        const dp = (b.priority ?? 0) - (a.priority ?? 0);
+        if (dp !== 0) return dp;
+        return new Date(b.thread.updated_at).getTime() - new Date(a.thread.updated_at).getTime();
+      })
       .slice(0, 6);
   }, [threads, surface, recentThreadsForSurface.length, artifactThreadIds]);
 
@@ -251,13 +286,19 @@ export function SurfacePanel({
     if (recentThreadsForSurface.length === 0) return [];
     const hasArtifact = (t: StrategyThread) => artifactThreadIds?.has(t.id) ?? false;
     const isRunning = (t: StrategyThread) => runningThreadIds?.has(t.id) ?? false;
-    return recentThreadsForSurface.map((t) => {
-      // Light, surface-aware reasoning for owned threads.
+    return recentThreadsForSurface.map((t, idx) => {
       let reason = 'You ran this here';
       let group = 'Your work';
-      if (isRunning(t)) { reason = 'Running now'; group = 'Active'; }
-      else if (hasArtifact(t)) { reason = 'Has artifact'; group = 'With artifact'; }
-      return { thread: t, reason, group };
+      let nextAction: string | undefined;
+      let priority = 50;
+      if (isRunning(t)) {
+        reason = 'Running now'; group = 'Active'; nextAction = 'open to follow'; priority = 100;
+      } else if (hasArtifact(t)) {
+        reason = 'Has artifact'; group = 'With artifact'; nextAction = 'expand or refine'; priority = 80;
+      }
+      // First (most recent) gets a slight bump so it earns the "Top match" badge.
+      if (idx === 0) priority += 5;
+      return { thread: t, reason, group, nextAction, priority };
     });
   }, [recentThreadsForSurface, artifactThreadIds, runningThreadIds]);
 
@@ -340,8 +381,8 @@ export function SurfacePanel({
           </button>
         </div>
 
-        {/* Body */}
-        <div className="mt-5 space-y-5">
+        {/* Body — spacing rhythm comes from per-surface vibe */}
+        <div className={`mt-5 ${vibe.bodySpacing}`}>
           {/* Built-in actions */}
           {(surface === 'brainstorm' || surface === 'deep_research' || surface === 'refine') && (
             <PillGrid
@@ -393,6 +434,7 @@ export function SurfacePanel({
               onSelect={onSelectThread}
               runningThreadIds={runningThreadIds}
               artifactThreadIds={artifactThreadIds}
+              vibe={vibe}
             />
           )}
         </div>
@@ -548,7 +590,7 @@ function CustomPillsRow({
 // ───────────────── Recent in surface ─────────────────
 
 function RecentInSurface({
-  label, surface, ownThreads, fallbackThreads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
+  label, surface, ownThreads, fallbackThreads, activeThreadId, onSelect, runningThreadIds, artifactThreadIds, vibe,
 }: {
   label: string;
   surface: StrategySurfaceKey;
@@ -558,11 +600,15 @@ function RecentInSurface({
   onSelect: (id: string) => void;
   runningThreadIds?: Set<string>;
   artifactThreadIds?: Set<string>;
+  vibe: SurfaceVibe;
 }) {
   const hasOwn = ownThreads.length > 0;
   const hasFallback = !hasOwn && fallbackThreads.length > 0;
   const heading = hasOwn ? `Recent in ${label}` : (hasFallback ? 'Relevant recent work' : `Recent in ${label}`);
   const annotated: AnnotatedThread[] = hasOwn ? ownThreads : (hasFallback ? fallbackThreads : []);
+
+  // The single highest-priority thread earns a "Top match" badge.
+  const topMatchId = annotated.length > 0 ? annotated[0].thread.id : null;
 
   // Group annotated threads by their `group` field, preserving insertion order.
   const groups = useMemo(() => {
@@ -600,22 +646,44 @@ function RecentInSurface({
 
   return (
     <div>
-      <div className="flex items-center gap-1.5 mb-2">
-        <span className="text-[10.5px] font-medium uppercase tracking-[0.09em]" style={{ color: 'hsl(var(--sv-muted))' }}>
+      <div className="flex items-center gap-1.5 mb-3">
+        <span
+          className="text-[10.5px] font-semibold uppercase tracking-[0.11em]"
+          style={{ color: 'hsl(var(--sv-ink) / 0.7)' }}
+        >
           {heading}
         </span>
+        {annotated.length > 0 && (
+          <span className="text-[10px]" style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}>
+            · {annotated.length}
+          </span>
+        )}
       </div>
       {annotated.length > 0 ? (
-        <div className="space-y-3">
-          {groups.map(([groupName, items]) => (
+        <div className={vibe.groupSpacing}>
+          {groups.map(([groupName, items], idx) => (
             <div key={groupName}>
               {groups.length > 1 && (
                 <div
-                  className="text-[10px] font-medium tracking-[0.08em] mb-1.5"
-                  style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
+                  className="flex items-center gap-2 mb-2"
                   data-testid={`group-${groupName.toLowerCase().replace(/\s+/g, '-')}`}
                 >
-                  {groupName}
+                  <span
+                    className="text-[10px] font-semibold uppercase tracking-[0.1em]"
+                    style={{ color: 'hsl(var(--sv-ink) / 0.6)' }}
+                  >
+                    {groupName}
+                  </span>
+                  <div
+                    className="flex-1 h-px"
+                    style={{ background: 'hsl(var(--sv-hairline))' }}
+                  />
+                  <span
+                    className="text-[10px] tabular-nums"
+                    style={{ color: 'hsl(var(--sv-muted) / 0.7)' }}
+                  >
+                    {items.length}
+                  </span>
                 </div>
               )}
               <ThreadRows
@@ -625,6 +693,9 @@ function RecentInSurface({
                 runningThreadIds={runningThreadIds}
                 artifactThreadIds={artifactThreadIds}
                 showReason
+                showNextAction
+                topMatchId={idx === 0 ? topMatchId : null}
+                vibe={vibe}
               />
             </div>
           ))}
@@ -708,7 +779,7 @@ function WorkThreadList({
 
 function ThreadRows({
   items, activeThreadId, onSelect, runningThreadIds, artifactThreadIds,
-  showReason, showOriginTag,
+  showReason, showOriginTag, showNextAction, topMatchId, vibe,
 }: {
   items: AnnotatedThread[];
   activeThreadId: string | null;
@@ -719,14 +790,22 @@ function ThreadRows({
   showReason?: boolean;
   /** Show the originating mode tag (e.g. "→ Deep Research") inline. */
   showOriginTag?: boolean;
+  /** Show the suggested next action after the reason. */
+  showNextAction?: boolean;
+  /** ID of the thread that should display the "Top match" badge. */
+  topMatchId?: string | null;
+  /** Surface vibe — drives row density. */
+  vibe?: SurfaceVibe;
 }) {
+  const v = vibe ?? DEFAULT_VIBE;
   return (
-    <ul className="space-y-1">
-      {items.map(({ thread: t, reason, group }) => {
+    <ul className={v.rowSpacing}>
+      {items.map(({ thread: t, reason, group, nextAction }) => {
         const isActive = activeThreadId === t.id;
         const isRunning = runningThreadIds?.has(t.id) ?? false;
         const hasArtifact = artifactThreadIds?.has(t.id) ?? false;
         const isUntitled = !t.title || /^untitled/i.test(t.title);
+        const isTopMatch = !!topMatchId && topMatchId === t.id;
         // Origin tag: only show when group looks like a real surface label
         // and not the default "Freeform"/"Your work" buckets.
         const originTag = showOriginTag && group !== 'Freeform' ? group : null;
@@ -734,22 +813,38 @@ function ThreadRows({
           <li key={t.id}>
             <button
               onClick={() => onSelect(t.id)}
-              className="w-full text-left px-3 py-2 rounded-[8px] flex flex-col gap-0.5 transition-colors"
+              className={`w-full text-left px-3 ${v.rowPadY} rounded-[8px] flex flex-col gap-0.5 transition-colors`}
               style={{
-                background: isActive ? 'hsl(var(--sv-clay) / 0.08)' : 'transparent',
-                border: '1px solid ' + (isActive ? 'hsl(var(--sv-clay) / 0.30)' : 'hsl(var(--sv-hairline))'),
+                background: isActive ? 'hsl(var(--sv-clay) / 0.08)' : (isTopMatch ? 'hsl(var(--sv-clay) / 0.03)' : 'transparent'),
+                border: '1px solid ' + (isActive ? 'hsl(var(--sv-clay) / 0.30)' : (isTopMatch ? 'hsl(var(--sv-clay) / 0.22)' : 'hsl(var(--sv-hairline))')),
                 color: 'hsl(var(--sv-ink))',
                 opacity: isUntitled && !isActive && !isRunning && !hasArtifact ? 0.7 : 1,
               }}
               onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
-              onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+              onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = isTopMatch ? 'hsl(var(--sv-clay) / 0.03)' : 'transparent'; }}
               title={reason ? `${t.title || 'Untitled thread'} — ${reason}` : (t.title || 'Untitled thread')}
               data-testid={`surface-thread-${t.id}`}
             >
               <div className="flex items-center gap-2 w-full">
-                <span className="flex-1 min-w-0 truncate text-[13px]" style={{ fontWeight: isActive ? 600 : 400 }}>
+                <span
+                  className="flex-1 min-w-0 truncate text-[13px]"
+                  style={{ fontWeight: isActive ? 600 : v.titleWeight }}
+                >
                   {t.title || 'Untitled thread'}
                 </span>
+                {isTopMatch && (
+                  <span
+                    className="text-[9.5px] uppercase tracking-[0.1em] shrink-0 px-1.5 py-px rounded"
+                    style={{
+                      background: 'hsl(var(--sv-clay))',
+                      color: 'hsl(var(--sv-paper))',
+                      fontWeight: 600,
+                    }}
+                    data-testid={`top-match-${t.id}`}
+                  >
+                    Top match
+                  </span>
+                )}
                 {originTag && (
                   <span
                     className="text-[10px] shrink-0 px-1.5 py-px rounded inline-flex items-center gap-0.5"
@@ -776,11 +871,17 @@ function ThreadRows({
               </div>
               {showReason && reason && (
                 <span
-                  className="text-[10.5px] pl-px"
-                  style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}
+                  className="text-[10.5px] pl-px inline-flex items-center gap-1 flex-wrap"
+                  style={{ color: 'hsl(var(--sv-muted) / 0.9)' }}
                   data-testid={`reason-${t.id}`}
                 >
-                  {reason}
+                  <span style={{ color: 'hsl(var(--sv-ink) / 0.65)', fontWeight: 500 }}>{reason}</span>
+                  {showNextAction && nextAction && (
+                    <>
+                      <span style={{ color: 'hsl(var(--sv-muted) / 0.5)' }}>→</span>
+                      <span style={{ color: 'hsl(var(--sv-clay) / 0.85)' }}>{nextAction}</span>
+                    </>
+                  )}
                 </span>
               )}
             </button>
