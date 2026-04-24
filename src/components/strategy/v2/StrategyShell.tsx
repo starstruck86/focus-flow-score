@@ -239,6 +239,10 @@ export function StrategyShell() {
   }, []);
 
   const threadId = activeThread?.id ?? null;
+  // Live ref so the surface-swap effect can read the latest thread id without
+  // re-subscribing or carrying a stale closure.
+  const activeThreadIdRef = useRef<string | null>(threadId);
+  useEffect(() => { activeThreadIdRef.current = threadId; }, [threadId]);
 
   const { messages, isLoading, isSending, sendMessage } = useStrategyMessages(threadId);
   const { linkedContext } = useLinkedObjectContext(activeThread);
