@@ -22,7 +22,7 @@
  *
  * Pure presentation. No backend/engine changes.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   X, Lightbulb, Microscope, Wand2, BookOpen, FileText,
@@ -40,6 +40,9 @@ import {
   type CustomPill,
 } from '@/lib/strategy/customPills';
 import { getAllThreadTags } from '@/lib/strategy/threadTags';
+import {
+  getPinnedThreadIds, subscribePinnedThreads,
+} from '@/lib/strategy/pinnedThreads';
 import { displayThreadTitle, isUntitledTitle, WORKSPACE_SHORT } from '@/lib/strategy/threadNaming';
 import { isCleanupThread } from '@/lib/strategy/threadCleanup';
 import type { StrategySurfaceKey } from './StrategyNavSidebar';
