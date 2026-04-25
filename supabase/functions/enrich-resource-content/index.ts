@@ -2488,7 +2488,7 @@ function validateContentQuality(content: string | null, sourceType?: SourceType)
 }
 
 // ── Normalized output contract ─────────────────────────────
-type FinalStatus = 'enriched' | 'partial' | 'needs_auth' | 'unsupported' | 'failed';
+type FinalStatus = 'enriched' | 'deep_enriched' | 'partial' | 'needs_auth' | 'unsupported' | 'failed' | 'blocked_audio';
 
 interface EnrichmentOutput {
   resource_id: string;
@@ -2676,7 +2676,7 @@ async function orchestrateEnrichment(
       await persistAttemptProvenance(supabase, userId, resourceId, source, {
         resource_id: resourceId, url: url || '', source_classification: source,
         final_status: finalStatus, method_used: 'manual_content',
-        methods_attempted: ['manual_content'], attempt_count: 1,
+      methods_attempted: ['manual_content' as ExtractionAttempt], attempt_count: 1,
         extracted_text_length: contentText.length,
         completeness_score: quality.score,
         confidence_score: quality.score,
@@ -2687,7 +2687,7 @@ async function orchestrateEnrichment(
     return {
       resource_id: resourceId, url: url || '', source_classification: source,
       final_status: finalStatus, method_used: 'manual_content',
-      methods_attempted: ['manual_content'], attempt_count: 1,
+      methods_attempted: ['manual_content' as ExtractionAttempt], attempt_count: 1,
       extracted_text_length: contentText.length,
       completeness_score: quality.score, confidence_score: quality.score,
       missing_fields: quality.missing_fields,
@@ -3318,7 +3318,7 @@ Deno.serve(async (req) => {
     if (user) {
       // Authenticated user call
       userId = user.id;
-      supabase = userClient;
+      supabase = userClient as any;
     } else {
       // Fallback: service-role / internal call — use admin client
       supabase = createClient(supabaseUrl, serviceRoleKey);
@@ -3327,7 +3327,7 @@ Deno.serve(async (req) => {
         userId = body.user_id;
       } else if (body.resource_id) {
         const { data: res } = await supabase.from("resources").select("user_id").eq("id", body.resource_id).single();
-        userId = res?.user_id ?? "";
+        userId = (res as any)?.user_id ?? "";
       } else {
         userId = "";
       }

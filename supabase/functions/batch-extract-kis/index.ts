@@ -1795,7 +1795,6 @@ Deno.serve(async (req) => {
     }
 
     // ── 6. Quality threshold gate + post-extraction invariant ──
-    const floorDetails = computeMinKiFloorDetailed(resource.content.length, isLesson, densitySignals, resource.resource_type);
     const minKiFloor = floorDetails.final;
     const durationMs = Date.now() - startTime;
 

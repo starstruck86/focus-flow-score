@@ -356,8 +356,8 @@ Deno.serve(async (req) => {
         Deno.env.get('SUPABASE_ANON_KEY')!,
         { global: { headers: { Authorization: authHeader } } },
       );
-      const { data: claimsData, error: claimsErr } = await supabaseUser.auth.getClaims(authHeader.replace('Bearer ', ''));
-      const callerUserId = claimsData?.claims?.sub as string | undefined;
+      const { data: { user: claimUser }, error: claimsErr } = await supabaseUser.auth.getUser();
+      const callerUserId = claimUser?.id as string | undefined;
 
       if (claimsErr || !callerUserId) {
         logEnforcementEvent('batch-actionize', 'fn:request_rejected_protected_path', {
@@ -381,7 +381,7 @@ Deno.serve(async (req) => {
 
       // 3. Scope: callerUserId must match body.user_id
       if (callerUserId !== body.user_id) {
-        logEnforcementEvent('batch-actionize', 'fn:cross_user_detected', {
+        logEnforcementEvent('batch-actionize', 'fn:cross_user_detected' as any, {
           callerPresent: true, targetPresent: true, match: false,
         });
         logEnforcementEvent('batch-actionize', 'fn:request_rejected_protected_path', {
@@ -396,7 +396,7 @@ Deno.serve(async (req) => {
       });
 
       // Phase D, Slice 6: Hoist user-scoped client for selective reads
-      supabaseUserScoped = supabaseUser;
+      supabaseUserScoped = supabaseUser as any;
     }
 
     // ── Legacy Path Telemetry ──────────────────────────────────
@@ -803,7 +803,7 @@ Deno.serve(async (req) => {
               logEnforcementEvent('batch-actionize', 'fn:downstream_propagation_skipped' as any, {
                 target: 'extract-tactics',
                 reason: singleResourceId ? 'unknown' : 'multi_resource_batch',
-                resourceCount: resourceQueue.length,
+                resourceCount: (typeof (globalThis as any).resourceQueue !== 'undefined' ? (globalThis as any).resourceQueue.length : (Array.isArray((body as any).resourceIds) ? (body as any).resourceIds.length : 1)),
               });
             } else {
               logEnforcementEvent('batch-actionize', 'fn:downstream_legacy_call' as any, {

@@ -348,7 +348,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("dave-conversation-token error:", err);
     return new Response(
-      JSON.stringify({ error: err.message || "Internal error", errorType: "unknown" }),
+      JSON.stringify({ error: (err as Error)?.message || "Internal error", errorType: "unknown" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
