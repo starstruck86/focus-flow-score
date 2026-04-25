@@ -6,6 +6,7 @@ import {
   normalizeTaskRunResultPayload,
   hasRenderableDiscoveryContent,
 } from '@/lib/strategy/discoveryTaskResult';
+import { getStrategyConfig } from '@/lib/strategy/strategyConfig';
 import type {
   DiscoverySection,
   LibraryCoverageEntry,
