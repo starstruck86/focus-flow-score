@@ -24,6 +24,7 @@ import { DISCOVERY_PREP_BATCHES, authorOneBatch, buildBatchUserPrompt } from "./
 import { DISCOVERY_PREP_SECTIONS } from "./handlers/discoveryPrepTemplate.ts";
 import { callOpenAI, safeParseJSON } from "./providers.ts";
 import { getHandler } from "./registry.ts";
+import { validateDraftAgainstSop, type SopContractLike } from "./sopValidator.ts";
 
 /** Persist the synthesis artifact + prompt material into task_runs.meta
  *  so each subsequent step can reconstruct the authoring inputs without
