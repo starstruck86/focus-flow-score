@@ -72,8 +72,9 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     sop_enabled: !!sop,
     rules: sop ? Object.keys(sop) : [],
   }));
+  let sopInputCheck: ReturnType<typeof validateSopInputs> | null = null;
   try {
-    const sopInputCheck = validateSopInputs(inputs as Record<string, unknown>, sop);
+    sopInputCheck = validateSopInputs(inputs as Record<string, unknown>, sop);
     console.log(JSON.stringify({
       tag: "[sop-input-check]",
       run_id: runId,
@@ -149,9 +150,10 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         baseUserPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
         libraryCounts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
         researchChars: research.totalChars,
-        // Phase 3A safe bridge — carry SOP through to assembleAndFinalize
-        // for shadow output validation. Never read by prompt builders.
+        // Phase 3A/3B safe bridge — carry SOP + shadow input check
+        // through to assembleAndFinalize. Never read by prompt builders.
         sop,
+        sopInputCheck,
       });
       await ensureSectionRows({ supabase, runId, userId });
       console.log(JSON.stringify({
