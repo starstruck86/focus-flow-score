@@ -2181,6 +2181,7 @@ serve(async (req) => {
       globalInstructions: globalInstructionsRaw,
       workspace: workspaceRaw,
       resolvedSops: resolvedSopsRaw,
+      workspaceSop: workspaceSopRaw,
     } = body;
     const v2RequestOverride = _v2 === true;
     // Sidecar: explicit resource IDs the user picked from /library this turn.
