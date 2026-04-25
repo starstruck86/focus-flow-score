@@ -106,6 +106,14 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
       setCfg(next);
     });
   }, []);
+  const strategyConfigDebug = (() => {
+    if (typeof window === 'undefined') return { raw: null, parsed: null };
+    const raw = localStorage.getItem('sv-strategy-config-v1');
+    const parsed = raw ? JSON.parse(raw) : null;
+    // eslint-disable-next-line no-console
+    console.log('[strategy-config-debug]', { raw, parsed });
+    return { raw, parsed };
+  })();
   const isStrictMode = cfg.enabled === true && cfg.strictMode === true;
   const finalText = role === 'assistant' && isStrictMode ? enforceStrictFormat(rawText) : rawText;
 
@@ -122,8 +130,9 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
   const text = finalText;
   const isUser = role === 'user';
   const strictDebug = role === 'assistant' && process.env.NODE_ENV !== 'production' ? (
-    <div data-testid="strict-debug" style={{ fontSize: 10, opacity: 0.5, fontFamily: 'var(--sv-sans)' }}>
-      strict={String(isStrictMode)} enabled={String(cfg.enabled)} strictMode={String(cfg.strictMode)}
+    <div data-testid="strict-debug" style={{ fontSize: 10, opacity: 0.5, fontFamily: 'var(--sv-sans)', whiteSpace: 'pre-wrap' }}>
+      strict={String(isStrictMode)} enabled={String(cfg.enabled)} strictMode={String(cfg.strictMode)}{`\n`}
+      {JSON.stringify(strategyConfigDebug, null, 2)}
     </div>
   ) : null;
 
