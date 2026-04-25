@@ -6665,19 +6665,8 @@ function renderGlobalInstructionsBlock(g: CleanGlobalInstructions | null): strin
   const hasFreeText = g.globalInstructions.length > 0;
   const lines: string[] = [];
 
-  lines.push("");
-  lines.push("═══ USER STRATEGY INSTRUCTIONS (lightweight guidance) ═══");
-  lines.push(
-    "These are the operator's persistent preferences. Honor them when they don't conflict with the core contracts above (grounding, citation discipline, synthesis mode, audit). They are guidance, not overrides.",
-  );
-
-  if (hasFreeText) {
-    lines.push("");
-    lines.push("OPERATOR INSTRUCTIONS:");
-    lines.push(g.globalInstructions);
-  }
-
-  // Output preferences — short, declarative, no hard mandates.
+  // Output preferences — phrased the same way in both modes; the wrapper
+  // framing (lightweight vs mandate) is what changes behavior.
   const tonePhrase = g.outputPreferences.tone === "executive"
     ? "Executive: terse, decisive, no hedging."
     : g.outputPreferences.tone === "consultative"
@@ -6692,6 +6681,69 @@ function renderGlobalInstructionsBlock(g: CleanGlobalInstructions | null): strin
     ? "Freeform when the ask is conversational; structure only when it materially helps."
     : "Structured when the ask is non-trivial (headings/bullets/numbered steps).";
 
+  const libRules: string[] = [];
+  if (g.libraryBehavior.useRelevantLibraryByDefault) libRules.push("Lean on relevant library context when it's already retrieved.");
+  if (g.libraryBehavior.preferPlaybooksOverLooseKnowledgeItems) libRules.push("Prefer playbook-grade resources over loose KIs when both apply.");
+  if (g.libraryBehavior.citeSourcesWhenUsed) libRules.push("Cite the source title when you use library content.");
+  if (g.libraryBehavior.neverInventMetrics) libRules.push("Never invent numeric metrics — if a stat isn't in context, say so or ask.");
+  if (g.libraryBehavior.unknownsBecomeQuestions) libRules.push("Convert genuine unknowns into one specific clarifying question rather than guessing.");
+
+  if (g.strictMode) {
+    // ─── STRICT MODE ─────────────────────────────────────────────────
+    // Operator instructions are MANDATES. Wrapper is placed last so it
+    // sits closest to generation; framing tells the model to override
+    // its default style/format/structure to comply, while the core
+    // grounding/citation contracts above still win over both.
+    lines.push("");
+    lines.push("═══ OPERATOR INSTRUCTIONS — STRICT MODE (MANDATORY) ═══");
+    lines.push(
+      "The following OPERATOR INSTRUCTIONS must be followed exactly. These override default response style, formatting, and structure. Do not ignore or partially apply them. Do not fall back to default closers (e.g. '→ Next step:') if the operator specified a different closer or none. Reasoning depth and grounding/citation discipline from the core contracts above are NOT overridden — only style, format, and structure are.",
+    );
+
+    if (hasFreeText) {
+      lines.push("");
+      lines.push("OPERATOR INSTRUCTIONS:");
+      lines.push(g.globalInstructions);
+    }
+
+    lines.push("");
+    lines.push("OUTPUT PREFERENCES (apply exactly):");
+    lines.push(`- Tone: ${tonePhrase}`);
+    lines.push(`- Density: ${densityPhrase}`);
+    lines.push(`- Format: ${formatPhrase}`);
+    if (g.outputPreferences.alwaysEndWithNextStep) {
+      lines.push("- Close with a single concrete next step when the ask is action-oriented (skip for pure brainstorm/refine) — UNLESS the OPERATOR INSTRUCTIONS above specify a different closer, in which case use theirs verbatim.");
+    }
+
+    if (libRules.length > 0) {
+      lines.push("");
+      lines.push("LIBRARY BEHAVIOR:");
+      for (const r of libRules) lines.push(`- ${r}`);
+    }
+
+    if (g.selfCorrectOnce) {
+      lines.push("");
+      lines.push("SELF-CORRECT ONCE: Before finalizing, verify you followed the OPERATOR INSTRUCTIONS and OUTPUT PREFERENCES exactly (bullet counts, closers, format, tone). If you violated any of them, rewrite to comply. Do not narrate the check.");
+    }
+
+    lines.push("");
+    lines.push("END OPERATOR INSTRUCTIONS — comply exactly.");
+    return lines.join("\n");
+  }
+
+  // ─── DEFAULT MODE (lightweight guidance) ─────────────────────────
+  lines.push("");
+  lines.push("═══ USER STRATEGY INSTRUCTIONS (lightweight guidance) ═══");
+  lines.push(
+    "These are the operator's persistent preferences. Honor them when they don't conflict with the core contracts above (grounding, citation discipline, synthesis mode, audit). They are guidance, not overrides.",
+  );
+
+  if (hasFreeText) {
+    lines.push("");
+    lines.push("OPERATOR INSTRUCTIONS:");
+    lines.push(g.globalInstructions);
+  }
+
   lines.push("");
   lines.push("OUTPUT PREFERENCES:");
   lines.push(`- Tone: ${tonePhrase}`);
@@ -6701,24 +6753,12 @@ function renderGlobalInstructionsBlock(g: CleanGlobalInstructions | null): strin
     lines.push("- Close with a single concrete next step when the ask is action-oriented (skip for pure brainstorm/refine).");
   }
 
-  // Library behavior — phrased as preferences, never as gates. The real
-  // grounding/citation discipline lives in the core contracts above.
-  const libRules: string[] = [];
-  if (g.libraryBehavior.useRelevantLibraryByDefault) libRules.push("Lean on relevant library context when it's already retrieved.");
-  if (g.libraryBehavior.preferPlaybooksOverLooseKnowledgeItems) libRules.push("Prefer playbook-grade resources over loose KIs when both apply.");
-  if (g.libraryBehavior.citeSourcesWhenUsed) libRules.push("Cite the source title when you use library content.");
-  if (g.libraryBehavior.neverInventMetrics) libRules.push("Never invent numeric metrics — if a stat isn't in context, say so or ask.");
-  if (g.libraryBehavior.unknownsBecomeQuestions) libRules.push("Convert genuine unknowns into one specific clarifying question rather than guessing.");
   if (libRules.length > 0) {
     lines.push("");
     lines.push("LIBRARY BEHAVIOR (preferences, not gates):");
     for (const r of libRules) lines.push(`- ${r}`);
   }
 
-  if (g.strictMode) {
-    lines.push("");
-    lines.push("STRICT MODE: When the operator's instructions and a stylistic default conflict, the operator's instructions win — but the core grounding/citation contracts above always win over both.");
-  }
   if (g.selfCorrectOnce) {
     lines.push("");
     lines.push("SELF-CORRECT ONCE: Before finalizing, do one quick self-check that you respected the OPERATOR INSTRUCTIONS and OUTPUT PREFERENCES. If you violated them, fix it inline. Do not narrate the check.");
