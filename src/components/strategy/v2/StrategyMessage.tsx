@@ -66,13 +66,25 @@ function enforceStrictFormat(text: string): string {
  * from already-shaped text. Used to render structure directly, bypassing
  * any markdown parsing variability.
  */
-function parseStrictOutput(text: string): { bullets: string[]; nextMove: string | null } {
+function parseStrictOutput(text: string): { bullets: string[]; nextMove: string } {
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-  const bullets = lines
+
+  let bullets = lines
     .filter((l) => /^[•\-*]\s+/.test(l))
-    .map((l) => l.replace(/^[•\-*]\s+/, ''))
-    .slice(0, 3);
-  const nextMove = lines.find((l) => /→\s*NEXT MOVE/i.test(l)) ?? null;
+    .map((l) => l.replace(/^[•\-*]\s+/, '').trim());
+
+  // Fallback: if parser fails, recover bullets from raw sentences
+  if (bullets.length === 0) {
+    bullets = text
+      .replace(/→\s*NEXT MOVE:?.*$/i, '')
+      .split(/(?<=[.?!])\s+/)
+      .map((s) => s.replace(/^[•\-*\s]+/, '').trim())
+      .filter(Boolean);
+  }
+
+  bullets = bullets.slice(0, 3);
+
+  const nextMove = lines.find((l) => /→\s*NEXT MOVE/i.test(l)) || '→ NEXT MOVE:';
   return { bullets, nextMove };
 }
 
