@@ -25,36 +25,40 @@ import type { StrategyGlobalInstructionsConfig } from '@/lib/strategy/strategyCo
  * structured renderers and message_types).
  */
 function enforceStrictFormat(text: string): string {
-  const trimmed = (text ?? '').trim();
-  if (!trimmed) return trimmed;
+  const raw = (text ?? '').trim();
+  if (!raw) return raw;
 
-  const sentences = trimmed
-    .split(/(?<=[.?!])\s+/)
-    .map((s) => s.replace(/^["']|["']$/g, '').trim())
+  // Strip existing bullet/list markers and stray quotes so we can re-normalize cleanly
+  const cleaned = raw
+    .replace(/^\s*[•*\-–—]\s+/gm, '')
+    .replace(/^\s*\d+[.)]\s+/gm, '')
+    .replace(/["“”]/g, '')
+    .trim();
+
+  const sentences = cleaned
+    .split(/\r?\n+|(?<=[.?!])\s+/)
+    .map((s) => s.replace(/^[•*\-–—\s]+/, '').trim())
     .filter(Boolean);
 
   let bulletTexts: string[];
   if (sentences.length >= 3) {
     bulletTexts = sentences.slice(0, 3);
   } else {
-    // Generate variations instead of duplicating the same sentence
-    const base = sentences[0] || trimmed;
+    const base = sentences[0] || cleaned;
     bulletTexts = [
       base,
-      'What specific outcomes are you hoping to achieve?',
-      "What's currently preventing you from getting there?",
+      'What specific outcomes are you trying to achieve?',
+      "What's currently blocking progress?",
     ];
   }
 
-  const bullets = bulletTexts.map((s) => `- ${s}`);
+  // HARD ENFORCE exactly 3 bullets, single bullet style
+  bulletTexts = bulletTexts.slice(0, 3).map((s) => s.replace(/^[•*\-–—\s]+/, '').trim());
 
-  // CRITICAL: ReactMarkdown needs clean newline separation between list items
-  // and a blank line before the closing line so it isn't absorbed into the list.
-  let output = bullets.join('\n');
-  output += '\n\n→ NEXT MOVE:';
+  const bullets = bulletTexts.map((s) => `• ${s}`);
 
-  // Leading newline guarantees the first bullet starts a fresh block.
-  return '\n' + output;
+  // Leading newline + blank line before NEXT MOVE so it isn't absorbed into the list
+  return '\n' + bullets.join('\n') + '\n\n→ NEXT MOVE:';
 }
 
 /**
@@ -64,7 +68,10 @@ function enforceStrictFormat(text: string): string {
  */
 function parseStrictOutput(text: string): { bullets: string[]; nextMove: string | null } {
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-  const bullets = lines.filter((l) => l.startsWith('- ')).map((l) => l.replace(/^-\s+/, ''));
+  const bullets = lines
+    .filter((l) => /^[•\-*]\s+/.test(l))
+    .map((l) => l.replace(/^[•\-*]\s+/, ''))
+    .slice(0, 3);
   const nextMove = lines.find((l) => /→\s*NEXT MOVE/i.test(l)) ?? null;
   return { bullets, nextMove };
 }
