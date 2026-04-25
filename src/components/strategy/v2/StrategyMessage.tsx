@@ -191,6 +191,46 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
   // Assistant — serif, flush left, full width.
   // Calm Claude-style minimal renderer: subtle headers, tight bullets,
   // 1.65 line-height, no decorative chrome.
+
+  // Strict Mode bypass: render bullets + NEXT MOVE explicitly so output is
+  // deterministic regardless of markdown parsing.
+  if (isStrictMode) {
+    const { bullets, nextMove } = parseStrictOutput(text);
+    return (
+      <div
+        data-strategy-selectable
+        data-message-id={message.id}
+        data-message-role="assistant"
+        data-strict-mode="true"
+        className="text-[15px] break-words"
+        style={{
+          fontFamily: 'var(--sv-serif)',
+          color: 'hsl(var(--sv-ink))',
+          lineHeight: 1.65,
+        }}
+      >
+        <ul style={{ margin: '0 0 12px', paddingLeft: '1.25rem', listStyleType: 'disc' }}>
+          {bullets.map((b, i) => (
+            <li key={i} style={{ margin: '0 0 4px' }}>{b}</li>
+          ))}
+        </ul>
+        {nextMove && (
+          <div
+            style={{
+              marginTop: 12,
+              fontWeight: 600,
+              fontFamily: 'var(--sv-sans)',
+              color: 'hsl(var(--sv-ink))',
+            }}
+          >
+            {nextMove}
+          </div>
+        )}
+        {onQuickAction && <MessageActions onAction={onQuickAction} />}
+      </div>
+    );
+  }
+
   return (
     <div
       data-strategy-selectable
