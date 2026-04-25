@@ -96,8 +96,15 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
   const [cfg, setCfg] = useState(getStrategyConfig);
   useEffect(() => {
     // Force a fresh read on mount in case localStorage changed before subscribe.
-    setCfg(getStrategyConfig());
-    return subscribeStrategyConfig((next) => setCfg(next));
+    const initial = getStrategyConfig();
+    setCfg(initial);
+    // eslint-disable-next-line no-console
+    console.log('[StrategyMessage] CHAT CONFIG READ:', initial);
+    return subscribeStrategyConfig((next) => {
+      // eslint-disable-next-line no-console
+      console.log('[StrategyMessage] CHAT CONFIG UPDATED:', next);
+      setCfg(next);
+    });
   }, []);
   const isStrictMode = cfg.enabled === true && cfg.strictMode === true;
   const finalText = role === 'assistant' && isStrictMode ? enforceStrictFormat(rawText) : rawText;

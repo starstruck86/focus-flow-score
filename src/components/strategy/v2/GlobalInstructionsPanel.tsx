@@ -200,9 +200,21 @@ export function GlobalInstructionsPanel() {
   const sop = cfg.sopContracts.discoveryPrepFullMode;
 
   // Auto-save handlers ------------------------------------------------------
-  const setEnabled = (v: boolean) => updateStrategyConfig({ enabled: v });
-  const setStrict = (v: boolean) => updateStrategyConfig({ strictMode: v });
-  const setSelfCorrect = (v: boolean) => updateStrategyConfig({ selfCorrectOnce: v });
+  const setEnabled = (v: boolean) => {
+    const saved = updateStrategyConfig({ enabled: v });
+    // eslint-disable-next-line no-console
+    console.log('[StrategySettings] SAVED CONFIG (enabled):', saved);
+  };
+  const setStrict = (v: boolean) => {
+    const saved = updateStrategyConfig({ strictMode: v });
+    // eslint-disable-next-line no-console
+    console.log('[StrategySettings] SAVED CONFIG (strictMode):', saved);
+  };
+  const setSelfCorrect = (v: boolean) => {
+    const saved = updateStrategyConfig({ selfCorrectOnce: v });
+    // eslint-disable-next-line no-console
+    console.log('[StrategySettings] SAVED CONFIG (selfCorrectOnce):', saved);
+  };
 
   const flushGlobal = () => {
     if (globalText !== cfg.globalInstructions) {
@@ -297,7 +309,13 @@ export function GlobalInstructionsPanel() {
           </p>
           <Textarea
             value={globalText}
-            onChange={(e) => setGlobalText(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              setGlobalText(value);
+              const saved = updateStrategyGlobalInstructions(value);
+              // eslint-disable-next-line no-console
+              console.log('[StrategySettings] SAVED CONFIG:', saved);
+            }}
             onBlur={flushGlobal}
             placeholder="e.g. Be direct. Lead with the recommendation. Cite sources when used. Never invent metrics. Always end with a single concrete next step."
             className="min-h-[140px] text-[13px] leading-relaxed"
