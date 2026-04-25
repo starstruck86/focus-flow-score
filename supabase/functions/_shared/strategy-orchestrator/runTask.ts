@@ -32,6 +32,11 @@ import {
   TOTAL_BATCHES,
 } from "./progressiveDriver.ts";
 import { failStalePendingRun } from "./staleRunWatchdog.ts";
+import {
+  validateDraftAgainstSop,
+  validateSopInputs,
+  type SopContractLike,
+} from "./sopValidator.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
 
 // ── Internal: write a progress step to the run row (best-effort). ─
