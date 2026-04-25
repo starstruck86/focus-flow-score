@@ -47,6 +47,18 @@ function enforceStrictFormat(text: string): string {
   return '\n' + output;
 }
 
+/**
+ * Strict-mode parser — extracts bullet lines and the closing NEXT MOVE line
+ * from already-shaped text. Used to render structure directly, bypassing
+ * any markdown parsing variability.
+ */
+function parseStrictOutput(text: string): { bullets: string[]; nextMove: string | null } {
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const bullets = lines.filter((l) => l.startsWith('- ')).map((l) => l.replace(/^-\s+/, ''));
+  const nextMove = lines.find((l) => /→\s*NEXT MOVE/i.test(l)) ?? null;
+  return { bullets, nextMove };
+}
+
 interface Props {
   message: StrategyMessageT;
   /** When provided on assistant messages, renders quick-iteration actions
