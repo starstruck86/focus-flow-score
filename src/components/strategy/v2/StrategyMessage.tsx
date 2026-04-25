@@ -12,7 +12,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { StrategyMessage as StrategyMessageT } from '@/types/strategy';
 import { MessageActions } from './MessageActions';
-import { getStrategyConfig, isStrategyEngineEnabled } from '@/lib/strategy/strategyConfig';
+import { getStrategyConfig } from '@/lib/strategy/strategyConfig';
 
 /**
  * Strict-mode response shaper. Runs AFTER the model responds to guarantee:
@@ -83,9 +83,21 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
   const isPlainChat =
     role === 'assistant' &&
     (!message.message_type || message.message_type === 'chat');
-  const strictModeOn =
-    isPlainChat && isStrategyEngineEnabled() && getStrategyConfig().strictMode;
-  const text = strictModeOn ? enforceStrictFormat(rawText) : rawText;
+  const cfg = getStrategyConfig();
+  const isStrictMode = isPlainChat && cfg.enabled && cfg.strictMode;
+  const finalText = isStrictMode ? enforceStrictFormat(rawText) : rawText;
+
+  // Temporary debug — verify Strict Mode is actually shaping output.
+  if (isPlainChat && typeof window !== 'undefined') {
+    // eslint-disable-next-line no-console
+    console.log('[StrategyMessage] STRICT MODE ACTIVE:', isStrictMode);
+    // eslint-disable-next-line no-console
+    console.log('[StrategyMessage] ORIGINAL:', rawText);
+    // eslint-disable-next-line no-console
+    console.log('[StrategyMessage] FINAL:', finalText);
+  }
+
+  const text = finalText;
   const isUser = role === 'user';
 
   if (!text.trim()) {
