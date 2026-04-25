@@ -2676,21 +2676,25 @@ async function orchestrateEnrichment(
       await persistAttemptProvenance(supabase, userId, resourceId, source, {
         resource_id: resourceId, url: url || '', source_classification: source,
         final_status: finalStatus, method_used: 'manual_content',
-      methods_attempted: ['manual_content' as ExtractionAttempt], attempt_count: 1,
+        methods_attempted: ['manual_content' as unknown as ExtractionAttempt], attempt_count: 1,
         extracted_text_length: contentText.length,
         completeness_score: quality.score,
         confidence_score: quality.score,
         missing_fields: quality.missing_fields,
+        failure_reason: null,
+        recovery_hint: null,
       }, []);
     }
 
     return {
       resource_id: resourceId, url: url || '', source_classification: source,
       final_status: finalStatus, method_used: 'manual_content',
-      methods_attempted: ['manual_content' as ExtractionAttempt], attempt_count: 1,
+      methods_attempted: ['manual_content' as unknown as ExtractionAttempt], attempt_count: 1,
       extracted_text_length: contentText.length,
       completeness_score: quality.score, confidence_score: quality.score,
       missing_fields: quality.missing_fields,
+      failure_reason: null,
+      recovery_hint: null,
     };
   }
 
