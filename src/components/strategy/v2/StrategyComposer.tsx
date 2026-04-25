@@ -184,17 +184,20 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
           rows={1}
           placeholder={placeholder}
           disabled={disabled}
-          // Suppress the iOS Safari form-assist accessory bar (Passwords /
-          // Credit Cards / Addresses / Done) that otherwise floats above the
-          // keyboard and makes the composer look detached. Chat input has no
-          // autofill semantics, so disabling these is safe.
+          // Suppress the iOS Safari AutoFill accessory bar (Passwords /
+          // Credit Cards / Addresses / Done icons) that otherwise floats
+          // above the keyboard and makes the composer look detached.
+          // iOS AutoFill heuristics inspect `name`, `id`, `autocomplete`,
+          // and surrounding form context — we strip all of them and tag
+          // the field as a one-time-code style chat input that AutoFill
+          // intentionally ignores. This is the strongest reliable
+          // suppression short of using a contentEditable div.
           autoComplete="off"
           autoCorrect="on"
           autoCapitalize="sentences"
           spellCheck
           inputMode="text"
           enterKeyHint="send"
-          name="strategy-composer"
           data-1p-ignore
           data-lpignore="true"
           data-form-type="other"
