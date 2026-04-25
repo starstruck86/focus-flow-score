@@ -6689,20 +6689,23 @@ function renderGlobalInstructionsBlock(g: CleanGlobalInstructions | null): strin
   if (g.libraryBehavior.unknownsBecomeQuestions) libRules.push("Convert genuine unknowns into one specific clarifying question rather than guessing.");
 
   if (g.strictMode) {
-    // ─── STRICT MODE ─────────────────────────────────────────────────
-    // Operator instructions are MANDATES. Wrapper is placed last so it
-    // sits closest to generation; framing tells the model to override
-    // its default style/format/structure to comply, while the core
-    // grounding/citation contracts above still win over both.
+    // ─── STRICT MODE — FINAL RESPONSE-SHAPING LAYER ──────────────────
+    // Strict Mode reframes Global Instructions as the FINAL formatting
+    // contract for the response. It is appended last (after mode-lock,
+    // core prompt, readability, persistence, V2 dispatcher) so it sits
+    // closest to generation and acts as the last word on STRUCTURE,
+    // FORMATTING, and CLOSING STYLE. It does NOT override reasoning
+    // depth, content selection, grounding, or citation discipline from
+    // the core contracts above.
     lines.push("");
-    lines.push("═══ OPERATOR INSTRUCTIONS — STRICT MODE (MANDATORY) ═══");
+    lines.push("━━━ RESPONSE PREFERENCES (USER CONFIGURED) ━━━");
     lines.push(
-      "The following OPERATOR INSTRUCTIONS must be followed exactly. These override default response style, formatting, and structure. Do not ignore or partially apply them. Do not fall back to default closers (e.g. '→ Next step:') if the operator specified a different closer or none. Reasoning depth and grounding/citation discipline from the core contracts above are NOT overridden — only style, format, and structure are.",
+      "Apply the following preferences when formatting your response. Treat them as the FINAL formatting contract for this turn — they take precedence over any default style, structure, or closer (e.g. do NOT fall back to '→ Next step:' if the user specified a different closer or none). Reasoning depth, content selection, grounding, and citation discipline from the contracts above are NOT overridden — only structure, formatting, and closing style.",
     );
 
     if (hasFreeText) {
       lines.push("");
-      lines.push("OPERATOR INSTRUCTIONS:");
+      lines.push("USER FORMATTING PREFERENCES:");
       lines.push(g.globalInstructions);
     }
 
@@ -6712,7 +6715,7 @@ function renderGlobalInstructionsBlock(g: CleanGlobalInstructions | null): strin
     lines.push(`- Density: ${densityPhrase}`);
     lines.push(`- Format: ${formatPhrase}`);
     if (g.outputPreferences.alwaysEndWithNextStep) {
-      lines.push("- Close with a single concrete next step when the ask is action-oriented (skip for pure brainstorm/refine) — UNLESS the OPERATOR INSTRUCTIONS above specify a different closer, in which case use theirs verbatim.");
+      lines.push("- Close with a single concrete next step when the ask is action-oriented (skip for pure brainstorm/refine) — UNLESS the USER FORMATTING PREFERENCES above specify a different closer, in which case use theirs verbatim.");
     }
 
     if (libRules.length > 0) {
@@ -6723,11 +6726,12 @@ function renderGlobalInstructionsBlock(g: CleanGlobalInstructions | null): strin
 
     if (g.selfCorrectOnce) {
       lines.push("");
-      lines.push("SELF-CORRECT ONCE: Before finalizing, verify you followed the OPERATOR INSTRUCTIONS and OUTPUT PREFERENCES exactly (bullet counts, closers, format, tone). If you violated any of them, rewrite to comply. Do not narrate the check.");
+      lines.push("SELF-CORRECT ONCE: Before finalizing, verify you followed the USER FORMATTING PREFERENCES and OUTPUT PREFERENCES exactly (bullet counts, closers, structure, tone). If you violated any of them, rewrite to comply. Do not narrate the check.");
     }
 
     lines.push("");
-    lines.push("END OPERATOR INSTRUCTIONS — comply exactly.");
+    lines.push("If these preferences conflict with earlier formatting defaults, FOLLOW THESE PREFERENCES.");
+    lines.push("━━━ END RESPONSE PREFERENCES ━━━");
     return lines.join("\n");
   }
 
