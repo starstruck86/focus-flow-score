@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { mapSendErrorToFriendlyMessage } from './sendErrorMapping';
 import { buildGlobalInstructionsPayload } from '@/lib/strategy/buildGlobalInstructionsPayload';
 import { buildResolvedSopsPayload } from '@/lib/strategy/buildResolvedSopsPayload';
+import { buildWorkspaceSopPayload } from '@/lib/strategy/buildWorkspaceSopPayload';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/strategy-chat`;
 
@@ -84,6 +85,15 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
           // metadata payload. Server logs it under [strategy-sop] resolved.
           // SOP text is intentionally NOT sent — Phase 2 is observation only.
           resolvedSops: buildResolvedSopsPayload({
+            workspace: options?.workspace ?? 'work',
+            taskType: null,
+          }) ?? undefined,
+          // Phase 3A SOP Engine — first behavior-affecting step. When the
+          // active workspace has its SOP enabled, ship the raw advisory
+          // text so the server can append it AFTER core/V2/synthesis
+          // prompts and BEFORE global instructions. Task pipelines and
+          // freeform `work` chat are intentionally excluded by the helper.
+          workspaceSop: buildWorkspaceSopPayload({
             workspace: options?.workspace ?? 'work',
             taskType: null,
           }) ?? undefined,

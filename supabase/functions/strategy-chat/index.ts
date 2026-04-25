@@ -2181,6 +2181,7 @@ serve(async (req) => {
       globalInstructions: globalInstructionsRaw,
       workspace: workspaceRaw,
       resolvedSops: resolvedSopsRaw,
+      workspaceSop: workspaceSopRaw,
     } = body;
     const v2RequestOverride = _v2 === true;
     // Sidecar: explicit resource IDs the user picked from /library this turn.
@@ -2259,6 +2260,47 @@ serve(async (req) => {
         enabledCount: resolvedSopsLog?.enabledCount ?? 0,
         mode: resolvedSopsLog?.mode ?? 'freeform',
       })}`,
+    );
+
+    // ── Phase 3A — Universal Strategy SOP Engine: workspace SOP advisory ──
+    // First behavior-affecting step. The client ships raw workspace SOP text
+    // ONLY when the active workspace has its SOP enabled and we are NOT in a
+    // task pipeline. The server appends it AFTER core/V2/synthesis prompts
+    // and BEFORE global instructions. Strict mode-lock blocks (synthesis,
+    // short-form, V2 dispatcher, Discovery Prep orchestrator) are NOT
+    // touched — workspace SOPs are advisory.
+    //
+    // Hard guards mirror the client helper so a malformed payload can never
+    // smuggle unbounded text or task-mode injection past the resolver.
+    const WORKSPACE_SOP_MAX_CHARS = 6_000;
+    const cleanWorkspaceSop = ((): {
+      sopId: string;
+      workspace: string;
+      name: string;
+      rawInstructions: string;
+    } | null => {
+      if (!workspaceSopRaw || typeof workspaceSopRaw !== 'object') return null;
+      // Never inject during a task pipeline (Discovery Prep etc.). Phase 3A
+      // is workspace-only.
+      if (typeof workflowType === 'string' && workflowType.length > 0) return null;
+      const w = workspaceSopRaw as Record<string, unknown>;
+      const ws = typeof w.workspace === 'string' && ALLOWED_WORKSPACES.has(w.workspace)
+        ? w.workspace : null;
+      if (!ws) return null;
+      // `work` is freeform — never carries a workspace SOP.
+      if (ws === 'work') return null;
+      const sopId = typeof w.sopId === 'string' && w.sopId.startsWith('workspace:')
+        ? w.sopId : `workspace:${ws}`;
+      const name = typeof w.name === 'string' && w.name.trim().length > 0
+        ? w.name.slice(0, 120) : sopId;
+      const raw = typeof w.rawInstructions === 'string'
+        ? w.rawInstructions.trim().slice(0, WORKSPACE_SOP_MAX_CHARS)
+        : '';
+      if (!raw) return null;
+      return { sopId, workspace: ws, name, rawInstructions: raw };
+    })();
+    console.log(
+      `[strategy-sop] workspace-sop received: present=${!!workspaceSopRaw} sanitized=${!!cleanWorkspaceSop} workspace=${cleanWorkspaceSop?.workspace ?? 'none'} length=${cleanWorkspaceSop?.rawInstructions.length ?? 0}`,
     );
 
     // ── Debug: OpenAI key health check ──────────────────────
@@ -2485,6 +2527,7 @@ serve(async (req) => {
       v2RequestOverride,
       routingDecision,
       cleanGlobalInstructions,
+      cleanWorkspaceSop,
     );
   } catch (e) {
     console.error("strategy-chat error:", e);
@@ -5188,6 +5231,14 @@ async function handleChat(
   v2RequestOverride: boolean = false,
   routingDecision: RoutingDecision | null = null,
   globalInstructions: CleanGlobalInstructions | null = null,
+  // Phase 3A — workspace SOP advisory text. When non-null, appended after
+  // V1 mode-lock / V2 / synthesis preamble and BEFORE global instructions.
+  workspaceSop: {
+    sopId: string;
+    workspace: string;
+    name: string;
+    rawInstructions: string;
+  } | null = null,
 ) {
   await supabase.from("strategy_messages").insert({
     thread_id: threadId,
@@ -5556,6 +5607,29 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     .filter((m, idx, arr) =>
       !(idx === arr.length - 1 && m.role === "user" && m.text === content)
     );
+  // Phase 3A — Workspace SOP advisory injection.
+  // Append BEFORE global instructions so the global block stays the closest
+  // contract to the model output, and AFTER core/V1/V2/synthesis blocks so
+  // strict mode-lock formatting and synthesis contract remain authoritative.
+  // Treated as advisory only — must not override grounding, citation, or
+  // synthesis rules. Task pipelines (Discovery Prep) are excluded upstream
+  // by the client + server sanitizer (workflowType present → null).
+  if (workspaceSop && workspaceSop.rawInstructions.length > 0) {
+    const block = `\n\n━━━ WORKSPACE SOP (ADVISORY) ━━━\n${workspaceSop.rawInstructions}\n\nTreat the SOP above as guidance for tone, structure, and emphasis in this workspace. It does NOT override grounding, citation, synthesis, or strict-mode rules already specified above.\n`;
+    effectiveSystemPrompt = `${effectiveSystemPrompt}${block}`;
+    console.log(
+      `[strategy-sop] injected-workspace ${JSON.stringify({
+        workspace: workspaceSop.workspace,
+        sopId: workspaceSop.sopId,
+        length: workspaceSop.rawInstructions.length,
+      })}`,
+    );
+  } else {
+    console.log(
+      `[strategy-sop] injected-workspace skipped: present=${!!workspaceSop} reason=${workspaceSop ? 'empty' : 'null'}`,
+    );
+  }
+
   // Phase 2 — Apply lightweight Global Instructions at the FINAL prompt stage.
   // Single shared helper used at every LLM call site so V1, V2, and any
   // future grounded-strategy path all flow through the same injection.
