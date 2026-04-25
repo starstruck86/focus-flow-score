@@ -1674,7 +1674,7 @@ Deno.serve(async (req) => {
         // Only persist audit summary on terminal states
         if (!retryEligible) {
           const fullHistory = await fetchAttemptHistory(supabase, resourceId);
-          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson, typeof floorDetails !== 'undefined' ? floorDetails : undefined);
+          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson, undefined);
           if (audit) auditFields.extraction_audit_summary = audit;
         }
         await updateExtractionStatus(supabase, resourceId, newStatus, auditFields);
@@ -1795,6 +1795,7 @@ Deno.serve(async (req) => {
     }
 
     // ── 6. Quality threshold gate + post-extraction invariant ──
+    const floorDetails = computeMinKiFloorDetailed(resource.content.length, isLesson, densitySignals, resource.resource_type);
     const minKiFloor = floorDetails.final;
     const durationMs = Date.now() - startTime;
 
