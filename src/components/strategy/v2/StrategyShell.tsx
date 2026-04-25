@@ -426,7 +426,7 @@ export function StrategyShell() {
       // ride this send and only this send.
       const sidecar = pendingResourceIds.length > 0 ? pendingResourceIds : undefined;
       if (sidecar) setPendingResourceIds([]);
-      requestAnimationFrame(() => sendMessage(queued, sidecar ? { pickedResourceIds: sidecar } : undefined));
+      requestAnimationFrame(() => sendMessage(queued, { pickedResourceIds: sidecar, workspace: activeSurface ?? 'work' }));
     }
   }, [pendingThreadId, activeThread?.id, sendMessage, pendingResourceIds]);
 
@@ -748,7 +748,7 @@ export function StrategyShell() {
     if (sendingFrom) {
       setSurfaceThread(sendingFrom, threadId);
     }
-    sendMessage(text, sidecar ? { pickedResourceIds: sidecar } : undefined);
+    sendMessage(text, { pickedResourceIds: sidecar, workspace: sendingFrom ?? activeSurface ?? 'work' });
   }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread]);
 
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {

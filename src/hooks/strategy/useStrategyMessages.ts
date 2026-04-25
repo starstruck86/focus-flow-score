@@ -38,7 +38,7 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
 
   const sendMessage = useCallback(async (
     content: string,
-    options?: { depth?: string; pickedResourceIds?: string[] }
+    options?: { depth?: string; pickedResourceIds?: string[]; workspace?: string | null },
   ) => {
     if (!threadId || !user || !content.trim() || isSending) return;
     setIsSending(true);
@@ -75,6 +75,9 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
           // Phase 2: lightweight Global Instructions. Null when the engine is
           // disabled — server treats absence as "no behavior change".
           globalInstructions: buildGlobalInstructionsPayload() ?? undefined,
+          // Phase 1 SOP Engine — frontend routing metadata only. Backend logs
+          // it but does NOT inject any workspace SOP yet.
+          workspace: options?.workspace ?? 'work',
         }),
       });
 

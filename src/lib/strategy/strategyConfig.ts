@@ -57,6 +57,64 @@ export interface DiscoveryPrepSopContract {
   qaChecklist: string[];
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Universal Strategy SOP Engine — Phase 1 (data model + persistence only)
+// ──────────────────────────────────────────────────────────────────────────
+//
+// A StrategySopContract is the universal shape used by Global, Workspace, and
+// Task SOPs. It is intentionally generic so the resolver and (future) prompt
+// composer can iterate over them uniformly.
+//
+// Phase 1 contract: NO model behavior change. Contracts are stored, edited
+// in Settings, and surfaced via `resolveStrategySops()` — but no consumer
+// injects them into prompts yet.
+
+export type StrategyWorkspaceSopKey =
+  | 'brainstorm'
+  | 'deep_research'
+  | 'refine'
+  | 'library'
+  | 'artifacts'
+  | 'projects'
+  | 'work';
+
+export type StrategyTaskSopKey =
+  | 'discovery_prep'
+  | 'deal_review'
+  | 'account_research'
+  | 'recap_email'
+  | 'roi_model';
+
+export interface StrategySopLibraryRules {
+  preferTemplates: boolean;
+  preferPlaybooks: boolean;
+  citeSources: boolean;
+  neverInventMetrics: boolean;
+  unknownsBecomeQuestions: boolean;
+}
+
+export interface StrategySopEnforcement {
+  strict: boolean;
+  selfCorrectOnce: boolean;
+  requiredSections: string[];
+}
+
+export interface StrategySopContract {
+  enabled: boolean;
+  name: string;
+  rawInstructions: string;
+  /**
+   * Optional structured projection of `rawInstructions`. The shape is
+   * intentionally a free-form record so different SOPs can carry different
+   * sections (Discovery Prep has 10 known buckets; a custom SOP may have any
+   * heading). Empty/undefined when no parser has been run.
+   */
+  parsedSections?: Record<string, string[]>;
+  libraryRules?: StrategySopLibraryRules;
+  enforcement?: StrategySopEnforcement;
+  updatedAt: string;
+}
+
 export interface StrategyGlobalInstructionsConfig {
   version: number;
   enabled: boolean;
@@ -66,7 +124,18 @@ export interface StrategyGlobalInstructionsConfig {
   outputPreferences: OutputPreferences;
   libraryBehavior: LibraryBehavior;
   sopContracts: {
+    /**
+     * Backward-compatible — the original task-specific Discovery Prep SOP.
+     * Source of truth for code paths that already read this field. We keep
+     * it in lockstep with `tasks.discovery_prep` via a deterministic mirror.
+     */
     discoveryPrepFullMode: DiscoveryPrepSopContract;
+    /** Universal SOP — applies to every Strategy turn when enabled. */
+    global?: StrategySopContract;
+    /** Per-workspace SOPs keyed by surface. */
+    workspaces: Partial<Record<StrategyWorkspaceSopKey, StrategySopContract>>;
+    /** Per-task SOPs keyed by task type. */
+    tasks: Partial<Record<StrategyTaskSopKey, StrategySopContract>>;
   };
   updatedAt: string;
 }
@@ -93,10 +162,99 @@ function emptyParsedSop(): Omit<
   };
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Universal SOP — defaults & helpers
+// ──────────────────────────────────────────────────────────────────────────
+
+const WORKSPACE_SOP_KEYS: StrategyWorkspaceSopKey[] = [
+  'brainstorm', 'deep_research', 'refine', 'library', 'artifacts', 'projects', 'work',
+];
+
+const TASK_SOP_KEYS: StrategyTaskSopKey[] = [
+  'discovery_prep', 'deal_review', 'account_research', 'recap_email', 'roi_model',
+];
+
+export const STRATEGY_WORKSPACE_SOP_KEYS: ReadonlyArray<StrategyWorkspaceSopKey> = WORKSPACE_SOP_KEYS;
+export const STRATEGY_TASK_SOP_KEYS: ReadonlyArray<StrategyTaskSopKey> = TASK_SOP_KEYS;
+
+const DEFAULT_LIBRARY_RULES: StrategySopLibraryRules = {
+  preferTemplates: false,
+  preferPlaybooks: false,
+  citeSources: true,
+  neverInventMetrics: true,
+  unknownsBecomeQuestions: true,
+};
+
+const DEFAULT_ENFORCEMENT: StrategySopEnforcement = {
+  strict: false,
+  selfCorrectOnce: false,
+  requiredSections: [],
+};
+
+function defaultSopContract(name: string): StrategySopContract {
+  return {
+    enabled: false,
+    name,
+    rawInstructions: '',
+    parsedSections: {},
+    libraryRules: { ...DEFAULT_LIBRARY_RULES },
+    enforcement: { ...DEFAULT_ENFORCEMENT },
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+const WORKSPACE_DEFAULT_NAMES: Record<StrategyWorkspaceSopKey, string> = {
+  brainstorm: 'Brainstorm SOP',
+  deep_research: 'Deep Research SOP',
+  refine: 'Refine SOP',
+  library: 'Library SOP',
+  artifacts: 'Artifacts SOP',
+  projects: 'Projects SOP',
+  work: 'Work SOP',
+};
+
+const TASK_DEFAULT_NAMES: Record<StrategyTaskSopKey, string> = {
+  discovery_prep: 'Discovery Prep SOP',
+  deal_review: 'Deal Review SOP',
+  account_research: 'Account Research SOP',
+  recap_email: 'Recap Email SOP',
+  roi_model: 'ROI Model SOP',
+};
+
+/** Build a `StrategySopContract` projection from the legacy Discovery Prep contract. */
+function discoveryPrepToUniversal(c: DiscoveryPrepSopContract): StrategySopContract {
+  return {
+    enabled: c.enabled,
+    name: TASK_DEFAULT_NAMES.discovery_prep,
+    rawInstructions: c.rawSop,
+    parsedSections: {
+      nonNegotiables: c.nonNegotiables,
+      requiredInputs: c.requiredInputs,
+      requiredOutputs: c.requiredOutputs,
+      researchWorkflow: c.researchWorkflow,
+      mandatoryChecks: c.mandatoryChecks,
+      metricsProtocol: c.metricsProtocol,
+      pageOneCockpitRules: c.pageOneCockpitRules,
+      formattingRules: c.formattingRules,
+      buildOrder: c.buildOrder,
+      qaChecklist: c.qaChecklist,
+    },
+    libraryRules: { ...DEFAULT_LIBRARY_RULES },
+    enforcement: { ...DEFAULT_ENFORCEMENT },
+    updatedAt: c.parsedAt ?? new Date().toISOString(),
+  };
+}
+
 export function defaultStrategyConfig(): StrategyGlobalInstructionsConfig {
   const now = new Date().toISOString();
   const seed = DISCOVERY_PREP_SOP_SEED;
   const parsedSeed = parseDiscoveryPrepSop(seed);
+  const legacyDiscovery: DiscoveryPrepSopContract = {
+    enabled: false,
+    rawSop: seed,
+    parsedAt: now,
+    ...parsedSeed,
+  };
   return {
     version: CONFIG_VERSION,
     enabled: false,
@@ -117,11 +275,13 @@ export function defaultStrategyConfig(): StrategyGlobalInstructionsConfig {
       unknownsBecomeQuestions: true,
     },
     sopContracts: {
-      discoveryPrepFullMode: {
-        enabled: false,
-        rawSop: seed,
-        parsedAt: now,
-        ...parsedSeed,
+      discoveryPrepFullMode: legacyDiscovery,
+      global: undefined,
+      workspaces: {},
+      tasks: {
+        // Mirror the legacy seeded SOP into the universal slot so consumers
+        // of the new resolver see Discovery Prep out-of-the-box.
+        discovery_prep: discoveryPrepToUniversal(legacyDiscovery),
       },
     },
     updatedAt: now,
@@ -160,6 +320,35 @@ function mergeWithDefaults(
 ): StrategyGlobalInstructionsConfig {
   const base = defaultStrategyConfig();
   const sopPartial = partial.sopContracts?.discoveryPrepFullMode ?? {};
+  const mergedDiscovery: DiscoveryPrepSopContract = {
+    ...base.sopContracts.discoveryPrepFullMode,
+    ...sopPartial,
+  };
+
+  // Workspace SOPs — fill missing entries with undefined (off). Only retain
+  // keys we recognise so a stale schema can't smuggle data in.
+  const workspaces: Partial<Record<StrategyWorkspaceSopKey, StrategySopContract>> = {};
+  const workspacesPartial = partial.sopContracts?.workspaces ?? {};
+  for (const key of WORKSPACE_SOP_KEYS) {
+    const incoming = workspacesPartial[key];
+    if (incoming) workspaces[key] = normalizeContract(incoming, WORKSPACE_DEFAULT_NAMES[key]);
+  }
+
+  // Task SOPs — same pattern, plus we ensure discovery_prep stays in sync
+  // with the legacy `discoveryPrepFullMode` field.
+  const tasks: Partial<Record<StrategyTaskSopKey, StrategySopContract>> = {};
+  const tasksPartial = partial.sopContracts?.tasks ?? {};
+  for (const key of TASK_SOP_KEYS) {
+    const incoming = tasksPartial[key];
+    if (incoming) tasks[key] = normalizeContract(incoming, TASK_DEFAULT_NAMES[key]);
+  }
+  // Mirror legacy → universal so new resolver always sees the latest text.
+  tasks.discovery_prep = mirrorLegacyToUniversal(mergedDiscovery, tasks.discovery_prep);
+
+  const globalSop = partial.sopContracts?.global
+    ? normalizeContract(partial.sopContracts.global, 'Global Strategy SOP')
+    : base.sopContracts.global;
+
   return {
     ...base,
     ...partial,
@@ -167,12 +356,57 @@ function mergeWithDefaults(
     outputPreferences: { ...base.outputPreferences, ...(partial.outputPreferences ?? {}) },
     libraryBehavior: { ...base.libraryBehavior, ...(partial.libraryBehavior ?? {}) },
     sopContracts: {
-      discoveryPrepFullMode: {
-        ...base.sopContracts.discoveryPrepFullMode,
-        ...sopPartial,
-      },
+      discoveryPrepFullMode: mergedDiscovery,
+      global: globalSop,
+      workspaces,
+      tasks,
     },
     updatedAt: partial.updatedAt ?? base.updatedAt,
+  };
+}
+
+/**
+ * Ensure incoming contracts have all required fields filled in. Defensive —
+ * a manually edited blob in localStorage could be missing nested objects.
+ */
+function normalizeContract(c: Partial<StrategySopContract>, fallbackName: string): StrategySopContract {
+  return {
+    enabled: !!c.enabled,
+    name: typeof c.name === 'string' && c.name.trim() ? c.name : fallbackName,
+    rawInstructions: typeof c.rawInstructions === 'string' ? c.rawInstructions : '',
+    parsedSections: c.parsedSections && typeof c.parsedSections === 'object'
+      ? c.parsedSections
+      : {},
+    libraryRules: { ...DEFAULT_LIBRARY_RULES, ...(c.libraryRules ?? {}) },
+    enforcement: {
+      ...DEFAULT_ENFORCEMENT,
+      ...(c.enforcement ?? {}),
+      requiredSections: Array.isArray(c.enforcement?.requiredSections)
+        ? c.enforcement!.requiredSections.filter((s) => typeof s === 'string')
+        : [],
+    },
+    updatedAt: typeof c.updatedAt === 'string' ? c.updatedAt : new Date().toISOString(),
+  };
+}
+
+/**
+ * Project the legacy Discovery Prep contract into the universal slot while
+ * preserving any user edits already on the universal contract (libraryRules,
+ * enforcement, name). Raw text + parsed sections always win from the legacy
+ * source so there is one editing surface in Phase 1.
+ */
+function mirrorLegacyToUniversal(
+  legacy: DiscoveryPrepSopContract,
+  existing?: StrategySopContract,
+): StrategySopContract {
+  const projected = discoveryPrepToUniversal(legacy);
+  if (!existing) return projected;
+  return {
+    ...existing,
+    enabled: legacy.enabled,
+    rawInstructions: projected.rawInstructions,
+    parsedSections: projected.parsedSections,
+    updatedAt: projected.updatedAt,
   };
 }
 
@@ -234,12 +468,21 @@ export function updateDiscoveryPrepSop(
   patch: Partial<DiscoveryPrepSopContract>,
 ): StrategyGlobalInstructionsConfig {
   const current = getStrategyConfig();
+  const nextLegacy: DiscoveryPrepSopContract = {
+    ...current.sopContracts.discoveryPrepFullMode,
+    ...patch,
+  };
   return saveStrategyConfig({
     ...current,
     sopContracts: {
-      discoveryPrepFullMode: {
-        ...current.sopContracts.discoveryPrepFullMode,
-        ...patch,
+      ...current.sopContracts,
+      discoveryPrepFullMode: nextLegacy,
+      tasks: {
+        ...current.sopContracts.tasks,
+        discovery_prep: mirrorLegacyToUniversal(
+          nextLegacy,
+          current.sopContracts.tasks.discovery_prep,
+        ),
       },
     },
   });
@@ -258,7 +501,17 @@ export function reparseDiscoveryPrepSop(): DiscoveryPrepSopContract {
   };
   saveStrategyConfig({
     ...current,
-    sopContracts: { discoveryPrepFullMode: next },
+    sopContracts: {
+      ...current.sopContracts,
+      discoveryPrepFullMode: next,
+      tasks: {
+        ...current.sopContracts.tasks,
+        discovery_prep: mirrorLegacyToUniversal(
+          next,
+          current.sopContracts.tasks.discovery_prep,
+        ),
+      },
+    },
   });
   return next;
 }
@@ -271,6 +524,96 @@ export function isDiscoveryPrepSopEnabled(): boolean {
   const cfg = getStrategyConfig();
   return cfg.enabled && cfg.sopContracts.discoveryPrepFullMode.enabled;
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// Universal SOP — getters + updaters (Phase 1)
+// ──────────────────────────────────────────────────────────────────────────
+
+export function getGlobalSopContract(): StrategySopContract | undefined {
+  return getStrategyConfig().sopContracts.global;
+}
+
+export function getWorkspaceSopContract(
+  key: StrategyWorkspaceSopKey,
+): StrategySopContract | undefined {
+  return getStrategyConfig().sopContracts.workspaces[key];
+}
+
+export function getTaskSopContract(
+  key: StrategyTaskSopKey,
+): StrategySopContract | undefined {
+  return getStrategyConfig().sopContracts.tasks[key];
+}
+
+export function updateGlobalSop(
+  patch: Partial<StrategySopContract>,
+): StrategyGlobalInstructionsConfig {
+  const current = getStrategyConfig();
+  const merged = normalizeContract(
+    { ...(current.sopContracts.global ?? {}), ...patch, updatedAt: new Date().toISOString() },
+    'Global Strategy SOP',
+  );
+  return saveStrategyConfig({
+    ...current,
+    sopContracts: { ...current.sopContracts, global: merged },
+  });
+}
+
+export function updateWorkspaceSop(
+  key: StrategyWorkspaceSopKey,
+  patch: Partial<StrategySopContract>,
+): StrategyGlobalInstructionsConfig {
+  const current = getStrategyConfig();
+  const existing = current.sopContracts.workspaces[key];
+  const merged = normalizeContract(
+    { ...(existing ?? {}), ...patch, updatedAt: new Date().toISOString() },
+    WORKSPACE_DEFAULT_NAMES[key],
+  );
+  return saveStrategyConfig({
+    ...current,
+    sopContracts: {
+      ...current.sopContracts,
+      workspaces: { ...current.sopContracts.workspaces, [key]: merged },
+    },
+  });
+}
+
+export function updateTaskSop(
+  key: StrategyTaskSopKey,
+  patch: Partial<StrategySopContract>,
+): StrategyGlobalInstructionsConfig {
+  const current = getStrategyConfig();
+  const existing = current.sopContracts.tasks[key];
+  const merged = normalizeContract(
+    { ...(existing ?? {}), ...patch, updatedAt: new Date().toISOString() },
+    TASK_DEFAULT_NAMES[key],
+  );
+  // When the user edits the universal Discovery Prep slot, mirror enable
+  // back to the legacy contract so existing readers (useTaskExecution etc.)
+  // continue to work without code changes.
+  if (key === 'discovery_prep') {
+    return saveStrategyConfig({
+      ...current,
+      sopContracts: {
+        ...current.sopContracts,
+        discoveryPrepFullMode: {
+          ...current.sopContracts.discoveryPrepFullMode,
+          enabled: merged.enabled,
+          rawSop: merged.rawInstructions || current.sopContracts.discoveryPrepFullMode.rawSop,
+        },
+        tasks: { ...current.sopContracts.tasks, [key]: merged },
+      },
+    });
+  }
+  return saveStrategyConfig({
+    ...current,
+    sopContracts: {
+      ...current.sopContracts,
+      tasks: { ...current.sopContracts.tasks, [key]: merged },
+    },
+  });
+}
+
 
 export function isStrategyEngineEnabled(): boolean {
   return getStrategyConfig().enabled;

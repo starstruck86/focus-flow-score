@@ -2179,6 +2179,7 @@ serve(async (req) => {
       pickedResourceIds,
       _v2,
       globalInstructions: globalInstructionsRaw,
+      workspace: workspaceRaw,
     } = body;
     const v2RequestOverride = _v2 === true;
     // Sidecar: explicit resource IDs the user picked from /library this turn.
@@ -2197,6 +2198,20 @@ serve(async (req) => {
     // "shared helper didn't fire". Logs even when payload is null.
     console.log(
       `[global-instructions] received: present=${!!globalInstructionsRaw} sanitized=${!!cleanGlobalInstructions} free_text_chars=${cleanGlobalInstructions?.globalInstructions.length ?? 0}`,
+    );
+
+    // Phase 1 — Universal Strategy SOP Engine: log workspace metadata only.
+    // We do NOT branch on workspace yet. This log proves the routing payload
+    // arrives end-to-end so Phase 2 can wire injection safely.
+    const ALLOWED_WORKSPACES = new Set([
+      'brainstorm', 'deep_research', 'refine', 'library',
+      'artifacts', 'projects', 'work',
+    ]);
+    const workspace = typeof workspaceRaw === 'string' && ALLOWED_WORKSPACES.has(workspaceRaw)
+      ? workspaceRaw
+      : null;
+    console.log(
+      `[strategy-sop] received workspace=${workspace ?? 'none'} taskType=${typeof workflowType === 'string' ? workflowType : 'none'} hasWorkspace=${!!workspace} hasGlobalInstructions=${!!cleanGlobalInstructions}`,
     );
 
     // ── Debug: OpenAI key health check ──────────────────────
