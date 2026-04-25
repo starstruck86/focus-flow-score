@@ -149,6 +149,9 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         baseUserPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
         libraryCounts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
         researchChars: research.totalChars,
+        // Phase 3A safe bridge — carry SOP through to assembleAndFinalize
+        // for shadow output validation. Never read by prompt builders.
+        sop,
       });
       await ensureSectionRows({ supabase, runId, userId });
       console.log(JSON.stringify({
