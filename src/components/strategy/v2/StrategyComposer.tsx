@@ -92,13 +92,20 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
     return ta;
   });
 
-  // Auto-resize the textarea up to a soft cap
+  // Auto-resize the textarea up to a soft cap.
+  // When empty, lock to a single compact line (24px) so the composer never
+  // balloons before the user types — this is what the mobile bug report flags
+  // as the "huge empty vertical box" before any input.
   useEffect(() => {
     const el = taRef.current;
     if (!el) return;
+    if (!value) {
+      el.style.height = '24px';
+      return;
+    }
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 240) + 'px';
-  }, [value]);
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }, [value, serifPlaceholder]);
 
   // Detect slash-mode (must start with "/", no embedded newlines, no inner spaces past slash word)
   useEffect(() => {
@@ -142,7 +149,7 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
 
   return (
     <div
-      className="w-full px-6 pt-1 pb-[calc(env(safe-area-inset-bottom)+96px)] sm:pb-3"
+      className="w-full px-4 sm:px-6 pt-1 pb-[calc(env(safe-area-inset-bottom)+12px)] sm:pb-3"
       style={{
         background: 'hsl(var(--sv-paper))',
       }}
@@ -152,11 +159,11 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
         className="mx-auto relative"
         style={{
           maxWidth: 860,
-          minHeight: 56,
+          minHeight: 48,
           background: 'hsl(var(--sv-paper))',
           display: 'flex',
           alignItems: 'flex-end',
-          padding: '12px 14px',
+          padding: '10px 12px',
         }}
       >
         <textarea
@@ -173,13 +180,14 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
           rows={1}
           placeholder={placeholder}
           disabled={disabled}
-          className={`flex-1 bg-transparent border-0 outline-none resize-none leading-[1.5] ${serifPlaceholder && !value ? 'text-[17px]' : 'text-[15px]'}`}
+          className={`flex-1 bg-transparent border-0 outline-none resize-none leading-[1.5] ${serifPlaceholder && !value ? 'text-[15px] sm:text-[17px]' : 'text-[15px]'}`}
           style={{
             color: 'hsl(var(--sv-ink))',
             fontFamily: serifPlaceholder && !value ? 'var(--sv-serif)' : 'var(--sv-sans)',
             paddingLeft: onAttachFiles ? 32 : 0,
             paddingRight: 40,
-            maxHeight: 240,
+            maxHeight: 120,
+            overflowY: 'auto',
             transition: 'padding-left 120ms ease',
           }}
         />
