@@ -5607,6 +5607,29 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     .filter((m, idx, arr) =>
       !(idx === arr.length - 1 && m.role === "user" && m.text === content)
     );
+  // Phase 3A — Workspace SOP advisory injection.
+  // Append BEFORE global instructions so the global block stays the closest
+  // contract to the model output, and AFTER core/V1/V2/synthesis blocks so
+  // strict mode-lock formatting and synthesis contract remain authoritative.
+  // Treated as advisory only — must not override grounding, citation, or
+  // synthesis rules. Task pipelines (Discovery Prep) are excluded upstream
+  // by the client + server sanitizer (workflowType present → null).
+  if (workspaceSop && workspaceSop.rawInstructions.length > 0) {
+    const block = `\n\n━━━ WORKSPACE SOP (ADVISORY) ━━━\n${workspaceSop.rawInstructions}\n\nTreat the SOP above as guidance for tone, structure, and emphasis in this workspace. It does NOT override grounding, citation, synthesis, or strict-mode rules already specified above.\n`;
+    effectiveSystemPrompt = `${effectiveSystemPrompt}${block}`;
+    console.log(
+      `[strategy-sop] injected-workspace ${JSON.stringify({
+        workspace: workspaceSop.workspace,
+        sopId: workspaceSop.sopId,
+        length: workspaceSop.rawInstructions.length,
+      })}`,
+    );
+  } else {
+    console.log(
+      `[strategy-sop] injected-workspace skipped: present=${!!workspaceSop} reason=${workspaceSop ? 'empty' : 'null'}`,
+    );
+  }
+
   // Phase 2 — Apply lightweight Global Instructions at the FINAL prompt stage.
   // Single shared helper used at every LLM call site so V1, V2, and any
   // future grounded-strategy path all flow through the same injection.
