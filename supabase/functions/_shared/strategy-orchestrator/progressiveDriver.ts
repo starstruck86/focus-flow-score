@@ -38,8 +38,9 @@ export async function persistSynthesisArtifact(args: {
   libraryCounts: { kis: number; playbooks: number };
   researchChars: number;
   sop?: SopContractLike | null;
+  sopInputCheck?: any;
 }): Promise<void> {
-  const { supabase, runId, synthesis, systemPrompt, baseUserPrompt, libraryCounts, researchChars, sop } = args;
+  const { supabase, runId, synthesis, systemPrompt, baseUserPrompt, libraryCounts, researchChars, sop, sopInputCheck } = args;
   const { error } = await supabase
     .from("task_runs")
     .update({
@@ -55,6 +56,13 @@ export async function persistSynthesisArtifact(args: {
           // shadow-mode output validation logging. Read by
           // assembleAndFinalize. NEVER consumed by prompt builders.
           sop: sop ?? null,
+        },
+        // Phase 3B — surface SOP shadow results at the top of meta so
+        // they're queryable without digging into progressive context.
+        sop: {
+          enabled: !!sop,
+          inputCheck: sopInputCheck ?? null,
+          outputCheck: null,
         },
       },
       updated_at: new Date().toISOString(),
