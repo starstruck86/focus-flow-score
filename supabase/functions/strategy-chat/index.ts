@@ -5488,17 +5488,13 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     .filter((m, idx, arr) =>
       !(idx === arr.length - 1 && m.role === "user" && m.text === content)
     );
-  // Phase 2 — Append lightweight Global Instructions LAST (after V1 mode-lock
-  // and V2 dispatcher prompt), so they sit closest to the user turn but
-  // never override the core grounding/audit/synthesis machinery above.
-  // Returns "" when payload is null/empty → exact baseline behavior.
-  const giBlock = renderGlobalInstructionsBlock(globalInstructions);
-  if (giBlock) {
-    effectiveSystemPrompt = `${effectiveSystemPrompt}${giBlock}`;
-    console.log(
-      `[global-instructions] injected: tone=${globalInstructions?.outputPreferences.tone} density=${globalInstructions?.outputPreferences.density} format=${globalInstructions?.outputPreferences.format} strict=${globalInstructions?.strictMode} self_correct=${globalInstructions?.selfCorrectOnce} free_text_chars=${globalInstructions?.globalInstructions.length ?? 0}`,
-    );
-  }
+  // Phase 2 — Apply lightweight Global Instructions at the FINAL prompt stage.
+  // Single shared helper used at every LLM call site so V1, V2, and any
+  // future grounded-strategy path all flow through the same injection.
+  // Returns the original prompt unchanged when payload is null/empty →
+  // exact baseline behavior preserved.
+  const giPath: GIPath = v2Active ? "v2" : (mode === "strong" || mode === "partial" || mode === "thin" || mode === "short_form" ? "synthesis" : "v1");
+  effectiveSystemPrompt = applyGlobalInstructions(effectiveSystemPrompt, globalInstructions, giPath);
 
   const messages = [
     { role: "system" as const, content: effectiveSystemPrompt },
