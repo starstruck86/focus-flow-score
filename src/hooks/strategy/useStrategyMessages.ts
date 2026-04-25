@@ -5,6 +5,7 @@ import type { StrategyMessage } from '@/types/strategy';
 import { toast } from 'sonner';
 import { mapSendErrorToFriendlyMessage } from './sendErrorMapping';
 import { buildGlobalInstructionsPayload } from '@/lib/strategy/buildGlobalInstructionsPayload';
+import { buildResolvedSopsPayload } from '@/lib/strategy/buildResolvedSopsPayload';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/strategy-chat`;
 
@@ -78,6 +79,14 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
           // Phase 1 SOP Engine — frontend routing metadata only. Backend logs
           // it but does NOT inject any workspace SOP yet.
           workspace: options?.workspace ?? 'work',
+          // Phase 2 SOP Engine — resolver plumbing. Client resolves which
+          // SOPs apply (global / workspace / task) and sends a lightweight
+          // metadata payload. Server logs it under [strategy-sop] resolved.
+          // SOP text is intentionally NOT sent — Phase 2 is observation only.
+          resolvedSops: buildResolvedSopsPayload({
+            workspace: options?.workspace ?? 'work',
+            taskType: null,
+          }) ?? undefined,
         }),
       });
 
