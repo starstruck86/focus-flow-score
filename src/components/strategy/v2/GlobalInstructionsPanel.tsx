@@ -201,19 +201,13 @@ export function GlobalInstructionsPanel() {
 
   // Auto-save handlers ------------------------------------------------------
   const setEnabled = (v: boolean) => {
-    const saved = updateStrategyConfig({ enabled: v });
-    // eslint-disable-next-line no-console
-    console.log('[StrategySettings] SAVED CONFIG (enabled):', saved);
+    updateStrategyConfig({ enabled: v });
   };
   const setStrict = (v: boolean) => {
-    const saved = updateStrategyConfig({ strictMode: v });
-    // eslint-disable-next-line no-console
-    console.log('[StrategySettings] SAVED CONFIG (strictMode):', saved);
+    updateStrategyConfig({ strictMode: v });
   };
   const setSelfCorrect = (v: boolean) => {
-    const saved = updateStrategyConfig({ selfCorrectOnce: v });
-    // eslint-disable-next-line no-console
-    console.log('[StrategySettings] SAVED CONFIG (selfCorrectOnce):', saved);
+    updateStrategyConfig({ selfCorrectOnce: v });
   };
 
   const flushGlobal = () => {
@@ -255,19 +249,6 @@ export function GlobalInstructionsPanel() {
 
   return (
     <div className="space-y-4">
-      {process.env.NODE_ENV !== 'production' && (
-        <div
-          data-testid="strategy-config-debug-settings"
-          className="rounded-lg p-2 text-[10px]"
-          style={{
-            background: 'hsl(var(--sv-paper-2, var(--sv-paper)))',
-            border: '1px solid hsl(var(--sv-line))',
-            color: 'hsl(var(--sv-muted))',
-          }}
-        >
-          enabled={String(cfg.enabled)} strictMode={String(cfg.strictMode)} selfCorrectOnce={String(cfg.selfCorrectOnce)}
-        </div>
-      )}
       {/* Section header ---------------------------------------------------- */}
       <header className="flex items-start gap-3">
         <div
@@ -325,9 +306,7 @@ export function GlobalInstructionsPanel() {
             onChange={(e) => {
               const value = e.target.value;
               setGlobalText(value);
-              const saved = updateStrategyGlobalInstructions(value);
-              // eslint-disable-next-line no-console
-              console.log('[StrategySettings] SAVED CONFIG:', saved);
+              updateStrategyGlobalInstructions(value);
             }}
             onBlur={flushGlobal}
             placeholder="e.g. Be direct. Lead with the recommendation. Cite sources when used. Never invent metrics. Always end with a single concrete next step."

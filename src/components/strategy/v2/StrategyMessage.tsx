@@ -112,11 +112,6 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
 
   const text = finalText;
   const isUser = role === 'user';
-  const strictDebug = role === 'assistant' && process.env.NODE_ENV !== 'production' ? (
-    <div data-testid="strict-debug" style={{ fontSize: 10, opacity: 0.5, fontFamily: 'var(--sv-sans)', whiteSpace: 'pre-wrap' }}>
-      strict={String(isStrictMode)} enabled={String(strategyConfig?.enabled)} strictMode={String(strategyConfig?.strictMode)}
-    </div>
-  ) : null;
 
   if (!text.trim()) {
     // Streaming placeholder — calm "Thinking…" label, no flashy animation.
@@ -153,7 +148,6 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
           lineHeight: 1.65,
         }}
       >
-        {strictDebug}
         <ul style={{ margin: '0 0 12px', paddingLeft: '1.25rem', listStyleType: 'disc' }}>
           {bullets.map((b, i) => (
             <li key={i} style={{ margin: '0 0 4px' }}>{b}</li>
@@ -252,7 +246,6 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
         lineHeight: 1.65,
       }}
     >
-      {strictDebug}
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
