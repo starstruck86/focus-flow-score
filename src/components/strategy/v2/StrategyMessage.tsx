@@ -66,13 +66,25 @@ function enforceStrictFormat(text: string): string {
  * from already-shaped text. Used to render structure directly, bypassing
  * any markdown parsing variability.
  */
-function parseStrictOutput(text: string): { bullets: string[]; nextMove: string | null } {
+function parseStrictOutput(text: string): { bullets: string[]; nextMove: string } {
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-  const bullets = lines
+
+  let bullets = lines
     .filter((l) => /^[•\-*]\s+/.test(l))
-    .map((l) => l.replace(/^[•\-*]\s+/, ''))
-    .slice(0, 3);
-  const nextMove = lines.find((l) => /→\s*NEXT MOVE/i.test(l)) ?? null;
+    .map((l) => l.replace(/^[•\-*]\s+/, '').trim());
+
+  // Fallback: if parser fails, recover bullets from raw sentences
+  if (bullets.length === 0) {
+    bullets = text
+      .replace(/→\s*NEXT MOVE:?.*$/i, '')
+      .split(/(?<=[.?!])\s+/)
+      .map((s) => s.replace(/^[•\-*\s]+/, '').trim())
+      .filter(Boolean);
+  }
+
+  bullets = bullets.slice(0, 3);
+
+  const nextMove = lines.find((l) => /→\s*NEXT MOVE/i.test(l)) || '→ NEXT MOVE:';
   return { bullets, nextMove };
 }
 
@@ -120,26 +132,10 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
   const text = finalText;
   const isUser = role === 'user';
 
-  if (!text.trim()) {
-    // Streaming placeholder — calm "Thinking…" label, no flashy animation.
-    return (
-      <div
-        className="py-1 text-[14px]"
-        style={{
-          paddingLeft: role === 'user' ? 40 : 0,
-          color: 'hsl(var(--sv-muted))',
-          fontFamily: 'var(--sv-sans)',
-          opacity: 0.6,
-        }}
-      >
-        Thinking…
-      </div>
-    );
-  }
-
-  // Strict Mode bypass: render assistant structure explicitly before any
-  // message-type, workflow, markdown, or user/system branching can intercept it.
-  if (role === 'assistant' && isStrictMode) {
+  // Strict Mode bypass: render assistant structure FIRST, before any
+  // empty-text, message-type, workflow, markdown, or user/system branching.
+  // This must be the highest-priority render path for assistant messages.
+  if (role === 'assistant' && isStrictMode && rawText.trim()) {
     const strictText = enforceStrictFormat(rawText);
     const { bullets, nextMove } = parseStrictOutput(strictText);
     return (
@@ -168,9 +164,26 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
             color: 'hsl(var(--sv-ink))',
           }}
         >
-          {nextMove ?? '→ NEXT MOVE:'}
+          {nextMove}
         </div>
         {onQuickAction && <MessageActions onAction={onQuickAction} />}
+      </div>
+    );
+  }
+
+  if (!text.trim()) {
+    // Streaming placeholder — calm "Thinking…" label, no flashy animation.
+    return (
+      <div
+        className="py-1 text-[14px]"
+        style={{
+          paddingLeft: role === 'user' ? 40 : 0,
+          color: 'hsl(var(--sv-muted))',
+          fontFamily: 'var(--sv-sans)',
+          opacity: 0.6,
+        }}
+      >
+        Thinking…
       </div>
     );
   }
