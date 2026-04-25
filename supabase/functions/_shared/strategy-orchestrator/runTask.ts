@@ -72,8 +72,9 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     sop_enabled: !!sop,
     rules: sop ? Object.keys(sop) : [],
   }));
+  let sopInputCheck: ReturnType<typeof validateSopInputs> | null = null;
   try {
-    const sopInputCheck = validateSopInputs(inputs as Record<string, unknown>, sop);
+    sopInputCheck = validateSopInputs(inputs as Record<string, unknown>, sop);
     console.log(JSON.stringify({
       tag: "[sop-input-check]",
       run_id: runId,
