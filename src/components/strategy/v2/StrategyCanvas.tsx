@@ -39,7 +39,12 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
   return (
     <div
       className="flex-1 min-h-0 overflow-y-auto"
-      style={{ background: 'hsl(var(--sv-paper))' }}
+      style={{
+        background: 'hsl(var(--sv-paper))',
+        // Ensure scrollIntoView leaves room for the sticky composer so the
+        // last message never sits flush against (or under) the input.
+        scrollPaddingBottom: 96,
+      }}
     >
       <div
         className="mx-auto px-6 pt-2 pb-3 sm:pb-8"
