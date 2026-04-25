@@ -1,5 +1,5 @@
 import { NavLink as RouterNavLink, useLocation } from 'react-router-dom';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -126,16 +126,38 @@ export function useActiveTabColor(): NavColor {
  */
 export function BottomNav({ variant = 'default' }: { variant?: 'default' | 'condensed' | 'hidden' } = {}) {
   const navRef = useRef<HTMLElement | null>(null);
+  // ─── Mobile keyboard detection ────────────────────────────────────────
+  // When the on-screen keyboard opens on iOS / Android, `visualViewport.height`
+  // shrinks below `window.innerHeight`. We hide the BottomNav in that state
+  // so the composer sits flush on top of the keyboard (ChatGPT/iMessage feel)
+  // instead of stacking under a second floating bar.
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (!vv) return;
+    const check = () => {
+      const diff = window.innerHeight - vv.height;
+      setKeyboardOpen(diff > 120);
+    };
+    check();
+    vv.addEventListener('resize', check);
+    vv.addEventListener('scroll', check);
+    return () => {
+      vv.removeEventListener('resize', check);
+      vv.removeEventListener('scroll', check);
+    };
+  }, []);
 
   // ─── Dynamic height sync ──────────────────────────────────────────────
   // The BottomNav's rendered height varies with viewport / safe-area / font
   // scaling. We measure it and publish the pixel value to
   // `--shell-nav-height` so every consumer (page padding, FAB clearance,
   // /strategy main height) stays perfectly aligned with reality. When the
-  // variant is `hidden` we publish 0 so /strategy can reclaim the space.
+  // variant is `hidden` — or the keyboard is open — we publish 0 so the
+  // chat column reclaims the space.
   useEffect(() => {
     const root = document.documentElement;
-    if (variant === 'hidden') {
+    if (variant === 'hidden' || keyboardOpen) {
       root.style.setProperty('--shell-nav-height', '0');
       return () => {
         root.style.setProperty('--shell-nav-height', '101');
@@ -156,9 +178,10 @@ export function BottomNav({ variant = 'default' }: { variant?: 'default' | 'cond
       // Restore design-system default so other mounts start from a known baseline.
       root.style.setProperty('--shell-nav-height', '101');
     };
-  }, [variant]);
+  }, [variant, keyboardOpen]);
 
   if (variant === 'hidden') return null;
+  if (keyboardOpen) return null;
 
   const condensed = variant === 'condensed';
 
