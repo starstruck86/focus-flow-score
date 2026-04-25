@@ -92,13 +92,20 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
     return ta;
   });
 
-  // Auto-resize the textarea up to a soft cap
+  // Auto-resize the textarea up to a soft cap.
+  // When empty, lock to a single compact line (24px) so the composer never
+  // balloons before the user types — this is what the mobile bug report flags
+  // as the "huge empty vertical box" before any input.
   useEffect(() => {
     const el = taRef.current;
     if (!el) return;
+    if (!value) {
+      el.style.height = '24px';
+      return;
+    }
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 240) + 'px';
-  }, [value]);
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }, [value, serifPlaceholder]);
 
   // Detect slash-mode (must start with "/", no embedded newlines, no inner spaces past slash word)
   useEffect(() => {
