@@ -603,6 +603,22 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     }
   }
 
+  // ── Phase 3A SOP "SAFE BRIDGE" — output validation (shadow only). ──
+  // Runs only on the non-progressive path (account_brief, ninety_day_plan,
+  // etc.). Discovery Prep finalizes inside assembleAndFinalize where the
+  // equivalent log is emitted.
+  try {
+    const sopOutputCheck = validateDraftAgainstSop(draftOutput, sop);
+    console.log(JSON.stringify({
+      tag: "[sop-output-check]",
+      run_id: runId,
+      task_type: taskType,
+      ...sopOutputCheck,
+    }));
+  } catch (sopErr) {
+    console.warn("[sop-output-check] threw (ignored, shadow mode):", String(sopErr).slice(0, 200));
+  }
+
   // ── Stage 5: Finalize the run row ────────────────────────────
   const finalizePatch: Record<string, unknown> = {
     draft_output: draftOutput,
