@@ -284,6 +284,16 @@ export function StrategyShell() {
   useEffect(() => { activeThreadIdRef.current = threadId; }, [threadId]);
 
   const { messages, isLoading, isSending, sendMessage } = useStrategyMessages(threadId);
+
+  // Lifted strategy config — single source of truth for Strict Mode and other
+  // render overrides. Subscribing once here means StrategyMessage no longer
+  // reads localStorage directly (which caused stale-config bugs across mounts).
+  const [strategyConfig, setStrategyConfig] = useState(() => getStrategyConfig());
+  useEffect(() => {
+    setStrategyConfig(getStrategyConfig());
+    return subscribeStrategyConfig((next) => setStrategyConfig(next));
+  }, []);
+
   const { linkedContext } = useLinkedObjectContext(activeThread);
   const { trustState, trustReason, conflicts, runDetect } = useThreadTrustState(threadId);
 
@@ -1183,6 +1193,7 @@ export function StrategyShell() {
             messages={messages}
             isLoading={isLoading}
             isSending={isSending}
+            strategyConfig={strategyConfig}
             onPickPrompt={(prompt) => {
               const ta = composerRef.current as
                 (HTMLTextAreaElement & { insertText?: (t: string) => void })
