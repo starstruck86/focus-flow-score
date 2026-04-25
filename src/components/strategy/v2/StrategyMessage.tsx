@@ -12,6 +12,43 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { StrategyMessage as StrategyMessageT } from '@/types/strategy';
 import { MessageActions } from './MessageActions';
+import { getStrategyConfig, isStrategyEngineEnabled } from '@/lib/strategy/strategyConfig';
+
+/**
+ * Strict-mode response shaper. Runs AFTER the model responds to guarantee:
+ *  - bullet structure (≤3 bullets, no paragraphs)
+ *  - exact closing line "→ NEXT MOVE: …"
+ *
+ * This is a pure presentation transform — backend prompt logic is untouched.
+ * Only applied to plain assistant chat messages (not workflow updates,
+ * artifacts, brainstorm, refine, or discovery prep — those have their own
+ * structured renderers and message_types).
+ */
+function enforceStrictFormat(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+
+  // Already in bullet form — preserve, just ensure the closing line.
+  const hasBullets = /(^|\n)\s*[-*•]\s+/.test(trimmed);
+  let output: string;
+
+  if (hasBullets) {
+    output = trimmed;
+  } else {
+    // Convert prose → up to 3 bullets (sentence-split).
+    const sentences = trimmed
+      .split(/(?<=[.?!])\s+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+    output = sentences.map((s) => `- ${s.replace(/^["']|["']$/g, '')}`).join('\n');
+  }
+
+  if (!/→\s*NEXT MOVE:/i.test(output)) {
+    output += '\n\n→ NEXT MOVE: [define next step]';
+  }
+  return output;
+}
 
 interface Props {
   message: StrategyMessageT;
