@@ -75,8 +75,17 @@ function extractText(contentJson: any): string {
 }
 
 export function StrategyMessage({ message, onQuickAction }: Props) {
-  const text = extractText(message.content_json);
+  const rawText = extractText(message.content_json);
   const role = message.role;
+  // Strict-mode shaping: only for plain assistant chat replies. Skip system,
+  // tool, workflow updates, and any non-chat structured message_types so we
+  // don't disturb Brainstorm / Refine / Discovery Prep / Artifact renderers.
+  const isPlainChat =
+    role === 'assistant' &&
+    (!message.message_type || message.message_type === 'chat');
+  const strictModeOn =
+    isPlainChat && isStrategyEngineEnabled() && getStrategyConfig().strictMode;
+  const text = strictModeOn ? enforceStrictFormat(rawText) : rawText;
   const isUser = role === 'user';
 
   if (!text.trim()) {
