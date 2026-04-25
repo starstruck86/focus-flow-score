@@ -2192,6 +2192,12 @@ serve(async (req) => {
     // chat path or leak unbounded text into the system prompt. Returns null
     // when absent/invalid → server treats as "no behavior change".
     const cleanGlobalInstructions = sanitizeGlobalInstructions(globalInstructionsRaw);
+    // Phase 2 — Diagnostic: surface what the server actually received so
+    // we can disambiguate "client didn't send" vs "server rejected" vs
+    // "shared helper didn't fire". Logs even when payload is null.
+    console.log(
+      `[global-instructions] received: present=${!!globalInstructionsRaw} sanitized=${!!cleanGlobalInstructions} free_text_chars=${cleanGlobalInstructions?.globalInstructions.length ?? 0}`,
+    );
 
     // ── Debug: OpenAI key health check ──────────────────────
     // Phase 0 acceptance gate. Returns 200 only when the key is shaped
@@ -5488,17 +5494,13 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     .filter((m, idx, arr) =>
       !(idx === arr.length - 1 && m.role === "user" && m.text === content)
     );
-  // Phase 2 — Append lightweight Global Instructions LAST (after V1 mode-lock
-  // and V2 dispatcher prompt), so they sit closest to the user turn but
-  // never override the core grounding/audit/synthesis machinery above.
-  // Returns "" when payload is null/empty → exact baseline behavior.
-  const giBlock = renderGlobalInstructionsBlock(globalInstructions);
-  if (giBlock) {
-    effectiveSystemPrompt = `${effectiveSystemPrompt}${giBlock}`;
-    console.log(
-      `[global-instructions] injected: tone=${globalInstructions?.outputPreferences.tone} density=${globalInstructions?.outputPreferences.density} format=${globalInstructions?.outputPreferences.format} strict=${globalInstructions?.strictMode} self_correct=${globalInstructions?.selfCorrectOnce} free_text_chars=${globalInstructions?.globalInstructions.length ?? 0}`,
-    );
-  }
+  // Phase 2 — Apply lightweight Global Instructions at the FINAL prompt stage.
+  // Single shared helper used at every LLM call site so V1, V2, and any
+  // future grounded-strategy path all flow through the same injection.
+  // Returns the original prompt unchanged when payload is null/empty →
+  // exact baseline behavior preserved.
+  const giPath: GIPath = v2Active ? "v2" : (mode === "strong" || mode === "partial" || mode === "thin" || mode === "short_form" ? "synthesis" : "v1");
+  effectiveSystemPrompt = applyGlobalInstructions(effectiveSystemPrompt, globalInstructions, giPath);
 
   const messages = [
     { role: "system" as const, content: effectiveSystemPrompt },
@@ -6723,5 +6725,34 @@ function renderGlobalInstructionsBlock(g: CleanGlobalInstructions | null): strin
   }
 
   return lines.join("\n");
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Phase 2 — Shared injection layer.
+//
+// Every LLM call site in handleChat MUST flow the final system prompt
+// through applyGlobalInstructions(). This is the single point where the
+// USER STRATEGY INSTRUCTIONS block gets appended — V1 mode-lock, V2
+// dispatcher, and any future grounded-strategy path all share it.
+//
+// Returns the prompt unchanged when the payload is null or produces no
+// renderable block → exact baseline behavior preserved (Phase 2 test #1).
+// ──────────────────────────────────────────────────────────────────────
+type GIPath = "v1" | "v2" | "synthesis";
+
+function applyGlobalInstructions(
+  systemPrompt: string,
+  gi: CleanGlobalInstructions | null,
+  path: GIPath,
+): string {
+  const block = renderGlobalInstructionsBlock(gi);
+  if (!block) {
+    console.log(`[global-instructions] skipped: path=${path} reason=${gi ? "empty_block" : "null_payload"}`);
+    return systemPrompt;
+  }
+  console.log(
+    `[global-instructions] injected: path=${path} length=${block.length} tone=${gi?.outputPreferences.tone} density=${gi?.outputPreferences.density} format=${gi?.outputPreferences.format} strict=${gi?.strictMode} self_correct=${gi?.selfCorrectOnce} free_text_chars=${gi?.globalInstructions.length ?? 0}`,
+  );
+  return `${systemPrompt}${block}`;
 }
 
