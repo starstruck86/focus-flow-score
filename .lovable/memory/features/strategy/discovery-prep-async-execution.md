@@ -22,3 +22,10 @@ type: feature
 
 **DOCX rendering**
 - Document is built with `hyphenation: { autoHyphenation: false, doNotHyphenateCaps: true, consecutiveHyphenLimit: 0 }` so Word does not split words mid-character — long words wrap whole to the next line.
+
+**SOP shadow validation (Phase 3A/3B)**
+- Client may attach `inputs.__sop` (DiscoveryPrepSopContract). Pulled off in `runTask.executePipeline` before any prompt builder runs — prompt signatures stay byte-identical.
+- `sopValidator.ts` runs `validateSopInputs` (pre-stage 2) and `validateDraftAgainstSop` (post-assembly). Both pure observation, never throw, never mutate state.
+- Logs: `[strategy-sop]`, `[sop-input-check]`, `[sop-output-check]`, and a single-line `[strategy-sop][task]` summary at finalize.
+- Persisted to `task_runs.meta.sop = { enabled, inputCheck, outputCheck, finalized_at }` for queryability after logs roll off.
+- DO NOT inject SOP content into prompts here — task SOP is diagnostic only until enforcement phase is approved.
