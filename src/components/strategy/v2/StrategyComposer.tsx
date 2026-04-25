@@ -149,9 +149,13 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
 
   return (
     <div
-      className="w-full px-4 sm:px-6 pt-1 pb-[calc(env(safe-area-inset-bottom)+12px)] sm:pb-3"
+      className="w-full px-4 sm:px-6 pt-1 pb-[calc(env(safe-area-inset-bottom)+8px)] sm:pb-3 sticky bottom-0 z-30 sm:static shrink-0"
       style={{
         background: 'hsl(var(--sv-paper))',
+        // iOS Safari: when the keyboard opens, the visual viewport shrinks
+        // and `bottom-0` inside a 100dvh column keeps the composer pinned to
+        // the visible bottom edge — never tucked under the keyboard.
+        borderTop: '1px solid hsl(var(--sv-hairline))',
       }}
     >
       <div
@@ -159,7 +163,7 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
         className="mx-auto relative"
         style={{
           maxWidth: 860,
-          minHeight: 48,
+          minHeight: 56,
           background: 'hsl(var(--sv-paper))',
           display: 'flex',
           alignItems: 'flex-end',
