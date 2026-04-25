@@ -320,6 +320,35 @@ function mergeWithDefaults(
 ): StrategyGlobalInstructionsConfig {
   const base = defaultStrategyConfig();
   const sopPartial = partial.sopContracts?.discoveryPrepFullMode ?? {};
+  const mergedDiscovery: DiscoveryPrepSopContract = {
+    ...base.sopContracts.discoveryPrepFullMode,
+    ...sopPartial,
+  };
+
+  // Workspace SOPs — fill missing entries with undefined (off). Only retain
+  // keys we recognise so a stale schema can't smuggle data in.
+  const workspaces: Partial<Record<StrategyWorkspaceSopKey, StrategySopContract>> = {};
+  const workspacesPartial = partial.sopContracts?.workspaces ?? {};
+  for (const key of WORKSPACE_SOP_KEYS) {
+    const incoming = workspacesPartial[key];
+    if (incoming) workspaces[key] = normalizeContract(incoming, WORKSPACE_DEFAULT_NAMES[key]);
+  }
+
+  // Task SOPs — same pattern, plus we ensure discovery_prep stays in sync
+  // with the legacy `discoveryPrepFullMode` field.
+  const tasks: Partial<Record<StrategyTaskSopKey, StrategySopContract>> = {};
+  const tasksPartial = partial.sopContracts?.tasks ?? {};
+  for (const key of TASK_SOP_KEYS) {
+    const incoming = tasksPartial[key];
+    if (incoming) tasks[key] = normalizeContract(incoming, TASK_DEFAULT_NAMES[key]);
+  }
+  // Mirror legacy → universal so new resolver always sees the latest text.
+  tasks.discovery_prep = mirrorLegacyToUniversal(mergedDiscovery, tasks.discovery_prep);
+
+  const globalSop = partial.sopContracts?.global
+    ? normalizeContract(partial.sopContracts.global, 'Global Strategy SOP')
+    : base.sopContracts.global;
+
   return {
     ...base,
     ...partial,
@@ -327,12 +356,57 @@ function mergeWithDefaults(
     outputPreferences: { ...base.outputPreferences, ...(partial.outputPreferences ?? {}) },
     libraryBehavior: { ...base.libraryBehavior, ...(partial.libraryBehavior ?? {}) },
     sopContracts: {
-      discoveryPrepFullMode: {
-        ...base.sopContracts.discoveryPrepFullMode,
-        ...sopPartial,
-      },
+      discoveryPrepFullMode: mergedDiscovery,
+      global: globalSop,
+      workspaces,
+      tasks,
     },
     updatedAt: partial.updatedAt ?? base.updatedAt,
+  };
+}
+
+/**
+ * Ensure incoming contracts have all required fields filled in. Defensive —
+ * a manually edited blob in localStorage could be missing nested objects.
+ */
+function normalizeContract(c: Partial<StrategySopContract>, fallbackName: string): StrategySopContract {
+  return {
+    enabled: !!c.enabled,
+    name: typeof c.name === 'string' && c.name.trim() ? c.name : fallbackName,
+    rawInstructions: typeof c.rawInstructions === 'string' ? c.rawInstructions : '',
+    parsedSections: c.parsedSections && typeof c.parsedSections === 'object'
+      ? c.parsedSections
+      : {},
+    libraryRules: { ...DEFAULT_LIBRARY_RULES, ...(c.libraryRules ?? {}) },
+    enforcement: {
+      ...DEFAULT_ENFORCEMENT,
+      ...(c.enforcement ?? {}),
+      requiredSections: Array.isArray(c.enforcement?.requiredSections)
+        ? c.enforcement!.requiredSections.filter((s) => typeof s === 'string')
+        : [],
+    },
+    updatedAt: typeof c.updatedAt === 'string' ? c.updatedAt : new Date().toISOString(),
+  };
+}
+
+/**
+ * Project the legacy Discovery Prep contract into the universal slot while
+ * preserving any user edits already on the universal contract (libraryRules,
+ * enforcement, name). Raw text + parsed sections always win from the legacy
+ * source so there is one editing surface in Phase 1.
+ */
+function mirrorLegacyToUniversal(
+  legacy: DiscoveryPrepSopContract,
+  existing?: StrategySopContract,
+): StrategySopContract {
+  const projected = discoveryPrepToUniversal(legacy);
+  if (!existing) return projected;
+  return {
+    ...existing,
+    enabled: legacy.enabled,
+    rawInstructions: projected.rawInstructions,
+    parsedSections: projected.parsedSections,
+    updatedAt: projected.updatedAt,
   };
 }
 
