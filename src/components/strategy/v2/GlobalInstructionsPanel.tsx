@@ -268,7 +268,7 @@ export function GlobalInstructionsPanel() {
                 color: 'hsl(var(--sv-muted))',
               }}
             >
-              Phase 1 · UI only
+              Phase 2 · Chat live
             </span>
           </p>
         </div>
