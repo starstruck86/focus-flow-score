@@ -468,12 +468,21 @@ export function updateDiscoveryPrepSop(
   patch: Partial<DiscoveryPrepSopContract>,
 ): StrategyGlobalInstructionsConfig {
   const current = getStrategyConfig();
+  const nextLegacy: DiscoveryPrepSopContract = {
+    ...current.sopContracts.discoveryPrepFullMode,
+    ...patch,
+  };
   return saveStrategyConfig({
     ...current,
     sopContracts: {
-      discoveryPrepFullMode: {
-        ...current.sopContracts.discoveryPrepFullMode,
-        ...patch,
+      ...current.sopContracts,
+      discoveryPrepFullMode: nextLegacy,
+      tasks: {
+        ...current.sopContracts.tasks,
+        discovery_prep: mirrorLegacyToUniversal(
+          nextLegacy,
+          current.sopContracts.tasks.discovery_prep,
+        ),
       },
     },
   });
@@ -492,7 +501,17 @@ export function reparseDiscoveryPrepSop(): DiscoveryPrepSopContract {
   };
   saveStrategyConfig({
     ...current,
-    sopContracts: { discoveryPrepFullMode: next },
+    sopContracts: {
+      ...current.sopContracts,
+      discoveryPrepFullMode: next,
+      tasks: {
+        ...current.sopContracts.tasks,
+        discovery_prep: mirrorLegacyToUniversal(
+          next,
+          current.sopContracts.tasks.discovery_prep,
+        ),
+      },
+    },
   });
   return next;
 }
@@ -505,6 +524,96 @@ export function isDiscoveryPrepSopEnabled(): boolean {
   const cfg = getStrategyConfig();
   return cfg.enabled && cfg.sopContracts.discoveryPrepFullMode.enabled;
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// Universal SOP — getters + updaters (Phase 1)
+// ──────────────────────────────────────────────────────────────────────────
+
+export function getGlobalSopContract(): StrategySopContract | undefined {
+  return getStrategyConfig().sopContracts.global;
+}
+
+export function getWorkspaceSopContract(
+  key: StrategyWorkspaceSopKey,
+): StrategySopContract | undefined {
+  return getStrategyConfig().sopContracts.workspaces[key];
+}
+
+export function getTaskSopContract(
+  key: StrategyTaskSopKey,
+): StrategySopContract | undefined {
+  return getStrategyConfig().sopContracts.tasks[key];
+}
+
+export function updateGlobalSop(
+  patch: Partial<StrategySopContract>,
+): StrategyGlobalInstructionsConfig {
+  const current = getStrategyConfig();
+  const merged = normalizeContract(
+    { ...(current.sopContracts.global ?? {}), ...patch, updatedAt: new Date().toISOString() },
+    'Global Strategy SOP',
+  );
+  return saveStrategyConfig({
+    ...current,
+    sopContracts: { ...current.sopContracts, global: merged },
+  });
+}
+
+export function updateWorkspaceSop(
+  key: StrategyWorkspaceSopKey,
+  patch: Partial<StrategySopContract>,
+): StrategyGlobalInstructionsConfig {
+  const current = getStrategyConfig();
+  const existing = current.sopContracts.workspaces[key];
+  const merged = normalizeContract(
+    { ...(existing ?? {}), ...patch, updatedAt: new Date().toISOString() },
+    WORKSPACE_DEFAULT_NAMES[key],
+  );
+  return saveStrategyConfig({
+    ...current,
+    sopContracts: {
+      ...current.sopContracts,
+      workspaces: { ...current.sopContracts.workspaces, [key]: merged },
+    },
+  });
+}
+
+export function updateTaskSop(
+  key: StrategyTaskSopKey,
+  patch: Partial<StrategySopContract>,
+): StrategyGlobalInstructionsConfig {
+  const current = getStrategyConfig();
+  const existing = current.sopContracts.tasks[key];
+  const merged = normalizeContract(
+    { ...(existing ?? {}), ...patch, updatedAt: new Date().toISOString() },
+    TASK_DEFAULT_NAMES[key],
+  );
+  // When the user edits the universal Discovery Prep slot, mirror enable
+  // back to the legacy contract so existing readers (useTaskExecution etc.)
+  // continue to work without code changes.
+  if (key === 'discovery_prep') {
+    return saveStrategyConfig({
+      ...current,
+      sopContracts: {
+        ...current.sopContracts,
+        discoveryPrepFullMode: {
+          ...current.sopContracts.discoveryPrepFullMode,
+          enabled: merged.enabled,
+          rawSop: merged.rawInstructions || current.sopContracts.discoveryPrepFullMode.rawSop,
+        },
+        tasks: { ...current.sopContracts.tasks, [key]: merged },
+      },
+    });
+  }
+  return saveStrategyConfig({
+    ...current,
+    sopContracts: {
+      ...current.sopContracts,
+      tasks: { ...current.sopContracts.tasks, [key]: merged },
+    },
+  });
+}
+
 
 export function isStrategyEngineEnabled(): boolean {
   return getStrategyConfig().enabled;
