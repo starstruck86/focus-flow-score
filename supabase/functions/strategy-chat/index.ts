@@ -6727,3 +6727,32 @@ function renderGlobalInstructionsBlock(g: CleanGlobalInstructions | null): strin
   return lines.join("\n");
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Phase 2 — Shared injection layer.
+//
+// Every LLM call site in handleChat MUST flow the final system prompt
+// through applyGlobalInstructions(). This is the single point where the
+// USER STRATEGY INSTRUCTIONS block gets appended — V1 mode-lock, V2
+// dispatcher, and any future grounded-strategy path all share it.
+//
+// Returns the prompt unchanged when the payload is null or produces no
+// renderable block → exact baseline behavior preserved (Phase 2 test #1).
+// ──────────────────────────────────────────────────────────────────────
+type GIPath = "v1" | "v2" | "synthesis";
+
+function applyGlobalInstructions(
+  systemPrompt: string,
+  gi: CleanGlobalInstructions | null,
+  path: GIPath,
+): string {
+  const block = renderGlobalInstructionsBlock(gi);
+  if (!block) {
+    console.log(`[global-instructions] skipped: path=${path} reason=${gi ? "empty_block" : "null_payload"}`);
+    return systemPrompt;
+  }
+  console.log(
+    `[global-instructions] injected: path=${path} length=${block.length} tone=${gi?.outputPreferences.tone} density=${gi?.outputPreferences.density} format=${gi?.outputPreferences.format} strict=${gi?.strictMode} self_correct=${gi?.selfCorrectOnce} free_text_chars=${gi?.globalInstructions.length ?? 0}`,
+  );
+  return `${systemPrompt}${block}`;
+}
+
