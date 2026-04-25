@@ -200,9 +200,21 @@ export function GlobalInstructionsPanel() {
   const sop = cfg.sopContracts.discoveryPrepFullMode;
 
   // Auto-save handlers ------------------------------------------------------
-  const setEnabled = (v: boolean) => updateStrategyConfig({ enabled: v });
-  const setStrict = (v: boolean) => updateStrategyConfig({ strictMode: v });
-  const setSelfCorrect = (v: boolean) => updateStrategyConfig({ selfCorrectOnce: v });
+  const setEnabled = (v: boolean) => {
+    const saved = updateStrategyConfig({ enabled: v });
+    // eslint-disable-next-line no-console
+    console.log('[StrategySettings] SAVED CONFIG (enabled):', saved);
+  };
+  const setStrict = (v: boolean) => {
+    const saved = updateStrategyConfig({ strictMode: v });
+    // eslint-disable-next-line no-console
+    console.log('[StrategySettings] SAVED CONFIG (strictMode):', saved);
+  };
+  const setSelfCorrect = (v: boolean) => {
+    const saved = updateStrategyConfig({ selfCorrectOnce: v });
+    // eslint-disable-next-line no-console
+    console.log('[StrategySettings] SAVED CONFIG (selfCorrectOnce):', saved);
+  };
 
   const flushGlobal = () => {
     if (globalText !== cfg.globalInstructions) {
