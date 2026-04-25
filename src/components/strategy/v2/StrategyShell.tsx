@@ -44,6 +44,7 @@ import type { StrategyThread } from '@/types/strategy';
 
 import { StrategyTopBar } from './StrategyTopBar';
 import { StrategyCanvas } from './StrategyCanvas';
+import { getStrategyConfig, subscribeStrategyConfig } from '@/lib/strategy/strategyConfig';
 import { StrategyComposer } from './StrategyComposer';
 import { BlockedComposer } from './BlockedComposer';
 import { StrategySwitcher } from './StrategySwitcher';
