@@ -37,8 +37,9 @@ export async function persistSynthesisArtifact(args: {
   baseUserPrompt: string;
   libraryCounts: { kis: number; playbooks: number };
   researchChars: number;
+  sop?: SopContractLike | null;
 }): Promise<void> {
-  const { supabase, runId, synthesis, systemPrompt, baseUserPrompt, libraryCounts, researchChars } = args;
+  const { supabase, runId, synthesis, systemPrompt, baseUserPrompt, libraryCounts, researchChars, sop } = args;
   const { error } = await supabase
     .from("task_runs")
     .update({
@@ -50,6 +51,10 @@ export async function persistSynthesisArtifact(args: {
           library_counts: libraryCounts,
           research_chars: researchChars,
           persisted_at: new Date().toISOString(),
+          // Phase 3A — carry SOP through to the assembly step purely for
+          // shadow-mode output validation logging. Read by
+          // assembleAndFinalize. NEVER consumed by prompt builders.
+          sop: sop ?? null,
         },
       },
       updated_at: new Date().toISOString(),
