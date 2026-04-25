@@ -609,8 +609,16 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // Runs only on the non-progressive path (account_brief, ninety_day_plan,
   // etc.). Discovery Prep finalizes inside assembleAndFinalize where the
   // equivalent log is emitted.
+  //
+  // Phase 3B addendum (Account Research): in addition to logging the
+  // output check, persist the input/output check pair under
+  // task_runs.meta.sop with a finalized_at timestamp, and emit the
+  // `[strategy-sop][task]` summary log so observability mirrors the
+  // progressive driver. Behavior is unchanged — never blocks, never
+  // injects into prompts.
+  let sopOutputCheck: ReturnType<typeof validateDraftAgainstSop> | null = null;
   try {
-    const sopOutputCheck = validateDraftAgainstSop(draftOutput, sop);
+    sopOutputCheck = validateDraftAgainstSop(draftOutput, sop);
     console.log(JSON.stringify({
       tag: "[sop-output-check]",
       run_id: runId,
@@ -619,6 +627,23 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     }));
   } catch (sopErr) {
     console.warn("[sop-output-check] threw (ignored, shadow mode):", String(sopErr).slice(0, 200));
+  }
+
+  try {
+    console.log(JSON.stringify({
+      tag: "[strategy-sop][task]",
+      run_id: runId,
+      task_type: taskType,
+      sop_enabled: !!sop,
+      input_ok: sopInputCheck?.ran
+        ? (sopInputCheck.required_inputs_missing?.length ?? 0) === 0
+        : null,
+      output_ok: sopOutputCheck?.ran
+        ? (sopOutputCheck.required_outputs_missing?.length ?? 0) === 0
+        : null,
+    }));
+  } catch (sopErr) {
+    console.warn("[strategy-sop][task] log threw (ignored, shadow mode):", String(sopErr).slice(0, 200));
   }
 
   // ── Stage 5: Finalize the run row ────────────────────────────
@@ -630,9 +655,17 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     completed_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
-  if (fallbackMeta) {
-    finalizePatch.meta = { authoring_fallback: fallbackMeta };
-  }
+  // Merge SOP shadow-validation results into meta alongside any
+  // pre-existing authoring_fallback metadata.
+  const sopMetaBlock = {
+    enabled: !!sop,
+    inputCheck: sopInputCheck ?? null,
+    outputCheck: sopOutputCheck ?? null,
+    finalized_at: new Date().toISOString(),
+  };
+  const metaPatch: Record<string, unknown> = { sop: sopMetaBlock };
+  if (fallbackMeta) metaPatch.authoring_fallback = fallbackMeta;
+  finalizePatch.meta = metaPatch;
   const { error: updateErr } = await supabase
     .from("task_runs")
     .update(finalizePatch)
