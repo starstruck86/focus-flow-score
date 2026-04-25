@@ -17,6 +17,7 @@ import { ArrowLeft, Settings } from 'lucide-react';
 import { ManageStrategyPanel } from '@/components/strategy/v2/ManageStrategyPanel';
 import { PillEditorPanel } from '@/components/strategy/v2/PillEditorPanel';
 import { GlobalInstructionsPanel } from '@/components/strategy/v2/GlobalInstructionsPanel';
+import { StrategySopEnginePanel } from '@/components/strategy/v2/StrategySopEnginePanel';
 import { listCustomPills, type CustomPill } from '@/lib/strategy/customPills';
 import type { StrategySurfaceKey } from '@/components/strategy/v2/StrategyNavSidebar';
 import '@/styles/strategy-v2.css';
@@ -85,6 +86,11 @@ export default function StrategySettings() {
                 {/* Phase 1 — Global Instructions Engine (UI + persistence only) */}
                 <div className="mb-8">
                   <GlobalInstructionsPanel />
+                </div>
+
+                {/* Universal SOP Engine — Phase 1 (Global / Workspaces / Tasks) */}
+                <div className="mb-8">
+                  <StrategySopEnginePanel />
                 </div>
 
                 <ManageStrategyPanel
