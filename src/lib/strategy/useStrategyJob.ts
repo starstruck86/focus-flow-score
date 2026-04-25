@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { buildAccountResearchSopAttachment } from './buildAccountResearchSopAttachment';
 
 export type StrategyJobStatus = 'idle' | 'pending' | 'running' | 'completed' | 'failed';
 export type StrategyTaskType = 'account_brief' | 'ninety_day_plan';
@@ -155,10 +156,32 @@ export function useStrategyJob() {
     setState({ runId: null, taskType, status: 'pending', progressStep: PROGRESS_LABELS.queued, result: null, error: null, failedStage: null, retryHint: null });
 
     try {
+      // Phase 3B SOP "SAFE BRIDGE" — Account Research only.
+      // When the universal `tasks.account_research` SOP is enabled in
+      // Strategy Settings, attach the parsed contract under inputs.__sop
+      // so the orchestrator runs shadow input/output validation. The
+      // server NEVER injects this into prompt builders — observation only.
+      // Discovery Prep is intentionally untouched here (it goes through
+      // run-discovery-prep / useTaskExecution, not this hook).
+      let sopAttachment: ReturnType<typeof buildAccountResearchSopAttachment> = null;
+      if (taskType === 'account_brief') {
+        try {
+          sopAttachment = buildAccountResearchSopAttachment();
+        } catch {
+          sopAttachment = null;
+        }
+      }
+
+      const enrichedInputs: Record<string, unknown> = {
+        ...inputs,
+        __override: override,
+        ...(sopAttachment ? { __sop: sopAttachment } : {}),
+      };
+
       const start = await callRunStrategyJob({
         action: 'generate',
         task_type: taskType,
-        inputs: { ...inputs, __override: override },
+        inputs: enrichedInputs,
       });
       const runId = start.run_id as string | undefined;
       if (!runId) throw new Error('Failed to start strategy job');
