@@ -2180,6 +2180,7 @@ serve(async (req) => {
       _v2,
       globalInstructions: globalInstructionsRaw,
       workspace: workspaceRaw,
+      resolvedSops: resolvedSopsRaw,
     } = body;
     const v2RequestOverride = _v2 === true;
     // Sidecar: explicit resource IDs the user picked from /library this turn.
@@ -2212,6 +2213,52 @@ serve(async (req) => {
       : null;
     console.log(
       `[strategy-sop] received workspace=${workspace ?? 'none'} taskType=${typeof workflowType === 'string' ? workflowType : 'none'} hasWorkspace=${!!workspace} hasGlobalInstructions=${!!cleanGlobalInstructions}`,
+    );
+
+    // Phase 2 — Universal Strategy SOP Engine: resolver plumbing.
+    // The client runs `resolveStrategySops()` and sends a lightweight metadata
+    // payload describing which SOPs apply this turn. We validate-and-log it.
+    // SOP TEXT IS INTENTIONALLY NOT INJECTED — observation only.
+    const ALLOWED_TASK_KEYS = new Set([
+      'discovery_prep', 'deal_review', 'account_research', 'recap_email', 'roi_model',
+    ]);
+    const ALLOWED_MODES = new Set(['freeform', 'workspace', 'task']);
+    let resolvedSopsLog: {
+      workspace: string | null;
+      taskType: string | null;
+      mode: string;
+      appliedSopIds: string[];
+      enabledCount: number;
+    } | null = null;
+    if (resolvedSopsRaw && typeof resolvedSopsRaw === 'object') {
+      const r = resolvedSopsRaw as Record<string, unknown>;
+      const wsCandidate = typeof r.workspace === 'string' ? r.workspace : null;
+      const tkCandidate = typeof r.taskType === 'string' ? r.taskType : null;
+      const modeCandidate = typeof r.mode === 'string' ? r.mode : 'freeform';
+      const ids = Array.isArray(r.appliedSopIds)
+        ? r.appliedSopIds
+            .filter((s): s is string => typeof s === 'string' && s.length <= 64)
+            .slice(0, 16)
+        : [];
+      const count = typeof r.enabledCount === 'number' && Number.isFinite(r.enabledCount)
+        ? Math.min(Math.max(r.enabledCount | 0, 0), 16)
+        : ids.length;
+      resolvedSopsLog = {
+        workspace: wsCandidate && ALLOWED_WORKSPACES.has(wsCandidate) ? wsCandidate : null,
+        taskType: tkCandidate && ALLOWED_TASK_KEYS.has(tkCandidate) ? tkCandidate : null,
+        mode: ALLOWED_MODES.has(modeCandidate) ? modeCandidate : 'freeform',
+        appliedSopIds: ids,
+        enabledCount: count,
+      };
+    }
+    console.log(
+      `[strategy-sop] resolved ${JSON.stringify({
+        workspace: resolvedSopsLog?.workspace ?? workspace ?? null,
+        taskType: resolvedSopsLog?.taskType ?? (typeof workflowType === 'string' ? workflowType : null),
+        appliedSopIds: resolvedSopsLog?.appliedSopIds ?? [],
+        enabledCount: resolvedSopsLog?.enabledCount ?? 0,
+        mode: resolvedSopsLog?.mode ?? 'freeform',
+      })}`,
     );
 
     // ── Debug: OpenAI key health check ──────────────────────

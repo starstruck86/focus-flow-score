@@ -90,6 +90,26 @@ describe('resolveStrategySops — workspace mode', () => {
     expect(r.appliedSopIds).toEqual(['global', 'workspace:brainstorm']);
   });
 
+  it('stacks global + refine when entering Refine workspace', () => {
+    enableEngine();
+    updateGlobalSop({ enabled: true });
+    updateWorkspaceSop('refine', { enabled: true, rawInstructions: 'r' });
+    const r = resolveStrategySops({ workspace: 'refine' });
+    expect(r.mode).toBe('workspace');
+    expect(r.appliedSopIds).toEqual(['global', 'workspace:refine']);
+    expect(r.enabledCount).toBe(2);
+  });
+
+  it('Work surface returns global only even with work workspace SOP enabled', () => {
+    enableEngine();
+    updateGlobalSop({ enabled: true });
+    updateWorkspaceSop('work', { enabled: true });
+    const r = resolveStrategySops({ workspace: 'work' });
+    expect(r.mode).toBe('freeform');
+    expect(r.workspaceSop).toBeNull();
+    expect(r.appliedSopIds).toEqual(['global']);
+  });
+
   it('skips disabled workspace SOPs', () => {
     enableEngine();
     updateWorkspaceSop('refine', { enabled: false, rawInstructions: 'r' });
