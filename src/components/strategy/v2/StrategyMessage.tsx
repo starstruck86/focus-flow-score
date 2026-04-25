@@ -12,7 +12,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { StrategyMessage as StrategyMessageT } from '@/types/strategy';
 import { MessageActions } from './MessageActions';
-import { getStrategyConfig, isStrategyEngineEnabled } from '@/lib/strategy/strategyConfig';
+import { getStrategyConfig } from '@/lib/strategy/strategyConfig';
 
 /**
  * Strict-mode response shaper. Runs AFTER the model responds to guarantee:
