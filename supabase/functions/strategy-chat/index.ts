@@ -5231,6 +5231,14 @@ async function handleChat(
   v2RequestOverride: boolean = false,
   routingDecision: RoutingDecision | null = null,
   globalInstructions: CleanGlobalInstructions | null = null,
+  // Phase 3A — workspace SOP advisory text. When non-null, appended after
+  // V1 mode-lock / V2 / synthesis preamble and BEFORE global instructions.
+  workspaceSop: {
+    sopId: string;
+    workspace: string;
+    name: string;
+    rawInstructions: string;
+  } | null = null,
 ) {
   await supabase.from("strategy_messages").insert({
     thread_id: threadId,
