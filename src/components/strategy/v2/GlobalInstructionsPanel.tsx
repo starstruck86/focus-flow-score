@@ -186,7 +186,14 @@ export function GlobalInstructionsPanel() {
   const [cfg, setCfg] = useState<StrategyGlobalInstructionsConfig>(() => getStrategyConfig());
   // Local mirrors so typing stays snappy; we flush on blur (not on every keystroke).
   const [globalText, setGlobalText] = useState(cfg.globalInstructions);
-  const [sopText, setSopText] = useState(cfg.sopContracts.discoveryPrepFullMode.rawSop);
+  const strategyConfigDebug = (() => {
+    if (typeof window === 'undefined') return { raw: null, parsed: null };
+    const raw = localStorage.getItem('sv-strategy-config-v1');
+    const parsed = raw ? JSON.parse(raw) : null;
+    // eslint-disable-next-line no-console
+    console.log('[strategy-config-debug]', { raw, parsed });
+    return { raw, parsed };
+  })();
 
   useEffect(() => {
     const unsub = subscribeStrategyConfig((next) => {
