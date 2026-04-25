@@ -104,7 +104,7 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
       return;
     }
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    el.style.height = Math.min(Math.max(el.scrollHeight, 24), 120) + 'px';
   }, [value, serifPlaceholder]);
 
   // Detect slash-mode (must start with "/", no embedded newlines, no inner spaces past slash word)
