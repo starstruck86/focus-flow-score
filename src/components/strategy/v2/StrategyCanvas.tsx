@@ -8,6 +8,7 @@
  */
 import { useEffect, useRef } from 'react';
 import type { StrategyMessage as StrategyMessageT } from '@/types/strategy';
+import type { StrategyGlobalInstructionsConfig } from '@/lib/strategy/strategyConfig';
 import { StrategyMessage } from './StrategyMessage';
 import { StrategyEmptyState } from './StrategyEmptyState';
 
@@ -21,9 +22,12 @@ interface Props {
   /** Called when the user clicks a quick-iteration action under an
    *  assistant response (Regenerate / Shorten / Expand / Improve). */
   onQuickAction?: (prompt: string) => void;
+  /** Lifted strategy config (Strict Mode etc.) — passed down to messages
+   *  so they all observe the same single source of truth from StrategyShell. */
+  strategyConfig?: StrategyGlobalInstructionsConfig;
 }
 
-export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState = false, onPickPrompt, onQuickAction }: Props) {
+export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState = false, onPickPrompt, onQuickAction, strategyConfig }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -58,6 +62,7 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
               <StrategyMessage
                 message={m}
                 onQuickAction={isLastAssistant ? onQuickAction : undefined}
+                strategyConfig={strategyConfig}
               />
             </div>
           );
@@ -75,6 +80,7 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
                 citations_json: null,
                 created_at: new Date().toISOString(),
               }}
+              strategyConfig={strategyConfig}
             />
           </div>
         )}

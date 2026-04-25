@@ -8,12 +8,11 @@
  *
  * 32px gap to next message is owned by the parent stream.
  */
-import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { StrategyMessage as StrategyMessageT } from '@/types/strategy';
 import { MessageActions } from './MessageActions';
-import { getStrategyConfig, subscribeStrategyConfig } from '@/lib/strategy/strategyConfig';
+import type { StrategyGlobalInstructionsConfig } from '@/lib/strategy/strategyConfig';
 
 /**
  * Strict-mode response shaper. Runs AFTER the model responds to guarantee:
@@ -65,6 +64,10 @@ interface Props {
   /** When provided on assistant messages, renders quick-iteration actions
    *  (Regenerate / Shorten / Expand / Improve) underneath the response. */
   onQuickAction?: (prompt: string) => void;
+  /** Lifted strategy config from StrategyShell — single source of truth
+   *  for Strict Mode and other render overrides. We do NOT read
+   *  getStrategyConfig() here; the parent owns the subscription. */
+  strategyConfig?: StrategyGlobalInstructionsConfig;
 }
 
 /** Strict text extractor — never renders raw provider/debug payloads. */
@@ -84,55 +87,24 @@ function extractText(contentJson: any): string {
   return '';
 }
 
-export function StrategyMessage({ message, onQuickAction }: Props) {
+export function StrategyMessage({ message, onQuickAction, strategyConfig }: Props) {
   const rawText = extractText(message.content_json);
   const role = message.role;
   // Strict-mode shaping is a render override that applies to ANY assistant
   // message, regardless of message_type or workflow lane. No type gating.
   //
-  // We subscribe to strategyConfig so toggling Strict Mode in Settings
-  // immediately re-renders existing assistant messages — reading once on
-  // mount would leave already-rendered messages stuck on the prior config.
-  const [cfg, setCfg] = useState(getStrategyConfig);
-  useEffect(() => {
-    // Force a fresh read on mount in case localStorage changed before subscribe.
-    const initial = getStrategyConfig();
-    setCfg(initial);
-    // eslint-disable-next-line no-console
-    console.log('[StrategyMessage] CHAT CONFIG READ:', initial);
-    return subscribeStrategyConfig((next) => {
-      // eslint-disable-next-line no-console
-      console.log('[StrategyMessage] CHAT CONFIG UPDATED:', next);
-      setCfg(next);
-    });
-  }, []);
-  const strategyConfigDebug = (() => {
-    if (typeof window === 'undefined') return { raw: null, parsed: null };
-    const raw = localStorage.getItem('sv-strategy-config-v1');
-    const parsed = raw ? JSON.parse(raw) : null;
-    // eslint-disable-next-line no-console
-    console.log('[strategy-config-debug]', { raw, parsed });
-    return { raw, parsed };
-  })();
-  const isStrictMode = cfg.enabled === true && cfg.strictMode === true;
+  // strategyConfig is lifted to StrategyShell — that parent owns the
+  // single subscription to localStorage. We do NOT call getStrategyConfig()
+  // here; reading it directly was the source of stale config bugs.
+  const isStrictMode =
+    strategyConfig?.enabled === true && strategyConfig?.strictMode === true;
   const finalText = role === 'assistant' && isStrictMode ? enforceStrictFormat(rawText) : rawText;
-
-  // Temporary debug — verify Strict Mode is actually shaping output.
-  if (role === 'assistant' && typeof window !== 'undefined') {
-    // eslint-disable-next-line no-console
-    console.log('[StrategyMessage] STRICT MODE ACTIVE:', role === 'assistant' && isStrictMode);
-    // eslint-disable-next-line no-console
-    console.log('[StrategyMessage] ORIGINAL:', rawText);
-    // eslint-disable-next-line no-console
-    console.log('[StrategyMessage] FINAL:', finalText);
-  }
 
   const text = finalText;
   const isUser = role === 'user';
   const strictDebug = role === 'assistant' && process.env.NODE_ENV !== 'production' ? (
     <div data-testid="strict-debug" style={{ fontSize: 10, opacity: 0.5, fontFamily: 'var(--sv-sans)', whiteSpace: 'pre-wrap' }}>
-      strict={String(isStrictMode)} enabled={String(cfg.enabled)} strictMode={String(cfg.strictMode)}{`\n`}
-      {JSON.stringify(strategyConfigDebug, null, 2)}
+      strict={String(isStrictMode)} enabled={String(strategyConfig?.enabled)} strictMode={String(strategyConfig?.strictMode)}
     </div>
   ) : null;
 
