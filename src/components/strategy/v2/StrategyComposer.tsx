@@ -184,6 +184,20 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
           rows={1}
           placeholder={placeholder}
           disabled={disabled}
+          // Suppress the iOS Safari form-assist accessory bar (Passwords /
+          // Credit Cards / Addresses / Done) that otherwise floats above the
+          // keyboard and makes the composer look detached. Chat input has no
+          // autofill semantics, so disabling these is safe.
+          autoComplete="off"
+          autoCorrect="on"
+          autoCapitalize="sentences"
+          spellCheck
+          inputMode="text"
+          enterKeyHint="send"
+          name="strategy-composer"
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
           className={`flex-1 bg-transparent border-0 outline-none resize-none leading-[1.5] ${serifPlaceholder && !value ? 'text-[15px] sm:text-[17px]' : 'text-[15px]'}`}
           style={{
             color: 'hsl(var(--sv-ink))',
