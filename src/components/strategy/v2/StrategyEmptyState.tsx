@@ -48,10 +48,12 @@ const CHIPS: PromptChip[] = [
 
 export function StrategyEmptyState({ onPickPrompt }: Props) {
   return (
-    // Center vertically so the empty state reads as the room's focal point,
-    // not a header floating above a void. min-h tuned to fit above the composer
-    // without forcing a scroll.
-    <div className="flex flex-col items-center justify-center text-center select-none px-6" style={{ minHeight: '52vh' }}>
+    // Mobile: anchor to top of canvas so the empty state sits directly above
+    // the composer (no dead space, ChatGPT-style). Desktop: restore the
+    // vertical centering so the prompt reads as the focal point of the room.
+    <div
+      className="flex flex-col items-center text-center select-none px-6 pt-4 pb-3 sm:justify-center sm:pt-0 sm:pb-0 sm:min-h-[52vh]"
+    >
       <h1
         className="text-[28px] leading-[1.15] tracking-tight"
         style={{
