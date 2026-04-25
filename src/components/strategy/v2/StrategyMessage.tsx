@@ -89,13 +89,13 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
   // Strict-mode shaping is a render override that applies to ANY assistant
   // message, regardless of message_type or workflow lane. No type gating.
   const cfg = getStrategyConfig();
-  const isStrictMode = role === 'assistant' && cfg.enabled && cfg.strictMode;
-  const finalText = isStrictMode ? enforceStrictFormat(rawText) : rawText;
+  const isStrictMode = cfg.enabled === true && cfg.strictMode === true;
+  const finalText = role === 'assistant' && isStrictMode ? enforceStrictFormat(rawText) : rawText;
 
   // Temporary debug — verify Strict Mode is actually shaping output.
   if (role === 'assistant' && typeof window !== 'undefined') {
     // eslint-disable-next-line no-console
-    console.log('[StrategyMessage] STRICT MODE ACTIVE:', isStrictMode);
+    console.log('[StrategyMessage] STRICT MODE ACTIVE:', role === 'assistant' && isStrictMode);
     // eslint-disable-next-line no-console
     console.log('[StrategyMessage] ORIGINAL:', rawText);
     // eslint-disable-next-line no-console
@@ -104,6 +104,11 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
 
   const text = finalText;
   const isUser = role === 'user';
+  const strictDebug = role === 'assistant' && process.env.NODE_ENV !== 'production' ? (
+    <div data-testid="strict-debug" style={{ fontSize: 10, opacity: 0.5, fontFamily: 'var(--sv-sans)' }}>
+      strict={String(isStrictMode)} enabled={String(cfg.enabled)} strictMode={String(cfg.strictMode)}
+    </div>
+  ) : null;
 
   if (!text.trim()) {
     // Streaming placeholder — calm "Thinking…" label, no flashy animation.
@@ -118,6 +123,45 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
         }}
       >
         Thinking…
+      </div>
+    );
+  }
+
+  // Strict Mode bypass: render assistant structure explicitly before any
+  // message-type, workflow, markdown, or user/system branching can intercept it.
+  if (role === 'assistant' && isStrictMode) {
+    const strictText = enforceStrictFormat(rawText);
+    const { bullets, nextMove } = parseStrictOutput(strictText);
+    return (
+      <div
+        data-strategy-selectable
+        data-message-id={message.id}
+        data-message-role="assistant"
+        data-strict-mode="true"
+        className="strategy-strict-message text-[15px] break-words"
+        style={{
+          fontFamily: 'var(--sv-serif)',
+          color: 'hsl(var(--sv-ink))',
+          lineHeight: 1.65,
+        }}
+      >
+        {strictDebug}
+        <ul style={{ margin: '0 0 12px', paddingLeft: '1.25rem', listStyleType: 'disc' }}>
+          {bullets.map((b, i) => (
+            <li key={i} style={{ margin: '0 0 4px' }}>{b}</li>
+          ))}
+        </ul>
+        <div
+          style={{
+            marginTop: 12,
+            fontWeight: 600,
+            fontFamily: 'var(--sv-sans)',
+            color: 'hsl(var(--sv-ink))',
+          }}
+        >
+          {nextMove ?? '→ NEXT MOVE:'}
+        </div>
+        {onQuickAction && <MessageActions onAction={onQuickAction} />}
       </div>
     );
   }
@@ -188,45 +232,6 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
   // Calm Claude-style minimal renderer: subtle headers, tight bullets,
   // 1.65 line-height, no decorative chrome.
 
-  // Strict Mode bypass: render bullets + NEXT MOVE explicitly so output is
-  // deterministic regardless of markdown parsing.
-  if (isStrictMode) {
-    const { bullets, nextMove } = parseStrictOutput(text);
-    return (
-      <div
-        data-strategy-selectable
-        data-message-id={message.id}
-        data-message-role="assistant"
-        data-strict-mode="true"
-        className="text-[15px] break-words"
-        style={{
-          fontFamily: 'var(--sv-serif)',
-          color: 'hsl(var(--sv-ink))',
-          lineHeight: 1.65,
-        }}
-      >
-        <ul style={{ margin: '0 0 12px', paddingLeft: '1.25rem', listStyleType: 'disc' }}>
-          {bullets.map((b, i) => (
-            <li key={i} style={{ margin: '0 0 4px' }}>{b}</li>
-          ))}
-        </ul>
-        {nextMove && (
-          <div
-            style={{
-              marginTop: 12,
-              fontWeight: 600,
-              fontFamily: 'var(--sv-sans)',
-              color: 'hsl(var(--sv-ink))',
-            }}
-          >
-            {nextMove}
-          </div>
-        )}
-        {onQuickAction && <MessageActions onAction={onQuickAction} />}
-      </div>
-    );
-  }
-
   return (
     <div
       data-strategy-selectable
@@ -239,6 +244,7 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
         lineHeight: 1.65,
       }}
     >
+      {strictDebug}
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
