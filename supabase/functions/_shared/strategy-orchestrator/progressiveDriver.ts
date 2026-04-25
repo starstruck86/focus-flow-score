@@ -294,13 +294,16 @@ export async function assembleAndFinalize(args: {
   const sources = Array.isArray(synthesis?.sources) ? synthesis.sources : undefined;
   const draftOutput = { sections: assembled, ...(sources ? { sources } : {}) };
 
-  // ── Phase 3A SOP "SAFE BRIDGE" — output validation (shadow only). ──
+  // ── Phase 3A/3B SOP "SAFE BRIDGE" — output validation (shadow only). ──
   // Read the SOP that was carried through persistSynthesisArtifact.
   // Never blocks, never mutates the draft.
+  let sopOutputCheck: any = null;
+  let sopEnabled = false;
   try {
     const sop: SopContractLike | null =
       ((runRow?.meta as any)?.progressive?.sop as SopContractLike | null) ?? null;
-    const sopOutputCheck = validateDraftAgainstSop(draftOutput, sop);
+    sopEnabled = !!sop;
+    sopOutputCheck = validateDraftAgainstSop(draftOutput, sop);
     console.log(JSON.stringify({
       tag: "[sop-output-check]",
       run_id: runId,
@@ -310,6 +313,18 @@ export async function assembleAndFinalize(args: {
   } catch (sopErr) {
     console.warn("[sop-output-check] threw (ignored, shadow mode):", String(sopErr).slice(0, 200));
   }
+
+  // Phase 3B — single-line summary so we can grep one log per run.
+  const sopMetaPrev = (runRow?.meta as any)?.sop ?? {};
+  const sopInputCheckPrev = sopMetaPrev?.inputCheck ?? null;
+  console.log(JSON.stringify({
+    tag: "[strategy-sop][task]",
+    run_id: runId,
+    task_type: taskType,
+    sop_enabled: sopEnabled,
+    input_ok: sopInputCheckPrev?.ran ? (sopInputCheckPrev.required_inputs_missing?.length ?? 0) === 0 : null,
+    output_ok: sopOutputCheck?.ran ? (sopOutputCheck.required_outputs_missing?.length ?? 0) === 0 : null,
+  }));
 
   // ── Review (best-effort, non-fatal) ──
   let reviewOutput: any = { strengths: [], redlines: [], library_coverage: { used: [], gaps: [] } };
@@ -354,6 +369,14 @@ export async function assembleAndFinalize(args: {
       fallback_pct: Number(fallbackPct.toFixed(3)),
       drift_warning: driftWarning,
       assembled_at: new Date().toISOString(),
+    },
+    // Phase 3B — persist SOP shadow results (input + output) for queryability.
+    sop: {
+      ...(meta.sop ?? {}),
+      enabled: sopEnabled,
+      inputCheck: sopInputCheckPrev,
+      outputCheck: sopOutputCheck,
+      finalized_at: new Date().toISOString(),
     },
   };
 
