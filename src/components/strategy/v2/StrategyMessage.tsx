@@ -132,26 +132,10 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
   const text = finalText;
   const isUser = role === 'user';
 
-  if (!text.trim()) {
-    // Streaming placeholder — calm "Thinking…" label, no flashy animation.
-    return (
-      <div
-        className="py-1 text-[14px]"
-        style={{
-          paddingLeft: role === 'user' ? 40 : 0,
-          color: 'hsl(var(--sv-muted))',
-          fontFamily: 'var(--sv-sans)',
-          opacity: 0.6,
-        }}
-      >
-        Thinking…
-      </div>
-    );
-  }
-
-  // Strict Mode bypass: render assistant structure explicitly before any
-  // message-type, workflow, markdown, or user/system branching can intercept it.
-  if (role === 'assistant' && isStrictMode) {
+  // Strict Mode bypass: render assistant structure FIRST, before any
+  // empty-text, message-type, workflow, markdown, or user/system branching.
+  // This must be the highest-priority render path for assistant messages.
+  if (role === 'assistant' && isStrictMode && rawText.trim()) {
     const strictText = enforceStrictFormat(rawText);
     const { bullets, nextMove } = parseStrictOutput(strictText);
     return (
@@ -180,9 +164,26 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
             color: 'hsl(var(--sv-ink))',
           }}
         >
-          {nextMove ?? '→ NEXT MOVE:'}
+          {nextMove}
         </div>
         {onQuickAction && <MessageActions onAction={onQuickAction} />}
+      </div>
+    );
+  }
+
+  if (!text.trim()) {
+    // Streaming placeholder — calm "Thinking…" label, no flashy animation.
+    return (
+      <div
+        className="py-1 text-[14px]"
+        style={{
+          paddingLeft: role === 'user' ? 40 : 0,
+          color: 'hsl(var(--sv-muted))',
+          fontFamily: 'var(--sv-sans)',
+          opacity: 0.6,
+        }}
+      >
+        Thinking…
       </div>
     );
   }
