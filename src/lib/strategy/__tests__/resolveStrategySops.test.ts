@@ -1,7 +1,31 @@
 /**
  * resolveStrategySops — Phase 1 unit coverage.
+ *
+ * Runs under either jsdom or node — provides an in-memory localStorage shim
+ * so the suite is environment-agnostic and not blocked by jsdom/canvas
+ * native-binding issues in the sandbox.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
+
+// Minimal localStorage + window shim so strategyConfig can persist between
+// calls regardless of the active vitest environment.
+type Store = Map<string, string>;
+function installStorageShim() {
+  const store: Store = new Map();
+  const storage = {
+    getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+    setItem: (k: string, v: string) => { store.set(k, String(v)); },
+    removeItem: (k: string) => { store.delete(k); },
+    clear: () => { store.clear(); },
+    key: (i: number) => Array.from(store.keys())[i] ?? null,
+    get length() { return store.size; },
+  };
+  (globalThis as any).window = (globalThis as any).window ?? { addEventListener: () => {} };
+  (globalThis as any).window.localStorage = storage;
+  (globalThis as any).localStorage = storage;
+}
+installStorageShim();
+
 import {
   saveStrategyConfig,
   getStrategyConfig,
