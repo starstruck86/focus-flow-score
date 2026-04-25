@@ -297,7 +297,13 @@ export function GlobalInstructionsPanel() {
           </p>
           <Textarea
             value={globalText}
-            onChange={(e) => setGlobalText(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              setGlobalText(value);
+              const saved = updateStrategyGlobalInstructions(value);
+              // eslint-disable-next-line no-console
+              console.log('[StrategySettings] SAVED CONFIG:', saved);
+            }}
             onBlur={flushGlobal}
             placeholder="e.g. Be direct. Lead with the recommendation. Cite sources when used. Never invent metrics. Always end with a single concrete next step."
             className="min-h-[140px] text-[13px] leading-relaxed"
