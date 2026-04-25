@@ -524,25 +524,25 @@ Deno.serve(async (req) => {
 
     // Gather DB context in parallel — always include resources & transcripts now
     const dbQueries: Promise<any>[] = [
-      supabase.from("accounts").select("*").eq("user_id", user.id).limit(200),
-      supabase.from("opportunities").select("*").eq("user_id", user.id).limit(200),
-      supabase.from("renewals").select("*").eq("user_id", user.id).limit(200),
+      supabase.from("accounts").select("*").eq("user_id", user.id).limit(200) as unknown as Promise<any>,
+      supabase.from("opportunities").select("*").eq("user_id", user.id).limit(200) as unknown as Promise<any>,
+      supabase.from("renewals").select("*").eq("user_id", user.id).limit(200) as unknown as Promise<any>,
       supabase.from("calendar_events").select("*").eq("user_id", user.id)
         .gte("start_time", `${today}T00:00:00`).lte("start_time", `${today}T23:59:59`)
-        .order("start_time"),
+        .order("start_time") as unknown as Promise<any>,
       supabase.from("daily_journal_entries").select("*").eq("user_id", user.id)
-        .order("date", { ascending: false }).limit(1),
-      supabase.from("quota_targets").select("*").eq("user_id", user.id).limit(1),
+        .order("date", { ascending: false }).limit(1) as unknown as Promise<any>,
+      supabase.from("quota_targets").select("*").eq("user_id", user.id).limit(1) as unknown as Promise<any>,
       // Always fetch resources
-      supabase.from("resources").select("id,title,description,content,tags,resource_type,file_url").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(50),
+      supabase.from("resources").select("id,title,description,content,tags,resource_type,file_url").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(50) as unknown as Promise<any>,
     ];
 
     // For modes that need deep context, also fetch contacts and transcripts
     if (needsDeepContext || pageContext?.page === 'coach') {
       dbQueries.push(
-        supabase.from("contacts").select("*").eq("user_id", user.id).limit(500),
+        supabase.from("contacts").select("*").eq("user_id", user.id).limit(500) as unknown as Promise<any>,
         supabase.from("call_transcripts").select("*").eq("user_id", user.id)
-          .order("call_date", { ascending: false }).limit(20),
+          .order("call_date", { ascending: false }).limit(20) as unknown as Promise<any>,
       );
     }
 
@@ -550,7 +550,7 @@ Deno.serve(async (req) => {
     if (pageContext?.page === 'coach') {
       dbQueries.push(
         supabase.from("transcript_grades").select("overall_score,overall_grade,style_score,acumen_score,cadence_score,structure_score,cotm_score,meddicc_score,discovery_score,presence_score,commercial_score,next_step_score,feedback_focus,coaching_issue,coaching_why,replacement_behavior,call_type")
-          .eq("user_id", user.id).order("created_at", { ascending: false }).limit(20)
+          .eq("user_id", user.id).order("created_at", { ascending: false }).limit(20) as unknown as Promise<any>
       );
     }
 

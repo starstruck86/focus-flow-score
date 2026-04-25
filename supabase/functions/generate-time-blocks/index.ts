@@ -80,7 +80,7 @@ function mergeLockedCalendarBlocks(
     if (block.type === "meeting" && lockedLabelSet.has(normalizeLabel(block.label))) return false;
 
     if (block.type === "meeting") {
-      return !lockedBlocks.some((lockedBlock) => overlaps(block, lockedBlock));
+      return !lockedBlocks.some((lockedBlock) => overlaps(block as { start_time: string; end_time: string }, lockedBlock as { start_time: string; end_time: string }));
     }
 
     return true;

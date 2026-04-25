@@ -1674,7 +1674,7 @@ Deno.serve(async (req) => {
         // Only persist audit summary on terminal states
         if (!retryEligible) {
           const fullHistory = await fetchAttemptHistory(supabase, resourceId);
-          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson, typeof floorDetails !== 'undefined' ? floorDetails : undefined);
+          const audit = buildAuditFromHistory(fullHistory, newStatus, resource.content.length, isLesson, undefined);
           if (audit) auditFields.extraction_audit_summary = audit;
         }
         await updateExtractionStatus(supabase, resourceId, newStatus, auditFields);
