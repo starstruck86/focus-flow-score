@@ -187,14 +187,6 @@ export function GlobalInstructionsPanel() {
   // Local mirrors so typing stays snappy; we flush on blur (not on every keystroke).
   const [globalText, setGlobalText] = useState(cfg.globalInstructions);
   const [sopText, setSopText] = useState(cfg.sopContracts.discoveryPrepFullMode.rawSop);
-  const strategyConfigDebug = (() => {
-    if (typeof window === 'undefined') return { raw: null, parsed: null };
-    const raw = localStorage.getItem('sv-strategy-config-v1');
-    const parsed = raw ? JSON.parse(raw) : null;
-    // eslint-disable-next-line no-console
-    console.log('[strategy-config-debug]', { raw, parsed });
-    return { raw, parsed };
-  })();
 
   useEffect(() => {
     const unsub = subscribeStrategyConfig((next) => {
@@ -264,17 +256,17 @@ export function GlobalInstructionsPanel() {
   return (
     <div className="space-y-4">
       {process.env.NODE_ENV !== 'production' && (
-        <pre
+        <div
           data-testid="strategy-config-debug-settings"
-          className="whitespace-pre-wrap break-words rounded-lg p-2 text-[10px]"
+          className="rounded-lg p-2 text-[10px]"
           style={{
             background: 'hsl(var(--sv-paper-2, var(--sv-paper)))',
             border: '1px solid hsl(var(--sv-line))',
             color: 'hsl(var(--sv-muted))',
           }}
         >
-          {JSON.stringify(strategyConfigDebug, null, 2)}
-        </pre>
+          enabled={String(cfg.enabled)} strictMode={String(cfg.strictMode)} selfCorrectOnce={String(cfg.selfCorrectOnce)}
+        </div>
       )}
       {/* Section header ---------------------------------------------------- */}
       <header className="flex items-start gap-3">
