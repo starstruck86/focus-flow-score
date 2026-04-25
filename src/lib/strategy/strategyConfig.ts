@@ -57,6 +57,64 @@ export interface DiscoveryPrepSopContract {
   qaChecklist: string[];
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Universal Strategy SOP Engine — Phase 1 (data model + persistence only)
+// ──────────────────────────────────────────────────────────────────────────
+//
+// A StrategySopContract is the universal shape used by Global, Workspace, and
+// Task SOPs. It is intentionally generic so the resolver and (future) prompt
+// composer can iterate over them uniformly.
+//
+// Phase 1 contract: NO model behavior change. Contracts are stored, edited
+// in Settings, and surfaced via `resolveStrategySops()` — but no consumer
+// injects them into prompts yet.
+
+export type StrategyWorkspaceSopKey =
+  | 'brainstorm'
+  | 'deep_research'
+  | 'refine'
+  | 'library'
+  | 'artifacts'
+  | 'projects'
+  | 'work';
+
+export type StrategyTaskSopKey =
+  | 'discovery_prep'
+  | 'deal_review'
+  | 'account_research'
+  | 'recap_email'
+  | 'roi_model';
+
+export interface StrategySopLibraryRules {
+  preferTemplates: boolean;
+  preferPlaybooks: boolean;
+  citeSources: boolean;
+  neverInventMetrics: boolean;
+  unknownsBecomeQuestions: boolean;
+}
+
+export interface StrategySopEnforcement {
+  strict: boolean;
+  selfCorrectOnce: boolean;
+  requiredSections: string[];
+}
+
+export interface StrategySopContract {
+  enabled: boolean;
+  name: string;
+  rawInstructions: string;
+  /**
+   * Optional structured projection of `rawInstructions`. The shape is
+   * intentionally a free-form record so different SOPs can carry different
+   * sections (Discovery Prep has 10 known buckets; a custom SOP may have any
+   * heading). Empty/undefined when no parser has been run.
+   */
+  parsedSections?: Record<string, string[]>;
+  libraryRules?: StrategySopLibraryRules;
+  enforcement?: StrategySopEnforcement;
+  updatedAt: string;
+}
+
 export interface StrategyGlobalInstructionsConfig {
   version: number;
   enabled: boolean;
@@ -66,7 +124,18 @@ export interface StrategyGlobalInstructionsConfig {
   outputPreferences: OutputPreferences;
   libraryBehavior: LibraryBehavior;
   sopContracts: {
+    /**
+     * Backward-compatible — the original task-specific Discovery Prep SOP.
+     * Source of truth for code paths that already read this field. We keep
+     * it in lockstep with `tasks.discovery_prep` via a deterministic mirror.
+     */
     discoveryPrepFullMode: DiscoveryPrepSopContract;
+    /** Universal SOP — applies to every Strategy turn when enabled. */
+    global?: StrategySopContract;
+    /** Per-workspace SOPs keyed by surface. */
+    workspaces: Partial<Record<StrategyWorkspaceSopKey, StrategySopContract>>;
+    /** Per-task SOPs keyed by task type. */
+    tasks: Partial<Record<StrategyTaskSopKey, StrategySopContract>>;
   };
   updatedAt: string;
 }
