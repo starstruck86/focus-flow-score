@@ -2262,6 +2262,47 @@ serve(async (req) => {
       })}`,
     );
 
+    // ── Phase 3A — Universal Strategy SOP Engine: workspace SOP advisory ──
+    // First behavior-affecting step. The client ships raw workspace SOP text
+    // ONLY when the active workspace has its SOP enabled and we are NOT in a
+    // task pipeline. The server appends it AFTER core/V2/synthesis prompts
+    // and BEFORE global instructions. Strict mode-lock blocks (synthesis,
+    // short-form, V2 dispatcher, Discovery Prep orchestrator) are NOT
+    // touched — workspace SOPs are advisory.
+    //
+    // Hard guards mirror the client helper so a malformed payload can never
+    // smuggle unbounded text or task-mode injection past the resolver.
+    const WORKSPACE_SOP_MAX_CHARS = 6_000;
+    const cleanWorkspaceSop = ((): {
+      sopId: string;
+      workspace: string;
+      name: string;
+      rawInstructions: string;
+    } | null => {
+      if (!workspaceSopRaw || typeof workspaceSopRaw !== 'object') return null;
+      // Never inject during a task pipeline (Discovery Prep etc.). Phase 3A
+      // is workspace-only.
+      if (typeof workflowType === 'string' && workflowType.length > 0) return null;
+      const w = workspaceSopRaw as Record<string, unknown>;
+      const ws = typeof w.workspace === 'string' && ALLOWED_WORKSPACES.has(w.workspace)
+        ? w.workspace : null;
+      if (!ws) return null;
+      // `work` is freeform — never carries a workspace SOP.
+      if (ws === 'work') return null;
+      const sopId = typeof w.sopId === 'string' && w.sopId.startsWith('workspace:')
+        ? w.sopId : `workspace:${ws}`;
+      const name = typeof w.name === 'string' && w.name.trim().length > 0
+        ? w.name.slice(0, 120) : sopId;
+      const raw = typeof w.rawInstructions === 'string'
+        ? w.rawInstructions.trim().slice(0, WORKSPACE_SOP_MAX_CHARS)
+        : '';
+      if (!raw) return null;
+      return { sopId, workspace: ws, name, rawInstructions: raw };
+    })();
+    console.log(
+      `[strategy-sop] workspace-sop received: present=${!!workspaceSopRaw} sanitized=${!!cleanWorkspaceSop} workspace=${cleanWorkspaceSop?.workspace ?? 'none'} length=${cleanWorkspaceSop?.rawInstructions.length ?? 0}`,
+    );
+
     // ── Debug: OpenAI key health check ──────────────────────
     // Phase 0 acceptance gate. Returns 200 only when the key is shaped
     // correctly AND a real round-trip to api.openai.com succeeds.
