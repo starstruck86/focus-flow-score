@@ -68,7 +68,10 @@ function enforceStrictFormat(text: string): string {
  */
 function parseStrictOutput(text: string): { bullets: string[]; nextMove: string | null } {
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-  const bullets = lines.filter((l) => l.startsWith('- ')).map((l) => l.replace(/^-\s+/, ''));
+  const bullets = lines
+    .filter((l) => /^[•\-*]\s+/.test(l))
+    .map((l) => l.replace(/^[•\-*]\s+/, ''))
+    .slice(0, 3);
   const nextMove = lines.find((l) => /→\s*NEXT MOVE/i.test(l)) ?? null;
   return { bullets, nextMove };
 }
