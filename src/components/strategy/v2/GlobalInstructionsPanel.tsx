@@ -263,6 +263,19 @@ export function GlobalInstructionsPanel() {
 
   return (
     <div className="space-y-4">
+      {process.env.NODE_ENV !== 'production' && (
+        <pre
+          data-testid="strategy-config-debug-settings"
+          className="whitespace-pre-wrap break-words rounded-lg p-2 text-[10px]"
+          style={{
+            background: 'hsl(var(--sv-paper-2, var(--sv-paper)))',
+            border: '1px solid hsl(var(--sv-line))',
+            color: 'hsl(var(--sv-muted))',
+          }}
+        >
+          {JSON.stringify(strategyConfigDebug, null, 2)}
+        </pre>
+      )}
       {/* Section header ---------------------------------------------------- */}
       <header className="flex items-start gap-3">
         <div
