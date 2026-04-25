@@ -8,11 +8,12 @@
  *
  * 32px gap to next message is owned by the parent stream.
  */
+import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { StrategyMessage as StrategyMessageT } from '@/types/strategy';
 import { MessageActions } from './MessageActions';
-import { getStrategyConfig } from '@/lib/strategy/strategyConfig';
+import { getStrategyConfig, subscribeStrategyConfig } from '@/lib/strategy/strategyConfig';
 
 /**
  * Strict-mode response shaper. Runs AFTER the model responds to guarantee:
@@ -88,7 +89,16 @@ export function StrategyMessage({ message, onQuickAction }: Props) {
   const role = message.role;
   // Strict-mode shaping is a render override that applies to ANY assistant
   // message, regardless of message_type or workflow lane. No type gating.
-  const cfg = getStrategyConfig();
+  //
+  // We subscribe to strategyConfig so toggling Strict Mode in Settings
+  // immediately re-renders existing assistant messages — reading once on
+  // mount would leave already-rendered messages stuck on the prior config.
+  const [cfg, setCfg] = useState(getStrategyConfig);
+  useEffect(() => {
+    // Force a fresh read on mount in case localStorage changed before subscribe.
+    setCfg(getStrategyConfig());
+    return subscribeStrategyConfig((next) => setCfg(next));
+  }, []);
   const isStrictMode = cfg.enabled === true && cfg.strictMode === true;
   const finalText = role === 'assistant' && isStrictMode ? enforceStrictFormat(rawText) : rawText;
 
