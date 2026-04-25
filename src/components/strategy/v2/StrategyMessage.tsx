@@ -30,13 +30,23 @@ function enforceStrictFormat(text: string): string {
 
   const sentences = trimmed
     .split(/(?<=[.?!])\s+/)
-    .map((s) => s.trim())
+    .map((s) => s.replace(/^["']|["']$/g, '').trim())
     .filter(Boolean);
 
-  const bullets = Array.from({ length: 3 }).map((_, i) => {
-    const s = sentences[i] || sentences[0] || trimmed;
-    return `- ${s.replace(/^["']|["']$/g, '').trim()}`;
-  });
+  let bulletTexts: string[];
+  if (sentences.length >= 3) {
+    bulletTexts = sentences.slice(0, 3);
+  } else {
+    // Generate variations instead of duplicating the same sentence
+    const base = sentences[0] || trimmed;
+    bulletTexts = [
+      base,
+      'What specific outcomes are you hoping to achieve?',
+      "What's currently preventing you from getting there?",
+    ];
+  }
+
+  const bullets = bulletTexts.map((s) => `- ${s}`);
 
   // CRITICAL: ReactMarkdown needs clean newline separation between list items
   // and a blank line before the closing line so it isn't absorbed into the list.
