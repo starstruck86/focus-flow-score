@@ -286,6 +286,23 @@ export async function assembleAndFinalize(args: {
   const sources = Array.isArray(synthesis?.sources) ? synthesis.sources : undefined;
   const draftOutput = { sections: assembled, ...(sources ? { sources } : {}) };
 
+  // ── Phase 3A SOP "SAFE BRIDGE" — output validation (shadow only). ──
+  // Read the SOP that was carried through persistSynthesisArtifact.
+  // Never blocks, never mutates the draft.
+  try {
+    const sop: SopContractLike | null =
+      ((runRow?.meta as any)?.progressive?.sop as SopContractLike | null) ?? null;
+    const sopOutputCheck = validateDraftAgainstSop(draftOutput, sop);
+    console.log(JSON.stringify({
+      tag: "[sop-output-check]",
+      run_id: runId,
+      task_type: taskType,
+      ...sopOutputCheck,
+    }));
+  } catch (sopErr) {
+    console.warn("[sop-output-check] threw (ignored, shadow mode):", String(sopErr).slice(0, 200));
+  }
+
   // ── Review (best-effort, non-fatal) ──
   let reviewOutput: any = { strengths: [], redlines: [], library_coverage: { used: [], gaps: [] } };
   try {
