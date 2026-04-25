@@ -6,6 +6,7 @@ import {
   normalizeTaskRunResultPayload,
   hasRenderableDiscoveryContent,
 } from '@/lib/strategy/discoveryTaskResult';
+import { getStrategyConfig } from '@/lib/strategy/strategyConfig';
 import type {
   DiscoverySection,
   LibraryCoverageEntry,
@@ -125,8 +126,39 @@ export function useTaskExecution() {
     cancelRef.current = false;
 
     try {
+      // Phase 3A SOP "SAFE BRIDGE" — when the user has enabled the
+      // Discovery Prep SOP in Strategy Settings, attach the parsed
+      // contract under inputs.__sop so the orchestrator can run shadow
+      // input/output validation. The server NEVER injects this into
+      // prompt builders in Phase 3A — it is observation only.
+      let sopAttachment: Record<string, unknown> | null = null;
+      try {
+        const cfg = getStrategyConfig();
+        if (cfg.enabled && cfg.sopContracts.discoveryPrepFullMode.enabled) {
+          const sop = cfg.sopContracts.discoveryPrepFullMode;
+          sopAttachment = {
+            nonNegotiables: sop.nonNegotiables,
+            requiredInputs: sop.requiredInputs,
+            requiredOutputs: sop.requiredOutputs,
+            researchWorkflow: sop.researchWorkflow,
+            mandatoryChecks: sop.mandatoryChecks,
+            metricsProtocol: sop.metricsProtocol,
+            pageOneCockpitRules: sop.pageOneCockpitRules,
+            formattingRules: sop.formattingRules,
+            buildOrder: sop.buildOrder,
+            qaChecklist: sop.qaChecklist,
+          };
+        }
+      } catch {
+        // Reading localStorage must never break a run.
+        sopAttachment = null;
+      }
+      const enrichedInputs = sopAttachment
+        ? { ...inputs, __sop: sopAttachment }
+        : inputs;
+
       // 1) Kick off the background job (returns immediately).
-      const start = await callDiscoveryPrep({ action: 'generate', inputs });
+      const start = await callDiscoveryPrep({ action: 'generate', inputs: enrichedInputs });
       const runId: string | undefined = start?.run_id;
       if (!runId) throw new Error('Failed to start Discovery Prep job');
       activeRunIdRef.current = runId;

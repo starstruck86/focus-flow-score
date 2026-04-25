@@ -24,6 +24,7 @@ import { DISCOVERY_PREP_BATCHES, authorOneBatch, buildBatchUserPrompt } from "./
 import { DISCOVERY_PREP_SECTIONS } from "./handlers/discoveryPrepTemplate.ts";
 import { callOpenAI, safeParseJSON } from "./providers.ts";
 import { getHandler } from "./registry.ts";
+import { validateDraftAgainstSop, type SopContractLike } from "./sopValidator.ts";
 
 /** Persist the synthesis artifact + prompt material into task_runs.meta
  *  so each subsequent step can reconstruct the authoring inputs without
@@ -36,8 +37,9 @@ export async function persistSynthesisArtifact(args: {
   baseUserPrompt: string;
   libraryCounts: { kis: number; playbooks: number };
   researchChars: number;
+  sop?: SopContractLike | null;
 }): Promise<void> {
-  const { supabase, runId, synthesis, systemPrompt, baseUserPrompt, libraryCounts, researchChars } = args;
+  const { supabase, runId, synthesis, systemPrompt, baseUserPrompt, libraryCounts, researchChars, sop } = args;
   const { error } = await supabase
     .from("task_runs")
     .update({
@@ -49,6 +51,10 @@ export async function persistSynthesisArtifact(args: {
           library_counts: libraryCounts,
           research_chars: researchChars,
           persisted_at: new Date().toISOString(),
+          // Phase 3A — carry SOP through to the assembly step purely for
+          // shadow-mode output validation logging. Read by
+          // assembleAndFinalize. NEVER consumed by prompt builders.
+          sop: sop ?? null,
         },
       },
       updated_at: new Date().toISOString(),
@@ -279,6 +285,23 @@ export async function assembleAndFinalize(args: {
   const synthesis = (runRow?.meta as any)?.progressive?.synthesis;
   const sources = Array.isArray(synthesis?.sources) ? synthesis.sources : undefined;
   const draftOutput = { sections: assembled, ...(sources ? { sources } : {}) };
+
+  // ── Phase 3A SOP "SAFE BRIDGE" — output validation (shadow only). ──
+  // Read the SOP that was carried through persistSynthesisArtifact.
+  // Never blocks, never mutates the draft.
+  try {
+    const sop: SopContractLike | null =
+      ((runRow?.meta as any)?.progressive?.sop as SopContractLike | null) ?? null;
+    const sopOutputCheck = validateDraftAgainstSop(draftOutput, sop);
+    console.log(JSON.stringify({
+      tag: "[sop-output-check]",
+      run_id: runId,
+      task_type: taskType,
+      ...sopOutputCheck,
+    }));
+  } catch (sopErr) {
+    console.warn("[sop-output-check] threw (ignored, shadow mode):", String(sopErr).slice(0, 200));
+  }
 
   // ── Review (best-effort, non-fatal) ──
   let reviewOutput: any = { strengths: [], redlines: [], library_coverage: { used: [], gaps: [] } };

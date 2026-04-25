@@ -32,6 +32,11 @@ import {
   TOTAL_BATCHES,
 } from "./progressiveDriver.ts";
 import { failStalePendingRun } from "./staleRunWatchdog.ts";
+import {
+  validateDraftAgainstSop,
+  validateSopInputs,
+  type SopContractLike,
+} from "./sopValidator.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
 
 // ── Internal: write a progress step to the run row (best-effort). ─
@@ -51,6 +56,33 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   const { supabase, userId, inputs, taskType } = ctx;
   const handler = getHandler(taskType);
   console.log(`[orchestrator] task=${taskType} run=${runId} company=${inputs.company_name || "(none)"} user=${userId.slice(0, 8)}`);
+
+  // ── Phase 3A SOP "SAFE BRIDGE" — observe only, never block. ────
+  // The client may attach a structured SOP contract via inputs.__sop.
+  // We pull it off the wire here so it never reaches downstream
+  // prompt builders (those signatures stay byte-identical).
+  const sop: SopContractLike | null =
+    (inputs as any)?.__sop && typeof (inputs as any).__sop === "object"
+      ? ((inputs as any).__sop as SopContractLike)
+      : null;
+  console.log(JSON.stringify({
+    tag: "[strategy-sop]",
+    run_id: runId,
+    task_type: taskType,
+    sop_enabled: !!sop,
+    rules: sop ? Object.keys(sop) : [],
+  }));
+  try {
+    const sopInputCheck = validateSopInputs(inputs as Record<string, unknown>, sop);
+    console.log(JSON.stringify({
+      tag: "[sop-input-check]",
+      run_id: runId,
+      task_type: taskType,
+      ...sopInputCheck,
+    }));
+  } catch (sopErr) {
+    console.warn("[sop-input-check] threw (ignored, shadow mode):", String(sopErr).slice(0, 200));
+  }
 
   // ── Stage 0: Library retrieval ────────────────────────────────
   await setProgress(supabase, runId, "library_retrieval");
@@ -117,6 +149,9 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         baseUserPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
         libraryCounts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
         researchChars: research.totalChars,
+        // Phase 3A safe bridge — carry SOP through to assembleAndFinalize
+        // for shadow output validation. Never read by prompt builders.
+        sop,
       });
       await ensureSectionRows({ supabase, runId, userId });
       console.log(JSON.stringify({
@@ -566,6 +601,22 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       console.error("[stage-4] review failed:", e?.message || e);
       // Don't fail the whole run for review issues; surface in row.
     }
+  }
+
+  // ── Phase 3A SOP "SAFE BRIDGE" — output validation (shadow only). ──
+  // Runs only on the non-progressive path (account_brief, ninety_day_plan,
+  // etc.). Discovery Prep finalizes inside assembleAndFinalize where the
+  // equivalent log is emitted.
+  try {
+    const sopOutputCheck = validateDraftAgainstSop(draftOutput, sop);
+    console.log(JSON.stringify({
+      tag: "[sop-output-check]",
+      run_id: runId,
+      task_type: taskType,
+      ...sopOutputCheck,
+    }));
+  } catch (sopErr) {
+    console.warn("[sop-output-check] threw (ignored, shadow mode):", String(sopErr).slice(0, 200));
   }
 
   // ── Stage 5: Finalize the run row ────────────────────────────
