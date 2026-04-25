@@ -25,29 +25,26 @@ import { getStrategyConfig } from '@/lib/strategy/strategyConfig';
  * structured renderers and message_types).
  */
 function enforceStrictFormat(text: string): string {
-  const trimmed = text.trim();
+  const trimmed = (text ?? '').trim();
   if (!trimmed) return trimmed;
 
-  // Already in bullet form — preserve, just ensure the closing line.
-  const hasBullets = /(^|\n)\s*[-*•]\s+/.test(trimmed);
-  let output: string;
+  const sentences = trimmed
+    .split(/(?<=[.?!])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-  if (hasBullets) {
-    output = trimmed;
-  } else {
-    // Convert prose → up to 3 bullets (sentence-split).
-    const sentences = trimmed
-      .split(/(?<=[.?!])\s+/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .slice(0, 3);
-    output = sentences.map((s) => `- ${s.replace(/^["']|["']$/g, '')}`).join('\n');
-  }
+  const bullets = Array.from({ length: 3 }).map((_, i) => {
+    const s = sentences[i] || sentences[0] || trimmed;
+    return `- ${s.replace(/^["']|["']$/g, '').trim()}`;
+  });
 
-  if (!/→\s*NEXT MOVE:/i.test(output)) {
-    output += '\n\n→ NEXT MOVE: [define next step]';
-  }
-  return output;
+  // CRITICAL: ReactMarkdown needs clean newline separation between list items
+  // and a blank line before the closing line so it isn't absorbed into the list.
+  let output = bullets.join('\n');
+  output += '\n\n→ NEXT MOVE:';
+
+  // Leading newline guarantees the first bullet starts a fresh block.
+  return '\n' + output;
 }
 
 interface Props {
