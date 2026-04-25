@@ -86,18 +86,14 @@ function extractText(contentJson: any): string {
 export function StrategyMessage({ message, onQuickAction }: Props) {
   const rawText = extractText(message.content_json);
   const role = message.role;
-  // Strict-mode shaping: only for plain assistant chat replies. Skip system,
-  // tool, workflow updates, and any non-chat structured message_types so we
-  // don't disturb Brainstorm / Refine / Discovery Prep / Artifact renderers.
-  const isPlainChat =
-    role === 'assistant' &&
-    (!message.message_type || message.message_type === 'chat');
+  // Strict-mode shaping is a render override that applies to ANY assistant
+  // message, regardless of message_type or workflow lane. No type gating.
   const cfg = getStrategyConfig();
-  const isStrictMode = isPlainChat && cfg.enabled && cfg.strictMode;
+  const isStrictMode = role === 'assistant' && cfg.enabled && cfg.strictMode;
   const finalText = isStrictMode ? enforceStrictFormat(rawText) : rawText;
 
   // Temporary debug — verify Strict Mode is actually shaping output.
-  if (isPlainChat && typeof window !== 'undefined') {
+  if (role === 'assistant' && typeof window !== 'undefined') {
     // eslint-disable-next-line no-console
     console.log('[StrategyMessage] STRICT MODE ACTIVE:', isStrictMode);
     // eslint-disable-next-line no-console
