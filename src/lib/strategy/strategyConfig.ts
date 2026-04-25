@@ -162,10 +162,99 @@ function emptyParsedSop(): Omit<
   };
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Universal SOP — defaults & helpers
+// ──────────────────────────────────────────────────────────────────────────
+
+const WORKSPACE_SOP_KEYS: StrategyWorkspaceSopKey[] = [
+  'brainstorm', 'deep_research', 'refine', 'library', 'artifacts', 'projects', 'work',
+];
+
+const TASK_SOP_KEYS: StrategyTaskSopKey[] = [
+  'discovery_prep', 'deal_review', 'account_research', 'recap_email', 'roi_model',
+];
+
+export const STRATEGY_WORKSPACE_SOP_KEYS: ReadonlyArray<StrategyWorkspaceSopKey> = WORKSPACE_SOP_KEYS;
+export const STRATEGY_TASK_SOP_KEYS: ReadonlyArray<StrategyTaskSopKey> = TASK_SOP_KEYS;
+
+const DEFAULT_LIBRARY_RULES: StrategySopLibraryRules = {
+  preferTemplates: false,
+  preferPlaybooks: false,
+  citeSources: true,
+  neverInventMetrics: true,
+  unknownsBecomeQuestions: true,
+};
+
+const DEFAULT_ENFORCEMENT: StrategySopEnforcement = {
+  strict: false,
+  selfCorrectOnce: false,
+  requiredSections: [],
+};
+
+function defaultSopContract(name: string): StrategySopContract {
+  return {
+    enabled: false,
+    name,
+    rawInstructions: '',
+    parsedSections: {},
+    libraryRules: { ...DEFAULT_LIBRARY_RULES },
+    enforcement: { ...DEFAULT_ENFORCEMENT },
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+const WORKSPACE_DEFAULT_NAMES: Record<StrategyWorkspaceSopKey, string> = {
+  brainstorm: 'Brainstorm SOP',
+  deep_research: 'Deep Research SOP',
+  refine: 'Refine SOP',
+  library: 'Library SOP',
+  artifacts: 'Artifacts SOP',
+  projects: 'Projects SOP',
+  work: 'Work SOP',
+};
+
+const TASK_DEFAULT_NAMES: Record<StrategyTaskSopKey, string> = {
+  discovery_prep: 'Discovery Prep SOP',
+  deal_review: 'Deal Review SOP',
+  account_research: 'Account Research SOP',
+  recap_email: 'Recap Email SOP',
+  roi_model: 'ROI Model SOP',
+};
+
+/** Build a `StrategySopContract` projection from the legacy Discovery Prep contract. */
+function discoveryPrepToUniversal(c: DiscoveryPrepSopContract): StrategySopContract {
+  return {
+    enabled: c.enabled,
+    name: TASK_DEFAULT_NAMES.discovery_prep,
+    rawInstructions: c.rawSop,
+    parsedSections: {
+      nonNegotiables: c.nonNegotiables,
+      requiredInputs: c.requiredInputs,
+      requiredOutputs: c.requiredOutputs,
+      researchWorkflow: c.researchWorkflow,
+      mandatoryChecks: c.mandatoryChecks,
+      metricsProtocol: c.metricsProtocol,
+      pageOneCockpitRules: c.pageOneCockpitRules,
+      formattingRules: c.formattingRules,
+      buildOrder: c.buildOrder,
+      qaChecklist: c.qaChecklist,
+    },
+    libraryRules: { ...DEFAULT_LIBRARY_RULES },
+    enforcement: { ...DEFAULT_ENFORCEMENT },
+    updatedAt: c.parsedAt ?? new Date().toISOString(),
+  };
+}
+
 export function defaultStrategyConfig(): StrategyGlobalInstructionsConfig {
   const now = new Date().toISOString();
   const seed = DISCOVERY_PREP_SOP_SEED;
   const parsedSeed = parseDiscoveryPrepSop(seed);
+  const legacyDiscovery: DiscoveryPrepSopContract = {
+    enabled: false,
+    rawSop: seed,
+    parsedAt: now,
+    ...parsedSeed,
+  };
   return {
     version: CONFIG_VERSION,
     enabled: false,
@@ -186,11 +275,13 @@ export function defaultStrategyConfig(): StrategyGlobalInstructionsConfig {
       unknownsBecomeQuestions: true,
     },
     sopContracts: {
-      discoveryPrepFullMode: {
-        enabled: false,
-        rawSop: seed,
-        parsedAt: now,
-        ...parsedSeed,
+      discoveryPrepFullMode: legacyDiscovery,
+      global: undefined,
+      workspaces: {},
+      tasks: {
+        // Mirror the legacy seeded SOP into the universal slot so consumers
+        // of the new resolver see Discovery Prep out-of-the-box.
+        discovery_prep: discoveryPrepToUniversal(legacyDiscovery),
       },
     },
     updatedAt: now,
