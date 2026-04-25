@@ -2192,6 +2192,12 @@ serve(async (req) => {
     // chat path or leak unbounded text into the system prompt. Returns null
     // when absent/invalid → server treats as "no behavior change".
     const cleanGlobalInstructions = sanitizeGlobalInstructions(globalInstructionsRaw);
+    // Phase 2 — Diagnostic: surface what the server actually received so
+    // we can disambiguate "client didn't send" vs "server rejected" vs
+    // "shared helper didn't fire". Logs even when payload is null.
+    console.log(
+      `[global-instructions] received: present=${!!globalInstructionsRaw} sanitized=${!!cleanGlobalInstructions} free_text_chars=${cleanGlobalInstructions?.globalInstructions.length ?? 0}`,
+    );
 
     // ── Debug: OpenAI key health check ──────────────────────
     // Phase 0 acceptance gate. Returns 200 only when the key is shaped
