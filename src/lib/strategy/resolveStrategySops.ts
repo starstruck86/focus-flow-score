@@ -203,11 +203,16 @@ export function resolveStrategySops(
   const globalCandidate = cfg.enabled ? cfg.sopContracts.global : undefined;
   const globalSop = isEnabled(globalCandidate) ? globalCandidate : null;
 
+  const originalWorkspaceProvided =
+    typeof input.workspace === 'string' && input.workspace.trim()
+      ? input.workspace.trim()
+      : null;
   const workspaceSop = pickLegacyWorkspaceSop(
     cfg,
     mode,
     workspace,
     input.taskType ?? null,
+    originalWorkspaceProvided,
   );
 
   let taskSop: StrategySopContract | null = null;
