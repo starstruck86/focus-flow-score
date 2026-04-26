@@ -112,19 +112,23 @@ export interface BuildStrategyChatPromptArgs {
   /**
    * Pre-rendered "=== LIBRARY RESOURCES ===" block from
    * resourceRetrieval.renderResourceContextBlock(). Self-headers.
-   * When present, it forces the model to either cite an exact title
-   * or admit absence — never to invent a template/example/calculator.
    */
   resourceContextBlock?: string;
   /**
    * Pre-rendered "=== LIBRARY TOTALS ===" block holding the AUTHORITATIVE
-   * counts of the user's resources / KIs / playbooks (from a real DB
-   * COUNT query, NOT a vector top-K). When present, it is the only place
-   * the model is allowed to source numeric library claims from. Combined
-   * with LIBRARY COUNT DISCIPLINE above, this is what kills hallucinated
-   * counts like "you have 12 resources on X".
+   * counts of the user's resources / KIs / playbooks.
    */
   libraryTotalsBlock?: string;
+  /**
+   * Phase W4 — resolved WorkspaceContract used to:
+   *   1. Inject the structured workspace overlay block (mission,
+   *      cognitive posture, reasoning path, retrieval posture, output
+   *      formatting hints, failure modes, escalation hints).
+   *   2. Reorder the prompt's context blocks via `contextMode`
+   *      (thread_first | draft_first | artifact_first | project_first).
+   * When omitted, behavior is byte-identical to the pre-W4 composer.
+   */
+  workspaceContract?: WorkspaceContract;
 }
 
 /**
