@@ -67,7 +67,7 @@ export function WorkflowFormSheet({ workflow, onClose, onRun, onEditCustom }: Pr
       return;
     }
     const compiled = compileWorkflowPrompt(workflow, values);
-    onRun(compiled, workflow);
+    onRun(compiled, workflow, values);
   };
 
   const title = workflow.formTitle ?? workflow.label;
