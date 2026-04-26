@@ -832,6 +832,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   };
   const metaPatch: Record<string, unknown> = { sop: sopMetaBlock };
   if (fallbackMeta) metaPatch.authoring_fallback = fallbackMeta;
+  if (citationCheckMeta) metaPatch.citation_check = citationCheckMeta;
   finalizePatch.meta = metaPatch;
   const { error: updateErr } = await supabase
     .from("task_runs")
