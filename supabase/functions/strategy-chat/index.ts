@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import {
   assembleStrategyContext,
   auditResourceCitations,
+  buildCitationCheckLog,
   buildPendingLookupAction,
   buildPromptCompositionLog,
   buildRetrievalDecisionLog,
@@ -20,6 +21,7 @@ import {
   getLibraryTotals,
   inferTopicScopes,
   loadWorkingThesisState,
+  logCitationCheck,
   logRetrievalDecision,
   type LookupIntent,
   mergeWorkingThesisState,
@@ -32,6 +34,7 @@ import {
   resolveServerWorkspaceContract,
   retrieveLibraryContext,
   retrieveResourceContext,
+  runCitationCheck,
   runLibraryLookup,
   saveWorkingThesisState,
   shouldUseStrategyCorePrompt,
