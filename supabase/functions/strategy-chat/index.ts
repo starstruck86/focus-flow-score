@@ -5441,6 +5441,7 @@ async function handleChat(
     pack,
     userContent: content,
     pickedResourceIds,
+    workspaceKeyRaw,
   });
   const accountId: string | null = pack.account?.id ?? null;
 
