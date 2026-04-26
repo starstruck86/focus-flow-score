@@ -45,6 +45,11 @@ import {
   logRetrievalDecision,
   resolveServerWorkspaceContract,
 } from "../strategy-core/retrievalEnforcement.ts";
+import {
+  buildPromptCompositionLog,
+  buildWorkspaceOverlay,
+  logPromptComposition,
+} from "../strategy-core/workspacePrompt.ts";
 import { resolveTaskWorkspace } from "./taskWorkspace.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
 
@@ -161,6 +166,43 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     }) as Record<string, unknown>),
   } as any);
 
+  // ── W4: Workspace overlay (taskTemplateLocked: true always) ──────
+  // Compose the structured workspace overlay once and prepend it to
+  // every task system prompt below. `taskTemplateLocked: true` forces
+  // the explicit "TASK TEMPLATE TAKES PRECEDENCE" guard so the overlay
+  // can NEVER reshape locked task schemas (Discovery Prep, Account
+  // Brief, 90-Day Plan). Section names, ordering, and JSON shapes
+  // remain owned by the task template.
+  const workspaceOverlay = buildWorkspaceOverlay({
+    contract: resolvedContract.contract,
+    taskTemplateLocked: true,
+    // Escalation hints are a chat-time concept; suppress for runTask
+    // to keep the overlay tight inside the task pipeline.
+    includeEscalationRules: false,
+    surface: "run-task",
+  });
+  const overlayPrefix = workspaceOverlay.text
+    ? `${workspaceOverlay.text}\n\n`
+    : "";
+
+  // Telemetry — single structured composition log for this run.
+  try {
+    logPromptComposition(
+      buildPromptCompositionLog({
+        contract: resolvedContract.contract,
+        result: workspaceOverlay,
+        taskTemplateLocked: true,
+        surface: "run-task",
+        taskType,
+        runId,
+      }),
+    );
+  } catch (e) {
+    console.warn(
+      "[workspace:prompt_composition] log failed (non-fatal):",
+      (e as Error)?.message,
+    );
+  }
 
   // ── Stage 1: External research (Perplexity, parallel) ────────
   const queries = handler.buildResearchQueries(inputs);
@@ -196,7 +238,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   const synthesisModel = "gpt-5-mini";
   console.log(JSON.stringify({ tag: "stage-2:start", run_id: runId, model: synthesisModel, reasoning_effort: "medium" }));
   const synthesisRaw = await callOpenAI([
-    { role: "system", content: "You are a senior sales strategist. Synthesize research + internal IP into actionable intelligence. Return structured JSON only. No markdown fences, no preamble." },
+    { role: "system", content: `${overlayPrefix}You are a senior sales strategist. Synthesize research + internal IP into actionable intelligence. Return structured JSON only. No markdown fences, no preamble.` },
     { role: "user", content: handler.buildSynthesisPrompt(inputs, research, library) },
   ], { model: synthesisModel, maxTokens: 16000, reasoningEffort: "medium" });
   const synthesis = safeParseJSON<any>(synthesisRaw) ?? { raw: synthesisRaw };
@@ -215,7 +257,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         supabase,
         runId,
         synthesis,
-        systemPrompt: handler.buildDocumentSystemPrompt(),
+        systemPrompt: `${overlayPrefix}${handler.buildDocumentSystemPrompt()}`,
         baseUserPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
         libraryCounts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
         researchChars: research.totalChars,
@@ -307,7 +349,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   };
 
   const authoringMessages = [
-    { role: "system", content: handler.buildDocumentSystemPrompt() },
+    { role: "system", content: `${overlayPrefix}${handler.buildDocumentSystemPrompt()}` },
     { role: "user", content: handler.buildDocumentUserPrompt(inputs, synthesis, library) },
   ];
 
@@ -410,7 +452,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         const rescue = await authorBySectionBatches({
           runId,
           taskType,
-          systemPrompt: handler.buildDocumentSystemPrompt(),
+          systemPrompt: `${overlayPrefix}${handler.buildDocumentSystemPrompt()}`,
           baseUserPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
           synthesis,
           supabase,
@@ -522,7 +564,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         const rescue = await authorBySectionBatches({
           runId,
           taskType,
-          systemPrompt: handler.buildDocumentSystemPrompt(),
+          systemPrompt: `${overlayPrefix}${handler.buildDocumentSystemPrompt()}`,
           baseUserPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
           synthesis,
           supabase,
@@ -663,7 +705,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     console.log("[stage-4] generating playbook-grounded review...");
     try {
       const reviewRaw = await callOpenAI([
-        { role: "system", content: "You are a senior sales leader reviewing a prep document. Be specific, actionable, and grounded in the provided internal playbooks/KIs." },
+        { role: "system", content: `${overlayPrefix}You are a senior sales leader reviewing a prep document. Be specific, actionable, and grounded in the provided internal playbooks/KIs.` },
         { role: "user", content: handler.buildReviewPrompt(inputs, draftOutput, library) },
       ], { model: "gpt-5-mini", temperature: 0.4, maxTokens: 4000 });
       const parsed = safeParseJSON<any>(reviewRaw);
