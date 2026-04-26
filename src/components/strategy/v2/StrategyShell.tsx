@@ -94,6 +94,7 @@ import { StrategyProgressPanel } from './StrategyProgressPanel';
 import { ArtifactInlineCard } from './ArtifactInlineCard';
 import { ArtifactWorkspace } from './ArtifactWorkspace';
 import { useThreadTaskRuns } from '@/hooks/strategy/useThreadTaskRuns';
+import { useStrategyJob } from '@/lib/strategy/useStrategyJob';
 
 import '@/styles/strategy-v2.css';
 
@@ -312,6 +313,13 @@ export function StrategyShell() {
   const { active: activeRun, latestCompleted } = useThreadTaskRuns(threadId);
   const { rows: allTaskRunsForThread } = useThreadTaskRuns(null); // no-op placeholder; per-thread indicators below
 
+  // Shell-level Strategy Job hook — used by pills that route directly into
+  // the real task pipeline (currently: "Build account brief" only). The
+  // existing chat send path is untouched; this is purely additive.
+  const { start: startStrategyJob } = useStrategyJob();
+  /** Account-brief inputs queued while we wait for a fresh thread to mount. */
+  const queuedAccountBriefRef = useRef<{ inputs: Record<string, unknown>; original: string } | null>(null);
+
   // Track which run id was most recently observed in-flight, so we can show
   // "freshly completed" copy on the inline artifact card.
   const [recentlyCompletedRunId, setRecentlyCompletedRunId] = useState<string | null>(null);
@@ -428,7 +436,19 @@ export function StrategyShell() {
       if (sidecar) setPendingResourceIds([]);
       requestAnimationFrame(() => sendMessage(queued, { pickedResourceIds: sidecar, workspace: activeSurface ?? 'work' }));
     }
-  }, [pendingThreadId, activeThread?.id, sendMessage, pendingResourceIds]);
+    // Flush any account-brief job that was queued while waiting for the
+    // freshly-created thread. Thread linkage is what lets useThreadTaskRuns
+    // pick the run up and surface the artifact card in this shell.
+    const queuedBrief = queuedAccountBriefRef.current;
+    queuedAccountBriefRef.current = null;
+    if (queuedBrief) {
+      const inputs = { ...queuedBrief.inputs, thread_id: pendingThreadId };
+      startStrategyJob('account_brief', inputs, 'deep').catch((e) => {
+        const msg = e instanceof Error ? e.message : 'Failed to start Account Brief';
+        toast.error(msg);
+      });
+    }
+  }, [pendingThreadId, activeThread?.id, sendMessage, pendingResourceIds, startStrategyJob]);
 
   /** Branch from selection (if any) or current thread state. Provenance preserved via cloned_from_thread_id. */
   const handleBranch = useCallback(async () => {
@@ -923,7 +943,11 @@ export function StrategyShell() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSurface, threadId, draftKeyOf]);
 
-  const handleRunWorkflow = useCallback((compiledPrompt: string) => {
+  const handleRunWorkflow = useCallback((
+    compiledPrompt: string,
+    def?: WorkflowDef,
+    values?: Record<string, string>,
+  ) => {
     setActiveWorkflow(null);
     const launchedFrom = launchSurfaceRef.current;
     launchSurfaceRef.current = null;
@@ -934,11 +958,58 @@ export function StrategyShell() {
         pendingThreadTagRef.current = launchedFrom;
       }
     }
-    // Stay in the launching surface — the new thread becomes its own.
+
+    // ── Account Brief routing ───────────────────────────────────────────
+    // The "Build account brief" pill is the first workflow accelerator
+    // wired into a real task pipeline (account_brief). It MUST create a
+    // task_runs row, attach the SOP via __sop, and run shadow validation.
+    // All other pills continue to fall through to the chat send path.
+    if (def?.id === 'research.account_brief' && values) {
+      const company = (values.account ?? '').trim();
+      const objective = (values.objective ?? '').trim();
+      const inputs: Record<string, unknown> = {
+        company_name: company || 'Unknown',
+        // The account_brief handler treats the objective as research context.
+        context: objective || undefined,
+        original_message: compiledPrompt,
+      };
+      if (threadId) {
+        startStrategyJob('account_brief', { ...inputs, thread_id: threadId }, 'deep')
+          .catch((e) => {
+            const msg = e instanceof Error ? e.message : 'Failed to start Account Brief';
+            toast.error(msg);
+          });
+        requestAnimationFrame(() => composerRef.current?.focus());
+        return;
+      }
+      // No thread yet — create one, then flush the queued brief once the
+      // thread mounts (handled in the pendingThreadId resolution effect).
+      queuedAccountBriefRef.current = { inputs, original: compiledPrompt };
+      (async () => {
+        if (!user) return;
+        const surfaceForTitle = (launchedFrom && launchedFrom !== 'work') ? launchedFrom : null;
+        const titleSeed = company ? `Account Brief · ${company}` : 'Account Brief';
+        const derivedTitle = buildWorkspaceTitle(titleSeed, surfaceForTitle);
+        setIsCreatingThread(true);
+        const newId = await createThread(derivedTitle, 'strategy', 'freeform');
+        if (newId) {
+          if (surfaceForTitle) tagThread(newId, surfaceForTitle);
+          pendingThreadSurfaceRef.current = launchedFrom ?? 'work';
+          setPendingThreadId(newId);
+        } else {
+          setIsCreatingThread(false);
+          queuedAccountBriefRef.current = null;
+          toast.error('Failed to create thread');
+        }
+      })();
+      return;
+    }
+
+    // Default path: send compiled prompt as a chat message (unchanged).
     handleSend(compiledPrompt);
     requestAnimationFrame(() => composerRef.current?.focus());
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threadId]);
+  }, [threadId, startStrategyJob, user, createThread]);
 
   // Apply pending thread tag once the new thread becomes active.
   useEffect(() => {
