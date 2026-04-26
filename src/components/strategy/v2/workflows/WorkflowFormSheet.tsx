@@ -27,7 +27,14 @@ import {
 interface Props {
   workflow: WorkflowDef | null;
   onClose: () => void;
-  onRun: (compiledPrompt: string, def: WorkflowDef) => void;
+  /**
+   * Fired when the user clicks Run. Receives the compiled prompt, the
+   * workflow definition, AND the raw field values keyed by `field.key`.
+   * The raw values let the host route specific pills (e.g. the
+   * `research.account_brief` pill) into a real task pipeline instead of
+   * falling through to the chat send path.
+   */
+  onRun: (compiledPrompt: string, def: WorkflowDef, values: Record<string, string>) => void;
   /** When provided, custom pills show an Edit button that calls this. */
   onEditCustom?: (customPillId: string) => void;
 }
