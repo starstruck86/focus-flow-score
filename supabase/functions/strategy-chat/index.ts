@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import {
   assembleStrategyContext,
   auditResourceCitations,
+  buildCitationCheckLog,
   buildPendingLookupAction,
   buildPromptCompositionLog,
   buildRetrievalDecisionLog,
@@ -20,6 +21,7 @@ import {
   getLibraryTotals,
   inferTopicScopes,
   loadWorkingThesisState,
+  logCitationCheck,
   logRetrievalDecision,
   type LookupIntent,
   mergeWorkingThesisState,
@@ -32,6 +34,7 @@ import {
   resolveServerWorkspaceContract,
   retrieveLibraryContext,
   retrieveResourceContext,
+  runCitationCheck,
   runLibraryLookup,
   saveWorkingThesisState,
   shouldUseStrategyCorePrompt,
@@ -5348,6 +5351,11 @@ async function handleChat(
   // registry. Null/unknown falls back to `work` inside the resolver.
   workspaceKeyRaw: string | null = null,
 ) {
+  // W5: resolve the workspace contract once for handleChat scope so
+  // the citation enforcer can read `citationMode` for both the
+  // streaming and non-streaming branches below.
+  const __resolvedContract = resolveServerWorkspaceContract(workspaceKeyRaw);
+  const __retrievalRules = __resolvedContract.retrievalRules;
   await supabase.from("strategy_messages").insert({
     thread_id: threadId,
     user_id: userId,
@@ -5942,19 +5950,35 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       );
     }
     const visible = subst.text;
-    // Citation audit: catch any fabricated RESOURCE[…] references.
-    // Closed-set mode is enabled when the user picked a resource via
-    // /library — this prevents adjacent-variant hallucinations
-    // (e.g. "Q3" when they picked "Q2").
-    const audit = auditResourceCitations(visible, resourceHits, {
-      closedSet: pickedResourceIds.length > 0,
+    // Citation audit (W5): governed by `retrievalRules.citationMode`
+    // from the resolved workspace contract. Strict workspaces still
+    // publish the rewrite (legacy behavior); other modes are shadow
+    // and reporting only. Closed-set mode (user picked a resource via
+    // /library) is preserved across all modes.
+    const w5Citation = runCitationCheck({
+      assistantText: visible,
+      libraryHits: resourceHits,
+      libraryUsed: resourceHits.length > 0,
+      workspace: __resolvedContract.workspace,
+      contractVersion: __resolvedContract.contractVersion,
+      citationMode: __retrievalRules.citationMode,
+      auditOptions: { closedSet: pickedResourceIds.length > 0 },
     });
-    if (audit.modified) {
+    const audit = w5Citation.audit ?? auditResourceCitations(visible, [], { closedSet: false });
+    if (w5Citation.audit?.modified) {
       console.log(
-        `[citation-audit] non-stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged${pickedResourceIds.length > 0 ? " (closed-set)" : ""}`,
+        `[citation-audit] non-stream mode=${w5Citation.citationMode}: ${w5Citation.audit.unverifiedCitations.length} unverified citation(s) flagged${pickedResourceIds.length > 0 ? " (closed-set)" : ""}`,
       );
     }
-    const auditedVisible = audit.text;
+    try {
+      logCitationCheck(buildCitationCheckLog({
+        result: w5Citation,
+        workspace: __resolvedContract.workspace,
+        contractVersion: __resolvedContract.contractVersion,
+        surface: "strategy-chat",
+      }));
+    } catch { /* never throw from telemetry */ }
+    const auditedVisible = w5Citation.auditedText;
     await supabase.from("strategy_messages").insert({
       thread_id: threadId,
       user_id: userId,
@@ -6227,19 +6251,34 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         }
         const visible = subst.text;
 
-        // Step 3: citation audit on the GUARDED text (so banner
-        // attaches to the same body that's persisted). Closed-set
-        // mode prevents adjacent-variant hallucinations when the
-        // user picked a resource via /library.
-        const audit = auditResourceCitations(visible, resourceHits, {
-          closedSet: pickedResourceIds.length > 0,
+        // Step 3: citation audit on the GUARDED text (W5: governed
+        // by `retrievalRules.citationMode`). Strict workspaces still
+        // publish the rewrite to the persisted body; other modes are
+        // shadow + reporting only. Closed-set mode is preserved.
+        const w5Citation = runCitationCheck({
+          assistantText: visible,
+          libraryHits: resourceHits,
+          libraryUsed: resourceHits.length > 0,
+          workspace: __resolvedContract.workspace,
+          contractVersion: __resolvedContract.contractVersion,
+          citationMode: __retrievalRules.citationMode,
+          auditOptions: { closedSet: pickedResourceIds.length > 0 },
         });
-        if (audit.modified) {
+        const audit = w5Citation.audit ?? auditResourceCitations(visible, [], { closedSet: false });
+        if (w5Citation.audit?.modified) {
           console.log(
-            `[citation-audit] stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged${pickedResourceIds.length > 0 ? " (closed-set)" : ""}`,
+            `[citation-audit] stream mode=${w5Citation.citationMode}: ${w5Citation.audit.unverifiedCitations.length} unverified citation(s) flagged${pickedResourceIds.length > 0 ? " (closed-set)" : ""}`,
           );
         }
-        const auditedVisible = audit.text;
+        try {
+          logCitationCheck(buildCitationCheckLog({
+            result: w5Citation,
+            workspace: __resolvedContract.workspace,
+            contractVersion: __resolvedContract.contractVersion,
+            surface: "strategy-chat",
+          }));
+        } catch { /* never throw from telemetry */ }
+        const auditedVisible = w5Citation.auditedText;
 
         // ── HYBRID GUARD (diagnostic) ──
         const hybridGuard = evaluateHybridGuard(intent.intent, auditedVisible);

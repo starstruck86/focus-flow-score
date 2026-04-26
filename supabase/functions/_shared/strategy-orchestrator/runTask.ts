@@ -50,6 +50,12 @@ import {
   buildWorkspaceOverlay,
   logPromptComposition,
 } from "../strategy-core/workspacePrompt.ts";
+import {
+  buildCitationCheckLog,
+  logCitationCheck,
+  runCitationCheck,
+  type CitationAuditHit,
+} from "../strategy-core/index.ts";
 import { resolveTaskWorkspace } from "./taskWorkspace.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
 
@@ -757,6 +763,56 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     console.warn("[strategy-sop][task] log threw (ignored, shadow mode):", String(sopErr).slice(0, 200));
   }
 
+  // ── W5: Citation behavior check (shadow + reporting only) ────────
+  // Apply the workspace `citationMode` to the authored draft + review.
+  // Discovery Prep finalizes via the progressive driver, so this branch
+  // covers account_brief / ninety_day_plan / fallback. We never rewrite
+  // structured task output here — strict-mode rewrites would land back
+  // inside JSON, which the templates don't model. W5 stays shadow.
+  let citationCheckMeta: Record<string, unknown> | null = null;
+  try {
+    const libraryHits: CitationAuditHit[] = [
+      ...((library.knowledgeItems ?? []) as Array<{ id: string; title: string }>).map(
+        (k) => ({ id: k.id, title: k.title }),
+      ),
+      ...((library.playbooks ?? []) as Array<{ id: string; title: string }>).map(
+        (p) => ({ id: p.id, title: p.title }),
+      ),
+    ];
+    const auditableText = JSON.stringify({
+      sections: draftOutput?.sections ?? [],
+      review: reviewOutput,
+    });
+    const w5Citation = runCitationCheck({
+      assistantText: auditableText,
+      libraryHits,
+      libraryUsed: libraryHits.length > 0,
+      workspace: resolvedContract.workspace,
+      contractVersion: resolvedContract.contractVersion,
+      citationMode: resolvedContract.retrievalRules.citationMode,
+    });
+    logCitationCheck(buildCitationCheckLog({
+      result: w5Citation,
+      workspace: resolvedContract.workspace,
+      contractVersion: resolvedContract.contractVersion,
+      surface: "run-task",
+      taskType,
+      runId,
+    }));
+    citationCheckMeta = {
+      mode: w5Citation.citationMode,
+      audited: w5Citation.audited,
+      citations_found: w5Citation.citationsFound,
+      issues: w5Citation.issues,
+      modified: w5Citation.audit?.modified === true,
+    };
+  } catch (citErr) {
+    console.warn(
+      "[workspace:citation_check] threw (ignored, shadow mode):",
+      String(citErr).slice(0, 200),
+    );
+  }
+
   // ── Stage 5: Finalize the run row ────────────────────────────
   const finalizePatch: Record<string, unknown> = {
     draft_output: draftOutput,
@@ -776,6 +832,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   };
   const metaPatch: Record<string, unknown> = { sop: sopMetaBlock };
   if (fallbackMeta) metaPatch.authoring_fallback = fallbackMeta;
+  if (citationCheckMeta) metaPatch.citation_check = citationCheckMeta;
   finalizePatch.meta = metaPatch;
   const { error: updateErr } = await supabase
     .from("task_runs")
