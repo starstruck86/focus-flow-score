@@ -27,8 +27,13 @@ export type WorkspaceKey =
   | 'work';
 
 // ─── Retrieval posture ────────────────────────────────────────────
+//
+// `libraryUse` is the workspace's posture toward the user's library —
+// NOT a switch that disables it. The library is universal Strategy
+// context; every workspace can reach it. The posture only controls
+// how aggressively it is used. See edge mirror for full semantics.
 
-export type LibraryMode = 'off' | 'opportunistic' | 'preferred' | 'required';
+export type LibraryUse = 'background' | 'relevant' | 'primary' | 'required';
 export type WebMode = 'off' | 'opportunistic' | 'required_for_current_facts';
 export type CitationMode =
   | 'none'
@@ -42,7 +47,7 @@ export type ContextMode =
   | 'draft_first';
 
 export interface RetrievalRules {
-  libraryMode: LibraryMode;
+  libraryUse: LibraryUse;
   webMode: WebMode;
   citationMode: CitationMode;
   contextMode: ContextMode;
