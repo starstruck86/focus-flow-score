@@ -313,6 +313,13 @@ export function StrategyShell() {
   const { active: activeRun, latestCompleted } = useThreadTaskRuns(threadId);
   const { rows: allTaskRunsForThread } = useThreadTaskRuns(null); // no-op placeholder; per-thread indicators below
 
+  // Shell-level Strategy Job hook — used by pills that route directly into
+  // the real task pipeline (currently: "Build account brief" only). The
+  // existing chat send path is untouched; this is purely additive.
+  const { start: startStrategyJob } = useStrategyJob();
+  /** Account-brief inputs queued while we wait for a fresh thread to mount. */
+  const queuedAccountBriefRef = useRef<{ inputs: Record<string, unknown>; original: string } | null>(null);
+
   // Track which run id was most recently observed in-flight, so we can show
   // "freshly completed" copy on the inline artifact card.
   const [recentlyCompletedRunId, setRecentlyCompletedRunId] = useState<string | null>(null);
