@@ -224,10 +224,13 @@ export function resolveStrategySops(
   const appliedSopIds: string[] = [];
   if (globalSop) appliedSopIds.push('global');
   if (workspaceSop) {
-    // Mirror Phase 3A behaviour: id reflects either the active workspace or
-    // the implicit Discovery-Prep → artifacts stack.
-    const wsLabel =
-      workspace ?? (input.taskType === 'discovery_prep' ? 'artifacts' : 'unknown');
+    // Mirror Phase 3A: when Discovery Prep implicitly stacks the artifacts
+    // SOP (no/explicit-artifacts workspace input), label the id 'artifacts'.
+    // Otherwise reflect the normalized workspace key.
+    const stackedArtifactsForDiscoveryPrep =
+      input.taskType === 'discovery_prep' &&
+      (!originalWorkspaceProvided || originalWorkspaceProvided === 'artifacts');
+    const wsLabel = stackedArtifactsForDiscoveryPrep ? 'artifacts' : workspace;
     appliedSopIds.push(`workspace:${wsLabel}`);
   }
   if (taskSop) appliedSopIds.push(`task:${input.taskType}`);
