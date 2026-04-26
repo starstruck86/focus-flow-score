@@ -1,15 +1,15 @@
 // ════════════════════════════════════════════════════════════════
-// Strategy Core — Retrieval Enforcement (Phase W3)
+// Strategy Core — Retrieval Enforcement (Phase W3, corrected)
 //
-// Threads a resolved WorkspaceContract's retrievalRules into the
-// server-side retrieval path. This is the *only* gate between a
-// workspace's declared posture and the actual library/web/context
-// queries we run for a turn.
+// The library is universal Strategy context. Every workspace has access
+// by default; this module only encodes how aggressively each workspace
+// uses it. The legacy "libraryMode: off" concept has been retired —
+// `background` keeps the library available without auto-injection.
 //
 // Scope (W3):
-//   • libraryMode  → off | opportunistic | preferred | required
-//   • webMode      → off | opportunistic | required_for_current_facts
-//   • contextMode  → thread_first | draft_first | artifact_first | project_first
+//   • libraryUse  → background | relevant | primary | required
+//   • webMode     → off | opportunistic | required_for_current_facts
+//   • contextMode → thread_first | draft_first | artifact_first | project_first
 //   • citationMode → carried forward only; W5 will enforce.
 //
 // Non-goals here:
@@ -27,7 +27,7 @@
 import type {
   CitationMode,
   ContextMode,
-  LibraryMode,
+  LibraryUse,
   RetrievalRules,
   WebMode,
   WorkspaceContract,
@@ -69,7 +69,7 @@ export function resolveServerWorkspaceContract(
   };
 }
 
-// ─── Library gating ──────────────────────────────────────────────
+// ─── Library gating (libraryUse) ─────────────────────────────────
 
 export interface LibraryGateInputs {
   /** The current user prompt / turn content. */
@@ -78,11 +78,18 @@ export interface LibraryGateInputs {
   derivedScopes: string[];
   /**
    * Whether the existing system would have queried the library based
-   * on its own heuristics (e.g. accountId present, picked resources,
-   * topic intent). Used so `opportunistic` does not silently expand
-   * retrieval beyond today's behavior.
+   * on its own heuristics (account/opp present, picked resources,
+   * topic intent). Used so `relevant` mirrors today's default behavior
+   * without silently expanding retrieval.
    */
   legacyWouldQuery: boolean;
+  /**
+   * True when the user message explicitly invokes the library (e.g.
+   * "use my library", "from my saved resources", "based on my
+   * playbooks"). Heuristic — the caller decides; we just respect it.
+   * `background` workspaces only auto-query when this is true.
+   */
+  userExplicitlyRequestedLibrary?: boolean;
 }
 
 export type LibraryGateDecision =
@@ -90,47 +97,82 @@ export type LibraryGateDecision =
   | { shouldQuery: true; reason: LibraryGateRunReason };
 
 export type LibraryGateSkipReason =
-  | "library_mode_off"
-  | "no_scopes_or_signal"
-  | "opportunistic_no_legacy_signal";
+  | "background_no_explicit_request"
+  | "relevant_no_signal";
 
 export type LibraryGateRunReason =
-  | "preferred_with_query"
-  | "required"
-  | "opportunistic_legacy_signal";
+  | "background_explicit_request"
+  | "relevant_with_signal"
+  | "primary_default"
+  | "required";
 
 /** Decide whether to invoke the library retriever for this turn. */
 export function decideLibraryQuery(
   rules: RetrievalRules,
   inputs: LibraryGateInputs,
 ): LibraryGateDecision {
-  const mode: LibraryMode = rules.libraryMode;
-  if (mode === "off") {
-    return { shouldQuery: false, reason: "library_mode_off" };
-  }
+  const mode: LibraryUse = rules.libraryUse;
   const hasMeaningfulQuery = inputs.derivedScopes.length > 0 ||
     (inputs.userContent && inputs.userContent.trim().length >= 4);
 
   if (mode === "required") {
-    // Required workspaces always query, even with thin signal — they
-    // need the library coverage check to fire so the gap can be
-    // surfaced honestly.
+    // Library-centered work: always query so the coverage check fires
+    // and an honest gap can be surfaced.
     return { shouldQuery: true, reason: "required" };
   }
-  if (mode === "preferred") {
-    if (!hasMeaningfulQuery) {
-      return { shouldQuery: false, reason: "no_scopes_or_signal" };
+
+  if (mode === "primary") {
+    // Active retrieval whenever a meaningful query can be formed.
+    // Even with thin signal, we still attempt — primary workspaces
+    // would rather log `no_relevant_hits` than silently skip.
+    if (hasMeaningfulQuery || inputs.legacyWouldQuery) {
+      return { shouldQuery: true, reason: "primary_default" };
     }
-    return { shouldQuery: true, reason: "preferred_with_query" };
+    return { shouldQuery: false, reason: "relevant_no_signal" };
   }
-  // opportunistic — preserve legacy behavior exactly.
-  if (inputs.legacyWouldQuery && hasMeaningfulQuery) {
-    return { shouldQuery: true, reason: "opportunistic_legacy_signal" };
+
+  if (mode === "relevant") {
+    // Operator default: query when there is *any* retrieval signal
+    // (derived scope, legacy heuristic, or non-trivial user content).
+    if (
+      inputs.legacyWouldQuery ||
+      inputs.derivedScopes.length > 0 ||
+      hasMeaningfulQuery
+    ) {
+      return { shouldQuery: true, reason: "relevant_with_signal" };
+    }
+    return { shouldQuery: false, reason: "relevant_no_signal" };
   }
-  return { shouldQuery: false, reason: "opportunistic_no_legacy_signal" };
+
+  // background — do not auto-inject unless the user explicitly asked
+  // OR retrieval was already going to run via legacy heuristics. We
+  // intentionally do NOT skip just because workspace is Refine.
+  if (inputs.userExplicitlyRequestedLibrary) {
+    return { shouldQuery: true, reason: "background_explicit_request" };
+  }
+  return { shouldQuery: false, reason: "background_no_explicit_request" };
 }
 
-// ─── Library coverage gap (libraryMode: required) ────────────────
+// ─── Library coverage state ──────────────────────────────────────
+
+/**
+ * Coverage state replaces the old boolean gap. It is *always* logged
+ * so telemetry can see whether the library was consulted, found, or
+ * fell short — and only `required_missing` represents a hard problem.
+ *
+ *  • not_needed       — workspace did not need to query (e.g. background
+ *                       with no explicit request)
+ *  • used             — queried and found at least one hit
+ *  • no_relevant_hits — queried, zero hits; non-fatal for non-required
+ *                       workspaces (informational signal)
+ *  • required_missing — `required` workspace queried, zero hits → real
+ *                       coverage gap to surface
+ */
+export type LibraryCoverageState =
+  | "not_needed"
+  | "used"
+  | "no_relevant_hits"
+  | "required_missing";
 
 export interface LibraryCoverageInputs {
   rules: RetrievalRules;
@@ -140,33 +182,25 @@ export interface LibraryCoverageInputs {
   libraryQueried: boolean;
 }
 
-export interface LibraryCoverageGap {
-  hasGap: boolean;
-  reason:
-    | "library_required_no_hits"
-    | "library_required_not_queried"
-    | "no_gap";
-}
-
 /**
- * For workspaces where libraryMode === "required", surface a
- * structured coverage gap when retrieval returned nothing. This is a
- * telemetry/state signal — W5/W6 will decide how to surface it to the
- * user. We intentionally do NOT throw here.
+ * Evaluate the library coverage state. Never throws. The caller
+ * decides what to do with `required_missing` — typically the Library
+ * workspace and library-centered tasks surface it to the user; other
+ * workspaces just log it.
  */
 export function evaluateLibraryCoverage(
   inputs: LibraryCoverageInputs,
-): LibraryCoverageGap {
-  if (inputs.rules.libraryMode !== "required") {
-    return { hasGap: false, reason: "no_gap" };
-  }
+): LibraryCoverageState {
   if (!inputs.libraryQueried) {
-    return { hasGap: true, reason: "library_required_not_queried" };
+    return "not_needed";
   }
-  if (inputs.libraryHitCount <= 0) {
-    return { hasGap: true, reason: "library_required_no_hits" };
+  if (inputs.libraryHitCount > 0) {
+    return "used";
   }
-  return { hasGap: false, reason: "no_gap" };
+  if (inputs.rules.libraryUse === "required") {
+    return "required_missing";
+  }
+  return "no_relevant_hits";
 }
 
 // ─── Web gating (advisory in MVP) ────────────────────────────────
@@ -270,10 +304,10 @@ export function orderContextBlocks(
 export interface RetrievalDecisionLog {
   workspace: WorkspaceKey;
   contractVersion: string;
-  libraryMode: LibraryMode;
+  libraryUse: LibraryUse;
   libraryQueried: boolean;
   libraryHitCount: number;
-  libraryCoverageGap: LibraryCoverageGap["reason"];
+  libraryCoverageState: LibraryCoverageState;
   webMode: WebMode;
   webQueried: boolean;
   webHitCount: number;
@@ -307,7 +341,7 @@ export function buildRetrievalDecisionLog(args: {
   resolved: ResolvedServerContract;
   libraryDecision: LibraryGateDecision;
   libraryHitCount: number;
-  libraryGap: LibraryCoverageGap;
+  libraryCoverageState: LibraryCoverageState;
   webDecision: WebGateDecision;
   webHitCount: number;
   surface?: string;
@@ -318,10 +352,10 @@ export function buildRetrievalDecisionLog(args: {
   return {
     workspace: resolved.workspace,
     contractVersion: resolved.contractVersion,
-    libraryMode: resolved.retrievalRules.libraryMode,
+    libraryUse: resolved.retrievalRules.libraryUse,
     libraryQueried,
     libraryHitCount: args.libraryHitCount,
-    libraryCoverageGap: args.libraryGap.reason,
+    libraryCoverageState: args.libraryCoverageState,
     webMode: resolved.retrievalRules.webMode,
     webQueried,
     webHitCount: args.webHitCount,

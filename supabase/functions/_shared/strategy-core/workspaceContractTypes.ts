@@ -28,8 +28,22 @@ export type WorkspaceKey =
   | "work";
 
 // ─── Retrieval posture ────────────────────────────────────────────
+//
+// `libraryUse` is the workspace's *posture toward the user's library*,
+// NOT a switch that disables it. The library is universal Strategy
+// context — every workspace can reach it. The posture only controls
+// how aggressively it is used.
+//
+//   • background — available; do not actively inject unless the user
+//                  explicitly requests it or relevance is unmistakable
+//   • relevant   — retrieve and inject when the request signals likely
+//                  relevance (default operator behavior)
+//   • primary    — actively retrieve and treat as a major context
+//                  source whenever a meaningful query can be formed
+//   • required   — library-centered work; missing coverage surfaces a
+//                  `required_missing` state to the caller
 
-export type LibraryMode = "off" | "opportunistic" | "preferred" | "required";
+export type LibraryUse = "background" | "relevant" | "primary" | "required";
 export type WebMode = "off" | "opportunistic" | "required_for_current_facts";
 export type CitationMode =
   | "none"
@@ -43,7 +57,7 @@ export type ContextMode =
   | "draft_first";
 
 export interface RetrievalRules {
-  libraryMode: LibraryMode;
+  libraryUse: LibraryUse;
   webMode: WebMode;
   citationMode: CitationMode;
   contextMode: ContextMode;

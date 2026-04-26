@@ -117,7 +117,7 @@ export type {
   EscalationRule,
   GateEnforcementType,
   GateSeverity,
-  LibraryMode,
+  LibraryUse,
   OutputFormattingHints,
   ProjectsConfig,
   QualityGate,
@@ -142,8 +142,8 @@ export {
 } from "./retrievalEnforcement.ts";
 export type {
   ContextBlockKind,
-  LibraryCoverageGap,
   LibraryCoverageInputs,
+  LibraryCoverageState,
   LibraryGateDecision,
   LibraryGateInputs,
   LibraryGateRunReason,

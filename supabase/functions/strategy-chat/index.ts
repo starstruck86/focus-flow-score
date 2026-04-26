@@ -5081,7 +5081,8 @@ async function buildChatSystemPrompt(args: {
     // Resource retrieval is intent-driven (named resource, picked IDs,
     // topic scopes) and not workspace-gated yet — keeping it on
     // preserves Strategy chat's existing resource-aware behavior.
-    // libraryMode === "off" still skips the broader library scan above.
+    // Library posture (`libraryUse: background`) only suppresses the
+    // broader library scan above, not intent-driven resource lookup.
     retrieveResourceContext(supabase, userId, {
       userMessage: userContent,
       accountId,
@@ -5109,10 +5110,10 @@ async function buildChatSystemPrompt(args: {
     }),
   ]);
 
-  // Coverage gap evaluation + structured retrieval-decision telemetry.
+  // Coverage state evaluation + structured retrieval-decision telemetry.
   const __libraryHitCount = (library?.knowledgeItems?.length ?? 0) +
     (library?.playbooks?.length ?? 0);
-  const __libraryGap = evaluateLibraryCoverage({
+  const __libraryCoverageState = evaluateLibraryCoverage({
     rules: __retrievalRules,
     libraryHitCount: __libraryHitCount,
     libraryQueried: __libraryDecision.shouldQuery,
@@ -5122,7 +5123,7 @@ async function buildChatSystemPrompt(args: {
       resolved: __resolvedContract,
       libraryDecision: __libraryDecision,
       libraryHitCount: __libraryHitCount,
-      libraryGap: __libraryGap,
+      libraryCoverageState: __libraryCoverageState,
       webDecision: __webDecision,
       webHitCount: 0,
       surface: "strategy-chat",

@@ -21,15 +21,15 @@ import type {
   ContextMode,
   GateEnforcementType,
   GateSeverity,
-  LibraryMode,
+  LibraryUse,
   WebMode,
   WorkspaceKey,
 } from "./workspaceContractTypes.ts";
 
-const VALID_LIBRARY: ReadonlyArray<LibraryMode> = [
-  "off",
-  "opportunistic",
-  "preferred",
+const VALID_LIBRARY: ReadonlyArray<LibraryUse> = [
+  "background",
+  "relevant",
+  "primary",
   "required",
 ];
 const VALID_WEB: ReadonlyArray<WebMode> = [
@@ -100,10 +100,38 @@ Deno.test("every contract has the required core fields populated", () => {
 Deno.test("retrieval rules use only finalized enum vocabulary", () => {
   for (const key of ALL_WORKSPACE_KEYS) {
     const r = WORKSPACE_CONTRACTS[key].retrievalRules;
-    assert(VALID_LIBRARY.includes(r.libraryMode), `${key}: libraryMode`);
+    assert(VALID_LIBRARY.includes(r.libraryUse), `${key}: libraryUse`);
     assert(VALID_WEB.includes(r.webMode), `${key}: webMode`);
     assert(VALID_CITATION.includes(r.citationMode), `${key}: citationMode`);
     assert(VALID_CONTEXT.includes(r.contextMode), `${key}: contextMode`);
+  }
+});
+
+Deno.test("workspace defaults reflect the universal-library principle", () => {
+  // Library is universal Strategy context — every workspace can access
+  // it; posture only controls how aggressively it is used. Refine no
+  // longer disables the library; it merely keeps it in the background.
+  const expected: Record<string, LibraryUse> = {
+    brainstorm: "relevant",
+    deep_research: "primary",
+    refine: "background",
+    library: "required",
+    artifacts: "primary",
+    projects: "primary",
+    work: "relevant",
+  };
+  for (const key of ALL_WORKSPACE_KEYS) {
+    assertEquals(
+      WORKSPACE_CONTRACTS[key].retrievalRules.libraryUse,
+      expected[key],
+      `${key}: expected libraryUse=${expected[key]}`,
+    );
+  }
+});
+
+Deno.test("contract version was bumped to 1.1.0 for the libraryUse rename", () => {
+  for (const key of ALL_WORKSPACE_KEYS) {
+    assertEquals(WORKSPACE_CONTRACTS[key].version, "1.1.0", `${key}: version`);
   }
 });
 
