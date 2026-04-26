@@ -50,6 +50,12 @@ import {
   buildWorkspaceOverlay,
   logPromptComposition,
 } from "../strategy-core/workspacePrompt.ts";
+import {
+  buildCitationCheckLog,
+  logCitationCheck,
+  runCitationCheck,
+  type CitationAuditHit,
+} from "../strategy-core/index.ts";
 import { resolveTaskWorkspace } from "./taskWorkspace.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
 
