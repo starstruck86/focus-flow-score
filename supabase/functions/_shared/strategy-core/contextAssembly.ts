@@ -6,12 +6,27 @@
 // formats a compact text block ready to inject into any Strategy
 // Core prompt.
 //
-// PR #1 scope: this file is INTRODUCED but NOT YET WIRED. Discovery
-// Prep continues to receive its inputs from the caller (the existing
-// run-discovery-prep edge function builds the inputs object). PR #2
-// will use this from strategy-chat so chat assembles the same context
-// the prep doc gets.
+// W3 (Retrieval Enforcement) extension:
+//   • Optionally accepts a resolved WorkspaceContract's retrievalRules.
+//   • When provided, the rendered contextBlock is reordered per
+//     `contextMode` (thread_first | draft_first | artifact_first |
+//     project_first) using `orderContextBlocks` from
+//     retrievalEnforcement.ts.
+//   • When omitted, behavior is byte-identical to the pre-W3 output
+//     (back-compat for existing strategy-chat / runTask callers that
+//     have not yet threaded a contract through).
+//
+// W3 does NOT change library / web retrieval inside this file — those
+// are gated by `decideLibraryQuery` / `decideWebQuery` at the call
+// site. This module only owns account/contact/transcript context and
+// its ordering.
 // ════════════════════════════════════════════════════════════════
+
+import type { RetrievalRules } from "./workspaceContractTypes.ts";
+import {
+  orderContextBlocks,
+  type OrderableContextBlock,
+} from "./retrievalEnforcement.ts";
 
 export interface AssembledStrategyContext {
   account: {
@@ -63,8 +78,15 @@ export async function assembleStrategyContext(args: {
   supabase: any;
   userId: string;
   accountId?: string | null;
+  /**
+   * Optional W3 input. When supplied, the rendered `contextBlock`
+   * orders its constituent sections per `contextMode`. Library/web
+   * decisions are NOT made here — those are owned by the call site
+   * via `retrievalEnforcement`.
+   */
+  retrievalRules?: RetrievalRules;
 }): Promise<AssembledStrategyContext> {
-  const { supabase, userId, accountId } = args;
+  const { supabase, userId, accountId, retrievalRules } = args;
   if (!accountId) return EMPTY;
 
   try {
