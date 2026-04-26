@@ -18,7 +18,7 @@ import type {
   WorkspaceKey,
 } from "./workspaceContractTypes";
 
-const CONTRACT_VERSION = "1.0.0";
+const CONTRACT_VERSION = '1.1.0';
 
 // ─── Brainstorm ───────────────────────────────────────────────────
 
