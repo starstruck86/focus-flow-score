@@ -5209,7 +5209,39 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     libraryTotalsBlock: libraryTotals
       ? renderLibraryTotalsBlock(libraryTotals)
       : "",
+    // W4 — pass the resolved server-side workspace contract so the
+    // composer can append the structured workspace overlay block and
+    // apply contextMode ordering. The contract is already resolved
+    // above for retrieval enforcement (`__resolvedContract`) — reuse
+    // it here to keep one source of truth per turn.
+    workspaceContract: __resolvedContract.contract,
   });
+
+  // ── W4: prompt-composition telemetry (chat surface) ────────────
+  // Recompute the overlay metadata cheaply (pure function over the
+  // contract) so we can log a stable, structured composition record.
+  // This mirrors the run-task surface log so observability is uniform.
+  try {
+    const __overlay = buildWorkspaceOverlay({
+      contract: __resolvedContract.contract,
+      taskTemplateLocked: false,
+      surface: "strategy-chat",
+    });
+    logPromptComposition(
+      buildPromptCompositionLog({
+        contract: __resolvedContract.contract,
+        result: __overlay,
+        taskTemplateLocked: false,
+        surface: "strategy-chat",
+      }),
+    );
+  } catch (e) {
+    console.warn(
+      "[workspace:prompt_composition] log failed (non-fatal):",
+      (e as Error)?.message,
+    );
+  }
+
 
   // ── READABILITY + STRUCTURE CONTRACT ────────────────────────────
   // Frontend renders Markdown. We enforce a Claude/ChatGPT-grade
