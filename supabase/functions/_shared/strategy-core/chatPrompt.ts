@@ -31,6 +31,15 @@ import {
   FACT_DISCIPLINE_RULES,
   STRATEGY_CORE_THINKING_ORDER,
 } from "./reasoningCore.ts";
+import {
+  buildWorkspaceOverlay,
+  type WorkspaceOverlayResult,
+} from "./workspacePrompt.ts";
+import {
+  orderContextBlocks,
+  type OrderableContextBlock,
+} from "./retrievalEnforcement.ts";
+import type { WorkspaceContract } from "./workspaceContractTypes.ts";
 
 const CHAT_IDENTITY = `You are a high-performance sales operator embedded in the rep's Strategy workspace. You produce work the rep can copy and use right now. You think like a senior operator — opinionated, commercially sharp, grounded in this rep's real account and their internal library. You do NOT sound like a generic assistant or a consultant.`;
 
@@ -103,19 +112,23 @@ export interface BuildStrategyChatPromptArgs {
   /**
    * Pre-rendered "=== LIBRARY RESOURCES ===" block from
    * resourceRetrieval.renderResourceContextBlock(). Self-headers.
-   * When present, it forces the model to either cite an exact title
-   * or admit absence — never to invent a template/example/calculator.
    */
   resourceContextBlock?: string;
   /**
    * Pre-rendered "=== LIBRARY TOTALS ===" block holding the AUTHORITATIVE
-   * counts of the user's resources / KIs / playbooks (from a real DB
-   * COUNT query, NOT a vector top-K). When present, it is the only place
-   * the model is allowed to source numeric library claims from. Combined
-   * with LIBRARY COUNT DISCIPLINE above, this is what kills hallucinated
-   * counts like "you have 12 resources on X".
+   * counts of the user's resources / KIs / playbooks.
    */
   libraryTotalsBlock?: string;
+  /**
+   * Phase W4 — resolved WorkspaceContract used to:
+   *   1. Inject the structured workspace overlay block (mission,
+   *      cognitive posture, reasoning path, retrieval posture, output
+   *      formatting hints, failure modes, escalation hints).
+   *   2. Reorder the prompt's context blocks via `contextMode`
+   *      (thread_first | draft_first | artifact_first | project_first).
+   * When omitted, behavior is byte-identical to the pre-W4 composer.
+   */
+  workspaceContract?: WorkspaceContract;
 }
 
 /**
@@ -135,6 +148,9 @@ export function buildStrategyChatSystemPrompt(
     : "Standard";
   const depthBlock = DEPTH_INSTRUCTIONS[depthLabel];
 
+  // Global Strategy SOP rules ALWAYS come first. Workspace overlay
+  // (W4) is appended after the output contract so it shapes behavior
+  // without ever overriding the inviolable rules.
   const parts: string[] = [
     CHAT_IDENTITY,
     STRATEGY_CORE_THINKING_ORDER,
@@ -145,47 +161,70 @@ export function buildStrategyChatSystemPrompt(
     depthBlock,
   ];
 
+  // ── W4: Workspace overlay (optional) ─────────────────────────
+  let overlay: WorkspaceOverlayResult | null = null;
+  if (args.workspaceContract) {
+    overlay = buildWorkspaceOverlay({
+      contract: args.workspaceContract,
+      // Strategy chat does not lock task templates; runTask does.
+      taskTemplateLocked: false,
+      surface: "strategy-chat",
+    });
+    if (overlay.text) parts.push(overlay.text);
+  }
+
+  // ── Context blocks ───────────────────────────────────────────
+  // Build heterogeneous context blocks first, then optionally
+  // reorder per the workspace's contextMode (W4). When no contract
+  // is supplied the order is byte-identical to the pre-W4 composer.
+  const contextBlocks: OrderableContextBlock[] = [];
+
   const lib = (args.libraryContext || "").trim();
   if (lib) {
-    parts.push(
-      `=== INTERNAL LIBRARY (ground your answer in these when relevant) ===\n${lib}`,
-    );
+    contextBlocks.push({
+      kind: "library",
+      label: "internal_library",
+      text: `=== INTERNAL LIBRARY (ground your answer in these when relevant) ===\n${lib}`,
+    });
   }
 
   const acct = (args.accountContext || "").trim();
   if (acct) {
-    parts.push(`=== ACCOUNT CONTEXT ===\n${acct}`);
+    contextBlocks.push({
+      kind: "account",
+      label: "account_context",
+      text: `=== ACCOUNT CONTEXT ===\n${acct}`,
+    });
   }
 
-  // Library resources block — already self-headers ("=== LIBRARY
-  // RESOURCES ==="). Placed alongside other context so the model
-  // sees both the entity context and the retrieved artifact list.
   const res = (args.resourceContextBlock || "").trim();
   if (res) {
-    parts.push(res);
+    // Library RESOURCES block — counts as "library" for ordering.
+    contextBlocks.push({ kind: "library", label: "library_resources", text: res });
   }
 
-  // Authoritative library totals — already self-headers ("=== LIBRARY
-  // TOTALS ==="). This is the ONLY place the model is allowed to source
-  // numeric library claims from (see LIBRARY COUNT DISCIPLINE rule).
-  // When absent, the model must refuse to assert counts.
   const totals = (args.libraryTotalsBlock || "").trim();
   if (totals) {
-    parts.push(totals);
+    contextBlocks.push({ kind: "library", label: "library_totals", text: totals });
   }
 
-  // Working thesis state — placed AFTER static context so the live
-  // operating model is the last thing the model sees before the user
-  // turn. Already self-headers ("=== CURRENT WORKING THESIS STATE ===").
   const thesis = (args.workingThesisBlock || "").trim();
   if (thesis) {
-    parts.push(thesis);
+    // Working thesis is the live thread state.
+    contextBlocks.push({ kind: "thread", label: "working_thesis", text: thesis });
   }
 
   const ctx = (args.contextSection || "").trim();
   if (ctx) {
-    parts.push(ctx);
+    // The legacy contextSection is treated as a thread-bound pack.
+    contextBlocks.push({ kind: "thread", label: "context_section", text: ctx });
   }
+
+  const ordered = args.workspaceContract
+    ? orderContextBlocks(contextBlocks, args.workspaceContract.retrievalRules)
+    : contextBlocks;
+
+  for (const b of ordered) parts.push(b.text);
 
   return parts.join("\n\n");
 }

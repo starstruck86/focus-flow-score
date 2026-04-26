@@ -156,3 +156,18 @@ export type {
   WebGateRunReason,
   WebGateSkipReason,
 } from "./retrievalEnforcement.ts";
+
+// ─── Workspace prompt overlay (Phase W4) ─────────────────────────
+export {
+  ALL_WORKSPACE_PROMPT_BLOCKS,
+  buildPromptCompositionLog,
+  buildWorkspaceOverlay,
+  logPromptComposition,
+} from "./workspacePrompt.ts";
+export type {
+  BuildPromptCompositionLogArgs,
+  BuildWorkspaceOverlayArgs,
+  WorkspaceOverlayResult,
+  WorkspacePromptBlockId,
+  WorkspacePromptComposition,
+} from "./workspacePrompt.ts";
