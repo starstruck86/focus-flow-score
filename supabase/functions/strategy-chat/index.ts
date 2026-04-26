@@ -7,6 +7,7 @@ import {
   buildPromptCompositionLog,
   buildRetrievalDecisionLog,
   buildStrategyChatSystemPrompt,
+  buildWorkspaceOverlay,
   logPromptComposition,
   decideLibraryQuery,
   decideWebQuery,
