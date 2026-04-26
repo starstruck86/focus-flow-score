@@ -100,3 +100,30 @@ export {
   type ValidationResult,
   type WorkingThesisState,
 } from "./thesisMemory.ts";
+
+// ─── Workspace SOP contracts (Phase W1 — data only) ─────────────
+export {
+  ALL_WORKSPACE_KEYS,
+  getWorkspaceContract,
+  WORKSPACE_CONTRACTS,
+} from "./workspaceContracts.ts";
+export type {
+  ArtifactsConfig,
+  CitationMode,
+  ContextMode,
+  EscalationAction,
+  EscalationRule,
+  GateEnforcementType,
+  GateSeverity,
+  LibraryMode,
+  OutputFormattingHints,
+  ProjectsConfig,
+  QualityGate,
+  RefineConfig,
+  RetrievalRules,
+  WebMode,
+  WorkConfig,
+  WorkMaterialityRule,
+  WorkspaceContract,
+  WorkspaceKey,
+} from "./workspaceContractTypes.ts";
