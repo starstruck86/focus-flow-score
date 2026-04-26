@@ -238,7 +238,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   const synthesisModel = "gpt-5-mini";
   console.log(JSON.stringify({ tag: "stage-2:start", run_id: runId, model: synthesisModel, reasoning_effort: "medium" }));
   const synthesisRaw = await callOpenAI([
-    { role: "system", content: "You are a senior sales strategist. Synthesize research + internal IP into actionable intelligence. Return structured JSON only. No markdown fences, no preamble." },
+    { role: "system", content: `${overlayPrefix}You are a senior sales strategist. Synthesize research + internal IP into actionable intelligence. Return structured JSON only. No markdown fences, no preamble.` },
     { role: "user", content: handler.buildSynthesisPrompt(inputs, research, library) },
   ], { model: synthesisModel, maxTokens: 16000, reasoningEffort: "medium" });
   const synthesis = safeParseJSON<any>(synthesisRaw) ?? { raw: synthesisRaw };
