@@ -5003,23 +5003,52 @@ async function buildChatSystemPrompt(args: {
     };
   }
 
+  // ── W3 — Retrieval Enforcement ────────────────────────────────
+  // Resolve the workspace contract server-side (never trust the
+  // client). The contract's retrievalRules drive whether we query the
+  // library and how the assembled context block is ordered. Web mode
+  // is honored advisory-only here because strategy-chat has no live
+  // web tool wired in MVP.
+  const __resolvedContract = resolveServerWorkspaceContract(workspaceKeyRaw);
+  const __retrievalRules = __resolvedContract.retrievalRules;
+
   // Pull the same context the prep doc gets, in parallel with library
   // retrieval AND the working thesis state for this account AND the
   // newly-added resource retrieval (exact / near-exact title + entity
   // links + category backstop).
   const scopes = deriveLibraryScopes(pack.account, userContent);
+
+  // Library gate — preserves legacy behavior for `opportunistic`
+  // (only queries when scopes existed today) while enforcing `off`
+  // and forcing `preferred`/`required` when a meaningful query exists.
+  const __libraryDecision = decideLibraryQuery(__retrievalRules, {
+    userContent,
+    derivedScopes: scopes,
+    legacyWouldQuery: scopes.length > 0,
+  });
+  const __webDecision = decideWebQuery(__retrievalRules, {
+    // strategy-chat has no live web/search adapter wired today.
+    webCapabilityAvailable: false,
+    legacyWouldQuery: false,
+  });
+
   let retrievalError: { message: string; stack?: string | null; stage?: string } | null = null;
   const [assembled, library, workingThesis, resources, libraryTotals] = await Promise.all([
     accountId
-      ? assembleStrategyContext({ supabase, userId, accountId }).catch((e) => {
-        console.warn(
-          "[strategy-chat] assembleStrategyContext failed:",
-          (e as Error).message,
-        );
-        return null;
-      })
+      ? assembleStrategyContext({
+          supabase,
+          userId,
+          accountId,
+          retrievalRules: __retrievalRules,
+        }).catch((e) => {
+          console.warn(
+            "[strategy-chat] assembleStrategyContext failed:",
+            (e as Error).message,
+          );
+          return null;
+        })
       : Promise.resolve(null),
-    scopes.length
+    __libraryDecision.shouldQuery && scopes.length
       ? retrieveLibraryContext(supabase, userId, {} as any, {
         scopes,
         maxKIs: 8,
@@ -5043,6 +5072,10 @@ async function buildChatSystemPrompt(args: {
         return null;
       })
       : Promise.resolve(null),
+    // Resource retrieval is intent-driven (named resource, picked IDs,
+    // topic scopes) and not workspace-gated yet — keeping it on
+    // preserves Strategy chat's existing resource-aware behavior.
+    // libraryMode === "off" still skips the broader library scan above.
     retrieveResourceContext(supabase, userId, {
       userMessage: userContent,
       accountId,
@@ -5069,6 +5102,27 @@ async function buildChatSystemPrompt(args: {
       return null;
     }),
   ]);
+
+  // Coverage gap evaluation + structured retrieval-decision telemetry.
+  const __libraryHitCount = (library?.knowledgeItems?.length ?? 0) +
+    (library?.playbooks?.length ?? 0);
+  const __libraryGap = evaluateLibraryCoverage({
+    rules: __retrievalRules,
+    libraryHitCount: __libraryHitCount,
+    libraryQueried: __libraryDecision.shouldQuery,
+  });
+  logRetrievalDecision(
+    buildRetrievalDecisionLog({
+      resolved: __resolvedContract,
+      libraryDecision: __libraryDecision,
+      libraryHitCount: __libraryHitCount,
+      libraryGap: __libraryGap,
+      webDecision: __webDecision,
+      webHitCount: 0,
+      surface: "strategy-chat",
+    }),
+  );
+
   const retrievalDiagnostics = buildRetrievalDiagnostics({
     userContent,
     resources,
