@@ -51,7 +51,7 @@ const BRAINSTORM: WorkspaceContract = {
     "Recommend a next move — refine the top option, deepen one angle, or research a hypothesis",
   ],
   retrievalRules: {
-    libraryMode: "opportunistic",
+    libraryUse: "relevant",
     webMode: "off",
     citationMode: "none_unless_library_used",
     contextMode: "thread_first",
@@ -172,7 +172,7 @@ const DEEP_RESEARCH: WorkspaceContract = {
     "End with the 2–3 highest-leverage questions the user should ask next",
   ],
   retrievalRules: {
-    libraryMode: "preferred",
+    libraryUse: "primary",
     webMode: "required_for_current_facts",
     citationMode: "strict",
     contextMode: "thread_first",
@@ -300,7 +300,7 @@ const REFINE: WorkspaceContract = {
     "Output the improved version + a '## Changes' diff explaining the 2–3 key changes",
   ],
   retrievalRules: {
-    libraryMode: "off",
+    libraryUse: "background",
     webMode: "off",
     citationMode: "none",
     contextMode: "draft_first",
@@ -426,7 +426,7 @@ const LIBRARY: WorkspaceContract = {
     "Surface gaps in '## Gaps' and recommend next move",
   ],
   retrievalRules: {
-    libraryMode: "required",
+    libraryUse: "required",
     webMode: "off",
     citationMode: "strict",
     contextMode: "thread_first",
@@ -546,7 +546,7 @@ const ARTIFACTS: WorkspaceContract = {
     "Verify the output conforms to the contract before returning",
   ],
   retrievalRules: {
-    libraryMode: "preferred",
+    libraryUse: "primary",
     webMode: "opportunistic",
     citationMode: "strict",
     contextMode: "artifact_first",
@@ -657,7 +657,7 @@ const PROJECTS: WorkspaceContract = {
     "Recommend a next move grounded in project context, not a generic best practice",
   ],
   retrievalRules: {
-    libraryMode: "preferred",
+    libraryUse: "primary",
     webMode: "opportunistic",
     citationMode: "strict",
     contextMode: "project_first",
@@ -765,7 +765,7 @@ const WORK: WorkspaceContract = {
     "If a tail next-step adds value, append 'Next move: <one line>' — otherwise omit",
   ],
   retrievalRules: {
-    libraryMode: "opportunistic",
+    libraryUse: "relevant",
     webMode: "opportunistic",
     citationMode: "light",
     contextMode: "thread_first",
