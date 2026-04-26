@@ -436,7 +436,19 @@ export function StrategyShell() {
       if (sidecar) setPendingResourceIds([]);
       requestAnimationFrame(() => sendMessage(queued, { pickedResourceIds: sidecar, workspace: activeSurface ?? 'work' }));
     }
-  }, [pendingThreadId, activeThread?.id, sendMessage, pendingResourceIds]);
+    // Flush any account-brief job that was queued while waiting for the
+    // freshly-created thread. Thread linkage is what lets useThreadTaskRuns
+    // pick the run up and surface the artifact card in this shell.
+    const queuedBrief = queuedAccountBriefRef.current;
+    queuedAccountBriefRef.current = null;
+    if (queuedBrief) {
+      const inputs = { ...queuedBrief.inputs, thread_id: pendingThreadId };
+      startStrategyJob('account_brief', inputs, 'deep').catch((e) => {
+        const msg = e instanceof Error ? e.message : 'Failed to start Account Brief';
+        toast.error(msg);
+      });
+    }
+  }, [pendingThreadId, activeThread?.id, sendMessage, pendingResourceIds, startStrategyJob]);
 
   /** Branch from selection (if any) or current thread state. Provenance preserved via cloned_from_thread_id. */
   const handleBranch = useCallback(async () => {
