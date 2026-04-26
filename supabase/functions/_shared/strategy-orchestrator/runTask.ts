@@ -37,6 +37,15 @@ import {
   validateSopInputs,
   type SopContractLike,
 } from "./sopValidator.ts";
+import {
+  buildRetrievalDecisionLog,
+  decideLibraryQuery,
+  decideWebQuery,
+  evaluateLibraryCoverage,
+  logRetrievalDecision,
+  resolveServerWorkspaceContract,
+} from "../strategy-core/retrievalEnforcement.ts";
+import { resolveTaskWorkspace } from "./taskWorkspace.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
 
 // ── Internal: write a progress step to the run row (best-effort). ─
