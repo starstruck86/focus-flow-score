@@ -4903,6 +4903,12 @@ async function buildChatSystemPrompt(args: {
   userContent: string;
   /** Sidecar: resource IDs the user explicitly picked from /library this turn. */
   pickedResourceIds?: string[];
+  /**
+   * W3 — workspace key supplied by the client (validated upstream).
+   * The server resolves this through the W1 contract registry; unknown
+   * values fall back to the `work` contract.
+   */
+  workspaceKeyRaw?: string | null;
 }): Promise<{
   prompt: string;
   workingThesis: WorkingThesisState | null;
@@ -4928,6 +4934,7 @@ async function buildChatSystemPrompt(args: {
     pack,
     userContent,
     pickedResourceIds = [],
+    workspaceKeyRaw = null,
   } = args;
   const accountId: string | null = pack.account?.id ?? null;
   const opportunityId: string | null = pack.opportunity?.id ?? null;
