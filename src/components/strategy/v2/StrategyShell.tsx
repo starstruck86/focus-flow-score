@@ -902,6 +902,15 @@ export function StrategyShell() {
     // Stash the launch surface so the resulting thread can be tagged.
     launchSurfaceRef.current = activeSurface;
 
+    // ── Account Brief: force the form sheet so the click routes through
+    // handleRunWorkflow → startStrategyJob('account_brief'). Without this,
+    // the default pill click would insert/send the bracketed template via
+    // strategy-chat and skip the real task pipeline + SOP shadow validation.
+    if (def.id === 'research.account_brief') {
+      setActiveWorkflow(def);
+      return;
+    }
+
     const compiled = compileTemplateForComposer(def);
 
     // Decide: send immediately or insert?
