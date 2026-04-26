@@ -5945,19 +5945,35 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       );
     }
     const visible = subst.text;
-    // Citation audit: catch any fabricated RESOURCE[…] references.
-    // Closed-set mode is enabled when the user picked a resource via
-    // /library — this prevents adjacent-variant hallucinations
-    // (e.g. "Q3" when they picked "Q2").
-    const audit = auditResourceCitations(visible, resourceHits, {
-      closedSet: pickedResourceIds.length > 0,
+    // Citation audit (W5): governed by `retrievalRules.citationMode`
+    // from the resolved workspace contract. Strict workspaces still
+    // publish the rewrite (legacy behavior); other modes are shadow
+    // and reporting only. Closed-set mode (user picked a resource via
+    // /library) is preserved across all modes.
+    const w5Citation = runCitationCheck({
+      assistantText: visible,
+      libraryHits: resourceHits,
+      libraryUsed: resourceHits.length > 0,
+      workspace: __resolvedContract.workspace,
+      contractVersion: __resolvedContract.contractVersion,
+      citationMode: __retrievalRules.citationMode,
+      auditOptions: { closedSet: pickedResourceIds.length > 0 },
     });
-    if (audit.modified) {
+    const audit = w5Citation.audit ?? auditResourceCitations(visible, [], { closedSet: false });
+    if (w5Citation.audit?.modified) {
       console.log(
-        `[citation-audit] non-stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged${pickedResourceIds.length > 0 ? " (closed-set)" : ""}`,
+        `[citation-audit] non-stream mode=${w5Citation.citationMode}: ${w5Citation.audit.unverifiedCitations.length} unverified citation(s) flagged${pickedResourceIds.length > 0 ? " (closed-set)" : ""}`,
       );
     }
-    const auditedVisible = audit.text;
+    try {
+      logCitationCheck(buildCitationCheckLog({
+        result: w5Citation,
+        workspace: __resolvedContract.workspace,
+        contractVersion: __resolvedContract.contractVersion,
+        surface: "strategy-chat",
+      }));
+    } catch { /* never throw from telemetry */ }
+    const auditedVisible = w5Citation.auditedText;
     await supabase.from("strategy_messages").insert({
       thread_id: threadId,
       user_id: userId,
