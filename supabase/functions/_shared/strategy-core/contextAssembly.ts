@@ -151,7 +151,12 @@ export async function assembleStrategyContext(args: {
         }
       : null;
 
-    const contextBlock = buildContextBlock(account, contacts, latestTranscript);
+    const contextBlock = buildContextBlock(
+      account,
+      contacts,
+      latestTranscript,
+      retrievalRules,
+    );
     return { account, contacts, latestTranscript, contextBlock };
   } catch (e) {
     console.warn("[strategy-core/contextAssembly] failed:", (e as Error).message);
@@ -163,8 +168,12 @@ function buildContextBlock(
   account: AssembledStrategyContext["account"],
   contacts: AssembledStrategyContext["contacts"],
   transcript: AssembledStrategyContext["latestTranscript"],
+  retrievalRules: RetrievalRules | undefined,
 ): string {
-  const parts: string[] = [];
+  // Pre-W3 behavior: account → contacts → transcript, joined.
+  // The mapping below preserves that exact ordering when no
+  // retrievalRules are supplied (back-compat).
+  const blocks: OrderableContextBlock[] = [];
 
   if (account) {
     const info: string[] = [`Account: ${account.name}`];
@@ -176,8 +185,10 @@ function buildContextBlock(
       info.push(`Marketing Platform: ${account.marketingPlatformDetected}`);
     }
     if (account.ecommerce) info.push(`Ecommerce: ${account.ecommerce}`);
-    parts.push(info.join("\n"));
-    if (account.notes) parts.push(`Account Notes:\n${account.notes}`);
+    let text = info.join("\n");
+    if (account.notes) text += `\n\nAccount Notes:\n${account.notes}`;
+    // Account record is part of the project/account stream — kind: "account".
+    blocks.push({ kind: "account", label: "account", text });
   }
 
   if (contacts.length) {
@@ -185,7 +196,12 @@ function buildContextBlock(
       const details = [c.title, c.buyerRole, c.department].filter(Boolean).join(" · ");
       return `- ${c.name}${details ? ` (${details})` : ""}`;
     });
-    parts.push(`Key Contacts:\n${lines.join("\n")}`);
+    // Contacts continue the project/account picture.
+    blocks.push({
+      kind: "account",
+      label: "contacts",
+      text: `Key Contacts:\n${lines.join("\n")}`,
+    });
   }
 
   if (transcript) {
@@ -197,8 +213,22 @@ function buildContextBlock(
       ? transcript.content.slice(0, 2000) + "\n[...transcript truncated]"
       : transcript.content;
     tParts.push(`Transcript:\n${preview}`);
-    parts.push(tParts.join("\n"));
+    // Latest call transcript is the closest analog to "thread" within
+    // the assembled-context stream, so it ranks under thread_first.
+    blocks.push({
+      kind: "thread",
+      label: "latest_transcript",
+      text: tParts.join("\n"),
+    });
   }
 
-  return parts.join("\n\n");
+  const ordered = retrievalRules
+    ? orderContextBlocks(blocks, retrievalRules)
+    : blocks;
+
+  return ordered
+    .map((b) => b.text)
+    .filter((t) => t && t.length > 0)
+    .join("\n\n");
 }
+
