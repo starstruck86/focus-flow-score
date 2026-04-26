@@ -457,6 +457,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
           synthesis,
           supabase,
         });
+        if (rescue.sections_authored > 0) {
           console.log(JSON.stringify({
             tag: "[authoring:section_batch_rescue_success]",
             run_id: runId,
