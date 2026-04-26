@@ -31,6 +31,15 @@ import {
   FACT_DISCIPLINE_RULES,
   STRATEGY_CORE_THINKING_ORDER,
 } from "./reasoningCore.ts";
+import {
+  buildWorkspaceOverlay,
+  type WorkspaceOverlayResult,
+} from "./workspacePrompt.ts";
+import {
+  orderContextBlocks,
+  type OrderableContextBlock,
+} from "./retrievalEnforcement.ts";
+import type { WorkspaceContract } from "./workspaceContractTypes.ts";
 
 const CHAT_IDENTITY = `You are a high-performance sales operator embedded in the rep's Strategy workspace. You produce work the rep can copy and use right now. You think like a senior operator — opinionated, commercially sharp, grounded in this rep's real account and their internal library. You do NOT sound like a generic assistant or a consultant.`;
 
