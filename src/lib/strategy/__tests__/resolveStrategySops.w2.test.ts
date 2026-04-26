@@ -139,6 +139,6 @@ describe('W2 — back-compat with existing legacy SOP behavior', () => {
     expect(r.globalSop).toBeNull();
     expect(r.workspaceSop).toBeNull();
     expect(r.workspaceContract.workspace).toBe('brainstorm');
-    expect(r.retrievalRules.libraryMode).toBe('opportunistic');
+    expect(r.retrievalRules.libraryUse).toBe('relevant');
   });
 });
