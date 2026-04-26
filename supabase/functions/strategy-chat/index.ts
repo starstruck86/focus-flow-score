@@ -6246,19 +6246,34 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         }
         const visible = subst.text;
 
-        // Step 3: citation audit on the GUARDED text (so banner
-        // attaches to the same body that's persisted). Closed-set
-        // mode prevents adjacent-variant hallucinations when the
-        // user picked a resource via /library.
-        const audit = auditResourceCitations(visible, resourceHits, {
-          closedSet: pickedResourceIds.length > 0,
+        // Step 3: citation audit on the GUARDED text (W5: governed
+        // by `retrievalRules.citationMode`). Strict workspaces still
+        // publish the rewrite to the persisted body; other modes are
+        // shadow + reporting only. Closed-set mode is preserved.
+        const w5Citation = runCitationCheck({
+          assistantText: visible,
+          libraryHits: resourceHits,
+          libraryUsed: resourceHits.length > 0,
+          workspace: __resolvedContract.workspace,
+          contractVersion: __resolvedContract.contractVersion,
+          citationMode: __retrievalRules.citationMode,
+          auditOptions: { closedSet: pickedResourceIds.length > 0 },
         });
-        if (audit.modified) {
+        const audit = w5Citation.audit ?? auditResourceCitations(visible, [], { closedSet: false });
+        if (w5Citation.audit?.modified) {
           console.log(
-            `[citation-audit] stream: ${audit.unverifiedCitations.length} unverified citation(s) flagged${pickedResourceIds.length > 0 ? " (closed-set)" : ""}`,
+            `[citation-audit] stream mode=${w5Citation.citationMode}: ${w5Citation.audit.unverifiedCitations.length} unverified citation(s) flagged${pickedResourceIds.length > 0 ? " (closed-set)" : ""}`,
           );
         }
-        const auditedVisible = audit.text;
+        try {
+          logCitationCheck(buildCitationCheckLog({
+            result: w5Citation,
+            workspace: __resolvedContract.workspace,
+            contractVersion: __resolvedContract.contractVersion,
+            surface: "strategy-chat",
+          }));
+        } catch { /* never throw from telemetry */ }
+        const auditedVisible = w5Citation.auditedText;
 
         // ── HYBRID GUARD (diagnostic) ──
         const hybridGuard = evaluateHybridGuard(intent.intent, auditedVisible);
