@@ -105,8 +105,10 @@ export {
 export {
   ALL_WORKSPACE_KEYS,
   getWorkspaceContract,
+  normalizeWorkspaceKey,
   WORKSPACE_CONTRACTS,
 } from "./workspaceContracts.ts";
+export type { NormalizeWorkspaceKeyResult } from "./workspaceContracts.ts";
 export type {
   ArtifactsConfig,
   CitationMode,
@@ -127,3 +129,30 @@ export type {
   WorkspaceContract,
   WorkspaceKey,
 } from "./workspaceContractTypes.ts";
+
+// ─── Retrieval enforcement (Phase W3) ───────────────────────────
+export {
+  buildRetrievalDecisionLog,
+  decideLibraryQuery,
+  decideWebQuery,
+  evaluateLibraryCoverage,
+  logRetrievalDecision,
+  orderContextBlocks,
+  resolveServerWorkspaceContract,
+} from "./retrievalEnforcement.ts";
+export type {
+  ContextBlockKind,
+  LibraryCoverageGap,
+  LibraryCoverageInputs,
+  LibraryGateDecision,
+  LibraryGateInputs,
+  LibraryGateRunReason,
+  LibraryGateSkipReason,
+  OrderableContextBlock,
+  ResolvedServerContract,
+  RetrievalDecisionLog,
+  WebGateDecision,
+  WebGateInputs,
+  WebGateRunReason,
+  WebGateSkipReason,
+} from "./retrievalEnforcement.ts";

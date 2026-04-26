@@ -4,15 +4,20 @@ import {
   assembleStrategyContext,
   auditResourceCitations,
   buildPendingLookupAction,
+  buildRetrievalDecisionLog,
   buildStrategyChatSystemPrompt,
+  decideLibraryQuery,
+  decideWebQuery,
   detectAffirmative,
   detectLookupIntent,
   detectNegative,
   emptyWorkingThesisState,
+  evaluateLibraryCoverage,
   extractThesisPatchFromProse,
   getLibraryTotals,
   inferTopicScopes,
   loadWorkingThesisState,
+  logRetrievalDecision,
   type LookupIntent,
   mergeWorkingThesisState,
   type PendingLookupAction,
@@ -21,6 +26,7 @@ import {
   renderLibraryTotalsBlock,
   renderLookupResultText,
   renderWorkingThesisStateBlock,
+  resolveServerWorkspaceContract,
   retrieveLibraryContext,
   retrieveResourceContext,
   runLibraryLookup,
@@ -2528,6 +2534,7 @@ serve(async (req) => {
       routingDecision,
       cleanGlobalInstructions,
       cleanWorkspaceSop,
+      workspace,
     );
   } catch (e) {
     console.error("strategy-chat error:", e);
@@ -4902,6 +4909,12 @@ async function buildChatSystemPrompt(args: {
   userContent: string;
   /** Sidecar: resource IDs the user explicitly picked from /library this turn. */
   pickedResourceIds?: string[];
+  /**
+   * W3 — workspace key supplied by the client (validated upstream).
+   * The server resolves this through the W1 contract registry; unknown
+   * values fall back to the `work` contract.
+   */
+  workspaceKeyRaw?: string | null;
 }): Promise<{
   prompt: string;
   workingThesis: WorkingThesisState | null;
@@ -4927,6 +4940,7 @@ async function buildChatSystemPrompt(args: {
     pack,
     userContent,
     pickedResourceIds = [],
+    workspaceKeyRaw = null,
   } = args;
   const accountId: string | null = pack.account?.id ?? null;
   const opportunityId: string | null = pack.opportunity?.id ?? null;
@@ -4995,23 +5009,52 @@ async function buildChatSystemPrompt(args: {
     };
   }
 
+  // ── W3 — Retrieval Enforcement ────────────────────────────────
+  // Resolve the workspace contract server-side (never trust the
+  // client). The contract's retrievalRules drive whether we query the
+  // library and how the assembled context block is ordered. Web mode
+  // is honored advisory-only here because strategy-chat has no live
+  // web tool wired in MVP.
+  const __resolvedContract = resolveServerWorkspaceContract(workspaceKeyRaw);
+  const __retrievalRules = __resolvedContract.retrievalRules;
+
   // Pull the same context the prep doc gets, in parallel with library
   // retrieval AND the working thesis state for this account AND the
   // newly-added resource retrieval (exact / near-exact title + entity
   // links + category backstop).
   const scopes = deriveLibraryScopes(pack.account, userContent);
+
+  // Library gate — preserves legacy behavior for `opportunistic`
+  // (only queries when scopes existed today) while enforcing `off`
+  // and forcing `preferred`/`required` when a meaningful query exists.
+  const __libraryDecision = decideLibraryQuery(__retrievalRules, {
+    userContent,
+    derivedScopes: scopes,
+    legacyWouldQuery: scopes.length > 0,
+  });
+  const __webDecision = decideWebQuery(__retrievalRules, {
+    // strategy-chat has no live web/search adapter wired today.
+    webCapabilityAvailable: false,
+    legacyWouldQuery: false,
+  });
+
   let retrievalError: { message: string; stack?: string | null; stage?: string } | null = null;
   const [assembled, library, workingThesis, resources, libraryTotals] = await Promise.all([
     accountId
-      ? assembleStrategyContext({ supabase, userId, accountId }).catch((e) => {
-        console.warn(
-          "[strategy-chat] assembleStrategyContext failed:",
-          (e as Error).message,
-        );
-        return null;
-      })
+      ? assembleStrategyContext({
+          supabase,
+          userId,
+          accountId,
+          retrievalRules: __retrievalRules,
+        }).catch((e) => {
+          console.warn(
+            "[strategy-chat] assembleStrategyContext failed:",
+            (e as Error).message,
+          );
+          return null;
+        })
       : Promise.resolve(null),
-    scopes.length
+    __libraryDecision.shouldQuery && scopes.length
       ? retrieveLibraryContext(supabase, userId, {} as any, {
         scopes,
         maxKIs: 8,
@@ -5035,6 +5078,10 @@ async function buildChatSystemPrompt(args: {
         return null;
       })
       : Promise.resolve(null),
+    // Resource retrieval is intent-driven (named resource, picked IDs,
+    // topic scopes) and not workspace-gated yet — keeping it on
+    // preserves Strategy chat's existing resource-aware behavior.
+    // libraryMode === "off" still skips the broader library scan above.
     retrieveResourceContext(supabase, userId, {
       userMessage: userContent,
       accountId,
@@ -5061,6 +5108,27 @@ async function buildChatSystemPrompt(args: {
       return null;
     }),
   ]);
+
+  // Coverage gap evaluation + structured retrieval-decision telemetry.
+  const __libraryHitCount = (library?.knowledgeItems?.length ?? 0) +
+    (library?.playbooks?.length ?? 0);
+  const __libraryGap = evaluateLibraryCoverage({
+    rules: __retrievalRules,
+    libraryHitCount: __libraryHitCount,
+    libraryQueried: __libraryDecision.shouldQuery,
+  });
+  logRetrievalDecision(
+    buildRetrievalDecisionLog({
+      resolved: __resolvedContract,
+      libraryDecision: __libraryDecision,
+      libraryHitCount: __libraryHitCount,
+      libraryGap: __libraryGap,
+      webDecision: __webDecision,
+      webHitCount: 0,
+      surface: "strategy-chat",
+    }),
+  );
+
   const retrievalDiagnostics = buildRetrievalDiagnostics({
     userContent,
     resources,
@@ -5239,6 +5307,10 @@ async function handleChat(
     name: string;
     rawInstructions: string;
   } | null = null,
+  // Phase W3 — workspace key (validated upstream). Used by retrieval
+  // enforcement to resolve the WorkspaceContract from the server-side
+  // registry. Null/unknown falls back to `work` inside the resolver.
+  workspaceKeyRaw: string | null = null,
 ) {
   await supabase.from("strategy_messages").insert({
     thread_id: threadId,
@@ -5436,6 +5508,7 @@ async function handleChat(
     pack,
     userContent: content,
     pickedResourceIds,
+    workspaceKeyRaw,
   });
   const accountId: string | null = pack.account?.id ?? null;
 

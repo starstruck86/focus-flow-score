@@ -904,3 +904,73 @@ export const ALL_WORKSPACE_KEYS: ReadonlyArray<WorkspaceKey> = [
   "projects",
   "work",
 ];
+
+// ─── Workspace key normalization (server mirror of W2) ──────────────
+//
+// Server-side mirror of `src/lib/strategy/workspaceContracts.ts`'s
+// normalizeWorkspaceKey. Used by retrieval enforcement (W3) to never
+// trust arbitrary client-provided workspace strings — we always re-
+// resolve through this function and fall back to `work` on unknown
+// keys, surfacing a structured note for telemetry.
+
+const WORKSPACE_KEY_ALIASES: Readonly<Record<string, WorkspaceKey>> =
+  Object.freeze({
+    research: "deep_research",
+    deepresearch: "deep_research",
+    "deep-research": "deep_research",
+    deep_research: "deep_research",
+    brainstorm: "brainstorm",
+    refine: "refine",
+    library: "library",
+    artifacts: "artifacts",
+    artifact: "artifacts",
+    projects: "projects",
+    project: "projects",
+    work: "work",
+  });
+
+export interface NormalizeWorkspaceKeyResult {
+  /** The canonical workspace key chosen. Always a valid WorkspaceKey. */
+  key: WorkspaceKey;
+  /** True when the input had to be coerced (alias mapped, or fallback used). */
+  fellBack: boolean;
+  /** Structured telemetry note. Null when the input was already canonical. */
+  note: {
+    code: "workspace_key_alias" | "workspace_key_fallback";
+    rawInput: unknown;
+  } | null;
+}
+
+/**
+ * Normalize a (potentially client-supplied) workspace identifier into
+ * a canonical WorkspaceKey. Unknown keys, null, undefined, and any
+ * `custom:*` value all fall back to `work` so retrieval/composition
+ * never silently runs against an undefined contract.
+ */
+export function normalizeWorkspaceKey(
+  raw: unknown,
+): NormalizeWorkspaceKeyResult {
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    const lower = trimmed.toLowerCase();
+    if ((WORKSPACE_CONTRACTS as Record<string, unknown>)[trimmed]) {
+      return { key: trimmed as WorkspaceKey, fellBack: false, note: null };
+    }
+    const aliased = WORKSPACE_KEY_ALIASES[lower];
+    if (aliased) {
+      const wasCanonical = lower === aliased;
+      return {
+        key: aliased,
+        fellBack: !wasCanonical,
+        note: wasCanonical
+          ? null
+          : { code: "workspace_key_alias", rawInput: raw },
+      };
+    }
+  }
+  return {
+    key: "work",
+    fellBack: true,
+    note: { code: "workspace_key_fallback", rawInput: raw },
+  };
+}
