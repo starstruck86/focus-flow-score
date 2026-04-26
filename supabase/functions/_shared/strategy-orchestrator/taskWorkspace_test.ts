@@ -108,8 +108,8 @@ Deno.test("telemetry payload uses libraryUse + libraryCoverageState", () => {
   assertEquals(log.surface, "run-task");
   assert(typeof log.contractVersion === "string" && log.contractVersion.length > 0);
   // Legacy field names must not appear.
-  assertEquals((log as Record<string, unknown>).libraryMode, undefined);
-  assertEquals((log as Record<string, unknown>).libraryCoverageGap, undefined);
+  assertEquals((log as unknown as Record<string, unknown>).libraryMode, undefined);
+  assertEquals((log as unknown as Record<string, unknown>).libraryCoverageGap, undefined);
 });
 
 Deno.test("primary task with zero library hits → no_relevant_hits (non-fatal)", () => {
