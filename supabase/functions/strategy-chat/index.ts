@@ -5351,6 +5351,11 @@ async function handleChat(
   // registry. Null/unknown falls back to `work` inside the resolver.
   workspaceKeyRaw: string | null = null,
 ) {
+  // W5: resolve the workspace contract once for handleChat scope so
+  // the citation enforcer can read `citationMode` for both the
+  // streaming and non-streaming branches below.
+  const __resolvedContract = resolveServerWorkspaceContract(workspaceKeyRaw);
+  const __retrievalRules = __resolvedContract.retrievalRules;
   await supabase.from("strategy_messages").insert({
     thread_id: threadId,
     user_id: userId,
