@@ -1,5 +1,6 @@
 // ════════════════════════════════════════════════════════════════
-// Retrieval Enforcement (W3) — behavioral tests
+// Retrieval Enforcement (W3) — behavioral tests (corrected for
+// the universal-library `libraryUse` model).
 //
 // Pure unit tests against the gating + ordering helpers. We do NOT
 // hit the database here — the contract is that callers use these
@@ -38,9 +39,10 @@ Deno.test("W3 resolver: alias 'research' maps to deep_research", () => {
   assertEquals(r.normalization.note?.code, "workspace_key_alias");
 });
 
-Deno.test("W3 resolver: unknown key falls back to work", () => {
+Deno.test("W3 resolver: unknown key falls back to work (libraryUse=relevant)", () => {
   const r = resolveServerWorkspaceContract("not_a_workspace");
   assertEquals(r.workspace, "work");
+  assertEquals(r.retrievalRules.libraryUse, "relevant");
   assertEquals(r.normalization.fellBack, true);
   assertEquals(r.normalization.note?.code, "workspace_key_fallback");
 });
@@ -50,41 +52,71 @@ Deno.test("W3 resolver: null/undefined fall back to work", () => {
   assertEquals(resolveServerWorkspaceContract(undefined).workspace, "work");
 });
 
-// ─── decideLibraryQuery ──────────────────────────────────────────
+// ─── decideLibraryQuery: background ──────────────────────────────
 
-Deno.test("libraryMode: off → never queries", () => {
-  const rules = getWorkspaceContract("refine").retrievalRules; // off
+Deno.test("libraryUse: background → does NOT auto-query without explicit request", () => {
+  const rules = getWorkspaceContract("refine").retrievalRules; // background
   const d = decideLibraryQuery(rules, {
     userContent: "tighten this email",
     derivedScopes: ["cold-email"],
     legacyWouldQuery: true,
   });
   assertEquals(d.shouldQuery, false);
-  assertEquals(d.reason, "library_mode_off");
+  assertEquals(d.reason, "background_no_explicit_request");
 });
 
-Deno.test("libraryMode: preferred → queries when scopes exist", () => {
-  const rules = getWorkspaceContract("deep_research").retrievalRules;
+Deno.test("libraryUse: background → queries when user explicitly requests library", () => {
+  const rules = getWorkspaceContract("refine").retrievalRules;
   const d = decideLibraryQuery(rules, {
-    userContent: "investigate Acme",
-    derivedScopes: ["enterprise-saas"],
+    userContent: "rewrite this using my saved playbooks",
+    derivedScopes: [],
     legacyWouldQuery: false,
+    userExplicitlyRequestedLibrary: true,
   });
   assertEquals(d.shouldQuery, true);
-  assertEquals(d.reason, "preferred_with_query");
+  assertEquals(d.reason, "background_explicit_request");
 });
 
-Deno.test("libraryMode: preferred → skips when no scopes and no content", () => {
-  const rules = getWorkspaceContract("deep_research").retrievalRules;
+// ─── decideLibraryQuery: relevant ────────────────────────────────
+
+Deno.test("libraryUse: relevant → queries when scopes/signals exist", () => {
+  const rules = getWorkspaceContract("brainstorm").retrievalRules;
+  const d = decideLibraryQuery(rules, {
+    userContent: "ideas for outbound to enterprise SaaS",
+    derivedScopes: ["enterprise-saas"],
+    legacyWouldQuery: true,
+  });
+  assertEquals(d.shouldQuery, true);
+  assertEquals(d.reason, "relevant_with_signal");
+});
+
+Deno.test("libraryUse: relevant → skips when no signal AND no content", () => {
+  const rules = getWorkspaceContract("work").retrievalRules;
   const d = decideLibraryQuery(rules, {
     userContent: "",
     derivedScopes: [],
     legacyWouldQuery: false,
   });
   assertEquals(d.shouldQuery, false);
+  assertEquals(d.reason, "relevant_no_signal");
 });
 
-Deno.test("libraryMode: required → always queries (Library workspace)", () => {
+// ─── decideLibraryQuery: primary ─────────────────────────────────
+
+Deno.test("libraryUse: primary → always queries when a meaningful query exists", () => {
+  const rules = getWorkspaceContract("deep_research").retrievalRules; // primary
+  const d = decideLibraryQuery(rules, {
+    userContent: "investigate Acme",
+    derivedScopes: [],
+    legacyWouldQuery: false,
+  });
+  assertEquals(d.shouldQuery, true);
+  assertEquals(d.reason, "primary_default");
+});
+
+// ─── decideLibraryQuery: required ────────────────────────────────
+
+Deno.test("libraryUse: required → always queries (Library workspace)", () => {
   const rules = getWorkspaceContract("library").retrievalRules;
   const d = decideLibraryQuery(rules, {
     userContent: "",
@@ -95,44 +127,46 @@ Deno.test("libraryMode: required → always queries (Library workspace)", () => 
   assertEquals(d.reason, "required");
 });
 
-Deno.test("libraryMode: opportunistic preserves legacy behavior", () => {
-  const rules = getWorkspaceContract("brainstorm").retrievalRules;
-  const queriedWhenLegacyWould = decideLibraryQuery(rules, {
-    userContent: "ideas for outbound",
-    derivedScopes: ["outbound"],
-    legacyWouldQuery: true,
-  });
-  assertEquals(queriedWhenLegacyWould.shouldQuery, true);
-
-  const skippedWhenLegacyWouldNot = decideLibraryQuery(rules, {
-    userContent: "ideas for outbound",
-    derivedScopes: [],
-    legacyWouldQuery: false,
-  });
-  assertEquals(skippedWhenLegacyWouldNot.shouldQuery, false);
-});
-
 // ─── evaluateLibraryCoverage ─────────────────────────────────────
 
-Deno.test("coverage: required + 0 hits → gap", () => {
-  const rules = getWorkspaceContract("library").retrievalRules;
-  const gap = evaluateLibraryCoverage({
+Deno.test("coverage: not queried → not_needed", () => {
+  const rules = getWorkspaceContract("refine").retrievalRules;
+  const state = evaluateLibraryCoverage({
     rules,
     libraryHitCount: 0,
-    libraryQueried: true,
+    libraryQueried: false,
   });
-  assertEquals(gap.hasGap, true);
-  assertEquals(gap.reason, "library_required_no_hits");
+  assertEquals(state, "not_needed");
 });
 
-Deno.test("coverage: preferred + 0 hits → no gap", () => {
+Deno.test("coverage: queried with hits → used", () => {
   const rules = getWorkspaceContract("deep_research").retrievalRules;
-  const gap = evaluateLibraryCoverage({
+  const state = evaluateLibraryCoverage({
+    rules,
+    libraryHitCount: 3,
+    libraryQueried: true,
+  });
+  assertEquals(state, "used");
+});
+
+Deno.test("coverage: primary + 0 hits → no_relevant_hits (non-fatal)", () => {
+  const rules = getWorkspaceContract("artifacts").retrievalRules; // primary
+  const state = evaluateLibraryCoverage({
     rules,
     libraryHitCount: 0,
     libraryQueried: true,
   });
-  assertEquals(gap.hasGap, false);
+  assertEquals(state, "no_relevant_hits");
+});
+
+Deno.test("coverage: required + 0 hits → required_missing", () => {
+  const rules = getWorkspaceContract("library").retrievalRules;
+  const state = evaluateLibraryCoverage({
+    rules,
+    libraryHitCount: 0,
+    libraryQueried: true,
+  });
+  assertEquals(state, "required_missing");
 });
 
 // ─── decideWebQuery ──────────────────────────────────────────────
@@ -214,7 +248,7 @@ Deno.test("buildRetrievalDecisionLog produces a complete telemetry payload", () 
     webCapabilityAvailable: false,
     legacyWouldQuery: false,
   });
-  const gap = evaluateLibraryCoverage({
+  const coverage = evaluateLibraryCoverage({
     rules: resolved.retrievalRules,
     libraryHitCount: 0,
     libraryQueried: libraryDecision.shouldQuery,
@@ -223,15 +257,41 @@ Deno.test("buildRetrievalDecisionLog produces a complete telemetry payload", () 
     resolved,
     libraryDecision,
     libraryHitCount: 0,
-    libraryGap: gap,
+    libraryCoverageState: coverage,
     webDecision,
     webHitCount: 0,
     surface: "test",
   });
   assertEquals(log.workspace, "library");
-  assertEquals(log.libraryMode, "required");
+  assertEquals(log.libraryUse, "required");
   assertEquals(log.libraryQueried, true);
-  assertEquals(log.libraryCoverageGap, "library_required_no_hits");
+  assertEquals(log.libraryCoverageState, "required_missing");
   assertEquals(log.surface, "test");
   assert(log.contractVersion.length > 0);
+  assertEquals(log.contractVersion, "1.1.0");
+});
+
+Deno.test("buildRetrievalDecisionLog: primary + 0 hits logs no_relevant_hits, not failure", () => {
+  const resolved = resolveServerWorkspaceContract("artifacts"); // primary
+  const libraryDecision = decideLibraryQuery(resolved.retrievalRules, {
+    userContent: "build the brief",
+    derivedScopes: ["acme"],
+    legacyWouldQuery: true,
+  });
+  const coverage = evaluateLibraryCoverage({
+    rules: resolved.retrievalRules,
+    libraryHitCount: 0,
+    libraryQueried: libraryDecision.shouldQuery,
+  });
+  const log = buildRetrievalDecisionLog({
+    resolved,
+    libraryDecision,
+    libraryHitCount: 0,
+    libraryCoverageState: coverage,
+    webDecision: { shouldQuery: false, reason: "no_web_capability_wired" },
+    webHitCount: 0,
+  });
+  assertEquals(log.libraryUse, "primary");
+  assertEquals(log.libraryQueried, true);
+  assertEquals(log.libraryCoverageState, "no_relevant_hits");
 });
