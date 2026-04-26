@@ -79,11 +79,17 @@ describe('W2 — typed contract is always attached', () => {
 });
 
 describe('W2 — workspace key normalization', () => {
-  it('null workspace falls back to `work`', () => {
+  it('null/missing workspace falls back to `work` with a structured note', () => {
     const r = resolveStrategySops({ workspace: null });
     expect(r.workspace).toBe('work');
     expect(r.workspaceContract.workspace).toBe('work');
-    expect(r.notes).toEqual([]); // null is the documented default — no warning note
+    // Resolver never silently falls back — null produces a `missing` note so
+    // callers (telemetry, dev panel) can see the resolver decision.
+    expect(r.notes).toHaveLength(1);
+    expect(r.notes[0].kind).toBe('workspace_key_fallback');
+    expect(r.notes[0].input).toBeNull();
+    expect(r.notes[0].detail).toBe('missing');
+    expect(r.notes[0].resolvedTo).toBe('work');
   });
 
   it('unknown workspace falls back to `work` with a fallback note', () => {
