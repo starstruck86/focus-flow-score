@@ -166,6 +166,43 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     }) as Record<string, unknown>),
   } as any);
 
+  // ── W4: Workspace overlay (taskTemplateLocked: true always) ──────
+  // Compose the structured workspace overlay once and prepend it to
+  // every task system prompt below. `taskTemplateLocked: true` forces
+  // the explicit "TASK TEMPLATE TAKES PRECEDENCE" guard so the overlay
+  // can NEVER reshape locked task schemas (Discovery Prep, Account
+  // Brief, 90-Day Plan). Section names, ordering, and JSON shapes
+  // remain owned by the task template.
+  const workspaceOverlay = buildWorkspaceOverlay({
+    contract: resolvedContract.contract,
+    taskTemplateLocked: true,
+    // Escalation hints are a chat-time concept; suppress for runTask
+    // to keep the overlay tight inside the task pipeline.
+    includeEscalationRules: false,
+    surface: "run-task",
+  });
+  const overlayPrefix = workspaceOverlay.text
+    ? `${workspaceOverlay.text}\n\n`
+    : "";
+
+  // Telemetry — single structured composition log for this run.
+  try {
+    logPromptComposition(
+      buildPromptCompositionLog({
+        contract: resolvedContract.contract,
+        result: workspaceOverlay,
+        taskTemplateLocked: true,
+        surface: "run-task",
+        taskType,
+        runId,
+      }),
+    );
+  } catch (e) {
+    console.warn(
+      "[workspace:prompt_composition] log failed (non-fatal):",
+      (e as Error)?.message,
+    );
+  }
 
   // ── Stage 1: External research (Perplexity, parallel) ────────
   const queries = handler.buildResearchQueries(inputs);
