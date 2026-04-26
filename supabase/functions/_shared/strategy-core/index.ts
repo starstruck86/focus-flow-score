@@ -171,3 +171,18 @@ export type {
   WorkspacePromptBlockId,
   WorkspacePromptComposition,
 } from "./workspacePrompt.ts";
+
+// ─── Citation behavior enforcement (Phase W5) ────────────────────
+export {
+  buildCitationCheckLog,
+  logCitationCheck,
+  runCitationCheck,
+} from "./citationEnforcement.ts";
+export type {
+  CitationCheckInputs,
+  CitationCheckLog,
+  CitationCheckResult,
+  CitationCheckSurface,
+  CitationIssue,
+  CitationIssueCode,
+} from "./citationEnforcement.ts";
