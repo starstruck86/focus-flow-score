@@ -45,6 +45,11 @@ import {
   logRetrievalDecision,
   resolveServerWorkspaceContract,
 } from "../strategy-core/retrievalEnforcement.ts";
+import {
+  buildPromptCompositionLog,
+  buildWorkspaceOverlay,
+  logPromptComposition,
+} from "../strategy-core/workspacePrompt.ts";
 import { resolveTaskWorkspace } from "./taskWorkspace.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
 
