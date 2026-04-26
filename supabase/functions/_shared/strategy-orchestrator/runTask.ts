@@ -37,6 +37,15 @@ import {
   validateSopInputs,
   type SopContractLike,
 } from "./sopValidator.ts";
+import {
+  buildRetrievalDecisionLog,
+  decideLibraryQuery,
+  decideWebQuery,
+  evaluateLibraryCoverage,
+  logRetrievalDecision,
+  resolveServerWorkspaceContract,
+} from "../strategy-core/retrievalEnforcement.ts";
+import { resolveTaskWorkspace } from "./taskWorkspace.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
 
 // ── Internal: write a progress step to the run row (best-effort). ─
@@ -86,12 +95,72 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   }
 
   // ── Stage 0: Library retrieval ────────────────────────────────
-  await setProgress(supabase, runId, "library_retrieval");
-  const library = await retrieveLibraryContext(supabase, userId, inputs, {
-    scopes: handler.libraryScopes(inputs),
-    maxKIs: 12,
-    maxPlaybooks: 6,
+  // W3 — resolve the workspace contract for this task so the universal
+  // library retrieval policy is consistent with the chat surface.
+  // The mapping is task_type → WorkspaceKey via the W3 normalizer.
+  // Library scopes still drive the actual query; the contract decides
+  // whether we *should* query and how to interpret coverage.
+  const taskWorkspace = resolveTaskWorkspace(taskType);
+  const resolvedContract = resolveServerWorkspaceContract(taskWorkspace.workspace);
+  const derivedScopes = handler.libraryScopes(inputs);
+  const userContent = [
+    inputs.company_name,
+    inputs.opportunity,
+    inputs.prior_notes,
+    inputs.desired_next_step,
+  ].filter((v): v is string => typeof v === "string" && v.length > 0).join(" ");
+
+  const libraryDecision = decideLibraryQuery(resolvedContract.retrievalRules, {
+    userContent,
+    derivedScopes,
+    // Task pipelines have always run library retrieval when scopes
+    // exist; mirror that as the legacy heuristic so `relevant` does
+    // not silently shrink retrieval when this fallback path is used.
+    legacyWouldQuery: derivedScopes.length > 0,
+    userExplicitlyRequestedLibrary: false,
   });
+
+  await setProgress(supabase, runId, "library_retrieval");
+  const library = libraryDecision.shouldQuery
+    ? await retrieveLibraryContext(supabase, userId, inputs, {
+        scopes: derivedScopes,
+        maxKIs: 12,
+        maxPlaybooks: 6,
+      })
+    : { knowledgeItems: [], playbooks: [], contextString: "", counts: { kis: 0, playbooks: 0 } };
+
+  const libraryHitCount = (library.counts?.kis ?? 0) + (library.counts?.playbooks ?? 0);
+  const libraryCoverageState = evaluateLibraryCoverage({
+    rules: resolvedContract.retrievalRules,
+    libraryQueried: libraryDecision.shouldQuery,
+    libraryHitCount,
+  });
+
+  // Web retrieval is not wired into the task pipeline yet — log the
+  // decision honestly so telemetry shows it as deferred, never faked.
+  const webDecision = decideWebQuery(resolvedContract.retrievalRules, {
+    webCapabilityAvailable: false,
+    legacyWouldQuery: false,
+  });
+
+  logRetrievalDecision({
+    ...buildRetrievalDecisionLog({
+      resolved: resolvedContract,
+      libraryDecision,
+      libraryHitCount,
+      libraryCoverageState,
+      webDecision,
+      webHitCount: 0,
+      surface: "run-task",
+    }),
+    // Extra task-context fields (additive, ignored by typed consumers).
+    ...(({
+      task_type: taskType,
+      run_id: runId,
+      task_fell_back: taskWorkspace.taskFellBack,
+    }) as Record<string, unknown>),
+  } as any);
+
 
   // ── Stage 1: External research (Perplexity, parallel) ────────
   const queries = handler.buildResearchQueries(inputs);
