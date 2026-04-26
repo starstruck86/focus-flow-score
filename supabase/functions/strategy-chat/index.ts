@@ -2528,6 +2528,7 @@ serve(async (req) => {
       routingDecision,
       cleanGlobalInstructions,
       cleanWorkspaceSop,
+      workspace,
     );
   } catch (e) {
     console.error("strategy-chat error:", e);
@@ -5239,6 +5240,10 @@ async function handleChat(
     name: string;
     rawInstructions: string;
   } | null = null,
+  // Phase W3 — workspace key (validated upstream). Used by retrieval
+  // enforcement to resolve the WorkspaceContract from the server-side
+  // registry. Null/unknown falls back to `work` inside the resolver.
+  workspaceKeyRaw: string | null = null,
 ) {
   await supabase.from("strategy_messages").insert({
     thread_id: threadId,
