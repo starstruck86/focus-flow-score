@@ -141,16 +141,24 @@ function buildNote(n: NormalizeWorkspaceKeyResult): ResolverNote | null {
  *   • only when engine is on
  *   • only when mode is 'workspace' or (Discovery Prep) 'task'
  *   • only when the underlying contract is `enabled`
+ *
+ * `originalWorkspaceProvided` mirrors the pre-W2 behavior: the
+ * Discovery-Prep → artifacts narrow rule fires when the caller either
+ * supplied no workspace at all or explicitly supplied 'artifacts'. The
+ * normalized fallback to 'work' must NOT trigger that rule, so we look
+ * at the raw input — not the normalized key.
  */
 function pickLegacyWorkspaceSop(
   cfg: ReturnType<typeof getStrategyConfig>,
   mode: StrategyChatMode,
   workspace: WorkspaceKey,
   taskType: StrategyTaskSopKey | null | undefined,
+  originalWorkspaceProvided: string | null,
 ): StrategySopContract | null {
   if (!cfg.enabled) return null;
 
-  // Standard workspace mode lookup.
+  // Standard workspace mode lookup — only when the caller actually selected
+  // a workspace. The fallback 'work' alone should not pull in a contract.
   if (mode === 'workspace' || mode === 'task') {
     const ws =
       cfg.sopContracts.workspaces[workspace as StrategyWorkspaceSopKey];
@@ -161,7 +169,7 @@ function pickLegacyWorkspaceSop(
   // no workspace was explicitly provided.
   if (
     taskType === 'discovery_prep' &&
-    (!workspace || workspace === 'artifacts')
+    (!originalWorkspaceProvided || originalWorkspaceProvided === 'artifacts')
   ) {
     const artifacts = cfg.sopContracts.workspaces.artifacts;
     if (isEnabled(artifacts)) return artifacts;
