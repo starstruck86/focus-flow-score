@@ -257,7 +257,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         supabase,
         runId,
         synthesis,
-        systemPrompt: handler.buildDocumentSystemPrompt(),
+        systemPrompt: `${overlayPrefix}${handler.buildDocumentSystemPrompt()}`,
         baseUserPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
         libraryCounts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
         researchChars: research.totalChars,
@@ -349,7 +349,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   };
 
   const authoringMessages = [
-    { role: "system", content: handler.buildDocumentSystemPrompt() },
+    { role: "system", content: `${overlayPrefix}${handler.buildDocumentSystemPrompt()}` },
     { role: "user", content: handler.buildDocumentUserPrompt(inputs, synthesis, library) },
   ];
 
@@ -452,12 +452,11 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         const rescue = await authorBySectionBatches({
           runId,
           taskType,
-          systemPrompt: handler.buildDocumentSystemPrompt(),
+          systemPrompt: `${overlayPrefix}${handler.buildDocumentSystemPrompt()}`,
           baseUserPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
           synthesis,
           supabase,
         });
-        if (rescue.sections_authored > 0) {
           console.log(JSON.stringify({
             tag: "[authoring:section_batch_rescue_success]",
             run_id: runId,
@@ -564,7 +563,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         const rescue = await authorBySectionBatches({
           runId,
           taskType,
-          systemPrompt: handler.buildDocumentSystemPrompt(),
+          systemPrompt: `${overlayPrefix}${handler.buildDocumentSystemPrompt()}`,
           baseUserPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
           synthesis,
           supabase,
@@ -705,7 +704,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     console.log("[stage-4] generating playbook-grounded review...");
     try {
       const reviewRaw = await callOpenAI([
-        { role: "system", content: "You are a senior sales leader reviewing a prep document. Be specific, actionable, and grounded in the provided internal playbooks/KIs." },
+        { role: "system", content: `${overlayPrefix}You are a senior sales leader reviewing a prep document. Be specific, actionable, and grounded in the provided internal playbooks/KIs.` },
         { role: "user", content: handler.buildReviewPrompt(inputs, draftOutput, library) },
       ], { model: "gpt-5-mini", temperature: 0.4, maxTokens: 4000 });
       const parsed = safeParseJSON<any>(reviewRaw);
