@@ -438,9 +438,9 @@ const REGISTRY: Record<string, GateImpl> = {
     const lower = assistantText.toLowerCase();
     const hasNudge = /consider\s*[:\-]/i.test(assistantText);
     if (!hasNudge) return { outcome: "pass", detail: "no nudge" };
-    // Materiality rules live in workspaceConfig. If none configured,
+    // Materiality rules live in workConfig. If none configured,
     // we cannot evaluate — skip rather than fail.
-    const rules: any[] = (contract.workspaceConfig as any)?.materialityRules ?? [];
+    const rules: any[] = (contract.workConfig?.materialityRules as any) ?? [];
     if (rules.length === 0) {
       return { outcome: "skipped", detail: "no materiality rules in contract" };
     }
