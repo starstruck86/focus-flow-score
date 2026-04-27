@@ -941,6 +941,16 @@ export default function StrategyDebug() {
           safeRuns.map((r: any) => r.meta),
         ),
       });
+      setEnforcement({
+        chat: summarizeEnforcementHistory(
+          "chat",
+          safeMsgs.map((m: any) => m.content_json),
+        ),
+        task: summarizeEnforcementHistory(
+          "task",
+          safeRuns.map((r: any) => r.meta),
+        ),
+      });
     } finally {
       setRecentLoading(false);
     }
