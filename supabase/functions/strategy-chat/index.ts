@@ -59,6 +59,7 @@ import {
   userAskedForResource,
   validateWorkingThesisState,
   type WorkingThesisState,
+  computeSchemaHealth,
 } from "../_shared/strategy-core/index.ts";
 import {
   assembleRoutingEvidence as v2AssembleEvidence,
