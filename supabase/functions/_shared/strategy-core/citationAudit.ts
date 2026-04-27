@@ -237,10 +237,56 @@ export function auditResourceCitations(
     return `${full} ${tag}`;
   });
 
+  // ── 3. KI[…] and CARD[…] form (additive — only when caller threads
+  //        the relevant hit set through; otherwise we leave these alone
+  //        to preserve prior behavior).
+  const auditNamespacedCitation = (
+    ns: "KI" | "CARD",
+    nsHits: CitationAuditHit[] | undefined,
+  ) => {
+    if (!nsHits || nsHits.length === 0) return;
+    const { titles: nsTitles, idShorts: nsIdShorts } = buildTitleIndex(nsHits);
+    const re = new RegExp(`${ns}\\[\\s*("?)([^\\]"]+?)\\1\\s*\\]`, "g");
+    out = out.replace(re, (_full, _q, inner: string) => {
+      const trimmed = inner.trim();
+      // id-short form: 8 hex chars (the format we render in prompts)
+      if (/^[a-f0-9]{6,12}$/i.test(trimmed)) {
+        if (nsIdShorts.has(trimmed.slice(0, 8).toLowerCase())) {
+          verified.push(`${ns}:${trimmed}`);
+          return `${ns}[${trimmed}]`;
+        }
+        // Unknown id-short — flag.
+        unverified.push(`${ns}:${trimmed}`);
+        modified = true;
+        return `⚠ UNVERIFIED-${ns}[${trimmed}]`;
+      }
+      // title form
+      const norm = normalize(trimmed);
+      let hit = nsTitles.has(norm);
+      if (!hit) {
+        for (const t of nsTitles) {
+          if (t.includes(norm) || norm.includes(t)) {
+            hit = true;
+            break;
+          }
+        }
+      }
+      if (hit) {
+        verified.push(`${ns}:${trimmed}`);
+        return `${ns}["${trimmed}"]`;
+      }
+      unverified.push(`${ns}:${trimmed}`);
+      modified = true;
+      return `⚠ UNVERIFIED-${ns}["${trimmed}"]`;
+    });
+  };
+  auditNamespacedCitation("KI", options.kiHits);
+  auditNamespacedCitation("CARD", options.cardHits);
+
   if (modified) {
     out =
       out.trimEnd() +
-      `\n\n_⚠ Citation audit: ${unverified.length} resource reference${unverified.length === 1 ? " was" : "s were"} not found in your library and cannot be verified. Strategy will not pretend it exists._`;
+      `\n\n_⚠ Citation audit: ${unverified.length} library reference${unverified.length === 1 ? " was" : "s were"} not found in your library and cannot be verified. Strategy will not pretend it exists._`;
   }
 
   // Dedupe, preserve order.
