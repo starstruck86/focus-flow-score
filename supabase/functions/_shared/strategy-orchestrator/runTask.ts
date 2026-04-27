@@ -339,6 +339,17 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   console.log(JSON.stringify({ tag: "stage-2:end", run_id: runId, model: synthesisModel, synthesis_fields: Object.keys(synthesis).length }));
 
   // ── Progressive execution switch (discovery_prep only) ─────────
+  // ┌──────────────────────────────────────────────────────────────┐
+  // │ DISCOVERY PREP IS PROTECTED                                  │
+  // │ - No enforcement                                             │
+  // │ - No structural changes                                      │
+  // │ - No repair passes                                           │
+  // │ - This is the highest-quality baseline output                │
+  // │ Any modification must be explicitly approved.                │
+  // │ Phase 5 contract: shadow validation only. The progressive    │
+  // │ driver may run validateDraftAgainstSop and persist meta.sop, │
+  // │ but MUST NOT mutate draftOutput.                             │
+  // └──────────────────────────────────────────────────────────────┘
   // Persist synthesis as the single source of truth, pre-create
   // task_run_sections rows, and kick off batch 0 in a fresh isolate
   // via HTTP self-invoke. Return immediately so this isolate exits
