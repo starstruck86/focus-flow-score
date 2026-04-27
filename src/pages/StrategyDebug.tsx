@@ -367,6 +367,72 @@ function RecordPanel({ row }: { row: FetchedRow | null }) {
       </Card>
 
       {health && <SchemaHealthCard health={health} />}
+      {row && (() => {
+        const persisted = readPersistedSchemaHealth(row.meta);
+        if (!persisted) {
+          return (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Persisted Schema Health (W10)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground">
+                  No persisted <code>schema_health</code> on this row — falling back to live W9 validation above.
+                </p>
+              </CardContent>
+            </Card>
+          );
+        }
+        const drift = health
+          ? compareSchemaHealth(
+              persisted,
+              health.totals,
+              health.reports.filter((r) => r.status === "malformed").map((r) => r.key),
+            )
+          : { drifted: false, reasons: [] };
+        return (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                Persisted Schema Health (W10)
+                <Badge variant={persisted.status === "drift" ? "destructive" : persisted.status === "validator_error" ? "destructive" : "default"} className="text-[10px] uppercase">
+                  {persisted.status}
+                </Badge>
+                {drift.drifted && (
+                  <Badge variant="destructive" className="text-[10px] uppercase">drift vs live</Badge>
+                )}
+              </CardTitle>
+              <p className="text-[11px] text-muted-foreground">
+                stamped {persisted.validated_at} · schema {persisted.schema_version}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="default">valid: {persisted.totals.valid}</Badge>
+                <Badge variant="outline">missing: {persisted.totals.missing}</Badge>
+                <Badge variant={persisted.totals.malformed > 0 ? "destructive" : "outline"}>
+                  malformed: {persisted.totals.malformed}
+                </Badge>
+                <Badge variant="secondary">unknown fields: {persisted.totals.unknownFieldWarnings}</Badge>
+              </div>
+              {persisted.malformed_keys.length > 0 && (
+                <p className="text-[11px]"><span className="font-mono text-destructive">malformed:</span> {persisted.malformed_keys.join(", ")}</p>
+              )}
+              {drift.drifted && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 space-y-1">
+                  <p className="text-[11px] font-medium">Drift vs live validation:</p>
+                  {drift.reasons.map((r, i) => (
+                    <p key={i} className="text-[11px] font-mono text-muted-foreground">{r}</p>
+                  ))}
+                </div>
+              )}
+              {persisted.error && (
+                <p className="text-[11px] text-destructive">validator error: {persisted.error}</p>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
     </div>
   );
 }
