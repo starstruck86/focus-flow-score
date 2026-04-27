@@ -16,13 +16,15 @@
 //   3. STANDARDS block must contain the "DO NOT CITE" instruction.
 //   4. Pass B never mutates the input outputText (byte equality).
 //   5. Pass B never emits an `improvedDraft` in Phase 1.
-//   6. RESOURCE beats STANDARD — `retrievedItemIds` demotes
-//      candidates from the standards pool.
+//   6. Skipped Pass A → Pass B verdict is `insufficient_exemplars`
+//      (no degraded generation).
 //   7. Telemetry join key parity — log + persistence + result all
 //      expose the same `exemplarSetId`.
-//   8. Skip behavior is clean — no exemplars → injected=false,
-//      empty rendered block, Pass B verdict is
-//      `insufficient_exemplars` (no degraded generation).
+//   8. Skip behavior is clean — no exemplars → empty rendered
+//      block (no placeholder/fallback).
+//   9. Workspace key flows through unchanged across passes.
+//  10. Distinct ExemplarSet ids produce distinct telemetry join
+//      keys.
 //
 // If a future refactor breaks any of these, this file should be the
 // first thing that turns red.
@@ -57,15 +59,17 @@ function makeExemplar(
 ): ExemplarRef {
   return {
     id,
+    shortId: id.slice(0, 8),
     role: "exemplar",
     title: `Exemplar ${id}`,
     whenToUse: "Use when prospect raises a budget objection.",
     theMove: "Acknowledge, then reframe budget around outcomes.",
-    appliesToContexts: ["enterprise"],
+    whyItWorks: "Shifts the frame from cost to value.",
     antiPatterns: ["Discounting too early."],
+    exampleSnippet: null,
+    appliesToContexts: ["enterprise"],
     confidence: 0.8,
-    sourceIds: [],
-    workspaceTags: ["work"],
+    score: 3.2,
     ...overrides,
   };
 }
@@ -74,15 +78,17 @@ function injectedSet(exemplars: ExemplarRef[]): ExemplarSet {
   return {
     exemplarSetId: "exset-doctrine-1",
     workspace: "work",
-    surface: "strategy_chat",
-    taskType: undefined,
+    surface: "strategy-chat",
     injected: true,
     exemplars,
-    skippedReason: null,
-    roleCounts: { standard: 0, exemplar: exemplars.length, pattern: 0, tactic: 0 },
-    selectedAt: new Date().toISOString(),
+    roleCounts: {
+      standard: 0,
+      exemplar: exemplars.length,
+      pattern: 0,
+      tactic: 0,
+    },
+    approxTokens: 100,
     durationMs: 1,
-    candidateCount: exemplars.length,
   };
 }
 
@@ -90,15 +96,13 @@ function skippedSet(): ExemplarSet {
   return {
     exemplarSetId: "exset-skipped-doctrine",
     workspace: "work",
-    surface: "strategy_chat",
-    taskType: undefined,
+    surface: "strategy-chat",
     injected: false,
+    skippedReason: "no_rows",
     exemplars: [],
-    skippedReason: "no_candidates",
     roleCounts: { standard: 0, exemplar: 0, pattern: 0, tactic: 0 },
-    selectedAt: new Date().toISOString(),
+    approxTokens: 0,
     durationMs: 1,
-    candidateCount: 0,
   };
 }
 
@@ -108,7 +112,7 @@ Deno.test("Doctrine #1: selectExemplars signature must NOT accept libraryUse", (
   // This is a structural assertion: if a future PR adds `libraryUse`
   // to SelectExemplarsOpts, the type would change and this test
   // serves as a documented intent. We assert via runtime introspection
-  // that calling with no libraryUse works — and document the rule.
+  // that the function exists — and document the rule.
   //
   // The TypeScript compiler is the real enforcer; this test pins the
   // doctrinal reason in code so reviewers see the constraint.
@@ -127,10 +131,9 @@ Deno.test("Doctrine #2: Pass B reuses ExemplarSet id verbatim (no re-selection)"
 
   const inputs: CalibrationInputs = {
     workspace: "work",
-    surface: "strategy_chat",
+    surface: "strategy-chat",
     exemplarSet: set,
     outputText: "Some answer.",
-    retrievedResourceIds: [],
   };
 
   const result = runLibraryCalibration(inputs);
@@ -171,10 +174,9 @@ Deno.test("Doctrine #4: Pass B never mutates outputText (byte equality)", () => 
 
   const result = runLibraryCalibration({
     workspace: "work",
-    surface: "strategy_chat",
+    surface: "strategy-chat",
     exemplarSet: set,
     outputText: original,
-    retrievedResourceIds: [],
   });
 
   // outputText must be untouched.
@@ -191,10 +193,9 @@ Deno.test("Doctrine #5: Pass B never emits improvedDraft in Phase 1", () => {
   const set = injectedSet([makeExemplar("ex-1"), makeExemplar("ex-2")]);
   const result = runLibraryCalibration({
     workspace: "work",
-    surface: "strategy_chat",
+    surface: "strategy-chat",
     exemplarSet: set,
     outputText: "Below-standard answer.",
-    retrievedResourceIds: [],
   });
   assert(
     !("improvedDraft" in (result as Record<string, unknown>)) ||
@@ -207,10 +208,9 @@ Deno.test("Doctrine #6: skipped Pass A → Pass B verdict is insufficient_exempl
   const set = skippedSet();
   const result = runLibraryCalibration({
     workspace: "work",
-    surface: "strategy_chat",
+    surface: "strategy-chat",
     exemplarSet: set,
     outputText: "Anything.",
-    retrievedResourceIds: [],
   });
   assertEquals(result.overallVerdict, "insufficient_exemplars");
   // Same id flows through even on skip — telemetry join key.
@@ -224,10 +224,9 @@ Deno.test("Doctrine #7: telemetry join key parity (log + persistence + result)",
 
   const result = runLibraryCalibration({
     workspace: "work",
-    surface: "strategy_chat",
+    surface: "strategy-chat",
     exemplarSet: set,
     outputText: "An answer.",
-    retrievedResourceIds: [],
   });
   const calibBlock = buildCalibrationPersistenceBlock(result);
 
@@ -252,10 +251,9 @@ Deno.test("Doctrine #9: workspace key flows through unchanged across passes", ()
   const set = injectedSet([makeExemplar("ex-1"), makeExemplar("ex-2")]);
   const result = runLibraryCalibration({
     workspace: "work",
-    surface: "strategy_chat",
+    surface: "strategy-chat",
     exemplarSet: set,
     outputText: "Some answer.",
-    retrievedResourceIds: [],
   });
   assertEquals(set.workspace, "work");
   assertEquals(result.workspace, "work");
