@@ -275,14 +275,7 @@ function SchemaHealthCard({ health }: { health: SchemaHealthSummary }) {
           >
             malformed: {totals.malformed}
           </Badge>
-          <Badge
-            variant="secondary"
-            className={`gap-1 ${
-              totals.unknownFieldWarnings > 0
-                ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
-                : ""
-            }`}
-          >
+          <Badge variant="secondary" className="gap-1">
             unknown fields: {totals.unknownFieldWarnings}
           </Badge>
         </div>
