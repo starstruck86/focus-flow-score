@@ -140,6 +140,7 @@ export function runCitationCheck(
     libraryUsed,
     citationMode,
     auditOptions,
+    enableLegacyCitationRewrite = false,
   } = inputs;
 
   const issues: CitationIssue[] = [];
