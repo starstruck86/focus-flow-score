@@ -6626,6 +6626,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           escalation_suggestions: w7EscalationBlock ?? undefined,
           standard_context: standardContextBlock ?? undefined,
           calibration: calibrationBlock ?? undefined,
+          enforcement_dry_run: w12EnforcementBlock ?? undefined,
           routing_decision: (() => {
             const base: any = {
               mode,
