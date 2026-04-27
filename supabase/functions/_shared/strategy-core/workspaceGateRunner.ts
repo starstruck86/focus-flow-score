@@ -269,7 +269,7 @@ const REGISTRY: Record<string, GateImpl> = {
   }),
   "refine.variant_count_and_labels": ({ assistantText, contract }) => {
     const variantCount = countMatches(assistantText, /(^|\n)\s*(?:variant|option)\s*[a-d]?\s*[:\-]/gi);
-    const cap = contract.workspaceConfig?.variantsCap ?? 2;
+    const cap = contract.refineConfig?.maxVariants ?? 2;
     if (variantCount === 0) return { outcome: "skipped", detail: "no variants requested" };
     return variantCount <= cap
       ? { outcome: "pass", detail: `variants=${variantCount}/${cap}`, metric: variantCount }
