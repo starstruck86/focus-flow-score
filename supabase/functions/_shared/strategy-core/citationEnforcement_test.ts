@@ -100,7 +100,7 @@ Deno.test("refine: citationMode=none never audits, never raises issues", () => {
 
 // ─── Strict: deep_research / library / artifacts ──────────────────
 
-Deno.test("deep_research: strict mode runs audit and rewrites unverified", () => {
+Deno.test("deep_research: strict mode audits in shadow — does NOT mutate auditedText by default", () => {
   const resolved = resolveServerWorkspaceContract("deep_research");
   assertEquals(resolved.retrievalRules.citationMode, "strict");
 
@@ -121,14 +121,41 @@ Deno.test("deep_research: strict mode runs audit and rewrites unverified", () =>
 
   assertEquals(result.audited, true);
   assertExists(result.audit);
+  // Auditor WOULD have rewritten — telemetry still reflects that.
   assertEquals(result.audit!.modified, true);
-  // Strict publishes the rewrite.
-  assert(result.auditedText.includes("⚠ UNVERIFIED"));
+  assert(result.audit!.text.includes("⚠ UNVERIFIED"));
+  // W5 shadow: canonical assistant text is unchanged.
+  assertEquals(result.auditedText, text);
+  assertEquals(result.auditedText.includes("⚠ UNVERIFIED"), false);
   assertEquals(
     result.issues.some((i) => i.code === "unverified_citation"),
     true,
   );
   assert(result.citationsFound >= 1);
+});
+
+Deno.test("strict + enableLegacyCitationRewrite=true publishes audit.text (opt-in, outside W5)", () => {
+  const text =
+    `Per RESOURCE["Q2 Business Case Template"] we should expand. ` +
+    `Also see RESOURCE["Made-Up Doc That Does Not Exist"].`;
+
+  const result = runCitationCheck(
+    baseInputs({
+      workspace: "deep_research",
+      contractVersion: "1.1.0",
+      citationMode: "strict",
+      libraryHits: HITS,
+      libraryUsed: true,
+      assistantText: text,
+      enableLegacyCitationRewrite: true,
+    }),
+  );
+
+  assertEquals(result.audited, true);
+  assertEquals(result.audit!.modified, true);
+  // Legacy opt-in: auditedText IS the rewritten text.
+  assert(result.auditedText.includes("⚠ UNVERIFIED"));
+  assertEquals(result.auditedText, result.audit!.text);
 });
 
 Deno.test("library: strict mode runs audit in shadow when nothing to flag", () => {
