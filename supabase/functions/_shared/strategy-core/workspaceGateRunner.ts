@@ -407,7 +407,7 @@ const REGISTRY: Record<string, GateImpl> = {
     if (!hasRecommendation) return { outcome: "skipped", detail: "no recommendation" };
     const grounded =
       libraryUsed ||
-      retrievalDecision?.libraryCoverage === "used" ||
+      retrievalDecision?.libraryCoverageState === "used" ||
       /\bRESOURCE\[[^\]]+\]/.test(assistantText);
     return grounded
       ? { outcome: "pass", detail: "recommendation grounded" }
