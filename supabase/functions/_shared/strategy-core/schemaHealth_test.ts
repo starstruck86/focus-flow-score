@@ -48,5 +48,5 @@ Deno.test("computeSchemaHealth — task source includes sop", () => {
 Deno.test("computeSchemaHealth — never throws on garbage input", () => {
   const r = computeSchemaHealth(null, "chat");
   assertEquals(r.status, "ok");
-  assertEquals(r.totals.missing, 7);
+  assertEquals(r.totals.missing, 8);
 });
