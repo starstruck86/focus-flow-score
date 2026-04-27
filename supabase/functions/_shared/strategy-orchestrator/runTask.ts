@@ -41,6 +41,17 @@ import {
   enforceTaskSopOnce,
   type EnforceTaskSopOnceResult,
 } from "./enforceTaskSopOnce.ts";
+
+// ─────────────────────────────────────────────────────────────────
+// Phase 5 — Discovery Prep protection flag.
+// Discovery Prep is permanently shadow-only. Enforcement is hard-
+// gated off and additionally guarded by this env flag so that no
+// future code path can accidentally enable repair without an
+// explicit opt-in deploy.
+// ─────────────────────────────────────────────────────────────────
+const STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT: boolean =
+  (Deno.env.get("STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT") ?? "false")
+    .toLowerCase() === "true";
 import {
   buildRetrievalDecisionLog,
   decideLibraryQuery,
