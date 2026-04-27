@@ -352,7 +352,7 @@ export async function authorBySectionBatches(args: {
       sections_returned: result.sections.length,
     }));
     outcomes.push({
-      section_ids: batch.ids,
+      section_ids: [...batch.ids],
       primary_status: result.primary_status,
       fallback_status: result.fallback_status,
       error: result.error,
