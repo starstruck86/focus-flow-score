@@ -148,7 +148,12 @@ async function runWith(opts: {
     await runStrategyTask({
       supabase: supabase as any,
       userId: "user_1",
-      taskType: "discovery_prep",
+      // NOTE: account_brief — not discovery_prep — exercises the monolithic
+      // Stage 3 Claude authoring path that this file is designed to prove.
+      // discovery_prep now hands off to a separate progressive driver in a
+      // fresh isolate (see runTask.ts line ~328) and would never reach the
+      // assertions below from within this test process.
+      taskType: "account_brief",
       inputs: { company_name: "Acme" } as any,
     });
   } catch (e) {
