@@ -205,6 +205,46 @@ export type {
   GateRunnerSurface,
 } from "./workspaceGateRunner.ts";
 
+// ─── Library Standard Context (Phase W6.5 Pass A, shadow) ───────
+export {
+  buildStandardContextLog,
+  buildStandardContextPersistenceBlock,
+  logStandardContext,
+  renderStandardBlock,
+  roleWeightsFor,
+  selectExemplars,
+} from "./libraryStandard.ts";
+export type {
+  ExemplarRef,
+  ExemplarRole,
+  ExemplarSet,
+  StandardContextLog,
+  StandardContextPersistenceBlock,
+  StandardSkipReason,
+  StandardSurface,
+} from "./libraryStandard.ts";
+
+// ─── Library Calibration (Phase W6.5 Pass B, shadow) ─────────────
+export {
+  buildCalibrationLog,
+  buildCalibrationPersistenceBlock,
+  dimensionsFor,
+  logCalibrationResult,
+  runLibraryCalibration,
+} from "./libraryCalibration.ts";
+export type {
+  CalibrationConfidence,
+  CalibrationFinding,
+  CalibrationInputs,
+  CalibrationPersistenceBlock,
+  CalibrationResult,
+  CalibrationResultLog,
+  CalibrationSurface,
+  CalibrationVerdict,
+  DimensionScore,
+  UpgradeSuggestion,
+} from "./libraryCalibration.ts";
+
 // ─── Escalation rules (Phase W7, shadow-only) ────────────────────
 export {
   buildEscalationPersistenceBlock,
