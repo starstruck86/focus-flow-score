@@ -926,6 +926,44 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     );
   }
 
+  // ── W6.5 Pass B — Library Calibration (shadow, post-gen) ─────────
+  // Uses the SAME ExemplarSet from Pass A. Heuristic-only in Phase 1
+  // — no LLM judge. Never mutates draft_output. Skips cleanly if
+  // Pass A skipped or threw.
+  let calibrationPersistenceBlock: CalibrationPersistenceBlock | null = null;
+  try {
+    if (exemplarSet) {
+      const requiredSectionIds: string[] | undefined = (() => {
+        const declared = (handler as { requiredSectionIds?: readonly string[] })
+          .requiredSectionIds;
+        if (Array.isArray(declared) && declared.length > 0) {
+          return [...declared];
+        }
+        return undefined;
+      })();
+      const calibration = runLibraryCalibration({
+        workspace: resolvedContract.workspace,
+        surface: "run-task",
+        taskType,
+        runId,
+        outputText: auditableTaskText || JSON.stringify(draftOutput ?? {}),
+        parsedOutput: draftOutput,
+        userPromptText: userContent || undefined,
+        exemplarSet,
+        requiredSectionIds,
+      });
+      logCalibrationResult(calibration);
+      calibrationPersistenceBlock = buildCalibrationPersistenceBlock(
+        calibration,
+      );
+    }
+  } catch (calErr) {
+    console.warn(
+      "[workspace:calibration_result] run-task threw (ignored, shadow):",
+      String(calErr).slice(0, 200),
+    );
+  }
+
   // ── W7: Escalation rules (shadow-only, advisory) ─────────────────
   // Evaluates whether the task output suggests promoting the user to
   // another workspace (e.g. an account_brief logging a Projects
