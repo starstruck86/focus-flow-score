@@ -236,9 +236,7 @@ function SchemaReportRow({ report }: { report: SchemaReport }) {
           )}
           {hasUnknown && (
             <p>
-              <span className="font-mono text-amber-600 dark:text-amber-400">
-                unknown:
-              </span>{" "}
+              <span className="font-mono text-foreground/80">unknown:</span>{" "}
               {report.unknownFields.join(", ")}
             </p>
           )}
