@@ -441,9 +441,73 @@ function RecordPanel({ row }: { row: FetchedRow | null }) {
   );
 }
 
-// ─── Recent rows sidebar ─────────────────────────────────────────
+// ─── Drift history (W10) ─────────────────────────────────────────
 
-interface RecentItem {
+function DriftSummaryCard({ summary }: { summary: DriftHistorySummary }) {
+  const title = summary.source === "chat" ? "Recent chat messages" : "Recent task runs";
+  const { counts, total, topMalformedKeys, topUnknownFieldKeys } = summary;
+  const driftish = counts.drift + counts.validator_error;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          {title}
+          <Badge variant="outline" className="text-[10px]">
+            last {total}
+          </Badge>
+          {driftish > 0 && (
+            <Badge variant="destructive" className="text-[10px] uppercase">
+              {driftish} need attention
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="default">ok: {counts.ok}</Badge>
+          <Badge variant={counts.drift > 0 ? "destructive" : "outline"}>
+            drift: {counts.drift}
+          </Badge>
+          <Badge variant={counts.validator_error > 0 ? "destructive" : "outline"}>
+            validator_error: {counts.validator_error}
+          </Badge>
+          <Badge variant="secondary">missing: {counts.missing}</Badge>
+        </div>
+        {topMalformedKeys.length > 0 && (
+          <div>
+            <p className="text-[11px] font-medium mb-1">Top malformed blocks</p>
+            <div className="flex flex-wrap gap-1">
+              {topMalformedKeys.map((k) => (
+                <Badge key={k.key} variant="destructive" className="text-[10px] font-mono">
+                  {k.key} · {k.count}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+        {topUnknownFieldKeys.length > 0 && (
+          <div>
+            <p className="text-[11px] font-medium mb-1">Top unknown-field blocks</p>
+            <div className="flex flex-wrap gap-1">
+              {topUnknownFieldKeys.map((k) => (
+                <Badge key={k.key} variant="secondary" className="text-[10px] font-mono">
+                  {k.key} · {k.count}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+        {topMalformedKeys.length === 0 && topUnknownFieldKeys.length === 0 && (
+          <p className="text-[11px] text-muted-foreground italic">
+            No malformed blocks or unknown-field warnings in this window.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Recent rows sidebar ─────────────────────────────────────────
   id: string;
   createdAt: string | null;
   label: string;
