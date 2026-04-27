@@ -27,14 +27,21 @@
 //       (W5 keeps this shadow; W6 owns enforcement.)
 //
 //   • strict
-//       Run the existing strict audit (which already rewrites
-//       UNVERIFIED references and appends the citation banner).
-//       The caller MAY use `auditedText` directly — this preserves
-//       the existing strategy-chat behavior for `strict` workspaces
-//       (deep_research, library, artifacts, projects, work).
+//       Run the existing strict audit (which detects UNVERIFIED
+//       references and would rewrite the text + append a citation
+//       banner). In W5, this runs SHADOW-only by default —
+//       `auditedText` returns the ORIGINAL assistant text, while
+//       `audit.text` and `audit.modified` remain available for
+//       telemetry and future enforcement.
+//
+//       Callers that explicitly need the legacy chat rewrite can
+//       opt in via `enableLegacyCitationRewrite: true` on the
+//       inputs. This is OUTSIDE the W5 shadow-only contract and
+//       must be set deliberately by the caller.
 //
 // W5 is intentionally SHADOW + REPORTING. We do not block. We do
-// not retry. Quality-gate-style enforcement is W6's job.
+// not retry. We do not mutate canonical assistant text. Quality-
+// gate-style enforcement is W6's job.
 // ════════════════════════════════════════════════════════════════
 
 import {
