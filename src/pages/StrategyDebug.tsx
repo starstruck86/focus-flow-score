@@ -55,6 +55,14 @@ import {
   type DriftHistorySummary,
   summarizeDriftHistory,
 } from "@/lib/strategy/debug/driftHistory";
+import {
+  aggregatePromotionReadiness,
+  classifyChatPromotionReadiness,
+  classifyTaskPromotionReadiness,
+  type PromotionReadiness,
+  type PromotionReadinessAggregate,
+  type PromotionReadinessReport,
+} from "@/lib/strategy/debug/promotionReadiness";
 import { useApprovalCheck } from "@/hooks/useApprovalCheck";
 
 type RecordKind = "message" | "run";
