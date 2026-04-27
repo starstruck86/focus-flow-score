@@ -100,15 +100,18 @@ export interface CitationCheckResult {
   audited: boolean;
   /**
    * The deterministic audit result. Always populated when `audited` is
-   * true. For `strict` workspaces, callers MAY substitute the audited
-   * text into the persisted message (existing strategy-chat behavior).
-   * For `light` / `none_unless_library_used`, the rewrite is shadow.
+   * true. `audit.text` and `audit.modified` reflect what the auditor
+   * WOULD have published — useful for telemetry — but W5 does not
+   * publish that text by default.
    */
   audit: CitationAuditResult | null;
   /**
-   * Convenience: text the caller MAY use. For strict workspaces this
-   * is `audit.text` (preserves prior chat behavior). For all other
-   * modes this is the input text — W5 does not rewrite.
+   * Text the caller should treat as the canonical assistant output.
+   * In W5 this is ALWAYS the original input text, regardless of mode.
+   * The single exception is when the caller passes
+   * `enableLegacyCitationRewrite: true` AND the mode is `strict` —
+   * that opt-in path is outside W5 shadow-only behavior and
+   * preserves the legacy strategy-chat rewrite.
    */
   auditedText: string;
 }
