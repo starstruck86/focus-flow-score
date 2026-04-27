@@ -885,6 +885,10 @@ export default function StrategyDebug() {
     chat: PromotionReadinessAggregate;
     task: PromotionReadinessAggregate;
   } | null>(null);
+  const [enforcement, setEnforcement] = useState<{
+    chat: EnforcementHistorySummary;
+    task: EnforcementHistorySummary;
+  } | null>(null);
 
   const loadRecent = async () => {
     setRecentLoading(true);
