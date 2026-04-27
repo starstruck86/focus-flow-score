@@ -262,3 +262,14 @@ export type {
   EscalationSuggestionLog,
   EscalationSurface,
 } from "./workspaceEscalation.ts";
+
+// ─── Schema Health (W10, runtime observability — read/write summary only) ──
+export {
+  computeSchemaHealth,
+  STRATEGY_SCHEMA_VERSION,
+} from "./schemaHealth.ts";
+export type {
+  LayerKey as SchemaHealthLayerKey,
+  SchemaHealthCompact,
+  SchemaStatus as SchemaHealthBlockStatus,
+} from "./schemaHealth.ts";
