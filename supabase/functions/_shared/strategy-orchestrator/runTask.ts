@@ -831,6 +831,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // template, so the artifacts.required_sections_present gate will
   // skip when no IDs are passed (per W6 contract).
   let gatePersistenceBlock: GatePersistenceBlock | null = null;
+  let w6GateSummary: ReturnType<typeof runWorkspaceGates> | null = null;
   try {
     const requiredSectionIds: string[] | undefined = (() => {
       const declared = (handler as { requiredSectionIds?: readonly string[] })
@@ -841,7 +842,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       // No locked template — leave undefined; gate will skip cleanly.
       return undefined;
     })();
-    const w6Summary = runWorkspaceGates({
+    w6GateSummary = runWorkspaceGates({
       inputs: {
         contract: resolvedContract.contract,
         assistantText: auditableTaskText || JSON.stringify(draftOutput ?? {}),
@@ -856,12 +857,49 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       taskType,
       runId,
     });
-    logGateResults(w6Summary);
-    gatePersistenceBlock = buildGatePersistenceBlock(w6Summary);
+    logGateResults(w6GateSummary);
+    gatePersistenceBlock = buildGatePersistenceBlock(w6GateSummary);
   } catch (gateErr) {
     console.warn(
       "[workspace:gate_result] run-task threw (ignored, shadow):",
       String(gateErr).slice(0, 200),
+    );
+  }
+
+  // ── W7: Escalation rules (shadow-only, advisory) ─────────────────
+  // Evaluates whether the task output suggests promoting the user to
+  // another workspace (e.g. an account_brief logging a Projects
+  // promotion). Pure telemetry + persistence — never routes the user.
+  let escalationPersistenceBlock: EscalationPersistenceBlock | null = null;
+  try {
+    // Synthesize a prompt-like signal from structured task inputs so
+    // intent-driven rules (e.g. evidence asks) can still fire.
+    const synthesizedPrompt = [
+      inputs.desired_next_step,
+      inputs.prior_notes,
+      inputs.opportunity,
+    ].filter((v) => typeof v === "string" && v.trim().length > 0).join("\n");
+    const w7Summary = evaluateEscalationRules({
+      inputs: {
+        contract: resolvedContract.contract,
+        assistantText: auditableTaskText || JSON.stringify(draftOutput ?? {}),
+        userPrompt: synthesizedPrompt || undefined,
+        gateSummary: w6GateSummary,
+        citationCheck: w5CitationResult,
+        libraryHits: w5LibraryHits,
+        taskType,
+        runId,
+      },
+      surface: "run-task",
+      taskType,
+      runId,
+    });
+    logEscalationSuggestions(w7Summary);
+    escalationPersistenceBlock = buildEscalationPersistenceBlock(w7Summary);
+  } catch (escErr) {
+    console.warn(
+      "[workspace:escalation_suggestion] run-task threw (ignored, shadow):",
+      String(escErr).slice(0, 200),
     );
   }
 
