@@ -699,6 +699,12 @@ export interface EscalationSuggestionLog {
   reason: string;
   confidence: EscalationConfidence;
   shadow: true;
+  /** W7.5 — "rule" (contract trigger) or "calibration_overlay". */
+  source?: "rule" | "calibration_overlay";
+  /** W7.5 — calibration verdict for this turn (undefined when no calibration). */
+  calibrationVerdict?: CalibrationVerdict;
+  /** W7.5 — calibration overall confidence (undefined when no calibration). */
+  calibrationConfidence?: W65CalibrationConfidence;
 }
 
 export function buildEscalationSuggestionLogs(
@@ -718,6 +724,9 @@ export function buildEscalationSuggestionLogs(
     reason: s.reason,
     confidence: s.confidence,
     shadow: true,
+    source: s.source,
+    calibrationVerdict: summary.calibrationVerdict,
+    calibrationConfidence: summary.calibrationConfidence,
   }));
 }
 
