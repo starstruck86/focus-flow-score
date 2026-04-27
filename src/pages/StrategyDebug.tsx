@@ -295,7 +295,9 @@ function RecentList({
 // ─── Page ────────────────────────────────────────────────────────
 
 export default function StrategyDebug() {
-  const { allowed, loading: approvalLoading } = useApprovalCheck();
+  const approvalStatus = useApprovalCheck();
+  const approvalLoading = approvalStatus === "loading";
+  const allowed = approvalStatus === "approved" || approvalStatus === "skipped";
   const [tab, setTab] = useState<RecordKind>("message");
   const [idInput, setIdInput] = useState("");
   const [row, setRow] = useState<FetchedRow | null>(null);
