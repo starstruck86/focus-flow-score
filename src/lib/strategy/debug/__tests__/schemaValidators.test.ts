@@ -255,13 +255,20 @@ describe("snapshot — full chat fixture", () => {
             "status": "valid",
             "unknownFields": [],
           },
+          {
+            "invalidFields": [],
+            "key": "enforcement_dry_run",
+            "missingFields": [],
+            "status": "valid",
+            "unknownFields": [],
+          },
         ],
         "source": "chat",
         "totals": {
           "malformed": 0,
           "missing": 0,
           "unknownFieldWarnings": 0,
-          "valid": 7,
+          "valid": 8,
         },
       }
     `);
