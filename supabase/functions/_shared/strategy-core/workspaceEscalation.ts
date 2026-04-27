@@ -74,6 +74,12 @@ export interface EscalationInputs {
   /** runTask only — task type / run id (for telemetry correlation). */
   taskType?: string;
   runId?: string;
+  /**
+   * W6.5 Pass B calibration output. When present, W7.5 overlay rules
+   * fire AFTER the existing trigger-driven rules (additive — never
+   * replaces). Shadow-only, no behavior change beyond telemetry.
+   */
+  calibration?: CalibrationResult | null;
 }
 
 export interface EscalationSuggestion {
@@ -89,6 +95,12 @@ export interface EscalationSuggestion {
   confidence: EscalationConfidence;
   /** Always true in W7. */
   shadow: true;
+  /**
+   * W7.5 — set when this suggestion was emitted by the calibration
+   * overlay (vs. the contract trigger registry). Existing rule-driven
+   * suggestions are tagged "rule".
+   */
+  source?: "rule" | "calibration_overlay";
 }
 
 export interface EscalationRunSummary {
