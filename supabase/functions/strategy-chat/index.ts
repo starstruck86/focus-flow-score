@@ -5951,10 +5951,11 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     }
     const visible = subst.text;
     // Citation audit (W5): governed by `retrievalRules.citationMode`
-    // from the resolved workspace contract. Strict workspaces still
-    // publish the rewrite (legacy behavior); other modes are shadow
-    // and reporting only. Closed-set mode (user picked a resource via
-    // /library) is preserved across all modes.
+    // from the resolved workspace contract. SHADOW/REPORTING ONLY in
+    // W5 — `auditedText` returns the original assistant text for all
+    // modes; telemetry still reports what the auditor would have
+    // changed. Closed-set mode (user picked a resource via /library)
+    // is preserved across all modes.
     const w5Citation = runCitationCheck({
       assistantText: visible,
       libraryHits: resourceHits,
@@ -6252,9 +6253,10 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         const visible = subst.text;
 
         // Step 3: citation audit on the GUARDED text (W5: governed
-        // by `retrievalRules.citationMode`). Strict workspaces still
-        // publish the rewrite to the persisted body; other modes are
-        // shadow + reporting only. Closed-set mode is preserved.
+        // by `retrievalRules.citationMode`). SHADOW/REPORTING ONLY —
+        // `auditedText` returns the original assistant text for all
+        // modes; telemetry still reports `modified` when the auditor
+        // would have rewritten. Closed-set mode is preserved.
         const w5Citation = runCitationCheck({
           assistantText: visible,
           libraryHits: resourceHits,

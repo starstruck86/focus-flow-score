@@ -27,14 +27,21 @@
 //       (W5 keeps this shadow; W6 owns enforcement.)
 //
 //   • strict
-//       Run the existing strict audit (which already rewrites
-//       UNVERIFIED references and appends the citation banner).
-//       The caller MAY use `auditedText` directly — this preserves
-//       the existing strategy-chat behavior for `strict` workspaces
-//       (deep_research, library, artifacts, projects, work).
+//       Run the existing strict audit (which detects UNVERIFIED
+//       references and would rewrite the text + append a citation
+//       banner). In W5, this runs SHADOW-only by default —
+//       `auditedText` returns the ORIGINAL assistant text, while
+//       `audit.text` and `audit.modified` remain available for
+//       telemetry and future enforcement.
+//
+//       Callers that explicitly need the legacy chat rewrite can
+//       opt in via `enableLegacyCitationRewrite: true` on the
+//       inputs. This is OUTSIDE the W5 shadow-only contract and
+//       must be set deliberately by the caller.
 //
 // W5 is intentionally SHADOW + REPORTING. We do not block. We do
-// not retry. Quality-gate-style enforcement is W6's job.
+// not retry. We do not mutate canonical assistant text. Quality-
+// gate-style enforcement is W6's job.
 // ════════════════════════════════════════════════════════════════
 
 import {
@@ -73,6 +80,13 @@ export interface CitationCheckInputs {
   citationMode: CitationMode;
   /** Optional pass-through to the deterministic auditor. */
   auditOptions?: CitationAuditOptions;
+  /**
+   * OUTSIDE W5 scope. When true, `strict` mode publishes the
+   * deterministic auditor's rewritten text as `auditedText`,
+   * preserving the legacy strategy-chat citation rewrite.
+   * Defaults to false — W5 is shadow/reporting only.
+   */
+  enableLegacyCitationRewrite?: boolean;
 }
 
 export interface CitationCheckResult {
@@ -86,15 +100,18 @@ export interface CitationCheckResult {
   audited: boolean;
   /**
    * The deterministic audit result. Always populated when `audited` is
-   * true. For `strict` workspaces, callers MAY substitute the audited
-   * text into the persisted message (existing strategy-chat behavior).
-   * For `light` / `none_unless_library_used`, the rewrite is shadow.
+   * true. `audit.text` and `audit.modified` reflect what the auditor
+   * WOULD have published — useful for telemetry — but W5 does not
+   * publish that text by default.
    */
   audit: CitationAuditResult | null;
   /**
-   * Convenience: text the caller MAY use. For strict workspaces this
-   * is `audit.text` (preserves prior chat behavior). For all other
-   * modes this is the input text — W5 does not rewrite.
+   * Text the caller should treat as the canonical assistant output.
+   * In W5 this is ALWAYS the original input text, regardless of mode.
+   * The single exception is when the caller passes
+   * `enableLegacyCitationRewrite: true` AND the mode is `strict` —
+   * that opt-in path is outside W5 shadow-only behavior and
+   * preserves the legacy strategy-chat rewrite.
    */
   auditedText: string;
 }
@@ -123,6 +140,7 @@ export function runCitationCheck(
     libraryUsed,
     citationMode,
     auditOptions,
+    enableLegacyCitationRewrite = false,
   } = inputs;
 
   const issues: CitationIssue[] = [];
@@ -208,10 +226,11 @@ export function runCitationCheck(
   }
 
   // ── Mode: strict ───────────────────────────────────────────────
-  // Run the existing strict auditor and PUBLISH its rewrite as
-  // `auditedText`. This preserves the legacy strategy-chat
-  // contract: strict workspaces have always had citation rewrites
-  // applied to persisted text.
+  // W5 SHADOW: run the strict auditor for telemetry/issue reporting,
+  // but do NOT publish `audit.text` as canonical output by default.
+  // Callers that explicitly need the legacy rewrite (pre-W5
+  // strategy-chat behavior) must pass `enableLegacyCitationRewrite:
+  // true`. That opt-in is outside the W5 shadow-only contract.
   const audit = auditResourceCitations(text, libraryHits, auditOptions);
   const citationsFound = audit.verifiedTitles.length;
   if (audit.unverifiedCitations.length > 0) {
@@ -232,7 +251,7 @@ export function runCitationCheck(
     issues,
     audited: true,
     audit,
-    auditedText: audit.text,
+    auditedText: enableLegacyCitationRewrite ? audit.text : text,
   };
 }
 
