@@ -6556,6 +6556,121 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         }\n\ndata: [DONE]\n\n`;
         controller.enqueue(new TextEncoder().encode(sseChunk));
         controller.close();
+        const streamContentJson: Record<string, unknown> = {
+          text: finalVisible,
+          sources_used: pack.sourceCount,
+          retrieval_meta: pack.retrievalMeta,
+          retrieval_handoff: retrievalDiagnostics,
+          pending_action: candidatePending ?? undefined,
+          model_used: result.model,
+          provider_used: result.provider,
+          fallback_used: false,
+          citation_audit: audit.modified
+            ? {
+              modified: true,
+              unverified: audit.unverifiedCitations,
+              verified: audit.verifiedTitles,
+            }
+            : undefined,
+          gate_check: w6GateBlock ?? undefined,
+          escalation_suggestions: w7EscalationBlock ?? undefined,
+          standard_context: standardContextBlock ?? undefined,
+          calibration: calibrationBlock ?? undefined,
+          routing_decision: (() => {
+            const base: any = {
+              mode,
+              mode_reason: modeReason,
+              intent: intent.intent,
+              resource_hits: resourceHits.length,
+              ki_hits: kiHits,
+              intended_provider: route.primaryProvider,
+              intended_model: route.model,
+              actual_provider: result.provider,
+              actual_model: result.model,
+              fallback_used: false,
+              routing_reason: route._routingReason,
+              retrieval_debug: retrievalDebug ?? null,
+              hybrid_guard_checked: hybridGuard.checked,
+              hybrid_guard_passed: hybridGuard.passed,
+              hybrid_guard_failure_reasons: hybridGuard.failure_reasons,
+              hybrid_rewrite_applied: hybridRewriteApplied,
+              hybrid_rewrite_reason: hybridRewriteReason,
+              hybrid_rewrite_failures_before: hybridRewriteApplied ? hybridGuard.failure_reasons : [],
+              hybrid_rewrite_failures_after: hybridRewriteApplied ? hybridGuardAfter.failure_reasons : [],
+              short_form_diagnostics: mode === "short_form" ? {
+                kind: shortFormKind ?? null,
+                prompt_chars: (content || "").length,
+                system_prompt_chars: effectiveSystemPrompt.length,
+                max_tokens_cap: route.maxTokens,
+                output_chars: (finalVisible || "").length,
+                latency_ms: result.latencyMs,
+              } : null,
+            };
+            if (v2Active && v2EvidenceBase) {
+              try {
+                const wq = v2ValidateResponse({
+                  userPrompt: content || "",
+                  responseBody: finalVisible || "",
+                  priorTurnPrompt: v2EvidenceBase.priorTurnPrompt,
+                });
+                const aud = v2AuditResponse({
+                  decision: v2EvidenceBase.decision,
+                  body: finalVisible || "",
+                  hadLibraryHits: (resourceHits.length + kiHits) > 0,
+                  resourceTitles: v2EvidenceBase.resourceTitles,
+                  kiIds: v2EvidenceBase.kiIds,
+                  kiTitles: v2EvidenceBase.kiTitles,
+                });
+                // Phase 3: contract-drift sentinel (logged, never blocks).
+                let drift: { missing: string[] } | null = null;
+                if (
+                  v2EvidenceBase.decision.askShape === "synthesis_framework" &&
+                  v2EvidenceBase.decision.mode === "A_strong"
+                ) {
+                  const check = assertSynthesisContractIntact(effectiveSystemPrompt);
+                  if (!check.intact) {
+                    drift = { missing: check.missing };
+                    console.warn(
+                      `[v2] contract_drift (stream): synthesis non-negotiables missing: ${check.missing.join(",")}`,
+                    );
+                  }
+                }
+                base.v2 = v2AssembleEvidence({
+                  decision: v2EvidenceBase.decision,
+                  signals: v2EvidenceBase.signals,
+                  wrongQuestion: wq,
+                  audit: aud,
+                  provider: result.provider,
+                  model: result.model,
+                  regenCount: 0,
+                  intendedProvider: route.primaryProvider,
+                  fallbackUsed: result.fallbackUsed === true,
+                  contractDrift: drift,
+                });
+                if (base.v2.claude_fallback) {
+                  console.warn(
+                    `[v2] claude_fallback=true (stream) intended=${route.primaryProvider} actual=${result.provider}`,
+                  );
+                }
+              } catch (e) {
+                base.v2_error = (e as Error).message;
+              }
+            }
+            return base;
+          })(),
+        };
+        // W10 — stamp compact schema-health summary AFTER all blocks are assembled.
+        try {
+          streamContentJson.schema_health = computeSchemaHealth(
+            streamContentJson,
+            "chat",
+          );
+        } catch (shErr) {
+          console.warn(
+            "[schema_health] stream stamping failed (ignored):",
+            String(shErr).slice(0, 200),
+          );
+        }
         await supabase.from("strategy_messages").insert({
           thread_id: threadId,
           user_id: userId,
@@ -6565,109 +6680,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           model_used: result.model,
           fallback_used: false,
           latency_ms: latency,
-          content_json: {
-            text: finalVisible,
-            sources_used: pack.sourceCount,
-            retrieval_meta: pack.retrievalMeta,
-            retrieval_handoff: retrievalDiagnostics,
-            pending_action: candidatePending ?? undefined,
-            model_used: result.model,
-            provider_used: result.provider,
-            fallback_used: false,
-            citation_audit: audit.modified
-              ? {
-                modified: true,
-                unverified: audit.unverifiedCitations,
-                verified: audit.verifiedTitles,
-              }
-              : undefined,
-            gate_check: w6GateBlock ?? undefined,
-            escalation_suggestions: w7EscalationBlock ?? undefined,
-            standard_context: standardContextBlock ?? undefined,
-            calibration: calibrationBlock ?? undefined,
-            routing_decision: (() => {
-              const base: any = {
-                mode,
-                mode_reason: modeReason,
-                intent: intent.intent,
-                resource_hits: resourceHits.length,
-                ki_hits: kiHits,
-                intended_provider: route.primaryProvider,
-                intended_model: route.model,
-                actual_provider: result.provider,
-                actual_model: result.model,
-                fallback_used: false,
-                routing_reason: route._routingReason,
-                retrieval_debug: retrievalDebug ?? null,
-                hybrid_guard_checked: hybridGuard.checked,
-                hybrid_guard_passed: hybridGuard.passed,
-                hybrid_guard_failure_reasons: hybridGuard.failure_reasons,
-                hybrid_rewrite_applied: hybridRewriteApplied,
-                hybrid_rewrite_reason: hybridRewriteReason,
-                hybrid_rewrite_failures_before: hybridRewriteApplied ? hybridGuard.failure_reasons : [],
-                hybrid_rewrite_failures_after: hybridRewriteApplied ? hybridGuardAfter.failure_reasons : [],
-                short_form_diagnostics: mode === "short_form" ? {
-                  kind: shortFormKind ?? null,
-                  prompt_chars: (content || "").length,
-                  system_prompt_chars: effectiveSystemPrompt.length,
-                  max_tokens_cap: route.maxTokens,
-                  output_chars: (finalVisible || "").length,
-                  latency_ms: result.latencyMs,
-                } : null,
-              };
-              if (v2Active && v2EvidenceBase) {
-                try {
-                  const wq = v2ValidateResponse({
-                    userPrompt: content || "",
-                    responseBody: finalVisible || "",
-                    priorTurnPrompt: v2EvidenceBase.priorTurnPrompt,
-                  });
-                  const aud = v2AuditResponse({
-                    decision: v2EvidenceBase.decision,
-                    body: finalVisible || "",
-                    hadLibraryHits: (resourceHits.length + kiHits) > 0,
-                    resourceTitles: v2EvidenceBase.resourceTitles,
-                    kiIds: v2EvidenceBase.kiIds,
-                    kiTitles: v2EvidenceBase.kiTitles,
-                  });
-                  // Phase 3: contract-drift sentinel (logged, never blocks).
-                  let drift: { missing: string[] } | null = null;
-                  if (
-                    v2EvidenceBase.decision.askShape === "synthesis_framework" &&
-                    v2EvidenceBase.decision.mode === "A_strong"
-                  ) {
-                    const check = assertSynthesisContractIntact(effectiveSystemPrompt);
-                    if (!check.intact) {
-                      drift = { missing: check.missing };
-                      console.warn(
-                        `[v2] contract_drift (stream): synthesis non-negotiables missing: ${check.missing.join(",")}`,
-                      );
-                    }
-                  }
-                  base.v2 = v2AssembleEvidence({
-                    decision: v2EvidenceBase.decision,
-                    signals: v2EvidenceBase.signals,
-                    wrongQuestion: wq,
-                    audit: aud,
-                    provider: result.provider,
-                    model: result.model,
-                    regenCount: 0,
-                    intendedProvider: route.primaryProvider,
-                    fallbackUsed: result.fallbackUsed === true,
-                    contractDrift: drift,
-                  });
-                  if (base.v2.claude_fallback) {
-                    console.warn(
-                      `[v2] claude_fallback=true (stream) intended=${route.primaryProvider} actual=${result.provider}`,
-                    );
-                  }
-                } catch (e) {
-                  base.v2_error = (e as Error).message;
-                }
-              }
-              return base;
-            })(),
-          },
+          content_json: streamContentJson,
         });
         await supabase.from("strategy_threads").update({
           updated_at: new Date().toISOString(),
