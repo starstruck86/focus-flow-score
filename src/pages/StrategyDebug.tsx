@@ -63,6 +63,12 @@ import {
   type PromotionReadinessAggregate,
   type PromotionReadinessReport,
 } from "@/lib/strategy/debug/promotionReadiness";
+import {
+  type EnforcementHistorySummary,
+  type EnforcementPersistedBlock,
+  readPersistedEnforcement,
+  summarizeEnforcementHistory,
+} from "@/lib/strategy/debug/enforcementHistory";
 import { useApprovalCheck } from "@/hooks/useApprovalCheck";
 
 type RecordKind = "message" | "run";
