@@ -202,7 +202,7 @@ describe("parseTaskRunTelemetry", () => {
 
   it("handles fully-empty meta", () => {
     const result = parseTaskRunTelemetry({});
-    expect(result.layers.length).toBe(7); // SOP omitted when missing
+    expect(result.layers.length).toBe(8); // SOP omitted when missing
     for (const layer of result.layers) {
       expect(layer.status).toBe("missing");
     }
