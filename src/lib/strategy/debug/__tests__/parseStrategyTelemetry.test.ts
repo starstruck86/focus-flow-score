@@ -66,7 +66,7 @@ describe("parseChatMessageTelemetry — happy path", () => {
     expect(result.source).toBe("chat");
   });
 
-  it("emits all 7 layers in canonical order", () => {
+  it("emits all 8 layers in canonical order", () => {
     expect(result.layers.map((l) => l.key)).toEqual([
       "retrieval",
       "standard_context",
@@ -75,6 +75,7 @@ describe("parseChatMessageTelemetry — happy path", () => {
       "gate_check",
       "calibration",
       "escalation_suggestions",
+      "enforcement_dry_run",
     ]);
   });
 
