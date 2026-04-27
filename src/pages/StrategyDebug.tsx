@@ -508,6 +508,8 @@ function DriftSummaryCard({ summary }: { summary: DriftHistorySummary }) {
 }
 
 // ─── Recent rows sidebar ─────────────────────────────────────────
+
+interface RecentItem {
   id: string;
   createdAt: string | null;
   label: string;
