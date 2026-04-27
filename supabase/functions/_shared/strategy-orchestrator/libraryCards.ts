@@ -149,7 +149,7 @@ export async function getCards(
   }
 
   const contextString = trimmed.length
-    ? `=== LIBRARY CARDS (cite as CARD[id-prefix] when used) ===\n${trimmed.map(renderCard).join("\n\n")}`
+    ? `=== LIBRARY CARDS (PREFER title form CARD["<exact title>"] when citing; fall back to CARD[id-prefix] only if you cannot reproduce the title verbatim) ===\n${trimmed.map(renderCard).join("\n\n")}`
     : "";
 
   const counts: Record<LibraryRole, number> = { standard: 0, tactic: 0, pattern: 0, exemplar: 0 };

@@ -52,6 +52,19 @@ export interface CitationAuditOptions {
    * ("Q3" when they picked "Q2", etc.).
    */
   closedSet?: boolean;
+  /**
+   * Optional KI hit set. When provided AND non-empty, KI["title"] /
+   * KI[id-short] citations in the assistant text are validated against
+   * it. When omitted/empty (the default), KI citations are NOT
+   * scanned — preserving prior behavior for callers that don't yet
+   * thread KI hits through.
+   */
+  kiHits?: CitationAuditHit[];
+  /**
+   * Optional CARD hit set. Same semantics as kiHits but for CARD[…]
+   * citations.
+   */
+  cardHits?: CitationAuditHit[];
 }
 
 export interface CitationAuditResult {
@@ -163,11 +176,59 @@ export function auditResourceCitations(
     },
   );
 
-  // ── 2. Informal "<Title>" + artifact-word references ──────────
+  // ── 2. KI[…] and CARD[…] form (additive — only when caller threads
+  //        the relevant hit set through; otherwise we leave these alone
+  //        to preserve prior behavior).
+  //        Runs BEFORE the informal-quoted-string scanner so that titles
+  //        like "Command of the Message Framework" wrapped in KI["…"]
+  //        are not double-flagged by the artifact-word heuristic.
+  const auditNamespacedCitation = (
+    ns: "KI" | "CARD",
+    nsHits: CitationAuditHit[] | undefined,
+  ) => {
+    if (!nsHits || nsHits.length === 0) return;
+    const { titles: nsTitles, idShorts: nsIdShorts } = buildTitleIndex(nsHits);
+    const re = new RegExp(`${ns}\\[\\s*("?)([^\\]"]+?)\\1\\s*\\]`, "g");
+    out = out.replace(re, (_full, _q, inner: string) => {
+      const trimmed = inner.trim();
+      // id-short form: 6-12 hex chars (the format we render in prompts)
+      if (/^[a-f0-9]{6,12}$/i.test(trimmed)) {
+        if (nsIdShorts.has(trimmed.slice(0, 8).toLowerCase())) {
+          verified.push(`${ns}:${trimmed}`);
+          return `${ns}[${trimmed}]`;
+        }
+        unverified.push(`${ns}:${trimmed}`);
+        modified = true;
+        return `⚠ UNVERIFIED-${ns}[${trimmed}]`;
+      }
+      // title form
+      const norm = normalize(trimmed);
+      let hit = nsTitles.has(norm);
+      if (!hit) {
+        for (const t of nsTitles) {
+          if (t.includes(norm) || norm.includes(t)) {
+            hit = true;
+            break;
+          }
+        }
+      }
+      if (hit) {
+        verified.push(`${ns}:${trimmed}`);
+        return `${ns}["${trimmed}"]`;
+      }
+      unverified.push(`${ns}:${trimmed}`);
+      modified = true;
+      return `⚠ UNVERIFIED-${ns}["${trimmed}"]`;
+    });
+  };
+  auditNamespacedCitation("KI", options.kiHits);
+  auditNamespacedCitation("CARD", options.cardHits);
+
+  // ── 3. Informal "<Title>" + artifact-word references ──────────
   // We only flag quoted strings that sit next to an artifact word, so
   // we don't spuriously annotate seller quotes from a transcript.
-  // We also skip anything already wrapped by RESOURCE[…] / UNVERIFIED[…]
-  // (handled by step 1) to avoid double-flagging.
+  // We also skip anything already wrapped by RESOURCE[…] / KI[…] /
+  // CARD[…] / UNVERIFIED[…] (handled above) to avoid double-flagging.
   //
   // CLOSED-SET MODE: when the user explicitly picked a resource, the
   // artifact-word requirement is relaxed — any quoted phrase that
@@ -192,10 +253,11 @@ export function auditResourceCitations(
 
   const quotedRe = /["“]([A-Z][^"“”]{2,80})["”]/g;
   out = out.replace(quotedRe, (full, inner: string, offset: number) => {
-    // Skip if this quoted string is the value of a RESOURCE[…] or
-    // UNVERIFIED[…] bracket (already audited in step 1).
+    // Skip if this quoted string is the value of a RESOURCE[…] / KI[…] /
+    // CARD[…] / UNVERIFIED[…] / UNVERIFIED-KI[…] / UNVERIFIED-CARD[…]
+    // bracket (already audited above).
     const before = out.slice(Math.max(0, offset - 20), offset);
-    if (/(?:RESOURCE|UNVERIFIED)\[\s*$/.test(before)) return full;
+    if (/(?:RESOURCE|KI|CARD|UNVERIFIED(?:-KI|-CARD)?)\[\s*$/.test(before)) return full;
 
     const window = out.slice(Math.max(0, offset - 60), Math.min(out.length, offset + full.length + 60)).toLowerCase();
     const looksLikeArtifact = ARTIFACT_WORDS.some((w) => window.includes(w));
@@ -227,7 +289,7 @@ export function auditResourceCitations(
   if (modified) {
     out =
       out.trimEnd() +
-      `\n\n_⚠ Citation audit: ${unverified.length} resource reference${unverified.length === 1 ? " was" : "s were"} not found in your library and cannot be verified. Strategy will not pretend it exists._`;
+      `\n\n_⚠ Citation audit: ${unverified.length} library reference${unverified.length === 1 ? " was" : "s were"} not found in your library and cannot be verified. Strategy will not pretend it exists._`;
   }
 
   // Dedupe, preserve order.

@@ -1114,7 +1114,9 @@ export function renderResourceContextBlock(args: {
     `Retrieved ${hits.length} resource${hits.length === 1 ? "" : "s"}${
       kiHits.length > 0 ? ` and ${kiHits.length} KI${kiHits.length === 1 ? "" : "s"}` : ""
     } from the user's library. ` +
-      `Cite resources by EXACT title in the form RESOURCE["<title>"]; cite KIs as KI[<short id>]. ` +
+      `Cite resources by EXACT title in the form RESOURCE["<title>"]. ` +
+      `For KIs, PREFER the title form KI["<exact title>"] (every KI below shows its title in quotes); ` +
+      `fall back to KI[<short id>] only if you cannot reproduce the title verbatim. ` +
       `Do NOT invent additional titles.`,
   );
   if (inferredTopics.length > 0) {
