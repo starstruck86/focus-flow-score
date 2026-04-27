@@ -63,6 +63,12 @@ import {
   type PromotionReadinessAggregate,
   type PromotionReadinessReport,
 } from "@/lib/strategy/debug/promotionReadiness";
+import {
+  type EnforcementHistorySummary,
+  type EnforcementPersistedBlock,
+  readPersistedEnforcement,
+  summarizeEnforcementHistory,
+} from "@/lib/strategy/debug/enforcementHistory";
 import { useApprovalCheck } from "@/hooks/useApprovalCheck";
 
 type RecordKind = "message" | "run";
@@ -454,6 +460,9 @@ function RecordPanel({ row }: { row: FetchedRow | null }) {
           }
         />
       )}
+      {row && (
+        <EnforcementDryRunCard block={readPersistedEnforcement(row.meta)} />
+      )}
     </div>
   );
 }
@@ -595,6 +604,158 @@ function PromotionReadinessCard({
   );
 }
 
+// ─── Enforcement Dry-Run (W12) ───────────────────────────────────
+
+function EnforcementDryRunCard({ block }: { block: EnforcementPersistedBlock | null }) {
+  if (!block) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            Enforcement Dry-Run (W12)
+            <Badge variant="outline" className="text-[10px]">read-only</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground">
+            No <code>enforcement_dry_run</code> block on this row (pre-W12 or skipped).
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+  const totals = block.totals ?? {};
+  const evals = Array.isArray(block.evaluations) ? block.evaluations : [];
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          Enforcement Dry-Run (W12)
+          <Badge variant="outline" className="text-[10px] uppercase">
+            {block.contractVersion ?? "v?"}
+          </Badge>
+          <Badge variant="outline" className="text-[10px]">read-only</Badge>
+          <Badge variant="secondary" className="text-[10px] uppercase">dry-run only</Badge>
+        </CardTitle>
+        <p className="text-[11px] text-muted-foreground">
+          surface {block.surface ?? "—"} · workspace {block.workspace ?? "—"}
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline">evaluated: {totals.evaluated ?? 0}</Badge>
+          <Badge variant={(totals.wouldFire ?? 0) > 0 ? "destructive" : "outline"}>
+            would-fire: {totals.wouldFire ?? 0}
+          </Badge>
+          <Badge variant="secondary">disabled: {totals.disabled ?? 0}</Badge>
+          <Badge variant={(totals.errors ?? 0) > 0 ? "destructive" : "outline"}>
+            errors: {totals.errors ?? 0}
+          </Badge>
+        </div>
+        {evals.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground italic">
+            No policies evaluated.
+          </p>
+        ) : (
+          <div className="space-y-1">
+            {evals.map((ev, i) => (
+              <div
+                key={i}
+                className="rounded-md border bg-card/30 px-2 py-1.5 text-[11px] flex items-center gap-2 flex-wrap"
+              >
+                <span className="font-mono">{ev.policyId ?? "?"}</span>
+                <Badge variant="outline" className="text-[10px] font-mono">
+                  layer: {ev.layer ?? "—"}
+                </Badge>
+                <Badge variant="outline" className="text-[10px] uppercase">
+                  {ev.state ?? "—"}
+                </Badge>
+                <Badge
+                  variant={ev.wouldFire ? "destructive" : "outline"}
+                  className="text-[10px] uppercase"
+                >
+                  {ev.wouldFire ? "would-fire" : "silent"}
+                </Badge>
+                {ev.reason && (
+                  <span className="text-muted-foreground italic truncate">
+                    {ev.reason}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function EnforcementHistoryCard({ summary }: { summary: EnforcementHistorySummary }) {
+  const title = summary.source === "chat"
+    ? "Chat — enforcement dry-run"
+    : "Tasks — enforcement dry-run";
+  const stateEntries = Object.entries(summary.stateCounts);
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          {title}
+          <Badge variant="outline" className="text-[10px]">
+            last {summary.total}
+          </Badge>
+          <Badge variant="secondary" className="text-[10px] uppercase">dry-run only</Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="default">with block: {summary.withBlock}</Badge>
+          <Badge variant="outline">missing: {summary.missingBlock}</Badge>
+          <Badge variant={summary.totalWouldFire > 0 ? "destructive" : "outline"}>
+            total would-fire: {summary.totalWouldFire}
+          </Badge>
+        </div>
+        {summary.topFiringPolicies.length > 0 && (
+          <div>
+            <p className="text-[11px] font-medium mb-1">Top firing policies</p>
+            <div className="flex flex-wrap gap-1">
+              {summary.topFiringPolicies.map((p) => (
+                <Badge
+                  key={p.policyId}
+                  variant="destructive"
+                  className="text-[10px] font-mono"
+                >
+                  {p.policyId} · {p.count}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+        {stateEntries.length > 0 && (
+          <div>
+            <p className="text-[11px] font-medium mb-1">Policy states observed</p>
+            <div className="flex flex-wrap gap-1">
+              {stateEntries.map(([state, count]) => (
+                <Badge
+                  key={state}
+                  variant="outline"
+                  className="text-[10px] font-mono"
+                >
+                  {state} · {count}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+        {summary.topFiringPolicies.length === 0 && stateEntries.length === 0 && (
+          <p className="text-[11px] text-muted-foreground italic">
+            No persisted enforcement_dry_run blocks observed in this window.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function PromotionReadinessHistoryCard({
   agg,
 }: {
@@ -727,6 +888,10 @@ export default function StrategyDebug() {
     chat: PromotionReadinessAggregate;
     task: PromotionReadinessAggregate;
   } | null>(null);
+  const [enforcement, setEnforcement] = useState<{
+    chat: EnforcementHistorySummary;
+    task: EnforcementHistorySummary;
+  } | null>(null);
 
   const loadRecent = async () => {
     setRecentLoading(true);
@@ -775,6 +940,16 @@ export default function StrategyDebug() {
           safeMsgs.map((m: any) => m.content_json),
         ),
         task: aggregatePromotionReadiness(
+          "task",
+          safeRuns.map((r: any) => r.meta),
+        ),
+      });
+      setEnforcement({
+        chat: summarizeEnforcementHistory(
+          "chat",
+          safeMsgs.map((m: any) => m.content_json),
+        ),
+        task: summarizeEnforcementHistory(
           "task",
           safeRuns.map((r: any) => r.meta),
         ),
@@ -950,6 +1125,13 @@ export default function StrategyDebug() {
           <div className="grid md:grid-cols-2 gap-4">
             <PromotionReadinessHistoryCard agg={readiness.chat} />
             <PromotionReadinessHistoryCard agg={readiness.task} />
+          </div>
+        )}
+
+        {enforcement && (
+          <div className="grid md:grid-cols-2 gap-4">
+            <EnforcementHistoryCard summary={enforcement.chat} />
+            <EnforcementHistoryCard summary={enforcement.task} />
           </div>
         )}
 
