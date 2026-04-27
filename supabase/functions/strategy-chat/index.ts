@@ -5764,6 +5764,49 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     );
   }
 
+  // ── W6.5 Pass A — Library Standard Context (shadow, pre-gen) ──
+  // Select 2–4 STANDARD/EXEMPLAR/PATTERN cards from the user's
+  // library, demote anything already retrieved as a RESOURCE
+  // (RESOURCE beats STANDARD), and inject a "WHAT GOOD LOOKS LIKE"
+  // block. This shapes HOW the model writes — it is NOT citation
+  // material. The same `exemplarSet` is reused by Pass B post-gen.
+  let exemplarSet: ExemplarSet | null = null;
+  let standardContextBlock: ReturnType<typeof buildStandardContextPersistenceBlock> | null = null;
+  try {
+    const passAScopes = (() => {
+      const fromUser = inferTopicScopes(content || "");
+      if (fromUser.length > 0) return fromUser;
+      // Fall back to account/opportunity names so the standards block
+      // still matches the conversational frame.
+      const fb: string[] = [];
+      if (pack.account?.name) fb.push(pack.account.name);
+      if (pack.opportunity?.name) fb.push(pack.opportunity.name);
+      return fb;
+    })();
+    const retrievedItemIds = [
+      ...resourceHits.map((h) => h.id),
+      ...kiHitList.map((k) => k.id),
+      ...pickedResourceIds,
+    ];
+    exemplarSet = await selectExemplars(supabase, userId, {
+      workspace: __resolvedContract.workspace,
+      surface: "strategy-chat",
+      scopes: passAScopes,
+      retrievedItemIds,
+    });
+    logStandardContext(exemplarSet);
+    standardContextBlock = buildStandardContextPersistenceBlock(exemplarSet);
+    const standardsText = renderStandardBlock(exemplarSet);
+    if (standardsText) {
+      effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n${standardsText}\n`;
+    }
+  } catch (passAErr) {
+    console.warn(
+      "[workspace:standard_context] threw (ignored, shadow):",
+      String(passAErr).slice(0, 200),
+    );
+  }
+
   // Phase 2 — Apply lightweight Global Instructions at the FINAL prompt stage.
   // Single shared helper used at every LLM call site so V1, V2, and any
   // future grounded-strategy path all flow through the same injection.
