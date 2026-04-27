@@ -6506,6 +6506,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         }
         // ── W7: Escalation rules (shadow-only, advisory, streaming) ─
         let w7EscalationBlock: ReturnType<typeof buildEscalationPersistenceBlock> | null = null;
+        let w7EscalationSummary: ReturnType<typeof evaluateEscalationRules> | null = null;
         try {
           const w7Summary = evaluateEscalationRules({
             inputs: {
@@ -6521,10 +6522,32 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
             surface: "strategy-chat",
           });
           logEscalationSuggestions(w7Summary);
+          w7EscalationSummary = w7Summary;
           w7EscalationBlock = buildEscalationPersistenceBlock(w7Summary);
         } catch (escErr) {
           console.warn("[workspace:escalation_suggestion] stream threw (ignored, shadow):", String(escErr).slice(0, 200));
         }
+        // ── W12: Enforcement dry-run (shadow-only) — streaming ──────
+        let w12EnforcementBlock: ReturnType<typeof buildEnforcementPersistenceBlock> | null = null;
+        try {
+          const w12Summary = runEnforcementDryRun({
+            contract: __resolvedContract.contract,
+            surface: "strategy-chat",
+            workspace: __resolvedContract.workspace,
+            contractVersion: __resolvedContract.contractVersion,
+            threadId,
+            gateSummary: w6GateSummary,
+            calibration: calibrationResult,
+            citationCheck: w5Citation,
+            escalationSummary: w7EscalationSummary,
+            schemaHealth: null,
+          });
+          logEnforcementDryRun(w12Summary);
+          w12EnforcementBlock = buildEnforcementPersistenceBlock(w12Summary);
+        } catch (enfErr) {
+          console.warn("[workspace:enforcement_dry_run] stream threw (ignored, shadow):", String(enfErr).slice(0, 200));
+        }
+
 
         // ── HYBRID GUARD (diagnostic) ──
         const hybridGuard = evaluateHybridGuard(intent.intent, auditedVisible);
