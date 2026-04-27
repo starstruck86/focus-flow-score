@@ -774,8 +774,11 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // structured task output here — strict-mode rewrites would land back
   // inside JSON, which the templates don't model. W5 stays shadow.
   let citationCheckMeta: Record<string, unknown> | null = null;
+  let w5CitationResult: ReturnType<typeof runCitationCheck> | null = null;
+  let w5LibraryHits: CitationAuditHit[] = [];
+  let auditableTaskText = "";
   try {
-    const libraryHits: CitationAuditHit[] = [
+    w5LibraryHits = [
       ...((library.knowledgeItems ?? []) as Array<{ id: string; title: string }>).map(
         (k) => ({ id: k.id, title: k.title }),
       ),
@@ -783,20 +786,20 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         (p) => ({ id: p.id, title: p.title }),
       ),
     ];
-    const auditableText = JSON.stringify({
+    auditableTaskText = JSON.stringify({
       sections: draftOutput?.sections ?? [],
       review: reviewOutput,
     });
-    const w5Citation = runCitationCheck({
-      assistantText: auditableText,
-      libraryHits,
-      libraryUsed: libraryHits.length > 0,
+    w5CitationResult = runCitationCheck({
+      assistantText: auditableTaskText,
+      libraryHits: w5LibraryHits,
+      libraryUsed: w5LibraryHits.length > 0,
       workspace: resolvedContract.workspace,
       contractVersion: resolvedContract.contractVersion,
       citationMode: resolvedContract.retrievalRules.citationMode,
     });
     logCitationCheck(buildCitationCheckLog({
-      result: w5Citation,
+      result: w5CitationResult,
       workspace: resolvedContract.workspace,
       contractVersion: resolvedContract.contractVersion,
       surface: "run-task",
@@ -804,11 +807,11 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       runId,
     }));
     citationCheckMeta = {
-      mode: w5Citation.citationMode,
-      audited: w5Citation.audited,
-      citations_found: w5Citation.citationsFound,
-      issues: w5Citation.issues,
-      modified: w5Citation.audit?.modified === true,
+      mode: w5CitationResult.citationMode,
+      audited: w5CitationResult.audited,
+      citations_found: w5CitationResult.citationsFound,
+      issues: w5CitationResult.issues,
+      modified: w5CitationResult.audit?.modified === true,
     };
   } catch (citErr) {
     console.warn(
@@ -816,6 +819,48 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       String(citErr).slice(0, 200),
     );
   }
+
+  // ── W6: Quality gate runner (shadow-only) ────────────────────────
+  // Run after the W5 citation check so gates can read its result.
+  // Required section IDs are derived from whatever the draft actually
+  // contains — handlers in this code path do not declare a locked
+  // template, so the artifacts.required_sections_present gate will
+  // skip when no IDs are passed (per W6 contract).
+  let gatePersistenceBlock: GatePersistenceBlock | null = null;
+  try {
+    const requiredSectionIds: string[] | undefined = (() => {
+      const declared = (handler as { requiredSectionIds?: readonly string[] })
+        .requiredSectionIds;
+      if (Array.isArray(declared) && declared.length > 0) {
+        return [...declared];
+      }
+      // No locked template — leave undefined; gate will skip cleanly.
+      return undefined;
+    })();
+    const w6Summary = runWorkspaceGates({
+      inputs: {
+        contract: resolvedContract.contract,
+        assistantText: auditableTaskText || JSON.stringify(draftOutput ?? {}),
+        parsedOutput: draftOutput,
+        libraryHits: w5LibraryHits,
+        libraryUsed: w5LibraryHits.length > 0,
+        citationCheck: w5CitationResult,
+        taskType,
+        requiredSectionIds,
+      },
+      surface: "run-task",
+      taskType,
+      runId,
+    });
+    logGateResults(w6Summary);
+    gatePersistenceBlock = buildGatePersistenceBlock(w6Summary);
+  } catch (gateErr) {
+    console.warn(
+      "[workspace:gate_result] run-task threw (ignored, shadow):",
+      String(gateErr).slice(0, 200),
+    );
+  }
+
 
   // ── Stage 5: Finalize the run row ────────────────────────────
   const finalizePatch: Record<string, unknown> = {
