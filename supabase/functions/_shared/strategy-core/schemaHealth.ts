@@ -148,6 +148,17 @@ const SCHEMAS: readonly BlockSchema[] = [
     ],
   },
   {
+    key: "enforcement_dry_run",
+    blockKeys: ["enforcement_dry_run"],
+    fields: [
+      { name: "workspace", type: "string", required: true },
+      { name: "contractVersion", type: "string", required: false },
+      { name: "surface", type: "string", required: false },
+      { name: "totals", type: "object", required: true },
+      { name: "evaluations", type: "array", required: true },
+    ],
+  },
+  {
     key: "sop",
     blockKeys: ["sop"],
     fields: [
