@@ -147,7 +147,7 @@ Deno.test("Pass B: persistence block exposes verdict + exemplarSetId", () => {
   assertEquals(block.exemplarSetId, set.exemplarSetId);
   assertEquals(typeof block.overallVerdict, "string");
   // Phase-1 invariant: persistence block does NOT carry an improved draft.
-  assert(!("improvedDraft" in (block as Record<string, unknown>)));
+  assert(!("improvedDraft" in (block as unknown as Record<string, unknown>)));
 });
 
 Deno.test("Pass B: fabrication guard reports OK when only known refs are produced", () => {
