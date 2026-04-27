@@ -757,8 +757,12 @@ export interface EscalationPersistenceBlock {
       | "action"
       | "reason"
       | "confidence"
+      | "source"
     >
   >;
+  /** W7.5 — calibration verdict at the time of evaluation. */
+  calibrationVerdict?: CalibrationVerdict;
+  calibrationConfidence?: W65CalibrationConfidence;
 }
 
 export function buildEscalationPersistenceBlock(
@@ -776,6 +780,9 @@ export function buildEscalationPersistenceBlock(
       action: s.action,
       reason: s.reason,
       confidence: s.confidence,
+      source: s.source,
     })),
+    calibrationVerdict: summary.calibrationVerdict,
+    calibrationConfidence: summary.calibrationConfidence,
   };
 }
