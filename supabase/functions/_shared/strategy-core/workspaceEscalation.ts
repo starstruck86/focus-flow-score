@@ -584,7 +584,85 @@ export function evaluateEscalationRules(args: {
       reason: result.reason,
       confidence: result.confidence,
       shadow: true,
+      source: "rule",
     });
+  }
+
+  // ── W7.5 Calibration-Aware Overlay (shadow-only) ────────────────
+  //
+  // Doctrine: the library defines what "good" looks like. When W6.5
+  // calibration is available we use it to (a) raise smarter promotions
+  // when the output is below standard, (b) flag library gaps when
+  // there weren't enough exemplars, and (c) suppress noise when the
+  // output already meets standard.
+  //
+  // Hard rules:
+  //   • Never replaces existing rule-driven suggestions — additive only.
+  //   • Always shadow:true.
+  //   • Never throws.
+  let overlaySuggestionsEmitted = 0;
+  let overlayDowngrades = 0;
+  const calibration = inputs.calibration ?? undefined;
+  if (calibration) {
+    try {
+      // (A) below_standard + high → recommend Refine.
+      if (
+        calibration.overallVerdict === "below_standard" &&
+        calibration.overallConfidence === "high" &&
+        contract.workspace !== "refine"
+      ) {
+        suggestions.push({
+          id: `${contract.workspace}.escalate.refine.calibration`,
+          sourceWorkspace: contract.workspace,
+          targetWorkspace: "refine",
+          action: "recommend_workspace",
+          trigger: "calibration:below_standard",
+          reason:
+            "Output is below the standard set by your library exemplars.",
+          confidence: "high",
+          shadow: true,
+          source: "calibration_overlay",
+        });
+        overlaySuggestionsEmitted++;
+      }
+
+      // (B) insufficient_exemplars → library gap signal.
+      if (
+        calibration.overallVerdict === "insufficient_exemplars" &&
+        contract.workspace !== "library"
+      ) {
+        suggestions.push({
+          id: `${contract.workspace}.escalate.library.calibration`,
+          sourceWorkspace: contract.workspace,
+          targetWorkspace: "library",
+          action: "log_promotion_suggestion",
+          trigger: "calibration:insufficient_exemplars",
+          reason:
+            "Not enough examples in your library to define what good looks like.",
+          confidence: "medium",
+          shadow: true,
+          source: "calibration_overlay",
+        });
+        overlaySuggestionsEmitted++;
+      }
+
+      // (C) on_standard → suppress noise.
+      // Don't add new suggestions; downgrade existing rule-driven
+      // suggestions to "low" confidence so dashboards can deprioritize.
+      if (calibration.overallVerdict === "on_standard") {
+        for (const s of suggestions) {
+          if (s.source === "rule" && s.confidence !== "low") {
+            s.confidence = "low";
+            overlayDowngrades++;
+          }
+        }
+      }
+    } catch (overlayErr) {
+      console.warn(
+        "[workspace:escalation] W7.5 overlay threw (ignored, shadow):",
+        String(overlayErr).slice(0, 200),
+      );
+    }
   }
 
   return {
@@ -597,7 +675,11 @@ export function evaluateEscalationRules(args: {
     totals: {
       rulesEvaluated: rules.length,
       suggestionsEmitted: suggestions.length,
+      overlaySuggestionsEmitted,
+      overlayDowngrades,
     },
+    calibrationVerdict: calibration?.overallVerdict,
+    calibrationConfidence: calibration?.overallConfidence,
   };
 }
 
