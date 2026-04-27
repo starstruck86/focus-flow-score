@@ -6049,6 +6049,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           }
           : undefined,
         gate_check: w6GateBlock ?? undefined,
+        escalation_suggestions: w7EscalationBlock ?? undefined,
         routing_decision: (() => {
           const base: any = {
             mode,
