@@ -148,8 +148,8 @@ Deno.test("retrieveResourceContext: emits admit-absence block when nothing match
   });
   assertEquals(out.hits.length, 0);
   assertEquals(out.userAskedForResource, true);
-  assertStringIncludes(out.contextBlock, "No matching resource was found");
-  assertStringIncludes(out.contextBlock, "I don't see a matching resource");
+  assertStringIncludes(out.contextBlock, "No matching resource or KI was found");
+  assertStringIncludes(out.contextBlock, "I scanned your library");
   assertStringIncludes(out.contextBlock, "Do NOT invent");
 });
 
