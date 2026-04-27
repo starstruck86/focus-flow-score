@@ -281,7 +281,7 @@ describe("snapshot — full task fixture", () => {
     const sop = result.reports.find((r) => r.key === "sop");
     expect(sop?.status).toBe("valid");
     expect(result.totals).toEqual({
-      valid: 8,
+      valid: 9,
       missing: 0,
       malformed: 0,
       unknownFieldWarnings: 0,
