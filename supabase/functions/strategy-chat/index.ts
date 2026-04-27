@@ -5639,10 +5639,85 @@ async function handleChat(
     `[mode] intent=${intent.intent} mode=${mode} reason=${modeReason} provider=${route.primaryProvider} model=${route.model} routing=${modeRoute._routingReason}${shortFormKind ? ` sf_kind=${shortFormKind}` : ""}`,
   );
 
+  // ── Phase 7B — SOP AUTHORITY UPGRADE ──
+  // Build SOP blocks with strong, directive framing and inject them HIGH in
+  // the prompt — immediately after the core identity (systemPrompt) and
+  // BEFORE the V1/V2/synthesis reasoning preamble. This ensures SOPs act as
+  // behavioral authority layers, not passive trailing text. They still must
+  // not override grounding, citation, or safety rules — that precedence is
+  // stated explicitly inside the block.
+  const buildGlobalSopBlock = (): string => {
+    if (!globalSop || globalSop.rawInstructions.length === 0) return "";
+    return `
+
+━━━ GLOBAL STRATEGY SOP (OPERATING STANDARD) ━━━
+You MUST follow the operating standard below when producing your response.
+This defines how you:
+- think
+- structure answers
+- determine depth
+- use research
+- produce outputs
+
+These instructions apply to ALL responses unless they conflict with:
+- grounding rules
+- citation requirements
+- safety constraints
+
+If a conflict exists:
+- preserve grounding and safety
+- otherwise follow this SOP
+
+${globalSop.rawInstructions}
+
+Before finalizing your response, ensure it reflects this SOP.
+If it does not: improve it before returning.
+`;
+  };
+  const buildWorkspaceSopBlock = (): string => {
+    if (!workspaceSop || workspaceSop.rawInstructions.length === 0) return "";
+    return `
+
+━━━ WORKSPACE SOP (${(workspaceSop.workspace ?? "workspace").toString().toUpperCase()} MODE) ━━━
+You MUST operate in this workspace mode.
+
+This defines:
+- how you approach the task
+- how you structure output
+- how much depth to apply
+- how to balance expansion vs precision
+
+This modifies how you apply the global SOP for this specific task.
+
+${workspaceSop.rawInstructions}
+
+Before finalizing your response, ensure it reflects this SOP.
+If it does not: improve it before returning.
+`;
+  };
+  const sopAuthorityBlock = `${buildGlobalSopBlock()}${buildWorkspaceSopBlock()}`;
+  if (sopAuthorityBlock.length > 0) {
+    console.log(
+      `[strategy-sop] injected-sop-authority-early ${JSON.stringify({
+        global_present: !!globalSop && globalSop.rawInstructions.length > 0,
+        workspace: workspaceSop?.workspace ?? null,
+        workspace_present: !!workspaceSop && workspaceSop.rawInstructions.length > 0,
+        block_length: sopAuthorityBlock.length,
+        position: "post-core-identity / pre-reasoning-preamble",
+      })}`,
+    );
+  } else {
+    console.log(
+      `[strategy-sop] injected-sop-authority-early skipped: no SOP payload`,
+    );
+  }
+
   // Inject a small thinking-path preamble into the system prompt for grounded
   // modes so the assistant opens with what it found and what it's extending.
   // The preamble is appended; the model must obey the original mode-lock too.
-  let effectiveSystemPrompt = systemPrompt;
+  // SOPs are prepended via sopAuthorityBlock so they sit between core identity
+  // and the reasoning preamble.
+  let effectiveSystemPrompt = `${systemPrompt}${sopAuthorityBlock}`;
   if (mode === "short_form") {
     // SHORT-FORM mode-lock: tight output shape, no synthesis scaffolding.
     const shapeRule = shortFormKind === "subject_lines"
