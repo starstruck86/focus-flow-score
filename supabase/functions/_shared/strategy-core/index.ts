@@ -186,3 +186,21 @@ export type {
   CitationIssue,
   CitationIssueCode,
 } from "./citationEnforcement.ts";
+
+// ─── Quality gate runner (Phase W6, shadow-only) ─────────────────
+export {
+  buildGatePersistenceBlock,
+  buildGateResultLogs,
+  hasGateImplementation,
+  logGateResults,
+  runWorkspaceGates,
+} from "./workspaceGateRunner.ts";
+export type {
+  GateCheckInputs,
+  GateOutcome,
+  GatePersistenceBlock,
+  GateResult,
+  GateResultLog,
+  GateRunSummary,
+  GateRunnerSurface,
+} from "./workspaceGateRunner.ts";
