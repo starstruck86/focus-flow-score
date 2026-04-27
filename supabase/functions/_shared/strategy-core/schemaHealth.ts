@@ -28,6 +28,7 @@ export type LayerKey =
   | "gate_check"
   | "calibration"
   | "escalation_suggestions"
+  | "enforcement_dry_run"
   | "sop";
 
 type FieldType =
