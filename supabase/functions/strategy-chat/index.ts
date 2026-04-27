@@ -5918,11 +5918,52 @@ This is NOT optional. Do not ignore these rules.
         length: brainstormBlock.length,
         position: "post-global-instructions",
       })}`,
-    );
-  }
+     );
+   }
 
-  const messages = [
-    { role: "system" as const, content: effectiveSystemPrompt },
+   // ── Phase 7A: SOP Execution Trace (observability only, no behavior change) ──
+   try {
+     const wsName = (workspaceSop?.workspace ?? "work") as string;
+     const wsSopLen = workspaceSop?.rawInstructions?.length ?? 0;
+     const giLen = (() => {
+       try {
+         if (!globalInstructions) return 0;
+         if (typeof globalInstructions === "string") return globalInstructions.length;
+         return JSON.stringify(globalInstructions).length;
+       } catch { return 0; }
+     })();
+     // Best-effort detection of "global SOP" presence in the assembled prompt.
+     const globalSopApplied = /GLOBAL SOP|STRATEGY GLOBAL SOP|━━━ GLOBAL/i.test(effectiveSystemPrompt);
+     const workspaceSopApplied = wsSopLen > 0 && /WORKSPACE SOP/i.test(effectiveSystemPrompt);
+     const globalInstructionsApplied = giLen > 0;
+
+     console.log(
+       `[strategy-sop][prompt-trace] ${JSON.stringify({
+         workspace: wsName,
+         global_sop_applied: globalSopApplied,
+         workspace_sop_applied: workspaceSopApplied,
+         global_instructions_applied: globalInstructionsApplied,
+         system_prompt_length: effectiveSystemPrompt.length,
+         system_prompt_preview: effectiveSystemPrompt.slice(0, 1200),
+         injection_order: ["core", "global_sop", "workspace_sop", "global_instructions", ...(wsName === "brainstorm" ? ["brainstorm_enforcement"] : [])],
+       })}`,
+     );
+
+     console.log(
+       `[strategy-sop][presence-check] ${JSON.stringify({
+         workspace: wsName,
+         global_sop_present: globalSopApplied,
+         workspace_sop_present: wsSopLen > 0,
+         workspace_sop_length: wsSopLen,
+         global_sop_length: giLen,
+       })}`,
+     );
+   } catch (traceErr) {
+     console.warn("[strategy-sop][prompt-trace] failed (ignored):", String(traceErr).slice(0, 200));
+   }
+
+   const messages = [
+     { role: "system" as const, content: effectiveSystemPrompt },
     ...priorMessages.map((m) => ({
       role: m.role === "user" ? "user" as const : "assistant" as const,
       content: m.text,
@@ -6699,6 +6740,52 @@ This is NOT optional. Do not ignore these rules.
           retrievalDebug,
           retrievalDiagnostics,
         });
+
+        // ── Phase 7A: behavior-check + mode-check (observability only) ──
+        try {
+          const ws = (workspaceSop?.workspace ?? "work") as string;
+          const txt = finalVisible || "";
+          const len = txt.length;
+          const containsStructure = /(^|\n)\s*(#{1,6}\s|[-*•]\s|\d+\.\s|\|.*\|)/m.test(txt);
+          const containsExecSummary = /executive summary|tl;dr|top-line|bottom line/i.test(txt);
+          const trimmed = txt.trim();
+          const containsQuestions = /\?\s*$/.test(trimmed) || (txt.match(/\?/g)?.length ?? 0) >= 2;
+          const containsCitations = /(RESOURCE\[|KI\[|CARD\[)/.test(txt);
+          const estimatedDepth = len < 500 ? "low" : len <= 1500 ? "medium" : "high";
+
+          console.log(
+            `[strategy-sop][behavior-check] ${JSON.stringify({
+              workspace: ws,
+              response_length: len,
+              contains_structure: containsStructure,
+              contains_executive_summary: containsExecSummary,
+              contains_questions: containsQuestions,
+              contains_citations: containsCitations,
+              estimated_depth: estimatedDepth,
+            })}`,
+          );
+
+          // Lightweight mode classification heuristic.
+          const lower = txt.toLowerCase();
+          const angleHits = (lower.match(/\bangle\b|\bhypothesis\b|\bopener\b|\bpov\b/g) || []).length;
+          const evidenceHits = (lower.match(/\bsource\b|\bevidence\b|\baccording to\b|\bper \w+ \(/g) || []).length;
+          const refineHits = /\brewrit|\brevised|\bedit(ed)?\b|\bbefore:\s|\bafter:\s/i.test(txt);
+          const sectionHits = (txt.match(/(^|\n)#{1,3}\s/g) || []).length;
+          let modeDetected: string = "generic";
+          if (angleHits >= 2 && containsStructure) modeDetected = "brainstorm";
+          else if (refineHits) modeDetected = "refine";
+          else if (sectionHits >= 3 && len > 1200) modeDetected = "artifact";
+          else if (evidenceHits >= 2 || (containsCitations && len > 600)) modeDetected = "research";
+
+          console.log(
+            `[strategy-sop][mode-check] ${JSON.stringify({
+              workspace: ws,
+              mode_detected: modeDetected,
+            })}`,
+          );
+        } catch (bcErr) {
+          console.warn("[strategy-sop][behavior-check] failed (ignored):", String(bcErr).slice(0, 200));
+        }
 
         // Step 4: emit the entire guarded+audited text in ONE SSE
         // delta, then [DONE]. Client renders this atomically — no
