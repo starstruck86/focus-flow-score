@@ -52,9 +52,13 @@ import {
 } from "../strategy-core/workspacePrompt.ts";
 import {
   buildCitationCheckLog,
+  buildEscalationPersistenceBlock,
   buildGatePersistenceBlock,
+  type EscalationPersistenceBlock,
+  evaluateEscalationRules,
   type GatePersistenceBlock,
   logCitationCheck,
+  logEscalationSuggestions,
   logGateResults,
   runCitationCheck,
   runWorkspaceGates,
