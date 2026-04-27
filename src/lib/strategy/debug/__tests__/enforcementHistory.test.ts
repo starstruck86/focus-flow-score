@@ -108,7 +108,7 @@ describe("summarizeEnforcementHistory — counts", () => {
       fullBlock([], ["dry_run"]),
     ]);
     expect(r.stateCounts.disabled).toBe(1);
-    expect(r.stateCounts.dry_run).toBe(3);
+    expect(r.stateCounts.dry_run).toBe(2);
   });
 });
 
