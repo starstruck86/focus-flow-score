@@ -61,19 +61,25 @@ export type WorkspaceKey =
 
 // ─── Retrieval posture ────────────────────────────────────────────
 //
-// `libraryUse` is the workspace's *posture toward the user's library*,
-// NOT a switch that disables it. The library is universal Strategy
-// context — every workspace can reach it. The posture only controls
-// how aggressively it is used.
+// `libraryUse` is the workspace's *posture toward the user's library
+// as a RESOURCE source* (citation-eligible factual grounding). It is
+// NOT a switch that disables the library. The library is universal
+// Strategy context — every workspace can reach it, and the STANDARD
+// / EXEMPLAR / PATTERN role (W6.5) runs independently of this
+// posture (see header doctrine).
 //
-//   • background — available; do not actively inject unless the user
-//                  explicitly requests it or relevance is unmistakable
-//   • relevant   — retrieve and inject when the request signals likely
-//                  relevance (default operator behavior)
-//   • primary    — actively retrieve and treat as a major context
-//                  source whenever a meaningful query can be formed
-//   • required   — library-centered work; missing coverage surfaces a
-//                  `required_missing` state to the caller
+//   • background — RESOURCE available; do not actively inject unless
+//                  the user explicitly requests it or relevance is
+//                  unmistakable. STANDARDS still apply.
+//   • relevant   — retrieve and inject as RESOURCE when the request
+//                  signals likely relevance (default operator
+//                  behavior). STANDARDS still apply.
+//   • primary    — actively retrieve and treat as a major RESOURCE
+//                  whenever a meaningful query can be formed.
+//                  STANDARDS still apply.
+//   • required   — library-centered work; missing RESOURCE coverage
+//                  surfaces a `required_missing` state to the caller.
+//                  STANDARDS still apply.
 
 export type LibraryUse = "background" | "relevant" | "primary" | "required";
 export type WebMode = "off" | "opportunistic" | "required_for_current_facts";
