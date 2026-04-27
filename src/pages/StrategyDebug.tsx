@@ -46,6 +46,11 @@ import {
   validateChatMessageSchema,
   validateTaskRunSchema,
 } from "@/lib/strategy/debug/schemaValidators";
+import {
+  compareSchemaHealth,
+  type PersistedSchemaHealth,
+  readPersistedSchemaHealth,
+} from "@/lib/strategy/debug/persistedSchemaHealth";
 import { useApprovalCheck } from "@/hooks/useApprovalCheck";
 
 type RecordKind = "message" | "run";
