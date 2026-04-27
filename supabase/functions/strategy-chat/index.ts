@@ -6332,8 +6332,9 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         // Mirrors non-stream wiring above. Telemetry + persistence
         // only — never mutates assistant output.
         let w6GateBlock: ReturnType<typeof buildGatePersistenceBlock> | null = null;
+        let w6GateSummary: ReturnType<typeof runWorkspaceGates> | null = null;
         try {
-          const w6Summary = runWorkspaceGates({
+          w6GateSummary = runWorkspaceGates({
             inputs: {
               contract: __resolvedContract.contract,
               assistantText: auditedVisible,
@@ -6343,10 +6344,29 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
             },
             surface: "strategy-chat",
           });
-          logGateResults(w6Summary);
-          w6GateBlock = buildGatePersistenceBlock(w6Summary);
+          logGateResults(w6GateSummary);
+          w6GateBlock = buildGatePersistenceBlock(w6GateSummary);
         } catch (gateErr) {
           console.warn("[workspace:gate_result] stream threw (ignored, shadow):", String(gateErr).slice(0, 200));
+        }
+        // ── W7: Escalation rules (shadow-only, advisory, streaming) ─
+        let w7EscalationBlock: ReturnType<typeof buildEscalationPersistenceBlock> | null = null;
+        try {
+          const w7Summary = evaluateEscalationRules({
+            inputs: {
+              contract: __resolvedContract.contract,
+              assistantText: auditedVisible,
+              userPrompt: content,
+              gateSummary: w6GateSummary,
+              citationCheck: w5Citation,
+              libraryHits: resourceHits,
+            },
+            surface: "strategy-chat",
+          });
+          logEscalationSuggestions(w7Summary);
+          w7EscalationBlock = buildEscalationPersistenceBlock(w7Summary);
+        } catch (escErr) {
+          console.warn("[workspace:escalation_suggestion] stream threw (ignored, shadow):", String(escErr).slice(0, 200));
         }
 
         // ── HYBRID GUARD (diagnostic) ──
