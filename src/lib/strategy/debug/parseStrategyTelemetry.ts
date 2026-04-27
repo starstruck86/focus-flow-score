@@ -48,6 +48,7 @@ export type StrategyLayerKey =
   | "gate_check"
   | "calibration"
   | "escalation_suggestions"
+  | "enforcement_dry_run"
   | "sop";
 
 export interface StrategyTelemetrySummary {
