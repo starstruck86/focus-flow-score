@@ -10,8 +10,8 @@ Deno.test("computeSchemaHealth — empty meta returns ok with all-missing", () =
   assertEquals(r.status, "ok");
   assertEquals(r.schema_version, STRATEGY_SCHEMA_VERSION);
   assertEquals(r.totals.malformed, 0);
-  // chat hides sop, so 7 layers expected as missing
-  assertEquals(r.totals.missing, 7);
+  // chat hides sop; W12 added enforcement_dry_run, so 8 layers expected as missing
+  assertEquals(r.totals.missing, 8);
 });
 
 Deno.test("computeSchemaHealth — malformed block produces drift", () => {
