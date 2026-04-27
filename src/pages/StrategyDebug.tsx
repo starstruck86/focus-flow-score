@@ -1125,6 +1125,13 @@ export default function StrategyDebug() {
           </div>
         )}
 
+        {enforcement && (
+          <div className="grid md:grid-cols-2 gap-4">
+            <EnforcementHistoryCard summary={enforcement.chat} />
+            <EnforcementHistoryCard summary={enforcement.task} />
+          </div>
+        )}
+
         <div className="grid md:grid-cols-[1fr_280px] gap-4">
           <RecordPanel row={row} />
           <div className="space-y-4">
