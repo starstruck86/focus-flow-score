@@ -452,7 +452,7 @@ export function StrategySopEnginePanel() {
             defaultName="Global Strategy SOP"
             contract={globalContract}
             onChange={(patch) => updateGlobalSop(patch)}
-            badge="applies to every turn"
+            status={GLOBAL_STATUS}
           />
         </TabsContent>
 
@@ -465,7 +465,7 @@ export function StrategySopEnginePanel() {
                 id={`ws-${key}`}
                 defaultName={`${WORKSPACE_LABELS[key]} SOP`}
                 contract={c}
-                badge={WORKSPACE_LABELS[key]}
+                status={WORKSPACE_STATUSES[key]}
                 onChange={(patch) => updateWorkspaceSop(key, patch)}
               />
             );
@@ -481,7 +481,7 @@ export function StrategySopEnginePanel() {
                 id={`task-${key}`}
                 defaultName={`${TASK_LABELS[key]} SOP`}
                 contract={c}
-                badge={TASK_LABELS[key]}
+                status={TASK_STATUSES[key]}
                 onChange={(patch) => updateTaskSop(key, patch)}
               />
             );
