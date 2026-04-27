@@ -5794,7 +5794,10 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         kiTitles: kiHitList.map((k) => k.title),
       });
       v2Decision = v2.decision;
-      effectiveSystemPrompt = v2.systemPrompt;
+      // V2 builds its own core identity + reasoning. Re-apply SOP authority
+      // immediately after so the SOP remains the controlling behavioral layer
+      // ahead of standards / global instructions / brainstorm enforcement.
+      effectiveSystemPrompt = `${v2.systemPrompt}${sopAuthorityBlock}`;
       // Stash prior turn for wrong-question check later.
       v2EvidenceBase = {
         decision: v2.decision,
