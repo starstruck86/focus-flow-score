@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Tests for W8 Strategy Telemetry parser.
  *
