@@ -269,7 +269,7 @@ const REGISTRY: Record<string, GateImpl> = {
   }),
   "refine.variant_count_and_labels": ({ assistantText, contract }) => {
     const variantCount = countMatches(assistantText, /(^|\n)\s*(?:variant|option)\s*[a-d]?\s*[:\-]/gi);
-    const cap = contract.workspaceConfig?.variantsCap ?? 2;
+    const cap = contract.refineConfig?.maxVariants ?? 2;
     if (variantCount === 0) return { outcome: "skipped", detail: "no variants requested" };
     return variantCount <= cap
       ? { outcome: "pass", detail: `variants=${variantCount}/${cap}`, metric: variantCount }
@@ -438,9 +438,9 @@ const REGISTRY: Record<string, GateImpl> = {
     const lower = assistantText.toLowerCase();
     const hasNudge = /consider\s*[:\-]/i.test(assistantText);
     if (!hasNudge) return { outcome: "pass", detail: "no nudge" };
-    // Materiality rules live in workspaceConfig. If none configured,
+    // Materiality rules live in workConfig. If none configured,
     // we cannot evaluate — skip rather than fail.
-    const rules: any[] = (contract.workspaceConfig as any)?.materialityRules ?? [];
+    const rules: any[] = (contract.workConfig?.materialityRules as any) ?? [];
     if (rules.length === 0) {
       return { outcome: "skipped", detail: "no materiality rules in contract" };
     }
@@ -538,7 +538,7 @@ export function runWorkspaceGates(args: {
 
   return {
     workspace: contract.workspace,
-    contractVersion: contract.contractVersion,
+    contractVersion: contract.version,
     surface,
     taskType,
     runId,
