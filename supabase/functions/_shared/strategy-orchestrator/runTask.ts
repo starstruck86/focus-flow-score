@@ -989,6 +989,8 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         libraryHits: w5LibraryHits,
         taskType,
         runId,
+        // W7.5 — calibration-aware overlay (shadow-only, additive).
+        calibration: calibrationResult,
       },
       surface: "run-task",
       taskType,
