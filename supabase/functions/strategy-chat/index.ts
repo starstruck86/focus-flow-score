@@ -36,13 +36,10 @@ import {
   retrieveResourceContext,
   buildEscalationPersistenceBlock,
   buildGatePersistenceBlock,
-  buildEnforcementPersistenceBlock,
   evaluateEscalationRules,
   logEscalationSuggestions,
   logGateResults,
-  logEnforcementDryRun,
   runCitationCheck,
-  runEnforcementDryRun,
   runLibraryLookup,
   runWorkspaceGates,
   // ─── W6.5 Library Calibration Layer ─────────────────────────────
