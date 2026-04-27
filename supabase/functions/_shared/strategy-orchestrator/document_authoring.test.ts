@@ -32,6 +32,10 @@ function makeFakeSupabase() {
         rows[id] = { id, ...ctx.insert };
         return { data: { id }, error: null };
       }
+      if (ctx.upsert) {
+        // Best-effort no-op upsert: succeed without mutating tracked run rows.
+        return { data: null, error: null, count: 0 };
+      }
       if (ctx.update && ctx.eq) {
         const row = rows[ctx.eq.val];
         if (row) Object.assign(row, ctx.update);
@@ -47,14 +51,27 @@ function makeFakeSupabase() {
     const b: any = {
       insert(v: any) { ctx.insert = v; return b; },
       update(v: any) { ctx.update = v; return b; },
+      upsert(v: any, _opts?: any) { ctx.upsert = v; return b; },
+      delete() { ctx.delete = true; return b; },
       select(c?: string) { ctx.select = c || "*"; return b; },
       eq(col: string, val: any) { ctx.eq = { col, val }; return b; },
+      neq() { return b; },
       in() { return b; },
       or() { return b; },
       ilike() { return b; },
+      overlaps() { return b; },
+      contains() { return b; },
+      is() { return b; },
+      gt() { return b; },
+      gte() { return b; },
+      lt() { return b; },
+      lte() { return b; },
+      not() { return b; },
       limit() { return b; },
+      range() { return b; },
       order() { return b; },
       single() { return exec(); },
+      maybeSingle() { return exec(); },
       then(res: any, rej: any) { return exec().then(res, rej); },
     };
     return b;
