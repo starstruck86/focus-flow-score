@@ -28,6 +28,11 @@ import type {
   CitationCheckResult,
 } from "./citationEnforcement.ts";
 import type {
+  CalibrationConfidence as W65CalibrationConfidence,
+  CalibrationResult,
+  CalibrationVerdict,
+} from "./libraryCalibration.ts";
+import type {
   RetrievalDecisionLog,
 } from "./retrievalEnforcement.ts";
 import type {
