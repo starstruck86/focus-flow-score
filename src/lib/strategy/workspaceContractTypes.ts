@@ -60,10 +60,12 @@ export type WorkspaceKey =
 
 // ─── Retrieval posture ────────────────────────────────────────────
 //
-// `libraryUse` is the workspace's posture toward the user's library —
-// NOT a switch that disables it. The library is universal Strategy
-// context; every workspace can reach it. The posture only controls
-// how aggressively it is used. See edge mirror for full semantics.
+// `libraryUse` is the workspace's posture toward the user's library
+// as a RESOURCE source (citation-eligible factual grounding) — NOT
+// a switch that disables the library. The library is universal
+// Strategy context; every workspace can reach it. The STANDARD /
+// EXEMPLAR / PATTERN role (W6.5) runs independently of this posture.
+// See edge mirror for full semantics and the library doctrine.
 
 export type LibraryUse = 'background' | 'relevant' | 'primary' | 'required';
 export type WebMode = 'off' | 'opportunistic' | 'required_for_current_facts';
