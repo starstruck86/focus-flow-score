@@ -38,6 +38,10 @@ import {
   type SopContractLike,
 } from "./sopValidator.ts";
 import {
+  enforceTaskSopOnce,
+  type EnforceTaskSopOnceResult,
+} from "./enforceTaskSopOnce.ts";
+import {
   buildRetrievalDecisionLog,
   decideLibraryQuery,
   decideWebQuery,
@@ -823,6 +827,61 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     console.warn("[sop-output-check] threw (ignored, shadow mode):", String(sopErr).slice(0, 200));
   }
 
+  // ── Phase 4 — Account Brief one-pass SOP repair ───────────────────
+  // Activates ONLY for account_brief, ONLY when the initial output
+  // check reports missing required outputs. Exactly one repair pass.
+  // Never blocks completion. Discovery Prep is intentionally excluded.
+  let sopOutputCheckBefore: ReturnType<typeof validateDraftAgainstSop> | null =
+    sopOutputCheck;
+  let sopEnforcement: EnforceTaskSopOnceResult | null = null;
+  if (
+    taskType === "account_brief" &&
+    sop &&
+    sopOutputCheck?.ran &&
+    (sopOutputCheck.required_outputs_missing?.length ?? 0) > 0
+  ) {
+    try {
+      sopEnforcement = await enforceTaskSopOnce({
+        draftOutput,
+        sop,
+        outputCheck: sopOutputCheck,
+        taskType,
+        callModel: (messages) =>
+          callOpenAI(messages, { model: "gpt-5-mini", maxTokens: 8000 }),
+      });
+      if (sopEnforcement.corrected && sopEnforcement.draftOutput) {
+        // Adopt the repaired draft and refresh the output check so
+        // downstream W5/W6 read the corrected artifact.
+        draftOutput = sopEnforcement.draftOutput;
+        try {
+          sopOutputCheck = validateDraftAgainstSop(draftOutput, sop);
+        } catch (_) { /* keep before-check on failure */ }
+      }
+      console.log(JSON.stringify({
+        tag: "[strategy-sop][enforcement]",
+        run_id: runId,
+        task_type: taskType,
+        correction_attempted: sopEnforcement.correction_attempted,
+        corrected: sopEnforcement.corrected,
+        missing_before: sopEnforcement.missing_before,
+        missing_after: sopEnforcement.missing_after ?? null,
+        enforcement_error: sopEnforcement.enforcement_error ?? null,
+      }));
+    } catch (enfErr) {
+      sopEnforcement = {
+        draftOutput,
+        correction_attempted: true,
+        corrected: false,
+        enforcement_error: String((enfErr as Error)?.message ?? enfErr).slice(0, 300),
+        missing_before: sopOutputCheck.required_outputs_missing ?? [],
+      };
+      console.warn(
+        "[strategy-sop][enforcement] threw (ignored, never blocks):",
+        String(enfErr).slice(0, 200),
+      );
+    }
+  }
+
   try {
     console.log(JSON.stringify({
       tag: "[strategy-sop][task]",
@@ -1058,13 +1117,30 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     updated_at: new Date().toISOString(),
   };
   // Merge SOP shadow-validation results into meta alongside any
-  // pre-existing authoring_fallback metadata.
-  const sopMetaBlock = {
-    enabled: !!sop,
-    inputCheck: sopInputCheck ?? null,
-    outputCheck: sopOutputCheck ?? null,
-    finalized_at: new Date().toISOString(),
-  };
+  // pre-existing authoring_fallback metadata. For account_brief, the
+  // Phase 4 enforcement shape is used (before/after + correction flags).
+  const finalizedAt = new Date().toISOString();
+  const sopMetaBlock: Record<string, unknown> = taskType === "account_brief"
+    ? {
+      enabled: !!sop,
+      inputCheck: sopInputCheck ?? null,
+      outputCheckBefore: sopOutputCheckBefore ?? null,
+      correction_attempted: sopEnforcement?.correction_attempted ?? false,
+      corrected: sopEnforcement?.corrected ?? false,
+      outputCheckAfter: sopEnforcement?.corrected
+        ? (sopOutputCheck ?? null)
+        : null,
+      ...(sopEnforcement?.enforcement_error
+        ? { enforcement_error: sopEnforcement.enforcement_error }
+        : {}),
+      finalized_at: finalizedAt,
+    }
+    : {
+      enabled: !!sop,
+      inputCheck: sopInputCheck ?? null,
+      outputCheck: sopOutputCheck ?? null,
+      finalized_at: finalizedAt,
+    };
   const metaPatch: Record<string, unknown> = { sop: sopMetaBlock };
   if (fallbackMeta) metaPatch.authoring_fallback = fallbackMeta;
   if (citationCheckMeta) metaPatch.citation_check = citationCheckMeta;
