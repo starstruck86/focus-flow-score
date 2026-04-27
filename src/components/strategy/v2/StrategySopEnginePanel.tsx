@@ -60,6 +60,54 @@ const TASK_LABELS: Record<StrategyTaskSopKey, string> = {
 };
 
 // ──────────────────────────────────────────────────────────────────────────
+// SOP runtime status registry — single source of truth for what each
+// stored SOP slot actually does at runtime today. Drives badge copy and
+// card subtitle. Update this when a slot's runtime behavior changes.
+// ──────────────────────────────────────────────────────────────────────────
+
+type SopRuntimeTone = 'live' | 'shadow' | 'staged' | 'coming_soon';
+
+interface SopRuntimeStatus {
+  /** Short chip label rendered in the card header. */
+  badge: string;
+  /** Plain-English subtitle (replaces the misleading Phase 1 copy). */
+  subtitle: string;
+  /** Visual tone for the chip. */
+  tone: SopRuntimeTone;
+}
+
+const TONE_STYLE: Record<SopRuntimeTone, { bg: string; fg: string }> = {
+  live:        { bg: 'hsl(140 60% 40% / 0.14)', fg: 'hsl(140 50% 32%)' },
+  shadow:      { bg: 'hsl(38 90% 50% / 0.16)',  fg: 'hsl(32 75% 38%)' },
+  staged:      { bg: 'hsl(var(--sv-line) / 0.6)', fg: 'hsl(var(--sv-muted))' },
+  coming_soon: { bg: 'hsl(var(--sv-line) / 0.4)', fg: 'hsl(var(--sv-muted))' },
+};
+
+const GLOBAL_STATUS: SopRuntimeStatus = {
+  badge: 'Staged — not active yet',
+  subtitle: 'Stored only. Global SOP does not yet shape chat behavior — Global Instructions (in the section above) is the active universal layer today.',
+  tone: 'staged',
+};
+
+const WORKSPACE_STATUSES: Record<StrategyWorkspaceSopKey, SopRuntimeStatus> = {
+  brainstorm:    { badge: 'Chat advisory live', subtitle: 'Active in chat as an advisory block when this workspace is selected. Does not override grounding, citation, or synthesis rules.', tone: 'live' },
+  deep_research: { badge: 'Chat advisory live', subtitle: 'Active in chat as an advisory block when this workspace is selected. Does not override grounding, citation, or synthesis rules.', tone: 'live' },
+  refine:        { badge: 'Chat advisory live', subtitle: 'Active in chat as an advisory block when this workspace is selected. Does not override grounding, citation, or synthesis rules.', tone: 'live' },
+  library:       { badge: 'Chat advisory live', subtitle: 'Active in chat as an advisory block when this workspace is selected. Does not override grounding, citation, or synthesis rules.', tone: 'live' },
+  artifacts:     { badge: 'Chat advisory live', subtitle: 'Active in chat as an advisory block when this workspace is selected. Does not override grounding, citation, or synthesis rules.', tone: 'live' },
+  work:          { badge: 'Freeform rail — SOP not currently applied', subtitle: 'Work is the freeform rail. Workspace SOPs are intentionally not injected here — only Global Instructions apply.', tone: 'staged' },
+  projects:      { badge: 'Organization surface — SOP not currently applied', subtitle: 'Projects is an organization surface, not a chat workspace. Stored SOP is preserved but not injected at runtime.', tone: 'staged' },
+};
+
+const TASK_STATUSES: Record<StrategyTaskSopKey, SopRuntimeStatus> = {
+  discovery_prep:   { badge: 'Task validation live — shadow / protected', subtitle: 'Discovery Prep runs shadow input/output validation against this SOP and persists results to the run record. Output is never modified — Discovery Prep quality is protected.', tone: 'shadow' },
+  account_research: { badge: 'Task validation live — shadow', subtitle: 'Account Research (Account Brief) runs shadow input/output validation against this SOP and persists results. Output is not modified yet; one-pass repair is planned for a later phase.', tone: 'shadow' },
+  deal_review:      { badge: 'Coming soon', subtitle: 'Stored only. No task pipeline reads this SOP yet.', tone: 'coming_soon' },
+  recap_email:      { badge: 'Coming soon', subtitle: 'Stored only. No task pipeline reads this SOP yet.', tone: 'coming_soon' },
+  roi_model:        { badge: 'Coming soon', subtitle: 'Stored only. No task pipeline reads this SOP yet.', tone: 'coming_soon' },
+};
+
+// ──────────────────────────────────────────────────────────────────────────
 // Tiny helpers
 // ──────────────────────────────────────────────────────────────────────────
 
