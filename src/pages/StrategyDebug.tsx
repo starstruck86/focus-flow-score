@@ -211,7 +211,7 @@ function SchemaReportRow({ report }: { report: SchemaReport }) {
         {hasUnknown && (
           <Badge
             variant="secondary"
-            className="text-[10px] gap-1 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
+            className="text-[10px] gap-1"
           >
             +{report.unknownFields.length} unknown
           </Badge>
