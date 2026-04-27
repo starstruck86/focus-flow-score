@@ -6253,9 +6253,10 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         const visible = subst.text;
 
         // Step 3: citation audit on the GUARDED text (W5: governed
-        // by `retrievalRules.citationMode`). Strict workspaces still
-        // publish the rewrite to the persisted body; other modes are
-        // shadow + reporting only. Closed-set mode is preserved.
+        // by `retrievalRules.citationMode`). SHADOW/REPORTING ONLY —
+        // `auditedText` returns the original assistant text for all
+        // modes; telemetry still reports `modified` when the auditor
+        // would have rewritten. Closed-set mode is preserved.
         const w5Citation = runCitationCheck({
           assistantText: visible,
           libraryHits: resourceHits,
