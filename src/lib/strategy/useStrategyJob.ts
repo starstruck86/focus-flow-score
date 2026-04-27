@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { buildAccountResearchSopAttachment } from './buildAccountResearchSopAttachment';
+import { buildStrategySopPayloads, type AccountResearchSopAttachment } from './buildStrategySopPayloads';
 
 export type StrategyJobStatus = 'idle' | 'pending' | 'running' | 'completed' | 'failed';
 export type StrategyTaskType = 'account_brief' | 'ninety_day_plan';
@@ -163,10 +163,14 @@ export function useStrategyJob() {
       // server NEVER injects this into prompt builders — observation only.
       // Discovery Prep is intentionally untouched here (it goes through
       // run-discovery-prep / useTaskExecution, not this hook).
-      let sopAttachment: ReturnType<typeof buildAccountResearchSopAttachment> = null;
+      let sopAttachment: AccountResearchSopAttachment | null = null;
       if (taskType === 'account_brief') {
         try {
-          sopAttachment = buildAccountResearchSopAttachment();
+          // Phase 3 — Unified Strategy SOP Resolver. Account Research SOP
+          // attachment now flows through the single resolver so the wire
+          // shape can never drift from the chat-side payloads. Discovery
+          // Prep stays untouched (handled by useTaskExecution).
+          sopAttachment = buildStrategySopPayloads({ taskType: 'account_research' }).taskSop;
         } catch {
           sopAttachment = null;
         }
