@@ -14,6 +14,38 @@
  * metrics, uncertainty labeling, user-intent preservation, useful
  * output) remain active everywhere and are NOT restated in workspace
  * contracts. Contracts only describe what changes by work mode.
+ *
+ * ─── The Library Doctrine (non-negotiable) ─────────────────────
+ *
+ * The user's library is Strategy's "degree in sales." It is NOT a
+ * nice-to-have retrieval source and NOT just a citation pool. It is
+ * the standing definition of what good looks like — the sales
+ * education, exemplars, patterns, and standards Strategy has been
+ * trained on by *this* user. Every workspace inherits this doctrine.
+ *
+ * Library items carry TWO simultaneous roles:
+ *
+ *   1. RESOURCE — factual grounding / citation candidates.
+ *      Used when an item is the source of a specific claim. Governed
+ *      by W3 retrieval and W5 citation enforcement.
+ *
+ *   2. STANDARD / EXEMPLAR / PATTERN — the quality bar. "What good
+ *      looks like." Used to shape *how* Strategy thinks and writes
+ *      BEFORE generation (W6.5 Pass A) and to grade the output AFTER
+ *      generation (W6.5 Pass B). Standards are guidance, not facts;
+ *      they are NOT cited unless their language is directly borrowed.
+ *
+ * Both roles run on every request where library coverage exists. The
+ * `libraryUse` posture below only controls *how aggressively* the
+ * RESOURCE role leads the prompt — it never disables the STANDARD
+ * role and never makes the library "optional." If exemplars are
+ * insufficient for a given workspace, W6.5 skips cleanly; it never
+ * fabricates standards and never falls back to generic guidance.
+ *
+ * Future phases MUST preserve this two-role architecture: do not
+ * collapse STANDARD into citations, do not gate STANDARD on
+ * `libraryUse`, and do not treat the library as merely opportunistic
+ * retrieval.
  */
 
 /** Canonical workspace identity. Mirrors StrategyWorkspaceSopKey. */
@@ -28,10 +60,12 @@ export type WorkspaceKey =
 
 // ─── Retrieval posture ────────────────────────────────────────────
 //
-// `libraryUse` is the workspace's posture toward the user's library —
-// NOT a switch that disables it. The library is universal Strategy
-// context; every workspace can reach it. The posture only controls
-// how aggressively it is used. See edge mirror for full semantics.
+// `libraryUse` is the workspace's posture toward the user's library
+// as a RESOURCE source (citation-eligible factual grounding) — NOT
+// a switch that disables the library. The library is universal
+// Strategy context; every workspace can reach it. The STANDARD /
+// EXEMPLAR / PATTERN role (W6.5) runs independently of this posture.
+// See edge mirror for full semantics and the library doctrine.
 
 export type LibraryUse = 'background' | 'relevant' | 'primary' | 'required';
 export type WebMode = 'off' | 'opportunistic' | 'required_for_current_facts';

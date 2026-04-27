@@ -1,6 +1,15 @@
 // ════════════════════════════════════════════════════════════════
 // Strategy Core — W6.5 Pass A: Library Standard Context
 //
+// Doctrine: the user's library is Strategy's "degree in sales" — the
+// standing definition of what good looks like. Library items carry
+// TWO simultaneous roles: RESOURCE (factual grounding / citations,
+// owned by W3/W5) and STANDARD / EXEMPLAR / PATTERN (the quality bar,
+// owned by W6.5). This module owns the STANDARD role's pre-generation
+// half. The library is never "merely retrieval"; the STANDARD role
+// runs whether or not RESOURCE retrieval fired and regardless of the
+// workspace's `libraryUse` posture.
+//
 // Selects 2–4 STANDARD / EXEMPLAR / PATTERN items from the user's
 // library_cards table and renders them as a "WHAT GOOD LOOKS LIKE"
 // guidance block injected BEFORE generation. The same `ExemplarSet`

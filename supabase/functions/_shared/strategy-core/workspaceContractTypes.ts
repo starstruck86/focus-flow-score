@@ -4,9 +4,9 @@
 // This module defines the typed contract for Workspace SOPs. It is
 // intentionally pure: no runtime, no I/O, no model calls. Later phases
 // (W2 resolver upgrade, W3 retrieval enforcement, W4 prompt composition,
-// W5 citation behavior, W6 gate runner, W8/W9 workspace-specific
-// post-processing, W10 telemetry) consume these types but never redefine
-// them.
+// W5 citation behavior, W6 gate runner, W6.5 library calibration,
+// W7 escalation, W8/W9 workspace-specific post-processing, W10
+// telemetry) consume these types but never redefine them.
 //
 // Inviolable Global Strategy SOP rules (no fabrication, no invented
 // metrics, uncertainty labeling, user-intent preservation, useful
@@ -15,6 +15,38 @@
 //
 // Architecture: Global Strategy SOP → Workspace SOP → Pill Task Config
 // → Run Validation/Self-Correct.
+//
+// ─── The Library Doctrine (non-negotiable) ───────────────────────
+//
+// The user's library is Strategy's "degree in sales." It is NOT a
+// nice-to-have retrieval source and NOT just a citation pool. It is
+// the standing definition of what good looks like — the sales
+// education, exemplars, patterns, and standards Strategy has been
+// trained on by *this* user. Every workspace inherits this doctrine.
+//
+// Library items carry TWO simultaneous roles:
+//
+//   1. RESOURCE — factual grounding / citation candidates.
+//      Used when an item is the source of a specific claim. Governed
+//      by W3 retrieval and W5 citation enforcement.
+//
+//   2. STANDARD / EXEMPLAR / PATTERN — the quality bar. "What good
+//      looks like." Used to shape *how* Strategy thinks and writes
+//      BEFORE generation (W6.5 Pass A) and to grade the output AFTER
+//      generation (W6.5 Pass B). Standards are guidance, not facts;
+//      they are NOT cited unless their language is directly borrowed.
+//
+// Both roles run on every request where library coverage exists. The
+// `libraryUse` posture below only controls *how aggressively* the
+// RESOURCE role leads the prompt — it never disables the STANDARD
+// role and never makes the library "optional." If exemplars are
+// insufficient for a given workspace, W6.5 skips cleanly; it never
+// fabricates standards and never falls back to generic guidance.
+//
+// Future phases MUST preserve this two-role architecture: do not
+// collapse STANDARD into citations, do not gate STANDARD on
+// `libraryUse`, and do not treat the library as merely opportunistic
+// retrieval.
 // ════════════════════════════════════════════════════════════════
 
 /** Canonical workspace identity. Mirrors StrategyWorkspaceSopKey. */
@@ -29,19 +61,25 @@ export type WorkspaceKey =
 
 // ─── Retrieval posture ────────────────────────────────────────────
 //
-// `libraryUse` is the workspace's *posture toward the user's library*,
-// NOT a switch that disables it. The library is universal Strategy
-// context — every workspace can reach it. The posture only controls
-// how aggressively it is used.
+// `libraryUse` is the workspace's *posture toward the user's library
+// as a RESOURCE source* (citation-eligible factual grounding). It is
+// NOT a switch that disables the library. The library is universal
+// Strategy context — every workspace can reach it, and the STANDARD
+// / EXEMPLAR / PATTERN role (W6.5) runs independently of this
+// posture (see header doctrine).
 //
-//   • background — available; do not actively inject unless the user
-//                  explicitly requests it or relevance is unmistakable
-//   • relevant   — retrieve and inject when the request signals likely
-//                  relevance (default operator behavior)
-//   • primary    — actively retrieve and treat as a major context
-//                  source whenever a meaningful query can be formed
-//   • required   — library-centered work; missing coverage surfaces a
-//                  `required_missing` state to the caller
+//   • background — RESOURCE available; do not actively inject unless
+//                  the user explicitly requests it or relevance is
+//                  unmistakable. STANDARDS still apply.
+//   • relevant   — retrieve and inject as RESOURCE when the request
+//                  signals likely relevance (default operator
+//                  behavior). STANDARDS still apply.
+//   • primary    — actively retrieve and treat as a major RESOURCE
+//                  whenever a meaningful query can be formed.
+//                  STANDARDS still apply.
+//   • required   — library-centered work; missing RESOURCE coverage
+//                  surfaces a `required_missing` state to the caller.
+//                  STANDARDS still apply.
 
 export type LibraryUse = "background" | "relevant" | "primary" | "required";
 export type WebMode = "off" | "opportunistic" | "required_for_current_facts";

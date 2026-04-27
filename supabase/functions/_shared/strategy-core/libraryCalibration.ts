@@ -1,6 +1,13 @@
 // ════════════════════════════════════════════════════════════════
 // Strategy Core — W6.5 Pass B: Library Calibration
 //
+// Doctrine: the user's library is Strategy's "degree in sales." This
+// module owns the post-generation half of the STANDARD / EXEMPLAR /
+// PATTERN role — grading the output against the same "what good
+// looks like" set that shaped it. Calibration is not citation
+// enforcement (that's W5) and not pass/fail gating (that's W6); it
+// is the library evaluating Strategy's work the way a coach would.
+//
 // After W6 quality gates and BEFORE W7 escalation, compare the
 // generated output against the SAME `ExemplarSet` produced by W6.5
 // Pass A (libraryStandard). Produces strengths, gaps, upgrade

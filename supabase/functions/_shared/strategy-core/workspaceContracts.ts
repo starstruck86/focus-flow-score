@@ -5,6 +5,14 @@
 // WorkspaceContract objects. No runtime, no I/O. Later phases consume
 // this registry; this file only owns the source-of-truth contracts.
 //
+// Library doctrine (see workspaceContractTypes.ts header): the user's
+// library is Strategy's "degree in sales." Every contract below
+// inherits the two-role model — RESOURCE (citation-eligible facts)
+// and STANDARD / EXEMPLAR / PATTERN (the quality bar / what good
+// looks like). The `libraryUse` field on each contract governs
+// RESOURCE posture only; the STANDARD role is universal and runs in
+// W6.5 regardless of `libraryUse`.
+//
 // Design references:
 //   • Final approved Workspace SOP proposal (7 workspaces)
 //   • Inviolable Global SOP rules (not restated here)
