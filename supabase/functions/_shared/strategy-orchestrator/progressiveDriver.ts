@@ -315,15 +315,22 @@ export async function assembleAndFinalize(args: {
   }
 
   // Phase 3B — single-line summary so we can grep one log per run.
+  // Phase 5 — Discovery Prep is permanently shadow-only. Tag the log
+  // line with `discovery_prep_shadow_only` and explicitly assert
+  // `enforcement: false` so observability can prove no repair pass ran.
   const sopMetaPrev = (runRow?.meta as any)?.sop ?? {};
   const sopInputCheckPrev = sopMetaPrev?.inputCheck ?? null;
   console.log(JSON.stringify({
     tag: "[strategy-sop][task]",
+    mode: taskType === "discovery_prep" ? "discovery_prep_shadow_only" : undefined,
     run_id: runId,
     task_type: taskType,
     sop_enabled: sopEnabled,
+    input_ran: !!sopInputCheckPrev?.ran,
+    output_ran: !!sopOutputCheck?.ran,
     input_ok: sopInputCheckPrev?.ran ? (sopInputCheckPrev.required_inputs_missing?.length ?? 0) === 0 : null,
     output_ok: sopOutputCheck?.ran ? (sopOutputCheck.required_outputs_missing?.length ?? 0) === 0 : null,
+    enforcement: false,
   }));
 
   // ── Review (best-effort, non-fatal) ──
