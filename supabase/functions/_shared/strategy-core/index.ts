@@ -204,3 +204,21 @@ export type {
   GateRunSummary,
   GateRunnerSurface,
 } from "./workspaceGateRunner.ts";
+
+// ─── Escalation rules (Phase W7, shadow-only) ────────────────────
+export {
+  buildEscalationPersistenceBlock,
+  buildEscalationSuggestionLogs,
+  evaluateEscalationRules,
+  hasEscalationImplementation,
+  logEscalationSuggestions,
+} from "./workspaceEscalation.ts";
+export type {
+  EscalationConfidence,
+  EscalationInputs,
+  EscalationPersistenceBlock,
+  EscalationRunSummary,
+  EscalationSuggestion,
+  EscalationSuggestionLog,
+  EscalationSurface,
+} from "./workspaceEscalation.ts";
