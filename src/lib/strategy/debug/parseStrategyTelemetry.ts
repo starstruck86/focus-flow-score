@@ -440,6 +440,7 @@ const ORDERED_EXTRACTORS: ReadonlyArray<
   extractGateCheck,
   extractCalibration,
   extractEscalation,
+  extractEnforcementDryRun,
 ];
 
 function summarize(
