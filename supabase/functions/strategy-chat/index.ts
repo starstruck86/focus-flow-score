@@ -6107,77 +6107,69 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     } catch (escErr) {
       console.warn("[workspace:escalation_suggestion] threw (ignored, shadow):", String(escErr).slice(0, 200));
     }
-    await supabase.from("strategy_messages").insert({
-      thread_id: threadId,
-      user_id: userId,
-      role: "assistant",
-      message_type: "chat",
-      provider_used: result.provider,
+    const nonStreamContentJson: Record<string, unknown> = {
+      text: auditedVisible,
+      sources_used: pack.sourceCount,
+      retrieval_meta: pack.retrievalMeta,
+      pending_action: candidatePending ?? undefined,
       model_used: result.model,
+      provider_used: result.provider,
       fallback_used: result.fallbackUsed,
-      latency_ms: result.latencyMs,
-      content_json: {
-        text: auditedVisible,
-        sources_used: pack.sourceCount,
-        retrieval_meta: pack.retrievalMeta,
-        pending_action: candidatePending ?? undefined,
-        model_used: result.model,
-        provider_used: result.provider,
-        fallback_used: result.fallbackUsed,
-        citation_audit: audit.modified
-          ? {
-            modified: true,
-            unverified: audit.unverifiedCitations,
-            verified: audit.verifiedTitles,
-          }
-          : undefined,
-        gate_check: w6GateBlock ?? undefined,
-        escalation_suggestions: w7EscalationBlock ?? undefined,
-        standard_context: standardContextBlock ?? undefined,
-        calibration: calibrationBlock ?? undefined,
-        routing_decision: (() => {
-          const base: any = {
-            mode,
-            mode_reason: modeReason,
-            intent: intent.intent,
-            resource_hits: resourceHits.length,
-            ki_hits: kiHits,
-            intended_provider: route.primaryProvider,
-            intended_model: route.model,
-            actual_provider: result.provider,
-            actual_model: result.model,
-            fallback_used: result.fallbackUsed,
-            routing_reason: route._routingReason,
-            retrieval_debug: retrievalDebug ?? null,
-            short_form_diagnostics: mode === "short_form" ? {
-              kind: shortFormKind ?? null,
-              prompt_chars: (content || "").length,
-              system_prompt_chars: effectiveSystemPrompt.length,
-              max_tokens_cap: route.maxTokens,
-              output_chars: (auditedVisible || "").length,
-              latency_ms: result.latencyMs,
-            } : null,
-          };
-          if (v2Active && v2EvidenceBase) {
-            try {
-              const wq = v2ValidateResponse({
-                userPrompt: content || "",
-                responseBody: auditedVisible || "",
-                priorTurnPrompt: v2EvidenceBase.priorTurnPrompt,
-              });
-              const aud = v2AuditResponse({
-                decision: v2EvidenceBase.decision,
-                body: auditedVisible || "",
-                hadLibraryHits: (resourceHits.length + kiHits) > 0,
-                resourceTitles: v2EvidenceBase.resourceTitles,
-                kiIds: v2EvidenceBase.kiIds,
-                kiTitles: v2EvidenceBase.kiTitles,
-              });
-              // Phase 3: contract-drift sentinel (logged, never blocks).
-              // Only meaningful for strong-signal synthesis turns.
-              let drift: { missing: string[] } | null = null;
-              if (
-                v2EvidenceBase.decision.askShape === "synthesis_framework" &&
+      citation_audit: audit.modified
+        ? {
+          modified: true,
+          unverified: audit.unverifiedCitations,
+          verified: audit.verifiedTitles,
+        }
+        : undefined,
+      gate_check: w6GateBlock ?? undefined,
+      escalation_suggestions: w7EscalationBlock ?? undefined,
+      standard_context: standardContextBlock ?? undefined,
+      calibration: calibrationBlock ?? undefined,
+      routing_decision: (() => {
+        const base: any = {
+          mode,
+          mode_reason: modeReason,
+          intent: intent.intent,
+          resource_hits: resourceHits.length,
+          ki_hits: kiHits,
+          intended_provider: route.primaryProvider,
+          intended_model: route.model,
+          actual_provider: result.provider,
+          actual_model: result.model,
+          fallback_used: result.fallbackUsed,
+          routing_reason: route._routingReason,
+          retrieval_debug: retrievalDebug ?? null,
+          short_form_diagnostics: mode === "short_form" ? {
+            kind: shortFormKind ?? null,
+            prompt_chars: (content || "").length,
+            system_prompt_chars: effectiveSystemPrompt.length,
+            max_tokens_cap: route.maxTokens,
+            output_chars: (auditedVisible || "").length,
+            latency_ms: result.latencyMs,
+          } : null,
+        };
+        if (v2Active && v2EvidenceBase) {
+          try {
+            const wq = v2ValidateResponse({
+              userPrompt: content || "",
+              responseBody: auditedVisible || "",
+              priorTurnPrompt: v2EvidenceBase.priorTurnPrompt,
+            });
+            const aud = v2AuditResponse({
+              decision: v2EvidenceBase.decision,
+              body: auditedVisible || "",
+              hadLibraryHits: (resourceHits.length + kiHits) > 0,
+              resourceTitles: v2EvidenceBase.resourceTitles,
+              kiIds: v2EvidenceBase.kiIds,
+              kiTitles: v2EvidenceBase.kiTitles,
+            });
+            // Phase 3: contract-drift sentinel (logged, never blocks).
+            // Only meaningful for strong-signal synthesis turns.
+            let drift: { missing: string[] } | null = null;
+            if (
+              v2EvidenceBase.decision.askShape === "synthesis_framework" &&
+
                 v2EvidenceBase.decision.mode === "A_strong"
               ) {
                 const check = assertSynthesisContractIntact(effectiveSystemPrompt);
