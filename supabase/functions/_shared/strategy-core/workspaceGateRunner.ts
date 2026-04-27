@@ -538,7 +538,7 @@ export function runWorkspaceGates(args: {
 
   return {
     workspace: contract.workspace,
-    contractVersion: contract.contractVersion,
+    contractVersion: contract.version,
     surface,
     taskType,
     runId,
