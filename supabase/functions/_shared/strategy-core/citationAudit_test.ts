@@ -142,3 +142,73 @@ Deno.test("auditResourceCitations closed-set off: bare quoted variant is left al
   const out = auditResourceCitations(text, PICKED_HITS);
   assertEquals(out.modified, false);
 });
+
+// ── KI/CARD title-form citations (Phase 6) ────────────────────────
+
+const KI_HITS = [
+  { id: "aaaaaaaa-1111-2222-3333-444444444444", title: "Command of the Message Framework" },
+  { id: "bbbbbbbb-5555-6666-7777-888888888888", title: "Discovery Question Stack" },
+];
+
+const CARD_HITS = [
+  { id: "cccccccc-9999-0000-1111-222222222222", title: "Discovery - Call Coaching" },
+];
+
+Deno.test("KI title citation: accepted when title matches", () => {
+  const text = `Lean on KI["Command of the Message Framework"] for the opener.`;
+  const out = auditResourceCitations(text, [], { kiHits: KI_HITS });
+  assertEquals(out.modified, false);
+  assertStringIncludes(out.text, `KI["Command of the Message Framework"]`);
+  assertEquals(out.verifiedTitles.includes("KI:Command of the Message Framework"), true);
+});
+
+Deno.test("KI id citation: still accepted when id matches", () => {
+  const text = `See KI[aaaaaaaa] for the structure.`;
+  const out = auditResourceCitations(text, [], { kiHits: KI_HITS });
+  assertEquals(out.modified, false);
+  assertStringIncludes(out.text, "KI[aaaaaaaa]");
+});
+
+Deno.test("CARD title citation: accepted when title matches", () => {
+  const text = `Use CARD["Discovery - Call Coaching"] for the prep.`;
+  const out = auditResourceCitations(text, [], { cardHits: CARD_HITS });
+  assertEquals(out.modified, false);
+  assertStringIncludes(out.text, `CARD["Discovery - Call Coaching"]`);
+});
+
+Deno.test("CARD id citation: still accepted when id matches", () => {
+  const text = `Pull from CARD[cccccccc] in your library.`;
+  const out = auditResourceCitations(text, [], { cardHits: CARD_HITS });
+  assertEquals(out.modified, false);
+});
+
+Deno.test("KI fabricated title: flagged with UNVERIFIED-KI when audit has KI hit set", () => {
+  const text = `Borrow from KI["Magical Closing Framework I Made Up"].`;
+  const out = auditResourceCitations(text, [], { kiHits: KI_HITS });
+  assertEquals(out.modified, true);
+  assertStringIncludes(out.text, "⚠ UNVERIFIED-KI");
+  assertStringIncludes(out.text, "Citation audit:");
+});
+
+Deno.test("CARD fabricated title: flagged with UNVERIFIED-CARD", () => {
+  const text = `See CARD["Phantom Coaching Card"] for guidance.`;
+  const out = auditResourceCitations(text, [], { cardHits: CARD_HITS });
+  assertEquals(out.modified, true);
+  assertStringIncludes(out.text, "⚠ UNVERIFIED-CARD");
+});
+
+Deno.test("KI/CARD scanning is OFF by default (backward compat)", () => {
+  // Prior callers pass no kiHits/cardHits — KI[…] must pass through untouched
+  // even when it doesn't match anything (we have no hit set to compare against).
+  const text = `Reference KI["Anything At All"] and KI[deadbeef] here.`;
+  const out = auditResourceCitations(text, []);
+  assertEquals(out.modified, false);
+  assertStringIncludes(out.text, `KI["Anything At All"]`);
+  assertStringIncludes(out.text, "KI[deadbeef]");
+});
+
+Deno.test("KI substring tolerance: trimmed title still verifies", () => {
+  const text = `Apply KI["Command of the Message"] now.`;
+  const out = auditResourceCitations(text, [], { kiHits: KI_HITS });
+  assertEquals(out.modified, false, `expected substring match; got: ${out.text}`);
+});
