@@ -5825,6 +5825,52 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     );
   }
 
+  // ── Brainstorm enforcement (prompt-level, brainstorm workspace only) ──
+  // Injected AFTER workspace SOP. Forbids generic category labels and
+  // forces angles to be company-specific with tension + POV + usage.
+  // Strictly scoped — never applies to deep_research / refine / library /
+  // artifacts / task pipelines.
+  if (workspaceSop?.workspace === "brainstorm") {
+    const brainstormBlock = `\n\n━━━ BRAINSTORM ENFORCEMENT (STRICT) ━━━
+You MUST follow these rules when generating angles:
+
+1. Do NOT produce generic categories such as:
+   - personalization
+   - omnichannel
+   - loyalty
+   - data utilization
+   - engagement campaigns
+   These are banned as standalone angles.
+
+2. Every angle MUST include:
+   - a specific observation or hypothesis about THIS company
+   - a point of tension, risk, or missed opportunity
+   - why it matters to the business
+   - how it can be used in a conversation (opener, question, or POV)
+
+3. If an idea could apply to most companies, discard it.
+
+4. Each angle must be materially different from the others (no rephrased duplicates).
+
+5. Structure your output as:
+   - 4–6 strong angles maximum
+   - then identify the top 2–3 strongest
+   - explain why those matter most
+   - explain when to use them (outbound, discovery, exec meeting, etc.)
+
+6. Output must feel like strategic insight, not marketing advice.
+
+7. If your draft feels generic or could be reused for any company, regenerate internally before responding.
+`;
+    effectiveSystemPrompt = `${effectiveSystemPrompt}${brainstormBlock}`;
+    console.log(
+      `[strategy-sop] injected-brainstorm-enforcement ${JSON.stringify({
+        workspace: "brainstorm",
+        length: brainstormBlock.length,
+      })}`,
+    );
+  }
+
   // ── W6.5 Pass A — Library Standard Context (shadow, pre-gen) ──
   // Select 2–4 STANDARD/EXEMPLAR/PATTERN cards from the user's
   // library, demote anything already retrieved as a RESOURCE
