@@ -75,6 +75,10 @@ import {
   selectExemplars,
   type StandardContextPersistenceBlock,
   computeSchemaHealth,
+  buildEnforcementPersistenceBlock,
+  logEnforcementDryRun,
+  runEnforcementDryRun,
+  type EnforcementPersistenceBlock,
 } from "../strategy-core/index.ts";
 import { resolveTaskWorkspace } from "./taskWorkspace.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
