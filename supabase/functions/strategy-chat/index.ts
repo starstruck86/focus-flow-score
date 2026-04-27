@@ -5399,6 +5399,13 @@ async function handleChat(
   // enforcement to resolve the WorkspaceContract from the server-side
   // registry. Null/unknown falls back to `work` inside the resolver.
   workspaceKeyRaw: string | null = null,
+  // Phase 2 (Global SOP) — advisory text. When non-null, appended AFTER
+  // core/V1/V2/synthesis preamble and BEFORE the workspace SOP block.
+  globalSop: {
+    sopId: 'global';
+    name: string;
+    rawInstructions: string;
+  } | null = null,
 ) {
   // W5: resolve the workspace contract once for handleChat scope so
   // the citation enforcer can read `citationMode` for both the
