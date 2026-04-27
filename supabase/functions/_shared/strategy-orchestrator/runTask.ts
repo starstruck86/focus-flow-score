@@ -206,7 +206,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     includeEscalationRules: false,
     surface: "run-task",
   });
-  const overlayPrefix = workspaceOverlay.text
+  let overlayPrefix = workspaceOverlay.text
     ? `${workspaceOverlay.text}\n\n`
     : "";
 
