@@ -946,6 +946,13 @@ export default function StrategyDebug() {
           </div>
         )}
 
+        {readiness && (
+          <div className="grid md:grid-cols-2 gap-4">
+            <PromotionReadinessHistoryCard agg={readiness.chat} />
+            <PromotionReadinessHistoryCard agg={readiness.task} />
+          </div>
+        )}
+
         <div className="grid md:grid-cols-[1fr_280px] gap-4">
           <RecordPanel row={row} />
           <div className="space-y-4">
