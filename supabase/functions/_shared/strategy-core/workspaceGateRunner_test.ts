@@ -412,3 +412,75 @@ Deno.test("hasGateImplementation: true for known checkRef, false for unknown", (
   assertEquals(hasGateImplementation("brainstorm.min_options"), true);
   assertEquals(hasGateImplementation("nonexistent.gate"), false);
 });
+
+// ─── W6 Phase 2 — wiring parity & artifact skip ───────────────────
+
+Deno.test("run-task surface produces persistence block with same shape as strategy-chat", () => {
+  const chatSummary = runWorkspaceGates({
+    inputs: inputsFor("brainstorm", {
+      assistantText: "[Angle: A]\n[Angle: B]\nNext: ship A.",
+    }),
+    surface: "strategy-chat",
+  });
+  const taskSummary = runWorkspaceGates({
+    inputs: inputsFor("artifacts", {
+      assistantText: JSON.stringify({ sections: [] }),
+    }),
+    surface: "run-task",
+    taskType: "account_brief",
+    runId: "run-xyz",
+  });
+  const chatBlock = buildGatePersistenceBlock(chatSummary);
+  const taskBlock = buildGatePersistenceBlock(taskSummary);
+
+  // Same key surface area → safe for symmetric persistence.
+  const keys = (o: unknown) => Object.keys(o as Record<string, unknown>).sort();
+  assertEquals(keys(chatBlock), keys(taskBlock));
+  assertEquals(taskBlock.surface, "run-task");
+  assertEquals(chatBlock.surface, "strategy-chat");
+  // Both contain a totals block with the same shape.
+  assertEquals(keys(chatBlock.totals), keys(taskBlock.totals));
+});
+
+Deno.test("artifacts.required_sections_present skips when no requiredSectionIds are passed", () => {
+  // Mirrors runTask behavior when the handler does not declare a
+  // locked section template: pass none → gate skips cleanly.
+  const summary = runWorkspaceGates({
+    inputs: inputsFor("artifacts", {
+      assistantText: JSON.stringify({ sections: [{ id: "anything" }] }),
+      parsedOutput: { sections: [{ id: "anything" }] },
+      // requiredSectionIds intentionally omitted
+    }),
+    surface: "run-task",
+    taskType: "account_brief",
+    runId: "run-no-template",
+  });
+  const sectionGate = summary.results.find(
+    (r) => r.checkRef === "artifacts.required_sections_present",
+  );
+  assert(sectionGate, "expected required_sections_present gate to run");
+  assertEquals(sectionGate.outcome, "skipped");
+  // And the runner remains shadow-only regardless.
+  assertEquals(summary.totals.total, summary.results.length);
+  for (const r of summary.results) assertEquals(r.shadow, true);
+});
+
+Deno.test("run-task summary forwards taskType + runId to telemetry payload", () => {
+  const summary = runWorkspaceGates({
+    inputs: inputsFor("artifacts", {
+      assistantText: JSON.stringify({ sections: [] }),
+      parsedOutput: { sections: [] },
+    }),
+    surface: "run-task",
+    taskType: "ninety_day_plan",
+    runId: "run-telemetry-1",
+  });
+  assertEquals(summary.taskType, "ninety_day_plan");
+  assertEquals(summary.runId, "run-telemetry-1");
+  const logs = buildGateResultLogs(summary);
+  for (const log of logs) {
+    assertEquals(log.surface, "run-task");
+    assertEquals(log.taskType, "ninety_day_plan");
+    assertEquals(log.runId, "run-telemetry-1");
+  }
+});
