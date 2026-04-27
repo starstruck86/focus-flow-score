@@ -132,7 +132,7 @@ Deno.test("Pass B: never mutates the outputText input (byte-equality)", () => {
   // Caller's string is untouched (string is immutable, but assert intent).
   assertEquals(original, "1. Open with CFO angle\n2. Champion enablement\n3. Peer pull");
   // Result does NOT carry a mutated text payload.
-  assert(!("outputText" in (result as Record<string, unknown>)));
+  assert(!("outputText" in (result as unknown as Record<string, unknown>)));
 });
 
 Deno.test("Pass B: persistence block exposes verdict + exemplarSetId", () => {
