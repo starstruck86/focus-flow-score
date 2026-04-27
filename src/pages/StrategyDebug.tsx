@@ -723,6 +723,10 @@ export default function StrategyDebug() {
     chat: DriftHistorySummary;
     task: DriftHistorySummary;
   } | null>(null);
+  const [readiness, setReadiness] = useState<{
+    chat: PromotionReadinessAggregate;
+    task: PromotionReadinessAggregate;
+  } | null>(null);
 
   const loadRecent = async () => {
     setRecentLoading(true);
@@ -761,6 +765,16 @@ export default function StrategyDebug() {
           safeMsgs.map((m: any) => m.content_json),
         ),
         task: summarizeDriftHistory(
+          "task",
+          safeRuns.map((r: any) => r.meta),
+        ),
+      });
+      setReadiness({
+        chat: aggregatePromotionReadiness(
+          "chat",
+          safeMsgs.map((m: any) => m.content_json),
+        ),
+        task: aggregatePromotionReadiness(
           "task",
           safeRuns.map((r: any) => r.meta),
         ),
