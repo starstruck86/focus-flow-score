@@ -34,8 +34,11 @@ import {
   resolveServerWorkspaceContract,
   retrieveLibraryContext,
   retrieveResourceContext,
+  buildGatePersistenceBlock,
+  logGateResults,
   runCitationCheck,
   runLibraryLookup,
+  runWorkspaceGates,
   saveWorkingThesisState,
   shouldUseStrategyCorePrompt,
   type ThesisStatePatch,
@@ -5980,6 +5983,24 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       }));
     } catch { /* never throw from telemetry */ }
     const auditedVisible = w5Citation.auditedText;
+    // ── W6: Quality gate runner (shadow-only) ────────────────────
+    let w6GateBlock: ReturnType<typeof buildGatePersistenceBlock> | null = null;
+    try {
+      const w6Summary = runWorkspaceGates({
+        inputs: {
+          contract: __resolvedContract.contract,
+          assistantText: auditedVisible,
+          libraryHits: resourceHits,
+          libraryUsed: resourceHits.length > 0,
+          citationCheck: w5Citation,
+        },
+        surface: "strategy-chat",
+      });
+      logGateResults(w6Summary);
+      w6GateBlock = buildGatePersistenceBlock(w6Summary);
+    } catch (gateErr) {
+      console.warn("[workspace:gate_result] threw (ignored, shadow):", String(gateErr).slice(0, 200));
+    }
     await supabase.from("strategy_messages").insert({
       thread_id: threadId,
       user_id: userId,
@@ -6004,6 +6025,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
             verified: audit.verifiedTitles,
           }
           : undefined,
+        gate_check: w6GateBlock ?? undefined,
         routing_decision: (() => {
           const base: any = {
             mode,
