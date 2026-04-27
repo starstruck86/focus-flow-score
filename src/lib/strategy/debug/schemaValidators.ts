@@ -195,6 +195,19 @@ export const STRATEGY_BLOCK_SCHEMAS: readonly BlockSchema[] = [
       { name: "calibrationConfidence", type: "string", required: false },
     ],
   },
+  {
+    key: "enforcement_dry_run",
+    label: "Enforcement Dry Run",
+    wave: "W12",
+    blockKeys: ["enforcement_dry_run"],
+    fields: [
+      { name: "workspace", type: "string", required: true },
+      { name: "contractVersion", type: "string", required: false },
+      { name: "surface", type: "string", required: false },
+      { name: "totals", type: "object", required: true },
+      { name: "evaluations", type: "array", required: true },
+    ],
+  },
   // SOP is included; absent on chat — the validator emits "missing"
   // for chat sources and the UI hides it when source === "chat".
   {
