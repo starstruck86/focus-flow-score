@@ -80,6 +80,13 @@ export interface CitationCheckInputs {
   citationMode: CitationMode;
   /** Optional pass-through to the deterministic auditor. */
   auditOptions?: CitationAuditOptions;
+  /**
+   * OUTSIDE W5 scope. When true, `strict` mode publishes the
+   * deterministic auditor's rewritten text as `auditedText`,
+   * preserving the legacy strategy-chat citation rewrite.
+   * Defaults to false — W5 is shadow/reporting only.
+   */
+  enableLegacyCitationRewrite?: boolean;
 }
 
 export interface CitationCheckResult {
