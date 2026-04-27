@@ -198,8 +198,8 @@ Deno.test("Doctrine #5: Pass B never emits improvedDraft in Phase 1", () => {
     outputText: "Below-standard answer.",
   });
   assert(
-    !("improvedDraft" in (result as Record<string, unknown>)) ||
-      (result as Record<string, unknown>).improvedDraft === undefined,
+    !("improvedDraft" in (result as unknown as Record<string, unknown>)) ||
+      (result as unknown as Record<string, unknown>).improvedDraft === undefined,
     "improvedDraft must not be present in Phase 1.",
   );
 });
