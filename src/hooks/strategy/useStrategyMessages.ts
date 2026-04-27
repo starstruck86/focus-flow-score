@@ -5,9 +5,7 @@ import type { StrategyMessage } from '@/types/strategy';
 import { toast } from 'sonner';
 import { mapSendErrorToFriendlyMessage } from './sendErrorMapping';
 import { buildGlobalInstructionsPayload } from '@/lib/strategy/buildGlobalInstructionsPayload';
-import { buildResolvedSopsPayload } from '@/lib/strategy/buildResolvedSopsPayload';
-import { buildWorkspaceSopPayload } from '@/lib/strategy/buildWorkspaceSopPayload';
-import { buildGlobalSopPayload } from '@/lib/strategy/buildGlobalSopPayload';
+import { buildStrategySopPayloads } from '@/lib/strategy/buildStrategySopPayloads';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/strategy-chat`;
 
@@ -55,6 +53,15 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
     };
     setMessages(prev => [...prev, userMsg]);
 
+    // Phase 3 — Unified Strategy SOP Resolver. One pass produces every SOP
+    // payload that leaves the client (resolvedSops + globalSop +
+    // workspaceSop). Chat never sends taskSop — task pipelines own that.
+    const sopWorkspace = options?.workspace ?? 'work';
+    const { resolvedSops, workspaceSop, globalSop } = buildStrategySopPayloads({
+      workspace: sopWorkspace,
+      taskType: null,
+    });
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const resp = await fetch(CHAT_URL, {
@@ -80,31 +87,25 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
           globalInstructions: buildGlobalInstructionsPayload() ?? undefined,
           // Phase 1 SOP Engine — frontend routing metadata only. Backend logs
           // it but does NOT inject any workspace SOP yet.
-          workspace: options?.workspace ?? 'work',
+          workspace: sopWorkspace,
           // Phase 2 SOP Engine — resolver plumbing. Client resolves which
           // SOPs apply (global / workspace / task) and sends a lightweight
           // metadata payload. Server logs it under [strategy-sop] resolved.
-          // SOP text is intentionally NOT sent — Phase 2 is observation only.
-          resolvedSops: buildResolvedSopsPayload({
-            workspace: options?.workspace ?? 'work',
-            taskType: null,
-          }) ?? undefined,
+          // SOP text is intentionally NOT sent in this field — observation only.
+          resolvedSops: resolvedSops ?? undefined,
           // Phase 3A SOP Engine — first behavior-affecting step. When the
           // active workspace has its SOP enabled, ship the raw advisory
           // text so the server can append it AFTER core/V2/synthesis
           // prompts and BEFORE global instructions. Task pipelines and
-          // freeform `work` chat are intentionally excluded by the helper.
-          workspaceSop: buildWorkspaceSopPayload({
-            workspace: options?.workspace ?? 'work',
-            taskType: null,
-          }) ?? undefined,
+          // freeform `work` chat are intentionally excluded by the resolver.
+          workspaceSop: workspaceSop ?? undefined,
           // Phase 2 (Global SOP) — first behavior-affecting step for the
           // Global SOP. When the engine + global contract are enabled, ship
           // the raw advisory text. Server appends it AFTER core/V2/synthesis
           // and BEFORE the workspace SOP + global instructions. Task
           // pipelines (Discovery Prep, run-strategy-job, runTask) never
-          // send this — chat-only by design.
-          globalSop: buildGlobalSopPayload() ?? undefined,
+          // send this — chat-only by design (resolver excludes them).
+          globalSop: globalSop ?? undefined,
         }),
       });
 
