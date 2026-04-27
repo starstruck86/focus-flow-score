@@ -266,7 +266,7 @@ export interface SchemaHealthCompact {
   error?: string;
 }
 
-export const STRATEGY_SCHEMA_VERSION = "w10.v1";
+export const STRATEGY_SCHEMA_VERSION = "w12.v1";
 
 export function computeSchemaHealth(
   meta: unknown,
