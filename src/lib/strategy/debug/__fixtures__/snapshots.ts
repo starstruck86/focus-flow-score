@@ -66,6 +66,13 @@ export const CHAT_MESSAGE_FULL_META = {
     calibrationVerdict: "on_standard",
     calibrationConfidence: "high",
   },
+  enforcement_dry_run: {
+    workspace: "strategy",
+    contractVersion: "v1",
+    surface: "strategy-chat",
+    totals: { evaluated: 5, wouldFire: 0, disabled: 0, errors: 0 },
+    evaluations: [],
+  },
 } as const;
 
 export const TASK_RUN_FULL_META = {

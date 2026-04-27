@@ -28,6 +28,7 @@ export type LayerKey =
   | "gate_check"
   | "calibration"
   | "escalation_suggestions"
+  | "enforcement_dry_run"
   | "sop";
 
 type FieldType =
@@ -147,6 +148,17 @@ const SCHEMAS: readonly BlockSchema[] = [
     ],
   },
   {
+    key: "enforcement_dry_run",
+    blockKeys: ["enforcement_dry_run"],
+    fields: [
+      { name: "workspace", type: "string", required: true },
+      { name: "contractVersion", type: "string", required: false },
+      { name: "surface", type: "string", required: false },
+      { name: "totals", type: "object", required: true },
+      { name: "evaluations", type: "array", required: true },
+    ],
+  },
+  {
     key: "sop",
     blockKeys: ["sop"],
     fields: [
@@ -254,7 +266,7 @@ export interface SchemaHealthCompact {
   error?: string;
 }
 
-export const STRATEGY_SCHEMA_VERSION = "w10.v1";
+export const STRATEGY_SCHEMA_VERSION = "w12.v1";
 
 export function computeSchemaHealth(
   meta: unknown,

@@ -66,7 +66,7 @@ describe("parseChatMessageTelemetry — happy path", () => {
     expect(result.source).toBe("chat");
   });
 
-  it("emits all 7 layers in canonical order", () => {
+  it("emits all 8 layers in canonical order", () => {
     expect(result.layers.map((l) => l.key)).toEqual([
       "retrieval",
       "standard_context",
@@ -75,6 +75,7 @@ describe("parseChatMessageTelemetry — happy path", () => {
       "gate_check",
       "calibration",
       "escalation_suggestions",
+      "enforcement_dry_run",
     ]);
   });
 
@@ -100,7 +101,7 @@ describe("parseChatMessageTelemetry — happy path", () => {
 describe("parseChatMessageTelemetry — missing blocks", () => {
   it("handles fully-empty content_json without throwing", () => {
     const result = parseChatMessageTelemetry({});
-    expect(result.layers.length).toBe(7);
+    expect(result.layers.length).toBe(8);
     for (const layer of result.layers) {
       expect(layer.status).toBe("missing");
       expect(layer.raw).toBeNull();
@@ -110,12 +111,14 @@ describe("parseChatMessageTelemetry — missing blocks", () => {
   it("handles null without throwing", () => {
     const result = parseChatMessageTelemetry(null);
     expect(result.source).toBe("chat");
-    expect(result.layers.length).toBe(7);
+    expect(result.layers.length).toBe(8);
     expect(result.badges.standardContextInjected).toBeNull();
     expect(result.badges.calibrationVerdict).toBeNull();
     expect(result.badges.gateFailures).toBe(0);
     expect(result.badges.citationIssues).toBe(0);
     expect(result.badges.escalationCount).toBe(0);
+    expect(result.badges.enforcementWouldFire).toBe(0);
+    expect(result.badges.enforcementEvaluated).toBeNull();
   });
 
   it("handles undefined without throwing", () => {
@@ -199,10 +202,43 @@ describe("parseTaskRunTelemetry", () => {
 
   it("handles fully-empty meta", () => {
     const result = parseTaskRunTelemetry({});
-    expect(result.layers.length).toBe(7); // SOP omitted when missing
+    expect(result.layers.length).toBe(8); // SOP omitted when missing
     for (const layer of result.layers) {
       expect(layer.status).toBe("missing");
     }
+  });
+});
+
+describe("parseChatMessageTelemetry — W12 enforcement_dry_run", () => {
+  it("missing block → status missing, badges defaults", () => {
+    const r = parseChatMessageTelemetry({});
+    const e = r.layers.find((l) => l.key === "enforcement_dry_run")!;
+    expect(e.status).toBe("missing");
+    expect(r.badges.enforcementWouldFire).toBe(0);
+    expect(r.badges.enforcementEvaluated).toBeNull();
+  });
+
+  it("populated block → status ran, badges populated", () => {
+    const r = parseChatMessageTelemetry({
+      enforcement_dry_run: {
+        workspace: "strategy",
+        contractVersion: "v1",
+        surface: "strategy-chat",
+        totals: { evaluated: 5, wouldFire: 2, disabled: 1, errors: 0 },
+        evaluations: [],
+      },
+    });
+    const e = r.layers.find((l) => l.key === "enforcement_dry_run")!;
+    expect(e.status).toBe("ran");
+    expect(e.summary).toContain("evaluated=5");
+    expect(r.badges.enforcementWouldFire).toBe(2);
+    expect(r.badges.enforcementEvaluated).toBe(5);
+  });
+
+  it("malformed block → status failed", () => {
+    const r = parseChatMessageTelemetry({ enforcement_dry_run: "oops" });
+    const e = r.layers.find((l) => l.key === "enforcement_dry_run")!;
+    expect(e.status).toBe("failed");
   });
 });
 

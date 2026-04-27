@@ -255,13 +255,20 @@ describe("snapshot — full chat fixture", () => {
             "status": "valid",
             "unknownFields": [],
           },
+          {
+            "invalidFields": [],
+            "key": "enforcement_dry_run",
+            "missingFields": [],
+            "status": "valid",
+            "unknownFields": [],
+          },
         ],
         "source": "chat",
         "totals": {
           "malformed": 0,
           "missing": 0,
           "unknownFieldWarnings": 0,
-          "valid": 7,
+          "valid": 8,
         },
       }
     `);
@@ -274,7 +281,7 @@ describe("snapshot — full task fixture", () => {
     const sop = result.reports.find((r) => r.key === "sop");
     expect(sop?.status).toBe("valid");
     expect(result.totals).toEqual({
-      valid: 8,
+      valid: 9,
       missing: 0,
       malformed: 0,
       unknownFieldWarnings: 0,

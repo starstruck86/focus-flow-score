@@ -48,6 +48,7 @@ export type StrategyLayerKey =
   | "gate_check"
   | "calibration"
   | "escalation_suggestions"
+  | "enforcement_dry_run"
   | "sop";
 
 export interface StrategyTelemetrySummary {
@@ -60,6 +61,10 @@ export interface StrategyTelemetrySummary {
     gateFailures: number;
     citationIssues: number;
     escalationCount: number;
+    /** W12 — total `wouldFire` policies in the dry-run summary. */
+    enforcementWouldFire: number;
+    /** W12 — total policies evaluated. null when block missing. */
+    enforcementEvaluated: number | null;
   };
 }
 
@@ -355,6 +360,50 @@ function extractEscalation(meta: unknown): LayerSummary {
   };
 }
 
+function extractEnforcementDryRun(meta: unknown): LayerSummary {
+  const block = getBlock(meta, "enforcement_dry_run");
+  if (block === undefined || block === null) {
+    return {
+      key: "enforcement_dry_run",
+      label: "Enforcement Dry Run",
+      wave: "W12",
+      status: "missing",
+      summary: "no enforcement_dry_run block recorded",
+      raw: null,
+    };
+  }
+  if (!isObject(block)) {
+    return {
+      key: "enforcement_dry_run",
+      label: "Enforcement Dry Run",
+      wave: "W12",
+      status: "failed",
+      summary: "enforcement_dry_run is not an object",
+      raw: block,
+    };
+  }
+  const totals = isObject(block["totals"])
+    ? (block["totals"] as Record<string, unknown>)
+    : null;
+  const evaluated = safeNumber(totals?.["evaluated"]);
+  const wouldFire = safeNumber(totals?.["wouldFire"]);
+  const disabled = safeNumber(totals?.["disabled"]);
+  const errors = safeNumber(totals?.["errors"]);
+  // Block exists → "ran" even if no policy fired (dry-run still ran).
+  const status: LayerStatus = evaluated === 0 ? "skipped" : "ran";
+  return {
+    key: "enforcement_dry_run",
+    label: "Enforcement Dry Run",
+    wave: "W12",
+    status,
+    summary:
+      `evaluated=${evaluated} · wouldFire=${wouldFire} · disabled=${disabled}${
+        errors > 0 ? ` · errors=${errors}` : ""
+      }`,
+    raw: block,
+  };
+}
+
 function extractSop(meta: unknown): LayerSummary | null {
   const block = getBlock(meta, "sop");
   if (block === undefined) return null;
@@ -391,6 +440,7 @@ const ORDERED_EXTRACTORS: ReadonlyArray<
   extractGateCheck,
   extractCalibration,
   extractEscalation,
+  extractEnforcementDryRun,
 ];
 
 function summarize(
@@ -402,6 +452,7 @@ function summarize(
   const gate = layers.find((l) => l.key === "gate_check");
   const citation = layers.find((l) => l.key === "citation_check");
   const escalation = layers.find((l) => l.key === "escalation_suggestions");
+  const enforcement = layers.find((l) => l.key === "enforcement_dry_run");
 
   const calibRaw = isObject(calibration?.raw)
     ? (calibration!.raw as Record<string, unknown>)
@@ -417,6 +468,12 @@ function summarize(
     : null;
   const stdRaw = isObject(standardContext?.raw)
     ? (standardContext!.raw as Record<string, unknown>)
+    : null;
+  const enforcementRaw = isObject(enforcement?.raw)
+    ? (enforcement!.raw as Record<string, unknown>)
+    : null;
+  const enforcementTotals = isObject(enforcementRaw?.["totals"])
+    ? (enforcementRaw!["totals"] as Record<string, unknown>)
     : null;
 
   const gateFailures = Array.isArray(gateRaw?.["gates"])
@@ -441,6 +498,11 @@ function summarize(
     ? safeString(calibRaw["overallVerdict"])
     : null;
 
+  const enforcementWouldFire = safeNumber(enforcementTotals?.["wouldFire"]);
+  const enforcementEvaluated = enforcementTotals
+    ? safeNumber(enforcementTotals["evaluated"])
+    : null;
+
   return {
     source,
     layers,
@@ -450,6 +512,8 @@ function summarize(
       gateFailures,
       citationIssues,
       escalationCount,
+      enforcementWouldFire,
+      enforcementEvaluated,
     },
   };
 }
