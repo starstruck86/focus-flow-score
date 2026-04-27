@@ -5695,6 +5695,38 @@ Before finalizing your response, ensure it reflects this SOP.
 If it does not: improve it before returning.
 `;
   };
+  const strategyObjectiveBlock = `\n\n━━━ STRATEGY OBJECTIVE ━━━
+
+You are not here to give correct answers.
+You are here to produce leverage.
+
+Every response must:
+- create insight
+- expose non-obvious opportunities
+- increase Corey's chance of winning
+- avoid generic or surface-level thinking
+
+If your answer could apply to any company, it is wrong.
+If your answer does not change how Corey thinks or acts, it is insufficient.
+
+Always prefer:
+- specificity over generality
+- insight over completeness
+- leverage over explanation
+
+Do not default to safe answers.
+Do not default to obvious recommendations.
+Do not summarize when you can interpret.
+
+Your job is to make Corey more dangerous in a deal.
+
+━━━ END OBJECTIVE ━━━\n\n`;
+  console.log(
+    `[strategy-sop] injected-strategy-objective ${JSON.stringify({
+      position: "top-of-system-prompt",
+      block_length: strategyObjectiveBlock.length,
+    })}`,
+  );
   const sopAuthorityBlock = `${buildGlobalSopBlock()}${buildWorkspaceSopBlock()}`;
   if (sopAuthorityBlock.length > 0) {
     console.log(
@@ -5717,7 +5749,7 @@ If it does not: improve it before returning.
   // The preamble is appended; the model must obey the original mode-lock too.
   // SOPs are prepended via sopAuthorityBlock so they sit between core identity
   // and the reasoning preamble.
-  let effectiveSystemPrompt = `${systemPrompt}${sopAuthorityBlock}`;
+  let effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}`;
   if (mode === "short_form") {
     // SHORT-FORM mode-lock: tight output shape, no synthesis scaffolding.
     const shapeRule = shortFormKind === "subject_lines"
@@ -5739,7 +5771,7 @@ USE the library voice/angles for grounding, but DO NOT produce a long synthesis 
 ${shapeRule}
 If grounded vs extended distinction is material, tag each option [Grounded] or [Extended].
 Forbidden: long preambles, multi-section frameworks, "let me walk you through" openers.`;
-    effectiveSystemPrompt = `${systemPrompt}${sopAuthorityBlock}${preamble}`;
+    effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${preamble}`;
   } else if (mode === "strong" || mode === "partial" || mode === "thin") {
     const preamble = `
 
@@ -5753,7 +5785,7 @@ ${
     : "THIN grounding: open with one honest line stating what was found (e.g. 'Found 1 weakly related resource and no supporting KIs'). Then proceed using general reasoning. Mark assumptions. Offer one specific clarifying question at the end if it would materially sharpen the output. NEVER refuse, NEVER produce a one-line stop."
 }
 Forbidden: canned refusals like "I don't have enough signal" without ALSO producing the best first-pass answer you can.`;
-    effectiveSystemPrompt = `${systemPrompt}${sopAuthorityBlock}${preamble}`;
+    effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${preamble}`;
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -5797,7 +5829,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       // V2 builds its own core identity + reasoning. Re-apply SOP authority
       // immediately after so the SOP remains the controlling behavioral layer
       // ahead of standards / global instructions / brainstorm enforcement.
-      effectiveSystemPrompt = `${v2.systemPrompt}${sopAuthorityBlock}`;
+      effectiveSystemPrompt = `${strategyObjectiveBlock}${v2.systemPrompt}${sopAuthorityBlock}`;
       // Stash prior turn for wrong-question check later.
       v2EvidenceBase = {
         decision: v2.decision,
