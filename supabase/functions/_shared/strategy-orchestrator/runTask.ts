@@ -75,6 +75,10 @@ import {
   selectExemplars,
   type StandardContextPersistenceBlock,
   computeSchemaHealth,
+  buildEnforcementPersistenceBlock,
+  logEnforcementDryRun,
+  runEnforcementDryRun,
+  type EnforcementPersistenceBlock,
 } from "../strategy-core/index.ts";
 import { resolveTaskWorkspace } from "./taskWorkspace.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
@@ -976,6 +980,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // another workspace (e.g. an account_brief logging a Projects
   // promotion). Pure telemetry + persistence — never routes the user.
   let escalationPersistenceBlock: EscalationPersistenceBlock | null = null;
+  let w7EscalationSummary: ReturnType<typeof evaluateEscalationRules> | null = null;
   try {
     // Synthesize a prompt-like signal from structured task inputs so
     // intent-driven rules (e.g. evidence asks) can still fire.
@@ -1002,11 +1007,43 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       runId,
     });
     logEscalationSuggestions(w7Summary);
+    w7EscalationSummary = w7Summary;
     escalationPersistenceBlock = buildEscalationPersistenceBlock(w7Summary);
   } catch (escErr) {
     console.warn(
       "[workspace:escalation_suggestion] run-task threw (ignored, shadow):",
       String(escErr).slice(0, 200),
+    );
+  }
+
+  // ── W12: Enforcement dry-run (shadow only, never blocks) ─────────
+  // Reads only W5/W6/W6.5/W7.5 metadata. No mutation, no retries, no
+  // blocking. Stamped BEFORE schema_health so W10 validates the final
+  // payload (incl. enforcement_dry_run as a known top-level block).
+  let enforcementPersistenceBlock: EnforcementPersistenceBlock | null = null;
+  try {
+    const w12Summary = runEnforcementDryRun({
+      contract: resolvedContract.contract,
+      surface: "run-task",
+      workspace: resolvedContract.workspace,
+      contractVersion: resolvedContract.contractVersion,
+      taskType,
+      runId,
+      gateSummary: w6GateSummary,
+      calibration: calibrationResult,
+      citationCheck: w5CitationResult,
+      escalationSummary: w7EscalationSummary,
+      // schema_health not yet computed — pass undefined; the
+      // schema.drift.blocker policy reports silent-no-data, which is
+      // correct: this run hasn't been stamped yet.
+      schemaHealth: null,
+    });
+    logEnforcementDryRun(w12Summary);
+    enforcementPersistenceBlock = buildEnforcementPersistenceBlock(w12Summary);
+  } catch (enfErr) {
+    console.warn(
+      "[workspace:enforcement_dry_run] run-task threw (ignored, shadow):",
+      String(enfErr).slice(0, 200),
     );
   }
 
@@ -1035,6 +1072,8 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   if (escalationPersistenceBlock) metaPatch.escalation_suggestions = escalationPersistenceBlock;
   if (standardContextBlock) metaPatch.standard_context = standardContextBlock;
   if (calibrationPersistenceBlock) metaPatch.calibration = calibrationPersistenceBlock;
+  // W12 — enforcement dry-run BEFORE schema_health so W10 sees it.
+  if (enforcementPersistenceBlock) metaPatch.enforcement_dry_run = enforcementPersistenceBlock;
   // W10 — stamp compact schema-health summary AFTER all blocks are assembled.
   try {
     metaPatch.schema_health = computeSchemaHealth(metaPatch, "task");
