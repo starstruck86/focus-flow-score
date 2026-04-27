@@ -41,6 +41,22 @@ function makeStubSupabase(rowsByQuery: (rec: Recorded) => any[]) {
       rec.filters.push({ op: "in", col, val });
       return builder(rec);
     },
+    overlaps: (col: string, val: unknown) => {
+      rec.filters.push({ op: "overlaps", col, val });
+      return builder(rec);
+    },
+    contains: (col: string, val: unknown) => {
+      rec.filters.push({ op: "contains", col, val });
+      return builder(rec);
+    },
+    not: (col: string, op: string, val: unknown) => {
+      rec.filters.push({ op: `not_${op}`, col, val });
+      return builder(rec);
+    },
+    is: (col: string, val: unknown) => {
+      rec.filters.push({ op: "is", col, val });
+      return builder(rec);
+    },
     order: (_c: string, _o: unknown) => builder(rec),
     limit: (_n: number) => Promise.resolve({ data: rowsByQuery(rec), error: null }),
   });
@@ -132,8 +148,8 @@ Deno.test("retrieveResourceContext: emits admit-absence block when nothing match
   });
   assertEquals(out.hits.length, 0);
   assertEquals(out.userAskedForResource, true);
-  assertStringIncludes(out.contextBlock, "No matching resource was found");
-  assertStringIncludes(out.contextBlock, "I don't see a matching resource");
+  assertStringIncludes(out.contextBlock, "No matching resource or KI was found");
+  assertStringIncludes(out.contextBlock, "I scanned your library");
   assertStringIncludes(out.contextBlock, "Do NOT invent");
 });
 
