@@ -452,6 +452,7 @@ function summarize(
   const gate = layers.find((l) => l.key === "gate_check");
   const citation = layers.find((l) => l.key === "citation_check");
   const escalation = layers.find((l) => l.key === "escalation_suggestions");
+  const enforcement = layers.find((l) => l.key === "enforcement_dry_run");
 
   const calibRaw = isObject(calibration?.raw)
     ? (calibration!.raw as Record<string, unknown>)
@@ -467,6 +468,12 @@ function summarize(
     : null;
   const stdRaw = isObject(standardContext?.raw)
     ? (standardContext!.raw as Record<string, unknown>)
+    : null;
+  const enforcementRaw = isObject(enforcement?.raw)
+    ? (enforcement!.raw as Record<string, unknown>)
+    : null;
+  const enforcementTotals = isObject(enforcementRaw?.["totals"])
+    ? (enforcementRaw!["totals"] as Record<string, unknown>)
     : null;
 
   const gateFailures = Array.isArray(gateRaw?.["gates"])
@@ -491,6 +498,11 @@ function summarize(
     ? safeString(calibRaw["overallVerdict"])
     : null;
 
+  const enforcementWouldFire = safeNumber(enforcementTotals?.["wouldFire"]);
+  const enforcementEvaluated = enforcementTotals
+    ? safeNumber(enforcementTotals["evaluated"])
+    : null;
+
   return {
     source,
     layers,
@@ -500,6 +512,8 @@ function summarize(
       gateFailures,
       citationIssues,
       escalationCount,
+      enforcementWouldFire,
+      enforcementEvaluated,
     },
   };
 }
