@@ -1117,13 +1117,30 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     updated_at: new Date().toISOString(),
   };
   // Merge SOP shadow-validation results into meta alongside any
-  // pre-existing authoring_fallback metadata.
-  const sopMetaBlock = {
-    enabled: !!sop,
-    inputCheck: sopInputCheck ?? null,
-    outputCheck: sopOutputCheck ?? null,
-    finalized_at: new Date().toISOString(),
-  };
+  // pre-existing authoring_fallback metadata. For account_brief, the
+  // Phase 4 enforcement shape is used (before/after + correction flags).
+  const finalizedAt = new Date().toISOString();
+  const sopMetaBlock: Record<string, unknown> = taskType === "account_brief"
+    ? {
+      enabled: !!sop,
+      inputCheck: sopInputCheck ?? null,
+      outputCheckBefore: sopOutputCheckBefore ?? null,
+      correction_attempted: sopEnforcement?.correction_attempted ?? false,
+      corrected: sopEnforcement?.corrected ?? false,
+      outputCheckAfter: sopEnforcement?.corrected
+        ? (sopOutputCheck ?? null)
+        : null,
+      ...(sopEnforcement?.enforcement_error
+        ? { enforcement_error: sopEnforcement.enforcement_error }
+        : {}),
+      finalized_at: finalizedAt,
+    }
+    : {
+      enabled: !!sop,
+      inputCheck: sopInputCheck ?? null,
+      outputCheck: sopOutputCheck ?? null,
+      finalized_at: finalizedAt,
+    };
   const metaPatch: Record<string, unknown> = { sop: sopMetaBlock };
   if (fallbackMeta) metaPatch.authoring_fallback = fallbackMeta;
   if (citationCheckMeta) metaPatch.citation_check = citationCheckMeta;
