@@ -61,6 +61,10 @@ export interface StrategyTelemetrySummary {
     gateFailures: number;
     citationIssues: number;
     escalationCount: number;
+    /** W12 — total `wouldFire` policies in the dry-run summary. */
+    enforcementWouldFire: number;
+    /** W12 — total policies evaluated. null when block missing. */
+    enforcementEvaluated: number | null;
   };
 }
 
