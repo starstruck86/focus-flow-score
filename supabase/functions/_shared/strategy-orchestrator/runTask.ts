@@ -229,6 +229,55 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     );
   }
 
+  // ── W6.5 Pass A — Library Standard Context (shadow, pre-gen) ─────
+  // Select 2–4 STANDARD/EXEMPLAR/PATTERN cards from the user's
+  // library and append a "WHAT GOOD LOOKS LIKE" guidance block to
+  // overlayPrefix so it flows into every task system prompt
+  // (synthesis, authoring, review). The locked task templates are
+  // NOT modified — STANDARDS guide HOW to write, not WHAT to write.
+  // RESOURCE beats STANDARD: anything pulled in via Stage 0 library
+  // retrieval is demoted out of the candidate pool.
+  let exemplarSet: ExemplarSet | null = null;
+  let standardContextBlock: StandardContextPersistenceBlock | null = null;
+  try {
+    const passAScopes = (() => {
+      const fromUser = inferTopicScopes(userContent || "");
+      if (fromUser.length > 0) return fromUser;
+      const fb: string[] = [];
+      const co = (inputs as any)?.company_name;
+      const op = (inputs as any)?.opportunity;
+      if (typeof co === "string" && co.trim()) fb.push(co);
+      if (typeof op === "string" && op.trim()) fb.push(op);
+      return fb.length > 0 ? fb : derivedScopes;
+    })();
+    const retrievedItemIds: string[] = [
+      ...(library.knowledgeItems ?? [])
+        .map((k: any) => String(k?.id ?? ""))
+        .filter((s: string) => s.length > 0),
+      ...(library.playbooks ?? [])
+        .map((p: any) => String(p?.id ?? ""))
+        .filter((s: string) => s.length > 0),
+    ];
+    exemplarSet = await selectExemplars(supabase, userId, {
+      workspace: resolvedContract.workspace,
+      surface: "run-task",
+      taskType,
+      scopes: passAScopes,
+      retrievedItemIds,
+    });
+    logStandardContext(exemplarSet);
+    standardContextBlock = buildStandardContextPersistenceBlock(exemplarSet);
+    const standardsText = renderStandardBlock(exemplarSet);
+    if (standardsText) {
+      overlayPrefix = `${overlayPrefix}${standardsText}\n\n`;
+    }
+  } catch (passAErr) {
+    console.warn(
+      "[workspace:standard_context] run-task threw (ignored, shadow):",
+      String(passAErr).slice(0, 200),
+    );
+  }
+
   // ── Stage 1: External research (Perplexity, parallel) ────────
   const queries = handler.buildResearchQueries(inputs);
   const research: ResearchBundle = { results: {}, totalChars: 0 };
