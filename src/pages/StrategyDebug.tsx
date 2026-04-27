@@ -39,6 +39,13 @@ import {
   parseTaskRunTelemetry,
   type StrategyTelemetrySummary,
 } from "@/lib/strategy/debug/parseStrategyTelemetry";
+import {
+  type SchemaHealthSummary,
+  type SchemaReport,
+  type SchemaStatus,
+  validateChatMessageSchema,
+  validateTaskRunSchema,
+} from "@/lib/strategy/debug/schemaValidators";
 import { useApprovalCheck } from "@/hooks/useApprovalCheck";
 
 type RecordKind = "message" | "run";
@@ -173,6 +180,115 @@ function SummaryBadges({
   );
 }
 
+// ─── Schema health (W9) ──────────────────────────────────────────
+
+function SchemaStatusBadge({ status }: { status: SchemaStatus }) {
+  const variant: Record<
+    SchemaStatus,
+    "default" | "secondary" | "destructive" | "outline"
+  > = {
+    valid: "default",
+    missing: "outline",
+    malformed: "destructive",
+  };
+  return (
+    <Badge variant={variant[status]} className="text-[10px] uppercase">
+      {status}
+    </Badge>
+  );
+}
+
+function SchemaReportRow({ report }: { report: SchemaReport }) {
+  const hasUnknown = report.unknownFields.length > 0;
+  return (
+    <div className="rounded-md border bg-card/30 p-2.5">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] font-mono text-muted-foreground">
+          {report.wave}
+        </span>
+        <span className="font-medium text-xs">{report.label}</span>
+        <SchemaStatusBadge status={report.status} />
+        {hasUnknown && (
+          <Badge
+            variant="secondary"
+            className="text-[10px] gap-1"
+          >
+            +{report.unknownFields.length} unknown
+          </Badge>
+        )}
+      </div>
+      {(report.missingFields.length > 0 ||
+        report.invalidFields.length > 0 ||
+        report.notes.length > 0 ||
+        hasUnknown) && (
+        <div className="mt-1.5 space-y-0.5 text-[11px] text-muted-foreground">
+          {report.missingFields.length > 0 && (
+            <p>
+              <span className="font-mono text-destructive">missing:</span>{" "}
+              {report.missingFields.join(", ")}
+            </p>
+          )}
+          {report.invalidFields.length > 0 && (
+            <p>
+              <span className="font-mono text-destructive">invalid:</span>{" "}
+              {report.invalidFields.join(", ")}
+            </p>
+          )}
+          {hasUnknown && (
+            <p>
+              <span className="font-mono text-foreground/80">unknown:</span>{" "}
+              {report.unknownFields.join(", ")}
+            </p>
+          )}
+          {report.notes.map((n, i) => (
+            <p key={i} className="italic">
+              {n}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SchemaHealthCard({ health }: { health: SchemaHealthSummary }) {
+  const { totals, reports } = health;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          Schema Health
+          <Badge variant="outline" className="text-[10px]">
+            read-only
+          </Badge>
+        </CardTitle>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Badge variant="default" className="gap-1">
+            valid: {totals.valid}
+          </Badge>
+          <Badge variant="outline" className="gap-1">
+            missing: {totals.missing}
+          </Badge>
+          <Badge
+            variant={totals.malformed > 0 ? "destructive" : "outline"}
+            className="gap-1"
+          >
+            malformed: {totals.malformed}
+          </Badge>
+          <Badge variant="secondary" className="gap-1">
+            unknown fields: {totals.unknownFieldWarnings}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-1.5">
+        {reports.map((r) => (
+          <SchemaReportRow key={r.key} report={r} />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Panels ──────────────────────────────────────────────────────
 
 function RecordPanel({ row }: { row: FetchedRow | null }) {
@@ -181,6 +297,13 @@ function RecordPanel({ row }: { row: FetchedRow | null }) {
     return row.kind === "message"
       ? parseChatMessageTelemetry(row.meta)
       : parseTaskRunTelemetry(row.meta);
+  }, [row]);
+
+  const health = useMemo<SchemaHealthSummary | null>(() => {
+    if (!row) return null;
+    return row.kind === "message"
+      ? validateChatMessageSchema(row.meta)
+      : validateTaskRunSchema(row.meta);
   }, [row]);
 
   if (!row) {
@@ -237,6 +360,8 @@ function RecordPanel({ row }: { row: FetchedRow | null }) {
           ))}
         </CardContent>
       </Card>
+
+      {health && <SchemaHealthCard health={health} />}
     </div>
   );
 }
