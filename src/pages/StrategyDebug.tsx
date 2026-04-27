@@ -445,6 +445,15 @@ function RecordPanel({ row }: { row: FetchedRow | null }) {
           </Card>
         );
       })()}
+      {row && (
+        <PromotionReadinessCard
+          report={
+            row.kind === "message"
+              ? classifyChatPromotionReadiness(row.meta)
+              : classifyTaskPromotionReadiness(row.meta)
+          }
+        />
+      )}
     </div>
   );
 }
