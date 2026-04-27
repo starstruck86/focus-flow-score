@@ -6441,6 +6441,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         let calibrationBlock:
           | ReturnType<typeof buildCalibrationPersistenceBlock>
           | null = null;
+        let calibrationResult: ReturnType<typeof runLibraryCalibration> | null = null;
         try {
           if (exemplarSet) {
             const calibration = runLibraryCalibration({
@@ -6452,6 +6453,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
               exemplarSet,
             });
             logCalibrationResult(calibration);
+            calibrationResult = calibration;
             calibrationBlock = buildCalibrationPersistenceBlock(calibration);
           }
         } catch (calErr) {
@@ -6471,6 +6473,8 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
               gateSummary: w6GateSummary,
               citationCheck: w5Citation,
               libraryHits: resourceHits,
+              // W7.5 — calibration-aware overlay (shadow-only, additive).
+              calibration: calibrationResult,
             },
             surface: "strategy-chat",
           });
