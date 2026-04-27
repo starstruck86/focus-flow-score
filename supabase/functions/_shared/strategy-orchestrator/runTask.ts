@@ -856,7 +856,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // turn enforcement on for discovery_prep. Double-gated by env flag
   // STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT (default false).
   const discoveryPrepEnforcementBlocked =
-    taskType === "discovery_prep" &&
+    (taskType as string) === "discovery_prep" &&
     STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT !== true;
 
   // ── Phase 4 — Account Brief one-pass SOP repair ───────────────────
