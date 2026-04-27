@@ -60,6 +60,9 @@ import {
   validateWorkingThesisState,
   type WorkingThesisState,
   computeSchemaHealth,
+  buildEnforcementPersistenceBlock,
+  logEnforcementDryRun,
+  runEnforcementDryRun,
 } from "../_shared/strategy-core/index.ts";
 import {
   assembleRoutingEvidence as v2AssembleEvidence,
