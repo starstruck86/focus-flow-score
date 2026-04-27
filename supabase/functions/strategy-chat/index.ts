@@ -2215,6 +2215,7 @@ serve(async (req) => {
       workspace: workspaceRaw,
       resolvedSops: resolvedSopsRaw,
       workspaceSop: workspaceSopRaw,
+      globalSop: globalSopRaw,
     } = body;
     const v2RequestOverride = _v2 === true;
     // Sidecar: explicit resource IDs the user picked from /library this turn.
@@ -2334,6 +2335,32 @@ serve(async (req) => {
     })();
     console.log(
       `[strategy-sop] workspace-sop received: present=${!!workspaceSopRaw} sanitized=${!!cleanWorkspaceSop} workspace=${cleanWorkspaceSop?.workspace ?? 'none'} length=${cleanWorkspaceSop?.rawInstructions.length ?? 0}`,
+    );
+
+    // Phase 2 (Global SOP) — chat-only advisory injection.
+    // Mirrors the workspace SOP sanitizer but applies to the universal
+    // Global SOP. Task pipelines (workflowType set) NEVER receive it.
+    // Hard cap protects against oversized payloads.
+    const GLOBAL_SOP_MAX_CHARS = 12_000;
+    const cleanGlobalSop = ((): {
+      sopId: 'global';
+      name: string;
+      rawInstructions: string;
+    } | null => {
+      if (!globalSopRaw || typeof globalSopRaw !== 'object') return null;
+      // Never inject during a task pipeline (Discovery Prep etc.).
+      if (typeof workflowType === 'string' && workflowType.length > 0) return null;
+      const g = globalSopRaw as Record<string, unknown>;
+      const name = typeof g.name === 'string' && g.name.trim().length > 0
+        ? g.name.slice(0, 120) : 'Global Strategy SOP';
+      const raw = typeof g.rawInstructions === 'string'
+        ? g.rawInstructions.trim().slice(0, GLOBAL_SOP_MAX_CHARS)
+        : '';
+      if (!raw) return null;
+      return { sopId: 'global', name, rawInstructions: raw };
+    })();
+    console.log(
+      `[strategy-sop] global-sop received: present=${!!globalSopRaw} sanitized=${!!cleanGlobalSop} length=${cleanGlobalSop?.rawInstructions.length ?? 0}`,
     );
 
     // ── Debug: OpenAI key health check ──────────────────────
@@ -2562,6 +2589,7 @@ serve(async (req) => {
       cleanGlobalInstructions,
       cleanWorkspaceSop,
       workspace,
+      cleanGlobalSop,
     );
   } catch (e) {
     console.error("strategy-chat error:", e);
@@ -5371,6 +5399,13 @@ async function handleChat(
   // enforcement to resolve the WorkspaceContract from the server-side
   // registry. Null/unknown falls back to `work` inside the resolver.
   workspaceKeyRaw: string | null = null,
+  // Phase 2 (Global SOP) — advisory text. When non-null, appended AFTER
+  // core/V1/V2/synthesis preamble and BEFORE the workspace SOP block.
+  globalSop: {
+    sopId: 'global';
+    name: string;
+    rawInstructions: string;
+  } | null = null,
 ) {
   // W5: resolve the workspace contract once for handleChat scope so
   // the citation enforcer can read `citationMode` for both the
@@ -5745,6 +5780,28 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     .filter((m, idx, arr) =>
       !(idx === arr.length - 1 && m.role === "user" && m.text === content)
     );
+  // Phase 2 (Global SOP) — Global SOP advisory injection.
+  // Inject BEFORE the workspace SOP so the order from least-specific to
+  // most-specific is: core/V1/V2/synthesis → GLOBAL SOP → WORKSPACE SOP →
+  // Global Instructions. Advisory only: must not override grounding,
+  // citation, synthesis, or strict-mode rules already specified above.
+  // Task pipelines never reach here with a populated payload (sanitizer
+  // returns null when workflowType is present).
+  if (globalSop && globalSop.rawInstructions.length > 0) {
+    const block = `\n\n━━━ GLOBAL STRATEGY SOP (ADVISORY) ━━━\n${globalSop.rawInstructions}\n\nTreat this as guidance for reasoning, depth, structure, and quality. Do NOT override grounding, citation, or synthesis rules already specified above.\n`;
+    effectiveSystemPrompt = `${effectiveSystemPrompt}${block}`;
+    console.log(
+      `[strategy-sop] injected-global ${JSON.stringify({
+        sopId: globalSop.sopId,
+        length: globalSop.rawInstructions.length,
+      })}`,
+    );
+  } else {
+    console.log(
+      `[strategy-sop] injected-global skipped: present=${!!globalSop} reason=${globalSop ? 'empty' : 'null'}`,
+    );
+  }
+
   // Phase 3A — Workspace SOP advisory injection.
   // Append BEFORE global instructions so the global block stays the closest
   // contract to the model output, and AFTER core/V1/V2/synthesis blocks so

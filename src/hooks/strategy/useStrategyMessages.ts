@@ -7,6 +7,7 @@ import { mapSendErrorToFriendlyMessage } from './sendErrorMapping';
 import { buildGlobalInstructionsPayload } from '@/lib/strategy/buildGlobalInstructionsPayload';
 import { buildResolvedSopsPayload } from '@/lib/strategy/buildResolvedSopsPayload';
 import { buildWorkspaceSopPayload } from '@/lib/strategy/buildWorkspaceSopPayload';
+import { buildGlobalSopPayload } from '@/lib/strategy/buildGlobalSopPayload';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/strategy-chat`;
 
@@ -97,6 +98,13 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
             workspace: options?.workspace ?? 'work',
             taskType: null,
           }) ?? undefined,
+          // Phase 2 (Global SOP) — first behavior-affecting step for the
+          // Global SOP. When the engine + global contract are enabled, ship
+          // the raw advisory text. Server appends it AFTER core/V2/synthesis
+          // and BEFORE the workspace SOP + global instructions. Task
+          // pipelines (Discovery Prep, run-strategy-job, runTask) never
+          // send this — chat-only by design.
+          globalSop: buildGlobalSopPayload() ?? undefined,
         }),
       });
 
