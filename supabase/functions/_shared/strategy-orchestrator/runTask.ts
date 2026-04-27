@@ -52,8 +52,12 @@ import {
 } from "../strategy-core/workspacePrompt.ts";
 import {
   buildCitationCheckLog,
+  buildGatePersistenceBlock,
+  type GatePersistenceBlock,
   logCitationCheck,
+  logGateResults,
   runCitationCheck,
+  runWorkspaceGates,
   type CitationAuditHit,
 } from "../strategy-core/index.ts";
 import { resolveTaskWorkspace } from "./taskWorkspace.ts";
