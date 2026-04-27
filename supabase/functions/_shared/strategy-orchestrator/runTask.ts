@@ -41,6 +41,17 @@ import {
   enforceTaskSopOnce,
   type EnforceTaskSopOnceResult,
 } from "./enforceTaskSopOnce.ts";
+
+// ─────────────────────────────────────────────────────────────────
+// Phase 5 — Discovery Prep protection flag.
+// Discovery Prep is permanently shadow-only. Enforcement is hard-
+// gated off and additionally guarded by this env flag so that no
+// future code path can accidentally enable repair without an
+// explicit opt-in deploy.
+// ─────────────────────────────────────────────────────────────────
+const STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT: boolean =
+  (Deno.env.get("STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT") ?? "false")
+    .toLowerCase() === "true";
 import {
   buildRetrievalDecisionLog,
   decideLibraryQuery,
@@ -328,6 +339,17 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   console.log(JSON.stringify({ tag: "stage-2:end", run_id: runId, model: synthesisModel, synthesis_fields: Object.keys(synthesis).length }));
 
   // ── Progressive execution switch (discovery_prep only) ─────────
+  // ┌──────────────────────────────────────────────────────────────┐
+  // │ DISCOVERY PREP IS PROTECTED                                  │
+  // │ - No enforcement                                             │
+  // │ - No structural changes                                      │
+  // │ - No repair passes                                           │
+  // │ - This is the highest-quality baseline output                │
+  // │ Any modification must be explicitly approved.                │
+  // │ Phase 5 contract: shadow validation only. The progressive    │
+  // │ driver may run validateDraftAgainstSop and persist meta.sop, │
+  // │ but MUST NOT mutate draftOutput.                             │
+  // └──────────────────────────────────────────────────────────────┘
   // Persist synthesis as the single source of truth, pre-create
   // task_run_sections rows, and kick off batch 0 in a fresh isolate
   // via HTTP self-invoke. Return immediately so this isolate exits
@@ -827,14 +849,26 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     console.warn("[sop-output-check] threw (ignored, shadow mode):", String(sopErr).slice(0, 200));
   }
 
+  // ── Phase 5 — Discovery Prep HARD STOP ────────────────────────────
+  // Discovery Prep finalizes via the progressive driver and never
+  // reaches this branch in normal flow, but we add an explicit guard
+  // here so any future refactor that changes routing cannot silently
+  // turn enforcement on for discovery_prep. Double-gated by env flag
+  // STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT (default false).
+  const discoveryPrepEnforcementBlocked =
+    (taskType as string) === "discovery_prep" &&
+    STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT !== true;
+
   // ── Phase 4 — Account Brief one-pass SOP repair ───────────────────
   // Activates ONLY for account_brief, ONLY when the initial output
   // check reports missing required outputs. Exactly one repair pass.
-  // Never blocks completion. Discovery Prep is intentionally excluded.
+  // Never blocks completion. Discovery Prep is intentionally excluded
+  // (and additionally hard-stopped above — see Phase 5).
   let sopOutputCheckBefore: ReturnType<typeof validateDraftAgainstSop> | null =
     sopOutputCheck;
   let sopEnforcement: EnforceTaskSopOnceResult | null = null;
   if (
+    !discoveryPrepEnforcementBlocked &&
     taskType === "account_brief" &&
     sop &&
     sopOutputCheck?.ran &&
