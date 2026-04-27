@@ -6165,45 +6165,67 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
               kiTitles: v2EvidenceBase.kiTitles,
             });
             // Phase 3: contract-drift sentinel (logged, never blocks).
+            // Phase 3: contract-drift sentinel (logged, never blocks).
             // Only meaningful for strong-signal synthesis turns.
             let drift: { missing: string[] } | null = null;
             if (
               v2EvidenceBase.decision.askShape === "synthesis_framework" &&
-
-                v2EvidenceBase.decision.mode === "A_strong"
-              ) {
-                const check = assertSynthesisContractIntact(effectiveSystemPrompt);
-                if (!check.intact) {
-                  drift = { missing: check.missing };
-                  console.warn(
-                    `[v2] contract_drift: synthesis non-negotiables missing: ${check.missing.join(",")}`,
-                  );
-                }
-              }
-              base.v2 = v2AssembleEvidence({
-                decision: v2EvidenceBase.decision,
-                signals: v2EvidenceBase.signals,
-                wrongQuestion: wq,
-                audit: aud,
-                provider: result.provider,
-                model: result.model,
-                regenCount: 0,
-                intendedProvider: route.primaryProvider,
-                fallbackUsed: result.fallbackUsed === true,
-                contractDrift: drift,
-              });
-              if (base.v2.claude_fallback) {
+              v2EvidenceBase.decision.mode === "A_strong"
+            ) {
+              const check = assertSynthesisContractIntact(effectiveSystemPrompt);
+              if (!check.intact) {
+                drift = { missing: check.missing };
                 console.warn(
-                  `[v2] claude_fallback=true intended=${route.primaryProvider} actual=${result.provider}`,
+                  `[v2] contract_drift: synthesis non-negotiables missing: ${check.missing.join(",")}`,
                 );
               }
-            } catch (e) {
-              base.v2_error = (e as Error).message;
             }
+            base.v2 = v2AssembleEvidence({
+              decision: v2EvidenceBase.decision,
+              signals: v2EvidenceBase.signals,
+              wrongQuestion: wq,
+              audit: aud,
+              provider: result.provider,
+              model: result.model,
+              regenCount: 0,
+              intendedProvider: route.primaryProvider,
+              fallbackUsed: result.fallbackUsed === true,
+              contractDrift: drift,
+            });
+            if (base.v2.claude_fallback) {
+              console.warn(
+                `[v2] claude_fallback=true intended=${route.primaryProvider} actual=${result.provider}`,
+              );
+            }
+          } catch (e) {
+            base.v2_error = (e as Error).message;
           }
-          return base;
-        })(),
-      },
+        }
+        return base;
+      })(),
+    };
+    // W10 — stamp compact schema-health summary AFTER all blocks are assembled.
+    try {
+      nonStreamContentJson.schema_health = computeSchemaHealth(
+        nonStreamContentJson,
+        "chat",
+      );
+    } catch (shErr) {
+      console.warn(
+        "[schema_health] non-stream stamping failed (ignored):",
+        String(shErr).slice(0, 200),
+      );
+    }
+    await supabase.from("strategy_messages").insert({
+      thread_id: threadId,
+      user_id: userId,
+      role: "assistant",
+      message_type: "chat",
+      provider_used: result.provider,
+      model_used: result.model,
+      fallback_used: result.fallbackUsed,
+      latency_ms: result.latencyMs,
+      content_json: nonStreamContentJson,
     });
     // Cross-thread resource memory: persist VERIFIED citations only.
     // This is the write side of strategy_thread_resources — what makes
