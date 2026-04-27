@@ -115,7 +115,17 @@ export interface EscalationRunSummary {
   totals: {
     rulesEvaluated: number;
     suggestionsEmitted: number;
+    /** W7.5 — count emitted via the calibration overlay. */
+    overlaySuggestionsEmitted: number;
+    /** W7.5 — count of pre-existing suggestions whose confidence was downgraded. */
+    overlayDowngrades: number;
   };
+  /**
+   * W7.5 — verdict + confidence for telemetry/persistence join.
+   * Undefined when no calibration result was provided.
+   */
+  calibrationVerdict?: CalibrationVerdict;
+  calibrationConfidence?: W65CalibrationConfidence;
 }
 
 // ─── Tiny helpers ─────────────────────────────────────────────────
