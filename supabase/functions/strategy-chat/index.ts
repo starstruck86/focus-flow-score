@@ -5780,6 +5780,28 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     .filter((m, idx, arr) =>
       !(idx === arr.length - 1 && m.role === "user" && m.text === content)
     );
+  // Phase 2 (Global SOP) — Global SOP advisory injection.
+  // Inject BEFORE the workspace SOP so the order from least-specific to
+  // most-specific is: core/V1/V2/synthesis → GLOBAL SOP → WORKSPACE SOP →
+  // Global Instructions. Advisory only: must not override grounding,
+  // citation, synthesis, or strict-mode rules already specified above.
+  // Task pipelines never reach here with a populated payload (sanitizer
+  // returns null when workflowType is present).
+  if (globalSop && globalSop.rawInstructions.length > 0) {
+    const block = `\n\n━━━ GLOBAL STRATEGY SOP (ADVISORY) ━━━\n${globalSop.rawInstructions}\n\nTreat this as guidance for reasoning, depth, structure, and quality. Do NOT override grounding, citation, or synthesis rules already specified above.\n`;
+    effectiveSystemPrompt = `${effectiveSystemPrompt}${block}`;
+    console.log(
+      `[strategy-sop] injected-global ${JSON.stringify({
+        sopId: globalSop.sopId,
+        length: globalSop.rawInstructions.length,
+      })}`,
+    );
+  } else {
+    console.log(
+      `[strategy-sop] injected-global skipped: present=${!!globalSop} reason=${globalSop ? 'empty' : 'null'}`,
+    );
+  }
+
   // Phase 3A — Workspace SOP advisory injection.
   // Append BEFORE global instructions so the global block stays the closest
   // contract to the model output, and AFTER core/V1/V2/synthesis blocks so
