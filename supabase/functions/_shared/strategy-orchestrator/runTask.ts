@@ -51,18 +51,29 @@ import {
   logPromptComposition,
 } from "../strategy-core/workspacePrompt.ts";
 import {
+  buildCalibrationPersistenceBlock,
   buildCitationCheckLog,
   buildEscalationPersistenceBlock,
   buildGatePersistenceBlock,
+  buildStandardContextPersistenceBlock,
+  type CalibrationPersistenceBlock,
+  type CitationAuditHit,
   type EscalationPersistenceBlock,
   evaluateEscalationRules,
+  type ExemplarSet,
   type GatePersistenceBlock,
+  inferTopicScopes,
+  logCalibrationResult,
   logCitationCheck,
   logEscalationSuggestions,
   logGateResults,
+  logStandardContext,
+  renderStandardBlock,
   runCitationCheck,
+  runLibraryCalibration,
   runWorkspaceGates,
-  type CitationAuditHit,
+  selectExemplars,
+  type StandardContextPersistenceBlock,
 } from "../strategy-core/index.ts";
 import { resolveTaskWorkspace } from "./taskWorkspace.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
