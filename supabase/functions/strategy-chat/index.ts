@@ -6025,6 +6025,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
             verified: audit.verifiedTitles,
           }
           : undefined,
+        gate_check: w6GateBlock ?? undefined,
         routing_decision: (() => {
           const base: any = {
             mode,
