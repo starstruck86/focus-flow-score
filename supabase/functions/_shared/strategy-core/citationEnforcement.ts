@@ -226,10 +226,11 @@ export function runCitationCheck(
   }
 
   // ── Mode: strict ───────────────────────────────────────────────
-  // Run the existing strict auditor and PUBLISH its rewrite as
-  // `auditedText`. This preserves the legacy strategy-chat
-  // contract: strict workspaces have always had citation rewrites
-  // applied to persisted text.
+  // W5 SHADOW: run the strict auditor for telemetry/issue reporting,
+  // but do NOT publish `audit.text` as canonical output by default.
+  // Callers that explicitly need the legacy rewrite (pre-W5
+  // strategy-chat behavior) must pass `enableLegacyCitationRewrite:
+  // true`. That opt-in is outside the W5 shadow-only contract.
   const audit = auditResourceCitations(text, libraryHits, auditOptions);
   const citationsFound = audit.verifiedTitles.length;
   if (audit.unverifiedCitations.length > 0) {
@@ -250,7 +251,7 @@ export function runCitationCheck(
     issues,
     audited: true,
     audit,
-    auditedText: audit.text,
+    auditedText: enableLegacyCitationRewrite ? audit.text : text,
   };
 }
 
