@@ -209,6 +209,39 @@ describe("parseTaskRunTelemetry", () => {
   });
 });
 
+describe("parseChatMessageTelemetry — W12 enforcement_dry_run", () => {
+  it("missing block → status missing, badges defaults", () => {
+    const r = parseChatMessageTelemetry({});
+    const e = r.layers.find((l) => l.key === "enforcement_dry_run")!;
+    expect(e.status).toBe("missing");
+    expect(r.badges.enforcementWouldFire).toBe(0);
+    expect(r.badges.enforcementEvaluated).toBeNull();
+  });
+
+  it("populated block → status ran, badges populated", () => {
+    const r = parseChatMessageTelemetry({
+      enforcement_dry_run: {
+        workspace: "strategy",
+        contractVersion: "v1",
+        surface: "strategy-chat",
+        totals: { evaluated: 5, wouldFire: 2, disabled: 1, errors: 0 },
+        evaluations: [],
+      },
+    });
+    const e = r.layers.find((l) => l.key === "enforcement_dry_run")!;
+    expect(e.status).toBe("ran");
+    expect(e.summary).toContain("evaluated=5");
+    expect(r.badges.enforcementWouldFire).toBe(2);
+    expect(r.badges.enforcementEvaluated).toBe(5);
+  });
+
+  it("malformed block → status failed", () => {
+    const r = parseChatMessageTelemetry({ enforcement_dry_run: "oops" });
+    const e = r.layers.find((l) => l.key === "enforcement_dry_run")!;
+    expect(e.status).toBe("failed");
+  });
+});
+
 describe("invariants", () => {
   it("never mutates input (chat)", () => {
     const input = JSON.parse(JSON.stringify(fullChatContent));
