@@ -6059,6 +6059,31 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     } catch (gateErr) {
       console.warn("[workspace:gate_result] threw (ignored, shadow):", String(gateErr).slice(0, 200));
     }
+    // ── W6.5 Pass B — Library Calibration (shadow, post-gen) ─────
+    // Uses the SAME ExemplarSet from Pass A. Heuristic-only in
+    // Phase 1 — no LLM judge. Never mutates assistant output.
+    let calibrationBlock:
+      | ReturnType<typeof buildCalibrationPersistenceBlock>
+      | null = null;
+    try {
+      if (exemplarSet) {
+        const calibration = runLibraryCalibration({
+          workspace: __resolvedContract.workspace,
+          surface: "strategy-chat",
+          threadId,
+          outputText: auditedVisible,
+          userPromptText: content,
+          exemplarSet,
+        });
+        logCalibrationResult(calibration);
+        calibrationBlock = buildCalibrationPersistenceBlock(calibration);
+      }
+    } catch (calErr) {
+      console.warn(
+        "[workspace:calibration_result] threw (ignored, shadow):",
+        String(calErr).slice(0, 200),
+      );
+    }
     // ── W7: Escalation rules (shadow-only, advisory) ─────────────
     let w7EscalationBlock: ReturnType<typeof buildEscalationPersistenceBlock> | null = null;
     try {
