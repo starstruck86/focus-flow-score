@@ -45,6 +45,7 @@ const LazyFallback = ({ text = "Loading…" }: { text?: string }) => (
 const Diagnostics = lazy(() => import("./pages/Diagnostics"));
 const Strategy = lazy(() => import("./pages/Strategy"));
 const StrategySettings = lazy(() => import("./pages/StrategySettings"));
+const StrategyDebug = lazy(() => import("./pages/StrategyDebug"));
 const EnrichmentVerification = lazy(() => import("./pages/EnrichmentVerification"));
 const ExecuteWorkspace = lazy(() => import("./pages/ExecuteWorkspace"));
 const BulkExtractRunner = lazy(() => import("./pages/BulkExtractRunner"));
@@ -139,6 +140,13 @@ const App = () => (
                     <ProtectedPage routeName="Strategy Settings · Pill">
                       <Suspense fallback={<LazyFallback />}>
                         <StrategySettings />
+                      </Suspense>
+                    </ProtectedPage>
+                  } />
+                  <Route path="/strategy/debug" element={
+                    <ProtectedPage routeName="Strategy Debug">
+                      <Suspense fallback={<LazyFallback text="Loading debug…" />}>
+                        <StrategyDebug />
                       </Suspense>
                     </ProtectedPage>
                   } />
