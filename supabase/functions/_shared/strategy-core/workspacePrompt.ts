@@ -232,7 +232,8 @@ function renderRetrievalPosture(contract: WorkspaceContract): string {
   const r = contract.retrievalRules;
   const ctxLabel = CONTEXT_MODE_LABELS[r.contextMode] ?? r.contextMode;
   return `── Retrieval Posture ──
-- Library use: ${r.libraryUse} (the user's library is universal context — this controls how heavily it leads, never whether it is available).
+- The user's library is Strategy's "degree in sales" — the standing definition of what good looks like. It carries TWO roles on every request: RESOURCE (citation-eligible factual grounding) and STANDARD / EXEMPLAR / PATTERN (the quality bar that shapes how you think and write). Standards guide structure and posture even when not cited; never cite a standard unless you directly borrow its language.
+- Library use (RESOURCE posture): ${r.libraryUse} (controls how heavily the library leads as factual grounding — never whether it is available, and never disables the STANDARD role).
 - Web mode: ${r.webMode}.
 - Context mode: ${ctxLabel}.
 - Citation posture: ${r.citationMode} (posture only — citation behavior is not enforced at this stage; match the posture in your prose).`;
