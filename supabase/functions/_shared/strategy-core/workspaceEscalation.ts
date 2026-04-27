@@ -28,6 +28,11 @@ import type {
   CitationCheckResult,
 } from "./citationEnforcement.ts";
 import type {
+  CalibrationConfidence as W65CalibrationConfidence,
+  CalibrationResult,
+  CalibrationVerdict,
+} from "./libraryCalibration.ts";
+import type {
   RetrievalDecisionLog,
 } from "./retrievalEnforcement.ts";
 import type {
@@ -69,6 +74,12 @@ export interface EscalationInputs {
   /** runTask only — task type / run id (for telemetry correlation). */
   taskType?: string;
   runId?: string;
+  /**
+   * W6.5 Pass B calibration output. When present, W7.5 overlay rules
+   * fire AFTER the existing trigger-driven rules (additive — never
+   * replaces). Shadow-only, no behavior change beyond telemetry.
+   */
+  calibration?: CalibrationResult | null;
 }
 
 export interface EscalationSuggestion {
@@ -84,6 +95,12 @@ export interface EscalationSuggestion {
   confidence: EscalationConfidence;
   /** Always true in W7. */
   shadow: true;
+  /**
+   * W7.5 — set when this suggestion was emitted by the calibration
+   * overlay (vs. the contract trigger registry). Existing rule-driven
+   * suggestions are tagged "rule".
+   */
+  source?: "rule" | "calibration_overlay";
 }
 
 export interface EscalationRunSummary {
@@ -98,7 +115,17 @@ export interface EscalationRunSummary {
   totals: {
     rulesEvaluated: number;
     suggestionsEmitted: number;
+    /** W7.5 — count emitted via the calibration overlay. */
+    overlaySuggestionsEmitted: number;
+    /** W7.5 — count of pre-existing suggestions whose confidence was downgraded. */
+    overlayDowngrades: number;
   };
+  /**
+   * W7.5 — verdict + confidence for telemetry/persistence join.
+   * Undefined when no calibration result was provided.
+   */
+  calibrationVerdict?: CalibrationVerdict;
+  calibrationConfidence?: W65CalibrationConfidence;
 }
 
 // ─── Tiny helpers ─────────────────────────────────────────────────
@@ -557,7 +584,85 @@ export function evaluateEscalationRules(args: {
       reason: result.reason,
       confidence: result.confidence,
       shadow: true,
+      source: "rule",
     });
+  }
+
+  // ── W7.5 Calibration-Aware Overlay (shadow-only) ────────────────
+  //
+  // Doctrine: the library defines what "good" looks like. When W6.5
+  // calibration is available we use it to (a) raise smarter promotions
+  // when the output is below standard, (b) flag library gaps when
+  // there weren't enough exemplars, and (c) suppress noise when the
+  // output already meets standard.
+  //
+  // Hard rules:
+  //   • Never replaces existing rule-driven suggestions — additive only.
+  //   • Always shadow:true.
+  //   • Never throws.
+  let overlaySuggestionsEmitted = 0;
+  let overlayDowngrades = 0;
+  const calibration = inputs.calibration ?? undefined;
+  if (calibration) {
+    try {
+      // (A) below_standard + high → recommend Refine.
+      if (
+        calibration.overallVerdict === "below_standard" &&
+        calibration.overallConfidence === "high" &&
+        contract.workspace !== "refine"
+      ) {
+        suggestions.push({
+          id: `${contract.workspace}.escalate.refine.calibration`,
+          sourceWorkspace: contract.workspace,
+          targetWorkspace: "refine",
+          action: "recommend_workspace",
+          trigger: "calibration:below_standard",
+          reason:
+            "Output is below the standard set by your library exemplars.",
+          confidence: "high",
+          shadow: true,
+          source: "calibration_overlay",
+        });
+        overlaySuggestionsEmitted++;
+      }
+
+      // (B) insufficient_exemplars → library gap signal.
+      if (
+        calibration.overallVerdict === "insufficient_exemplars" &&
+        contract.workspace !== "library"
+      ) {
+        suggestions.push({
+          id: `${contract.workspace}.escalate.library.calibration`,
+          sourceWorkspace: contract.workspace,
+          targetWorkspace: "library",
+          action: "log_promotion_suggestion",
+          trigger: "calibration:insufficient_exemplars",
+          reason:
+            "Not enough examples in your library to define what good looks like.",
+          confidence: "medium",
+          shadow: true,
+          source: "calibration_overlay",
+        });
+        overlaySuggestionsEmitted++;
+      }
+
+      // (C) on_standard → suppress noise.
+      // Don't add new suggestions; downgrade existing rule-driven
+      // suggestions to "low" confidence so dashboards can deprioritize.
+      if (calibration.overallVerdict === "on_standard") {
+        for (const s of suggestions) {
+          if (s.source === "rule" && s.confidence !== "low") {
+            s.confidence = "low";
+            overlayDowngrades++;
+          }
+        }
+      }
+    } catch (overlayErr) {
+      console.warn(
+        "[workspace:escalation] W7.5 overlay threw (ignored, shadow):",
+        String(overlayErr).slice(0, 200),
+      );
+    }
   }
 
   return {
@@ -570,7 +675,11 @@ export function evaluateEscalationRules(args: {
     totals: {
       rulesEvaluated: rules.length,
       suggestionsEmitted: suggestions.length,
+      overlaySuggestionsEmitted,
+      overlayDowngrades,
     },
+    calibrationVerdict: calibration?.overallVerdict,
+    calibrationConfidence: calibration?.overallConfidence,
   };
 }
 
@@ -590,6 +699,12 @@ export interface EscalationSuggestionLog {
   reason: string;
   confidence: EscalationConfidence;
   shadow: true;
+  /** W7.5 — "rule" (contract trigger) or "calibration_overlay". */
+  source?: "rule" | "calibration_overlay";
+  /** W7.5 — calibration verdict for this turn (undefined when no calibration). */
+  calibrationVerdict?: CalibrationVerdict;
+  /** W7.5 — calibration overall confidence (undefined when no calibration). */
+  calibrationConfidence?: W65CalibrationConfidence;
 }
 
 export function buildEscalationSuggestionLogs(
@@ -609,6 +724,9 @@ export function buildEscalationSuggestionLogs(
     reason: s.reason,
     confidence: s.confidence,
     shadow: true,
+    source: s.source,
+    calibrationVerdict: summary.calibrationVerdict,
+    calibrationConfidence: summary.calibrationConfidence,
   }));
 }
 
@@ -639,8 +757,12 @@ export interface EscalationPersistenceBlock {
       | "action"
       | "reason"
       | "confidence"
+      | "source"
     >
   >;
+  /** W7.5 — calibration verdict at the time of evaluation. */
+  calibrationVerdict?: CalibrationVerdict;
+  calibrationConfidence?: W65CalibrationConfidence;
 }
 
 export function buildEscalationPersistenceBlock(
@@ -658,6 +780,9 @@ export function buildEscalationPersistenceBlock(
       action: s.action,
       reason: s.reason,
       confidence: s.confidence,
+      source: s.source,
     })),
+    calibrationVerdict: summary.calibrationVerdict,
+    calibrationConfidence: summary.calibrationConfidence,
   };
 }

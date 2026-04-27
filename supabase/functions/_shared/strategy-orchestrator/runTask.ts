@@ -931,6 +931,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // — no LLM judge. Never mutates draft_output. Skips cleanly if
   // Pass A skipped or threw.
   let calibrationPersistenceBlock: CalibrationPersistenceBlock | null = null;
+  let calibrationResult: Awaited<ReturnType<typeof runLibraryCalibration>> | null = null;
   try {
     if (exemplarSet) {
       const requiredSectionIds: string[] | undefined = (() => {
@@ -953,6 +954,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         requiredSectionIds,
       });
       logCalibrationResult(calibration);
+      calibrationResult = calibration;
       calibrationPersistenceBlock = buildCalibrationPersistenceBlock(
         calibration,
       );
@@ -987,6 +989,8 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         libraryHits: w5LibraryHits,
         taskType,
         runId,
+        // W7.5 — calibration-aware overlay (shadow-only, additive).
+        calibration: calibrationResult,
       },
       surface: "run-task",
       taskType,
