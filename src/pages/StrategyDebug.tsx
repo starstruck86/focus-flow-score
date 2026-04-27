@@ -507,35 +507,52 @@ export default function StrategyDebug() {
   const [recentRuns, setRecentRuns] = useState<RecentItem[]>([]);
   const [recentLoading, setRecentLoading] = useState(false);
 
+  const [history, setHistory] = useState<{
+    chat: DriftHistorySummary;
+    task: DriftHistorySummary;
+  } | null>(null);
+
   const loadRecent = async () => {
     setRecentLoading(true);
     try {
       const [{ data: msgs }, { data: runs }] = await Promise.all([
         supabase
           .from("strategy_messages")
-          .select("id, created_at, role, message_type")
+          .select("id, created_at, role, message_type, content_json")
           .order("created_at", { ascending: false })
-          .limit(15),
+          .limit(50),
         supabase
           .from("task_runs")
-          .select("id, created_at, task_type, status")
+          .select("id, created_at, task_type, status, meta")
           .order("created_at", { ascending: false })
-          .limit(15),
+          .limit(50),
       ]);
+      const safeMsgs = msgs ?? [];
+      const safeRuns = runs ?? [];
       setRecentMessages(
-        (msgs ?? []).map((m: any) => ({
+        safeMsgs.slice(0, 15).map((m: any) => ({
           id: m.id,
           createdAt: m.created_at,
           label: `${m.role ?? "?"} · ${m.message_type ?? ""}`,
         })),
       );
       setRecentRuns(
-        (runs ?? []).map((r: any) => ({
+        safeRuns.slice(0, 15).map((r: any) => ({
           id: r.id,
           createdAt: r.created_at,
           label: `${r.task_type ?? "?"} · ${r.status ?? ""}`,
         })),
       );
+      setHistory({
+        chat: summarizeDriftHistory(
+          "chat",
+          safeMsgs.map((m: any) => m.content_json),
+        ),
+        task: summarizeDriftHistory(
+          "task",
+          safeRuns.map((r: any) => r.meta),
+        ),
+      });
     } finally {
       setRecentLoading(false);
     }
