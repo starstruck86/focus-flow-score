@@ -74,6 +74,7 @@ import {
   runWorkspaceGates,
   selectExemplars,
   type StandardContextPersistenceBlock,
+  computeSchemaHealth,
 } from "../strategy-core/index.ts";
 import { resolveTaskWorkspace } from "./taskWorkspace.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
