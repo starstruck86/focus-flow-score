@@ -39,6 +39,13 @@ import {
   parseTaskRunTelemetry,
   type StrategyTelemetrySummary,
 } from "@/lib/strategy/debug/parseStrategyTelemetry";
+import {
+  type SchemaHealthSummary,
+  type SchemaReport,
+  type SchemaStatus,
+  validateChatMessageSchema,
+  validateTaskRunSchema,
+} from "@/lib/strategy/debug/schemaValidators";
 import { useApprovalCheck } from "@/hooks/useApprovalCheck";
 
 type RecordKind = "message" | "run";
