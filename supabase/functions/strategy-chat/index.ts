@@ -5881,6 +5881,46 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
   const giPath: GIPath = v2Active ? "v2" : (mode === "strong" || mode === "partial" || mode === "thin" || mode === "short_form" ? "synthesis" : "v1");
   effectiveSystemPrompt = applyGlobalInstructions(effectiveSystemPrompt, globalInstructions, giPath);
 
+  // ── FINAL LAYER: Brainstorm enforcement (HARD RULES) ──
+  // Must be appended AFTER applyGlobalInstructions so global instructions
+  // cannot soften or override these rules. Scoped strictly to brainstorm.
+  if (workspaceSop?.workspace === "brainstorm") {
+    const brainstormBlock = `
+
+━━━ BRAINSTORM ENFORCEMENT (HARD RULES) ━━━
+You MUST follow these rules:
+1. Do NOT output generic categories such as:
+   - personalization
+   - omnichannel
+   - loyalty
+   - engagement
+   - data utilization
+2. Every angle MUST include:
+   - a specific hypothesis about THIS company (named, not generic)
+   - a point of tension or missed opportunity
+   - why it matters
+   - how to use it in conversation (opener, question, or POV)
+3. If an idea could apply to most companies, discard it.
+4. Each angle must be meaningfully different from the others.
+5. Output 4–6 strong angles maximum.
+6. Then:
+   - identify the top 2–3
+   - explain why they matter
+   - explain when to use them (outbound, discovery, exec meeting, etc.)
+7. If your output is generic, regenerate internally before responding.
+
+This is NOT optional. Do not ignore these rules.
+`;
+    effectiveSystemPrompt = `${effectiveSystemPrompt}${brainstormBlock}`;
+    console.log(
+      `[strategy-sop] injected-brainstorm-enforcement-final ${JSON.stringify({
+        workspace: "brainstorm",
+        length: brainstormBlock.length,
+        position: "post-global-instructions",
+      })}`,
+    );
+  }
+
   const messages = [
     { role: "system" as const, content: effectiveSystemPrompt },
     ...priorMessages.map((m) => ({
