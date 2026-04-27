@@ -60,6 +60,54 @@ const TASK_LABELS: Record<StrategyTaskSopKey, string> = {
 };
 
 // ──────────────────────────────────────────────────────────────────────────
+// SOP runtime status registry — single source of truth for what each
+// stored SOP slot actually does at runtime today. Drives badge copy and
+// card subtitle. Update this when a slot's runtime behavior changes.
+// ──────────────────────────────────────────────────────────────────────────
+
+type SopRuntimeTone = 'live' | 'shadow' | 'staged' | 'coming_soon';
+
+interface SopRuntimeStatus {
+  /** Short chip label rendered in the card header. */
+  badge: string;
+  /** Plain-English subtitle (replaces the misleading Phase 1 copy). */
+  subtitle: string;
+  /** Visual tone for the chip. */
+  tone: SopRuntimeTone;
+}
+
+const TONE_STYLE: Record<SopRuntimeTone, { bg: string; fg: string }> = {
+  live:        { bg: 'hsl(140 60% 40% / 0.14)', fg: 'hsl(140 50% 32%)' },
+  shadow:      { bg: 'hsl(38 90% 50% / 0.16)',  fg: 'hsl(32 75% 38%)' },
+  staged:      { bg: 'hsl(var(--sv-line) / 0.6)', fg: 'hsl(var(--sv-muted))' },
+  coming_soon: { bg: 'hsl(var(--sv-line) / 0.4)', fg: 'hsl(var(--sv-muted))' },
+};
+
+const GLOBAL_STATUS: SopRuntimeStatus = {
+  badge: 'Staged — not active yet',
+  subtitle: 'Stored only. Global SOP does not yet shape chat behavior — Global Instructions (in the section above) is the active universal layer today.',
+  tone: 'staged',
+};
+
+const WORKSPACE_STATUSES: Record<StrategyWorkspaceSopKey, SopRuntimeStatus> = {
+  brainstorm:    { badge: 'Chat advisory live', subtitle: 'Active in chat as an advisory block when this workspace is selected. Does not override grounding, citation, or synthesis rules.', tone: 'live' },
+  deep_research: { badge: 'Chat advisory live', subtitle: 'Active in chat as an advisory block when this workspace is selected. Does not override grounding, citation, or synthesis rules.', tone: 'live' },
+  refine:        { badge: 'Chat advisory live', subtitle: 'Active in chat as an advisory block when this workspace is selected. Does not override grounding, citation, or synthesis rules.', tone: 'live' },
+  library:       { badge: 'Chat advisory live', subtitle: 'Active in chat as an advisory block when this workspace is selected. Does not override grounding, citation, or synthesis rules.', tone: 'live' },
+  artifacts:     { badge: 'Chat advisory live', subtitle: 'Active in chat as an advisory block when this workspace is selected. Does not override grounding, citation, or synthesis rules.', tone: 'live' },
+  work:          { badge: 'Freeform rail — SOP not currently applied', subtitle: 'Work is the freeform rail. Workspace SOPs are intentionally not injected here — only Global Instructions apply.', tone: 'staged' },
+  projects:      { badge: 'Organization surface — SOP not currently applied', subtitle: 'Projects is an organization surface, not a chat workspace. Stored SOP is preserved but not injected at runtime.', tone: 'staged' },
+};
+
+const TASK_STATUSES: Record<StrategyTaskSopKey, SopRuntimeStatus> = {
+  discovery_prep:   { badge: 'Task validation live — shadow / protected', subtitle: 'Discovery Prep runs shadow input/output validation against this SOP and persists results to the run record. Output is never modified — Discovery Prep quality is protected.', tone: 'shadow' },
+  account_research: { badge: 'Task validation live — shadow', subtitle: 'Account Research (Account Brief) runs shadow input/output validation against this SOP and persists results. Output is not modified yet; one-pass repair is planned for a later phase.', tone: 'shadow' },
+  deal_review:      { badge: 'Coming soon', subtitle: 'Stored only. No task pipeline reads this SOP yet.', tone: 'coming_soon' },
+  recap_email:      { badge: 'Coming soon', subtitle: 'Stored only. No task pipeline reads this SOP yet.', tone: 'coming_soon' },
+  roi_model:        { badge: 'Coming soon', subtitle: 'Stored only. No task pipeline reads this SOP yet.', tone: 'coming_soon' },
+};
+
+// ──────────────────────────────────────────────────────────────────────────
 // Tiny helpers
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -121,11 +169,23 @@ interface SopCardProps {
   defaultName: string;
   contract: StrategySopContract;
   onChange: (patch: Partial<StrategySopContract>) => void;
-  /** Visual hint (workspace tag, task chip, etc.). */
-  badge?: string;
+  /** Runtime status — drives the header chip + subtitle copy. */
+  status: SopRuntimeStatus;
 }
 
-function SopCard({ id, defaultName, contract, onChange, badge }: SopCardProps) {
+function StagedTag({ label = 'Staged' }: { label?: string }) {
+  return (
+    <span
+      className="ml-2 px-1 py-[1px] rounded text-[9.5px] font-semibold uppercase tracking-wide"
+      style={{ background: 'hsl(var(--sv-line) / 0.55)', color: 'hsl(var(--sv-muted))' }}
+      title="Stored only — not consumed at runtime today."
+    >
+      {label}
+    </span>
+  );
+}
+
+function SopCard({ id, defaultName, contract, onChange, status }: SopCardProps) {
   const [nameLocal, setNameLocal] = useState(contract.name);
   const [rawLocal, setRawLocal] = useState(contract.rawInstructions);
   const [requiredSectionsLocal, setRequiredSectionsLocal] = useState(
@@ -140,6 +200,7 @@ function SopCard({ id, defaultName, contract, onChange, badge }: SopCardProps) {
 
   const lib = contract.libraryRules ?? emptyContract(defaultName).libraryRules!;
   const enf = contract.enforcement ?? emptyContract(defaultName).enforcement!;
+  const toneStyle = TONE_STYLE[status.tone];
 
   return (
     <section
@@ -149,27 +210,27 @@ function SopCard({ id, defaultName, contract, onChange, badge }: SopCardProps) {
         border: '1px solid hsl(var(--sv-line))',
       }}
       data-testid={`sop-card-${id}`}
+      data-sop-tone={status.tone}
     >
       <header className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <h3
               className="text-[14px] font-semibold leading-tight"
               style={{ color: 'hsl(var(--sv-ink))' }}
             >
               {contract.name || defaultName}
             </h3>
-            {badge && (
-              <span
-                className="px-1.5 py-0.5 rounded text-[10.5px] font-medium"
-                style={{ background: 'hsl(var(--sv-line) / 0.6)', color: 'hsl(var(--sv-muted))' }}
-              >
-                {badge}
-              </span>
-            )}
+            <span
+              className="px-1.5 py-0.5 rounded text-[10.5px] font-medium"
+              style={{ background: toneStyle.bg, color: toneStyle.fg }}
+              data-testid={`sop-status-${id}`}
+            >
+              {status.badge}
+            </span>
           </div>
           <p className="text-[11.5px]" style={{ color: 'hsl(var(--sv-muted))' }}>
-            Stored only — Phase 1 does not change model behavior yet.
+            {status.subtitle}
           </p>
         </div>
         <Switch
@@ -207,14 +268,14 @@ function SopCard({ id, defaultName, contract, onChange, badge }: SopCardProps) {
             value={rawLocal}
             onChange={(e) => setRawLocal(e.target.value)}
             onBlur={() => { if (rawLocal !== contract.rawInstructions) onChange({ rawInstructions: rawLocal }); }}
-            placeholder="e.g. Open with the recommendation. Always cite KIs by id. Never invent metrics."
+            placeholder='e.g. Open with the recommendation. Cite resources by title in RESOURCE["…"] form. Never invent metrics.'
             className="min-h-[140px] text-[12.5px] leading-relaxed font-mono"
             data-testid={`sop-raw-${id}`}
           />
         </div>
 
-        {/* Library rules */}
-        <div>
+        {/* Library rules — stored only; not consumed by chat or task pipelines today. */}
+        <div className="opacity-70">
           <div className="flex items-center gap-1.5 mb-2">
             <BookOpenCheck className="h-3.5 w-3.5" style={{ color: 'hsl(var(--sv-clay))' }} />
             <span
@@ -223,7 +284,11 @@ function SopCard({ id, defaultName, contract, onChange, badge }: SopCardProps) {
             >
               Library rules
             </span>
+            <StagedTag />
           </div>
+          <p className="text-[11px] mb-2" style={{ color: 'hsl(var(--sv-muted))' }}>
+            Stored for a future release. Today, library citation behavior is governed by the global Strategy citation audit, not by these per-SOP toggles.
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
             <ToggleRow
               label="Prefer templates"
@@ -253,8 +318,8 @@ function SopCard({ id, defaultName, contract, onChange, badge }: SopCardProps) {
           </div>
         </div>
 
-        {/* Enforcement */}
-        <div>
+        {/* Enforcement — stored only; per-SOP enforcement is not wired today. */}
+        <div className="opacity-70">
           <div className="flex items-center gap-1.5 mb-2">
             <ShieldCheck className="h-3.5 w-3.5" style={{ color: 'hsl(var(--sv-clay))' }} />
             <span
@@ -263,17 +328,21 @@ function SopCard({ id, defaultName, contract, onChange, badge }: SopCardProps) {
             >
               Enforcement
             </span>
+            <StagedTag />
           </div>
+          <p className="text-[11px] mb-2" style={{ color: 'hsl(var(--sv-muted))' }}>
+            Per-SOP enforcement is not active. Discovery Prep and Account Research run shadow validation only. A targeted one-pass repair is planned for Account Research in a later phase.
+          </p>
           <div className="space-y-2.5">
             <ToggleRow
               label="Strict mode"
-              description="Validate required sections before output (Phase 4 will enforce)."
+              description="Staged. Future: validate required sections before output."
               checked={enf.strict}
               onChange={(v) => onChange({ enforcement: { ...enf, strict: v } })}
             />
             <ToggleRow
               label="Self-correct once"
-              description="If validation fails, attempt one silent correction."
+              description="Staged. Future: if validation fails, attempt one targeted repair pass."
               checked={enf.selfCorrectOnce}
               onChange={(v) => onChange({ enforcement: { ...enf, selfCorrectOnce: v } })}
             />
@@ -282,10 +351,10 @@ function SopCard({ id, defaultName, contract, onChange, badge }: SopCardProps) {
                 className="text-[12px] font-medium block mb-1"
                 style={{ color: 'hsl(var(--sv-ink))' }}
               >
-                Required sections
+                Required sections <StagedTag />
               </Label>
               <p className="text-[11px] mb-1.5" style={{ color: 'hsl(var(--sv-muted))' }}>
-                Comma-separated. Used by future validators to gate output.
+                Comma-separated. Stored for a future validator; not enforced today.
               </p>
               <Input
                 value={requiredSectionsLocal}
@@ -350,15 +419,9 @@ export function StrategySopEnginePanel() {
             Strategy SOP Engine
           </h2>
           <p className="text-[12px] mt-0.5" style={{ color: 'hsl(var(--sv-muted))' }}>
-            Define how Strategy behaves at three levels — Global, Workspace, Task.
-            <span
-              className="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] font-medium"
-              style={{ background: 'hsl(var(--sv-line) / 0.6)', color: 'hsl(var(--sv-muted))' }}
-            >
-              Phase 1 · Stored
-            </span>
+            Define how Strategy behaves at three levels — Global, Workspace, Task. Each card shows what is live today vs staged for a future release.
             <span className="ml-1.5 text-[11.5px]" style={{ color: 'hsl(var(--sv-muted))' }}>
-              {enabledCount} active
+              {enabledCount} enabled
             </span>
           </p>
         </div>
@@ -383,7 +446,7 @@ export function StrategySopEnginePanel() {
             defaultName="Global Strategy SOP"
             contract={globalContract}
             onChange={(patch) => updateGlobalSop(patch)}
-            badge="applies to every turn"
+            status={GLOBAL_STATUS}
           />
         </TabsContent>
 
@@ -396,7 +459,7 @@ export function StrategySopEnginePanel() {
                 id={`ws-${key}`}
                 defaultName={`${WORKSPACE_LABELS[key]} SOP`}
                 contract={c}
-                badge={WORKSPACE_LABELS[key]}
+                status={WORKSPACE_STATUSES[key]}
                 onChange={(patch) => updateWorkspaceSop(key, patch)}
               />
             );
@@ -412,7 +475,7 @@ export function StrategySopEnginePanel() {
                 id={`task-${key}`}
                 defaultName={`${TASK_LABELS[key]} SOP`}
                 contract={c}
-                badge={TASK_LABELS[key]}
+                status={TASK_STATUSES[key]}
                 onChange={(patch) => updateTaskSop(key, patch)}
               />
             );
