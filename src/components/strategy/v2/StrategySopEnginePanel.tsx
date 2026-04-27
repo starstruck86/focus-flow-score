@@ -419,15 +419,9 @@ export function StrategySopEnginePanel() {
             Strategy SOP Engine
           </h2>
           <p className="text-[12px] mt-0.5" style={{ color: 'hsl(var(--sv-muted))' }}>
-            Define how Strategy behaves at three levels — Global, Workspace, Task.
-            <span
-              className="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] font-medium"
-              style={{ background: 'hsl(var(--sv-line) / 0.6)', color: 'hsl(var(--sv-muted))' }}
-            >
-              Phase 1 · Stored
-            </span>
+            Define how Strategy behaves at three levels — Global, Workspace, Task. Each card shows what is live today vs staged for a future release.
             <span className="ml-1.5 text-[11.5px]" style={{ color: 'hsl(var(--sv-muted))' }}>
-              {enabledCount} active
+              {enabledCount} enabled
             </span>
           </p>
         </div>
