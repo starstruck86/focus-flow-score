@@ -51,18 +51,29 @@ import {
   logPromptComposition,
 } from "../strategy-core/workspacePrompt.ts";
 import {
+  buildCalibrationPersistenceBlock,
   buildCitationCheckLog,
   buildEscalationPersistenceBlock,
   buildGatePersistenceBlock,
+  buildStandardContextPersistenceBlock,
+  type CalibrationPersistenceBlock,
+  type CitationAuditHit,
   type EscalationPersistenceBlock,
   evaluateEscalationRules,
+  type ExemplarSet,
   type GatePersistenceBlock,
+  inferTopicScopes,
+  logCalibrationResult,
   logCitationCheck,
   logEscalationSuggestions,
   logGateResults,
+  logStandardContext,
+  renderStandardBlock,
   runCitationCheck,
+  runLibraryCalibration,
   runWorkspaceGates,
-  type CitationAuditHit,
+  selectExemplars,
+  type StandardContextPersistenceBlock,
 } from "../strategy-core/index.ts";
 import { resolveTaskWorkspace } from "./taskWorkspace.ts";
 import type { OrchestrationContext, OrchestrationResult, ResearchBundle } from "./types.ts";
@@ -195,7 +206,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     includeEscalationRules: false,
     surface: "run-task",
   });
-  const overlayPrefix = workspaceOverlay.text
+  let overlayPrefix = workspaceOverlay.text
     ? `${workspaceOverlay.text}\n\n`
     : "";
 
@@ -215,6 +226,55 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     console.warn(
       "[workspace:prompt_composition] log failed (non-fatal):",
       (e as Error)?.message,
+    );
+  }
+
+  // ── W6.5 Pass A — Library Standard Context (shadow, pre-gen) ─────
+  // Select 2–4 STANDARD/EXEMPLAR/PATTERN cards from the user's
+  // library and append a "WHAT GOOD LOOKS LIKE" guidance block to
+  // overlayPrefix so it flows into every task system prompt
+  // (synthesis, authoring, review). The locked task templates are
+  // NOT modified — STANDARDS guide HOW to write, not WHAT to write.
+  // RESOURCE beats STANDARD: anything pulled in via Stage 0 library
+  // retrieval is demoted out of the candidate pool.
+  let exemplarSet: ExemplarSet | null = null;
+  let standardContextBlock: StandardContextPersistenceBlock | null = null;
+  try {
+    const passAScopes = (() => {
+      const fromUser = inferTopicScopes(userContent || "");
+      if (fromUser.length > 0) return fromUser;
+      const fb: string[] = [];
+      const co = (inputs as any)?.company_name;
+      const op = (inputs as any)?.opportunity;
+      if (typeof co === "string" && co.trim()) fb.push(co);
+      if (typeof op === "string" && op.trim()) fb.push(op);
+      return fb.length > 0 ? fb : derivedScopes;
+    })();
+    const retrievedItemIds: string[] = [
+      ...(library.knowledgeItems ?? [])
+        .map((k: any) => String(k?.id ?? ""))
+        .filter((s: string) => s.length > 0),
+      ...(library.playbooks ?? [])
+        .map((p: any) => String(p?.id ?? ""))
+        .filter((s: string) => s.length > 0),
+    ];
+    exemplarSet = await selectExemplars(supabase, userId, {
+      workspace: resolvedContract.workspace,
+      surface: "run-task",
+      taskType,
+      scopes: passAScopes,
+      retrievedItemIds,
+    });
+    logStandardContext(exemplarSet);
+    standardContextBlock = buildStandardContextPersistenceBlock(exemplarSet);
+    const standardsText = renderStandardBlock(exemplarSet);
+    if (standardsText) {
+      overlayPrefix = `${overlayPrefix}${standardsText}\n\n`;
+    }
+  } catch (passAErr) {
+    console.warn(
+      "[workspace:standard_context] run-task threw (ignored, shadow):",
+      String(passAErr).slice(0, 200),
     );
   }
 
@@ -866,6 +926,44 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     );
   }
 
+  // ── W6.5 Pass B — Library Calibration (shadow, post-gen) ─────────
+  // Uses the SAME ExemplarSet from Pass A. Heuristic-only in Phase 1
+  // — no LLM judge. Never mutates draft_output. Skips cleanly if
+  // Pass A skipped or threw.
+  let calibrationPersistenceBlock: CalibrationPersistenceBlock | null = null;
+  try {
+    if (exemplarSet) {
+      const requiredSectionIds: string[] | undefined = (() => {
+        const declared = (handler as { requiredSectionIds?: readonly string[] })
+          .requiredSectionIds;
+        if (Array.isArray(declared) && declared.length > 0) {
+          return [...declared];
+        }
+        return undefined;
+      })();
+      const calibration = runLibraryCalibration({
+        workspace: resolvedContract.workspace,
+        surface: "run-task",
+        taskType,
+        runId,
+        outputText: auditableTaskText || JSON.stringify(draftOutput ?? {}),
+        parsedOutput: draftOutput,
+        userPromptText: userContent || undefined,
+        exemplarSet,
+        requiredSectionIds,
+      });
+      logCalibrationResult(calibration);
+      calibrationPersistenceBlock = buildCalibrationPersistenceBlock(
+        calibration,
+      );
+    }
+  } catch (calErr) {
+    console.warn(
+      "[workspace:calibration_result] run-task threw (ignored, shadow):",
+      String(calErr).slice(0, 200),
+    );
+  }
+
   // ── W7: Escalation rules (shadow-only, advisory) ─────────────────
   // Evaluates whether the task output suggests promoting the user to
   // another workspace (e.g. an account_brief logging a Projects
@@ -926,6 +1024,8 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   if (citationCheckMeta) metaPatch.citation_check = citationCheckMeta;
   if (gatePersistenceBlock) metaPatch.gate_check = gatePersistenceBlock;
   if (escalationPersistenceBlock) metaPatch.escalation_suggestions = escalationPersistenceBlock;
+  if (standardContextBlock) metaPatch.standard_context = standardContextBlock;
+  if (calibrationPersistenceBlock) metaPatch.calibration = calibrationPersistenceBlock;
   finalizePatch.meta = metaPatch;
   const { error: updateErr } = await supabase
     .from("task_runs")
