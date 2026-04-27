@@ -849,14 +849,26 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     console.warn("[sop-output-check] threw (ignored, shadow mode):", String(sopErr).slice(0, 200));
   }
 
+  // ── Phase 5 — Discovery Prep HARD STOP ────────────────────────────
+  // Discovery Prep finalizes via the progressive driver and never
+  // reaches this branch in normal flow, but we add an explicit guard
+  // here so any future refactor that changes routing cannot silently
+  // turn enforcement on for discovery_prep. Double-gated by env flag
+  // STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT (default false).
+  const discoveryPrepEnforcementBlocked =
+    taskType === "discovery_prep" &&
+    STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT !== true;
+
   // ── Phase 4 — Account Brief one-pass SOP repair ───────────────────
   // Activates ONLY for account_brief, ONLY when the initial output
   // check reports missing required outputs. Exactly one repair pass.
-  // Never blocks completion. Discovery Prep is intentionally excluded.
+  // Never blocks completion. Discovery Prep is intentionally excluded
+  // (and additionally hard-stopped above — see Phase 5).
   let sopOutputCheckBefore: ReturnType<typeof validateDraftAgainstSop> | null =
     sopOutputCheck;
   let sopEnforcement: EnforceTaskSopOnceResult | null = null;
   if (
+    !discoveryPrepEnforcementBlocked &&
     taskType === "account_brief" &&
     sop &&
     sopOutputCheck?.ran &&
