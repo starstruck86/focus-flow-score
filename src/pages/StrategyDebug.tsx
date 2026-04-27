@@ -460,6 +460,9 @@ function RecordPanel({ row }: { row: FetchedRow | null }) {
           }
         />
       )}
+      {row && (
+        <EnforcementDryRunCard block={readPersistedEnforcement(row.meta)} />
+      )}
     </div>
   );
 }
