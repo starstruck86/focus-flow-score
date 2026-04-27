@@ -52,6 +52,19 @@ export interface CitationAuditOptions {
    * ("Q3" when they picked "Q2", etc.).
    */
   closedSet?: boolean;
+  /**
+   * Optional KI hit set. When provided AND non-empty, KI["title"] /
+   * KI[id-short] citations in the assistant text are validated against
+   * it. When omitted/empty (the default), KI citations are NOT
+   * scanned — preserving prior behavior for callers that don't yet
+   * thread KI hits through.
+   */
+  kiHits?: CitationAuditHit[];
+  /**
+   * Optional CARD hit set. Same semantics as kiHits but for CARD[…]
+   * citations.
+   */
+  cardHits?: CitationAuditHit[];
 }
 
 export interface CitationAuditResult {
