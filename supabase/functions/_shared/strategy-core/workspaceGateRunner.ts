@@ -369,21 +369,17 @@ const REGISTRY: Record<string, GateImpl> = {
   "projects.references_available_context": ({ assistantText, libraryUsed, retrievalDecision }) => {
     const referenced =
       libraryUsed ||
-      (retrievalDecision?.libraryCoverage === "used") ||
+      (retrievalDecision?.libraryCoverageState === "used") ||
       /\bRESOURCE\[[^\]]+\]/.test(assistantText);
     return referenced
       ? { outcome: "pass", detail: "context referenced" }
       : { outcome: "skipped", detail: "no available context to reference" };
   },
   "projects.no_fabricated_continuity": ({ assistantText, retrievalDecision }) => {
-    // If thread/draft context wasn't used, output must NOT claim "as we
-    // discussed" / "previously decided" / "last time".
-    const usedThread =
-      retrievalDecision?.libraryCoverage === "used" ||
-      (retrievalDecision?.contextOrder ?? []).some((c) =>
-        c === "thread" || c === "draft"
-      );
-    if (usedThread) return { outcome: "pass", detail: "context present" };
+    // If library/thread context wasn't actually used, output must NOT
+    // claim "as we discussed" / "previously decided" / "last time".
+    const usedContext = retrievalDecision?.libraryCoverageState === "used";
+    if (usedContext) return { outcome: "pass", detail: "context present" };
     const t = lower(assistantText);
     const fabricated =
       t.includes("as we discussed") ||
