@@ -51,6 +51,10 @@ import {
   type PersistedSchemaHealth,
   readPersistedSchemaHealth,
 } from "@/lib/strategy/debug/persistedSchemaHealth";
+import {
+  type DriftHistorySummary,
+  summarizeDriftHistory,
+} from "@/lib/strategy/debug/driftHistory";
 import { useApprovalCheck } from "@/hooks/useApprovalCheck";
 
 type RecordKind = "message" | "run";
@@ -437,6 +441,72 @@ function RecordPanel({ row }: { row: FetchedRow | null }) {
   );
 }
 
+// ─── Drift history (W10) ─────────────────────────────────────────
+
+function DriftSummaryCard({ summary }: { summary: DriftHistorySummary }) {
+  const title = summary.source === "chat" ? "Recent chat messages" : "Recent task runs";
+  const { counts, total, topMalformedKeys, topUnknownFieldKeys } = summary;
+  const driftish = counts.drift + counts.validator_error;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          {title}
+          <Badge variant="outline" className="text-[10px]">
+            last {total}
+          </Badge>
+          {driftish > 0 && (
+            <Badge variant="destructive" className="text-[10px] uppercase">
+              {driftish} need attention
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="default">ok: {counts.ok}</Badge>
+          <Badge variant={counts.drift > 0 ? "destructive" : "outline"}>
+            drift: {counts.drift}
+          </Badge>
+          <Badge variant={counts.validator_error > 0 ? "destructive" : "outline"}>
+            validator_error: {counts.validator_error}
+          </Badge>
+          <Badge variant="secondary">missing: {counts.missing}</Badge>
+        </div>
+        {topMalformedKeys.length > 0 && (
+          <div>
+            <p className="text-[11px] font-medium mb-1">Top malformed blocks</p>
+            <div className="flex flex-wrap gap-1">
+              {topMalformedKeys.map((k) => (
+                <Badge key={k.key} variant="destructive" className="text-[10px] font-mono">
+                  {k.key} · {k.count}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+        {topUnknownFieldKeys.length > 0 && (
+          <div>
+            <p className="text-[11px] font-medium mb-1">Top unknown-field blocks</p>
+            <div className="flex flex-wrap gap-1">
+              {topUnknownFieldKeys.map((k) => (
+                <Badge key={k.key} variant="secondary" className="text-[10px] font-mono">
+                  {k.key} · {k.count}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+        {topMalformedKeys.length === 0 && topUnknownFieldKeys.length === 0 && (
+          <p className="text-[11px] text-muted-foreground italic">
+            No malformed blocks or unknown-field warnings in this window.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Recent rows sidebar ─────────────────────────────────────────
 
 interface RecentItem {
@@ -503,35 +573,52 @@ export default function StrategyDebug() {
   const [recentRuns, setRecentRuns] = useState<RecentItem[]>([]);
   const [recentLoading, setRecentLoading] = useState(false);
 
+  const [history, setHistory] = useState<{
+    chat: DriftHistorySummary;
+    task: DriftHistorySummary;
+  } | null>(null);
+
   const loadRecent = async () => {
     setRecentLoading(true);
     try {
       const [{ data: msgs }, { data: runs }] = await Promise.all([
         supabase
           .from("strategy_messages")
-          .select("id, created_at, role, message_type")
+          .select("id, created_at, role, message_type, content_json")
           .order("created_at", { ascending: false })
-          .limit(15),
+          .limit(50),
         supabase
           .from("task_runs")
-          .select("id, created_at, task_type, status")
+          .select("id, created_at, task_type, status, meta")
           .order("created_at", { ascending: false })
-          .limit(15),
+          .limit(50),
       ]);
+      const safeMsgs = msgs ?? [];
+      const safeRuns = runs ?? [];
       setRecentMessages(
-        (msgs ?? []).map((m: any) => ({
+        safeMsgs.slice(0, 15).map((m: any) => ({
           id: m.id,
           createdAt: m.created_at,
           label: `${m.role ?? "?"} · ${m.message_type ?? ""}`,
         })),
       );
       setRecentRuns(
-        (runs ?? []).map((r: any) => ({
+        safeRuns.slice(0, 15).map((r: any) => ({
           id: r.id,
           createdAt: r.created_at,
           label: `${r.task_type ?? "?"} · ${r.status ?? ""}`,
         })),
       );
+      setHistory({
+        chat: summarizeDriftHistory(
+          "chat",
+          safeMsgs.map((m: any) => m.content_json),
+        ),
+        task: summarizeDriftHistory(
+          "task",
+          safeRuns.map((r: any) => r.meta),
+        ),
+      });
     } finally {
       setRecentLoading(false);
     }
@@ -690,6 +777,13 @@ export default function StrategyDebug() {
               {fetchErr}
             </CardContent>
           </Card>
+        )}
+
+        {history && (
+          <div className="grid md:grid-cols-2 gap-4">
+            <DriftSummaryCard summary={history.chat} />
+            <DriftSummaryCard summary={history.task} />
+          </div>
         )}
 
         <div className="grid md:grid-cols-[1fr_280px] gap-4">

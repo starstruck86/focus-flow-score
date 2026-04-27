@@ -183,7 +183,7 @@ Deno.test("Doctrine #4: Pass B never mutates outputText (byte equality)", () => 
   assertEquals(original, snapshot, "outputText was mutated by Pass B");
   // Result must not carry an alternate draft in Phase 1.
   assertEquals(
-    (result as Record<string, unknown>).improvedDraft,
+    (result as unknown as Record<string, unknown>).improvedDraft,
     undefined,
     "Phase 1 must not emit improvedDraft.",
   );
@@ -198,8 +198,8 @@ Deno.test("Doctrine #5: Pass B never emits improvedDraft in Phase 1", () => {
     outputText: "Below-standard answer.",
   });
   assert(
-    !("improvedDraft" in (result as Record<string, unknown>)) ||
-      (result as Record<string, unknown>).improvedDraft === undefined,
+    !("improvedDraft" in (result as unknown as Record<string, unknown>)) ||
+      (result as unknown as Record<string, unknown>).improvedDraft === undefined,
     "improvedDraft must not be present in Phase 1.",
   );
 });

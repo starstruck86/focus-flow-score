@@ -458,7 +458,11 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // per-batch ladder as the PRIMARY authoring path. Claude remains first
   // per batch; ChatGPT (gpt-5) fallback is per-batch and exception-only.
   // Other task types still use the monolithic-first path below.
-  const BOUNDED_BATCH_FIRST = taskType === "discovery_prep";
+  // NOTE: discovery_prep returns above (line ~351) via the progressive
+  // handoff branch, so this code path is reached only by other task types.
+  // Cast widens the narrowed union so the (intentionally false) comparison
+  // remains valid TS without changing runtime behavior.
+  const BOUNDED_BATCH_FIRST = (taskType as string) === "discovery_prep";
 
   try {
     let documentRaw: string;
