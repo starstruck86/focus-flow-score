@@ -38,6 +38,10 @@ import {
   type SopContractLike,
 } from "./sopValidator.ts";
 import {
+  enforceTaskSopOnce,
+  type EnforceTaskSopOnceResult,
+} from "./enforceTaskSopOnce.ts";
+import {
   buildRetrievalDecisionLog,
   decideLibraryQuery,
   decideWebQuery,
