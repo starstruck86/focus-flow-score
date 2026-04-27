@@ -5639,10 +5639,85 @@ async function handleChat(
     `[mode] intent=${intent.intent} mode=${mode} reason=${modeReason} provider=${route.primaryProvider} model=${route.model} routing=${modeRoute._routingReason}${shortFormKind ? ` sf_kind=${shortFormKind}` : ""}`,
   );
 
+  // ── Phase 7B — SOP AUTHORITY UPGRADE ──
+  // Build SOP blocks with strong, directive framing and inject them HIGH in
+  // the prompt — immediately after the core identity (systemPrompt) and
+  // BEFORE the V1/V2/synthesis reasoning preamble. This ensures SOPs act as
+  // behavioral authority layers, not passive trailing text. They still must
+  // not override grounding, citation, or safety rules — that precedence is
+  // stated explicitly inside the block.
+  const buildGlobalSopBlock = (): string => {
+    if (!globalSop || globalSop.rawInstructions.length === 0) return "";
+    return `
+
+━━━ GLOBAL STRATEGY SOP (OPERATING STANDARD) ━━━
+You MUST follow the operating standard below when producing your response.
+This defines how you:
+- think
+- structure answers
+- determine depth
+- use research
+- produce outputs
+
+These instructions apply to ALL responses unless they conflict with:
+- grounding rules
+- citation requirements
+- safety constraints
+
+If a conflict exists:
+- preserve grounding and safety
+- otherwise follow this SOP
+
+${globalSop.rawInstructions}
+
+Before finalizing your response, ensure it reflects this SOP.
+If it does not: improve it before returning.
+`;
+  };
+  const buildWorkspaceSopBlock = (): string => {
+    if (!workspaceSop || workspaceSop.rawInstructions.length === 0) return "";
+    return `
+
+━━━ WORKSPACE SOP (${(workspaceSop.workspace ?? "workspace").toString().toUpperCase()} MODE) ━━━
+You MUST operate in this workspace mode.
+
+This defines:
+- how you approach the task
+- how you structure output
+- how much depth to apply
+- how to balance expansion vs precision
+
+This modifies how you apply the global SOP for this specific task.
+
+${workspaceSop.rawInstructions}
+
+Before finalizing your response, ensure it reflects this SOP.
+If it does not: improve it before returning.
+`;
+  };
+  const sopAuthorityBlock = `${buildGlobalSopBlock()}${buildWorkspaceSopBlock()}`;
+  if (sopAuthorityBlock.length > 0) {
+    console.log(
+      `[strategy-sop] injected-sop-authority-early ${JSON.stringify({
+        global_present: !!globalSop && globalSop.rawInstructions.length > 0,
+        workspace: workspaceSop?.workspace ?? null,
+        workspace_present: !!workspaceSop && workspaceSop.rawInstructions.length > 0,
+        block_length: sopAuthorityBlock.length,
+        position: "post-core-identity / pre-reasoning-preamble",
+      })}`,
+    );
+  } else {
+    console.log(
+      `[strategy-sop] injected-sop-authority-early skipped: no SOP payload`,
+    );
+  }
+
   // Inject a small thinking-path preamble into the system prompt for grounded
   // modes so the assistant opens with what it found and what it's extending.
   // The preamble is appended; the model must obey the original mode-lock too.
-  let effectiveSystemPrompt = systemPrompt;
+  // SOPs are prepended via sopAuthorityBlock so they sit between core identity
+  // and the reasoning preamble.
+  let effectiveSystemPrompt = `${systemPrompt}${sopAuthorityBlock}`;
   if (mode === "short_form") {
     // SHORT-FORM mode-lock: tight output shape, no synthesis scaffolding.
     const shapeRule = shortFormKind === "subject_lines"
@@ -5664,7 +5739,7 @@ USE the library voice/angles for grounding, but DO NOT produce a long synthesis 
 ${shapeRule}
 If grounded vs extended distinction is material, tag each option [Grounded] or [Extended].
 Forbidden: long preambles, multi-section frameworks, "let me walk you through" openers.`;
-    effectiveSystemPrompt = `${systemPrompt}${preamble}`;
+    effectiveSystemPrompt = `${systemPrompt}${sopAuthorityBlock}${preamble}`;
   } else if (mode === "strong" || mode === "partial" || mode === "thin") {
     const preamble = `
 
@@ -5678,7 +5753,7 @@ ${
     : "THIN grounding: open with one honest line stating what was found (e.g. 'Found 1 weakly related resource and no supporting KIs'). Then proceed using general reasoning. Mark assumptions. Offer one specific clarifying question at the end if it would materially sharpen the output. NEVER refuse, NEVER produce a one-line stop."
 }
 Forbidden: canned refusals like "I don't have enough signal" without ALSO producing the best first-pass answer you can.`;
-    effectiveSystemPrompt = `${systemPrompt}${preamble}`;
+    effectiveSystemPrompt = `${systemPrompt}${sopAuthorityBlock}${preamble}`;
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -5719,7 +5794,10 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         kiTitles: kiHitList.map((k) => k.title),
       });
       v2Decision = v2.decision;
-      effectiveSystemPrompt = v2.systemPrompt;
+      // V2 builds its own core identity + reasoning. Re-apply SOP authority
+      // immediately after so the SOP remains the controlling behavioral layer
+      // ahead of standards / global instructions / brainstorm enforcement.
+      effectiveSystemPrompt = `${v2.systemPrompt}${sopAuthorityBlock}`;
       // Stash prior turn for wrong-question check later.
       v2EvidenceBase = {
         decision: v2.decision,
@@ -5780,50 +5858,11 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     .filter((m, idx, arr) =>
       !(idx === arr.length - 1 && m.role === "user" && m.text === content)
     );
-  // Phase 2 (Global SOP) — Global SOP advisory injection.
-  // Inject BEFORE the workspace SOP so the order from least-specific to
-  // most-specific is: core/V1/V2/synthesis → GLOBAL SOP → WORKSPACE SOP →
-  // Global Instructions. Advisory only: must not override grounding,
-  // citation, synthesis, or strict-mode rules already specified above.
-  // Task pipelines never reach here with a populated payload (sanitizer
-  // returns null when workflowType is present).
-  if (globalSop && globalSop.rawInstructions.length > 0) {
-    const block = `\n\n━━━ GLOBAL STRATEGY SOP (ADVISORY) ━━━\n${globalSop.rawInstructions}\n\nTreat this as guidance for reasoning, depth, structure, and quality. Do NOT override grounding, citation, or synthesis rules already specified above.\n`;
-    effectiveSystemPrompt = `${effectiveSystemPrompt}${block}`;
-    console.log(
-      `[strategy-sop] injected-global ${JSON.stringify({
-        sopId: globalSop.sopId,
-        length: globalSop.rawInstructions.length,
-      })}`,
-    );
-  } else {
-    console.log(
-      `[strategy-sop] injected-global skipped: present=${!!globalSop} reason=${globalSop ? 'empty' : 'null'}`,
-    );
-  }
-
-  // Phase 3A — Workspace SOP advisory injection.
-  // Append BEFORE global instructions so the global block stays the closest
-  // contract to the model output, and AFTER core/V1/V2/synthesis blocks so
-  // strict mode-lock formatting and synthesis contract remain authoritative.
-  // Treated as advisory only — must not override grounding, citation, or
-  // synthesis rules. Task pipelines (Discovery Prep) are excluded upstream
-  // by the client + server sanitizer (workflowType present → null).
-  if (workspaceSop && workspaceSop.rawInstructions.length > 0) {
-    const block = `\n\n━━━ WORKSPACE SOP (ADVISORY) ━━━\n${workspaceSop.rawInstructions}\n\nTreat the SOP above as guidance for tone, structure, and emphasis in this workspace. It does NOT override grounding, citation, synthesis, or strict-mode rules already specified above.\n`;
-    effectiveSystemPrompt = `${effectiveSystemPrompt}${block}`;
-    console.log(
-      `[strategy-sop] injected-workspace ${JSON.stringify({
-        workspace: workspaceSop.workspace,
-        sopId: workspaceSop.sopId,
-        length: workspaceSop.rawInstructions.length,
-      })}`,
-    );
-  } else {
-    console.log(
-      `[strategy-sop] injected-workspace skipped: present=${!!workspaceSop} reason=${workspaceSop ? 'empty' : 'null'}`,
-    );
-  }
+  // Phase 7B — SOP injection now happens HIGH in the prompt (immediately
+  // after core identity, before reasoning preamble). The legacy late-stage
+  // GLOBAL/WORKSPACE SOP advisory blocks were removed so SOPs no longer sit
+  // beneath the reasoning preamble where the model deprioritized them.
+  // See sopAuthorityBlock above and its application in V1 + V2 paths.
 
   // ── Brainstorm enforcement moved to FINAL system-prompt layer ──
   // See injection block immediately AFTER applyGlobalInstructions below.
