@@ -1072,6 +1072,8 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   if (escalationPersistenceBlock) metaPatch.escalation_suggestions = escalationPersistenceBlock;
   if (standardContextBlock) metaPatch.standard_context = standardContextBlock;
   if (calibrationPersistenceBlock) metaPatch.calibration = calibrationPersistenceBlock;
+  // W12 — enforcement dry-run BEFORE schema_health so W10 sees it.
+  if (enforcementPersistenceBlock) metaPatch.enforcement_dry_run = enforcementPersistenceBlock;
   // W10 — stamp compact schema-health summary AFTER all blocks are assembled.
   try {
     metaPatch.schema_health = computeSchemaHealth(metaPatch, "task");
