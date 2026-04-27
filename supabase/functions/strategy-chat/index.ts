@@ -2337,6 +2337,32 @@ serve(async (req) => {
       `[strategy-sop] workspace-sop received: present=${!!workspaceSopRaw} sanitized=${!!cleanWorkspaceSop} workspace=${cleanWorkspaceSop?.workspace ?? 'none'} length=${cleanWorkspaceSop?.rawInstructions.length ?? 0}`,
     );
 
+    // Phase 2 (Global SOP) — chat-only advisory injection.
+    // Mirrors the workspace SOP sanitizer but applies to the universal
+    // Global SOP. Task pipelines (workflowType set) NEVER receive it.
+    // Hard cap protects against oversized payloads.
+    const GLOBAL_SOP_MAX_CHARS = 12_000;
+    const cleanGlobalSop = ((): {
+      sopId: 'global';
+      name: string;
+      rawInstructions: string;
+    } | null => {
+      if (!globalSopRaw || typeof globalSopRaw !== 'object') return null;
+      // Never inject during a task pipeline (Discovery Prep etc.).
+      if (typeof workflowType === 'string' && workflowType.length > 0) return null;
+      const g = globalSopRaw as Record<string, unknown>;
+      const name = typeof g.name === 'string' && g.name.trim().length > 0
+        ? g.name.slice(0, 120) : 'Global Strategy SOP';
+      const raw = typeof g.rawInstructions === 'string'
+        ? g.rawInstructions.trim().slice(0, GLOBAL_SOP_MAX_CHARS)
+        : '';
+      if (!raw) return null;
+      return { sopId: 'global', name, rawInstructions: raw };
+    })();
+    console.log(
+      `[strategy-sop] global-sop received: present=${!!globalSopRaw} sanitized=${!!cleanGlobalSop} length=${cleanGlobalSop?.rawInstructions.length ?? 0}`,
+    );
+
     // ── Debug: OpenAI key health check ──────────────────────
     // Phase 0 acceptance gate. Returns 200 only when the key is shaped
     // correctly AND a real round-trip to api.openai.com succeeds.
@@ -2563,6 +2589,7 @@ serve(async (req) => {
       cleanGlobalInstructions,
       cleanWorkspaceSop,
       workspace,
+      cleanGlobalSop,
     );
   } catch (e) {
     console.error("strategy-chat error:", e);
