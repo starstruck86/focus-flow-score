@@ -42,6 +42,17 @@ import {
   runCitationCheck,
   runLibraryLookup,
   runWorkspaceGates,
+  // ─── W6.5 Library Calibration Layer ─────────────────────────────
+  buildCalibrationLog,
+  buildCalibrationPersistenceBlock,
+  buildStandardContextLog,
+  buildStandardContextPersistenceBlock,
+  type ExemplarSet,
+  logCalibrationResult,
+  logStandardContext,
+  renderStandardBlock,
+  runLibraryCalibration,
+  selectExemplars,
   saveWorkingThesisState,
   shouldUseStrategyCorePrompt,
   type ThesisStatePatch,
@@ -5753,6 +5764,49 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     );
   }
 
+  // ── W6.5 Pass A — Library Standard Context (shadow, pre-gen) ──
+  // Select 2–4 STANDARD/EXEMPLAR/PATTERN cards from the user's
+  // library, demote anything already retrieved as a RESOURCE
+  // (RESOURCE beats STANDARD), and inject a "WHAT GOOD LOOKS LIKE"
+  // block. This shapes HOW the model writes — it is NOT citation
+  // material. The same `exemplarSet` is reused by Pass B post-gen.
+  let exemplarSet: ExemplarSet | null = null;
+  let standardContextBlock: ReturnType<typeof buildStandardContextPersistenceBlock> | null = null;
+  try {
+    const passAScopes = (() => {
+      const fromUser = inferTopicScopes(content || "");
+      if (fromUser.length > 0) return fromUser;
+      // Fall back to account/opportunity names so the standards block
+      // still matches the conversational frame.
+      const fb: string[] = [];
+      if (pack.account?.name) fb.push(pack.account.name);
+      if (pack.opportunity?.name) fb.push(pack.opportunity.name);
+      return fb;
+    })();
+    const retrievedItemIds = [
+      ...resourceHits.map((h) => h.id),
+      ...kiHitList.map((k) => k.id),
+      ...pickedResourceIds,
+    ];
+    exemplarSet = await selectExemplars(supabase, userId, {
+      workspace: __resolvedContract.workspace,
+      surface: "strategy-chat",
+      scopes: passAScopes,
+      retrievedItemIds,
+    });
+    logStandardContext(exemplarSet);
+    standardContextBlock = buildStandardContextPersistenceBlock(exemplarSet);
+    const standardsText = renderStandardBlock(exemplarSet);
+    if (standardsText) {
+      effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n${standardsText}\n`;
+    }
+  } catch (passAErr) {
+    console.warn(
+      "[workspace:standard_context] threw (ignored, shadow):",
+      String(passAErr).slice(0, 200),
+    );
+  }
+
   // Phase 2 — Apply lightweight Global Instructions at the FINAL prompt stage.
   // Single shared helper used at every LLM call site so V1, V2, and any
   // future grounded-strategy path all flow through the same injection.
@@ -6005,6 +6059,31 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     } catch (gateErr) {
       console.warn("[workspace:gate_result] threw (ignored, shadow):", String(gateErr).slice(0, 200));
     }
+    // ── W6.5 Pass B — Library Calibration (shadow, post-gen) ─────
+    // Uses the SAME ExemplarSet from Pass A. Heuristic-only in
+    // Phase 1 — no LLM judge. Never mutates assistant output.
+    let calibrationBlock:
+      | ReturnType<typeof buildCalibrationPersistenceBlock>
+      | null = null;
+    try {
+      if (exemplarSet) {
+        const calibration = runLibraryCalibration({
+          workspace: __resolvedContract.workspace,
+          surface: "strategy-chat",
+          threadId,
+          outputText: auditedVisible,
+          userPromptText: content,
+          exemplarSet,
+        });
+        logCalibrationResult(calibration);
+        calibrationBlock = buildCalibrationPersistenceBlock(calibration);
+      }
+    } catch (calErr) {
+      console.warn(
+        "[workspace:calibration_result] threw (ignored, shadow):",
+        String(calErr).slice(0, 200),
+      );
+    }
     // ── W7: Escalation rules (shadow-only, advisory) ─────────────
     let w7EscalationBlock: ReturnType<typeof buildEscalationPersistenceBlock> | null = null;
     try {
@@ -6050,6 +6129,8 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           : undefined,
         gate_check: w6GateBlock ?? undefined,
         escalation_suggestions: w7EscalationBlock ?? undefined,
+        standard_context: standardContextBlock ?? undefined,
+        calibration: calibrationBlock ?? undefined,
         routing_decision: (() => {
           const base: any = {
             mode,
