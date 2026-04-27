@@ -273,3 +273,25 @@ export type {
   SchemaHealthCompact,
   SchemaStatus as SchemaHealthBlockStatus,
 } from "./schemaHealth.ts";
+
+// ─── Enforcement Policy Registry (W12, dry-run only) ──────────────
+export {
+  buildEnforcementLogs,
+  buildEnforcementPersistenceBlock,
+  logEnforcementDryRun,
+  POLICY_REGISTRY,
+  runEnforcementDryRun,
+} from "./enforcementPolicy.ts";
+export type {
+  EnforcementInputs,
+  EnforcementPersistenceBlock,
+  EnforcementRunSummary,
+  EnforcementSurface,
+  PolicyDefinition,
+  PolicyEvaluation,
+  PolicyId,
+  PolicyLayer,
+  PolicySignal,
+  PolicyState,
+  PolicyStateOverrides,
+} from "./enforcementPolicy.ts";
