@@ -1031,6 +1031,15 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   if (escalationPersistenceBlock) metaPatch.escalation_suggestions = escalationPersistenceBlock;
   if (standardContextBlock) metaPatch.standard_context = standardContextBlock;
   if (calibrationPersistenceBlock) metaPatch.calibration = calibrationPersistenceBlock;
+  // W10 — stamp compact schema-health summary AFTER all blocks are assembled.
+  try {
+    metaPatch.schema_health = computeSchemaHealth(metaPatch, "task");
+  } catch (shErr) {
+    console.warn(
+      "[schema_health] runTask stamping failed (ignored):",
+      String(shErr).slice(0, 200),
+    );
+  }
   finalizePatch.meta = metaPatch;
   const { error: updateErr } = await supabase
     .from("task_runs")
