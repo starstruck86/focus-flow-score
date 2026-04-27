@@ -1024,6 +1024,8 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   if (citationCheckMeta) metaPatch.citation_check = citationCheckMeta;
   if (gatePersistenceBlock) metaPatch.gate_check = gatePersistenceBlock;
   if (escalationPersistenceBlock) metaPatch.escalation_suggestions = escalationPersistenceBlock;
+  if (standardContextBlock) metaPatch.standard_context = standardContextBlock;
+  if (calibrationPersistenceBlock) metaPatch.calibration = calibrationPersistenceBlock;
   finalizePatch.meta = metaPatch;
   const { error: updateErr } = await supabase
     .from("task_runs")
