@@ -6741,6 +6741,52 @@ This is NOT optional. Do not ignore these rules.
           retrievalDiagnostics,
         });
 
+        // ── Phase 7A: behavior-check + mode-check (observability only) ──
+        try {
+          const ws = (workspaceSop?.workspace ?? "work") as string;
+          const txt = finalVisible || "";
+          const len = txt.length;
+          const containsStructure = /(^|\n)\s*(#{1,6}\s|[-*•]\s|\d+\.\s|\|.*\|)/m.test(txt);
+          const containsExecSummary = /executive summary|tl;dr|top-line|bottom line/i.test(txt);
+          const trimmed = txt.trim();
+          const containsQuestions = /\?\s*$/.test(trimmed) || (txt.match(/\?/g)?.length ?? 0) >= 2;
+          const containsCitations = /(RESOURCE\[|KI\[|CARD\[)/.test(txt);
+          const estimatedDepth = len < 500 ? "low" : len <= 1500 ? "medium" : "high";
+
+          console.log(
+            `[strategy-sop][behavior-check] ${JSON.stringify({
+              workspace: ws,
+              response_length: len,
+              contains_structure: containsStructure,
+              contains_executive_summary: containsExecSummary,
+              contains_questions: containsQuestions,
+              contains_citations: containsCitations,
+              estimated_depth: estimatedDepth,
+            })}`,
+          );
+
+          // Lightweight mode classification heuristic.
+          const lower = txt.toLowerCase();
+          const angleHits = (lower.match(/\bangle\b|\bhypothesis\b|\bopener\b|\bpov\b/g) || []).length;
+          const evidenceHits = (lower.match(/\bsource\b|\bevidence\b|\baccording to\b|\bper \w+ \(/g) || []).length;
+          const refineHits = /\brewrit|\brevised|\bedit(ed)?\b|\bbefore:\s|\bafter:\s/i.test(txt);
+          const sectionHits = (txt.match(/(^|\n)#{1,3}\s/g) || []).length;
+          let modeDetected: string = "generic";
+          if (angleHits >= 2 && containsStructure) modeDetected = "brainstorm";
+          else if (refineHits) modeDetected = "refine";
+          else if (sectionHits >= 3 && len > 1200) modeDetected = "artifact";
+          else if (evidenceHits >= 2 || (containsCitations && len > 600)) modeDetected = "research";
+
+          console.log(
+            `[strategy-sop][mode-check] ${JSON.stringify({
+              workspace: ws,
+              mode_detected: modeDetected,
+            })}`,
+          );
+        } catch (bcErr) {
+          console.warn("[strategy-sop][behavior-check] failed (ignored):", String(bcErr).slice(0, 200));
+        }
+
         // Step 4: emit the entire guarded+audited text in ONE SSE
         // delta, then [DONE]. Client renders this atomically — no
         // first-token-drop risk.
