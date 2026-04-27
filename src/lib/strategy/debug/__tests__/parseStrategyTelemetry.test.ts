@@ -101,7 +101,7 @@ describe("parseChatMessageTelemetry — happy path", () => {
 describe("parseChatMessageTelemetry — missing blocks", () => {
   it("handles fully-empty content_json without throwing", () => {
     const result = parseChatMessageTelemetry({});
-    expect(result.layers.length).toBe(7);
+    expect(result.layers.length).toBe(8);
     for (const layer of result.layers) {
       expect(layer.status).toBe("missing");
       expect(layer.raw).toBeNull();
@@ -111,12 +111,14 @@ describe("parseChatMessageTelemetry — missing blocks", () => {
   it("handles null without throwing", () => {
     const result = parseChatMessageTelemetry(null);
     expect(result.source).toBe("chat");
-    expect(result.layers.length).toBe(7);
+    expect(result.layers.length).toBe(8);
     expect(result.badges.standardContextInjected).toBeNull();
     expect(result.badges.calibrationVerdict).toBeNull();
     expect(result.badges.gateFailures).toBe(0);
     expect(result.badges.citationIssues).toBe(0);
     expect(result.badges.escalationCount).toBe(0);
+    expect(result.badges.enforcementWouldFire).toBe(0);
+    expect(result.badges.enforcementEvaluated).toBeNull();
   });
 
   it("handles undefined without throwing", () => {
