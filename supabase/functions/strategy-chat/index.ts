@@ -5739,7 +5739,7 @@ USE the library voice/angles for grounding, but DO NOT produce a long synthesis 
 ${shapeRule}
 If grounded vs extended distinction is material, tag each option [Grounded] or [Extended].
 Forbidden: long preambles, multi-section frameworks, "let me walk you through" openers.`;
-    effectiveSystemPrompt = `${systemPrompt}${preamble}`;
+    effectiveSystemPrompt = `${systemPrompt}${preamble}${sopAuthorityBlock}`;
   } else if (mode === "strong" || mode === "partial" || mode === "thin") {
     const preamble = `
 
