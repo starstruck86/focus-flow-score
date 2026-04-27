@@ -369,6 +369,8 @@ function RecordPanel({ row }: { row: FetchedRow | null }) {
           ))}
         </CardContent>
       </Card>
+
+      {health && <SchemaHealthCard health={health} />}
     </div>
   );
 }
