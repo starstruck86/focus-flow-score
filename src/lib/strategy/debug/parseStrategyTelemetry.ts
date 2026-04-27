@@ -360,6 +360,50 @@ function extractEscalation(meta: unknown): LayerSummary {
   };
 }
 
+function extractEnforcementDryRun(meta: unknown): LayerSummary {
+  const block = getBlock(meta, "enforcement_dry_run");
+  if (block === undefined || block === null) {
+    return {
+      key: "enforcement_dry_run",
+      label: "Enforcement Dry Run",
+      wave: "W12",
+      status: "missing",
+      summary: "no enforcement_dry_run block recorded",
+      raw: null,
+    };
+  }
+  if (!isObject(block)) {
+    return {
+      key: "enforcement_dry_run",
+      label: "Enforcement Dry Run",
+      wave: "W12",
+      status: "failed",
+      summary: "enforcement_dry_run is not an object",
+      raw: block,
+    };
+  }
+  const totals = isObject(block["totals"])
+    ? (block["totals"] as Record<string, unknown>)
+    : null;
+  const evaluated = safeNumber(totals?.["evaluated"]);
+  const wouldFire = safeNumber(totals?.["wouldFire"]);
+  const disabled = safeNumber(totals?.["disabled"]);
+  const errors = safeNumber(totals?.["errors"]);
+  // Block exists → "ran" even if no policy fired (dry-run still ran).
+  const status: LayerStatus = evaluated === 0 ? "skipped" : "ran";
+  return {
+    key: "enforcement_dry_run",
+    label: "Enforcement Dry Run",
+    wave: "W12",
+    status,
+    summary:
+      `evaluated=${evaluated} · wouldFire=${wouldFire} · disabled=${disabled}${
+        errors > 0 ? ` · errors=${errors}` : ""
+      }`,
+    raw: block,
+  };
+}
+
 function extractSop(meta: unknown): LayerSummary | null {
   const block = getBlock(meta, "sop");
   if (block === undefined) return null;
