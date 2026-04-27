@@ -5858,50 +5858,11 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     .filter((m, idx, arr) =>
       !(idx === arr.length - 1 && m.role === "user" && m.text === content)
     );
-  // Phase 2 (Global SOP) — Global SOP advisory injection.
-  // Inject BEFORE the workspace SOP so the order from least-specific to
-  // most-specific is: core/V1/V2/synthesis → GLOBAL SOP → WORKSPACE SOP →
-  // Global Instructions. Advisory only: must not override grounding,
-  // citation, synthesis, or strict-mode rules already specified above.
-  // Task pipelines never reach here with a populated payload (sanitizer
-  // returns null when workflowType is present).
-  if (globalSop && globalSop.rawInstructions.length > 0) {
-    const block = `\n\n━━━ GLOBAL STRATEGY SOP (ADVISORY) ━━━\n${globalSop.rawInstructions}\n\nTreat this as guidance for reasoning, depth, structure, and quality. Do NOT override grounding, citation, or synthesis rules already specified above.\n`;
-    effectiveSystemPrompt = `${effectiveSystemPrompt}${block}`;
-    console.log(
-      `[strategy-sop] injected-global ${JSON.stringify({
-        sopId: globalSop.sopId,
-        length: globalSop.rawInstructions.length,
-      })}`,
-    );
-  } else {
-    console.log(
-      `[strategy-sop] injected-global skipped: present=${!!globalSop} reason=${globalSop ? 'empty' : 'null'}`,
-    );
-  }
-
-  // Phase 3A — Workspace SOP advisory injection.
-  // Append BEFORE global instructions so the global block stays the closest
-  // contract to the model output, and AFTER core/V1/V2/synthesis blocks so
-  // strict mode-lock formatting and synthesis contract remain authoritative.
-  // Treated as advisory only — must not override grounding, citation, or
-  // synthesis rules. Task pipelines (Discovery Prep) are excluded upstream
-  // by the client + server sanitizer (workflowType present → null).
-  if (workspaceSop && workspaceSop.rawInstructions.length > 0) {
-    const block = `\n\n━━━ WORKSPACE SOP (ADVISORY) ━━━\n${workspaceSop.rawInstructions}\n\nTreat the SOP above as guidance for tone, structure, and emphasis in this workspace. It does NOT override grounding, citation, synthesis, or strict-mode rules already specified above.\n`;
-    effectiveSystemPrompt = `${effectiveSystemPrompt}${block}`;
-    console.log(
-      `[strategy-sop] injected-workspace ${JSON.stringify({
-        workspace: workspaceSop.workspace,
-        sopId: workspaceSop.sopId,
-        length: workspaceSop.rawInstructions.length,
-      })}`,
-    );
-  } else {
-    console.log(
-      `[strategy-sop] injected-workspace skipped: present=${!!workspaceSop} reason=${workspaceSop ? 'empty' : 'null'}`,
-    );
-  }
+  // Phase 7B — SOP injection now happens HIGH in the prompt (immediately
+  // after core identity, before reasoning preamble). The legacy late-stage
+  // GLOBAL/WORKSPACE SOP advisory blocks were removed so SOPs no longer sit
+  // beneath the reasoning preamble where the model deprioritized them.
+  // See sopAuthorityBlock above and its application in V1 + V2 paths.
 
   // ── Brainstorm enforcement moved to FINAL system-prompt layer ──
   // See injection block immediately AFTER applyGlobalInstructions below.
