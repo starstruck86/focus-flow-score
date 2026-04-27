@@ -51,6 +51,10 @@ import {
   type PersistedSchemaHealth,
   readPersistedSchemaHealth,
 } from "@/lib/strategy/debug/persistedSchemaHealth";
+import {
+  type DriftHistorySummary,
+  summarizeDriftHistory,
+} from "@/lib/strategy/debug/driftHistory";
 import { useApprovalCheck } from "@/hooks/useApprovalCheck";
 
 type RecordKind = "message" | "run";
