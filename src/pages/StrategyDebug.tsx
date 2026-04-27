@@ -55,6 +55,14 @@ import {
   type DriftHistorySummary,
   summarizeDriftHistory,
 } from "@/lib/strategy/debug/driftHistory";
+import {
+  aggregatePromotionReadiness,
+  classifyChatPromotionReadiness,
+  classifyTaskPromotionReadiness,
+  type PromotionReadiness,
+  type PromotionReadinessAggregate,
+  type PromotionReadinessReport,
+} from "@/lib/strategy/debug/promotionReadiness";
 import { useApprovalCheck } from "@/hooks/useApprovalCheck";
 
 type RecordKind = "message" | "run";
@@ -437,6 +445,15 @@ function RecordPanel({ row }: { row: FetchedRow | null }) {
           </Card>
         );
       })()}
+      {row && (
+        <PromotionReadinessCard
+          report={
+            row.kind === "message"
+              ? classifyChatPromotionReadiness(row.meta)
+              : classifyTaskPromotionReadiness(row.meta)
+          }
+        />
+      )}
     </div>
   );
 }
@@ -507,7 +524,136 @@ function DriftSummaryCard({ summary }: { summary: DriftHistorySummary }) {
   );
 }
 
-// ─── Recent rows sidebar ─────────────────────────────────────────
+// ─── Promotion readiness (W11) ───────────────────────────────────
+
+function readinessVariant(
+  r: PromotionReadiness,
+): "default" | "secondary" | "destructive" | "outline" {
+  if (r === "promotion_candidate") return "default";
+  if (r === "blocked_by_drift") return "destructive";
+  if (r === "not_ready") return "destructive";
+  return "secondary";
+}
+
+function PromotionReadinessCard({
+  report,
+}: {
+  report: PromotionReadinessReport;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          Promotion Readiness (W11)
+          <Badge
+            variant={readinessVariant(report.readiness)}
+            className="text-[10px] uppercase"
+          >
+            {report.readiness}
+          </Badge>
+          <Badge variant="outline" className="text-[10px]">
+            read-only
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex flex-wrap gap-2 text-[11px] font-mono">
+          <Badge variant="outline">
+            schema: {report.signals.schemaHealth}
+          </Badge>
+          <Badge
+            variant={report.signals.gateFailures > 0 ? "destructive" : "outline"}
+          >
+            gate fails: {report.signals.gateFailures}
+          </Badge>
+          <Badge
+            variant={
+              report.signals.citationIssues > 0 ? "destructive" : "outline"
+            }
+          >
+            citation issues: {report.signals.citationIssues}
+          </Badge>
+          <Badge variant="outline">
+            calib: {report.signals.calibrationVerdict ?? "—"}/
+            {report.signals.calibrationConfidence ?? "—"}
+          </Badge>
+          <Badge variant="outline">
+            escalations: {report.signals.escalationCount}
+          </Badge>
+        </div>
+        {report.reasons.length > 0 && (
+          <ul className="text-[11px] text-muted-foreground space-y-0.5 list-disc list-inside">
+            {report.reasons.map((r, i) => (
+              <li key={i} className="font-mono">
+                {r}
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PromotionReadinessHistoryCard({
+  agg,
+}: {
+  agg: PromotionReadinessAggregate;
+}) {
+  const title = agg.source === "chat"
+    ? "Chat — promotion readiness"
+    : "Tasks — promotion readiness";
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          {title}
+          <Badge variant="outline" className="text-[10px]">
+            last {agg.total}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="default">
+            promotion_candidate: {agg.counts.promotion_candidate}
+          </Badge>
+          <Badge variant="secondary">
+            observe_more: {agg.counts.observe_more}
+          </Badge>
+          <Badge
+            variant={agg.counts.not_ready > 0 ? "destructive" : "outline"}
+          >
+            not_ready: {agg.counts.not_ready}
+          </Badge>
+          <Badge
+            variant={
+              agg.counts.blocked_by_drift > 0 ? "destructive" : "outline"
+            }
+          >
+            blocked_by_drift: {agg.counts.blocked_by_drift}
+          </Badge>
+        </div>
+        {agg.topReasons.length > 0 && (
+          <div>
+            <p className="text-[11px] font-medium mb-1">Top reasons</p>
+            <div className="flex flex-wrap gap-1">
+              {agg.topReasons.map((r) => (
+                <Badge
+                  key={r.reason}
+                  variant="outline"
+                  className="text-[10px] font-mono"
+                >
+                  {r.reason} · {r.count}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 interface RecentItem {
   id: string;
@@ -577,6 +723,10 @@ export default function StrategyDebug() {
     chat: DriftHistorySummary;
     task: DriftHistorySummary;
   } | null>(null);
+  const [readiness, setReadiness] = useState<{
+    chat: PromotionReadinessAggregate;
+    task: PromotionReadinessAggregate;
+  } | null>(null);
 
   const loadRecent = async () => {
     setRecentLoading(true);
@@ -615,6 +765,16 @@ export default function StrategyDebug() {
           safeMsgs.map((m: any) => m.content_json),
         ),
         task: summarizeDriftHistory(
+          "task",
+          safeRuns.map((r: any) => r.meta),
+        ),
+      });
+      setReadiness({
+        chat: aggregatePromotionReadiness(
+          "chat",
+          safeMsgs.map((m: any) => m.content_json),
+        ),
+        task: aggregatePromotionReadiness(
           "task",
           safeRuns.map((r: any) => r.meta),
         ),
@@ -783,6 +943,13 @@ export default function StrategyDebug() {
           <div className="grid md:grid-cols-2 gap-4">
             <DriftSummaryCard summary={history.chat} />
             <DriftSummaryCard summary={history.task} />
+          </div>
+        )}
+
+        {readiness && (
+          <div className="grid md:grid-cols-2 gap-4">
+            <PromotionReadinessHistoryCard agg={readiness.chat} />
+            <PromotionReadinessHistoryCard agg={readiness.task} />
           </div>
         )}
 
