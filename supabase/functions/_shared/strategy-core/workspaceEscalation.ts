@@ -354,9 +354,7 @@ const REGISTRY: Record<string, Evaluator> = {
   // ─── Library ────────────────────────────────────────────────────
   "library.escalate.deep_research": ({ libraryHits, retrievalDecision }) => {
     const hits = libraryHits?.length ?? 0;
-    const queried =
-      retrievalDecision?.library?.decision === "run" ||
-      retrievalDecision?.library?.runReason !== undefined;
+    const queried = retrievalDecision?.libraryQueried === true;
     if (queried && hits === 0) {
       return {
         reason: "Library returned zero relevant hits; deep research is required.",
