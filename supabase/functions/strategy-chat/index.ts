@@ -5284,6 +5284,11 @@ async function buildChatSystemPrompt(args: {
       change_vectors_count: (currentStateResult?.log as any)?.change_vectors_count ?? 0,
       change_vectors_y_verified_count: (currentStateResult?.log as any)?.change_vectors_y_verified_count ?? 0,
       change_vectors_y_inferred_count: (currentStateResult?.log as any)?.change_vectors_y_inferred_count ?? 0,
+      // ── Reference Anchor telemetry ────────────────────────────────
+      reference_types: (currentStateResult?.log as any)?.reference_types ?? [],
+      reference_confidences: (currentStateResult?.log as any)?.reference_confidences ?? [],
+      reference_grounded_count: (currentStateResult?.log as any)?.reference_grounded_count ?? 0,
+      reference_with_url_count: (currentStateResult?.log as any)?.reference_with_url_count ?? 0,
       // ── Commercial Insight (Challenger reframe) telemetry ──────────
       commercial_insights_count: (currentStateResult?.log as any)?.commercial_insights_count ?? 0,
       commercial_insights_verified_count: (currentStateResult?.log as any)?.commercial_insights_verified_count ?? 0,
