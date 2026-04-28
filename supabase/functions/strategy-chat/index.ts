@@ -5566,7 +5566,7 @@ async function buildChatSystemPrompt(args: {
 
   if (!useCore) {
     return {
-      prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock),
+      prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock, behaviorContractBlock),
       workingThesis: null,
       resourceHits: [],
       kiHits: [],
@@ -5576,6 +5576,7 @@ async function buildChatSystemPrompt(args: {
       intent,
       modeLockBlock,
       outputModeDecision,
+      behaviorIntent,
     };
   }
 
