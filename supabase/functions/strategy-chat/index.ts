@@ -78,6 +78,14 @@ import {
   runCurrentStatePreflight,
   type CurrentStateResult,
 } from "../_shared/strategy-core/currentStateIntelligence.ts";
+import {
+  selectOutputMode,
+  renderModeContractBody,
+  renderConversationEnforcementBlock,
+  type OutputMode,
+  type OutputModeDecision,
+  type ExplicitFormatKind,
+} from "../_shared/strategy-core/outputMode.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
