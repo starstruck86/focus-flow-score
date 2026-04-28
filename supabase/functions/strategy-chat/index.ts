@@ -5275,6 +5275,11 @@ async function buildChatSystemPrompt(args: {
       context_and_mode_combined: _currentStateUsed && !!outputModeDecision.mode,
       prioritized_signals_count: currentStateResult?.intelligence?.prioritized_signals?.length ?? 0,
       prioritized_signal_types: currentStateResult?.intelligence?.prioritized_signals?.map((s) => s.signal_type) ?? [],
+      // ── Verified-first telemetry (mirrors the preflight log) ───────
+      verified_signals_count: (currentStateResult?.log as any)?.verified_signals_count ?? 0,
+      inferred_signals_count: (currentStateResult?.log as any)?.inferred_signals_count ?? 0,
+      verified_first_applied: (currentStateResult?.log as any)?.verified_first_applied ?? false,
+      prioritized_verified_top_count: (currentStateResult?.log as any)?.prioritized_verified_top_count ?? 0,
       workspace: workspaceKeyRaw ?? null,
     }),
   );
