@@ -6168,6 +6168,22 @@ You MUST follow these rules:
    - explain when to use them (outbound, discovery, exec meeting, etc.)
 7. If your output is generic, regenerate internally before responding.
 
+PER-ANGLE QUALITY BAR (each angle MUST):
+- be meaningfully different from the others
+- contain a clear POV (not a description of what exists)
+- include a "why this works" explanation
+- feel like a real conversation strategy, not a category
+
+Avoid:
+- generic marketing themes (personalization, omnichannel, loyalty, engagement, data utilization)
+- consultant-style language ("highlight", "focus on", "leverage", "emphasize", "showcase")
+- ideas that could apply to any retailer / SaaS / B2B company
+
+Replace those patterns with:
+- a specific framing
+- a specific entry point
+- a specific tension or insight Corey can actually use in conversation
+
 Library use in brainstorm:
 - Use the library to generate STRONGER angles — patterns, named tactics, prior plays — but do NOT collapse to a single known tactic.
 - Do NOT default to library-first answers. Combine library patterns + reasoning + new angles.
