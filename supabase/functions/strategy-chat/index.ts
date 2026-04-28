@@ -6548,6 +6548,17 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
             if (ref.reference_excerpt) lines.push(`       excerpt:    ${ref.reference_excerpt}`);
             lines.push(`       confidence: ${ref.confidence}  (high → state directly · medium → "we're seeing…" · low → "a reasonable assumption is…")`);
           }
+          const fr = (s as any).friction;
+          if (fr) {
+            lines.push(`     friction (problem-first — OPEN THE PATH FROM THIS, never from a solution verb):`);
+            lines.push(`       what is hard:        ${fr.what_is_hard}`);
+            lines.push(`       why it's hard:       ${fr.why_it_is_hard}`);
+            lines.push(`       tradeoff:            ${fr.tradeoff}`);
+            lines.push(`       current-state link:  ${fr.current_state_link}`);
+            lines.push(`       implication:         ${fr.implication}`);
+            lines.push(`       problem-first move:  ${fr.conversation_move}`);
+            lines.push(`       validation Q:        ${fr.validation_question}`);
+          }
         }
       }
 
