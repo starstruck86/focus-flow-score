@@ -1897,12 +1897,13 @@ GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
   }
 
 ═══ CANONICAL OUTPUT SHAPE (every conversation path MUST follow this beat structure, in Corey's spoken voice) ═══
-For each of the 2–3 paths you produce, weave these beats into natural prose (no headings, no bullets unless the user asked for them):
-  1. CURRENT STATE + CHANGE → "They used to <X>. Now they're <Y>." (use the change_vector — never describe the company as static)
-  2. IMPLICATION            → "Which means <what changed / what breaks / business pressure>." (the strategic why, in one breath)
-  3. TENSION                → "The risk / gap is <strategic_tension or what_breaks>." (name the thing the customer hasn't reconciled)
-  4. CONVERSATION MOVE      → "I'd lead by <conversation_move, in first person — what Corey actually says>."
-  5. VALIDATION QUESTION    → "The question I'd ask is <validation_question, in plain customer-facing language>."
+For each of the 2–3 paths you produce, weave these beats into natural prose (no headings, no bullets unless the user asked for them). The path OPENS from the FRICTION — never from a solution:
+  1. FRICTION (PROBLEM)     → "The challenge for a team like this is <friction.what_is_hard>." (open here — never with a solution verb)
+  2. WHY IT'S HARD          → "<friction.why_it_is_hard / friction.tradeoff>." (the constraint behind the constraint)
+  3. CURRENT STATE + CHANGE → "They used to <X>. Now they're <Y>." (use the change_vector — anchors the friction in reality)
+  4. IMPLICATION            → "Which means <implication / what breaks / business pressure>." (the strategic why, in one breath)
+  5. CONVERSATION MOVE      → "So I'd push on <opportunity / tension>." OR "I'd lead by <move>." (first-person — what Corey actually says)
+  6. VALIDATION QUESTION    → "The question I'd ask is <validation_question>." (plain customer-facing language)
 
 HARD CONSTRAINTS (these REPLACE any earlier framing — if a previous instruction conflicts, the canonical shape wins):
 - DO NOT label ideas with category headings ("Acquisition", "Retention", "Lifecycle", "Personalization", "Loyalty", etc.).
