@@ -643,30 +643,38 @@ function renderPromptBlock(
     ? "INFERRED (no CRM match — reasoning from public knowledge)"
     : "MISSING";
 
-  return `═══ CURRENT STATE INTELLIGENCE ═══
+  const bm = intelligence.business_model.summary;
+  const cx = intelligence.customer_experience.what_it_is_like_to_be_a_customer;
+  const mm = intelligence.marketing_motion.likely_new_customer_motion;
+
+  return `═══ CURRENT STATE INTELLIGENCE (working hypotheses — use these as the basis of your response) ═══
 Company: ${c.name}${c.website ? ` (${c.website})` : ""}
 Account context state: ${stateLabel}
 Company confidence: ${c.confidence}
 Web research available this turn: ${webAvailable ? "yes" : "no"}
 
-CURRENT-STATE THESIS (working — refine in your answer):
-- Summary: ${t.summary}
-- Likely gap: ${t.likely_gap}
-- Why now: ${t.why_now}
+WORKING HYPOTHESES ABOUT ${c.name.toUpperCase()} (these are reasoned, not sourced — speak in "likely" voice when reflecting them):
+- Business model: ${bm}
+- Customer experience: ${cx}${mm ? `\n- Marketing current state: ${mm}` : ""}
 - Strategic tension: ${t.strategic_tension}
+- Likely gap (current → future): ${t.likely_gap}
+- Why now: ${t.why_now}
 - Future-state hypothesis: ${t.future_state_hypothesis}
+- Working thesis: ${t.summary}
 
-KNOWN FACTS:
+KNOWN FACTS (sourced):
 ${facts || "- (none in CRM/library — reason from public knowledge of this company)"}
 
 MUST-CONFIRM DISCOVERY QUESTIONS:
 ${mustConfirm}
 
-GENERATION RULES FOR THIS TURN:
-- Anchor every angle/recommendation in this current-state thesis. Do NOT produce generic lifecycle/marketing categories.
-- Distinguish facts from assumptions explicitly. Use "Likely:" or "Assumption:" when not sourced. Never present an inferred claim as a fact.
-- Map current state → future state. Each idea should imply the gap it closes.
-- Turn unknowns into discovery questions Corey can ask, not into hedges.
+GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
+- Your response MUST be built on the working hypotheses above. If a draft does not visibly reflect the business model, customer experience, and strategic tension named for ${c.name}, STOP and rewrite before responding.
+- Do NOT produce generic lifecycle / marketing / engagement categories (e.g. "Acquisition / Activation / Retention / Winback" buckets, "personalize the journey", "build a loyalty program"). The user can already produce that themselves.
+- Frame ideas as conversation strategies: angles Corey can lead with, tensions to surface, hypotheses to test — not capability checklists.
+- Speak hedged hypotheses honestly: use "${c.name} likely…", "in a [model] like ${c.name}'s…", "a reasonable assumption is…". Never present an inferred hypothesis as a sourced fact.
+- Map current state → future state. Each idea should imply the gap it closes for ${c.name} specifically.
+- Turn unknowns into discovery questions Corey can ask, not into hedges in your prose.
 - ${
     webAvailable
       ? "Cite sources when you draw from web research."
