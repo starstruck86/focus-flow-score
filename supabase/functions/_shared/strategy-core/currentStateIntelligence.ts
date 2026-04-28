@@ -1096,8 +1096,10 @@ function buildSkeletonIntelligence(args: {
   resolvedAccount: CurrentStateResult["resolvedAccount"];
   webResearched: boolean;
   hypotheses?: GeneratedHypotheses | null;
+  verifiedSignals?: VerifiedSignal[];
 }): CurrentStateIntelligence {
   const { entityName, resolvedAccount, webResearched, hypotheses } = args;
+  const verifiedSignals = args.verifiedSignals || [];
 
   const sourcedFacts: CurrentStateIntelligence["evidence"]["sourced_facts"] = [];
   if (resolvedAccount) {
@@ -1125,6 +1127,20 @@ function buildSkeletonIntelligence(args: {
       });
     }
   }
+
+  // Promote verified signals (web/library/resource) into sourced_facts
+  // so downstream consumers (citation audits, prompt facts list) treat
+  // them as first-class evidence rather than hypotheses.
+  for (const v of verifiedSignals) {
+    if (v.source === "inference") continue;
+    sourcedFacts.push({
+      claim: v.signal,
+      source_url: v.source_url,
+      source_title: v.source_title,
+      confidence: v.confidence,
+    });
+  }
+
 
   const companyConfidence: ConfidenceLevel = resolvedAccount
     ? "high"
