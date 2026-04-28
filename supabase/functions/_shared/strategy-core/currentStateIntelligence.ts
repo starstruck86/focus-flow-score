@@ -132,6 +132,31 @@ export interface CurrentStateIntelligence {
       confidence: "medium" | "low";
     }>;
   };
+  /**
+   * Top 2–3 ranked signals that should drive the response. Generated
+   * after hypotheses by `generatePrioritizedSignals`. Empty when the
+   * second pass fails — never fabricated.
+   */
+  prioritized_signals: PrioritizedSignal[];
+}
+
+export type SignalType =
+  | "tension"
+  | "revenue_or_growth"
+  | "change_in_motion"
+  | "blind_spot"
+  | "external_event"
+  | "competitive_pressure"
+  | "leadership_or_org"
+  | "product_or_launch";
+
+export interface PrioritizedSignal {
+  rank: 1 | 2 | 3;
+  signal: string;             // The signal itself, named concretely
+  signal_type: SignalType;
+  why_it_matters: string;     // What makes this matter for a first conversation
+  business_impact: string;    // Revenue / growth / risk implication
+  conversation_angle: string; // What Corey can actually say to open or drive on this
 }
 
 export interface CurrentStateResult {
