@@ -5192,6 +5192,8 @@ async function buildChatSystemPrompt(args: {
   rawWorkingThesisBlock?: string;
   /** Current State Intelligence result — surfaced for combined logging at handler. */
   currentStateResult?: CurrentStateResult | null;
+  /** Behavior-intent classification — surfaced for guard + telemetry. */
+  behaviorIntent?: BehaviorIntentResult;
 }> {
   const {
     supabase,
