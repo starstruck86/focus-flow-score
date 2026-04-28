@@ -994,7 +994,10 @@ async function generatePrioritizedSignals(args: {
     const allowedConfidences: ConfidenceLevel[] = ["high", "medium", "low"];
 
     const haveAccount = !!args.resolvedAccount;
-    const haveWeb = !!args.webResearched;
+    const verifiedWeb = (args.verifiedSignals || []).filter((v) => v.source === "web");
+    const verifiedLib = (args.verifiedSignals || []).filter((v) => v.source === "library" || v.source === "resource");
+    const haveWeb = !!args.webResearched && verifiedWeb.length > 0;
+    const haveLibrary = verifiedLib.length > 0;
 
     const cleaned: PrioritizedSignal[] = [];
     for (let i = 0; i < parsed.signals.length && cleaned.length < 3; i++) {
@@ -1028,12 +1031,14 @@ async function generatePrioritizedSignals(args: {
 
       // Trust-down rule: never let the model upgrade a signal beyond
       // what the actual source mix supports. Inference can never
-      // claim "account" or "web" sourcing.
+      // claim "account", "web", or "library" sourcing without backing
+      // verified evidence in the same turn.
       let source: SignalSourceType = allowedSources.includes(s.source_type)
         ? (s.source_type as SignalSourceType)
         : "inference";
       if (source === "account" && !haveAccount) source = "inference";
       if (source === "web" && !haveWeb) source = "inference";
+      if (source === "library" && !haveLibrary) source = "inference";
 
       let confidence: ConfidenceLevel = allowedConfidences.includes(s.confidence)
         ? (s.confidence as ConfidenceLevel)
@@ -1041,9 +1046,8 @@ async function generatePrioritizedSignals(args: {
       // Inference can't be high-confidence.
       if (source === "inference" && confidence === "high") confidence = "medium";
 
-      const rank = (cleaned.length + 1) as 1 | 2 | 3;
       cleaned.push({
-        rank,
+        rank: 1, // re-ranked below after verified-first sort
         signal,
         signal_type: type,
         source_type: source,
@@ -1062,7 +1066,18 @@ async function generatePrioritizedSignals(args: {
         conversation_angle: angle,
       });
     }
+
+    // VERIFIED-FIRST stable sort: any signal with a verifiable
+    // source_type (account / library / web) outranks inference,
+    // regardless of model-assigned rank. Within each tier, preserve
+    // the model's ordering (it already considered impact / tension).
+    const verifiedFirst = (s: PrioritizedSignal) => s.source_type !== "inference" ? 0 : 1;
+    cleaned.sort((a, b) => verifiedFirst(a) - verifiedFirst(b));
+    cleaned.forEach((s, idx) => {
+      s.rank = ((idx + 1) as 1 | 2 | 3);
+    });
     return cleaned;
+
   } catch (e) {
     console.warn(
       "[currentStateIntelligence] signal prioritization failed:",
