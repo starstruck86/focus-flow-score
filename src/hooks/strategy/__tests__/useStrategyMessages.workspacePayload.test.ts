@@ -61,8 +61,7 @@ function mockFetchOnce() {
   const fetchSpy = vi.fn().mockResolvedValue(
     new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
   );
-  // @ts-expect-error overriding global
-  globalThis.fetch = fetchSpy;
+  (globalThis as unknown as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
   return fetchSpy;
 }
 
