@@ -1741,7 +1741,17 @@ function renderPromptBlock(
     ).join("\n\n")
     : "(no commercial insight generated — fall back to leading with the top prioritized signal as the conversation entry, but still open with a POV, not a list)";
 
-  return `═══ CURRENT STATE INTELLIGENCE (verified-first — lead with what we can verify, extend with what we hypothesize) ═══
+  return `═══ UNIFIED STRATEGY PIPELINE (verified → change → prioritized → why → conversation) ═══
+Pipeline contract for THIS turn (do not skip a step, do not reorder):
+  1. Entity detection                         ✓ done
+  2. Verified signal gathering (web/account/library)  ✓ see VERIFIED SIGNALS below
+  3. Change vector construction (X → Y → Z)   ✓ embedded in each PRIORITIZED SIGNAL
+  4. Hypothesis generation (gap-fill only)    ✓ see WORKING HYPOTHESES (use sparingly)
+  5. Signal prioritization (top 2–3)          ✓ see PRIORITIZED SIGNALS
+  6. Strategic why (matters / now / company)  ✓ embedded in each PRIORITIZED SIGNAL
+  7. Conversation execution (what Corey SAYS) ← YOUR JOB IN THE RESPONSE BELOW
+
+═══ CURRENT STATE INTELLIGENCE (verified-first — lead with what we can verify, extend with what we hypothesize) ═══
 Company: ${c.name}${c.website ? ` (${c.website})` : ""}
 Account context state: ${stateLabel}
 Company confidence: ${c.confidence}
