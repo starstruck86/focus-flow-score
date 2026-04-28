@@ -111,9 +111,12 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
           // Phase 2: lightweight Global Instructions. Null when the engine is
           // disabled — server treats absence as "no behavior change".
           globalInstructions: buildGlobalInstructionsPayload() ?? undefined,
-          // Phase 1 SOP Engine — frontend routing metadata only. Backend logs
-          // it but does NOT inject any workspace SOP yet.
-          workspace: sopWorkspace,
+          // Phase 7D-fix — workspace truth. Send the actual selected workspace
+          // (or null when no surface is active). The server logs `workspace_sent`
+          // and `workspace_source` so freeform/no-surface is no longer
+          // indistinguishable from the Work surface.
+          workspace: explicitWorkspace,
+          workspaceSource,
           // Phase 2 SOP Engine — resolver plumbing. Client resolves which
           // SOPs apply (global / workspace / task) and sends a lightweight
           // metadata payload. Server logs it under [strategy-sop] resolved.
