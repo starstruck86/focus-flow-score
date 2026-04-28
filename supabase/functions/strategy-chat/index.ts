@@ -5595,39 +5595,11 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     }),
   );
 
-  // ── CURRENT STATE INTELLIGENCE PREFLIGHT ───────────────────────
-  // When a user mentions a company in an unlinked thread, build a
-  // working current-state thesis (attached if the company resolves to
-  // an existing account, otherwise inferred / low-confidence). The
-  // injected block reorients the model away from generic categories
-  // and toward Corey's "current state → future state" coaching.
-  // Excluded: task pipelines (Discovery Prep, Account Brief). Those
-  // run via run-strategy-task / run-discovery-prep, not this path.
-  let currentStateResult: CurrentStateResult | null = null;
-  try {
-    currentStateResult = await runCurrentStatePreflight({
-      supabase,
-      userId,
-      userContent,
-      workspaceKeyRaw,
-      threadHasLinkedAccount: !!pack.account?.id,
-      isTaskPipeline: false, // chat path; task pipelines bypass buildPromptOnce
-      intentTag: intent?.intent ?? null,
-      // strategy-chat has no live web/research adapter wired today;
-      // stays in "Likely:" voice and avoids any "I researched" phrasing.
-      webCapabilityAvailable: false,
-    });
-    console.log(
-      "[strategy-chat] current_state_preflight",
-      safeJson(currentStateResult.log),
-    );
-  } catch (e) {
-    console.warn(
-      "[strategy-chat] current_state_preflight failed (non-fatal):",
-      (e as Error).message,
-    );
-  }
-
+  // ── CURRENT STATE INTELLIGENCE (already ran above, before output mode).
+  // Reuse the same `currentStateResult` so the prompt carries the SAME
+  // context that telemetry reported as `current_state_used`. This is
+  // the load-bearing guarantee: output mode never bypasses context,
+  // and context never gets re-derived behind output mode's back.
   const currentStateBlock = currentStateResult?.promptBlock
     ? `\n${currentStateResult.promptBlock}\n`
     : "";
