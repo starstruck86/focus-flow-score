@@ -285,15 +285,77 @@ export function enforceBehaviorContract(
   const CATEGORY_RE = /\b(Acquisition|Retention|Lifecycle Marketing|Personalization|Loyalty|Brand Storytelling|Awareness)\b\s*:/;
   if (CATEGORY_RE.test(out)) violations.push("category_bucket_label");
 
-  if (violations.length === 0) {
-    return { triggered: false, text: out, violations, rewrite_applied: false };
+  // ── Depth-floor audit (FLAG-ONLY — never strips, never blocks) ───
+  // Detects "shorter but weaker" — when format compression dropped
+  // the underlying reasoning. Telemetry-only signal so we can spot
+  // the failure mode the user explicitly called out.
+  const auditDepth = (sample: string) => {
+    const lower = sample.toLowerCase();
+    const wordCount = (sample.match(/\b\w+\b/g) || []).length;
+    const has_change_vector =
+      /\b(from\s+[a-z][\w\- ]{1,40}\s+to\s+[a-z]|moving\s+from|shifting\s+from|pivot(?:ing)?\s+from|transitioning\s+from|→|->|–>|—>)/i.test(sample);
+    const has_friction_or_insight =
+      /\b(the\s+(?:hard|harder|real)\s+(?:problem|part)|the\s+challenge\s+(?:for|is|with)|what'?s\s+broken|the\s+reframe|the\s+thing\s+(?:i'?d|we'?d)\s+(?:focus|push|press)|the\s+tension|the\s+risk\s+(?:is|here)|the\s+trap)/i.test(sample);
+    const has_question = /\?\s*$/m.test(sample.trim()) || /\?\s/.test(sample);
+    // Specific anchor proxy: a proper noun OR a quoted/numeric specifier
+    // that isn't a generic marketing term. We flag absence, not presence.
+    const properNounMatches = sample.match(/\b[A-Z][a-zA-Z0-9]{2,}(?:\s+[A-Z][a-zA-Z0-9]+)?\b/g) || [];
+    const has_specific_anchor = properNounMatches.length >= 2 || /\b(\d{1,3}%|\$\d|Q[1-4]|FY\d{2,4}|H[12])\b/.test(sample);
+    const GENERIC = [
+      "lifecycle marketing", "customer engagement", "personalized journey",
+      "personalization at scale", "micro-moments", "segmentation strategy",
+      "loyalty program", "brand storytelling", "data-driven", "best practice",
+      "best-in-class", "thought leadership", "omnichannel", "single source of truth",
+    ];
+    const generic_phrase_hits = GENERIC.filter((g) => lower.includes(g));
+    return {
+      has_change_vector,
+      has_friction_or_insight,
+      has_question,
+      has_specific_anchor,
+      word_count: wordCount,
+      generic_phrase_hits,
+    };
+  };
+
+  const depth_signals = auditDepth(out);
+  // Floor: must have a question AND at least 3 of the 4 substance signals,
+  // AND no more than 1 generic-marketing phrase, AND not absurdly short
+  // (under 60 words for conversation_strategy almost always = stripped).
+  const substanceCount = [
+    depth_signals.has_change_vector,
+    depth_signals.has_friction_or_insight,
+    depth_signals.has_question,
+    depth_signals.has_specific_anchor,
+  ].filter(Boolean).length;
+  const depth_floor_passed =
+    depth_signals.has_question &&
+    substanceCount >= 3 &&
+    depth_signals.generic_phrase_hits.length <= 1 &&
+    depth_signals.word_count >= 60;
+
+  if (!depth_floor_passed) violations.push("depth_floor_below_threshold");
+
+  if (violations.length === 0 || (violations.length === 1 && violations[0] === "depth_floor_below_threshold")) {
+    // Format is clean. Depth issues are flagged only — never mutate
+    // the text, because mutating would make "shorter but weaker" worse.
+    return {
+      triggered: !depth_floor_passed,
+      text: out,
+      violations,
+      rewrite_applied: false,
+      depth_floor_passed,
+      depth_signals,
+    };
   }
 
   // ── Rewrite once: collapse to prose ──────────────────────────────
   // Strip headings, bold-labels, list markers, idea lead-ins, and
   // category labels. Re-flow into paragraphs. This is a deterministic
   // last-resort pass — the model is also instructed not to emit these
-  // shapes via the BEHAVIOR LOCK contract.
+  // shapes via the BEHAVIOR LOCK contract. We do NOT touch substance:
+  // every word the model emitted is preserved; only structural
+  // scaffolding is removed. Depth-floor is reported separately.
   let rewritten = out;
 
   // Remove markdown headings
@@ -317,5 +379,7 @@ export function enforceBehaviorContract(
     text: rewritten,
     violations,
     rewrite_applied: true,
+    depth_floor_passed,
+    depth_signals,
   };
 }
