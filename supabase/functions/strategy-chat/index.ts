@@ -5289,6 +5289,9 @@ async function buildChatSystemPrompt(args: {
       reference_confidences: (currentStateResult?.log as any)?.reference_confidences ?? [],
       reference_grounded_count: (currentStateResult?.log as any)?.reference_grounded_count ?? 0,
       reference_with_url_count: (currentStateResult?.log as any)?.reference_with_url_count ?? 0,
+      // ── Friction Layer (problem-first) telemetry ──────────────────
+      friction_layer_applied: (currentStateResult?.log as any)?.friction_layer_applied ?? false,
+      friction_signals_count: (currentStateResult?.log as any)?.friction_signals_count ?? 0,
       // ── Commercial Insight (Challenger reframe) telemetry ──────────
       commercial_insights_count: (currentStateResult?.log as any)?.commercial_insights_count ?? 0,
       commercial_insights_verified_count: (currentStateResult?.log as any)?.commercial_insights_verified_count ?? 0,
@@ -5302,6 +5305,7 @@ async function buildChatSystemPrompt(args: {
         "hypothesis_generation",
         "signal_prioritization",
         "strategic_why",
+        "friction_layer_problem_first",
         "conversation_execution_self_validated",
       ],
       workspace: workspaceKeyRaw ?? null,
