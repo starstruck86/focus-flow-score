@@ -44,6 +44,30 @@ export interface DetectedEntity {
   matchedAccountId?: string | null;
 }
 
+/**
+ * A signal gathered BEFORE hypothesis generation. Verified-first model:
+ * we attempt to surface real-world signals (recent news, launches,
+ * leadership changes, partnerships, hiring, campaigns, etc.) and tag
+ * each with its source + confidence. Hypotheses then build ON TOP of
+ * verified signals; ranking prefers verified over inferred.
+ */
+export type VerifiedSignalSource =
+  | "web"
+  | "account"
+  | "library"
+  | "resource"
+  | "inference";
+
+export interface VerifiedSignal {
+  signal: string;
+  source: VerifiedSignalSource;
+  confidence: ConfidenceLevel;
+  source_url?: string;
+  source_title?: string;
+  /** Free-form category for downstream prioritization (news, launch, leadership, etc.). */
+  kind?: string;
+}
+
 export interface CurrentStateIntelligence {
   company: {
     name: string;
