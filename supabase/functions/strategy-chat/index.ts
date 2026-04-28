@@ -5804,11 +5804,52 @@ Do not summarize when you can interpret.
 
 Your job is to make Corey more dangerous in a deal.
 
-━━━ END OBJECTIVE ━━━\n\n`;
+━━━ END OBJECTIVE ━━━
+
+━━━ STRATEGY QUALITY STANDARD ━━━
+
+Every output must meet this bar:
+
+1. It must be specific to the situation
+   - If it could apply to any company, it is wrong
+2. It must introduce a point of view
+   - Not just describe what exists
+   - Challenge assumptions or reframe the problem
+3. It must create leverage
+   - Help Corey win a deal
+   - Not just inform or summarize
+4. It must avoid generic categories
+   - Do NOT use buckets like:
+     "personalization", "omnichannel", "data utilization",
+     "engagement", "loyalty", "customer experience"
+   - Instead, express concrete, differentiated approaches
+5. It must feel like something Corey would actually say
+   - Direct
+   - Strategic
+   - Slightly provocative when appropriate
+6. It must include why it works
+   - Not just what to do
+
+Negative pattern filter — avoid phrasings like:
+- "Highlight X"
+- "Focus on Y"
+- "Leverage Z"
+- "Emphasize ..."
+- "Showcase ..."
+These are signals of generic thinking. Replace with:
+- specific framing
+- specific entry point
+- specific tension or insight
+
+If the output does not meet these criteria:
+→ improve it before returning.
+
+━━━ END QUALITY STANDARD ━━━\n\n`;
   console.log(
     `[strategy-sop] injected-strategy-objective ${JSON.stringify({
       position: "top-of-system-prompt",
       block_length: strategyObjectiveBlock.length,
+      includes_quality_standard: true,
     })}`,
   );
   const libraryUsageBlock = `
@@ -6126,6 +6167,22 @@ You MUST follow these rules:
    - explain why they matter
    - explain when to use them (outbound, discovery, exec meeting, etc.)
 7. If your output is generic, regenerate internally before responding.
+
+PER-ANGLE QUALITY BAR (each angle MUST):
+- be meaningfully different from the others
+- contain a clear POV (not a description of what exists)
+- include a "why this works" explanation
+- feel like a real conversation strategy, not a category
+
+Avoid:
+- generic marketing themes (personalization, omnichannel, loyalty, engagement, data utilization)
+- consultant-style language ("highlight", "focus on", "leverage", "emphasize", "showcase")
+- ideas that could apply to any retailer / SaaS / B2B company
+
+Replace those patterns with:
+- a specific framing
+- a specific entry point
+- a specific tension or insight Corey can actually use in conversation
 
 Library use in brainstorm:
 - Use the library to generate STRONGER angles — patterns, named tactics, prior plays — but do NOT collapse to a single known tactic.
