@@ -2227,6 +2227,28 @@ export async function runCurrentStatePreflight(
     commercial_insights_verified_count: commercialInsights.filter(
       (c) => c.source_type !== "inference",
     ).length,
+    // ── 3 WHY + AI Impact + Risk telemetry ────────────────────────
+    commercial_insights_three_why_complete_count: commercialInsights.filter(
+      (c) => !!c.why_anything && !!c.why_now && !!c.why_you,
+    ).length,
+    commercial_insights_ai_impact_complete_count: commercialInsights.filter(
+      (c) => !!c.ai_impact?.makes_easier && !!c.ai_impact?.makes_harder,
+    ).length,
+    commercial_insights_risk_complete_count: commercialInsights.filter(
+      (c) => !!c.risk,
+    ).length,
+    commercial_insights_full_challenger_narrative_count: commercialInsights.filter(
+      (c) =>
+        !!c.why_anything && !!c.why_now && !!c.why_you &&
+        !!c.ai_impact?.makes_easier && !!c.ai_impact?.makes_harder &&
+        !!c.risk && !!c.conversation_move && !!c.validation_question,
+    ).length,
+    challenger_layer_applied: commercialInsights.length > 0 && commercialInsights.every(
+      (c) =>
+        !!c.why_anything && !!c.why_now && !!c.why_you &&
+        !!c.ai_impact?.makes_easier && !!c.ai_impact?.makes_harder &&
+        !!c.risk,
+    ),
     unknowns_count: countUnknowns(intelligence),
     injected_current_state_block: true,
     candidates_considered: candidates,
