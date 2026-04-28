@@ -2213,6 +2213,7 @@ serve(async (req) => {
       _v2,
       globalInstructions: globalInstructionsRaw,
       workspace: workspaceRaw,
+      workspaceSource: workspaceSourceRaw,
       resolvedSops: resolvedSopsRaw,
       workspaceSop: workspaceSopRaw,
       globalSop: globalSopRaw,
