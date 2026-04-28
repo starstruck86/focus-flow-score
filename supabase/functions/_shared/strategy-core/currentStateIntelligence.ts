@@ -699,6 +699,7 @@ async function generateRealHypotheses(args: {
   entityName: string;
   resolvedAccount: CurrentStateResult["resolvedAccount"];
   userContent: string;
+  verifiedSignals?: VerifiedSignal[];
 }): Promise<GeneratedHypotheses | null> {
   const key = (globalThis as any).Deno?.env?.get?.("LOVABLE_API_KEY");
   if (!key) {
@@ -717,19 +718,35 @@ async function generateRealHypotheses(args: {
         : "")
     : "";
 
+  const verified = (args.verifiedSignals || []).filter((s) =>
+    s.source !== "inference" || s.confidence !== "low"
+  );
+  const verifiedBlock = verified.length
+    ? `\nVERIFIED SIGNALS (real-world, source-tagged — your hypotheses MUST build on top of these, not ignore them):\n` +
+      verified
+        .map((s) =>
+          `- [${s.source}·${s.confidence}${s.kind ? `·${s.kind}` : ""}] ${s.signal}` +
+          (s.source_url ? ` (${s.source_url})` : "")
+        )
+        .join("\n") + "\n"
+    : "";
+
   const sys =
     `You are a senior B2B sales strategist preparing a rep for a conversation. ` +
     `You generate concrete current-state hypotheses about a company so the rep ` +
     `walks in with a real point of view, not generic categories. ` +
-    `You reason from public knowledge of the company plus the model/industry ` +
-    `they likely operate in. You are explicit that these are hypotheses, but ` +
-    `you write them as real prose — never as scaffolding placeholders.`;
+    `You reason from VERIFIED SIGNALS first when present, then extend with ` +
+    `public knowledge of the company plus the model/industry they likely ` +
+    `operate in. You are explicit about which parts are verified vs hypothesis, ` +
+    `but you write hypotheses as real prose — never as scaffolding placeholders.`;
 
   const user =
     `Company in focus: ${args.entityName}` +
     acctSeed +
+    verifiedBlock +
     `\n\nThe rep's prompt that triggered this:\n"""${args.userContent.slice(0, 1200)}"""\n\n` +
     HYPOTHESIS_SCHEMA_HINT;
+
 
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 12000);
