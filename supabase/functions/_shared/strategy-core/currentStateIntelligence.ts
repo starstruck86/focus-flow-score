@@ -282,6 +282,23 @@ export interface ChangeVector {
   opportunity: string;           // The opportunity that emerges from the change
 }
 
+export interface SignalFriction {
+  /** What is hard about this signal — the constraint, named concretely. */
+  what_is_hard: string;
+  /** Why it's hard — the underlying reason (capacity, data, org, market, tooling, model). */
+  why_it_is_hard: string;
+  /** The tradeoff the team is forced to make — what they sacrifice to do this. */
+  tradeoff: string;
+  /** Connection back to the verified/inferred current state — anchors the friction in reality. */
+  current_state_link: string;
+  /** What breaks or gets left on the table if the friction isn't named and solved. */
+  implication: string;
+  /** First-person spoken move that opens from the PROBLEM, not the solution. */
+  conversation_move: string;
+  /** Plain-language question Corey would ask to test/validate the friction. */
+  validation_question: string;
+}
+
 export interface CurrentStateResult {
   ran: boolean;
   /** Why we didn't run, or "ok" when we did. */
