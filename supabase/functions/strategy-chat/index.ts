@@ -5554,11 +5554,50 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     userContent,
   });
 
+  // ── CURRENT STATE INTELLIGENCE PREFLIGHT ───────────────────────
+  // When a user mentions a company in an unlinked thread, build a
+  // working current-state thesis (attached if the company resolves to
+  // an existing account, otherwise inferred / low-confidence). The
+  // injected block reorients the model away from generic categories
+  // and toward Corey's "current state → future state" coaching.
+  // Excluded: task pipelines (Discovery Prep, Account Brief). Those
+  // run via run-strategy-task / run-discovery-prep, not this path.
+  let currentStateResult: CurrentStateResult | null = null;
+  try {
+    currentStateResult = await runCurrentStatePreflight({
+      supabase,
+      userId,
+      userContent,
+      workspaceKeyRaw,
+      threadHasLinkedAccount: !!pack.account?.id,
+      isTaskPipeline: false, // chat path; task pipelines bypass buildPromptOnce
+      intentTag: intent?.intent ?? null,
+      // strategy-chat has no live web/research adapter wired today;
+      // stays in "Likely:" voice and avoids any "I researched" phrasing.
+      webCapabilityAvailable: false,
+    });
+    console.log(
+      "[strategy-chat] current_state_preflight",
+      safeJson(currentStateResult.log),
+    );
+  } catch (e) {
+    console.warn(
+      "[strategy-chat] current_state_preflight failed (non-fatal):",
+      (e as Error).message,
+    );
+  }
+
+  const currentStateBlock = currentStateResult?.promptBlock
+    ? `\n${currentStateResult.promptBlock}\n`
+    : "";
+
   // Prepend the MODE LOCK so it's the FIRST thing the model reads,
   // before Strategy Core identity / thinking order / output contract.
   // This binds asset-type selection regardless of how rich the rest of
-  // the system prompt becomes.
-  const prompt = `${modeLockBlock}\n\n${composedCorePrompt}\n${readabilityContract}\n\n${persistenceContract}`;
+  // the system prompt becomes. The CURRENT STATE INTELLIGENCE block,
+  // when present, sits adjacent to the readability contract so the
+  // model treats it as a generation-shaping directive for THIS turn.
+  const prompt = `${modeLockBlock}\n\n${composedCorePrompt}\n${readabilityContract}${currentStateBlock}\n\n${persistenceContract}`;
 
   const resourceHits = (resources?.hits || []).map((h) => ({
     id: h.id,
