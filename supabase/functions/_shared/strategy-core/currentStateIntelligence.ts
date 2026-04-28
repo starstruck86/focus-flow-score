@@ -1699,7 +1699,13 @@ function renderPromptBlock(
         `   Strategic tension:     ${s.strategic_tension}\n` +
         `   Conversation move:     ${s.conversation_move}\n` +
         `   Validation question:   ${s.validation_question}` +
-        cvLines;
+        cvLines +
+        `\n   Reference (anchor — express IN PROSE per confidence rules below; do NOT dump as a citation):\n` +
+        `     type:       ${s.reference.reference_type}\n` +
+        `     source:     ${s.reference.reference_source}` +
+        (s.reference.reference_url ? `\n     url:        ${s.reference.reference_url}` : "") +
+        (s.reference.reference_excerpt ? `\n     excerpt:    ${s.reference.reference_excerpt}` : "") +
+        `\n     confidence: ${s.reference.confidence}`;
     }).join("\n\n")
     : "(prioritization pass produced no signals — fall back to the working hypotheses above, but still pick the 2-3 highest-leverage angles yourself before responding, and explain the why behind each.)";
 
