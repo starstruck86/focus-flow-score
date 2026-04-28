@@ -5893,6 +5893,7 @@ async function handleChat(
     rawWorkingThesisBlock,
     outputModeDecision,
     currentStateResult,
+  } = await buildChatSystemPrompt({
     supabase,
     userId,
     threadId,
