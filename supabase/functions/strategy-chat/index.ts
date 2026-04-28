@@ -5876,13 +5876,37 @@ Rewrite it until it does.
 If the output does not meet these criteria:
 → improve it before returning.
 
-━━━ END QUALITY STANDARD ━━━\n\n`;
+━━━ END QUALITY STANDARD ━━━
+
+━━━ STRATEGY EXAMPLE: WHAT GOOD LOOKS LIKE ━━━
+
+Use these as anchor examples for tone, POV, and conversational shape. Do NOT copy the wording. Match the style.
+
+Example of a strong approach:
+
+Instead of saying:
+"Focus on personalization and omnichannel engagement"
+
+Say something like:
+"One way I'd approach TJX is to challenge how they're thinking about personalization. Most retailers use it to drive efficiency — but for TJX, that might actually break the treasure-hunt experience. I'd open by asking whether personalization should increase conversion, or increase discovery — because those are two very different strategies."
+
+Another example:
+"I wouldn't lead with lifecycle marketing at all. I'd start with the fact that TJX wins because shopping feels unpredictable — then frame lifecycle as a way to extend that unpredictability beyond the store. That immediately changes the conversation from campaigns to experience design."
+
+These are good because:
+- they introduce a POV
+- they challenge assumptions
+- they feel like real conversation openings
+- they create leverage
+
+━━━ END EXAMPLES ━━━\n\n`;
   console.log(
     `[strategy-sop] injected-strategy-objective ${JSON.stringify({
       position: "top-of-system-prompt",
       block_length: strategyObjectiveBlock.length,
       includes_quality_standard: true,
       includes_conversation_frame: true,
+      includes_anchor_examples: true,
     })}`,
   );
   const libraryUsageBlock = `
