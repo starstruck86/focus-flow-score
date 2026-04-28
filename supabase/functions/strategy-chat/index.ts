@@ -6087,8 +6087,8 @@ This is NOT optional. Do not ignore these rules.
        sopMarkerIdx !== Number.POSITIVE_INFINITY &&
        sopMarkerIdx < reasoningMarkerIdx;
      const injectionOrder = path === "v2"
-       ? ["strategy_objective", "v2_identity", "global_sop", "workspace_sop", "v2_reasoning", "global_instructions", ...(wsName === "brainstorm" ? ["brainstorm_enforcement"] : [])]
-       : ["strategy_objective", "core_identity", "global_sop", "workspace_sop", "reasoning_preamble", "global_instructions", ...(wsName === "brainstorm" ? ["brainstorm_enforcement"] : [])];
+       ? ["strategy_objective", "v2_identity", "global_sop", "workspace_sop", "decision_layer", "v2_reasoning", "global_instructions", ...(wsName === "brainstorm" ? ["brainstorm_enforcement"] : [])]
+       : ["strategy_objective", "core_identity", "global_sop", "workspace_sop", "decision_layer", "reasoning_preamble", "global_instructions", ...(wsName === "brainstorm" ? ["brainstorm_enforcement"] : [])];
 
      console.log(
        `[strategy-sop][prompt-trace] ${JSON.stringify({
