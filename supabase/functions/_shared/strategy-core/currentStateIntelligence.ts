@@ -679,25 +679,79 @@ async function generatePrioritizedSignals(args: {
       "leadership_or_org",
       "product_or_launch",
     ];
+    const allowedSources: SignalSourceType[] = [
+      "account",
+      "library",
+      "web",
+      "inference",
+    ];
+    const allowedConfidences: ConfidenceLevel[] = ["high", "medium", "low"];
+
+    const haveAccount = !!args.resolvedAccount;
+    const haveWeb = !!args.webResearched;
 
     const cleaned: PrioritizedSignal[] = [];
     for (let i = 0; i < parsed.signals.length && cleaned.length < 3; i++) {
       const s: any = parsed.signals[i];
       if (!s || typeof s !== "object") continue;
+
       const signal = String(s.signal || "").trim();
-      const why = String(s.why_it_matters || "").trim();
-      const impact = String(s.business_impact || "").trim();
-      const angle = String(s.conversation_angle || "").trim();
-      if (!signal || !why || !impact || !angle) continue;
+      const whyMatters = String(s.why_it_matters || "").trim();
+      const whyNow = String(s.why_now || "").trim();
+      const whyCo = String(s.why_this_company || "").trim();
+      const pressure = String(s.business_pressure || "").trim();
+      const cxImp = String(s.customer_behavior_implication || "").trim();
+      const motionImp = String(s.marketing_motion_implication || "").trim();
+      const futureImp = String(s.future_state_implication || "").trim();
+      const tension = String(s.strategic_tension || "").trim();
+      const move = String(s.conversation_move || "").trim();
+      const validation = String(s.validation_question || "").trim();
+      const impact = String(s.business_impact || pressure || "").trim();
+      const angle = String(s.conversation_angle || move || "").trim();
+
+      // Required fields — drop the signal if any core Why field is missing.
+      if (
+        !signal || !whyMatters || !whyNow || !whyCo ||
+        !pressure || !cxImp || !motionImp || !futureImp ||
+        !tension || !move || !validation
+      ) continue;
+
       const type = allowedTypes.includes(s.signal_type)
         ? (s.signal_type as SignalType)
         : "tension";
+
+      // Trust-down rule: never let the model upgrade a signal beyond
+      // what the actual source mix supports. Inference can never
+      // claim "account" or "web" sourcing.
+      let source: SignalSourceType = allowedSources.includes(s.source_type)
+        ? (s.source_type as SignalSourceType)
+        : "inference";
+      if (source === "account" && !haveAccount) source = "inference";
+      if (source === "web" && !haveWeb) source = "inference";
+
+      let confidence: ConfidenceLevel = allowedConfidences.includes(s.confidence)
+        ? (s.confidence as ConfidenceLevel)
+        : "low";
+      // Inference can't be high-confidence.
+      if (source === "inference" && confidence === "high") confidence = "medium";
+
       const rank = (cleaned.length + 1) as 1 | 2 | 3;
       cleaned.push({
         rank,
         signal,
         signal_type: type,
-        why_it_matters: why,
+        source_type: source,
+        confidence,
+        why_it_matters: whyMatters,
+        why_now: whyNow,
+        why_this_company: whyCo,
+        business_pressure: pressure,
+        customer_behavior_implication: cxImp,
+        marketing_motion_implication: motionImp,
+        future_state_implication: futureImp,
+        strategic_tension: tension,
+        conversation_move: move,
+        validation_question: validation,
         business_impact: impact,
         conversation_angle: angle,
       });
