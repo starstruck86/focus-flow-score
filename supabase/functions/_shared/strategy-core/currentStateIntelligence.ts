@@ -917,6 +917,14 @@ const SIGNAL_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY this shape:
         "opportunity": "1 sentence: the opportunity that emerges from the X → Y → Z motion — the gap Corey can lean into."
       },
 
+      "reference": {
+        "reference_type": "web | account | library | market | inference",
+        "reference_source": "Concrete, human-readable source label. Examples: 'Q3 2025 earnings call', 'WSJ — Aug 2025', 'TJX Aug 2025 press release', 'CRM note: Sept 2025 discovery call', 'eMarketer 2025 Retail Outlook'. NEVER 'public knowledge', 'common sense', or 'industry best practice'.",
+        "reference_url": "URL when one exists; omit for account/library/inference references with no URL.",
+        "reference_excerpt": "1 short sentence — the actual claim from the reference that anchors this signal. Plain language, not a quote with quotation marks.",
+        "confidence": "high | medium | low — driven by how directly the reference supports the signal. high only when web/account/library reference is current and specific."
+      },
+
       "business_impact": "1 short sentence summarizing revenue / growth / risk implication (kept for downstream digest reuse).",
       "conversation_angle": "1 short spoken-voice opener (kept for downstream digest reuse). Same energy as conversation_move."
     }
