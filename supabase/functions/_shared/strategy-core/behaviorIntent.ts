@@ -228,6 +228,21 @@ export interface BehaviorGuardResult {
   text: string;
   violations: string[];
   rewrite_applied: boolean;
+  /**
+   * Depth-floor audit (conversation_strategy only). Flag-only — the
+   * guard NEVER strips substance. If `depth_floor_passed` is false,
+   * the model dropped reasoning while compressing format. Telemetry
+   * surfaces it so we can detect "shorter but weaker" regressions.
+   */
+  depth_floor_passed?: boolean;
+  depth_signals?: {
+    has_change_vector: boolean;
+    has_friction_or_insight: boolean;
+    has_question: boolean;
+    has_specific_anchor: boolean;
+    word_count: number;
+    generic_phrase_hits: string[];
+  };
 }
 
 /**
