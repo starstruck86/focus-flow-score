@@ -5120,22 +5120,11 @@ function buildResponseFormatContract(args: {
   workspace: string | null;
   intent: IntentResult;
   userContent: string;
-}): { contract: string; decision: OutputModeDecision } {
-  const { workspace, intent, userContent } = args;
+  decision: OutputModeDecision;
+}): string {
+  const { workspace, intent, userContent, decision } = args;
   const override = detectExplicitFormatOverride(userContent);
   const overrideLine = renderOverrideBlock(override);
-
-  // Universal output-mode selector. Maps explicit override → kind, then
-  // resolves mode from (override > conversation triggers > workspace
-  // default). Mode flows into the contract body and (when it's
-  // 'conversation') triggers the HARD RULES enforcement block.
-  const explicitKind: ExplicitFormatKind | null = override?.kind ?? null;
-  const decision = selectOutputMode({
-    workspace: workspace ?? null,
-    intent,
-    explicitFormat: explicitKind,
-    userContent,
-  });
 
   const tone = 'Write like a top-tier strategist: clear, concise, opinionated, no fluff. Avoid long preambles ("Let me walk you through…") and generic closers ("Hope this helps!").';
 
@@ -5151,14 +5140,12 @@ function buildResponseFormatContract(args: {
     ? `\n\n${overrideLine}\nThe USER FORMAT OVERRIDE above wins over the workspace defaults below when they conflict.`
     : '';
 
-  const contract = `\n═══ RESPONSE FORMAT CONTRACT (workspace: ${workspace ?? 'freeform'}, mode: ${decision.mode}) ═══
+  return `\n═══ RESPONSE FORMAT CONTRACT (workspace: ${workspace ?? 'freeform'}, mode: ${decision.mode}) ═══
 ${tone}${overrideTail}
 
 ${body}${shortFormTail}
 
 Use real Markdown when you do use it (## headings, **bold**, - bullets). Never print raw markdown symbols as literal text.`;
-
-  return { contract, decision };
 }
 
 async function buildChatSystemPrompt(args: {
