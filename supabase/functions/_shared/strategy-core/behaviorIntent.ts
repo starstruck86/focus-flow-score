@@ -154,12 +154,43 @@ export function renderBehaviorContract(intent: BehaviorIntent): string {
 Intent: conversation_strategy. All other behaviors are SUPPRESSED for this turn.
 Output is what Corey should SAY or ASK in the upcoming conversation.
 
-Rules (non-negotiable for this intent):
+══ DEPTH PRESERVATION (read this BEFORE the format rules below) ══
+This contract changes HOW the answer is delivered. It does NOT change HOW the
+answer is thought through. The full reasoning stack above this block —
+verified signals, current-state intelligence, change vectors (X→Y→Z),
+commercial insight (3 WHYs + AI impact + risk), strategic why, friction —
+MUST remain active in your thinking and MUST show up as substance in the
+prose. Compression ≠ simplification. If your draft is shorter but weaker,
+shorter but more generic, or shorter but less specific, you have failed
+this contract — regenerate.
+
+Required substance density per path (must all be present, woven into prose,
+NOT labeled as sections):
+  1. A specific anchor — a verified signal or current-state fact about the
+     account (cite it inline, not as a bibliography). No anchor = invalid.
+  2. A change vector — what is moving from X to Y, expressed as direction of
+     travel ("they're shifting from … toward …"). Generic verbs without a
+     from/to don't count.
+  3. A commercial insight or friction — the non-obvious reframe OR the hard
+     problem this creates. Must be specific to this account, not a category.
+  4. A move — what Corey actually says or leads with, in his voice.
+  5. A question — the validation question Corey asks the customer.
+All five must be present. Missing any one = regenerate.
+
+Format rules (delivery only — these never override depth):
   • 1 primary path. Optional 1 backup path only if materially different. Hard cap: 2.
-  • Natural prose in Corey's first-person voice. No headings. No bullet lists. No numbered lists. No category buckets (Acquisition / Retention / Lifecycle / Personalization / Loyalty / Awareness). No "Option A / Option B". No "Here are a few ways…". No "Idea 1 / Idea 2".
-  • Anchor in specific current-state or verified-signal facts about the account. Express change as direction of travel where it sharpens the point.
-  • Each path ends with the question Corey would ask.
-  • Suppressed behaviors: idea_generation (no idea lists), research_analysis (no facts dump), artifact_creation (no email/doc/plan).`;
+  • Each path 90–180 words. Tight, but long enough to carry all 5 substance elements.
+  • Natural prose in Corey's first-person voice. No headings. No bullet lists.
+    No numbered lists. No category buckets (Acquisition / Retention / Lifecycle /
+    Personalization / Loyalty / Awareness). No "Option A / Option B".
+    No "Here are a few ways…". No "Idea 1 / Idea 2".
+  • Specificity test before sending: would this paragraph still make sense if
+    you swapped the company name for any other company? If yes, it's too
+    generic — rewrite with the verified signal / current-state fact made load-bearing.
+  • Suppressed behaviors: idea_generation (no idea lists), research_analysis
+    (no facts dump as separate section), artifact_creation (no email/doc/plan).
+    BUT: the underlying reasoning from those layers IS still required as
+    substance inside the prose.`;
 
     case "idea_generation":
       return `═══ BEHAVIOR LOCK — IDEA GENERATION (exclusive) ═══
@@ -197,6 +228,21 @@ export interface BehaviorGuardResult {
   text: string;
   violations: string[];
   rewrite_applied: boolean;
+  /**
+   * Depth-floor audit (conversation_strategy only). Flag-only — the
+   * guard NEVER strips substance. If `depth_floor_passed` is false,
+   * the model dropped reasoning while compressing format. Telemetry
+   * surfaces it so we can detect "shorter but weaker" regressions.
+   */
+  depth_floor_passed?: boolean;
+  depth_signals?: {
+    has_change_vector: boolean;
+    has_friction_or_insight: boolean;
+    has_question: boolean;
+    has_specific_anchor: boolean;
+    word_count: number;
+    generic_phrase_hits: string[];
+  };
 }
 
 /**
@@ -239,15 +285,77 @@ export function enforceBehaviorContract(
   const CATEGORY_RE = /\b(Acquisition|Retention|Lifecycle Marketing|Personalization|Loyalty|Brand Storytelling|Awareness)\b\s*:/;
   if (CATEGORY_RE.test(out)) violations.push("category_bucket_label");
 
-  if (violations.length === 0) {
-    return { triggered: false, text: out, violations, rewrite_applied: false };
+  // ── Depth-floor audit (FLAG-ONLY — never strips, never blocks) ───
+  // Detects "shorter but weaker" — when format compression dropped
+  // the underlying reasoning. Telemetry-only signal so we can spot
+  // the failure mode the user explicitly called out.
+  const auditDepth = (sample: string) => {
+    const lower = sample.toLowerCase();
+    const wordCount = (sample.match(/\b\w+\b/g) || []).length;
+    const has_change_vector =
+      /\b(from\s+[a-z][\w\- ]{1,40}\s+to\s+[a-z]|moving\s+from|shifting\s+from|pivot(?:ing)?\s+from|transitioning\s+from|→|->|–>|—>)/i.test(sample);
+    const has_friction_or_insight =
+      /\b(the\s+(?:hard|harder|real)\s+(?:problem|part)|the\s+challenge\s+(?:for|is|with)|what'?s\s+broken|the\s+reframe|the\s+thing\s+(?:i'?d|we'?d)\s+(?:focus|push|press)|the\s+tension|the\s+risk\s+(?:is|here)|the\s+trap)/i.test(sample);
+    const has_question = /\?\s*$/m.test(sample.trim()) || /\?\s/.test(sample);
+    // Specific anchor proxy: a proper noun OR a quoted/numeric specifier
+    // that isn't a generic marketing term. We flag absence, not presence.
+    const properNounMatches = sample.match(/\b[A-Z][a-zA-Z0-9]{2,}(?:\s+[A-Z][a-zA-Z0-9]+)?\b/g) || [];
+    const has_specific_anchor = properNounMatches.length >= 2 || /\b(\d{1,3}%|\$\d|Q[1-4]|FY\d{2,4}|H[12])\b/.test(sample);
+    const GENERIC = [
+      "lifecycle marketing", "customer engagement", "personalized journey",
+      "personalization at scale", "micro-moments", "segmentation strategy",
+      "loyalty program", "brand storytelling", "data-driven", "best practice",
+      "best-in-class", "thought leadership", "omnichannel", "single source of truth",
+    ];
+    const generic_phrase_hits = GENERIC.filter((g) => lower.includes(g));
+    return {
+      has_change_vector,
+      has_friction_or_insight,
+      has_question,
+      has_specific_anchor,
+      word_count: wordCount,
+      generic_phrase_hits,
+    };
+  };
+
+  const depth_signals = auditDepth(out);
+  // Floor: must have a question AND at least 3 of the 4 substance signals,
+  // AND no more than 1 generic-marketing phrase, AND not absurdly short
+  // (under 60 words for conversation_strategy almost always = stripped).
+  const substanceCount = [
+    depth_signals.has_change_vector,
+    depth_signals.has_friction_or_insight,
+    depth_signals.has_question,
+    depth_signals.has_specific_anchor,
+  ].filter(Boolean).length;
+  const depth_floor_passed =
+    depth_signals.has_question &&
+    substanceCount >= 3 &&
+    depth_signals.generic_phrase_hits.length <= 1 &&
+    depth_signals.word_count >= 60;
+
+  if (!depth_floor_passed) violations.push("depth_floor_below_threshold");
+
+  if (violations.length === 0 || (violations.length === 1 && violations[0] === "depth_floor_below_threshold")) {
+    // Format is clean. Depth issues are flagged only — never mutate
+    // the text, because mutating would make "shorter but weaker" worse.
+    return {
+      triggered: !depth_floor_passed,
+      text: out,
+      violations,
+      rewrite_applied: false,
+      depth_floor_passed,
+      depth_signals,
+    };
   }
 
   // ── Rewrite once: collapse to prose ──────────────────────────────
   // Strip headings, bold-labels, list markers, idea lead-ins, and
   // category labels. Re-flow into paragraphs. This is a deterministic
   // last-resort pass — the model is also instructed not to emit these
-  // shapes via the BEHAVIOR LOCK contract.
+  // shapes via the BEHAVIOR LOCK contract. We do NOT touch substance:
+  // every word the model emitted is preserved; only structural
+  // scaffolding is removed. Depth-floor is reported separately.
   let rewritten = out;
 
   // Remove markdown headings
@@ -271,5 +379,7 @@ export function enforceBehaviorContract(
     text: rewritten,
     violations,
     rewrite_applied: true,
+    depth_floor_passed,
+    depth_signals,
   };
 }

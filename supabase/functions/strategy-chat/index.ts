@@ -6940,6 +6940,8 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           guard_triggered: true,
           violations: behaviorGuard.violations,
           rewrite_applied: behaviorGuard.rewrite_applied,
+          depth_floor_passed: behaviorGuard.depth_floor_passed ?? null,
+          depth_signals: behaviorGuard.depth_signals ?? null,
         }),
       );
     }
@@ -7367,6 +7369,8 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
               guard_triggered: true,
               violations: behaviorGuard.violations,
               rewrite_applied: behaviorGuard.rewrite_applied,
+              depth_floor_passed: behaviorGuard.depth_floor_passed ?? null,
+              depth_signals: behaviorGuard.depth_signals ?? null,
             }),
           );
         }
