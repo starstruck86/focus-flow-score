@@ -5404,7 +5404,7 @@ async function buildChatSystemPrompt(args: {
     // an inferred block (e.g. user mentioned a company in chat), we
     // append it so the model is never blind to context that was
     // already detected. Output mode contract still binds tone/shape.
-    const _genericBase = buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock);
+    const _genericBase = buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock, behaviorContractBlock);
     const _csBlock = currentStateResult?.promptBlock
       ? `\n${currentStateResult.promptBlock}\n`
       : "";
@@ -5420,6 +5420,7 @@ async function buildChatSystemPrompt(args: {
       modeLockBlock,
       outputModeDecision,
       currentStateResult,
+      behaviorIntent,
     };
   }
 
