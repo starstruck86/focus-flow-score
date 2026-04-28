@@ -1540,13 +1540,40 @@ async function generateCommercialInsights(args: {
       const implication = String(r.implication || "").trim();
       const tension = String(r.tension || "").trim();
       const conversation_entry = String(r.conversation_entry || "").trim();
-      const question = String(r.question || "").trim();
+      const questionRaw = String(r.question || "").trim();
+      // ── 3 WHY layer ──
+      const why_anything = String(r.why_anything || "").trim();
+      const why_now = String(r.why_now || "").trim();
+      const why_you = String(r.why_you || "").trim();
+      // ── AI Impact ──
+      const aiImpactRaw: any = r.ai_impact && typeof r.ai_impact === "object" ? r.ai_impact : {};
+      const ai_makes_easier = String(aiImpactRaw.makes_easier || "").trim();
+      const ai_makes_harder = String(aiImpactRaw.makes_harder || "").trim();
+      // ── Risk ──
+      const risk = String(r.risk || "").trim();
+      // ── Conversation move + validation question ──
+      let conversation_move = String(r.conversation_move || "").trim();
+      let validation_question = String(r.validation_question || questionRaw || "").trim();
+      const question = questionRaw || validation_question;
 
       // All fields required — drop incomplete insights so we never ship a half-formed reframe.
       if (
         !insight || !current_state || !shift || !problem ||
-        !implication || !tension || !conversation_entry || !question
+        !implication || !tension || !conversation_entry ||
+        !why_anything || !why_now || !why_you ||
+        !ai_makes_easier || !ai_makes_harder ||
+        !risk || !validation_question
       ) continue;
+
+      // Force first-person spoken-voice shape on the conversation move
+      // and validation question so the response can drop them in verbatim.
+      const SOLUTION_OPENER = /^(use|build|implement|launch|leverage|deploy|create|introduce|roll\s*out|stand\s*up|set\s*up|adopt)\b/i;
+      if (!conversation_move || SOLUTION_OPENER.test(conversation_move)) {
+        conversation_move = `I'd lead here by surfacing the tension: ${tension.replace(/[.!?]+$/, "")}`;
+      }
+      if (!/^the question i['']?d ask is/i.test(validation_question)) {
+        validation_question = `The question I'd ask is: ${validation_question.replace(/^[\s"'(]+/, "")}`;
+      }
 
       let source_type: SignalSourceType = allowedSources.includes(r.source_type)
         ? (r.source_type as SignalSourceType)
@@ -1574,8 +1601,18 @@ async function generateCommercialInsights(args: {
         problem,
         implication,
         tension,
+        why_anything,
+        why_now,
+        why_you,
+        ai_impact: {
+          makes_easier: ai_makes_easier,
+          makes_harder: ai_makes_harder,
+        },
+        risk,
         conversation_entry,
+        conversation_move,
         question,
+        validation_question,
         source_type,
         confidence,
         built_on_signal_ranks,
