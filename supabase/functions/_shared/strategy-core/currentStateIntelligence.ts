@@ -535,11 +535,26 @@ const SIGNAL_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY this shape:
   "signals": [
     {
       "rank": 1,
-      "signal": "Concrete, named signal (not a category). e.g. 'Inventory turns weekly and creates real-time scarcity that lifecycle programs almost never exploit', not 'opportunity in retention'.",
+      "signal": "Concrete, named signal (not a category). e.g. 'TJX's treasure-hunt model means inventory turns weekly and creates real-time scarcity that lifecycle programs almost never exploit', not 'opportunity in retention'.",
       "signal_type": "tension | revenue_or_growth | change_in_motion | blind_spot | external_event | competitive_pressure | leadership_or_org | product_or_launch",
-      "why_it_matters": "1 sentence: why THIS signal is the highest-leverage thing to put on the table in a first conversation.",
-      "business_impact": "1 sentence: the revenue, growth, or risk implication if they act vs. ignore.",
-      "conversation_angle": "1-2 sentences in first-person, exactly the way Corey would open or drive on this. No headings, no labels, no consultant-speak. Sounds like real spoken language."
+      "source_type": "account | library | web | inference",
+      "confidence": "high | medium | low",
+
+      "why_it_matters": "1 sentence: the business outcome, customer behavior, or operating-model lever this signal moves. Not 'this is important' — name what it changes.",
+      "why_now": "1 sentence: what is changing right now (market, customer behavior, company priority, competitive pressure, product investment, leadership shift, channel change, seasonality, technology shift).",
+      "why_this_company": "1 sentence: why THIS account specifically — not any company in the category. Tie to their model / scale / customer / position.",
+
+      "business_pressure": "1 sentence: the revenue / growth / margin / risk pressure this points to.",
+      "customer_behavior_implication": "1 sentence: what this signal implies about how their customers actually behave.",
+      "marketing_motion_implication": "1 sentence: what this implies about how lifecycle / engagement / CRM motion should be shaped.",
+      "future_state_implication": "1 sentence: what ambition or future-state this signal implies they are (or should be) moving toward.",
+
+      "strategic_tension": "1 sentence: the assumption Corey should challenge in conversation. Should sound like 'most teams assume X, but for this company Y is closer to true.'",
+      "conversation_move": "1-2 sentences in first-person spoken voice. Example shapes: \"I'd lead here because…\", \"The reason this matters is…\", \"The tension I'd test is…\". No headings, no labels, no consultant-speak.",
+      "validation_question": "1 sentence: the question Corey should ask the customer to test the hypothesis. Plain language, the way Corey would actually ask it.",
+
+      "business_impact": "1 short sentence summarizing revenue / growth / risk implication (kept for downstream digest reuse).",
+      "conversation_angle": "1 short spoken-voice opener (kept for downstream digest reuse). Same energy as conversation_move."
     }
   ]
 }
@@ -556,7 +571,9 @@ Hard rules:
 - No generic lifecycle buckets (Acquisition / Activation / Retention / Winback) as signals.
 - No "opportunity to personalize" / "build a loyalty program" / "improve email" — those are not signals.
 - A signal must be specific enough that another rep would say "yes, that's the real thing."
-- conversation_angle must read like spoken language Corey can use. No "we should explore...", no headings.
+- If the underlying basis is inferred (no sourced fact), set source_type = "inference" and confidence = "low" — do NOT pretend it's sourced.
+- Every Why field (why_it_matters, why_now, why_this_company) must be DIFFERENT. If you're tempted to repeat the signal in those fields, you haven't reasoned hard enough.
+- conversation_move and conversation_angle must read like spoken language. No "we should explore...", no headings.
 - Do NOT include any text outside the JSON object.`;
 
 interface GeneratedSignals {
