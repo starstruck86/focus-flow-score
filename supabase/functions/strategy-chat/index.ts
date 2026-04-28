@@ -5841,6 +5841,38 @@ These are signals of generic thinking. Replace with:
 - specific entry point
 - specific tension or insight
 
+━━━ CONVERSATION FRAME ━━━
+
+Outputs must be framed as how Corey would actually approach the conversation.
+
+Do NOT organize answers as categories or topics.
+Instead:
+- frame each idea as a distinct way to enter the conversation
+- include what Corey would actually say or how he would position it
+
+Avoid category-style thinking.
+Do NOT produce outputs like:
+- "Customer Journey Focus"
+- "Data Utilization"
+- "Omnichannel Strategy"
+These are generic and low-leverage.
+Instead:
+- anchor each idea in a specific insight or tension
+- make it feel like a deliberate approach, not a topic bucket
+
+Each angle must introduce a point of view.
+It should:
+- highlight something the prospect is likely missing
+- challenge a default assumption
+- reframe how they think about the problem
+If it doesn't create tension or insight, improve it.
+
+Sayable test:
+If this does not sound like something Corey could say in a real conversation, it is not good enough.
+Rewrite it until it does.
+
+━━━ END CONVERSATION FRAME ━━━
+
 If the output does not meet these criteria:
 → improve it before returning.
 
@@ -5850,6 +5882,7 @@ If the output does not meet these criteria:
       position: "top-of-system-prompt",
       block_length: strategyObjectiveBlock.length,
       includes_quality_standard: true,
+      includes_conversation_frame: true,
     })}`,
   );
   const libraryUsageBlock = `
