@@ -5269,6 +5269,7 @@ async function buildChatSystemPrompt(args: {
       retrievalSucceeded: false,
       intent,
       modeLockBlock,
+      outputModeDecision,
     };
   }
 
