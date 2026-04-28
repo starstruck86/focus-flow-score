@@ -5207,10 +5207,44 @@ async function buildChatSystemPrompt(args: {
   });
   const modeLockBlock = buildModeLockBlock(intent);
 
+  // ── CURRENT STATE INTELLIGENCE PREFLIGHT (RUNS FIRST) ──────────
+  // Per the integration contract: Current State Intelligence MUST run
+  // BEFORE output-mode selection. Output mode operates ON TOP of
+  // context — never instead of it. Even if the model ultimately
+  // routes to the early-return generic path, we still want a
+  // current-state attempt + structured log so we can prove we never
+  // bypassed context.
+  let currentStateResult: CurrentStateResult | null = null;
+  try {
+    currentStateResult = await runCurrentStatePreflight({
+      supabase,
+      userId,
+      userContent,
+      workspaceKeyRaw,
+      threadHasLinkedAccount: !!pack.account?.id,
+      isTaskPipeline: false, // chat path; task pipelines bypass buildPromptOnce
+      intentTag: intent?.intent ?? null,
+      // strategy-chat has no live web/research adapter wired today;
+      // stays in "Likely:" voice and avoids any "I researched" phrasing.
+      webCapabilityAvailable: false,
+    });
+    console.log(
+      "[strategy-chat] current_state_preflight",
+      safeJson(currentStateResult.log),
+    );
+  } catch (e) {
+    console.warn(
+      "[strategy-chat] current_state_preflight failed (non-fatal):",
+      (e as Error).message,
+    );
+  }
+  const _currentStateUsed = !!(currentStateResult?.ran && currentStateResult?.promptBlock);
+
   // Universal output-mode decision — computed ONCE per turn here so
   // every prompt path (early-return generic, full chat, V2) carries
   // the same value through the system prompt and downstream
-  // enforcement (conversation-mode HARD RULES).
+  // enforcement (conversation-mode HARD RULES). Runs AFTER current
+  // state so logs/diagnostics can prove the ordering.
   const _explicitOverride = detectExplicitFormatOverride(userContent);
   const outputModeDecision: OutputModeDecision = selectOutputMode({
     workspace: workspaceKeyRaw ?? null,
@@ -5218,6 +5252,26 @@ async function buildChatSystemPrompt(args: {
     explicitFormat: _explicitOverride?.kind ?? null,
     userContent,
   });
+
+  // ── INTEGRATION TELEMETRY: prove context + mode were combined ──
+  // Mandatory log so downstream review can confirm conversation mode
+  // never bypassed Current State Intelligence and that context was
+  // never ignored when output mode flipped.
+  console.log(
+    "[strategy-chat] context_and_mode",
+    safeJson({
+      current_state_used: _currentStateUsed,
+      current_state_reason: currentStateResult?.reason ?? "not_run",
+      account_context_state: currentStateResult?.accountContextState ?? "missing",
+      output_mode: outputModeDecision.mode,
+      output_mode_reason: outputModeDecision.reason,
+      // Combined when BOTH a non-empty current-state block AND a
+      // selected output mode are present — i.e. the prompt will
+      // carry context AND a mode contract together.
+      context_and_mode_combined: _currentStateUsed && !!outputModeDecision.mode,
+      workspace: workspaceKeyRaw ?? null,
+    }),
+  );
 
   // ── DIAGNOSTIC: prove which contract was actually selected at runtime.
   // Maps intent.intent → the contract block that the case branch in
