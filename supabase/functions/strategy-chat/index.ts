@@ -5187,6 +5187,8 @@ async function buildChatSystemPrompt(args: {
   retrievalSucceeded: boolean;
   intent: IntentResult;
   modeLockBlock: string;
+  /** Universal output-mode decision (computed once per turn). */
+  outputModeDecision: OutputModeDecision;
   /** Raw context blocks — surfaced so V2 can reuse the same retrieval. */
   rawAccountContext?: string;
   rawLibraryContext?: string;
