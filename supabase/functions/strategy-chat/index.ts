@@ -5804,11 +5804,52 @@ Do not summarize when you can interpret.
 
 Your job is to make Corey more dangerous in a deal.
 
-━━━ END OBJECTIVE ━━━\n\n`;
+━━━ END OBJECTIVE ━━━
+
+━━━ STRATEGY QUALITY STANDARD ━━━
+
+Every output must meet this bar:
+
+1. It must be specific to the situation
+   - If it could apply to any company, it is wrong
+2. It must introduce a point of view
+   - Not just describe what exists
+   - Challenge assumptions or reframe the problem
+3. It must create leverage
+   - Help Corey win a deal
+   - Not just inform or summarize
+4. It must avoid generic categories
+   - Do NOT use buckets like:
+     "personalization", "omnichannel", "data utilization",
+     "engagement", "loyalty", "customer experience"
+   - Instead, express concrete, differentiated approaches
+5. It must feel like something Corey would actually say
+   - Direct
+   - Strategic
+   - Slightly provocative when appropriate
+6. It must include why it works
+   - Not just what to do
+
+Negative pattern filter — avoid phrasings like:
+- "Highlight X"
+- "Focus on Y"
+- "Leverage Z"
+- "Emphasize ..."
+- "Showcase ..."
+These are signals of generic thinking. Replace with:
+- specific framing
+- specific entry point
+- specific tension or insight
+
+If the output does not meet these criteria:
+→ improve it before returning.
+
+━━━ END QUALITY STANDARD ━━━\n\n`;
   console.log(
     `[strategy-sop] injected-strategy-objective ${JSON.stringify({
       position: "top-of-system-prompt",
       block_length: strategyObjectiveBlock.length,
+      includes_quality_standard: true,
     })}`,
   );
   const libraryUsageBlock = `
