@@ -74,6 +74,10 @@ import {
 } from "../_shared/strategy-core/v2/index.ts";
 import { routeRequest, type RoutingDecision } from "../_shared/strategy-router/index.ts";
 import { logRoutingDecision } from "../_shared/strategy-router/log.ts";
+import {
+  runCurrentStatePreflight,
+  type CurrentStateResult,
+} from "../_shared/strategy-core/currentStateIntelligence.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
