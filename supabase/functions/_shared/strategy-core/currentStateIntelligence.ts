@@ -1288,13 +1288,30 @@ function renderPromptBlock(
     ).join("\n\n")
     : "(prioritization pass produced no signals — fall back to the working hypotheses above, but still pick the 2-3 highest-leverage angles yourself before responding, and explain the why behind each.)";
 
-  return `═══ CURRENT STATE INTELLIGENCE (working hypotheses — use these as the basis of your response) ═══
+  // VERIFIED-FIRST block: list real-world signals tagged with source +
+  // confidence. Hypotheses come AFTER and are clearly framed as
+  // gap-fillers. The prose contract below tells the model to LEAD with
+  // verified signals when they exist.
+  const verifiedSigs = (intelligence.verified_signals || []);
+  const verifiedCount = verifiedSigs.filter((v) => v.source !== "inference").length;
+  const inferredCount = verifiedSigs.length - verifiedCount;
+  const verifiedBlock = verifiedSigs.length
+    ? verifiedSigs.map((v, i) =>
+      `${i + 1}. [source:${v.source} · confidence:${v.confidence}${v.kind ? ` · ${v.kind}` : ""}] ${v.signal}` +
+      (v.source_url ? `\n   Source: ${v.source_title || v.source_url} (${v.source_url})` : "")
+    ).join("\n")
+    : "(no verified real-world signals gathered this turn — proceed with hypotheses, framed clearly as assumptions)";
+
+  return `═══ CURRENT STATE INTELLIGENCE (verified-first — lead with what we can verify, extend with what we hypothesize) ═══
 Company: ${c.name}${c.website ? ` (${c.website})` : ""}
 Account context state: ${stateLabel}
 Company confidence: ${c.confidence}
 Web research available this turn: ${webAvailable ? "yes" : "no"}
 
-WORKING HYPOTHESES ABOUT ${c.name.toUpperCase()} (these are reasoned, not sourced — speak in "likely" voice when reflecting them):
+═══ VERIFIED SIGNALS (real-world, source-tagged — PREFER THESE OVER HYPOTHESES) ═══
+${verifiedBlock}
+
+WORKING HYPOTHESES ABOUT ${c.name.toUpperCase()} (used ONLY to extend or fill gaps where verified signals are absent — speak in "likely" voice when reflecting them):
 - Business model: ${bm}
 - Customer experience: ${cx}${mm ? `\n- Marketing current state: ${mm}` : ""}
 - Strategic tension: ${t.strategic_tension}
@@ -1303,7 +1320,7 @@ WORKING HYPOTHESES ABOUT ${c.name.toUpperCase()} (these are reasoned, not source
 - Future-state hypothesis: ${t.future_state_hypothesis}
 - Working thesis: ${t.summary}
 
-KNOWN FACTS (sourced):
+KNOWN FACTS (sourced — CRM + verified signals promoted):
 ${facts || "- (none in CRM/library — reason from public knowledge of this company)"}
 
 ═══ PRIORITIZED SIGNALS + STRATEGIC WHY (TOP ${signals.length || "2-3"} — DRIVE YOUR RESPONSE FROM THESE) ═══
@@ -1314,6 +1331,8 @@ MUST-CONFIRM DISCOVERY QUESTIONS:
 ${mustConfirm}
 
 GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
+- VERIFIED-FIRST: When a prioritized signal has source_type ∈ {web, account, library}, lead with it. Reference the underlying real-world fact naturally in spoken language (not as a citation footnote). Example shape: "${c.name} has been [verified thing]. If that's true, the conversation I'd lead with is…". Inference is allowed only to extend verified signals or fill gaps where no verified signal exists.
+- Clearly distinguish verified from inferred IN PROSE. Verified: speak with confidence ("they've done X", "they recently launched Y"). Inferred: hedge ("a reasonable assumption is…", "${c.name} likely…", "if that holds…"). Never present an inferred angle as a sourced fact.
 - Your response MUST originate from the PRIORITIZED SIGNALS above. Each conversation path you produce must be traceable to one of those 2-3 ranked signals. Do not invent a fourth.
 - For each path, your prose MUST make the strategic WHY visible — not as headings, but woven into the language. The reader should clearly hear: why this matters, why now, why for ${c.name} specifically, what tension to test, and what to ask. Use spoken-voice openers like "I'd lead here because…", "The reason this matters is…", "The tension I'd test is…", "The question I'd ask is…".
 - Do NOT inventory everything that could matter. Surface ONLY what matters most. Fewer, sharper paths with deeper reasoning beat a long list every time.
@@ -1321,15 +1340,15 @@ GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
 - Each path must include the validation question Corey would ask the customer to test the hypothesis. Plain language, the way Corey would actually ask it.
 - Do NOT produce generic lifecycle / marketing / engagement categories ("Acquisition / Activation / Retention / Winback" buckets, "personalize the journey", "build a loyalty program"). The user can already produce that themselves.
 - Frame ideas as conversation strategies, not capability checklists. Angles Corey can lead with, tensions to surface, hypotheses to test.
-- Respect the source_type and confidence on each signal. If source_type=inference, frame it explicitly as a working hypothesis ("a reasonable assumption is…", "${c.name} likely…"). Never present an inferred signal as a sourced fact.
 - Map current state → future state. Each path should imply the gap it closes for ${c.name} specifically.
 - Turn unknowns into discovery questions Corey can ask, not into hedges in your prose.
 - ${
     webAvailable
-      ? "Cite sources when you draw from web research."
-      : "Web research is NOT available this turn — reason from your training knowledge of this company; do not say \"I researched\"."
+      ? "Web research is available — verified web signals above are real; reference them naturally without citation-heavy phrasing."
+      : "Web research is NOT available this turn — verified signals above came from training recall and are tagged accordingly; do not say \"I researched\"."
   }
-═══════════════════════════════════`;
+═══════════════════════════════════
+[Verified-first counters: verified=${verifiedCount}, inferred=${inferredCount}]`;
 }
 
 // ─── Main entry point ──────────────────────────────────────────────
