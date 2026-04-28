@@ -6416,47 +6416,67 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     const brainstormBlock = `
 
 ━━━ BRAINSTORM ENFORCEMENT (HARD RULES) ━━━
-You MUST follow these rules:
-1. Do NOT output generic categories such as:
-   - personalization
-   - omnichannel
-   - loyalty
-   - engagement
-   - data utilization
-2. Every angle MUST include:
-   - a specific hypothesis about THIS company (named, not generic)
-   - a point of tension or missed opportunity
-   - why it matters
-   - how to use it in conversation (opener, question, or POV)
-3. If an idea could apply to most companies, discard it.
-4. Each angle must be meaningfully different from the others.
-5. Output 4–6 strong angles maximum.
-6. Then:
-   - identify the top 2–3
-   - explain why they matter
-   - explain when to use them (outbound, discovery, exec meeting, etc.)
-7. If your output is generic, regenerate internally before responding.
 
-PER-ANGLE QUALITY BAR (each angle MUST):
-- be meaningfully different from the others
-- contain a clear POV (not a description of what exists)
-- include a "why this works" explanation
-- feel like a real conversation strategy, not a category
+OUTPUT MODE: CONVERSATION-ENTRY, NOT IDEA LIST.
+You are not producing a structured list of strategies. You are giving Corey
+the actual things he might say or push on when he opens or drives this
+conversation. Write the way Corey would think out loud right before a call.
 
-Avoid:
-- generic marketing themes (personalization, omnichannel, loyalty, engagement, data utilization)
-- consultant-style language ("highlight", "focus on", "leverage", "emphasize", "showcase")
-- ideas that could apply to any retailer / SaaS / B2B company
+FORMAT RULES (NON-NEGOTIABLE):
+1. Do NOT use headings, titles, bold labels, bullet headers, or any name
+   for an idea. No "Approach 1", no "Dynamic Inventory Alerts", no
+   "Reframe personalization as discovery" — no naming an angle at all.
+2. Do NOT format as a list of named approaches, cards, or sections.
+3. Each idea is a short paragraph (2–5 sentences) written in first person
+   as Corey, e.g.:
+     "I'd probably open by pushing on…"
+     "One way I'd come at this is…"
+     "I might start by asking them whether…"
+     "Honestly, I'd lean into the fact that…"
+4. Plain prose only. A simple "—" or blank line between ideas is fine.
+   No markdown headings (#, ##), no bold idea-names, no numbered list of
+   labeled strategies. A bare numbered or dashed list of paragraphs is
+   acceptable ONLY if each item starts with first-person language and
+   carries no label.
+5. Produce 3–5 distinct conversation entries. Each must be something Corey
+   could literally say out loud in the meeting.
 
-Replace those patterns with:
-- a specific framing
-- a specific entry point
-- a specific tension or insight Corey can actually use in conversation
+CONTENT RULES:
+- Anchor every entry in this specific company's situation (use the Current
+  State Intelligence + any account context). If an entry could be said to
+  any retailer / SaaS / B2B company, rewrite it or drop it.
+- Each entry must contain a real point of view, tension, or provocation —
+  not a description of a capability or a category.
+- No generic marketing themes as the spine of an idea (personalization,
+  omnichannel, loyalty, engagement, data utilization). You may reference
+  them only inside a specific, contrarian, company-grounded take.
+- No consultant verbs as the move ("highlight", "focus on", "leverage",
+  "emphasize", "showcase"). Replace with what Corey would actually say
+  or ask.
+- After the entries, you MAY add one short paragraph (still first-person,
+  no heading) calling out which 1–2 you'd actually lead with and why —
+  but only if it stays conversational. No "Top picks:" label.
 
-Library use in brainstorm:
-- Use the library to generate STRONGER angles — patterns, named tactics, prior plays — but do NOT collapse to a single known tactic.
-- Do NOT default to library-first answers. Combine library patterns + reasoning + new angles.
-- Do NOT announce that you searched the library or that nothing was found.
+EXAMPLES OF THE SHAPE WE WANT:
+  BAD  → "**Dynamic Inventory Alerts** — Reframe personalization as discovery…"
+  GOOD → "I'd probably lean into how their inventory is constantly
+          changing and ask whether they're actually using that to create
+          urgency outside the store. Most lifecycle programs assume a
+          stable catalog — TJX doesn't have one, and that's either a
+          headache or their biggest unused weapon."
+
+Library use:
+- Pull from the library to sharpen the POV, but do NOT name the play,
+  cite a framework by title in-line, or announce that you searched.
+  The library should make the entry sharper, not turn it into a label.
+
+SELF-CHECK BEFORE RESPONDING:
+- Does any line read like a heading, title, or named approach? If yes,
+  rewrite it as something Corey would say.
+- Does every entry start in first person ("I'd…", "I might…", "One way
+  I'd…", "Honestly…")? If not, fix it.
+- Could this be pasted into a real pre-call note as talking points? If
+  not, rewrite.
 
 This is NOT optional. Do not ignore these rules.
 `;
