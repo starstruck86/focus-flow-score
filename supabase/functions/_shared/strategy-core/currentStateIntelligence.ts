@@ -769,10 +769,22 @@ export async function runCurrentStatePreflight(
     : "inferred";
 
   const webResearched = !!args.webCapabilityAvailable;
+
+  // Generate REAL hypotheses (not placeholder scaffolding) before the
+  // main model runs. This is what gives the current-state block enough
+  // signal to actually steer generation. Failure is non-fatal — we
+  // fall back to hedged prose, never to "[Likely]" tokens.
+  const hypotheses = await generateRealHypotheses({
+    entityName: entity.name,
+    resolvedAccount,
+    userContent: args.userContent || "",
+  });
+
   const intelligence = buildSkeletonIntelligence({
     entityName: entity.name,
     resolvedAccount,
     webResearched,
+    hypotheses,
   });
 
   const promptBlock = renderPromptBlock(
@@ -797,6 +809,7 @@ export async function runCurrentStatePreflight(
       user_text: true,
     },
     current_state_confidence: intelligence.company.confidence,
+    hypotheses_generated: !!hypotheses,
     unknowns_count: countUnknowns(intelligence),
     injected_current_state_block: true,
     candidates_considered: candidates,
