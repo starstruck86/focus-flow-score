@@ -5313,8 +5313,16 @@ async function buildChatSystemPrompt(args: {
     userAskedForResource(userContent) ||
     inferTopicScopes(userContent).length > 0;
   if (!accountId && (!contextSection || contextSection.length < 200) && pickedResourceIds.length === 0 && !groundedAsk) {
+    // Even on the generic small-talk path, if Current State produced
+    // an inferred block (e.g. user mentioned a company in chat), we
+    // append it so the model is never blind to context that was
+    // already detected. Output mode contract still binds tone/shape.
+    const _genericBase = buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock);
+    const _csBlock = currentStateResult?.promptBlock
+      ? `\n${currentStateResult.promptBlock}\n`
+      : "";
     return {
-      prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock),
+      prompt: `${_genericBase}${_csBlock}`,
       workingThesis: null,
       resourceHits: [],
       kiHits: [],
@@ -5324,6 +5332,7 @@ async function buildChatSystemPrompt(args: {
       intent,
       modeLockBlock,
       outputModeDecision,
+      currentStateResult,
     };
   }
 
