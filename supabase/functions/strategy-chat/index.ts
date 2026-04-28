@@ -5511,10 +5511,11 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
   // anti-structure rule and anchor examples were trying to produce
   // conversational output. Each workspace now gets the format that
   // serves its purpose; explicit user instructions still override.
-  const { contract: readabilityContract, decision: outputModeDecision } = buildResponseFormatContract({
+  const readabilityContract = buildResponseFormatContract({
     workspace: workspaceKeyRaw ?? null,
     intent,
     userContent,
+    decision: outputModeDecision,
   });
   console.log(
     "[strategy-chat] output_mode",
