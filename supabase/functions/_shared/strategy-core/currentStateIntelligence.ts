@@ -1894,6 +1894,14 @@ export async function runCurrentStatePreflight(
     prioritized_signal_types: prioritizedSignals.map((s) => s.signal_type),
     prioritized_signal_sources: prioritizedSignals.map((s) => s.source_type),
     prioritized_verified_top_count: verifiedTopRanks,
+    // ── Change Vector (X → Y → Z) telemetry ───────────────────────
+    change_vectors_count: prioritizedSignals.filter((s) => !!s.change_vector).length,
+    change_vectors_y_verified_count: prioritizedSignals.filter(
+      (s) => s.change_vector?.now_basis === "verified",
+    ).length,
+    change_vectors_y_inferred_count: prioritizedSignals.filter(
+      (s) => s.change_vector?.now_basis === "inferred",
+    ).length,
     // ── Commercial Insight (Challenger) telemetry ─────────────────
     commercial_insights_count: commercialInsights.length,
     commercial_insights_sources: commercialInsights.map((c) => c.source_type),
