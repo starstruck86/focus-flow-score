@@ -6457,11 +6457,16 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       const sigs = Array.isArray(cs.prioritized_signals) ? cs.prioritized_signals : [];
       if (sigs.length) {
         lines.push("");
-        lines.push("PRIORITIZED SIGNALS (drive every angle from these — do not invent a fourth):");
+        lines.push("PRIORITIZED SIGNALS + STRATEGIC WHY (drive every path from these — do not invent a fourth):");
         for (const s of sigs) {
-          lines.push(`  ${s.rank}. [${s.signal_type}] ${s.signal}`);
-          lines.push(`     impact: ${s.business_impact}`);
-          lines.push(`     angle: ${s.conversation_angle}`);
+          lines.push(`  ${s.rank}. [${s.signal_type} · src:${s.source_type} · conf:${s.confidence}] ${s.signal}`);
+          lines.push(`     why it matters:   ${s.why_it_matters}`);
+          lines.push(`     why now:          ${s.why_now}`);
+          lines.push(`     why this company: ${s.why_this_company}`);
+          lines.push(`     pressure:         ${s.business_pressure}`);
+          lines.push(`     tension to test:  ${s.strategic_tension}`);
+          lines.push(`     conversation move:${s.conversation_move}`);
+          lines.push(`     validation Q:     ${s.validation_question}`);
         }
       }
       return lines.join("\n");

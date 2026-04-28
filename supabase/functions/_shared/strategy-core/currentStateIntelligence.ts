@@ -150,13 +150,33 @@ export type SignalType =
   | "leadership_or_org"
   | "product_or_launch";
 
+export type SignalSourceType = "account" | "library" | "web" | "inference";
+
 export interface PrioritizedSignal {
   rank: 1 | 2 | 3;
   signal: string;             // The signal itself, named concretely
   signal_type: SignalType;
-  why_it_matters: string;     // What makes this matter for a first conversation
-  business_impact: string;    // Revenue / growth / risk implication
-  conversation_angle: string; // What Corey can actually say to open or drive on this
+  source_type: SignalSourceType;
+  confidence: ConfidenceLevel;
+
+  // ── Strategic Why layer ──────────────────────────────────────────
+  why_it_matters: string;             // What outcome / behavior / model this affects
+  why_now: string;                    // What is changing right now that makes it timely
+  why_this_company: string;           // Why this is uniquely relevant to THIS account
+
+  business_pressure: string;          // Revenue / growth / risk pressure it points to
+  customer_behavior_implication: string; // What customer behavior it suggests
+  marketing_motion_implication: string;  // What it implies about lifecycle / engagement motion
+  future_state_implication: string;   // What ambition / future-state it implies
+
+  strategic_tension: string;          // The assumption Corey should challenge
+  conversation_move: string;          // What Corey should lead with (spoken voice)
+  validation_question: string;        // The question Corey should ask to test it
+
+  // Back-compat from the earlier Prioritization layer (kept so the
+  // conversation-mode digest and any prior consumers don't break):
+  business_impact: string;            // 1-line revenue/growth/risk implication
+  conversation_angle: string;         // Spoken-language opener
 }
 
 export interface CurrentStateResult {
@@ -515,11 +535,26 @@ const SIGNAL_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY this shape:
   "signals": [
     {
       "rank": 1,
-      "signal": "Concrete, named signal (not a category). e.g. 'Inventory turns weekly and creates real-time scarcity that lifecycle programs almost never exploit', not 'opportunity in retention'.",
+      "signal": "Concrete, named signal (not a category). e.g. 'TJX's treasure-hunt model means inventory turns weekly and creates real-time scarcity that lifecycle programs almost never exploit', not 'opportunity in retention'.",
       "signal_type": "tension | revenue_or_growth | change_in_motion | blind_spot | external_event | competitive_pressure | leadership_or_org | product_or_launch",
-      "why_it_matters": "1 sentence: why THIS signal is the highest-leverage thing to put on the table in a first conversation.",
-      "business_impact": "1 sentence: the revenue, growth, or risk implication if they act vs. ignore.",
-      "conversation_angle": "1-2 sentences in first-person, exactly the way Corey would open or drive on this. No headings, no labels, no consultant-speak. Sounds like real spoken language."
+      "source_type": "account | library | web | inference",
+      "confidence": "high | medium | low",
+
+      "why_it_matters": "1 sentence: the business outcome, customer behavior, or operating-model lever this signal moves. Not 'this is important' — name what it changes.",
+      "why_now": "1 sentence: what is changing right now (market, customer behavior, company priority, competitive pressure, product investment, leadership shift, channel change, seasonality, technology shift).",
+      "why_this_company": "1 sentence: why THIS account specifically — not any company in the category. Tie to their model / scale / customer / position.",
+
+      "business_pressure": "1 sentence: the revenue / growth / margin / risk pressure this points to.",
+      "customer_behavior_implication": "1 sentence: what this signal implies about how their customers actually behave.",
+      "marketing_motion_implication": "1 sentence: what this implies about how lifecycle / engagement / CRM motion should be shaped.",
+      "future_state_implication": "1 sentence: what ambition or future-state this signal implies they are (or should be) moving toward.",
+
+      "strategic_tension": "1 sentence: the assumption Corey should challenge in conversation. Should sound like 'most teams assume X, but for this company Y is closer to true.'",
+      "conversation_move": "1-2 sentences in first-person spoken voice. Example shapes: \"I'd lead here because…\", \"The reason this matters is…\", \"The tension I'd test is…\". No headings, no labels, no consultant-speak.",
+      "validation_question": "1 sentence: the question Corey should ask the customer to test the hypothesis. Plain language, the way Corey would actually ask it.",
+
+      "business_impact": "1 short sentence summarizing revenue / growth / risk implication (kept for downstream digest reuse).",
+      "conversation_angle": "1 short spoken-voice opener (kept for downstream digest reuse). Same energy as conversation_move."
     }
   ]
 }
@@ -536,7 +571,9 @@ Hard rules:
 - No generic lifecycle buckets (Acquisition / Activation / Retention / Winback) as signals.
 - No "opportunity to personalize" / "build a loyalty program" / "improve email" — those are not signals.
 - A signal must be specific enough that another rep would say "yes, that's the real thing."
-- conversation_angle must read like spoken language Corey can use. No "we should explore...", no headings.
+- If the underlying basis is inferred (no sourced fact), set source_type = "inference" and confidence = "low" — do NOT pretend it's sourced.
+- Every Why field (why_it_matters, why_now, why_this_company) must be DIFFERENT. If you're tempted to repeat the signal in those fields, you haven't reasoned hard enough.
+- conversation_move and conversation_angle must read like spoken language. No "we should explore...", no headings.
 - Do NOT include any text outside the JSON object.`;
 
 interface GeneratedSignals {
@@ -642,25 +679,79 @@ async function generatePrioritizedSignals(args: {
       "leadership_or_org",
       "product_or_launch",
     ];
+    const allowedSources: SignalSourceType[] = [
+      "account",
+      "library",
+      "web",
+      "inference",
+    ];
+    const allowedConfidences: ConfidenceLevel[] = ["high", "medium", "low"];
+
+    const haveAccount = !!args.resolvedAccount;
+    const haveWeb = !!args.webResearched;
 
     const cleaned: PrioritizedSignal[] = [];
     for (let i = 0; i < parsed.signals.length && cleaned.length < 3; i++) {
       const s: any = parsed.signals[i];
       if (!s || typeof s !== "object") continue;
+
       const signal = String(s.signal || "").trim();
-      const why = String(s.why_it_matters || "").trim();
-      const impact = String(s.business_impact || "").trim();
-      const angle = String(s.conversation_angle || "").trim();
-      if (!signal || !why || !impact || !angle) continue;
+      const whyMatters = String(s.why_it_matters || "").trim();
+      const whyNow = String(s.why_now || "").trim();
+      const whyCo = String(s.why_this_company || "").trim();
+      const pressure = String(s.business_pressure || "").trim();
+      const cxImp = String(s.customer_behavior_implication || "").trim();
+      const motionImp = String(s.marketing_motion_implication || "").trim();
+      const futureImp = String(s.future_state_implication || "").trim();
+      const tension = String(s.strategic_tension || "").trim();
+      const move = String(s.conversation_move || "").trim();
+      const validation = String(s.validation_question || "").trim();
+      const impact = String(s.business_impact || pressure || "").trim();
+      const angle = String(s.conversation_angle || move || "").trim();
+
+      // Required fields — drop the signal if any core Why field is missing.
+      if (
+        !signal || !whyMatters || !whyNow || !whyCo ||
+        !pressure || !cxImp || !motionImp || !futureImp ||
+        !tension || !move || !validation
+      ) continue;
+
       const type = allowedTypes.includes(s.signal_type)
         ? (s.signal_type as SignalType)
         : "tension";
+
+      // Trust-down rule: never let the model upgrade a signal beyond
+      // what the actual source mix supports. Inference can never
+      // claim "account" or "web" sourcing.
+      let source: SignalSourceType = allowedSources.includes(s.source_type)
+        ? (s.source_type as SignalSourceType)
+        : "inference";
+      if (source === "account" && !haveAccount) source = "inference";
+      if (source === "web" && !haveWeb) source = "inference";
+
+      let confidence: ConfidenceLevel = allowedConfidences.includes(s.confidence)
+        ? (s.confidence as ConfidenceLevel)
+        : "low";
+      // Inference can't be high-confidence.
+      if (source === "inference" && confidence === "high") confidence = "medium";
+
       const rank = (cleaned.length + 1) as 1 | 2 | 3;
       cleaned.push({
         rank,
         signal,
         signal_type: type,
-        why_it_matters: why,
+        source_type: source,
+        confidence,
+        why_it_matters: whyMatters,
+        why_now: whyNow,
+        why_this_company: whyCo,
+        business_pressure: pressure,
+        customer_behavior_implication: cxImp,
+        marketing_motion_implication: motionImp,
+        future_state_implication: futureImp,
+        strategic_tension: tension,
+        conversation_move: move,
+        validation_question: validation,
         business_impact: impact,
         conversation_angle: angle,
       });
@@ -845,12 +936,19 @@ function renderPromptBlock(
   const signals = intelligence.prioritized_signals || [];
   const signalsBlock = signals.length
     ? signals.map((s) =>
-      `${s.rank}. [${s.signal_type}] ${s.signal}\n` +
-      `   Why it matters: ${s.why_it_matters}\n` +
-      `   Business impact: ${s.business_impact}\n` +
-      `   Conversation angle: ${s.conversation_angle}`
+      `${s.rank}. [${s.signal_type} · source:${s.source_type} · confidence:${s.confidence}] ${s.signal}\n` +
+      `   Why it matters:        ${s.why_it_matters}\n` +
+      `   Why now:               ${s.why_now}\n` +
+      `   Why this company:      ${s.why_this_company}\n` +
+      `   Business pressure:     ${s.business_pressure}\n` +
+      `   Customer behavior:     ${s.customer_behavior_implication}\n` +
+      `   Marketing motion:      ${s.marketing_motion_implication}\n` +
+      `   Future-state implied:  ${s.future_state_implication}\n` +
+      `   Strategic tension:     ${s.strategic_tension}\n` +
+      `   Conversation move:     ${s.conversation_move}\n` +
+      `   Validation question:   ${s.validation_question}`
     ).join("\n\n")
-    : "(prioritization pass produced no signals — fall back to the working hypotheses above, but still pick the 2-3 highest-leverage angles yourself before responding.)";
+    : "(prioritization pass produced no signals — fall back to the working hypotheses above, but still pick the 2-3 highest-leverage angles yourself before responding, and explain the why behind each.)";
 
   return `═══ CURRENT STATE INTELLIGENCE (working hypotheses — use these as the basis of your response) ═══
 Company: ${c.name}${c.website ? ` (${c.website})` : ""}
@@ -870,21 +968,23 @@ WORKING HYPOTHESES ABOUT ${c.name.toUpperCase()} (these are reasoned, not source
 KNOWN FACTS (sourced):
 ${facts || "- (none in CRM/library — reason from public knowledge of this company)"}
 
-═══ PRIORITIZED SIGNALS (TOP ${signals.length || "2-3"} — DRIVE YOUR RESPONSE FROM THESE) ═══
+═══ PRIORITIZED SIGNALS + STRATEGIC WHY (TOP ${signals.length || "2-3"} — DRIVE YOUR RESPONSE FROM THESE) ═══
 ${signalsBlock}
-═══════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════════
 
 MUST-CONFIRM DISCOVERY QUESTIONS:
 ${mustConfirm}
 
 GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
-- Your response MUST originate from the PRIORITIZED SIGNALS above. Each conversation angle you produce must be traceable to one of those 2-3 ranked signals. Do not invent a fourth.
-- Do NOT inventory everything that could matter. Surface ONLY what matters most. Fewer, sharper angles beat a long list every time.
-- Each angle must connect to business impact (revenue, growth, risk) and carry a clear point of view Corey can actually say.
-- Do NOT produce generic lifecycle / marketing / engagement categories (e.g. "Acquisition / Activation / Retention / Winback" buckets, "personalize the journey", "build a loyalty program"). The user can already produce that themselves.
-- Frame ideas as conversation strategies: angles Corey can lead with, tensions to surface, hypotheses to test — not capability checklists.
-- Speak hedged hypotheses honestly: use "${c.name} likely…", "in a [model] like ${c.name}'s…", "a reasonable assumption is…". Never present an inferred hypothesis as a sourced fact.
-- Map current state → future state. Each idea should imply the gap it closes for ${c.name} specifically.
+- Your response MUST originate from the PRIORITIZED SIGNALS above. Each conversation path you produce must be traceable to one of those 2-3 ranked signals. Do not invent a fourth.
+- For each path, your prose MUST make the strategic WHY visible — not as headings, but woven into the language. The reader should clearly hear: why this matters, why now, why for ${c.name} specifically, what tension to test, and what to ask. Use spoken-voice openers like "I'd lead here because…", "The reason this matters is…", "The tension I'd test is…", "The question I'd ask is…".
+- Do NOT inventory everything that could matter. Surface ONLY what matters most. Fewer, sharper paths with deeper reasoning beat a long list every time.
+- Each path must connect to business pressure (revenue, growth, margin, risk) AND name the customer-behavior or motion implication — not just the angle.
+- Each path must include the validation question Corey would ask the customer to test the hypothesis. Plain language, the way Corey would actually ask it.
+- Do NOT produce generic lifecycle / marketing / engagement categories ("Acquisition / Activation / Retention / Winback" buckets, "personalize the journey", "build a loyalty program"). The user can already produce that themselves.
+- Frame ideas as conversation strategies, not capability checklists. Angles Corey can lead with, tensions to surface, hypotheses to test.
+- Respect the source_type and confidence on each signal. If source_type=inference, frame it explicitly as a working hypothesis ("a reasonable assumption is…", "${c.name} likely…"). Never present an inferred signal as a sourced fact.
+- Map current state → future state. Each path should imply the gap it closes for ${c.name} specifically.
 - Turn unknowns into discovery questions Corey can ask, not into hedges in your prose.
 - ${
     webAvailable
