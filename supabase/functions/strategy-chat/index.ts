@@ -2933,7 +2933,7 @@ function buildModeLockBlock(intent: IntentResult): string {
   const isTemplateMode = kind === "template";
   const placeholderPolicy = isTemplateMode
     ? `\n- SPECIFICITY FLOOR: every concrete reference you have in context MUST appear. Where a fact is genuinely unknown, use [BRACKETED_PLACEHOLDER] — that is the contract for template mode.`
-    : `\n- ZERO-PLACEHOLDER RULE (HARD): you are NOT in template mode. You are FORBIDDEN from emitting any placeholder token of any kind: no [BRACKETED_*], no $[BRACKETED_*], no %[BRACKETED_*], no [Client], no [Customer], no [Contact Name], no [specific date], no [date], no [name] except for a name that's actually in context. If you do not have a fact, do ONE of these: (a) use only the facts that ARE in the thread/account context, (b) say in ONE short line exactly what's missing (e.g. "I can make this CFO-ready once you give me the savings estimate and deadline."), or (c) write a directional sentence with no fake specifics (e.g. "If we delay this, we risk pushing the project into next quarter and missing the current implementation window."). Bracket-placeholder cosplay will be STRIPPED by the server-side guard and you will be marked incorrect.
+    : `\n- ZERO-PLACEHOLDER RULE (HARD): you are NOT in template mode. You are FORBIDDEN from emitting any placeholder token of any kind: no [BRACKETED_*], no $[BRACKETED_*], no %[BRACKETED_*], no [Client], no [Customer], no [Contact Name], no [specific date], no [date], no [name] except for a name that's actually in context. If a fact is missing: (a) do not invent it, (b) use the facts that ARE in the thread/account/workspace context, (c) write directional, useful content with no fake specifics (e.g. "If we delay this, we risk pushing the project into next quarter and missing the current implementation window."), (d) mark genuine unknowns clearly inline ("assumption:", "TBD:", "to confirm:"), and (e) convert the missing facts into 1–3 follow-up questions at the END of the response — never in place of the response. Do NOT produce a clarification-only reply that just states what's missing. Bracket-placeholder cosplay will be STRIPPED by the server-side guard and you will be marked incorrect.
 - SUBSTANCE CONTRACT: NEVER use any of these phrases — "I hope this finds you well", "I hope this email finds you well", "I hope you're doing well", "I hope all is well", "just checking in", "circling back", "touching base", "reaching out to see", "let me know if", "let me know your thoughts", "I wanted to", "I just wanted to", "happy to chat", "happy to discuss", "would love to", "I'd love to", "I look forward to hearing", "thoughts?", "any thoughts", "feel free to", "at your earliest convenience", "as per", "kindly", "warm regards". They make you sound like a junior SDR.
 - VERB FLOOR: lead sentences with strong, specific verbs. Replace "follow up on X" → "ask Y to confirm Z". Replace "check in on the deal" → "ask the named person for the decision/signature/intro you actually need".`;
   const substanceContract = isTemplateMode
@@ -3397,10 +3397,20 @@ If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable
     case "freeform":
     default:
       return `═══ MODE LOCK: FREEFORM ═══
-The user's intent isn't a clear asset request. Pick the SMALLEST useful output that answers the literal question.
+The user's intent isn't a clear asset request. Pick the right-sized useful output that answers the literal question — concise when a concise answer is correct, expanded when the workspace/Decision Layer requires it (e.g. Brainstorm expects multiple angles).
 - FORBIDDEN: defaulting to an email or a generic template just because that's easy.
 - FORBIDDEN: a strategic-thesis essay unless they explicitly asked for analysis.
-- REQUIRED: First line answers the question directly. If an asset is the right answer, give it. If a one-line answer is the right answer, give that and stop.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+- FORBIDDEN: clarification-only responses as the primary output. Do NOT reply with "I need more context", "can you clarify", or a single-line statement of what's missing in place of an actual answer.
+- REQUIRED: First line answers the question directly with substance. Deliver value before asking anything.
+
+AMBIGUITY HANDLING — BINDING:
+If the user's request is ambiguous or underspecified, do NOT stop with a clarification request. Instead:
+1. assume the most reasonable interpretation from the current workspace, thread, account context, and Corey's selling motion
+2. produce a useful, high-leverage response immediately
+3. state any assumptions briefly inline
+4. ask clarifying questions ONLY after delivering value, at the end, as optional refinements
+
+Clarification-only responses are allowed ONLY when the task is impossible to proceed with safely or meaningfully (e.g. destructive action with no target, or a literal contradiction). "I don't have enough info" is NOT a valid primary response in FREEFORM.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
   }
 }
 
