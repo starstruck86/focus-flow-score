@@ -882,6 +882,19 @@ const SIGNAL_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY this shape:
       "conversation_move": "1-2 sentences in first-person spoken voice. Example shapes: \"I'd lead here because…\", \"The reason this matters is…\", \"The tension I'd test is…\". No headings, no labels, no consultant-speak.",
       "validation_question": "1 sentence: the question Corey should ask the customer to test the hypothesis. Plain language, the way Corey would actually ask it.",
 
+      "change_vector": {
+        "before": "X — what this account USED TO do / how they USED TO operate on this dimension. 1 short sentence, concrete (not 'they had a basic program'). Example: 'Drove repeat purchase entirely through batch promotional email.'",
+        "before_basis": "verified | inferred",
+        "now": "Y — what they are doing / how they operate TODAY. Anchored in verified signals when present. 1 short sentence, concrete. Example: 'Have launched a paid loyalty tier and started personalizing offers by segment.'",
+        "now_basis": "verified | inferred",
+        "next": "Z — the direction of travel: where this is heading next 6-18 months based on signals + business model. 1 short sentence. Example: 'Moving toward a behaviorally-triggered lifecycle motion that monetizes the loyalty signal in real time.'",
+        "next_basis": "verified | inferred",
+        "what_changed": "1 sentence: the delta from X → Y, named concretely. The actual shift, not a vague 'they evolved'.",
+        "why_it_matters": "1 sentence: why this change matters for their business — revenue / customer / margin / risk lens.",
+        "what_breaks": "1 sentence: what breaks or gets left on the table if they don't keep moving toward Z.",
+        "opportunity": "1 sentence: the opportunity that emerges from the X → Y → Z motion — the gap Corey can lean into."
+      },
+
       "business_impact": "1 short sentence summarizing revenue / growth / risk implication (kept for downstream digest reuse).",
       "conversation_angle": "1 short spoken-voice opener (kept for downstream digest reuse). Same energy as conversation_move."
     }
