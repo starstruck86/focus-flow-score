@@ -1261,6 +1261,43 @@ async function generatePrioritizedSignals(args: {
         confidence: refConfidence,
       };
 
+      // ── Friction Layer (problem-first) — REQUIRED ─────────────────
+      // Forces the conversation to open from a constraint, not a
+      // solution. We sanitize the move so any solution-verb opener is
+      // rewritten into a problem-framed opener before it hits prose.
+      const fr: any = (s && typeof s.friction === "object" && s.friction) || {};
+      const whatIsHard = String(fr.what_is_hard || "").trim();
+      const whyHard = String(fr.why_it_is_hard || "").trim();
+      const tradeoff = String(fr.tradeoff || "").trim();
+      const csLink = String(fr.current_state_link || "").trim() || now;
+      const fricImp = String(fr.implication || "").trim() || (whatBreaks || "");
+      let fricMove = String(fr.conversation_move || "").trim();
+      const fricQ = String(fr.validation_question || "").trim() || validation;
+
+      // Drop the signal if there's no real friction to name. The whole
+      // point of this layer is to ensure no signal ships without a
+      // problem-first frame; an empty friction is a tell that the
+      // signal is too generic.
+      if (!whatIsHard || !whyHard || !tradeoff) continue;
+
+      // Sanitize: solution-verb opener → rewrite into problem-framed.
+      // Cheap regex guard ensures we never ship "Use lifecycle…" prose
+      // even if the model ignored the schema rule.
+      const SOLUTION_OPENER = /^(use|build|implement|launch|leverage|deploy|create|introduce|roll\s*out|stand\s*up|set\s*up|adopt)\b/i;
+      if (!fricMove || SOLUTION_OPENER.test(fricMove)) {
+        fricMove = `The challenge for a team like this is ${whatIsHard.replace(/[.!?]+$/, "")} — ${whyHard.replace(/^[A-Z]/, (m) => m.toLowerCase())}`;
+      }
+
+      const friction: SignalFriction = {
+        what_is_hard: whatIsHard,
+        why_it_is_hard: whyHard,
+        tradeoff,
+        current_state_link: csLink,
+        implication: fricImp || `Without naming this constraint, ${whatIsHard.replace(/[.!?]+$/, "")} compounds.`,
+        conversation_move: fricMove,
+        validation_question: fricQ,
+      };
+
       cleaned.push({
         rank: 1, // re-ranked below after verified-first sort
         signal,
@@ -1279,6 +1316,7 @@ async function generatePrioritizedSignals(args: {
         validation_question: validation,
         change_vector,
         reference,
+        friction,
         business_impact: impact,
         conversation_angle: angle,
       });
