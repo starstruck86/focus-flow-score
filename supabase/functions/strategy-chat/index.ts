@@ -5358,6 +5358,12 @@ async function buildChatSystemPrompt(args: {
       constraint_budget_applied: true,
       duplicate_gates_removed: true,
       generic_validator_passed: true,
+      // ── Behavior Intent Routing (intent → exclusive behavior) ─────
+      intent_detected: behaviorIntent.intent,
+      behavior_selected: behaviorIntent.intent,
+      suppressed_behaviors: behaviorIntent.suppressed,
+      behavior_intent_signal: behaviorIntent.matched_signal,
+      behavior_intent_confidence: behaviorIntent.confidence,
       workspace: workspaceKeyRaw ?? null,
     }),
   );
