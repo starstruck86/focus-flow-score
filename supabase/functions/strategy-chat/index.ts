@@ -5226,9 +5226,11 @@ async function buildChatSystemPrompt(args: {
       threadHasLinkedAccount: !!pack.account?.id,
       isTaskPipeline: false, // chat path; task pipelines bypass buildPromptOnce
       intentTag: intent?.intent ?? null,
-      // strategy-chat has no live web/research adapter wired today;
-      // stays in "Likely:" voice and avoids any "I researched" phrasing.
-      webCapabilityAvailable: false,
+      // Verified-first model: when Perplexity is configured we can
+      // ground signals in real-time web research; otherwise the
+      // current-state layer falls back to model recall tagged as
+      // source:"inference" so it never masquerades as web-sourced.
+      webCapabilityAvailable: !!Deno.env.get("PERPLEXITY_API_KEY"),
     });
     console.log(
       "[strategy-chat] current_state_preflight",
