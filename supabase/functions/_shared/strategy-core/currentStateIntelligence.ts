@@ -1541,6 +1541,24 @@ function renderPromptBlock(
     ).join("\n")
     : "(no verified real-world signals gathered this turn — proceed with hypotheses, framed clearly as assumptions)";
 
+  // COMMERCIAL INSIGHT (Challenger reframe) block — when present, this
+  // is the single most important block on the page: the response MUST
+  // open from the insight, not from a list of ideas.
+  const insights = intelligence.commercial_insights || [];
+  const insightsBlock = insights.length
+    ? insights.map((ins, i) =>
+      `${i + 1}. [src:${ins.source_type} · conf:${ins.confidence}${ins.built_on_signal_ranks?.length ? ` · built on signal #${ins.built_on_signal_ranks.join(",")}` : ""}]\n` +
+      `   Insight (the reframe):     ${ins.insight}\n` +
+      `   How they think today:      ${ins.current_state}\n` +
+      `   What is shifting:          ${ins.shift}\n` +
+      `   What breaks:               ${ins.problem}\n` +
+      `   Business implication:      ${ins.implication}\n` +
+      `   Tension to challenge:      ${ins.tension}\n` +
+      `   Conversation entry:        ${ins.conversation_entry}\n` +
+      `   Validation question:       ${ins.question}`
+    ).join("\n\n")
+    : "(no commercial insight generated — fall back to leading with the top prioritized signal as the conversation entry, but still open with a POV, not a list)";
+
   return `═══ CURRENT STATE INTELLIGENCE (verified-first — lead with what we can verify, extend with what we hypothesize) ═══
 Company: ${c.name}${c.website ? ` (${c.website})` : ""}
 Account context state: ${stateLabel}
@@ -1562,7 +1580,10 @@ WORKING HYPOTHESES ABOUT ${c.name.toUpperCase()} (used ONLY to extend or fill ga
 KNOWN FACTS (sourced — CRM + verified signals promoted):
 ${facts || "- (none in CRM/library — reason from public knowledge of this company)"}
 
-═══ PRIORITIZED SIGNALS + STRATEGIC WHY (TOP ${signals.length || "2-3"} — DRIVE YOUR RESPONSE FROM THESE) ═══
+═══ COMMERCIAL INSIGHT — CHALLENGER REFRAME (TOP ${insights.length || "1-2"} — OPEN YOUR RESPONSE FROM THE INSIGHT, NOT FROM A LIST) ═══
+${insightsBlock}
+
+═══ PRIORITIZED SIGNALS + STRATEGIC WHY (TOP ${signals.length || "2-3"} — these EXTEND the insight; do not let them replace it) ═══
 ${signalsBlock}
 ═══════════════════════════════════════════════════════════════════════
 
