@@ -3397,10 +3397,20 @@ If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable
     case "freeform":
     default:
       return `═══ MODE LOCK: FREEFORM ═══
-The user's intent isn't a clear asset request. Pick the SMALLEST useful output that answers the literal question.
+The user's intent isn't a clear asset request. Pick the right-sized useful output that answers the literal question — concise when a concise answer is correct, expanded when the workspace/Decision Layer requires it (e.g. Brainstorm expects multiple angles).
 - FORBIDDEN: defaulting to an email or a generic template just because that's easy.
 - FORBIDDEN: a strategic-thesis essay unless they explicitly asked for analysis.
-- REQUIRED: First line answers the question directly. If an asset is the right answer, give it. If a one-line answer is the right answer, give that and stop.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
+- FORBIDDEN: clarification-only responses as the primary output. Do NOT reply with "I need more context", "can you clarify", or a single-line statement of what's missing in place of an actual answer.
+- REQUIRED: First line answers the question directly with substance. Deliver value before asking anything.
+
+AMBIGUITY HANDLING — BINDING:
+If the user's request is ambiguous or underspecified, do NOT stop with a clarification request. Instead:
+1. assume the most reasonable interpretation from the current workspace, thread, account context, and Corey's selling motion
+2. produce a useful, high-leverage response immediately
+3. state any assumptions briefly inline
+4. ask clarifying questions ONLY after delivering value, at the end, as optional refinements
+
+Clarification-only responses are allowed ONLY when the task is impossible to proceed with safely or meaningfully (e.g. destructive action with no target, or a literal contradiction). "I don't have enough info" is NOT a valid primary response in FREEFORM.${economicLayer}${constraintLine}${substanceContract}${bindingClause}`;
   }
 }
 
