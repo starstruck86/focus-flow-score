@@ -26,7 +26,7 @@ import {
   type DispatchSignals,
   dispatch,
 } from "./operatorDispatcher.ts";
-import { buildV2SystemPrompt, buildV2SystemPromptParts } from "./extendedReasoningContract.ts";
+import { buildV2SystemPromptParts } from "./extendedReasoningContract.ts";
 import { auditQuality, type QualityAuditResult } from "./qualityAudit.ts";
 import { checkWrongQuestion, type WrongQuestionResult } from "./wrongQuestionGuard.ts";
 
