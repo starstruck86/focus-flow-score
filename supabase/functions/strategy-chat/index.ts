@@ -5220,6 +5220,18 @@ async function buildChatSystemPrompt(args: {
   });
   const modeLockBlock = buildModeLockBlock(intent);
 
+  // Universal output-mode decision — computed ONCE per turn here so
+  // every prompt path (early-return generic, full chat, V2) carries
+  // the same value through the system prompt and downstream
+  // enforcement (conversation-mode HARD RULES).
+  const _explicitOverride = detectExplicitFormatOverride(userContent);
+  const outputModeDecision: OutputModeDecision = selectOutputMode({
+    workspace: workspaceKeyRaw ?? null,
+    intent,
+    explicitFormat: _explicitOverride?.kind ?? null,
+    userContent,
+  });
+
   // ── DIAGNOSTIC: prove which contract was actually selected at runtime.
   // Maps intent.intent → the contract block that the case branch in
   // buildModeLockBlock injects (see switch around line 2764).
