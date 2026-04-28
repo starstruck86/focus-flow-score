@@ -316,7 +316,7 @@ Write the synthesis now. POV first. Commit.`);
     );
   }
 
-  return parts.join("\n\n");
+  return { identity: IDENTITY, reasoning: parts.join("\n\n") };
 }
 
 // ════════════════════════════════════════════════════════════════
