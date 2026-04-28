@@ -5744,6 +5744,43 @@ Rules:
 ━━━ END LIBRARY USAGE RULES ━━━
 `;
   const sopAuthorityBlock = `${libraryUsageBlock}${buildGlobalSopBlock()}${buildWorkspaceSopBlock()}`;
+  // Phase 7D — Strategy Decision Layer.
+  // Sits AFTER SOPs and BEFORE reasoning/synthesis preamble in both V1 and V2.
+  // Controls behavior (expansion vs compression, research vs synthesis,
+  // artifact vs quick answer) without forcing rigid templates.
+  const decisionLayerBlock = `
+
+━━━ STRATEGY DECISION LAYER ━━━
+
+Before producing your answer, decide how to approach this request.
+
+Classify the task:
+- brainstorm → expand into multiple distinct angles
+- research → gather evidence and generate insights
+- refine → improve existing content without changing intent
+- artifact → structure into a usable deliverable
+- quick answer → concise but high-signal
+
+Decision rules:
+- Brainstorm workspace: MUST expand into multiple angles (not a single answer)
+- Deep Research workspace: MUST prioritize evidence, reasoning, and implications
+- Refine workspace: MUST preserve intent and improve precision, not expand unnecessarily
+- Artifacts workspace: MUST structure output for real-world use (brief, doc, etc.)
+- Library workspace: MUST convert knowledge into reusable guidance
+- If ambiguous: choose the approach that creates the most leverage OR ask clarifying questions
+
+Do NOT default to generic answers.
+Do NOT collapse to a single idea when expansion is appropriate.
+
+━━━ END DECISION LAYER ━━━
+
+`;
+  console.log(
+    `[strategy-sop] injected-decision-layer ${JSON.stringify({
+      position: "post-sop / pre-reasoning",
+      block_length: decisionLayerBlock.length,
+    })}`,
+  );
   if (sopAuthorityBlock.length > 0) {
     console.log(
       `[strategy-sop] injected-sop-authority-early ${JSON.stringify({
@@ -5765,7 +5802,7 @@ Rules:
   // The preamble is appended; the model must obey the original mode-lock too.
   // SOPs are prepended via sopAuthorityBlock so they sit between core identity
   // and the reasoning preamble.
-  let effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}`;
+  let effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}`;
   if (mode === "short_form") {
     // SHORT-FORM mode-lock: tight output shape, no synthesis scaffolding.
     const shapeRule = shortFormKind === "subject_lines"
@@ -5787,7 +5824,7 @@ USE the library voice/angles for grounding, but DO NOT produce a long synthesis 
 ${shapeRule}
 If grounded vs extended distinction is material, tag each option [Grounded] or [Extended].
 Forbidden: long preambles, multi-section frameworks, "let me walk you through" openers.`;
-    effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${preamble}`;
+    effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}${preamble}`;
   } else if (mode === "strong" || mode === "partial" || mode === "thin") {
     const preamble = `
 
@@ -5801,7 +5838,7 @@ ${
     : "THIN grounding: open with one honest line stating what was found (e.g. 'Found 1 weakly related resource and no supporting KIs'). Then proceed using general reasoning. Mark assumptions. Offer one specific clarifying question at the end if it would materially sharpen the output. NEVER refuse, NEVER produce a one-line stop."
 }
 Forbidden: canned refusals like "I don't have enough signal" without ALSO producing the best first-pass answer you can.`;
-    effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${preamble}`;
+    effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}${preamble}`;
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -5849,7 +5886,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       const v2Identity = (v2 as any).identity ?? "";
       const v2Reasoning = (v2 as any).reasoning ?? v2.systemPrompt;
       effectiveSystemPrompt =
-        `${strategyObjectiveBlock}${v2Identity}${sopAuthorityBlock}\n\n${v2Reasoning}`;
+        `${strategyObjectiveBlock}${v2Identity}${sopAuthorityBlock}${decisionLayerBlock}\n\n${v2Reasoning}`;
       // Stash prior turn for wrong-question check later.
       v2EvidenceBase = {
         decision: v2.decision,
@@ -6050,8 +6087,8 @@ This is NOT optional. Do not ignore these rules.
        sopMarkerIdx !== Number.POSITIVE_INFINITY &&
        sopMarkerIdx < reasoningMarkerIdx;
      const injectionOrder = path === "v2"
-       ? ["strategy_objective", "v2_identity", "global_sop", "workspace_sop", "v2_reasoning", "global_instructions", ...(wsName === "brainstorm" ? ["brainstorm_enforcement"] : [])]
-       : ["strategy_objective", "core_identity", "global_sop", "workspace_sop", "reasoning_preamble", "global_instructions", ...(wsName === "brainstorm" ? ["brainstorm_enforcement"] : [])];
+       ? ["strategy_objective", "v2_identity", "global_sop", "workspace_sop", "decision_layer", "v2_reasoning", "global_instructions", ...(wsName === "brainstorm" ? ["brainstorm_enforcement"] : [])]
+       : ["strategy_objective", "core_identity", "global_sop", "workspace_sop", "decision_layer", "reasoning_preamble", "global_instructions", ...(wsName === "brainstorm" ? ["brainstorm_enforcement"] : [])];
 
      console.log(
        `[strategy-sop][prompt-trace] ${JSON.stringify({
@@ -6899,6 +6936,7 @@ This is NOT optional. Do not ignore these rules.
             `[strategy-sop][mode-check] ${JSON.stringify({
               workspace: ws,
               mode_detected: modeDetected,
+              decision_layer_active: true,
             })}`,
           );
         } catch (bcErr) {
