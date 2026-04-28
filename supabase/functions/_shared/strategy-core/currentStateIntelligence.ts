@@ -1779,7 +1779,17 @@ function renderPromptBlock(
         `     source:     ${s.reference.reference_source}` +
         (s.reference.reference_url ? `\n     url:        ${s.reference.reference_url}` : "") +
         (s.reference.reference_excerpt ? `\n     excerpt:    ${s.reference.reference_excerpt}` : "") +
-        `\n     confidence: ${s.reference.confidence}`;
+        `\n     confidence: ${s.reference.confidence}` +
+        (s.friction
+          ? `\n   Friction (problem-first — OPEN THE PATH FROM THIS, NOT FROM A SOLUTION):\n` +
+            `     What is hard:        ${s.friction.what_is_hard}\n` +
+            `     Why it's hard:       ${s.friction.why_it_is_hard}\n` +
+            `     Tradeoff:            ${s.friction.tradeoff}\n` +
+            `     Current-state link:  ${s.friction.current_state_link}\n` +
+            `     Implication:         ${s.friction.implication}\n` +
+            `     Problem-first move:  ${s.friction.conversation_move}\n` +
+            `     Validation question: ${s.friction.validation_question}`
+          : "");
     }).join("\n\n")
     : "(prioritization pass produced no signals — fall back to the working hypotheses above, but still pick the 2-3 highest-leverage angles yourself before responding, and explain the why behind each.)";
 
