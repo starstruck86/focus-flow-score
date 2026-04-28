@@ -235,10 +235,32 @@ export interface PrioritizedSignal {
   // "they used to… now they're… which means…".
   change_vector: ChangeVector;
 
+  // ── Reference Anchor ─────────────────────────────────────────────
+  // Every signal must be grounded in a defensible reference. The
+  // hierarchy (web > account > library > market > inference) drives
+  // BOTH ranking and the prose shape the model uses to express it.
+  reference: SignalReference;
+
   // Back-compat from the earlier Prioritization layer (kept so the
   // conversation-mode digest and any prior consumers don't break):
   business_impact: string;            // 1-line revenue/growth/risk implication
   conversation_angle: string;         // Spoken-language opener
+}
+
+export type ReferenceType =
+  | "web"        // news, earnings, launches, press
+  | "account"    // CRM record / sourced fact tied to the resolved account
+  | "library"    // user library / playbooks / framework material
+  | "market"     // industry / category report or analyst piece
+  | "inference"; // last resort — model recall, no external grounding
+
+export interface SignalReference {
+  reference_type: ReferenceType;
+  reference_source: string;   // Human-readable source label (e.g. "Q3 2025 earnings call", "WSJ", "TJX press release")
+  reference_url?: string;     // URL when available; omitted for inference / un-cited
+  confidence: ConfidenceLevel; // High / medium / low — drives prose shape
+  /** Optional 1-line excerpt or claim that anchors the signal to the reference. */
+  reference_excerpt?: string;
 }
 
 export interface ChangeVector {
