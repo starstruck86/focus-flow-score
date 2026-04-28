@@ -241,6 +241,12 @@ export interface PrioritizedSignal {
   // BOTH ranking and the prose shape the model uses to express it.
   reference: SignalReference;
 
+  // ── Friction Layer (problem-first thinking) ──────────────────────
+  // Names what is HARD about this signal — the constraint, tradeoff,
+  // or tension that makes it difficult to execute. Forces the
+  // conversation to open from a problem, not from an idea.
+  friction: SignalFriction;
+
   // Back-compat from the earlier Prioritization layer (kept so the
   // conversation-mode digest and any prior consumers don't break):
   business_impact: string;            // 1-line revenue/growth/risk implication
@@ -274,6 +280,23 @@ export interface ChangeVector {
   why_it_matters: string;        // Why the change matters for the business
   what_breaks: string;           // What breaks if they don't adapt
   opportunity: string;           // The opportunity that emerges from the change
+}
+
+export interface SignalFriction {
+  /** What is hard about this signal — the constraint, named concretely. */
+  what_is_hard: string;
+  /** Why it's hard — the underlying reason (capacity, data, org, market, tooling, model). */
+  why_it_is_hard: string;
+  /** The tradeoff the team is forced to make — what they sacrifice to do this. */
+  tradeoff: string;
+  /** Connection back to the verified/inferred current state — anchors the friction in reality. */
+  current_state_link: string;
+  /** What breaks or gets left on the table if the friction isn't named and solved. */
+  implication: string;
+  /** First-person spoken move that opens from the PROBLEM, not the solution. */
+  conversation_move: string;
+  /** Plain-language question Corey would ask to test/validate the friction. */
+  validation_question: string;
 }
 
 export interface CurrentStateResult {
@@ -925,6 +948,16 @@ const SIGNAL_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY this shape:
         "confidence": "high | medium | low — driven by how directly the reference supports the signal. high only when web/account/library reference is current and specific."
       },
 
+      "friction": {
+        "what_is_hard": "1 sentence: name the constraint, the hard part, the thing that makes this difficult to execute. Concrete — not 'it's complex'. Examples: 'Their merch margin is too thin to absorb personalization compute at scale', 'Lifecycle and retail are run by different P&Ls with no shared incentive', 'Their ESP can't action behavioral signals in <24h'.",
+        "why_it_is_hard": "1 sentence: the underlying reason — capacity, data, org structure, market dynamic, tooling, or business model. Why this constraint EXISTS, not just that it does.",
+        "tradeoff": "1 sentence: the tradeoff the team is forced to make today — what they sacrifice to keep operating the way they do (e.g. 'They get scale by trading personalization', 'They protect margin by under-investing in repeat-purchase tooling').",
+        "current_state_link": "1 sentence: tie the friction back to the verified or inferred current state (Y of the change vector, or a verified signal). The friction MUST be grounded in what's actually happening — not invented.",
+        "implication": "1 sentence: what BREAKS, gets left on the table, or compounds into bigger pain if the friction isn't named and addressed.",
+        "conversation_move": "1-2 sentences in first-person spoken voice that opens from the PROBLEM, not the solution. Shape: 'The challenge for a team like this is…', 'What's hard here is…', 'The real constraint is…'. NEVER opens with 'Use…', 'Build…', 'Implement…', 'Leverage…', or any solution verb.",
+        "validation_question": "1 sentence: the question Corey would ask the customer to test whether the friction is real and how they're managing the tradeoff. Plain customer language."
+      },
+
       "business_impact": "1 short sentence summarizing revenue / growth / risk implication (kept for downstream digest reuse).",
       "conversation_angle": "1 short spoken-voice opener (kept for downstream digest reuse). Same energy as conversation_move."
     }
@@ -950,6 +983,9 @@ Hard rules:
 - X, Y, Z must each describe a DIFFERENT state. If X and Y read the same, you haven't found the change — drop the signal.
 - reference is REQUIRED. Use the hierarchy: prefer web > account > library > market > inference. Pick the STRONGEST grounding actually available — never invent a URL or fabricate a press release / earnings line. If only model recall supports the signal, set reference_type="inference", confidence="low", reference_source="model recall", and OMIT reference_url.
 - reference.confidence drives prose downstream: high → speak with confidence ("they've done X"), medium → "we're seeing a shift toward…", low → "a reasonable assumption is…". Pick a confidence level you can defend.
+- friction is REQUIRED. Every signal MUST identify what is HARD about acting on it — the constraint, the tradeoff, the tension. If you cannot name a real constraint, the signal is too generic — drop it.
+- friction.conversation_move MUST open from the PROBLEM, not the solution. If your move starts with "Use…", "Build…", "Implement…", "Launch…", "Leverage…", or any solution verb, REWRITE it to open with the constraint ("The challenge for a team like this is…", "What's hard here is…", "The real constraint is…").
+- friction must be DIFFERENT from change_vector.what_breaks. what_breaks = consequence of inaction. friction = the structural reason action is hard right now.
 - Do NOT include any text outside the JSON object.`;
 
 interface GeneratedSignals {
@@ -1225,6 +1261,43 @@ async function generatePrioritizedSignals(args: {
         confidence: refConfidence,
       };
 
+      // ── Friction Layer (problem-first) — REQUIRED ─────────────────
+      // Forces the conversation to open from a constraint, not a
+      // solution. We sanitize the move so any solution-verb opener is
+      // rewritten into a problem-framed opener before it hits prose.
+      const fr: any = (s && typeof s.friction === "object" && s.friction) || {};
+      const whatIsHard = String(fr.what_is_hard || "").trim();
+      const whyHard = String(fr.why_it_is_hard || "").trim();
+      const tradeoff = String(fr.tradeoff || "").trim();
+      const csLink = String(fr.current_state_link || "").trim() || now;
+      const fricImp = String(fr.implication || "").trim() || (whatBreaks || "");
+      let fricMove = String(fr.conversation_move || "").trim();
+      const fricQ = String(fr.validation_question || "").trim() || validation;
+
+      // Drop the signal if there's no real friction to name. The whole
+      // point of this layer is to ensure no signal ships without a
+      // problem-first frame; an empty friction is a tell that the
+      // signal is too generic.
+      if (!whatIsHard || !whyHard || !tradeoff) continue;
+
+      // Sanitize: solution-verb opener → rewrite into problem-framed.
+      // Cheap regex guard ensures we never ship "Use lifecycle…" prose
+      // even if the model ignored the schema rule.
+      const SOLUTION_OPENER = /^(use|build|implement|launch|leverage|deploy|create|introduce|roll\s*out|stand\s*up|set\s*up|adopt)\b/i;
+      if (!fricMove || SOLUTION_OPENER.test(fricMove)) {
+        fricMove = `The challenge for a team like this is ${whatIsHard.replace(/[.!?]+$/, "")} — ${whyHard.replace(/^[A-Z]/, (m) => m.toLowerCase())}`;
+      }
+
+      const friction: SignalFriction = {
+        what_is_hard: whatIsHard,
+        why_it_is_hard: whyHard,
+        tradeoff,
+        current_state_link: csLink,
+        implication: fricImp || `Without naming this constraint, ${whatIsHard.replace(/[.!?]+$/, "")} compounds.`,
+        conversation_move: fricMove,
+        validation_question: fricQ,
+      };
+
       cleaned.push({
         rank: 1, // re-ranked below after verified-first sort
         signal,
@@ -1243,6 +1316,7 @@ async function generatePrioritizedSignals(args: {
         validation_question: validation,
         change_vector,
         reference,
+        friction,
         business_impact: impact,
         conversation_angle: angle,
       });
@@ -1705,7 +1779,17 @@ function renderPromptBlock(
         `     source:     ${s.reference.reference_source}` +
         (s.reference.reference_url ? `\n     url:        ${s.reference.reference_url}` : "") +
         (s.reference.reference_excerpt ? `\n     excerpt:    ${s.reference.reference_excerpt}` : "") +
-        `\n     confidence: ${s.reference.confidence}`;
+        `\n     confidence: ${s.reference.confidence}` +
+        (s.friction
+          ? `\n   Friction (problem-first — OPEN THE PATH FROM THIS, NOT FROM A SOLUTION):\n` +
+            `     What is hard:        ${s.friction.what_is_hard}\n` +
+            `     Why it's hard:       ${s.friction.why_it_is_hard}\n` +
+            `     Tradeoff:            ${s.friction.tradeoff}\n` +
+            `     Current-state link:  ${s.friction.current_state_link}\n` +
+            `     Implication:         ${s.friction.implication}\n` +
+            `     Problem-first move:  ${s.friction.conversation_move}\n` +
+            `     Validation question: ${s.friction.validation_question}`
+          : "");
     }).join("\n\n")
     : "(prioritization pass produced no signals — fall back to the working hypotheses above, but still pick the 2-3 highest-leverage angles yourself before responding, and explain the why behind each.)";
 
@@ -1741,7 +1825,7 @@ function renderPromptBlock(
     ).join("\n\n")
     : "(no commercial insight generated — fall back to leading with the top prioritized signal as the conversation entry, but still open with a POV, not a list)";
 
-  return `═══ UNIFIED STRATEGY PIPELINE (verified → change → prioritized → why → conversation) ═══
+  return `═══ UNIFIED STRATEGY PIPELINE (verified → change → prioritized → why → friction → conversation) ═══
 Pipeline contract for THIS turn (do not skip a step, do not reorder):
   1. Entity detection                         ✓ done
   2. Verified signal gathering (web/account/library)  ✓ see VERIFIED SIGNALS below
@@ -1749,7 +1833,8 @@ Pipeline contract for THIS turn (do not skip a step, do not reorder):
   4. Hypothesis generation (gap-fill only)    ✓ see WORKING HYPOTHESES (use sparingly)
   5. Signal prioritization (top 2–3)          ✓ see PRIORITIZED SIGNALS
   6. Strategic why (matters / now / company)  ✓ embedded in each PRIORITIZED SIGNAL
-  7. Conversation execution (what Corey SAYS) ← YOUR JOB IN THE RESPONSE BELOW
+  7. Friction layer (what is HARD)            ✓ embedded in each PRIORITIZED SIGNAL — open every path from this
+  8. Conversation execution (what Corey SAYS) ← YOUR JOB IN THE RESPONSE BELOW (open from FRICTION, not from a solution)
 
 ═══ CURRENT STATE INTELLIGENCE (verified-first — lead with what we can verify, extend with what we hypothesize) ═══
 Company: ${c.name}${c.website ? ` (${c.website})` : ""}
@@ -1800,6 +1885,8 @@ GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
   • low / inference → mark explicitly as a hypothesis: "A reasonable assumption is…", "If the pattern in their category holds…", "I'd hypothesize that…".
 - Always tie the reference to the reasoning. After surfacing the grounded fact, immediately follow with "This matters because…" (or equivalent) so the customer hears the implication, not just the data point.
 - NEVER fabricate a URL, press release, earnings line, or analyst report. If reference_type="inference", the prose MUST signal it as inference and MUST NOT cite a publication name. Defending the claim ("here's why I believe it") matters more than performing certainty.
+- PROBLEM-FIRST / FRICTION PROSE (NON-NEGOTIABLE): Every conversation path MUST OPEN from the friction (what is HARD), not from the solution. Use the friction.conversation_move as your opener. Required shape: "The challenge for a team like this is <what_is_hard>. Which means <implication>. So I'd push on <opportunity / tension>. The question I'd ask is <validation_question>." If your draft for any path starts with a solution verb (Use…, Build…, Implement…, Launch…, Leverage…, Deploy…, Roll out…, Stand up…), REWRITE it to open with the constraint, the tradeoff, or the tension. Identify the problem before you offer any move.
+- The friction is the THESIS of each path. The change vector and reference give it credibility; the friction gives it tension. Without naming what is hard, the path collapses into generic advice — DO NOT ship a path without surfacing its friction.
 - Do NOT produce generic lifecycle / marketing / engagement categories ("Acquisition / Activation / Retention / Winback" buckets, "personalize the journey", "build a loyalty program"). The user can already produce that themselves.
 - Frame ideas as conversation strategies, not capability checklists. Angles Corey can lead with, tensions to surface, hypotheses to test.
 - Map current state → future state. Each path should imply the gap it closes for ${c.name} specifically.
@@ -1811,12 +1898,13 @@ GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
   }
 
 ═══ CANONICAL OUTPUT SHAPE (every conversation path MUST follow this beat structure, in Corey's spoken voice) ═══
-For each of the 2–3 paths you produce, weave these beats into natural prose (no headings, no bullets unless the user asked for them):
-  1. CURRENT STATE + CHANGE → "They used to <X>. Now they're <Y>." (use the change_vector — never describe the company as static)
-  2. IMPLICATION            → "Which means <what changed / what breaks / business pressure>." (the strategic why, in one breath)
-  3. TENSION                → "The risk / gap is <strategic_tension or what_breaks>." (name the thing the customer hasn't reconciled)
-  4. CONVERSATION MOVE      → "I'd lead by <conversation_move, in first person — what Corey actually says>."
-  5. VALIDATION QUESTION    → "The question I'd ask is <validation_question, in plain customer-facing language>."
+For each of the 2–3 paths you produce, weave these beats into natural prose (no headings, no bullets unless the user asked for them). The path OPENS from the FRICTION — never from a solution:
+  1. FRICTION (PROBLEM)     → "The challenge for a team like this is <friction.what_is_hard>." (open here — never with a solution verb)
+  2. WHY IT'S HARD          → "<friction.why_it_is_hard / friction.tradeoff>." (the constraint behind the constraint)
+  3. CURRENT STATE + CHANGE → "They used to <X>. Now they're <Y>." (use the change_vector — anchors the friction in reality)
+  4. IMPLICATION            → "Which means <implication / what breaks / business pressure>." (the strategic why, in one breath)
+  5. CONVERSATION MOVE      → "So I'd push on <opportunity / tension>." OR "I'd lead by <move>." (first-person — what Corey actually says)
+  6. VALIDATION QUESTION    → "The question I'd ask is <validation_question>." (plain customer-facing language)
 
 HARD CONSTRAINTS (these REPLACE any earlier framing — if a previous instruction conflicts, the canonical shape wins):
 - DO NOT label ideas with category headings ("Acquisition", "Retention", "Lifecycle", "Personalization", "Loyalty", etc.).
@@ -1835,10 +1923,11 @@ For EACH conversation path in your draft, check:
   ☐ Does it end with a validation QUESTION Corey can ask the customer?
   ☐ Is it grounded in a PRIORITIZED SIGNAL above (not invented)?
   ☐ Does the prose grounding match the reference confidence (high asserts · medium hedges with "we're seeing…" · low marks as "a reasonable assumption is…")?
+  ☐ Does the path OPEN FROM A PROBLEM (friction.what_is_hard / a constraint / a tradeoff / a tension) — NOT from a solution verb (Use…, Build…, Implement…, Launch…, Leverage…, Deploy…)?
 If ANY box is unchecked → REWRITE that path inline before returning. Do not send a draft that fails the gate.
-Also reject and rewrite if the draft: opens with "Here are a few ways…" / "There are several angles…", uses category headings (Acquisition/Retention/Lifecycle/etc.), reads as recommendations to the company instead of language Corey would speak, or fabricates a URL / publication name.
+Also reject and rewrite if the draft: opens with "Here are a few ways…" / "There are several angles…", uses category headings (Acquisition/Retention/Lifecycle/etc.), reads as recommendations to the company instead of language Corey would speak, fabricates a URL / publication name, OR opens any path with a solution verb instead of naming the friction.
 ═══════════════════════════════════
-[Verified-first counters: verified=${verifiedCount}, inferred=${inferredCount} | commercial_insights=${insights.length}]`;
+[Verified-first counters: verified=${verifiedCount}, inferred=${inferredCount} | commercial_insights=${insights.length} | friction_paths=${signals.filter((s)=>!!s.friction).length}]`;
 }
 
 // ─── Main entry point ──────────────────────────────────────────────
@@ -2046,6 +2135,12 @@ export async function runCurrentStatePreflight(
     reference_with_url_count: prioritizedSignals.filter(
       (s) => !!s.reference?.reference_url,
     ).length,
+    // ── Friction Layer (problem-first) telemetry ──────────────────
+    friction_layer_applied: prioritizedSignals.every((s) => !!s.friction),
+    friction_signals_count: prioritizedSignals.filter((s) => !!s.friction).length,
+    friction_problem_first_moves: prioritizedSignals
+      .map((s) => s.friction?.conversation_move ?? "")
+      .filter(Boolean),
     // ── Commercial Insight (Challenger) telemetry ─────────────────
     commercial_insights_count: commercialInsights.length,
     commercial_insights_sources: commercialInsights.map((c) => c.source_type),
