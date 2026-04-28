@@ -235,10 +235,32 @@ export interface PrioritizedSignal {
   // "they used to… now they're… which means…".
   change_vector: ChangeVector;
 
+  // ── Reference Anchor ─────────────────────────────────────────────
+  // Every signal must be grounded in a defensible reference. The
+  // hierarchy (web > account > library > market > inference) drives
+  // BOTH ranking and the prose shape the model uses to express it.
+  reference: SignalReference;
+
   // Back-compat from the earlier Prioritization layer (kept so the
   // conversation-mode digest and any prior consumers don't break):
   business_impact: string;            // 1-line revenue/growth/risk implication
   conversation_angle: string;         // Spoken-language opener
+}
+
+export type ReferenceType =
+  | "web"        // news, earnings, launches, press
+  | "account"    // CRM record / sourced fact tied to the resolved account
+  | "library"    // user library / playbooks / framework material
+  | "market"     // industry / category report or analyst piece
+  | "inference"; // last resort — model recall, no external grounding
+
+export interface SignalReference {
+  reference_type: ReferenceType;
+  reference_source: string;   // Human-readable source label (e.g. "Q3 2025 earnings call", "WSJ", "TJX press release")
+  reference_url?: string;     // URL when available; omitted for inference / un-cited
+  confidence: ConfidenceLevel; // High / medium / low — drives prose shape
+  /** Optional 1-line excerpt or claim that anchors the signal to the reference. */
+  reference_excerpt?: string;
 }
 
 export interface ChangeVector {
@@ -895,6 +917,14 @@ const SIGNAL_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY this shape:
         "opportunity": "1 sentence: the opportunity that emerges from the X → Y → Z motion — the gap Corey can lean into."
       },
 
+      "reference": {
+        "reference_type": "web | account | library | market | inference",
+        "reference_source": "Concrete, human-readable source label. Examples: 'Q3 2025 earnings call', 'WSJ — Aug 2025', 'TJX Aug 2025 press release', 'CRM note: Sept 2025 discovery call', 'eMarketer 2025 Retail Outlook'. NEVER 'public knowledge', 'common sense', or 'industry best practice'.",
+        "reference_url": "URL when one exists; omit for account/library/inference references with no URL.",
+        "reference_excerpt": "1 short sentence — the actual claim from the reference that anchors this signal. Plain language, not a quote with quotation marks.",
+        "confidence": "high | medium | low — driven by how directly the reference supports the signal. high only when web/account/library reference is current and specific."
+      },
+
       "business_impact": "1 short sentence summarizing revenue / growth / risk implication (kept for downstream digest reuse).",
       "conversation_angle": "1 short spoken-voice opener (kept for downstream digest reuse). Same energy as conversation_move."
     }
@@ -918,6 +948,8 @@ Hard rules:
 - conversation_move and conversation_angle must read like spoken language. No "we should explore...", no headings.
 - change_vector is REQUIRED. X (before) and Z (next) are typically inferred — mark them so. Y (now) MUST be marked "verified" only when it traces to a verified signal or sourced CRM fact in the same turn; otherwise mark "inferred". Never mark Y as verified to sound credible.
 - X, Y, Z must each describe a DIFFERENT state. If X and Y read the same, you haven't found the change — drop the signal.
+- reference is REQUIRED. Use the hierarchy: prefer web > account > library > market > inference. Pick the STRONGEST grounding actually available — never invent a URL or fabricate a press release / earnings line. If only model recall supports the signal, set reference_type="inference", confidence="low", reference_source="model recall", and OMIT reference_url.
+- reference.confidence drives prose downstream: high → speak with confidence ("they've done X"), medium → "we're seeing a shift toward…", low → "a reasonable assumption is…". Pick a confidence level you can defend.
 - Do NOT include any text outside the JSON object.`;
 
 interface GeneratedSignals {
@@ -1148,6 +1180,51 @@ async function generatePrioritizedSignals(args: {
         opportunity: opportunity || `Lean into the gap created by ${whatChanged}.`,
       };
 
+      // ── Reference Anchor — REQUIRED ───────────────────────────────
+      // Trust-down on type: a signal whose source_type was downgraded
+      // to "inference" cannot present a web/account/library reference.
+      // We also strip URLs from inference references so the prose
+      // never implies a citation we don't have.
+      const allowedRefTypes: ReferenceType[] = ["web", "account", "library", "market", "inference"];
+      const refRaw: any = (s && typeof s.reference === "object" && s.reference) || {};
+      let reference_type: ReferenceType = allowedRefTypes.includes(refRaw.reference_type)
+        ? (refRaw.reference_type as ReferenceType)
+        : "inference";
+      // Trust-down: keep reference_type aligned with what the source mix supports.
+      if (reference_type === "account" && !haveAccount) reference_type = "inference";
+      if (reference_type === "web" && !haveWeb) reference_type = "inference";
+      if (reference_type === "library" && !haveLibrary) reference_type = "inference";
+      // If the signal itself was downgraded to inference, the reference must follow.
+      if (source === "inference" && reference_type !== "market") {
+        reference_type = "inference";
+      }
+
+      const reference_source = String(refRaw.reference_source || "").trim() ||
+        (reference_type === "inference" ? "model recall" : "");
+      const reference_url_raw = String(refRaw.reference_url || "").trim();
+      const reference_excerpt = String(refRaw.reference_excerpt || "").trim() || undefined;
+      // Inference references never carry a URL — block any model attempt to cite one.
+      const reference_url = reference_type === "inference" ? undefined : (reference_url_raw || undefined);
+
+      let refConfidence: ConfidenceLevel = allowedConfidences.includes(refRaw.confidence)
+        ? (refRaw.confidence as ConfidenceLevel)
+        : confidence;
+      // Inference can never be high-confidence; cap it.
+      if (reference_type === "inference" && refConfidence === "high") refConfidence = "low";
+      // A reference can't outclaim its underlying signal's confidence by more than one tier.
+      if (confidence === "low" && refConfidence === "high") refConfidence = "medium";
+
+      // Drop the signal if we can't even name a source. We never ship
+      // an unanchored signal — if the model didn't provide one, fall
+      // back to "model recall" / inference (already handled above).
+      const reference: SignalReference = {
+        reference_type,
+        reference_source: reference_source || "model recall",
+        reference_url,
+        reference_excerpt,
+        confidence: refConfidence,
+      };
+
       cleaned.push({
         rank: 1, // re-ranked below after verified-first sort
         signal,
@@ -1165,17 +1242,25 @@ async function generatePrioritizedSignals(args: {
         conversation_move: move,
         validation_question: validation,
         change_vector,
+        reference,
         business_impact: impact,
         conversation_angle: angle,
       });
     }
 
-    // VERIFIED-FIRST stable sort: any signal with a verifiable
-    // source_type (account / library / web) outranks inference,
-    // regardless of model-assigned rank. Within each tier, preserve
-    // the model's ordering (it already considered impact / tension).
-    const verifiedFirst = (s: PrioritizedSignal) => s.source_type !== "inference" ? 0 : 1;
-    cleaned.sort((a, b) => verifiedFirst(a) - verifiedFirst(b));
+    // REFERENCE-HIERARCHY stable sort: web > account > library > market > inference.
+    // This subsumes the earlier verified-first sort (web/account/library are
+    // the verifiable tiers) AND adds market reports as a defensible
+    // mid-tier above pure inference. Within each tier, preserve the
+    // model's ordering (it already considered impact / tension).
+    const refRank: Record<ReferenceType, number> = {
+      web: 0,
+      account: 1,
+      library: 2,
+      market: 3,
+      inference: 4,
+    };
+    cleaned.sort((a, b) => refRank[a.reference.reference_type] - refRank[b.reference.reference_type]);
     cleaned.forEach((s, idx) => {
       s.rank = ((idx + 1) as 1 | 2 | 3);
     });
@@ -1614,7 +1699,13 @@ function renderPromptBlock(
         `   Strategic tension:     ${s.strategic_tension}\n` +
         `   Conversation move:     ${s.conversation_move}\n` +
         `   Validation question:   ${s.validation_question}` +
-        cvLines;
+        cvLines +
+        `\n   Reference (anchor — express IN PROSE per confidence rules below; do NOT dump as a citation):\n` +
+        `     type:       ${s.reference.reference_type}\n` +
+        `     source:     ${s.reference.reference_source}` +
+        (s.reference.reference_url ? `\n     url:        ${s.reference.reference_url}` : "") +
+        (s.reference.reference_excerpt ? `\n     excerpt:    ${s.reference.reference_excerpt}` : "") +
+        `\n     confidence: ${s.reference.confidence}`;
     }).join("\n\n")
     : "(prioritization pass produced no signals — fall back to the working hypotheses above, but still pick the 2-3 highest-leverage angles yourself before responding, and explain the why behind each.)";
 
@@ -1693,6 +1784,12 @@ GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
 - Each path must include the validation question Corey would ask the customer to test the hypothesis. Plain language, the way Corey would actually ask it.
 - CHANGE-VECTOR PROSE (NON-NEGOTIABLE): Every prioritized-signal path MUST be expressed as a direction of travel using its change_vector. Anchor the prose in the X → Y → Z motion — not a static description. Use this spoken shape, adapted naturally: "They used to <X>. Now they're <Y>. Which means <what_changed / why_it_matters>. So I'd push on <opportunity / tension>. The question I'd ask is <validation_question>." Do NOT skip X. Do NOT collapse X and Y into the same idea. Do NOT describe the company as static.
 - Honor change_vector basis tags in prose. Y marked "verified" → speak with confidence ("they've moved to…"). Y or X marked "inferred" → hedge ("they were likely…", "today they appear to be…"). Z is always forward-looking — frame it as direction, not fact ("which points toward…", "the trajectory I'd bet on is…").
+- REFERENCE-ANCHORED PROSE (NON-NEGOTIABLE): Every signal MUST be grounded in its reference, but DO NOT dump citations, source labels, or URLs in the body. Express the grounding through prose shape driven by reference.confidence:
+  • high  → state the fact directly: "${c.name} has been [reference_excerpt]…", "Their Q3 earnings flagged…".
+  • medium → soften but anchor: "We're seeing a shift toward…", "Recent reporting suggests…", "Public signals point to…".
+  • low / inference → mark explicitly as a hypothesis: "A reasonable assumption is…", "If the pattern in their category holds…", "I'd hypothesize that…".
+- Always tie the reference to the reasoning. After surfacing the grounded fact, immediately follow with "This matters because…" (or equivalent) so the customer hears the implication, not just the data point.
+- NEVER fabricate a URL, press release, earnings line, or analyst report. If reference_type="inference", the prose MUST signal it as inference and MUST NOT cite a publication name. Defending the claim ("here's why I believe it") matters more than performing certainty.
 - Do NOT produce generic lifecycle / marketing / engagement categories ("Acquisition / Activation / Retention / Winback" buckets, "personalize the journey", "build a loyalty program"). The user can already produce that themselves.
 - Frame ideas as conversation strategies, not capability checklists. Angles Corey can lead with, tensions to surface, hypotheses to test.
 - Map current state → future state. Each path should imply the gap it closes for ${c.name} specifically.
@@ -1901,6 +1998,15 @@ export async function runCurrentStatePreflight(
     ).length,
     change_vectors_y_inferred_count: prioritizedSignals.filter(
       (s) => s.change_vector?.now_basis === "inferred",
+    ).length,
+    // ── Reference Anchor telemetry ────────────────────────────────
+    reference_types: prioritizedSignals.map((s) => s.reference?.reference_type ?? "missing"),
+    reference_confidences: prioritizedSignals.map((s) => s.reference?.confidence ?? "missing"),
+    reference_grounded_count: prioritizedSignals.filter(
+      (s) => s.reference && s.reference.reference_type !== "inference",
+    ).length,
+    reference_with_url_count: prioritizedSignals.filter(
+      (s) => !!s.reference?.reference_url,
     ).length,
     // ── Commercial Insight (Challenger) telemetry ─────────────────
     commercial_insights_count: commercialInsights.length,
