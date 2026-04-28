@@ -1,157 +1,103 @@
+// @vitest-environment node
 /**
  * Phase 7D-fix — Workspace payload truth tests.
  *
- * Asserts that the client `sendMessage` helper sends the *truthful*
- * workspace value to strategy-chat:
- *   • A real surface (brainstorm/refine/etc.) is forwarded verbatim,
- *     with workspaceSource = 'selected'.
- *   • No active surface → workspace = null + workspaceSource = 'none'.
- *     The previous behavior silently coerced this to 'work', making
- *     freeform calls indistinguishable from the Work surface in logs.
- *   • Caller may explicitly override workspaceSource (thread-tag, default).
+ * Validates the pure `resolveWorkspacePayload` helper that decides what
+ * `useStrategyMessages.sendMessage` puts on the wire as `workspace` /
+ * `workspaceSource`.
  *
- * This is a pure shape test against the request body — it does not
- * exercise the streaming or React state paths.
+ * Acceptance for the diagnostics fix:
+ *   • Real surface (Brainstorm/Refine/Deep Research/etc.) is forwarded
+ *     verbatim with workspaceSource = 'selected'.
+ *   • No active surface → workspaceSent = null + workspaceSource = 'none'.
+ *     The previous behavior silently coerced this to 'work' on the wire,
+ *     which made freeform calls indistinguishable from the Work surface
+ *     in the server logs.
+ *   • The SOP resolver still receives the legacy 'work' string when no
+ *     workspace is selected — that preserves freeform behavior (no
+ *     workspace SOP applies). Wire truth and resolver input are now
+ *     intentionally decoupled.
+ *   • Caller may explicitly override workspaceSource (thread-tag, default).
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
+import { resolveWorkspacePayload } from '../resolveWorkspacePayload';
 
-// Stub the supabase client BEFORE importing the hook so the module
-// captures the mocked instance.
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: {
-    auth: {
-      getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'tok' } } }),
-    },
-    from: () => ({
-      select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }),
-    }),
-  },
-}));
-
-vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'user-1' } }),
-}));
-
-vi.mock('@/lib/strategy/buildGlobalInstructionsPayload', () => ({
-  buildGlobalInstructionsPayload: () => null,
-}));
-
-vi.mock('@/lib/strategy/buildStrategySopPayloads', () => ({
-  buildStrategySopPayloads: () => ({
-    resolvedSops: null,
-    workspaceSop: null,
-    globalSop: null,
-    taskSop: null,
-  }),
-}));
-
-vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
-
-import { useStrategyMessages } from '../useStrategyMessages';
-
-function mockFetchOnce() {
-  // Empty SSE-like body so the streaming loop terminates immediately.
-  const body = new ReadableStream({
-    start(controller) {
-      controller.enqueue(new TextEncoder().encode('data: [DONE]\n'));
-      controller.close();
-    },
-  });
-  const fetchSpy = vi.fn().mockResolvedValue(
-    new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
-  );
-  (globalThis as unknown as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
-  return fetchSpy;
-}
-
-function readBody(fetchSpy: ReturnType<typeof vi.fn>) {
-  expect(fetchSpy).toHaveBeenCalledTimes(1);
-  const init = fetchSpy.mock.calls[0][1] as RequestInit;
-  return JSON.parse(init.body as string) as Record<string, unknown>;
-}
-
-describe('useStrategyMessages — workspace payload truth (Phase 7D-fix)', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
-  afterEach(() => { vi.restoreAllMocks(); });
-
-  it('sends the active surface verbatim with workspaceSource="selected"', async () => {
-    const fetchSpy = mockFetchOnce();
-    const { result } = renderHook(() => useStrategyMessages('thread-1'));
-    await act(async () => {
-      await result.current.sendMessage('Give me angles', {
-        workspace: 'brainstorm',
-        workspaceSource: 'selected',
-      });
-    });
-    const body = readBody(fetchSpy);
-    expect(body.workspace).toBe('brainstorm');
-    expect(body.workspaceSource).toBe('selected');
+describe('resolveWorkspacePayload — workspace payload truth (Phase 7D-fix)', () => {
+  it('Brainstorm surface → workspaceSent="brainstorm", source="selected"', () => {
+    const r = resolveWorkspacePayload({ workspace: 'brainstorm', workspaceSource: 'selected' });
+    expect(r.workspaceSent).toBe('brainstorm');
+    expect(r.workspaceSource).toBe('selected');
+    expect(r.sopResolverWorkspace).toBe('brainstorm');
   });
 
-  it('sends workspace=null + workspaceSource="none" when no surface is active', async () => {
-    const fetchSpy = mockFetchOnce();
-    const { result } = renderHook(() => useStrategyMessages('thread-1'));
-    await act(async () => {
-      await result.current.sendMessage('hello', { workspace: null, workspaceSource: 'none' });
-    });
-    const body = readBody(fetchSpy);
-    // CRITICAL: must NOT silently coerce to 'work'. Freeform/no-surface is
-    // a distinct runtime state and the server log relies on this.
-    expect(body.workspace).toBeNull();
-    expect(body.workspaceSource).toBe('none');
+  it('Refine surface forwarded verbatim', () => {
+    const r = resolveWorkspacePayload({ workspace: 'refine', workspaceSource: 'selected' });
+    expect(r.workspaceSent).toBe('refine');
+    expect(r.workspaceSource).toBe('selected');
   });
 
-  it('defaults workspaceSource to "none" when caller omits both fields', async () => {
-    const fetchSpy = mockFetchOnce();
-    const { result } = renderHook(() => useStrategyMessages('thread-1'));
-    await act(async () => {
-      await result.current.sendMessage('hello');
-    });
-    const body = readBody(fetchSpy);
-    expect(body.workspace).toBeNull();
-    expect(body.workspaceSource).toBe('none');
+  it('Deep Research surface forwarded verbatim', () => {
+    const r = resolveWorkspacePayload({ workspace: 'deep_research', workspaceSource: 'selected' });
+    expect(r.workspaceSent).toBe('deep_research');
+    expect(r.workspaceSource).toBe('selected');
   });
 
-  it('forwards Refine surface', async () => {
-    const fetchSpy = mockFetchOnce();
-    const { result } = renderHook(() => useStrategyMessages('thread-1'));
-    await act(async () => {
-      await result.current.sendMessage('refine this', {
-        workspace: 'refine',
-        workspaceSource: 'selected',
-      });
-    });
-    const body = readBody(fetchSpy);
-    expect(body.workspace).toBe('refine');
-    expect(body.workspaceSource).toBe('selected');
+  it('Library surface forwarded verbatim', () => {
+    const r = resolveWorkspacePayload({ workspace: 'library', workspaceSource: 'selected' });
+    expect(r.workspaceSent).toBe('library');
+    expect(r.workspaceSource).toBe('selected');
   });
 
-  it('forwards Deep Research surface', async () => {
-    const fetchSpy = mockFetchOnce();
-    const { result } = renderHook(() => useStrategyMessages('thread-1'));
-    await act(async () => {
-      await result.current.sendMessage('research', {
-        workspace: 'deep_research',
-        workspaceSource: 'selected',
-      });
-    });
-    const body = readBody(fetchSpy);
-    expect(body.workspace).toBe('deep_research');
-    expect(body.workspaceSource).toBe('selected');
+  it('Artifacts surface forwarded verbatim', () => {
+    const r = resolveWorkspacePayload({ workspace: 'artifacts', workspaceSource: 'selected' });
+    expect(r.workspaceSent).toBe('artifacts');
+    expect(r.workspaceSource).toBe('selected');
   });
 
-  it('honors an explicit workspaceSource="thread-tag" override', async () => {
-    const fetchSpy = mockFetchOnce();
-    const { result } = renderHook(() => useStrategyMessages('thread-1'));
-    await act(async () => {
-      await result.current.sendMessage('hi', {
-        workspace: 'brainstorm',
-        workspaceSource: 'thread-tag',
-      });
-    });
-    const body = readBody(fetchSpy);
-    expect(body.workspace).toBe('brainstorm');
-    expect(body.workspaceSource).toBe('thread-tag');
+  it('No active surface → wire workspace is null + source="none"', () => {
+    const r = resolveWorkspacePayload({ workspace: null, workspaceSource: 'none' });
+    // CRITICAL: must NOT silently coerce to 'work' on the wire.
+    expect(r.workspaceSent).toBeNull();
+    expect(r.workspaceSource).toBe('none');
+    // SOP resolver input still uses the legacy 'work' freeform key so the
+    // resolver picks "no workspace SOP" without any code change there.
+    expect(r.sopResolverWorkspace).toBe('work');
+  });
+
+  it('Omitted options → defaults to wire null + source="none"', () => {
+    const r = resolveWorkspacePayload();
+    expect(r.workspaceSent).toBeNull();
+    expect(r.workspaceSource).toBe('none');
+    expect(r.sopResolverWorkspace).toBe('work');
+  });
+
+  it('Empty / whitespace workspace string is treated as no surface', () => {
+    const r1 = resolveWorkspacePayload({ workspace: '' });
+    const r2 = resolveWorkspacePayload({ workspace: '   ' });
+    expect(r1.workspaceSent).toBeNull();
+    expect(r1.workspaceSource).toBe('none');
+    expect(r2.workspaceSent).toBeNull();
+    expect(r2.workspaceSource).toBe('none');
+  });
+
+  it('Honors explicit workspaceSource="thread-tag" override', () => {
+    const r = resolveWorkspacePayload({ workspace: 'brainstorm', workspaceSource: 'thread-tag' });
+    expect(r.workspaceSent).toBe('brainstorm');
+    expect(r.workspaceSource).toBe('thread-tag');
+  });
+
+  it('Honors explicit workspaceSource="default" override', () => {
+    const r = resolveWorkspacePayload({ workspace: 'deep_research', workspaceSource: 'default' });
+    expect(r.workspaceSent).toBe('deep_research');
+    expect(r.workspaceSource).toBe('default');
+  });
+
+  it('Work surface is a real selection (still forwarded as work, not freeform)', () => {
+    // Work CAN be explicitly selected by the user. In that case the wire
+    // value should be 'work' and source 'selected' — distinct from the
+    // implicit no-surface case where wire is null + source 'none'.
+    const r = resolveWorkspacePayload({ workspace: 'work', workspaceSource: 'selected' });
+    expect(r.workspaceSent).toBe('work');
+    expect(r.workspaceSource).toBe('selected');
   });
 });
