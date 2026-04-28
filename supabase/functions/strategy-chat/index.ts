@@ -5886,7 +5886,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       const v2Identity = (v2 as any).identity ?? "";
       const v2Reasoning = (v2 as any).reasoning ?? v2.systemPrompt;
       effectiveSystemPrompt =
-        `${strategyObjectiveBlock}${v2Identity}${sopAuthorityBlock}\n\n${v2Reasoning}`;
+        `${strategyObjectiveBlock}${v2Identity}${sopAuthorityBlock}${decisionLayerBlock}\n\n${v2Reasoning}`;
       // Stash prior turn for wrong-question check later.
       v2EvidenceBase = {
         decision: v2.decision,
