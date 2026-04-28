@@ -5216,6 +5216,28 @@ async function buildChatSystemPrompt(args: {
   });
   const modeLockBlock = buildModeLockBlock(intent);
 
+  // ── BEHAVIOR INTENT ROUTING (intent → exclusive behavior) ─────
+  // Coarse, mutually-exclusive classifier sitting ABOVE ChatIntent.
+  // Maps to one of: conversation_strategy | idea_generation |
+  // research_analysis | artifact_creation. Drives a single behavior
+  // contract injected into the prompt and a hard guard on the output.
+  const behaviorIntent: BehaviorIntentResult = classifyBehaviorIntent(
+    userContent,
+    { hasAccountContext: _hasAccountContext },
+  );
+  const behaviorContractBlock = renderBehaviorContract(behaviorIntent.intent);
+  console.log(
+    "[behavior-intent] classified",
+    JSON.stringify({
+      intent_detected: behaviorIntent.intent,
+      behavior_selected: behaviorIntent.intent,
+      suppressed_behaviors: behaviorIntent.suppressed,
+      matched_signal: behaviorIntent.matched_signal,
+      confidence: behaviorIntent.confidence,
+      has_account_context: _hasAccountContext,
+    }),
+  );
+
   // ── CURRENT STATE INTELLIGENCE PREFLIGHT (RUNS FIRST) ──────────
   // Per the integration contract: Current State Intelligence MUST run
   // BEFORE output-mode selection. Output mode operates ON TOP of
