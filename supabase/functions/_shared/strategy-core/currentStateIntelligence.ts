@@ -812,6 +812,7 @@ function buildSkeletonIntelligence(args: {
         ]
         : [],
     },
+    prioritized_signals: [],
   };
 }
 
