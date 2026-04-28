@@ -228,10 +228,30 @@ export interface PrioritizedSignal {
   conversation_move: string;          // What Corey should lead with (spoken voice)
   validation_question: string;        // The question Corey should ask to test it
 
+  // ── Change Vector (X → Y → Z) ────────────────────────────────────
+  // Direction of travel for this signal. Y is verified when possible;
+  // X and Z are typically inferred. Captures HOW the business is
+  // changing — not just what it is — so prose can sound like
+  // "they used to… now they're… which means…".
+  change_vector: ChangeVector;
+
   // Back-compat from the earlier Prioritization layer (kept so the
   // conversation-mode digest and any prior consumers don't break):
   business_impact: string;            // 1-line revenue/growth/risk implication
   conversation_angle: string;         // Spoken-language opener
+}
+
+export interface ChangeVector {
+  before: string;          // X — prior state (what they used to do / how they used to operate)
+  before_basis: "verified" | "inferred";
+  now: string;             // Y — current state (verified when possible)
+  now_basis: "verified" | "inferred";
+  next: string;            // Z — direction of travel (inferred unless explicitly signaled)
+  next_basis: "verified" | "inferred";
+  what_changed: string;          // The delta, named concretely
+  why_it_matters: string;        // Why the change matters for the business
+  what_breaks: string;           // What breaks if they don't adapt
+  opportunity: string;           // The opportunity that emerges from the change
 }
 
 export interface CurrentStateResult {
