@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { mapSendErrorToFriendlyMessage } from './sendErrorMapping';
 import { buildGlobalInstructionsPayload } from '@/lib/strategy/buildGlobalInstructionsPayload';
 import { buildStrategySopPayloads } from '@/lib/strategy/buildStrategySopPayloads';
+import { resolveWorkspacePayload } from './resolveWorkspacePayload';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/strategy-chat`;
 
@@ -39,7 +40,19 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
 
   const sendMessage = useCallback(async (
     content: string,
-    options?: { depth?: string; pickedResourceIds?: string[]; workspace?: string | null },
+    options?: {
+      depth?: string;
+      pickedResourceIds?: string[];
+      workspace?: string | null;
+      /**
+       * How the workspace value was chosen. Sent verbatim to the server so
+       * logs can distinguish a real workspace selection from the freeform
+       * "no surface active" case. The previous silent fallback to 'work'
+       * made debugging look like a workspace failure when it was actually
+       * the freeform lane.
+       */
+      workspaceSource?: 'selected' | 'thread-tag' | 'default' | 'none';
+    },
   ) => {
     if (!threadId || !user || !content.trim() || isSending) return;
     setIsSending(true);
@@ -53,10 +66,22 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
     };
     setMessages(prev => [...prev, userMsg]);
 
-    // Phase 3 — Unified Strategy SOP Resolver. One pass produces every SOP
-    // payload that leaves the client (resolvedSops + globalSop +
-    // workspaceSop). Chat never sends taskSop — task pipelines own that.
-    const sopWorkspace = options?.workspace ?? 'work';
+    // Phase 7D fix — Workspace payload truth.
+    // The caller is the source of truth for "is a Strategy surface active?".
+    // We do NOT coerce a missing workspace to 'work' anymore — that silently
+    // hid the freeform/no-surface case behind the Work surface in logs.
+    //
+    // Resolver behavior is unchanged: a null/undefined workspace produces no
+    // workspace SOP (freeform mode). We just stop lying about which lane the
+    // user was in.
+    const {
+      workspaceSent: explicitWorkspace,
+      workspaceSource,
+      sopResolverWorkspace: sopWorkspace,
+    } = resolveWorkspacePayload({
+      workspace: options?.workspace,
+      workspaceSource: options?.workspaceSource,
+    });
     const { resolvedSops, workspaceSop, globalSop } = buildStrategySopPayloads({
       workspace: sopWorkspace,
       taskType: null,
@@ -85,9 +110,12 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
           // Phase 2: lightweight Global Instructions. Null when the engine is
           // disabled — server treats absence as "no behavior change".
           globalInstructions: buildGlobalInstructionsPayload() ?? undefined,
-          // Phase 1 SOP Engine — frontend routing metadata only. Backend logs
-          // it but does NOT inject any workspace SOP yet.
-          workspace: sopWorkspace,
+          // Phase 7D-fix — workspace truth. Send the actual selected workspace
+          // (or null when no surface is active). The server logs `workspace_sent`
+          // and `workspace_source` so freeform/no-surface is no longer
+          // indistinguishable from the Work surface.
+          workspace: explicitWorkspace,
+          workspaceSource,
           // Phase 2 SOP Engine — resolver plumbing. Client resolves which
           // SOPs apply (global / workspace / task) and sends a lightweight
           // metadata payload. Server logs it under [strategy-sop] resolved.

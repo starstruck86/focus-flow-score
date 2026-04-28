@@ -2213,6 +2213,7 @@ serve(async (req) => {
       _v2,
       globalInstructions: globalInstructionsRaw,
       workspace: workspaceRaw,
+      workspaceSource: workspaceSourceRaw,
       resolvedSops: resolvedSopsRaw,
       workspaceSop: workspaceSopRaw,
       globalSop: globalSopRaw,
@@ -2246,8 +2247,34 @@ serve(async (req) => {
     const workspace = typeof workspaceRaw === 'string' && ALLOWED_WORKSPACES.has(workspaceRaw)
       ? workspaceRaw
       : null;
+    // Phase 7D-fix — workspace truth.
+    // Distinguish "no surface selected" (freeform) from "Work surface" and
+    // from "client sent a key the server doesn't recognize". This makes
+    // diagnostics impossible to misread the way the previous silent
+    // fallback to `'work'` allowed.
+    const ALLOWED_WORKSPACE_SOURCES = new Set(['selected', 'thread-tag', 'default', 'none']);
+    const workspaceSource: 'selected' | 'thread-tag' | 'default' | 'none' | 'unknown' =
+      typeof workspaceSourceRaw === 'string' && ALLOWED_WORKSPACE_SOURCES.has(workspaceSourceRaw)
+        ? (workspaceSourceRaw as 'selected' | 'thread-tag' | 'default' | 'none')
+        : 'unknown';
+    // What the server actually received from the wire — pre-validation. Used
+    // for diagnostics so a typo'd / unknown key doesn't get silently mapped
+    // to `null` without a trace.
+    const workspaceSentRaw: string | null =
+      typeof workspaceRaw === 'string' && workspaceRaw.trim().length > 0
+        ? workspaceRaw
+        : null;
+    const workspaceResolved: string =
+      workspace ?? (workspaceSentRaw ? `invalid:${workspaceSentRaw.slice(0, 32)}` : 'freeform');
+    // Workspaces that may carry a Workspace SOP (matches the resolver:
+    // `work` is freeform and is intentionally excluded).
+    const WORKSPACES_SUPPORTING_SOP = new Set([
+      'brainstorm', 'deep_research', 'refine', 'library', 'artifacts', 'projects',
+    ]);
+    const workspaceSupportsSop = workspace ? WORKSPACES_SUPPORTING_SOP.has(workspace) : false;
+
     console.log(
-      `[strategy-sop] received workspace=${workspace ?? 'none'} taskType=${typeof workflowType === 'string' ? workflowType : 'none'} hasWorkspace=${!!workspace} hasGlobalInstructions=${!!cleanGlobalInstructions}`,
+      `[strategy-sop] received workspace=${workspace ?? 'none'} source=${workspaceSource} sentRaw=${workspaceSentRaw ?? 'null'} taskType=${typeof workflowType === 'string' ? workflowType : 'none'} hasWorkspace=${!!workspace} supportsWorkspaceSop=${workspaceSupportsSop} hasGlobalInstructions=${!!cleanGlobalInstructions}`,
     );
 
     // Phase 2 — Universal Strategy SOP Engine: resolver plumbing.
@@ -2361,6 +2388,53 @@ serve(async (req) => {
     })();
     console.log(
       `[strategy-sop] global-sop received: present=${!!globalSopRaw} sanitized=${!!cleanGlobalSop} length=${cleanGlobalSop?.rawInstructions.length ?? 0}`,
+    );
+
+    // ── Phase 7D-fix — Single-line truth diagnostic ─────────────────────
+    // One structured JSON log capturing the full state of workspace + SOP
+    // routing for this request. Lets us read a single line in Supabase
+    // logs and definitively answer:
+    //   • which workspace did the client say it was in?
+    //   • which workspace did the server resolve?
+    //   • where did the workspace value come from? (selected/none/etc.)
+    //   • does that workspace even support a Workspace SOP?
+    //   • Global SOP: config enabled? raw length sent? sanitized? going to inject?
+    //   • Workspace SOP: sent? sanitized? going to inject?
+    // The downstream "[sop-engine]" / "[sop-output-check]" logs continue to
+    // report the actual injection result. This block reports the *inputs*.
+    const globalSopConfigEnabled = !!globalSopRaw && typeof globalSopRaw === 'object';
+    const globalSopRawLength = (globalSopRaw && typeof globalSopRaw === 'object'
+      && typeof (globalSopRaw as Record<string, unknown>).rawInstructions === 'string')
+      ? ((globalSopRaw as Record<string, unknown>).rawInstructions as string).length
+      : 0;
+    const workspaceSopRawLength = (workspaceSopRaw && typeof workspaceSopRaw === 'object'
+      && typeof (workspaceSopRaw as Record<string, unknown>).rawInstructions === 'string')
+      ? ((workspaceSopRaw as Record<string, unknown>).rawInstructions as string).length
+      : 0;
+    const willInjectWorkspaceSop = !!cleanWorkspaceSop;
+    const willInjectGlobalSop = !!cleanGlobalSop;
+    console.log(
+      `[strategy-sop:diagnostics] ${JSON.stringify({
+        // Workspace truth
+        workspace_sent: workspaceSentRaw,
+        workspace_resolved: workspaceResolved,
+        workspace_source: workspaceSource,
+        workspace_supports_sop: workspaceSupportsSop,
+        is_freeform: !workspace,
+        is_task_pipeline: typeof workflowType === 'string' && workflowType.length > 0,
+        // Global SOP lifecycle
+        global_sop_config_enabled: globalSopConfigEnabled,
+        global_sop_sent: globalSopRaw != null,
+        global_sop_raw_length: globalSopRawLength,
+        global_sop_sanitized: !!cleanGlobalSop,
+        global_sop_will_inject: willInjectGlobalSop,
+        // Workspace SOP lifecycle
+        workspace_sop_sent: workspaceSopRaw != null,
+        workspace_sop_raw_length: workspaceSopRawLength,
+        workspace_sop_sanitized: !!cleanWorkspaceSop,
+        workspace_sop_will_inject: willInjectWorkspaceSop,
+        workspace_sop_workspace: cleanWorkspaceSop?.workspace ?? null,
+      })}`,
     );
 
     // ── Debug: OpenAI key health check ──────────────────────
