@@ -871,6 +871,7 @@ async function generatePrioritizedSignals(args: {
   userContent: string;
   hypotheses: GeneratedHypotheses | null;
   sourcedFacts: CurrentStateIntelligence["evidence"]["sourced_facts"];
+  verifiedSignals: VerifiedSignal[];
   webResearched: boolean;
 }): Promise<PrioritizedSignal[]> {
   const key = (globalThis as any).Deno?.env?.get?.("LOVABLE_API_KEY");
@@ -885,9 +886,23 @@ async function generatePrioritizedSignals(args: {
         : "")
     : "";
 
+  // VERIFIED-FIRST: lead the prompt with verified signals so the model
+  // ranks them ahead of inferred hypotheses. Hypotheses come AFTER as
+  // gap-fillers, never as substitutes.
+  const verified = args.verifiedSignals || [];
+  const verifiedBlock = verified.length
+    ? `\nVERIFIED SIGNALS (real-world, source-tagged — PREFER THESE WHEN RANKING):\n` +
+      verified
+        .map((s, i) =>
+          `${i + 1}. [${s.source}·${s.confidence}${s.kind ? `·${s.kind}` : ""}] ${s.signal}` +
+          (s.source_url ? ` (${s.source_url})` : "")
+        )
+        .join("\n") + "\n"
+    : `\nVERIFIED SIGNALS: none gathered this turn — you may rank from hypotheses, but flag every signal as source_type:"inference".\n`;
+
   const hyp = args.hypotheses;
   const hypBlock = hyp
-    ? `\nWORKING HYPOTHESES (raw material — do not just restate; rank what matters most):\n` +
+    ? `\nINFERRED HYPOTHESES (gap-fillers — use ONLY to extend verified signals or when no verified signal exists):\n` +
       `- Business model: ${hyp.business_model_summary}\n` +
       `- Customer experience: ${hyp.customer_experience}\n` +
       `- Marketing motion: ${hyp.marketing_motion}\n` +
@@ -898,7 +913,7 @@ async function generatePrioritizedSignals(args: {
     : "";
 
   const facts = args.sourcedFacts.length
-    ? `\nKnown sourced facts:\n` +
+    ? `\nKnown sourced facts (CRM / library):\n` +
       args.sourcedFacts.slice(0, 6).map((f) => `- ${f.claim}`).join("\n") + "\n"
     : "";
 
@@ -907,17 +922,23 @@ async function generatePrioritizedSignals(args: {
     `top 2-3 signals that should drive a first conversation with this account. ` +
     `You ruthlessly cut everything that doesn't matter most. You write signals ` +
     `that are concrete, specific, and tied to real business impact — never ` +
-    `generic categories. The output tells the rep what matters most, not ` +
-    `everything that could matter.`;
+    `generic categories. ` +
+    `VERIFIED-FIRST RULE: when verified signals exist, they MUST take the top ranks. ` +
+    `Inferred hypotheses can only fill remaining slots, and only when they extend ` +
+    `(not duplicate) the verified ones. Never let an inferred angle outrank a ` +
+    `verified one. The output tells the rep what matters most, not everything ` +
+    `that could matter.`;
 
   const user =
     `Account in focus: ${args.entityName}` +
     acctSeed +
+    verifiedBlock +
     hypBlock +
     facts +
     `\nWeb research available this turn: ${args.webResearched ? "yes" : "no"}` +
     `\n\nThe rep's prompt:\n"""${args.userContent.slice(0, 1200)}"""\n\n` +
     SIGNAL_SCHEMA_HINT;
+
 
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 12000);
