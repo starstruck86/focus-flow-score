@@ -78,6 +78,14 @@ import {
   runCurrentStatePreflight,
   type CurrentStateResult,
 } from "../_shared/strategy-core/currentStateIntelligence.ts";
+import {
+  selectOutputMode,
+  renderModeContractBody,
+  renderConversationEnforcementBlock,
+  type OutputMode,
+  type OutputModeDecision,
+  type ExplicitFormatKind,
+} from "../_shared/strategy-core/outputMode.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -5112,74 +5120,15 @@ function buildResponseFormatContract(args: {
   workspace: string | null;
   intent: IntentResult;
   userContent: string;
+  decision: OutputModeDecision;
 }): string {
-  const { workspace, intent, userContent } = args;
+  const { workspace, intent, userContent, decision } = args;
   const override = detectExplicitFormatOverride(userContent);
   const overrideLine = renderOverrideBlock(override);
 
   const tone = 'Write like a top-tier strategist: clear, concise, opinionated, no fluff. Avoid long preambles ("Let me walk you through…") and generic closers ("Hope this helps!").';
 
-  let body = '';
-  switch (workspace) {
-    case 'brainstorm':
-      body = [
-        'PURPOSE: give Corey conversation entry points he could actually say or push on — not a structured list of strategies.',
-        'STYLE: first-person, conversational prose. Every idea must start with language like "I\'d…", "I\'d probably…", "I might…", "One way I\'d…", "Honestly, I\'d…".',
-        'DO NOT use ## headings. DO NOT name, title, or label ideas (no "Approach 1", no "Dynamic Inventory Alerts", no "Reframe X as Y", no bolded idea-names, no "Topic: …" leads).',
-        'Each idea is a short paragraph (2–5 sentences). 3–5 distinct entries. Separate with a blank line or a single dash. No nested bullets, no cards, no sections.',
-        'Anchor every entry in this specific company. If it could be said to any company, rewrite or drop it.',
-        'No "→ Next step:" tail line — it breaks the conversational shape.',
-      ].join('\n');
-      break;
-    case 'refine':
-      body = [
-        'PURPOSE: improve existing content the user pasted or referenced.',
-        'STYLE: preserve the original format. If the input is an email, return an email. If it is a paragraph, return a paragraph.',
-        'DO NOT add ## headings unless the input already had them or the user explicitly asked.',
-        'OUTPUT ORDER: rewritten version FIRST. Optionally, a short rationale (2–4 lines) after, separated by a blank line.',
-        'Prioritize sharper wording, tighter structure, and a stronger POV over visible reformatting.',
-      ].join('\n');
-      break;
-    case 'deep_research':
-      body = [
-        'PURPOSE: evidence, synthesis, implications.',
-        'STYLE: structured. Use ## headings and bullets where they aid scanning.',
-        'Encouraged sections: Facts / Inferences / Unknowns / Questions (use whichever fit the ask).',
-        'Cite sources/library evidence inline when used. End with "→ Next step: <one concrete action>" only if a next step is genuinely actionable.',
-      ].join('\n');
-      break;
-    case 'library':
-      body = [
-        'PURPOSE: turn library knowledge into reusable assets and guidance.',
-        'STYLE: structured. ## headings and bullets allowed.',
-        'Preserve resource names/titles verbatim. Organize into reusable concepts, plays, examples, or application notes.',
-        'End with "→ Next step:" when there is a real follow-on action.',
-      ].join('\n');
-      break;
-    case 'artifacts':
-      body = [
-        'PURPOSE: produce a usable deliverable (brief, doc, plan, table, etc.).',
-        'STYLE: structured for real-world use. ## headings, sub-sections, bullets, and tables are all allowed.',
-        'Optimize for artifact readiness — the output should be ready to paste/share with minimal editing.',
-      ].join('\n');
-      break;
-    case 'projects':
-      body = [
-        'PURPOSE: organize projects/plans.',
-        'STYLE: use structure (## headings, bullets) ONLY when organizing a plan, milestone list, or status. Otherwise match the ask.',
-        'Do not force headings on simple Q&A inside a project.',
-      ].join('\n');
-      break;
-    case 'work':
-    default:
-      body = [
-        'PURPOSE: general work surface — match the ask.',
-        'If the ask is quick/direct ("quick answer", "what should I say"), reply concisely with no headings.',
-        'If the ask is for a doc/brief/analysis, structure it with ## headings and bullets.',
-        'Do NOT force ## headings by default. Let the shape of the ask drive the shape of the answer.',
-      ].join('\n');
-      break;
-  }
+  const body = renderModeContractBody(decision.mode, workspace);
 
   const shortFormIntents = new Set(['subject_line', 'one_liner', 'opener', 'short_form']);
   const shortFormTail =
@@ -5191,7 +5140,7 @@ function buildResponseFormatContract(args: {
     ? `\n\n${overrideLine}\nThe USER FORMAT OVERRIDE above wins over the workspace defaults below when they conflict.`
     : '';
 
-  return `\n═══ RESPONSE FORMAT CONTRACT (workspace: ${workspace ?? 'freeform'}) ═══
+  return `\n═══ RESPONSE FORMAT CONTRACT (workspace: ${workspace ?? 'freeform'}, mode: ${decision.mode}) ═══
 ${tone}${overrideTail}
 
 ${body}${shortFormTail}
@@ -5225,6 +5174,8 @@ async function buildChatSystemPrompt(args: {
   retrievalSucceeded: boolean;
   intent: IntentResult;
   modeLockBlock: string;
+  /** Universal output-mode decision (computed once per turn). */
+  outputModeDecision: OutputModeDecision;
   /** Raw context blocks — surfaced so V2 can reuse the same retrieval. */
   rawAccountContext?: string;
   rawLibraryContext?: string;
@@ -5255,6 +5206,18 @@ async function buildChatSystemPrompt(args: {
     hasAccountContext: _hasAccountContext,
   });
   const modeLockBlock = buildModeLockBlock(intent);
+
+  // Universal output-mode decision — computed ONCE per turn here so
+  // every prompt path (early-return generic, full chat, V2) carries
+  // the same value through the system prompt and downstream
+  // enforcement (conversation-mode HARD RULES).
+  const _explicitOverride = detectExplicitFormatOverride(userContent);
+  const outputModeDecision: OutputModeDecision = selectOutputMode({
+    workspace: workspaceKeyRaw ?? null,
+    intent,
+    explicitFormat: _explicitOverride?.kind ?? null,
+    userContent,
+  });
 
   // ── DIAGNOSTIC: prove which contract was actually selected at runtime.
   // Maps intent.intent → the contract block that the case branch in
@@ -5306,6 +5269,7 @@ async function buildChatSystemPrompt(args: {
       retrievalSucceeded: false,
       intent,
       modeLockBlock,
+      outputModeDecision,
     };
   }
 
@@ -5461,6 +5425,7 @@ async function buildChatSystemPrompt(args: {
       retrievalSucceeded: !!resources && !retrievalError,
       intent,
       modeLockBlock,
+      outputModeDecision,
     };
   }
 
@@ -5552,7 +5517,20 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     workspace: workspaceKeyRaw ?? null,
     intent,
     userContent,
+    decision: outputModeDecision,
   });
+  console.log(
+    "[strategy-chat] output_mode",
+    safeJson({
+      output_mode: outputModeDecision.mode,
+      output_mode_reason: outputModeDecision.reason,
+      workspace_default_mode: outputModeDecision.workspace_default_mode,
+      explicit_format_override: outputModeDecision.explicit_format_override !== null,
+      explicit_format_kind: outputModeDecision.explicit_format_override,
+      conversation_trigger_matched: outputModeDecision.conversation_trigger_matched,
+      workspace: workspaceKeyRaw ?? null,
+    }),
+  );
 
   // ── CURRENT STATE INTELLIGENCE PREFLIGHT ───────────────────────
   // When a user mentions a company in an unlinked thread, build a
@@ -5618,6 +5596,7 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     retrievalSucceeded: !!resources && !retrievalError,
     intent,
     modeLockBlock,
+    outputModeDecision,
     rawAccountContext: assembled?.contextBlock || "",
     rawLibraryContext: library?.contextString || "",
     rawResourceContextBlock: resources?.contextBlock || "",
@@ -5874,6 +5853,7 @@ async function handleChat(
     rawLibraryContext,
     rawResourceContextBlock,
     rawWorkingThesisBlock,
+    outputModeDecision,
   } = await buildChatSystemPrompt({
     supabase,
     userId,
@@ -6409,86 +6389,29 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
   const giPath: GIPath = v2Active ? "v2" : (mode === "strong" || mode === "partial" || mode === "thin" || mode === "short_form" ? "synthesis" : "v1");
   effectiveSystemPrompt = applyGlobalInstructions(effectiveSystemPrompt, globalInstructions, giPath);
 
-  // ── FINAL LAYER: Brainstorm enforcement (HARD RULES) ──
-  // Must be appended AFTER applyGlobalInstructions so global instructions
-  // cannot soften or override these rules. Scoped strictly to brainstorm.
-  if (workspaceSop?.workspace === "brainstorm") {
-    const brainstormBlock = `
-
-━━━ BRAINSTORM ENFORCEMENT (HARD RULES) ━━━
-
-OUTPUT MODE: CONVERSATION-ENTRY, NOT IDEA LIST.
-You are not producing a structured list of strategies. You are giving Corey
-the actual things he might say or push on when he opens or drives this
-conversation. Write the way Corey would think out loud right before a call.
-
-FORMAT RULES (NON-NEGOTIABLE):
-1. Do NOT use headings, titles, bold labels, bullet headers, or any name
-   for an idea. No "Approach 1", no "Dynamic Inventory Alerts", no
-   "Reframe personalization as discovery" — no naming an angle at all.
-2. Do NOT format as a list of named approaches, cards, or sections.
-3. Each idea is a short paragraph (2–5 sentences) written in first person
-   as Corey, e.g.:
-     "I'd probably open by pushing on…"
-     "One way I'd come at this is…"
-     "I might start by asking them whether…"
-     "Honestly, I'd lean into the fact that…"
-4. Plain prose only. A simple "—" or blank line between ideas is fine.
-   No markdown headings (#, ##), no bold idea-names, no numbered list of
-   labeled strategies. A bare numbered or dashed list of paragraphs is
-   acceptable ONLY if each item starts with first-person language and
-   carries no label.
-5. Produce 3–5 distinct conversation entries. Each must be something Corey
-   could literally say out loud in the meeting.
-
-CONTENT RULES:
-- Anchor every entry in this specific company's situation (use the Current
-  State Intelligence + any account context). If an entry could be said to
-  any retailer / SaaS / B2B company, rewrite it or drop it.
-- Each entry must contain a real point of view, tension, or provocation —
-  not a description of a capability or a category.
-- No generic marketing themes as the spine of an idea (personalization,
-  omnichannel, loyalty, engagement, data utilization). You may reference
-  them only inside a specific, contrarian, company-grounded take.
-- No consultant verbs as the move ("highlight", "focus on", "leverage",
-  "emphasize", "showcase"). Replace with what Corey would actually say
-  or ask.
-- After the entries, you MAY add one short paragraph (still first-person,
-  no heading) calling out which 1–2 you'd actually lead with and why —
-  but only if it stays conversational. No "Top picks:" label.
-
-EXAMPLES OF THE SHAPE WE WANT:
-  BAD  → "**Dynamic Inventory Alerts** — Reframe personalization as discovery…"
-  GOOD → "I'd probably lean into how their inventory is constantly
-          changing and ask whether they're actually using that to create
-          urgency outside the store. Most lifecycle programs assume a
-          stable catalog — TJX doesn't have one, and that's either a
-          headache or their biggest unused weapon."
-
-Library use:
-- Pull from the library to sharpen the POV, but do NOT name the play,
-  cite a framework by title in-line, or announce that you searched.
-  The library should make the entry sharper, not turn it into a label.
-
-SELF-CHECK BEFORE RESPONDING:
-- Does any line read like a heading, title, or named approach? If yes,
-  rewrite it as something Corey would say.
-- Does every entry start in first person ("I'd…", "I might…", "One way
-  I'd…", "Honestly…")? If not, fix it.
-- Could this be pasted into a real pre-call note as talking points? If
-  not, rewrite.
-
-This is NOT optional. Do not ignore these rules.
-`;
-    effectiveSystemPrompt = `${effectiveSystemPrompt}${brainstormBlock}`;
+  // ── FINAL LAYER: Conversation-mode enforcement (HARD RULES) ──
+  // Universal — fires whenever the universal output-mode selector
+  // picked 'conversation' for THIS turn, regardless of workspace.
+  // This replaces the prior brainstorm-only enforcement so that
+  // "talk me through…" / "help me think through…" prompts in any
+  // workspace get the same prose-only, no-headings shape.
+  // Must be appended AFTER applyGlobalInstructions so global
+  // instructions cannot soften or override these rules.
+  if (outputModeDecision?.mode === "conversation") {
+    const convoBlock = renderConversationEnforcementBlock(
+      workspaceSop?.workspace ?? null,
+    );
+    effectiveSystemPrompt = `${effectiveSystemPrompt}${convoBlock}`;
     console.log(
-      `[strategy-sop] injected-brainstorm-enforcement-final ${JSON.stringify({
-        workspace: "brainstorm",
-        length: brainstormBlock.length,
+      `[strategy-sop] injected-conversation-enforcement-final ${JSON.stringify({
+        workspace: workspaceSop?.workspace ?? null,
+        output_mode: outputModeDecision.mode,
+        output_mode_reason: outputModeDecision.reason,
+        length: convoBlock.length,
         position: "post-global-instructions",
       })}`,
-     );
-   }
+    );
+  }
 
    // ── Phase 7A: SOP Execution Trace (observability only, no behavior change) ──
    try {
