@@ -1999,6 +1999,15 @@ export async function runCurrentStatePreflight(
     change_vectors_y_inferred_count: prioritizedSignals.filter(
       (s) => s.change_vector?.now_basis === "inferred",
     ).length,
+    // ── Reference Anchor telemetry ────────────────────────────────
+    reference_types: prioritizedSignals.map((s) => s.reference?.reference_type ?? "missing"),
+    reference_confidences: prioritizedSignals.map((s) => s.reference?.confidence ?? "missing"),
+    reference_grounded_count: prioritizedSignals.filter(
+      (s) => s.reference && s.reference.reference_type !== "inference",
+    ).length,
+    reference_with_url_count: prioritizedSignals.filter(
+      (s) => !!s.reference?.reference_url,
+    ).length,
     // ── Commercial Insight (Challenger) telemetry ─────────────────
     commercial_insights_count: commercialInsights.length,
     commercial_insights_sources: commercialInsights.map((c) => c.source_type),
