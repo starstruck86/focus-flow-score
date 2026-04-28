@@ -5120,74 +5120,26 @@ function buildResponseFormatContract(args: {
   workspace: string | null;
   intent: IntentResult;
   userContent: string;
-}): string {
+}): { contract: string; decision: OutputModeDecision } {
   const { workspace, intent, userContent } = args;
   const override = detectExplicitFormatOverride(userContent);
   const overrideLine = renderOverrideBlock(override);
 
+  // Universal output-mode selector. Maps explicit override → kind, then
+  // resolves mode from (override > conversation triggers > workspace
+  // default). Mode flows into the contract body and (when it's
+  // 'conversation') triggers the HARD RULES enforcement block.
+  const explicitKind: ExplicitFormatKind | null = override?.kind ?? null;
+  const decision = selectOutputMode({
+    workspace: workspace ?? null,
+    intent,
+    explicitFormat: explicitKind,
+    userContent,
+  });
+
   const tone = 'Write like a top-tier strategist: clear, concise, opinionated, no fluff. Avoid long preambles ("Let me walk you through…") and generic closers ("Hope this helps!").';
 
-  let body = '';
-  switch (workspace) {
-    case 'brainstorm':
-      body = [
-        'PURPOSE: give Corey conversation entry points he could actually say or push on — not a structured list of strategies.',
-        'STYLE: first-person, conversational prose. Every idea must start with language like "I\'d…", "I\'d probably…", "I might…", "One way I\'d…", "Honestly, I\'d…".',
-        'DO NOT use ## headings. DO NOT name, title, or label ideas (no "Approach 1", no "Dynamic Inventory Alerts", no "Reframe X as Y", no bolded idea-names, no "Topic: …" leads).',
-        'Each idea is a short paragraph (2–5 sentences). 3–5 distinct entries. Separate with a blank line or a single dash. No nested bullets, no cards, no sections.',
-        'Anchor every entry in this specific company. If it could be said to any company, rewrite or drop it.',
-        'No "→ Next step:" tail line — it breaks the conversational shape.',
-      ].join('\n');
-      break;
-    case 'refine':
-      body = [
-        'PURPOSE: improve existing content the user pasted or referenced.',
-        'STYLE: preserve the original format. If the input is an email, return an email. If it is a paragraph, return a paragraph.',
-        'DO NOT add ## headings unless the input already had them or the user explicitly asked.',
-        'OUTPUT ORDER: rewritten version FIRST. Optionally, a short rationale (2–4 lines) after, separated by a blank line.',
-        'Prioritize sharper wording, tighter structure, and a stronger POV over visible reformatting.',
-      ].join('\n');
-      break;
-    case 'deep_research':
-      body = [
-        'PURPOSE: evidence, synthesis, implications.',
-        'STYLE: structured. Use ## headings and bullets where they aid scanning.',
-        'Encouraged sections: Facts / Inferences / Unknowns / Questions (use whichever fit the ask).',
-        'Cite sources/library evidence inline when used. End with "→ Next step: <one concrete action>" only if a next step is genuinely actionable.',
-      ].join('\n');
-      break;
-    case 'library':
-      body = [
-        'PURPOSE: turn library knowledge into reusable assets and guidance.',
-        'STYLE: structured. ## headings and bullets allowed.',
-        'Preserve resource names/titles verbatim. Organize into reusable concepts, plays, examples, or application notes.',
-        'End with "→ Next step:" when there is a real follow-on action.',
-      ].join('\n');
-      break;
-    case 'artifacts':
-      body = [
-        'PURPOSE: produce a usable deliverable (brief, doc, plan, table, etc.).',
-        'STYLE: structured for real-world use. ## headings, sub-sections, bullets, and tables are all allowed.',
-        'Optimize for artifact readiness — the output should be ready to paste/share with minimal editing.',
-      ].join('\n');
-      break;
-    case 'projects':
-      body = [
-        'PURPOSE: organize projects/plans.',
-        'STYLE: use structure (## headings, bullets) ONLY when organizing a plan, milestone list, or status. Otherwise match the ask.',
-        'Do not force headings on simple Q&A inside a project.',
-      ].join('\n');
-      break;
-    case 'work':
-    default:
-      body = [
-        'PURPOSE: general work surface — match the ask.',
-        'If the ask is quick/direct ("quick answer", "what should I say"), reply concisely with no headings.',
-        'If the ask is for a doc/brief/analysis, structure it with ## headings and bullets.',
-        'Do NOT force ## headings by default. Let the shape of the ask drive the shape of the answer.',
-      ].join('\n');
-      break;
-  }
+  const body = renderModeContractBody(decision.mode, workspace);
 
   const shortFormIntents = new Set(['subject_line', 'one_liner', 'opener', 'short_form']);
   const shortFormTail =
@@ -5199,12 +5151,14 @@ function buildResponseFormatContract(args: {
     ? `\n\n${overrideLine}\nThe USER FORMAT OVERRIDE above wins over the workspace defaults below when they conflict.`
     : '';
 
-  return `\n═══ RESPONSE FORMAT CONTRACT (workspace: ${workspace ?? 'freeform'}) ═══
+  const contract = `\n═══ RESPONSE FORMAT CONTRACT (workspace: ${workspace ?? 'freeform'}, mode: ${decision.mode}) ═══
 ${tone}${overrideTail}
 
 ${body}${shortFormTail}
 
 Use real Markdown when you do use it (## headings, **bold**, - bullets). Never print raw markdown symbols as literal text.`;
+
+  return { contract, decision };
 }
 
 async function buildChatSystemPrompt(args: {
