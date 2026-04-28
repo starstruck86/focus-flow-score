@@ -1591,19 +1591,31 @@ function renderPromptBlock(
 
   const signals = intelligence.prioritized_signals || [];
   const signalsBlock = signals.length
-    ? signals.map((s) =>
-      `${s.rank}. [${s.signal_type} · source:${s.source_type} · confidence:${s.confidence}] ${s.signal}\n` +
-      `   Why it matters:        ${s.why_it_matters}\n` +
-      `   Why now:               ${s.why_now}\n` +
-      `   Why this company:      ${s.why_this_company}\n` +
-      `   Business pressure:     ${s.business_pressure}\n` +
-      `   Customer behavior:     ${s.customer_behavior_implication}\n` +
-      `   Marketing motion:      ${s.marketing_motion_implication}\n` +
-      `   Future-state implied:  ${s.future_state_implication}\n` +
-      `   Strategic tension:     ${s.strategic_tension}\n` +
-      `   Conversation move:     ${s.conversation_move}\n` +
-      `   Validation question:   ${s.validation_question}`
-    ).join("\n\n")
+    ? signals.map((s) => {
+      const cv = s.change_vector;
+      const cvLines = cv
+        ? `\n   Change vector (X→Y→Z):\n` +
+          `     X (before · ${cv.before_basis}): ${cv.before}\n` +
+          `     Y (now · ${cv.now_basis}):       ${cv.now}\n` +
+          `     Z (next · ${cv.next_basis}):     ${cv.next}\n` +
+          `     What changed:        ${cv.what_changed}\n` +
+          `     Why it matters:      ${cv.why_it_matters}\n` +
+          `     What breaks:         ${cv.what_breaks}\n` +
+          `     Opportunity:         ${cv.opportunity}`
+        : "";
+      return `${s.rank}. [${s.signal_type} · source:${s.source_type} · confidence:${s.confidence}] ${s.signal}\n` +
+        `   Why it matters:        ${s.why_it_matters}\n` +
+        `   Why now:               ${s.why_now}\n` +
+        `   Why this company:      ${s.why_this_company}\n` +
+        `   Business pressure:     ${s.business_pressure}\n` +
+        `   Customer behavior:     ${s.customer_behavior_implication}\n` +
+        `   Marketing motion:      ${s.marketing_motion_implication}\n` +
+        `   Future-state implied:  ${s.future_state_implication}\n` +
+        `   Strategic tension:     ${s.strategic_tension}\n` +
+        `   Conversation move:     ${s.conversation_move}\n` +
+        `   Validation question:   ${s.validation_question}` +
+        cvLines;
+    }).join("\n\n")
     : "(prioritization pass produced no signals — fall back to the working hypotheses above, but still pick the 2-3 highest-leverage angles yourself before responding, and explain the why behind each.)";
 
   // VERIFIED-FIRST block: list real-world signals tagged with source +
