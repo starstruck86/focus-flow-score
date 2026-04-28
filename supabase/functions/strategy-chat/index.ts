@@ -6523,6 +6523,15 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
             lines.push(`       what breaks:     ${cv.what_breaks}`);
             lines.push(`       opportunity:     ${cv.opportunity}`);
           }
+          const ref = (s as any).reference;
+          if (ref) {
+            lines.push(`     reference (express IN PROSE per confidence — never dump as a citation):`);
+            lines.push(`       type:       ${ref.reference_type}`);
+            lines.push(`       source:     ${ref.reference_source}`);
+            if (ref.reference_url) lines.push(`       url:        ${ref.reference_url}`);
+            if (ref.reference_excerpt) lines.push(`       excerpt:    ${ref.reference_excerpt}`);
+            lines.push(`       confidence: ${ref.confidence}  (high → state directly · medium → "we're seeing…" · low → "a reasonable assumption is…")`);
+          }
         }
       }
       return lines.join("\n");
