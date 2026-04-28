@@ -96,7 +96,7 @@ export function buildV2Prompt(args: {
     /\b(cfo|ceo|coo|cto|vp|director|champion|economic\s+buyer|technical\s+buyer|healthcare|fintech|retail|saas|manufacturing)\b/i
       .test(decision.cleanedUserText);
 
-  const systemPrompt = buildV2SystemPrompt({
+  const builderArgs = {
     decision,
     accountContext: args.accountContext,
     libraryContext: args.libraryContext,
@@ -106,11 +106,15 @@ export function buildV2Prompt(args: {
     resourceTitles: args.resourceTitles,
     kiIds: args.kiIds,
     kiTitles: args.kiTitles,
-  });
+  };
+  const { identity, reasoning } = buildV2SystemPromptParts(builderArgs);
+  const systemPrompt = `${identity}\n\n${reasoning}`;
 
   return {
     decision,
     systemPrompt,
+    identity,
+    reasoning,
     userText: decision.cleanedUserText,
   };
 }
