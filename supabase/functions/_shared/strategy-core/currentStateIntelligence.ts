@@ -351,10 +351,145 @@ async function resolveCandidateToAccount(
  * (name, website, industry, notes) and lift the company-confidence
  * to medium/high.
  */
+// ─── Real hypothesis generator (LLM-backed) ────────────────────────
+
+interface GeneratedHypotheses {
+  business_model_summary: string;
+  customer_experience: string;
+  marketing_motion: string;
+  strategic_tension: string;
+  future_state_hypothesis: string;
+  likely_gap: string;
+  why_now: string;
+  thesis_summary: string;
+}
+
+const HYPOTHESIS_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY these string keys:
+{
+  "business_model_summary": "1-2 sentences. Concrete, specific to this company. Use phrasing like 'X likely operates...' or 'In a Y model like X's...'. NEVER write '[Likely]' or scaffolding tokens — write real prose.",
+  "customer_experience": "1-2 sentences describing what it's actually like to be a customer of this company end-to-end. Be specific: discovery vs efficiency, anonymous vs logged-in, planned vs unplanned, etc.",
+  "marketing_motion": "1-2 sentences on how this company likely runs (or under-runs) lifecycle/CRM/engagement marketing today, given the business model. Name the likely shape and where it's misaligned.",
+  "strategic_tension": "1 sentence naming a non-obvious tension Corey can put on the table — the kind a smart prospect will recognize ('most lifecycle strategies optimize for X, but Y's model benefits from Z').",
+  "future_state_hypothesis": "1-2 sentences on what they're trying to become and what has to change in customer engagement to get there.",
+  "likely_gap": "1 sentence: the most plausible gap between current and future state.",
+  "why_now": "1 sentence: the market / competitive / internal pressure that makes this conversation timely.",
+  "thesis_summary": "1 crisp sentence summarizing the working thesis about where the company is today."
+}
+
+Hard rules:
+- Write real, concrete hypotheses. No placeholder text. No "[Likely]", "[Assume]", "describe…", "fill in…".
+- It's OK — and required — to be hypothetical. Use "likely", "in a [model] like X's", "a reasonable assumption is".
+- Do NOT cite. Do NOT pretend these are facts.
+- Do NOT include any text outside the JSON object.`;
+
+async function generateRealHypotheses(args: {
+  entityName: string;
+  resolvedAccount: CurrentStateResult["resolvedAccount"];
+  userContent: string;
+}): Promise<GeneratedHypotheses | null> {
+  const key = (globalThis as any).Deno?.env?.get?.("LOVABLE_API_KEY");
+  if (!key) {
+    console.warn(
+      "[currentStateIntelligence] LOVABLE_API_KEY missing — skipping hypothesis generation",
+    );
+    return null;
+  }
+
+  const acctSeed = args.resolvedAccount
+    ? `\nKnown CRM facts about ${args.resolvedAccount.name}:\n` +
+      `- Website: ${args.resolvedAccount.website ?? "unknown"}\n` +
+      `- Industry: ${args.resolvedAccount.industry ?? "unknown"}\n` +
+      (args.resolvedAccount.notes
+        ? `- CRM note: ${args.resolvedAccount.notes.slice(0, 400)}\n`
+        : "")
+    : "";
+
+  const sys =
+    `You are a senior B2B sales strategist preparing a rep for a conversation. ` +
+    `You generate concrete current-state hypotheses about a company so the rep ` +
+    `walks in with a real point of view, not generic categories. ` +
+    `You reason from public knowledge of the company plus the model/industry ` +
+    `they likely operate in. You are explicit that these are hypotheses, but ` +
+    `you write them as real prose — never as scaffolding placeholders.`;
+
+  const user =
+    `Company in focus: ${args.entityName}` +
+    acctSeed +
+    `\n\nThe rep's prompt that triggered this:\n"""${args.userContent.slice(0, 1200)}"""\n\n` +
+    HYPOTHESIS_SCHEMA_HINT;
+
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const resp = await fetch(
+      "https://ai.gateway.lovable.dev/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+        signal: ctrl.signal,
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          temperature: 0.6,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: sys },
+            { role: "user", content: user },
+          ],
+        }),
+      },
+    );
+    if (!resp.ok) {
+      console.warn(
+        `[currentStateIntelligence] hypothesis gen http ${resp.status}`,
+      );
+      return null;
+    }
+    const data = await resp.json();
+    const raw = data.choices?.[0]?.message?.content || "";
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const required: (keyof GeneratedHypotheses)[] = [
+      "business_model_summary",
+      "customer_experience",
+      "marketing_motion",
+      "strategic_tension",
+      "future_state_hypothesis",
+      "likely_gap",
+      "why_now",
+      "thesis_summary",
+    ];
+    for (const k of required) {
+      if (typeof parsed[k] !== "string" || !parsed[k].trim()) {
+        return null;
+      }
+      // Strip any leftover scaffolding tokens defensively.
+      parsed[k] = String(parsed[k])
+        .replace(/^\[(Likely|Assume|Assumption|TODO)\]\s*/i, "")
+        .replace(/\[(Likely|Assume|Assumption|TODO)\]/gi, "")
+        .trim();
+    }
+    return parsed as GeneratedHypotheses;
+  } catch (e) {
+    console.warn(
+      "[currentStateIntelligence] hypothesis gen failed:",
+      (e as Error).message,
+    );
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// ─── Inferred current-state builder ────────────────────────────────
+
 function buildSkeletonIntelligence(args: {
   entityName: string;
   resolvedAccount: CurrentStateResult["resolvedAccount"];
   webResearched: boolean;
+  hypotheses?: GeneratedHypotheses | null;
 }): CurrentStateIntelligence {
   const { entityName, resolvedAccount, webResearched } = args;
 
