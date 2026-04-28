@@ -5425,6 +5425,7 @@ async function buildChatSystemPrompt(args: {
       retrievalSucceeded: !!resources && !retrievalError,
       intent,
       modeLockBlock,
+      outputModeDecision,
     };
   }
 
