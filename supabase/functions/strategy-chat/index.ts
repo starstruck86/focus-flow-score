@@ -86,6 +86,13 @@ import {
   type OutputModeDecision,
   type ExplicitFormatKind,
 } from "../_shared/strategy-core/outputMode.ts";
+import {
+  classifyBehaviorIntent,
+  renderBehaviorContract,
+  enforceBehaviorContract,
+  type BehaviorIntent,
+  type BehaviorIntentResult,
+} from "../_shared/strategy-core/behaviorIntent.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
