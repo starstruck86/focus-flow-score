@@ -224,8 +224,45 @@ export function renderModeContractBody(
 // 'conversation', regardless of workspace. Replaces the prior
 // brainstorm-only enforcement block.
 // ─────────────────────────────────────────────────────────────────
-export function renderConversationEnforcementBlock(workspace: string | null | undefined): string {
+export interface ConversationEnforcementOpts {
+  /**
+   * Compact summary of Current State Intelligence facts/hypotheses for THIS turn.
+   * When present, it is inlined into the enforcement block so the model
+   * cannot bypass context by flipping into conversation mode.
+   */
+  currentStateDigest?: string | null;
+  /** True when Current State Intelligence ran and produced a usable block. */
+  currentStateUsed?: boolean;
+}
+
+export function renderConversationEnforcementBlock(
+  workspace: string | null | undefined,
+  opts: ConversationEnforcementOpts = {},
+): string {
   const ws = (workspace || "work").toLowerCase();
+  const csUsed = !!opts.currentStateUsed;
+  const csDigest = (opts.currentStateDigest || "").trim();
+  const contextClause = csUsed && csDigest
+    ? `
+
+CONTEXT YOU MUST USE (Current State Intelligence — already attached above):
+${csDigest}
+
+Every conversation entry MUST visibly reflect at least one specific fact,
+hypothesis, or tension from the block above. If a draft entry could be said
+to any company in any industry, REWRITE it before responding.`
+    : csUsed
+      ? `
+
+A Current State Intelligence block is attached above. Every conversation
+entry MUST visibly reflect at least one specific fact, hypothesis, or
+tension from it. Generic, company-agnostic lines are a violation.`
+      : `
+
+No Current State Intelligence block attached for this turn. Lead with what
+you'd actually want to learn about THIS account before forming a POV — do
+NOT fall back to generic category buckets.`;
+
   return `
 
 ━━━ CONVERSATION MODE ENFORCEMENT (HARD RULES) ━━━
@@ -235,6 +272,7 @@ You are NOT producing a structured list of strategies, a brief, or a
 deliverable. You are thinking with Corey — giving him the actual things
 he might say, ask, or push on. Write the way a sharp operator would
 think out loud right before the call.
+${contextClause}
 
 FORMAT RULES (NON-NEGOTIABLE):
 1. NO ## headings, titles, bold idea-names, "Approach 1" labels, or any
@@ -268,6 +306,8 @@ SELF-CHECK BEFORE RESPONDING:
 - Does any line read like a heading, title, or named approach? Rewrite.
 - Does every entry start in first person or natural conversational
   voice? If not, fix it.
+- Does every entry visibly reflect Current State context (when
+  attached above)? If not, rewrite.
 - Could this be pasted into a real pre-call note as talking points? If
   not, rewrite.
 

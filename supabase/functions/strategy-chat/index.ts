@@ -5181,6 +5181,8 @@ async function buildChatSystemPrompt(args: {
   rawLibraryContext?: string;
   rawResourceContextBlock?: string;
   rawWorkingThesisBlock?: string;
+  /** Current State Intelligence result — surfaced for combined logging at handler. */
+  currentStateResult?: CurrentStateResult | null;
 }> {
   const {
     supabase,
@@ -5207,10 +5209,44 @@ async function buildChatSystemPrompt(args: {
   });
   const modeLockBlock = buildModeLockBlock(intent);
 
+  // ── CURRENT STATE INTELLIGENCE PREFLIGHT (RUNS FIRST) ──────────
+  // Per the integration contract: Current State Intelligence MUST run
+  // BEFORE output-mode selection. Output mode operates ON TOP of
+  // context — never instead of it. Even if the model ultimately
+  // routes to the early-return generic path, we still want a
+  // current-state attempt + structured log so we can prove we never
+  // bypassed context.
+  let currentStateResult: CurrentStateResult | null = null;
+  try {
+    currentStateResult = await runCurrentStatePreflight({
+      supabase,
+      userId,
+      userContent,
+      workspaceKeyRaw,
+      threadHasLinkedAccount: !!pack.account?.id,
+      isTaskPipeline: false, // chat path; task pipelines bypass buildPromptOnce
+      intentTag: intent?.intent ?? null,
+      // strategy-chat has no live web/research adapter wired today;
+      // stays in "Likely:" voice and avoids any "I researched" phrasing.
+      webCapabilityAvailable: false,
+    });
+    console.log(
+      "[strategy-chat] current_state_preflight",
+      safeJson(currentStateResult.log),
+    );
+  } catch (e) {
+    console.warn(
+      "[strategy-chat] current_state_preflight failed (non-fatal):",
+      (e as Error).message,
+    );
+  }
+  const _currentStateUsed = !!(currentStateResult?.ran && currentStateResult?.promptBlock);
+
   // Universal output-mode decision — computed ONCE per turn here so
   // every prompt path (early-return generic, full chat, V2) carries
   // the same value through the system prompt and downstream
-  // enforcement (conversation-mode HARD RULES).
+  // enforcement (conversation-mode HARD RULES). Runs AFTER current
+  // state so logs/diagnostics can prove the ordering.
   const _explicitOverride = detectExplicitFormatOverride(userContent);
   const outputModeDecision: OutputModeDecision = selectOutputMode({
     workspace: workspaceKeyRaw ?? null,
@@ -5218,6 +5254,26 @@ async function buildChatSystemPrompt(args: {
     explicitFormat: _explicitOverride?.kind ?? null,
     userContent,
   });
+
+  // ── INTEGRATION TELEMETRY: prove context + mode were combined ──
+  // Mandatory log so downstream review can confirm conversation mode
+  // never bypassed Current State Intelligence and that context was
+  // never ignored when output mode flipped.
+  console.log(
+    "[strategy-chat] context_and_mode",
+    safeJson({
+      current_state_used: _currentStateUsed,
+      current_state_reason: currentStateResult?.reason ?? "not_run",
+      account_context_state: currentStateResult?.accountContextState ?? "missing",
+      output_mode: outputModeDecision.mode,
+      output_mode_reason: outputModeDecision.reason,
+      // Combined when BOTH a non-empty current-state block AND a
+      // selected output mode are present — i.e. the prompt will
+      // carry context AND a mode contract together.
+      context_and_mode_combined: _currentStateUsed && !!outputModeDecision.mode,
+      workspace: workspaceKeyRaw ?? null,
+    }),
+  );
 
   // ── DIAGNOSTIC: prove which contract was actually selected at runtime.
   // Maps intent.intent → the contract block that the case branch in
@@ -5259,8 +5315,16 @@ async function buildChatSystemPrompt(args: {
     userAskedForResource(userContent) ||
     inferTopicScopes(userContent).length > 0;
   if (!accountId && (!contextSection || contextSection.length < 200) && pickedResourceIds.length === 0 && !groundedAsk) {
+    // Even on the generic small-talk path, if Current State produced
+    // an inferred block (e.g. user mentioned a company in chat), we
+    // append it so the model is never blind to context that was
+    // already detected. Output mode contract still binds tone/shape.
+    const _genericBase = buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock);
+    const _csBlock = currentStateResult?.promptBlock
+      ? `\n${currentStateResult.promptBlock}\n`
+      : "";
     return {
-      prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock),
+      prompt: `${_genericBase}${_csBlock}`,
       workingThesis: null,
       resourceHits: [],
       kiHits: [],
@@ -5270,6 +5334,7 @@ async function buildChatSystemPrompt(args: {
       intent,
       modeLockBlock,
       outputModeDecision,
+      currentStateResult,
     };
   }
 
@@ -5532,39 +5597,11 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     }),
   );
 
-  // ── CURRENT STATE INTELLIGENCE PREFLIGHT ───────────────────────
-  // When a user mentions a company in an unlinked thread, build a
-  // working current-state thesis (attached if the company resolves to
-  // an existing account, otherwise inferred / low-confidence). The
-  // injected block reorients the model away from generic categories
-  // and toward Corey's "current state → future state" coaching.
-  // Excluded: task pipelines (Discovery Prep, Account Brief). Those
-  // run via run-strategy-task / run-discovery-prep, not this path.
-  let currentStateResult: CurrentStateResult | null = null;
-  try {
-    currentStateResult = await runCurrentStatePreflight({
-      supabase,
-      userId,
-      userContent,
-      workspaceKeyRaw,
-      threadHasLinkedAccount: !!pack.account?.id,
-      isTaskPipeline: false, // chat path; task pipelines bypass buildPromptOnce
-      intentTag: intent?.intent ?? null,
-      // strategy-chat has no live web/research adapter wired today;
-      // stays in "Likely:" voice and avoids any "I researched" phrasing.
-      webCapabilityAvailable: false,
-    });
-    console.log(
-      "[strategy-chat] current_state_preflight",
-      safeJson(currentStateResult.log),
-    );
-  } catch (e) {
-    console.warn(
-      "[strategy-chat] current_state_preflight failed (non-fatal):",
-      (e as Error).message,
-    );
-  }
-
+  // ── CURRENT STATE INTELLIGENCE (already ran above, before output mode).
+  // Reuse the same `currentStateResult` so the prompt carries the SAME
+  // context that telemetry reported as `current_state_used`. This is
+  // the load-bearing guarantee: output mode never bypasses context,
+  // and context never gets re-derived behind output mode's back.
   const currentStateBlock = currentStateResult?.promptBlock
     ? `\n${currentStateResult.promptBlock}\n`
     : "";
@@ -5601,6 +5638,7 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     rawLibraryContext: library?.contextString || "",
     rawResourceContextBlock: resources?.contextBlock || "",
     rawWorkingThesisBlock: workingThesisBlock || "",
+    currentStateResult,
   };
 }
 
@@ -5854,6 +5892,7 @@ async function handleChat(
     rawResourceContextBlock,
     rawWorkingThesisBlock,
     outputModeDecision,
+    currentStateResult,
   } = await buildChatSystemPrompt({
     supabase,
     userId,
@@ -6398,8 +6437,27 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
   // Must be appended AFTER applyGlobalInstructions so global
   // instructions cannot soften or override these rules.
   if (outputModeDecision?.mode === "conversation") {
+    // Build a compact Current State digest so the conversation enforcement
+    // block carries the actual hypotheses inline. This is what prevents
+    // conversation mode from bypassing context: even after Global
+    // Instructions, the model sees the specific facts/tensions it must
+    // anchor every entry to.
+    const _csDigest: string = (() => {
+      const cs = currentStateResult?.intelligence;
+      if (!cs) return "";
+      const lines: string[] = [];
+      if (cs.company?.name) lines.push(`Company: ${cs.company.name}`);
+      if (cs.business_model?.summary) lines.push(`Business model: ${cs.business_model.summary}`);
+      if (cs.current_state_thesis?.summary) lines.push(`Current state: ${cs.current_state_thesis.summary}`);
+      if (cs.current_state_thesis?.strategic_tension) lines.push(`Strategic tension: ${cs.current_state_thesis.strategic_tension}`);
+      if (cs.current_state_thesis?.future_state_hypothesis) lines.push(`Future-state hypothesis: ${cs.current_state_thesis.future_state_hypothesis}`);
+      if (cs.current_state_thesis?.likely_gap) lines.push(`Likely gap: ${cs.current_state_thesis.likely_gap}`);
+      return lines.join("\n");
+    })();
+    const _csUsed = !!(currentStateResult?.ran && currentStateResult?.promptBlock);
     const convoBlock = renderConversationEnforcementBlock(
       workspaceSop?.workspace ?? null,
+      { currentStateDigest: _csDigest, currentStateUsed: _csUsed },
     );
     effectiveSystemPrompt = `${effectiveSystemPrompt}${convoBlock}`;
     console.log(
@@ -6409,6 +6467,9 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         output_mode_reason: outputModeDecision.reason,
         length: convoBlock.length,
         position: "post-global-instructions",
+        current_state_used: _csUsed,
+        current_state_digest_chars: _csDigest.length,
+        context_and_mode_combined: _csUsed,
       })}`,
     );
   }
