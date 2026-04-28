@@ -986,7 +986,7 @@ Hard rules:
 - friction is REQUIRED. Every signal MUST identify what is HARD about acting on it — the constraint, the tradeoff, the tension. If you cannot name a real constraint, the signal is too generic — drop it.
 - friction.conversation_move MUST open from the PROBLEM, not the solution. If your move starts with "Use…", "Build…", "Implement…", "Launch…", "Leverage…", or any solution verb, REWRITE it to open with the constraint ("The challenge for a team like this is…", "What's hard here is…", "The real constraint is…").
 - friction must be DIFFERENT from change_vector.what_breaks. what_breaks = consequence of inaction. friction = the structural reason action is hard right now.
-- Do NOT include any text outside the JSON object.\`;
+- Do NOT include any text outside the JSON object.`;
 
 interface GeneratedSignals {
   signals: PrioritizedSignal[];
