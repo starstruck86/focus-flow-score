@@ -5019,9 +5019,11 @@ function buildGenericChatSystemPrompt(
   depth: string,
   contextSection: string,
   modeLockBlock?: string,
+  behaviorContractBlock?: string,
 ): string {
   const lockPrefix = modeLockBlock ? `${modeLockBlock}\n\n` : "";
-  return `${lockPrefix}You are a high-performance sales operator embedded in the rep's Strategy workspace. You produce work the rep can copy and use right now.
+  const behaviorPrefix = behaviorContractBlock ? `${behaviorContractBlock}\n\n` : "";
+  return `${lockPrefix}${behaviorPrefix}You are a high-performance sales operator embedded in the rep's Strategy workspace. You produce work the rep can copy and use right now.
 
 ═══ ELITE OPERATOR CONTRACT ═══
 Every response MUST follow this shape:
