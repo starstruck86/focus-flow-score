@@ -5380,27 +5380,18 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
   }
 
 
-  // ── READABILITY + STRUCTURE CONTRACT ────────────────────────────
-  // Frontend renders Markdown. We enforce a Claude/ChatGPT-grade
-  // structure on every chat response so the user can scan an answer
-  // in <10 seconds. Synthesis-mode and asset templates have their own
-  // formatting and are unaffected (they bring their own scaffolds).
-  const readabilityContract = `
-═══ RESPONSE FORMAT CONTRACT ═══
-Write like a top-tier strategist: clear, concise, opinionated, no fluff.
-
-Prefer short sections with clear headers.
-Use bullets wherever possible.
-Keep paragraphs to 1–2 lines.
-Optimize for fast scanning — headers + bullets should convey the answer.
-
-Use real Markdown (## headers, **bold**, - bullets). Never print raw symbols as text.
-End with a single closing line:
-   → Next step: <one concrete action>
-
-Avoid: walls of prose, long preambles ("Let me walk you through…"), generic closers ("Hope this helps!").
-
-If the ask is short-form (subject lines, openers, one-liners), keep the short-form shape from the mode block — still finish with "→ Next step:".`;
+  // ── WORKSPACE-AWARE RESPONSE FORMAT CONTRACT ───────────────────
+  // Root-cause fix: replace the universal "headers + bullets everywhere"
+  // contract with a workspace-aware policy. The previous universal
+  // contract was forcing `## headings` even in Brainstorm, where the
+  // anti-structure rule and anchor examples were trying to produce
+  // conversational output. Each workspace now gets the format that
+  // serves its purpose; explicit user instructions still override.
+  const readabilityContract = buildResponseFormatContract({
+    workspace: workspaceKeyRaw ?? null,
+    intent,
+    userContent,
+  });
 
   // Prepend the MODE LOCK so it's the FIRST thing the model reads,
   // before Strategy Core identity / thinking order / output contract.
