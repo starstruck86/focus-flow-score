@@ -180,6 +180,11 @@ export interface CurrentStateIntelligence {
   commercial_insights: CommercialInsight[];
 }
 
+export interface CommercialInsightAIImpact {
+  makes_easier: string;         // How AI lowers the cost / unlocks the shift
+  makes_harder: string;         // How AI raises the bar / creates new pressure
+}
+
 export interface CommercialInsight {
   insight: string;              // The reframe — one sharp sentence that changes how the customer sees their business
   current_state: string;        // How they (and most of the category) think about it today
@@ -187,8 +192,19 @@ export interface CommercialInsight {
   problem: string;              // What breaks if they keep operating on the old assumption
   implication: string;          // The business impact (revenue / growth / margin / risk) of the reframe
   tension: string;              // The assumption Corey should directly challenge
-  conversation_entry: string;   // Spoken-voice opener — must read like "I'd start here because…"
-  question: string;             // Validation question Corey asks to test the reframe with the customer
+  // ── 3 WHY layer (Challenger narrative) ─────────────────────────────
+  why_anything: string;         // What is structurally wrong / misaligned / the gap that exists
+  why_now: string;              // What is changing / the pressure that makes this urgent
+  why_you: string;              // Why our company / capability matters here — what enables the shift
+  // ── AI Impact layer ───────────────────────────────────────────────
+  ai_impact: CommercialInsightAIImpact;
+  // ── Risk layer ────────────────────────────────────────────────────
+  risk: string;                 // What happens if nothing changes / what they are likely missing
+  // ── Conversation execution ────────────────────────────────────────
+  conversation_entry: string;   // Spoken-voice opener — must read like "I'd lead here because…"
+  conversation_move: string;    // First-person move — must read like "I'd lead here…"
+  question: string;             // Legacy alias — kept for back-compat
+  validation_question: string;  // Validation question — must read like "The question I'd ask is…"
   source_type: SignalSourceType; // account | library | web | inference — trust-down enforced
   confidence: ConfidenceLevel;
   /** Which prioritized-signal rank(s) this insight builds on, when applicable. */
@@ -1358,14 +1374,23 @@ Return STRICT JSON in this exact shape:
 {
   "insights": [
     {
-      "insight": "ONE sharp sentence that REFRAMES how this company should think about their own business. Not an idea, not an angle, not a tactic — a new mental model. The customer should read it and think: 'I hadn't framed it that way before.' Bad: 'You should personalize the customer journey.' Good: 'TJX's treasure-hunt model means your most loyal customers are the ones you train to expect scarcity — not the ones you train to expect rewards.'",
+      "insight": "ONE sharp sentence that REFRAMES how this company should think about their own business. Not an idea, not an angle, not a tactic — a new mental model. The customer should read it and think: 'I hadn't framed it that way before.'",
       "current_state": "1 sentence: how this company (and most of the category) thinks about it today — the prevailing assumption.",
       "shift": "1 sentence: what is changing in the market / customer behavior / operating model / technology that makes the old assumption break.",
       "problem": "1 sentence: what concretely BREAKS or gets left on the table if they keep operating on the old assumption.",
       "implication": "1 sentence: the business impact of the reframe — revenue, growth, margin, retention, risk. Quantified or directional, not vague.",
       "tension": "1 sentence: the specific assumption Corey should directly challenge in conversation.",
-      "conversation_entry": "1-2 sentences in first-person spoken voice, MUST start with shape 'I'd start here because…' or 'The reason I'd lead with this is…'. No headings. No 'we should explore'. This is what Corey actually says.",
-      "question": "1 sentence: the validation question Corey asks the customer to test the reframe. Plain spoken language.",
+      "why_anything": "1 sentence: what is structurally wrong / misaligned / the gap that exists for THIS company. Names the broken or flawed assumption — not a generic 'companies should...'.",
+      "why_now": "1 sentence: what is changing right now / what pressure is increasing / what makes this urgent THIS quarter — not 'in the future'.",
+      "why_you": "1 sentence: why OUR company / capability matters here — what we specifically enable that closes the gap. Speak as the seller. No marketing language; name the concrete capability.",
+      "ai_impact": {
+        "makes_easier": "1 sentence: how AI lowers the cost / unlocks the shift / accelerates the move for this company specifically.",
+        "makes_harder": "1 sentence: how AI raises the bar / creates new pressure / makes the old way more dangerous for this company specifically."
+      },
+      "risk": "1 sentence: what happens if they don't change — what they are likely missing or misinterpreting. Concrete consequence, not vague 'they may fall behind'.",
+      "conversation_entry": "1-2 sentences in first-person spoken voice. MUST start with shape 'I'd lead here because…' or 'The reason I'd start here is…'. No headings. This is what Corey actually says.",
+      "conversation_move": "1 sentence in first-person, MUST start with 'I'd lead by…' or 'I'd push on…'. The concrete move Corey makes in the conversation.",
+      "validation_question": "1 sentence: the validation question Corey asks the customer to test the reframe. Plain spoken language, MUST read like 'The question I'd ask is…' (the verbatim phrase is fine).",
       "source_type": "account | library | web | inference",
       "confidence": "high | medium | low",
       "built_on_signal_ranks": [1, 2]
@@ -1378,7 +1403,10 @@ Hard rules:
 - An insight is NOT an idea, an angle, a play, a tactic, or a recommendation. It is a REFRAME of how the customer should understand their own business.
 - The insight must be specific to THIS company — not "retailers should…", not "loyalty programs should…".
 - The insight must EXPOSE a hidden problem or inefficiency, OR introduce a new mental model.
-- The conversation_entry must read like spoken language and must open with "I'd start here because…" (or near equivalent). No consultant-speak.
+- 3 WHY narrative is NON-NEGOTIABLE: every insight must include why_anything (what is broken), why_now (what is changing), why_you (why our solution matters). All three must be filled, all three must be company-specific.
+- AI IMPACT is NON-NEGOTIABLE: every insight must include both makes_easier and makes_harder, framed for THIS company. Do not produce generic "AI will change everything" platitudes.
+- RISK is NON-NEGOTIABLE: every insight must name what concretely happens if they don't act. Used to create urgency in conversation.
+- The conversation_entry, conversation_move, and validation_question are ALL required — Corey must walk out of the call with an opener, a move, and a question. Spoken-voice only.
 - Build each insight on top of the verified signals + prioritized signals provided. If you must use pure inference, set source_type="inference" and confidence="low".
 - Do NOT produce generic lifecycle / marketing categories.
 - Do NOT include text outside the JSON object.`;
@@ -1512,13 +1540,40 @@ async function generateCommercialInsights(args: {
       const implication = String(r.implication || "").trim();
       const tension = String(r.tension || "").trim();
       const conversation_entry = String(r.conversation_entry || "").trim();
-      const question = String(r.question || "").trim();
+      const questionRaw = String(r.question || "").trim();
+      // ── 3 WHY layer ──
+      const why_anything = String(r.why_anything || "").trim();
+      const why_now = String(r.why_now || "").trim();
+      const why_you = String(r.why_you || "").trim();
+      // ── AI Impact ──
+      const aiImpactRaw: any = r.ai_impact && typeof r.ai_impact === "object" ? r.ai_impact : {};
+      const ai_makes_easier = String(aiImpactRaw.makes_easier || "").trim();
+      const ai_makes_harder = String(aiImpactRaw.makes_harder || "").trim();
+      // ── Risk ──
+      const risk = String(r.risk || "").trim();
+      // ── Conversation move + validation question ──
+      let conversation_move = String(r.conversation_move || "").trim();
+      let validation_question = String(r.validation_question || questionRaw || "").trim();
+      const question = questionRaw || validation_question;
 
       // All fields required — drop incomplete insights so we never ship a half-formed reframe.
       if (
         !insight || !current_state || !shift || !problem ||
-        !implication || !tension || !conversation_entry || !question
+        !implication || !tension || !conversation_entry ||
+        !why_anything || !why_now || !why_you ||
+        !ai_makes_easier || !ai_makes_harder ||
+        !risk || !validation_question
       ) continue;
+
+      // Force first-person spoken-voice shape on the conversation move
+      // and validation question so the response can drop them in verbatim.
+      const SOLUTION_OPENER = /^(use|build|implement|launch|leverage|deploy|create|introduce|roll\s*out|stand\s*up|set\s*up|adopt)\b/i;
+      if (!conversation_move || SOLUTION_OPENER.test(conversation_move)) {
+        conversation_move = `I'd lead here by surfacing the tension: ${tension.replace(/[.!?]+$/, "")}`;
+      }
+      if (!/^the question i['']?d ask is/i.test(validation_question)) {
+        validation_question = `The question I'd ask is: ${validation_question.replace(/^[\s"'(]+/, "")}`;
+      }
 
       let source_type: SignalSourceType = allowedSources.includes(r.source_type)
         ? (r.source_type as SignalSourceType)
@@ -1546,8 +1601,18 @@ async function generateCommercialInsights(args: {
         problem,
         implication,
         tension,
+        why_anything,
+        why_now,
+        why_you,
+        ai_impact: {
+          makes_easier: ai_makes_easier,
+          makes_harder: ai_makes_harder,
+        },
+        risk,
         conversation_entry,
+        conversation_move,
         question,
+        validation_question,
         source_type,
         confidence,
         built_on_signal_ranks,
@@ -1820,8 +1885,19 @@ function renderPromptBlock(
       `   What breaks:               ${ins.problem}\n` +
       `   Business implication:      ${ins.implication}\n` +
       `   Tension to challenge:      ${ins.tension}\n` +
+      `   ── 3 WHY ──\n` +
+      `   Why anything (broken):     ${ins.why_anything}\n` +
+      `   Why now (urgency):         ${ins.why_now}\n` +
+      `   Why you (our edge):        ${ins.why_you}\n` +
+      `   ── AI Impact ──\n` +
+      `   AI makes this easier:      ${ins.ai_impact?.makes_easier ?? ""}\n` +
+      `   AI makes this harder:      ${ins.ai_impact?.makes_harder ?? ""}\n` +
+      `   ── Risk ──\n` +
+      `   If they don't change:      ${ins.risk}\n` +
+      `   ── Conversation execution ──\n` +
       `   Conversation entry:        ${ins.conversation_entry}\n` +
-      `   Validation question:       ${ins.question}`
+      `   Conversation move:         ${ins.conversation_move}\n` +
+      `   Validation question:       ${ins.validation_question || ins.question}`
     ).join("\n\n")
     : "(no commercial insight generated — fall back to leading with the top prioritized signal as the conversation entry, but still open with a POV, not a list)";
 
@@ -1868,8 +1944,12 @@ MUST-CONFIRM DISCOVERY QUESTIONS:
 ${mustConfirm}
 
 GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
-- INSIGHT-LED OPENING: When a COMMERCIAL INSIGHT is present above, your response MUST open from the insight using its conversation_entry verbatim or near-verbatim — shape: "I'd start here because…". Do NOT open with "Here are a few ways…", "There are several angles…", or any list-based opener. The insight is the POV; the prioritized signals extend it. The customer should walk away with a NEW way of understanding their business, not a longer to-do list.
+- INSIGHT-LED OPENING: When a COMMERCIAL INSIGHT is present above, your response MUST open from the insight using its conversation_entry verbatim or near-verbatim — shape: "I'd lead here because…". Do NOT open with "Here are a few ways…", "There are several angles…", or any list-based opener. The insight is the POV; the prioritized signals extend it. The customer should walk away with a NEW way of understanding their business, not a longer to-do list.
 - The insight is a REFRAME, not an idea. Surface the tension. Name what is shifting. Make the implication concrete. Then offer the validation question naturally in prose.
+- 3 WHY NARRATIVE (NON-NEGOTIABLE when an insight is present): the insight prose must weave all three WHYs in this order — (1) why_anything (what is structurally broken / misaligned for THIS company), (2) why_now (what is changing right now / the urgency), (3) why_you (why our capability matters to close the gap). Speak them in natural prose, not as headings. Shape: "What's broken here is… What's changing right now is… The reason we matter in this conversation is…".
+- AI IMPACT (NON-NEGOTIABLE when an insight is present): name BOTH sides naturally — what AI makes easier for them, and what AI makes harder. This creates the tension Corey uses to challenge. Shape: "AI makes <X> dramatically cheaper for them, which is the opportunity. But AI also makes <Y> harder — and that's the part most teams aren't pricing in."
+- RISK (NON-NEGOTIABLE when an insight is present): name the concrete consequence of inaction in the prose — not "they'll fall behind" but a specific, named risk for THIS company. Shape: "If they don't move, what they're risking is…".
+- The insight prose MUST end with the conversation move ("I'd lead here…" / "I'd push on…") and the validation question ("The question I'd ask is…"). Both, in that order. No exceptions.
 - VERIFIED-FIRST: When a prioritized signal has source_type ∈ {web, account, library}, lead with it. Reference the underlying real-world fact naturally in spoken language (not as a citation footnote). Example shape: "${c.name} has been [verified thing]. If that's true, the conversation I'd lead with is…". Inference is allowed only to extend verified signals or fill gaps where no verified signal exists.
 - Clearly distinguish verified from inferred IN PROSE. Verified: speak with confidence ("they've done X", "they recently launched Y"). Inferred: hedge ("a reasonable assumption is…", "${c.name} likely…", "if that holds…"). Never present an inferred angle as a sourced fact.
 - Your response MUST originate from the PRIORITIZED SIGNALS above. Each conversation path you produce must be traceable to one of those 2-3 ranked signals. Do not invent a fourth.
@@ -2147,6 +2227,28 @@ export async function runCurrentStatePreflight(
     commercial_insights_verified_count: commercialInsights.filter(
       (c) => c.source_type !== "inference",
     ).length,
+    // ── 3 WHY + AI Impact + Risk telemetry ────────────────────────
+    commercial_insights_three_why_complete_count: commercialInsights.filter(
+      (c) => !!c.why_anything && !!c.why_now && !!c.why_you,
+    ).length,
+    commercial_insights_ai_impact_complete_count: commercialInsights.filter(
+      (c) => !!c.ai_impact?.makes_easier && !!c.ai_impact?.makes_harder,
+    ).length,
+    commercial_insights_risk_complete_count: commercialInsights.filter(
+      (c) => !!c.risk,
+    ).length,
+    commercial_insights_full_challenger_narrative_count: commercialInsights.filter(
+      (c) =>
+        !!c.why_anything && !!c.why_now && !!c.why_you &&
+        !!c.ai_impact?.makes_easier && !!c.ai_impact?.makes_harder &&
+        !!c.risk && !!c.conversation_move && !!c.validation_question,
+    ).length,
+    challenger_layer_applied: commercialInsights.length > 0 && commercialInsights.every(
+      (c) =>
+        !!c.why_anything && !!c.why_now && !!c.why_you &&
+        !!c.ai_impact?.makes_easier && !!c.ai_impact?.makes_harder &&
+        !!c.risk,
+    ),
     unknowns_count: countUnknowns(intelligence),
     injected_current_state_block: true,
     candidates_considered: candidates,
