@@ -5038,6 +5038,163 @@ Depth: ${depth || "Standard"}.${
 ${contextSection}`;
 }
 
+// ─────────────────────────────────────────────────────────────────
+// Workspace-aware Response Format Contract
+//
+// Replaces the previous universal "headers + bullets everywhere"
+// readability contract. Each workspace has a different purpose, and
+// forcing the same format on all of them was causing real bugs:
+//   - Brainstorm output read like consultant categories instead of
+//     conversation entry points (anti-structure rule was outvoted).
+//   - Refine rewrites grew unwanted ## headings.
+//   - Work freeform answers got over-structured for simple asks.
+//
+// Policy is workspace-driven, but explicit user instructions in the
+// turn ("one sentence", "make a table", "build a brief", etc.) always
+// win — we surface them as an OVERRIDE block the model must respect.
+// Task / artifact pipelines bring their own scaffolds and are
+// unaffected (this contract sits alongside, not on top of, those).
+// ─────────────────────────────────────────────────────────────────
+type ExplicitFormatOverride =
+  | { kind: 'one_sentence' }
+  | { kind: 'one_line' }
+  | { kind: 'short' }
+  | { kind: 'table' }
+  | { kind: 'bullets' }
+  | { kind: 'brief' }
+  | { kind: 'headings' }
+  | null;
+
+function detectExplicitFormatOverride(userContent: string): ExplicitFormatOverride {
+  const t = (userContent || '').toLowerCase();
+  if (!t.trim()) return null;
+  if (/\b(one|1)\s*sentence\b/.test(t)) return { kind: 'one_sentence' };
+  if (/\b(one|1)\s*(line|liner)\b/.test(t)) return { kind: 'one_line' };
+  if (/\b(make|build|give me|create|draft|format).{0,20}\btable\b/.test(t) || /\bas a table\b/.test(t)) {
+    return { kind: 'table' };
+  }
+  if (/\b(build|write|draft|create|give me|make)\s+(?:a|an|me a|me an)?\s*(?:exec(?:utive)?|short|one[- ]?pager)?\s*(brief|memo|doc|document|one[- ]?pager|report)\b/.test(t)) {
+    return { kind: 'brief' };
+  }
+  if (/\b(use|with|in)\s+(headings|sections|headers)\b/.test(t)) return { kind: 'headings' };
+  if (/\b(in\s+)?bullets?\b/.test(t) || /\bbullet[- ]point/.test(t)) return { kind: 'bullets' };
+  if (/\b(quick|quickly|short|brief(ly)?|tl;dr|tldr|just give me|in a sentence|in a few words|concise(ly)?)\b/.test(t)) {
+    return { kind: 'short' };
+  }
+  return null;
+}
+
+function renderOverrideBlock(o: ExplicitFormatOverride): string {
+  if (!o) return '';
+  switch (o.kind) {
+    case 'one_sentence':
+      return 'USER FORMAT OVERRIDE: Reply in exactly one sentence. No headings, no bullets, no preamble.';
+    case 'one_line':
+      return 'USER FORMAT OVERRIDE: Reply in a single line. No headings, no bullets.';
+    case 'short':
+      return 'USER FORMAT OVERRIDE: Be concise — a few sentences at most. No headings unless essential.';
+    case 'table':
+      return 'USER FORMAT OVERRIDE: Reply as a Markdown table. Add at most one short framing line before the table.';
+    case 'bullets':
+      return 'USER FORMAT OVERRIDE: Reply as a tight bulleted list. No section headings unless the user asked for them.';
+    case 'brief':
+      return 'USER FORMAT OVERRIDE: Produce a structured brief with clear sections (## headings + bullets). Optimize for skim readability.';
+    case 'headings':
+      return 'USER FORMAT OVERRIDE: Use ## section headings to organize the response.';
+  }
+}
+
+function buildResponseFormatContract(args: {
+  workspace: string | null;
+  intent: IntentResult;
+  userContent: string;
+}): string {
+  const { workspace, intent, userContent } = args;
+  const override = detectExplicitFormatOverride(userContent);
+  const overrideLine = renderOverrideBlock(override);
+
+  const tone = 'Write like a top-tier strategist: clear, concise, opinionated, no fluff. Avoid long preambles ("Let me walk you through…") and generic closers ("Hope this helps!").';
+
+  let body = '';
+  switch (workspace) {
+    case 'brainstorm':
+      body = [
+        'PURPOSE: generate strategic options, angles, hooks, POVs.',
+        'STYLE: conversational and idea-driven. Each idea should read like a real conversation entry point Corey could actually open with — not a labeled category.',
+        'DO NOT use ## headings. DO NOT bucket ideas under titled categories ("Treasure Hunt Experience", "Loyalty Engagement", etc.).',
+        'DO NOT lead with a topic label followed by a colon. Lead with the move/POV itself.',
+        'Bullets are allowed only when they preserve conversational flow (e.g. a short list of distinct angles). Prefer short numbered options or short paragraphs over nested bullets.',
+        'No "→ Next step:" tail line in Brainstorm — it breaks the conversational shape.',
+      ].join('\n');
+      break;
+    case 'refine':
+      body = [
+        'PURPOSE: improve existing content the user pasted or referenced.',
+        'STYLE: preserve the original format. If the input is an email, return an email. If it is a paragraph, return a paragraph.',
+        'DO NOT add ## headings unless the input already had them or the user explicitly asked.',
+        'OUTPUT ORDER: rewritten version FIRST. Optionally, a short rationale (2–4 lines) after, separated by a blank line.',
+        'Prioritize sharper wording, tighter structure, and a stronger POV over visible reformatting.',
+      ].join('\n');
+      break;
+    case 'deep_research':
+      body = [
+        'PURPOSE: evidence, synthesis, implications.',
+        'STYLE: structured. Use ## headings and bullets where they aid scanning.',
+        'Encouraged sections: Facts / Inferences / Unknowns / Questions (use whichever fit the ask).',
+        'Cite sources/library evidence inline when used. End with "→ Next step: <one concrete action>" only if a next step is genuinely actionable.',
+      ].join('\n');
+      break;
+    case 'library':
+      body = [
+        'PURPOSE: turn library knowledge into reusable assets and guidance.',
+        'STYLE: structured. ## headings and bullets allowed.',
+        'Preserve resource names/titles verbatim. Organize into reusable concepts, plays, examples, or application notes.',
+        'End with "→ Next step:" when there is a real follow-on action.',
+      ].join('\n');
+      break;
+    case 'artifacts':
+      body = [
+        'PURPOSE: produce a usable deliverable (brief, doc, plan, table, etc.).',
+        'STYLE: structured for real-world use. ## headings, sub-sections, bullets, and tables are all allowed.',
+        'Optimize for artifact readiness — the output should be ready to paste/share with minimal editing.',
+      ].join('\n');
+      break;
+    case 'projects':
+      body = [
+        'PURPOSE: organize projects/plans.',
+        'STYLE: use structure (## headings, bullets) ONLY when organizing a plan, milestone list, or status. Otherwise match the ask.',
+        'Do not force headings on simple Q&A inside a project.',
+      ].join('\n');
+      break;
+    case 'work':
+    default:
+      body = [
+        'PURPOSE: general work surface — match the ask.',
+        'If the ask is quick/direct ("quick answer", "what should I say"), reply concisely with no headings.',
+        'If the ask is for a doc/brief/analysis, structure it with ## headings and bullets.',
+        'Do NOT force ## headings by default. Let the shape of the ask drive the shape of the answer.',
+      ].join('\n');
+      break;
+  }
+
+  const shortFormIntents = new Set(['subject_line', 'one_liner', 'opener', 'short_form']);
+  const shortFormTail =
+    intent && shortFormIntents.has((intent.intent as unknown as string) || '')
+      ? '\nIf the ask is short-form (subject lines, openers, one-liners), keep the short-form shape from the mode block — do NOT wrap it in headings.'
+      : '';
+
+  const overrideTail = overrideLine
+    ? `\n\n${overrideLine}\nThe USER FORMAT OVERRIDE above wins over the workspace defaults below when they conflict.`
+    : '';
+
+  return `\n═══ RESPONSE FORMAT CONTRACT (workspace: ${workspace ?? 'freeform'}) ═══
+${tone}${overrideTail}
+
+${body}${shortFormTail}
+
+Use real Markdown when you do use it (## headings, **bold**, - bullets). Never print raw markdown symbols as literal text.`;
+}
+
 async function buildChatSystemPrompt(args: {
   supabase: any;
   userId: string;
@@ -5380,27 +5537,18 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
   }
 
 
-  // ── READABILITY + STRUCTURE CONTRACT ────────────────────────────
-  // Frontend renders Markdown. We enforce a Claude/ChatGPT-grade
-  // structure on every chat response so the user can scan an answer
-  // in <10 seconds. Synthesis-mode and asset templates have their own
-  // formatting and are unaffected (they bring their own scaffolds).
-  const readabilityContract = `
-═══ RESPONSE FORMAT CONTRACT ═══
-Write like a top-tier strategist: clear, concise, opinionated, no fluff.
-
-Prefer short sections with clear headers.
-Use bullets wherever possible.
-Keep paragraphs to 1–2 lines.
-Optimize for fast scanning — headers + bullets should convey the answer.
-
-Use real Markdown (## headers, **bold**, - bullets). Never print raw symbols as text.
-End with a single closing line:
-   → Next step: <one concrete action>
-
-Avoid: walls of prose, long preambles ("Let me walk you through…"), generic closers ("Hope this helps!").
-
-If the ask is short-form (subject lines, openers, one-liners), keep the short-form shape from the mode block — still finish with "→ Next step:".`;
+  // ── WORKSPACE-AWARE RESPONSE FORMAT CONTRACT ───────────────────
+  // Root-cause fix: replace the universal "headers + bullets everywhere"
+  // contract with a workspace-aware policy. The previous universal
+  // contract was forcing `## headings` even in Brainstorm, where the
+  // anti-structure rule and anchor examples were trying to produce
+  // conversational output. Each workspace now gets the format that
+  // serves its purpose; explicit user instructions still override.
+  const readabilityContract = buildResponseFormatContract({
+    workspace: workspaceKeyRaw ?? null,
+    intent,
+    userContent,
+  });
 
   // Prepend the MODE LOCK so it's the FIRST thing the model reads,
   // before Strategy Core identity / thinking order / output contract.
