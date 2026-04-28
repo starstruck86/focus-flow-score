@@ -5510,11 +5510,23 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
   // anti-structure rule and anchor examples were trying to produce
   // conversational output. Each workspace now gets the format that
   // serves its purpose; explicit user instructions still override.
-  const readabilityContract = buildResponseFormatContract({
+  const { contract: readabilityContract, decision: outputModeDecision } = buildResponseFormatContract({
     workspace: workspaceKeyRaw ?? null,
     intent,
     userContent,
   });
+  console.log(
+    "[strategy-chat] output_mode",
+    safeJson({
+      output_mode: outputModeDecision.mode,
+      output_mode_reason: outputModeDecision.reason,
+      workspace_default_mode: outputModeDecision.workspace_default_mode,
+      explicit_format_override: outputModeDecision.explicit_format_override !== null,
+      explicit_format_kind: outputModeDecision.explicit_format_override,
+      conversation_trigger_matched: outputModeDecision.conversation_trigger_matched,
+      workspace: workspaceKeyRaw ?? null,
+    }),
+  );
 
   // ── CURRENT STATE INTELLIGENCE PREFLIGHT ───────────────────────
   // When a user mentions a company in an unlinked thread, build a
