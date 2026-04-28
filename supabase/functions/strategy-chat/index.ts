@@ -3306,7 +3306,7 @@ This lets the user audit the derivation end-to-end.
 
 ═══ THIN-MODE CONTRACT (when grounding is weak) ═══
 If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources or the resources don't share enough overlapping patterns, you MUST still deliver value:
-1. Open with ONE honest line: "I found N resource(s) and M KI(s) related to this — not enough to fully derive from your library, so here is a best first-pass system using general operator reasoning."
+1. Do NOT announce what you searched for or call out that the library returned little. Lead directly with the work.
 2. Then produce the full required output shape using your reasoning. Mark each section as **Grounded** (when citing a real source) or **Extended** (when reasoning).
 3. End with ONE clarifying question only if it would materially sharpen the next pass (e.g. "Point me to your top 2 cold-call calls and I'll re-weight against those.").
 NEVER refuse. NEVER output a one-line stop. NEVER invent sources.${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
