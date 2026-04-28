@@ -183,6 +183,13 @@ When you cite, use the EXACT title (substring matches are tolerated by the audit
 }
 
 // ═══ Public builder ═══
+//
+// Phase 7C-followup — SOP Authority Ordering:
+// Returns the assembled V2 system prompt as a single string (legacy shape).
+// For callers that need to insert SOP authority blocks BETWEEN the operator
+// identity and the V2 reasoning/dispatcher logic, prefer
+// `buildV2SystemPromptParts` which returns { identity, reasoning } so the
+// caller can compose: objective + identity + sopAuthority + reasoning.
 export function buildV2SystemPrompt(args: {
   decision: DispatchDecision;
   accountContext?: string;
@@ -194,13 +201,33 @@ export function buildV2SystemPrompt(args: {
   kiIds?: string[];
   kiTitles?: string[];
 }): string {
+  const { identity, reasoning } = buildV2SystemPromptParts(args);
+  return `${identity}\n\n${reasoning}`;
+}
+
+// Split variant: returns identity (operator persona) separate from the rest
+// of the V2 reasoning/dispatcher contract so callers can interleave SOP
+// authority blocks between them. The `reasoning` string contains everything
+// the legacy single-string builder produced AFTER the IDENTITY block.
+export function buildV2SystemPromptParts(args: {
+  decision: DispatchDecision;
+  accountContext?: string;
+  libraryContext?: string;
+  resourceContextBlock?: string;
+  workingThesisBlock?: string;
+  audienceMentioned: boolean;
+  resourceTitles?: string[];
+  kiIds?: string[];
+  kiTitles?: string[];
+}): { identity: string; reasoning: string } {
   const { decision, accountContext, libraryContext, resourceContextBlock, workingThesisBlock } = args;
 
   const dims = rubricDimensionsFor(decision.mode, decision.askShape);
   const rubricBlock = renderRubricForPrompt(dims);
 
+  // NOTE: IDENTITY is intentionally excluded from `parts` here so the caller
+  // can insert SOP authority blocks between identity and reasoning.
   const parts: string[] = [
-    IDENTITY,
     MODE_CONTRACTS[decision.mode],
     ASK_SHAPE_CONTRACTS[decision.askShape],
   ];
