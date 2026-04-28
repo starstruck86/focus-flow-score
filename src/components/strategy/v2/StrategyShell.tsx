@@ -434,7 +434,14 @@ export function StrategyShell() {
       // ride this send and only this send.
       const sidecar = pendingResourceIds.length > 0 ? pendingResourceIds : undefined;
       if (sidecar) setPendingResourceIds([]);
-      requestAnimationFrame(() => sendMessage(queued, { pickedResourceIds: sidecar, workspace: activeSurface ?? 'work' }));
+      requestAnimationFrame(() => sendMessage(queued, {
+        pickedResourceIds: sidecar,
+        // Phase 7D-fix: send the actual active surface, or null when none
+        // is selected. Do NOT silently coerce to 'work' — the server
+        // distinguishes "no workspace selected" (freeform) from "Work surface".
+        workspace: activeSurface ?? null,
+        workspaceSource: activeSurface ? 'selected' : 'none',
+      }));
     }
     // Flush any account-brief job that was queued while waiting for the
     // freshly-created thread. Thread linkage is what lets useThreadTaskRuns
@@ -768,7 +775,14 @@ export function StrategyShell() {
     if (sendingFrom) {
       setSurfaceThread(sendingFrom, threadId);
     }
-    sendMessage(text, { pickedResourceIds: sidecar, workspace: sendingFrom ?? activeSurface ?? 'work' });
+    {
+      const ws = sendingFrom ?? activeSurface ?? null;
+      sendMessage(text, {
+        pickedResourceIds: sidecar,
+        workspace: ws,
+        workspaceSource: sendingFrom ? 'selected' : (activeSurface ? 'selected' : 'none'),
+      });
+    }
   }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread]);
 
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {
