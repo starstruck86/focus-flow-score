@@ -6491,15 +6491,27 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       if (insights.length) {
         lines.push("");
         lines.push("COMMERCIAL INSIGHT — open your response from this reframe (do NOT lead with 'Here are a few ways…'):");
+        lines.push("Required narrative arc: REFRAME → 3 WHYs (why_anything → why_now → why_you) → AI IMPACT (easier + harder) → RISK → CONVERSATION MOVE → VALIDATION QUESTION. Weave as prose; no headings.");
         for (const ins of insights) {
-          lines.push(`  ▸ Insight:        ${ins.insight}`);
-          lines.push(`    How they think today: ${ins.current_state}`);
-          lines.push(`    What is shifting:     ${ins.shift}`);
-          lines.push(`    What breaks:          ${ins.problem}`);
-          lines.push(`    Implication:          ${ins.implication}`);
-          lines.push(`    Tension to challenge: ${ins.tension}`);
-          lines.push(`    Conversation entry:   ${ins.conversation_entry}`);
-          lines.push(`    Validation question:  ${ins.question}`);
+          lines.push(`  ▸ Insight:               ${ins.insight}`);
+          lines.push(`    How they think today:  ${ins.current_state}`);
+          lines.push(`    What is shifting:      ${ins.shift}`);
+          lines.push(`    What breaks:           ${ins.problem}`);
+          lines.push(`    Implication:           ${ins.implication}`);
+          lines.push(`    Tension to challenge:  ${ins.tension}`);
+          lines.push(`    — 3 WHY —`);
+          lines.push(`    Why anything (broken): ${ins.why_anything ?? ""}`);
+          lines.push(`    Why now (urgency):     ${ins.why_now ?? ""}`);
+          lines.push(`    Why you (our edge):    ${ins.why_you ?? ""}`);
+          lines.push(`    — AI Impact —`);
+          lines.push(`    AI makes easier:       ${ins.ai_impact?.makes_easier ?? ""}`);
+          lines.push(`    AI makes harder:       ${ins.ai_impact?.makes_harder ?? ""}`);
+          lines.push(`    — Risk —`);
+          lines.push(`    If they don't change:  ${ins.risk ?? ""}`);
+          lines.push(`    — Conversation —`);
+          lines.push(`    Conversation entry:    ${ins.conversation_entry}`);
+          lines.push(`    Conversation move:     ${ins.conversation_move ?? ""}`);
+          lines.push(`    Validation question:   ${ins.validation_question ?? ins.question}`);
         }
         lines.push("");
       }
