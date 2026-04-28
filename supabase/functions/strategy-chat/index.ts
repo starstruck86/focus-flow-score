@@ -5123,12 +5123,12 @@ function buildResponseFormatContract(args: {
   switch (workspace) {
     case 'brainstorm':
       body = [
-        'PURPOSE: generate strategic options, angles, hooks, POVs.',
-        'STYLE: conversational and idea-driven. Each idea should read like a real conversation entry point Corey could actually open with — not a labeled category.',
-        'DO NOT use ## headings. DO NOT bucket ideas under titled categories ("Treasure Hunt Experience", "Loyalty Engagement", etc.).',
-        'DO NOT lead with a topic label followed by a colon. Lead with the move/POV itself.',
-        'Bullets are allowed only when they preserve conversational flow (e.g. a short list of distinct angles). Prefer short numbered options or short paragraphs over nested bullets.',
-        'No "→ Next step:" tail line in Brainstorm — it breaks the conversational shape.',
+        'PURPOSE: give Corey conversation entry points he could actually say or push on — not a structured list of strategies.',
+        'STYLE: first-person, conversational prose. Every idea must start with language like "I\'d…", "I\'d probably…", "I might…", "One way I\'d…", "Honestly, I\'d…".',
+        'DO NOT use ## headings. DO NOT name, title, or label ideas (no "Approach 1", no "Dynamic Inventory Alerts", no "Reframe X as Y", no bolded idea-names, no "Topic: …" leads).',
+        'Each idea is a short paragraph (2–5 sentences). 3–5 distinct entries. Separate with a blank line or a single dash. No nested bullets, no cards, no sections.',
+        'Anchor every entry in this specific company. If it could be said to any company, rewrite or drop it.',
+        'No "→ Next step:" tail line — it breaks the conversational shape.',
       ].join('\n');
       break;
     case 'refine':
