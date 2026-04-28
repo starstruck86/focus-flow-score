@@ -5826,10 +5826,14 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         kiTitles: kiHitList.map((k) => k.title),
       });
       v2Decision = v2.decision;
-      // V2 builds its own core identity + reasoning. Re-apply SOP authority
-      // immediately after so the SOP remains the controlling behavioral layer
-      // ahead of standards / global instructions / brainstorm enforcement.
-      effectiveSystemPrompt = `${strategyObjectiveBlock}${v2.systemPrompt}${sopAuthorityBlock}`;
+      // Phase 7C-followup — SOP Authority Ordering parity with V1:
+      // Compose: STRATEGY OBJECTIVE → V2 IDENTITY → SOP AUTHORITY → V2 REASONING.
+      // This puts SOP authority BEFORE the V2 reasoning/dispatcher contract,
+      // matching V1's order (objective → identity → SOPs → reasoning preamble).
+      const v2Identity = (v2 as any).identity ?? "";
+      const v2Reasoning = (v2 as any).reasoning ?? v2.systemPrompt;
+      effectiveSystemPrompt =
+        `${strategyObjectiveBlock}${v2Identity}${sopAuthorityBlock}\n\n${v2Reasoning}`;
       // Stash prior turn for wrong-question check later.
       v2EvidenceBase = {
         decision: v2.decision,
