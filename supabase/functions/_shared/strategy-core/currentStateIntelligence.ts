@@ -1885,8 +1885,19 @@ function renderPromptBlock(
       `   What breaks:               ${ins.problem}\n` +
       `   Business implication:      ${ins.implication}\n` +
       `   Tension to challenge:      ${ins.tension}\n` +
+      `   ── 3 WHY ──\n` +
+      `   Why anything (broken):     ${ins.why_anything}\n` +
+      `   Why now (urgency):         ${ins.why_now}\n` +
+      `   Why you (our edge):        ${ins.why_you}\n` +
+      `   ── AI Impact ──\n` +
+      `   AI makes this easier:      ${ins.ai_impact?.makes_easier ?? ""}\n` +
+      `   AI makes this harder:      ${ins.ai_impact?.makes_harder ?? ""}\n` +
+      `   ── Risk ──\n` +
+      `   If they don't change:      ${ins.risk}\n` +
+      `   ── Conversation execution ──\n` +
       `   Conversation entry:        ${ins.conversation_entry}\n` +
-      `   Validation question:       ${ins.question}`
+      `   Conversation move:         ${ins.conversation_move}\n` +
+      `   Validation question:       ${ins.validation_question || ins.question}`
     ).join("\n\n")
     : "(no commercial insight generated — fall back to leading with the top prioritized signal as the conversation entry, but still open with a POV, not a list)";
 
