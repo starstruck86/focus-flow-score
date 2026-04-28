@@ -6012,15 +6012,37 @@ This is NOT optional. Do not ignore these rules.
      const workspaceSopApplied = wsSopLen > 0 && /WORKSPACE SOP/i.test(effectiveSystemPrompt);
      const globalInstructionsApplied = giLen > 0;
 
+     const path = v2Active ? "v2" : "v1";
+     // SOP authority is injected before reasoning in BOTH paths post-Phase 7C
+     // followup. Detect by checking that the GLOBAL/WORKSPACE SOP markers
+     // appear in the prompt BEFORE the V1 reasoning preamble or V2 mode
+     // contract markers.
+     const sopMarkerIdx = (() => {
+       const m = effectiveSystemPrompt.search(/━━━ GLOBAL STRATEGY SOP|━━━ WORKSPACE SOP/);
+       return m >= 0 ? m : Number.POSITIVE_INFINITY;
+     })();
+     const reasoningMarkerIdx = (() => {
+       const m = effectiveSystemPrompt.search(/═══ (LIBRARY-AWARENESS PROTOCOL|SHORT-FORM MODE|MODE: |ASK SHAPE: |FINAL INSTRUCTIONS)/);
+       return m >= 0 ? m : Number.POSITIVE_INFINITY;
+     })();
+     const sopBeforeReasoning =
+       sopMarkerIdx !== Number.POSITIVE_INFINITY &&
+       sopMarkerIdx < reasoningMarkerIdx;
+     const injectionOrder = path === "v2"
+       ? ["strategy_objective", "v2_identity", "global_sop", "workspace_sop", "v2_reasoning", "global_instructions", ...(wsName === "brainstorm" ? ["brainstorm_enforcement"] : [])]
+       : ["strategy_objective", "core_identity", "global_sop", "workspace_sop", "reasoning_preamble", "global_instructions", ...(wsName === "brainstorm" ? ["brainstorm_enforcement"] : [])];
+
      console.log(
        `[strategy-sop][prompt-trace] ${JSON.stringify({
+         path,
+         sop_before_reasoning: sopBeforeReasoning,
          workspace: wsName,
          global_sop_applied: globalSopApplied,
          workspace_sop_applied: workspaceSopApplied,
          global_instructions_applied: globalInstructionsApplied,
          system_prompt_length: effectiveSystemPrompt.length,
          system_prompt_preview: effectiveSystemPrompt.slice(0, 1200),
-         injection_order: ["core", "global_sop", "workspace_sop", "global_instructions", ...(wsName === "brainstorm" ? ["brainstorm_enforcement"] : [])],
+         injection_order: injectionOrder,
        })}`,
      );
 
