@@ -6389,86 +6389,29 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
   const giPath: GIPath = v2Active ? "v2" : (mode === "strong" || mode === "partial" || mode === "thin" || mode === "short_form" ? "synthesis" : "v1");
   effectiveSystemPrompt = applyGlobalInstructions(effectiveSystemPrompt, globalInstructions, giPath);
 
-  // ── FINAL LAYER: Brainstorm enforcement (HARD RULES) ──
-  // Must be appended AFTER applyGlobalInstructions so global instructions
-  // cannot soften or override these rules. Scoped strictly to brainstorm.
-  if (workspaceSop?.workspace === "brainstorm") {
-    const brainstormBlock = `
-
-━━━ BRAINSTORM ENFORCEMENT (HARD RULES) ━━━
-
-OUTPUT MODE: CONVERSATION-ENTRY, NOT IDEA LIST.
-You are not producing a structured list of strategies. You are giving Corey
-the actual things he might say or push on when he opens or drives this
-conversation. Write the way Corey would think out loud right before a call.
-
-FORMAT RULES (NON-NEGOTIABLE):
-1. Do NOT use headings, titles, bold labels, bullet headers, or any name
-   for an idea. No "Approach 1", no "Dynamic Inventory Alerts", no
-   "Reframe personalization as discovery" — no naming an angle at all.
-2. Do NOT format as a list of named approaches, cards, or sections.
-3. Each idea is a short paragraph (2–5 sentences) written in first person
-   as Corey, e.g.:
-     "I'd probably open by pushing on…"
-     "One way I'd come at this is…"
-     "I might start by asking them whether…"
-     "Honestly, I'd lean into the fact that…"
-4. Plain prose only. A simple "—" or blank line between ideas is fine.
-   No markdown headings (#, ##), no bold idea-names, no numbered list of
-   labeled strategies. A bare numbered or dashed list of paragraphs is
-   acceptable ONLY if each item starts with first-person language and
-   carries no label.
-5. Produce 3–5 distinct conversation entries. Each must be something Corey
-   could literally say out loud in the meeting.
-
-CONTENT RULES:
-- Anchor every entry in this specific company's situation (use the Current
-  State Intelligence + any account context). If an entry could be said to
-  any retailer / SaaS / B2B company, rewrite it or drop it.
-- Each entry must contain a real point of view, tension, or provocation —
-  not a description of a capability or a category.
-- No generic marketing themes as the spine of an idea (personalization,
-  omnichannel, loyalty, engagement, data utilization). You may reference
-  them only inside a specific, contrarian, company-grounded take.
-- No consultant verbs as the move ("highlight", "focus on", "leverage",
-  "emphasize", "showcase"). Replace with what Corey would actually say
-  or ask.
-- After the entries, you MAY add one short paragraph (still first-person,
-  no heading) calling out which 1–2 you'd actually lead with and why —
-  but only if it stays conversational. No "Top picks:" label.
-
-EXAMPLES OF THE SHAPE WE WANT:
-  BAD  → "**Dynamic Inventory Alerts** — Reframe personalization as discovery…"
-  GOOD → "I'd probably lean into how their inventory is constantly
-          changing and ask whether they're actually using that to create
-          urgency outside the store. Most lifecycle programs assume a
-          stable catalog — TJX doesn't have one, and that's either a
-          headache or their biggest unused weapon."
-
-Library use:
-- Pull from the library to sharpen the POV, but do NOT name the play,
-  cite a framework by title in-line, or announce that you searched.
-  The library should make the entry sharper, not turn it into a label.
-
-SELF-CHECK BEFORE RESPONDING:
-- Does any line read like a heading, title, or named approach? If yes,
-  rewrite it as something Corey would say.
-- Does every entry start in first person ("I'd…", "I might…", "One way
-  I'd…", "Honestly…")? If not, fix it.
-- Could this be pasted into a real pre-call note as talking points? If
-  not, rewrite.
-
-This is NOT optional. Do not ignore these rules.
-`;
-    effectiveSystemPrompt = `${effectiveSystemPrompt}${brainstormBlock}`;
+  // ── FINAL LAYER: Conversation-mode enforcement (HARD RULES) ──
+  // Universal — fires whenever the universal output-mode selector
+  // picked 'conversation' for THIS turn, regardless of workspace.
+  // This replaces the prior brainstorm-only enforcement so that
+  // "talk me through…" / "help me think through…" prompts in any
+  // workspace get the same prose-only, no-headings shape.
+  // Must be appended AFTER applyGlobalInstructions so global
+  // instructions cannot soften or override these rules.
+  if (outputModeDecision?.mode === "conversation") {
+    const convoBlock = renderConversationEnforcementBlock(
+      workspaceSop?.workspace ?? null,
+    );
+    effectiveSystemPrompt = `${effectiveSystemPrompt}${convoBlock}`;
     console.log(
-      `[strategy-sop] injected-brainstorm-enforcement-final ${JSON.stringify({
-        workspace: "brainstorm",
-        length: brainstormBlock.length,
+      `[strategy-sop] injected-conversation-enforcement-final ${JSON.stringify({
+        workspace: workspaceSop?.workspace ?? null,
+        output_mode: outputModeDecision.mode,
+        output_mode_reason: outputModeDecision.reason,
+        length: convoBlock.length,
         position: "post-global-instructions",
       })}`,
-     );
-   }
+    );
+  }
 
    // ── Phase 7A: SOP Execution Trace (observability only, no behavior change) ──
    try {
