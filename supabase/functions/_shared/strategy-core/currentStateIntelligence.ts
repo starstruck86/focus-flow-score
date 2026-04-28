@@ -169,6 +169,30 @@ export interface CurrentStateIntelligence {
    * second pass fails — never fabricated.
    */
   prioritized_signals: PrioritizedSignal[];
+  /**
+   * Commercial Insights (Challenger-style reframes). Generated AFTER
+   * verified signals + prioritized signals so the insight is grounded
+   * in real-world evidence, not pure inference. 1–2 insights max.
+   * Each insight reframes how the customer thinks about their own
+   * business — it is NOT another idea or angle. Empty when generation
+   * fails; never fabricated.
+   */
+  commercial_insights: CommercialInsight[];
+}
+
+export interface CommercialInsight {
+  insight: string;              // The reframe — one sharp sentence that changes how the customer sees their business
+  current_state: string;        // How they (and most of the category) think about it today
+  shift: string;                // What is changing in the world / market / their operating model
+  problem: string;              // What breaks if they keep operating on the old assumption
+  implication: string;          // The business impact (revenue / growth / margin / risk) of the reframe
+  tension: string;              // The assumption Corey should directly challenge
+  conversation_entry: string;   // Spoken-voice opener — must read like "I'd start here because…"
+  question: string;             // Validation question Corey asks to test the reframe with the customer
+  source_type: SignalSourceType; // account | library | web | inference — trust-down enforced
+  confidence: ConfidenceLevel;
+  /** Which prioritized-signal rank(s) this insight builds on, when applicable. */
+  built_on_signal_ranks?: number[];
 }
 
 export type SignalType =
