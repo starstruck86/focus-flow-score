@@ -6456,8 +6456,19 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       if (!cs) return "";
       const lines: string[] = [];
       if (cs.company?.name) lines.push(`Company: ${cs.company.name}`);
-      if (cs.business_model?.summary) lines.push(`Business model: ${cs.business_model.summary}`);
-      if (cs.current_state_thesis?.summary) lines.push(`Current state: ${cs.current_state_thesis.summary}`);
+      // Verified-first: surface verified signals BEFORE hypotheses so
+      // the conversation prose anchors on what's real, not what's guessed.
+      const verified = Array.isArray((cs as any).verified_signals) ? (cs as any).verified_signals : [];
+      const verifiedReal = verified.filter((v: any) => v && v.source !== "inference");
+      if (verifiedReal.length) {
+        lines.push("VERIFIED SIGNALS (real-world — lead with these):");
+        for (const v of verifiedReal.slice(0, 5)) {
+          lines.push(`  • [${v.source}·${v.confidence}${v.kind ? `·${v.kind}` : ""}] ${v.signal}`);
+        }
+        lines.push("");
+      }
+      if (cs.business_model?.summary) lines.push(`Business model (hypothesis): ${cs.business_model.summary}`);
+      if (cs.current_state_thesis?.summary) lines.push(`Current state (hypothesis): ${cs.current_state_thesis.summary}`);
       if (cs.current_state_thesis?.strategic_tension) lines.push(`Strategic tension: ${cs.current_state_thesis.strategic_tension}`);
       if (cs.current_state_thesis?.future_state_hypothesis) lines.push(`Future-state hypothesis: ${cs.current_state_thesis.future_state_hypothesis}`);
       if (cs.current_state_thesis?.likely_gap) lines.push(`Likely gap: ${cs.current_state_thesis.likely_gap}`);
