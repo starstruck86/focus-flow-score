@@ -1610,7 +1610,7 @@ GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
       : "Web research is NOT available this turn — verified signals above came from training recall and are tagged accordingly; do not say \"I researched\"."
   }
 ═══════════════════════════════════
-[Verified-first counters: verified=${verifiedCount}, inferred=${inferredCount}]`;
+[Verified-first counters: verified=${verifiedCount}, inferred=${inferredCount} | commercial_insights=${insights.length}]`;
 }
 
 // ─── Main entry point ──────────────────────────────────────────────
