@@ -936,12 +936,19 @@ function renderPromptBlock(
   const signals = intelligence.prioritized_signals || [];
   const signalsBlock = signals.length
     ? signals.map((s) =>
-      `${s.rank}. [${s.signal_type}] ${s.signal}\n` +
-      `   Why it matters: ${s.why_it_matters}\n` +
-      `   Business impact: ${s.business_impact}\n` +
-      `   Conversation angle: ${s.conversation_angle}`
+      `${s.rank}. [${s.signal_type} · source:${s.source_type} · confidence:${s.confidence}] ${s.signal}\n` +
+      `   Why it matters:        ${s.why_it_matters}\n` +
+      `   Why now:               ${s.why_now}\n` +
+      `   Why this company:      ${s.why_this_company}\n` +
+      `   Business pressure:     ${s.business_pressure}\n` +
+      `   Customer behavior:     ${s.customer_behavior_implication}\n` +
+      `   Marketing motion:      ${s.marketing_motion_implication}\n` +
+      `   Future-state implied:  ${s.future_state_implication}\n` +
+      `   Strategic tension:     ${s.strategic_tension}\n` +
+      `   Conversation move:     ${s.conversation_move}\n` +
+      `   Validation question:   ${s.validation_question}`
     ).join("\n\n")
-    : "(prioritization pass produced no signals — fall back to the working hypotheses above, but still pick the 2-3 highest-leverage angles yourself before responding.)";
+    : "(prioritization pass produced no signals — fall back to the working hypotheses above, but still pick the 2-3 highest-leverage angles yourself before responding, and explain the why behind each.)";
 
   return `═══ CURRENT STATE INTELLIGENCE (working hypotheses — use these as the basis of your response) ═══
 Company: ${c.name}${c.website ? ` (${c.website})` : ""}
@@ -961,21 +968,23 @@ WORKING HYPOTHESES ABOUT ${c.name.toUpperCase()} (these are reasoned, not source
 KNOWN FACTS (sourced):
 ${facts || "- (none in CRM/library — reason from public knowledge of this company)"}
 
-═══ PRIORITIZED SIGNALS (TOP ${signals.length || "2-3"} — DRIVE YOUR RESPONSE FROM THESE) ═══
+═══ PRIORITIZED SIGNALS + STRATEGIC WHY (TOP ${signals.length || "2-3"} — DRIVE YOUR RESPONSE FROM THESE) ═══
 ${signalsBlock}
-═══════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════════
 
 MUST-CONFIRM DISCOVERY QUESTIONS:
 ${mustConfirm}
 
 GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
-- Your response MUST originate from the PRIORITIZED SIGNALS above. Each conversation angle you produce must be traceable to one of those 2-3 ranked signals. Do not invent a fourth.
-- Do NOT inventory everything that could matter. Surface ONLY what matters most. Fewer, sharper angles beat a long list every time.
-- Each angle must connect to business impact (revenue, growth, risk) and carry a clear point of view Corey can actually say.
-- Do NOT produce generic lifecycle / marketing / engagement categories (e.g. "Acquisition / Activation / Retention / Winback" buckets, "personalize the journey", "build a loyalty program"). The user can already produce that themselves.
-- Frame ideas as conversation strategies: angles Corey can lead with, tensions to surface, hypotheses to test — not capability checklists.
-- Speak hedged hypotheses honestly: use "${c.name} likely…", "in a [model] like ${c.name}'s…", "a reasonable assumption is…". Never present an inferred hypothesis as a sourced fact.
-- Map current state → future state. Each idea should imply the gap it closes for ${c.name} specifically.
+- Your response MUST originate from the PRIORITIZED SIGNALS above. Each conversation path you produce must be traceable to one of those 2-3 ranked signals. Do not invent a fourth.
+- For each path, your prose MUST make the strategic WHY visible — not as headings, but woven into the language. The reader should clearly hear: why this matters, why now, why for ${c.name} specifically, what tension to test, and what to ask. Use spoken-voice openers like "I'd lead here because…", "The reason this matters is…", "The tension I'd test is…", "The question I'd ask is…".
+- Do NOT inventory everything that could matter. Surface ONLY what matters most. Fewer, sharper paths with deeper reasoning beat a long list every time.
+- Each path must connect to business pressure (revenue, growth, margin, risk) AND name the customer-behavior or motion implication — not just the angle.
+- Each path must include the validation question Corey would ask the customer to test the hypothesis. Plain language, the way Corey would actually ask it.
+- Do NOT produce generic lifecycle / marketing / engagement categories ("Acquisition / Activation / Retention / Winback" buckets, "personalize the journey", "build a loyalty program"). The user can already produce that themselves.
+- Frame ideas as conversation strategies, not capability checklists. Angles Corey can lead with, tensions to surface, hypotheses to test.
+- Respect the source_type and confidence on each signal. If source_type=inference, frame it explicitly as a working hypothesis ("a reasonable assumption is…", "${c.name} likely…"). Never present an inferred signal as a sourced fact.
+- Map current state → future state. Each path should imply the gap it closes for ${c.name} specifically.
 - Turn unknowns into discovery questions Corey can ask, not into hedges in your prose.
 - ${
     webAvailable
