@@ -6936,6 +6936,7 @@ This is NOT optional. Do not ignore these rules.
             `[strategy-sop][mode-check] ${JSON.stringify({
               workspace: ws,
               mode_detected: modeDetected,
+              decision_layer_active: true,
             })}`,
           );
         } catch (bcErr) {
