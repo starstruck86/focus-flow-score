@@ -5226,9 +5226,11 @@ async function buildChatSystemPrompt(args: {
       threadHasLinkedAccount: !!pack.account?.id,
       isTaskPipeline: false, // chat path; task pipelines bypass buildPromptOnce
       intentTag: intent?.intent ?? null,
-      // strategy-chat has no live web/research adapter wired today;
-      // stays in "Likely:" voice and avoids any "I researched" phrasing.
-      webCapabilityAvailable: false,
+      // Verified-first model: when Perplexity is configured we can
+      // ground signals in real-time web research; otherwise the
+      // current-state layer falls back to model recall tagged as
+      // source:"inference" so it never masquerades as web-sourced.
+      webCapabilityAvailable: !!Deno.env.get("PERPLEXITY_API_KEY"),
     });
     console.log(
       "[strategy-chat] current_state_preflight",
@@ -5273,6 +5275,11 @@ async function buildChatSystemPrompt(args: {
       context_and_mode_combined: _currentStateUsed && !!outputModeDecision.mode,
       prioritized_signals_count: currentStateResult?.intelligence?.prioritized_signals?.length ?? 0,
       prioritized_signal_types: currentStateResult?.intelligence?.prioritized_signals?.map((s) => s.signal_type) ?? [],
+      // ── Verified-first telemetry (mirrors the preflight log) ───────
+      verified_signals_count: (currentStateResult?.log as any)?.verified_signals_count ?? 0,
+      inferred_signals_count: (currentStateResult?.log as any)?.inferred_signals_count ?? 0,
+      verified_first_applied: (currentStateResult?.log as any)?.verified_first_applied ?? false,
+      prioritized_verified_top_count: (currentStateResult?.log as any)?.prioritized_verified_top_count ?? 0,
       workspace: workspaceKeyRaw ?? null,
     }),
   );
@@ -6449,8 +6456,19 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       if (!cs) return "";
       const lines: string[] = [];
       if (cs.company?.name) lines.push(`Company: ${cs.company.name}`);
-      if (cs.business_model?.summary) lines.push(`Business model: ${cs.business_model.summary}`);
-      if (cs.current_state_thesis?.summary) lines.push(`Current state: ${cs.current_state_thesis.summary}`);
+      // Verified-first: surface verified signals BEFORE hypotheses so
+      // the conversation prose anchors on what's real, not what's guessed.
+      const verified = Array.isArray((cs as any).verified_signals) ? (cs as any).verified_signals : [];
+      const verifiedReal = verified.filter((v: any) => v && v.source !== "inference");
+      if (verifiedReal.length) {
+        lines.push("VERIFIED SIGNALS (real-world — lead with these):");
+        for (const v of verifiedReal.slice(0, 5)) {
+          lines.push(`  • [${v.source}·${v.confidence}${v.kind ? `·${v.kind}` : ""}] ${v.signal}`);
+        }
+        lines.push("");
+      }
+      if (cs.business_model?.summary) lines.push(`Business model (hypothesis): ${cs.business_model.summary}`);
+      if (cs.current_state_thesis?.summary) lines.push(`Current state (hypothesis): ${cs.current_state_thesis.summary}`);
       if (cs.current_state_thesis?.strategic_tension) lines.push(`Strategic tension: ${cs.current_state_thesis.strategic_tension}`);
       if (cs.current_state_thesis?.future_state_hypothesis) lines.push(`Future-state hypothesis: ${cs.current_state_thesis.future_state_hypothesis}`);
       if (cs.current_state_thesis?.likely_gap) lines.push(`Likely gap: ${cs.current_state_thesis.likely_gap}`);

@@ -44,6 +44,30 @@ export interface DetectedEntity {
   matchedAccountId?: string | null;
 }
 
+/**
+ * A signal gathered BEFORE hypothesis generation. Verified-first model:
+ * we attempt to surface real-world signals (recent news, launches,
+ * leadership changes, partnerships, hiring, campaigns, etc.) and tag
+ * each with its source + confidence. Hypotheses then build ON TOP of
+ * verified signals; ranking prefers verified over inferred.
+ */
+export type VerifiedSignalSource =
+  | "web"
+  | "account"
+  | "library"
+  | "resource"
+  | "inference";
+
+export interface VerifiedSignal {
+  signal: string;
+  source: VerifiedSignalSource;
+  confidence: ConfidenceLevel;
+  source_url?: string;
+  source_title?: string;
+  /** Free-form category for downstream prioritization (news, launch, leadership, etc.). */
+  kind?: string;
+}
+
 export interface CurrentStateIntelligence {
   company: {
     name: string;
@@ -132,6 +156,13 @@ export interface CurrentStateIntelligence {
       confidence: "medium" | "low";
     }>;
   };
+  /**
+   * Verified-first signals gathered BEFORE hypothesis generation.
+   * Each is tagged with its source + confidence. Hypotheses and
+   * prioritization both build on top of these. Empty when no verified
+   * signal could be gathered (web/library/CRM produced nothing).
+   */
+  verified_signals: VerifiedSignal[];
   /**
    * Top 2–3 ranked signals that should drive the response. Generated
    * after hypotheses by `generatePrioritizedSignals`. Empty when the
@@ -396,7 +427,244 @@ async function resolveCandidateToAccount(
  * (name, website, industry, notes) and lift the company-confidence
  * to medium/high.
  */
+// ─── Verified-First Signal Gathering ───────────────────────────────
+//
+// Before we generate any hypothesis, we attempt to gather REAL,
+// verifiable signals about the company: recent news, product launches,
+// leadership / org changes, partnerships, hiring, campaigns, digital
+// or AI initiatives, industry shifts. We tag every signal with its
+// source + confidence. Hypotheses then build ON TOP of these. This is
+// the core of the verified-first contract: don't assume when we can
+// verify.
+
+const VERIFIED_SIGNAL_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY this shape:
+{
+  "signals": [
+    {
+      "signal": "Concrete, named real-world signal about this company. e.g. 'Launched a new owned-brand activewear line in March 2024 to broaden assortment beyond intimates' — not 'they invest in marketing'.",
+      "kind": "news | product_launch | campaign | leadership_change | hiring | partnership | digital_or_ai_initiative | website_or_app_change | industry_trend | financial_or_earnings",
+      "confidence": "high | medium | low",
+      "source_title": "Optional short label of the source if you can identify it. Empty string if unsure.",
+      "source_url": "Optional URL if you can recall a specific page. Empty string if unsure."
+    }
+  ]
+}
+
+Hard rules:
+- Maximum 5 signals. Prefer 2-3 STRONG signals over 5 weak ones.
+- ONLY include signals you can actually attest to from training knowledge or web research. If you are guessing, DO NOT include it — that's what the inference layer is for, not this layer.
+- If your knowledge of this company is thin or stale, return an empty signals array. Empty is correct and honest.
+- Set confidence honestly: "high" only when you are confident the signal is real and current; "medium" when you remember the signal but timing/details may have shifted; "low" when you only vaguely recall it.
+- Each signal must be specific: name the thing (product, exec, partner, campaign, market shift), not the category.
+- Do NOT include generic industry statements ("retail is becoming more digital"). Those are not signals about this company.
+- Do NOT include any text outside the JSON object.`;
+
+interface GeneratedVerifiedSignals {
+  signals: Array<{
+    signal?: string;
+    kind?: string;
+    confidence?: string;
+    source_title?: string;
+    source_url?: string;
+  }>;
+}
+
+/**
+ * Gather verified signals about the entity from the best available
+ * source. Order of preference:
+ *   1. Web research (Perplexity) when `webCapabilityAvailable` and
+ *      PERPLEXITY_API_KEY is set — these get `source: "web"`.
+ *   2. Model recall via Lovable AI Gateway — tagged honestly.
+ * Account / library / resource signals are seeded separately by the
+ * skeleton builder; we surface them through the same VerifiedSignal
+ * shape so the renderer can show one unified list.
+ *
+ * Failure is non-fatal — returns [] and the pipeline falls back to
+ * pure inference (and logs verified_first_applied=false).
+ */
+async function gatherVerifiedSignals(args: {
+  entityName: string;
+  resolvedAccount: CurrentStateResult["resolvedAccount"];
+  webCapabilityAvailable: boolean;
+}): Promise<VerifiedSignal[]> {
+  const env = (globalThis as any).Deno?.env;
+  const lovableKey = env?.get?.("LOVABLE_API_KEY");
+  const pplxKey = env?.get?.("PERPLEXITY_API_KEY");
+
+  const useWeb = !!(args.webCapabilityAvailable && pplxKey);
+  const sourceTag: VerifiedSignalSource = useWeb ? "web" : "inference";
+
+  // System framing changes based on whether we have live web grounding.
+  const sys = useWeb
+    ? `You are a B2B sales research analyst. You will be given a company name. ` +
+      `Use real-time web search to gather the most relevant, recent, verifiable ` +
+      `signals about this company that would shape a sales conversation: recent ` +
+      `news, product launches, leadership changes, partnerships, hiring trends, ` +
+      `digital or AI initiatives, campaigns, financial signals. You MUST cite ` +
+      `actual sources you found. If you cannot verify something, OMIT it.`
+    : `You are a B2B sales research analyst. You will be given a company name. ` +
+      `From your training knowledge, surface the strongest, most distinctive ` +
+      `real-world signals you can attest to about this company that would shape ` +
+      `a sales conversation. Be honest about confidence — if your knowledge is ` +
+      `thin or you're guessing, return an empty list. Empty is correct.`;
+
+  const acctLine = args.resolvedAccount?.industry
+    ? ` (industry: ${args.resolvedAccount.industry})`
+    : "";
+
+  const userMsg =
+    `Company: ${args.entityName}${acctLine}\n\n` +
+    `Surface the strongest verifiable signals about this company that would ` +
+    `shape a first sales conversation. Focus on what is RECENT, SPECIFIC, and ` +
+    `STRATEGICALLY RELEVANT.\n\n` +
+    VERIFIED_SIGNAL_SCHEMA_HINT;
+
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 15000);
+
+  try {
+    let raw = "";
+
+    if (useWeb) {
+      // Perplexity: real-time web grounded. Returns citations on the
+      // top-level `citations` array; we don't strictly need them here
+      // because we ask the model to embed source_url/title per signal.
+      const resp = await fetch("https://api.perplexity.ai/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${pplxKey}`,
+          "Content-Type": "application/json",
+        },
+        signal: ctrl.signal,
+        body: JSON.stringify({
+          model: "sonar",
+          temperature: 0.2,
+          search_recency_filter: "month",
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "verified_signals",
+              schema: {
+                type: "object",
+                properties: {
+                  signals: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        signal: { type: "string" },
+                        kind: { type: "string" },
+                        confidence: { type: "string" },
+                        source_title: { type: "string" },
+                        source_url: { type: "string" },
+                      },
+                      required: ["signal", "kind", "confidence"],
+                    },
+                  },
+                },
+                required: ["signals"],
+              },
+            },
+          },
+          messages: [
+            { role: "system", content: sys },
+            { role: "user", content: userMsg },
+          ],
+        }),
+      });
+      if (!resp.ok) {
+        console.warn(
+          `[currentStateIntelligence] perplexity verified-signals http ${resp.status}`,
+        );
+      } else {
+        const data = await resp.json();
+        raw = data?.choices?.[0]?.message?.content || "";
+      }
+    } else if (lovableKey) {
+      const resp = await fetch(
+        "https://ai.gateway.lovable.dev/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${lovableKey}`,
+            "Content-Type": "application/json",
+          },
+          signal: ctrl.signal,
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            temperature: 0.3,
+            response_format: { type: "json_object" },
+            messages: [
+              { role: "system", content: sys },
+              { role: "user", content: userMsg },
+            ],
+          }),
+        },
+      );
+      if (!resp.ok) {
+        console.warn(
+          `[currentStateIntelligence] gemini verified-signals http ${resp.status}`,
+        );
+      } else {
+        const data = await resp.json();
+        raw = data?.choices?.[0]?.message?.content || "";
+      }
+    } else {
+      return [];
+    }
+
+    if (!raw) return [];
+
+    let parsed: GeneratedVerifiedSignals | null = null;
+    try {
+      parsed = JSON.parse(raw) as GeneratedVerifiedSignals;
+    } catch {
+      // Perplexity sometimes wraps JSON in prose — pull the first {...}
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (m) {
+        try {
+          parsed = JSON.parse(m[0]) as GeneratedVerifiedSignals;
+        } catch { /* fall through */ }
+      }
+    }
+    if (!parsed || !Array.isArray(parsed.signals)) return [];
+
+    const allowedConf: ConfidenceLevel[] = ["high", "medium", "low"];
+    const cleaned: VerifiedSignal[] = [];
+    for (const s of parsed.signals) {
+      const signal = String(s?.signal || "").trim();
+      if (!signal) continue;
+      let conf: ConfidenceLevel = allowedConf.includes(s?.confidence as any)
+        ? (s!.confidence as ConfidenceLevel)
+        : "low";
+      // Trust-down: pure model recall (no web) can never be "high".
+      if (!useWeb && conf === "high") conf = "medium";
+      const url = String(s?.source_url || "").trim();
+      const title = String(s?.source_title || "").trim();
+      cleaned.push({
+        signal,
+        source: sourceTag,
+        confidence: conf,
+        source_url: url || undefined,
+        source_title: title || undefined,
+        kind: String(s?.kind || "").trim() || undefined,
+      });
+      if (cleaned.length >= 5) break;
+    }
+    return cleaned;
+  } catch (e) {
+    console.warn(
+      "[currentStateIntelligence] gatherVerifiedSignals failed:",
+      (e as Error).message,
+    );
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // ─── Real hypothesis generator (LLM-backed) ────────────────────────
+
 
 interface GeneratedHypotheses {
   business_model_summary: string;
@@ -431,6 +699,7 @@ async function generateRealHypotheses(args: {
   entityName: string;
   resolvedAccount: CurrentStateResult["resolvedAccount"];
   userContent: string;
+  verifiedSignals?: VerifiedSignal[];
 }): Promise<GeneratedHypotheses | null> {
   const key = (globalThis as any).Deno?.env?.get?.("LOVABLE_API_KEY");
   if (!key) {
@@ -449,19 +718,35 @@ async function generateRealHypotheses(args: {
         : "")
     : "";
 
+  const verified = (args.verifiedSignals || []).filter((s) =>
+    s.source !== "inference" || s.confidence !== "low"
+  );
+  const verifiedBlock = verified.length
+    ? `\nVERIFIED SIGNALS (real-world, source-tagged — your hypotheses MUST build on top of these, not ignore them):\n` +
+      verified
+        .map((s) =>
+          `- [${s.source}·${s.confidence}${s.kind ? `·${s.kind}` : ""}] ${s.signal}` +
+          (s.source_url ? ` (${s.source_url})` : "")
+        )
+        .join("\n") + "\n"
+    : "";
+
   const sys =
     `You are a senior B2B sales strategist preparing a rep for a conversation. ` +
     `You generate concrete current-state hypotheses about a company so the rep ` +
     `walks in with a real point of view, not generic categories. ` +
-    `You reason from public knowledge of the company plus the model/industry ` +
-    `they likely operate in. You are explicit that these are hypotheses, but ` +
-    `you write them as real prose — never as scaffolding placeholders.`;
+    `You reason from VERIFIED SIGNALS first when present, then extend with ` +
+    `public knowledge of the company plus the model/industry they likely ` +
+    `operate in. You are explicit about which parts are verified vs hypothesis, ` +
+    `but you write hypotheses as real prose — never as scaffolding placeholders.`;
 
   const user =
     `Company in focus: ${args.entityName}` +
     acctSeed +
+    verifiedBlock +
     `\n\nThe rep's prompt that triggered this:\n"""${args.userContent.slice(0, 1200)}"""\n\n` +
     HYPOTHESIS_SCHEMA_HINT;
+
 
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 12000);
@@ -586,6 +871,7 @@ async function generatePrioritizedSignals(args: {
   userContent: string;
   hypotheses: GeneratedHypotheses | null;
   sourcedFacts: CurrentStateIntelligence["evidence"]["sourced_facts"];
+  verifiedSignals: VerifiedSignal[];
   webResearched: boolean;
 }): Promise<PrioritizedSignal[]> {
   const key = (globalThis as any).Deno?.env?.get?.("LOVABLE_API_KEY");
@@ -600,9 +886,23 @@ async function generatePrioritizedSignals(args: {
         : "")
     : "";
 
+  // VERIFIED-FIRST: lead the prompt with verified signals so the model
+  // ranks them ahead of inferred hypotheses. Hypotheses come AFTER as
+  // gap-fillers, never as substitutes.
+  const verified = args.verifiedSignals || [];
+  const verifiedBlock = verified.length
+    ? `\nVERIFIED SIGNALS (real-world, source-tagged — PREFER THESE WHEN RANKING):\n` +
+      verified
+        .map((s, i) =>
+          `${i + 1}. [${s.source}·${s.confidence}${s.kind ? `·${s.kind}` : ""}] ${s.signal}` +
+          (s.source_url ? ` (${s.source_url})` : "")
+        )
+        .join("\n") + "\n"
+    : `\nVERIFIED SIGNALS: none gathered this turn — you may rank from hypotheses, but flag every signal as source_type:"inference".\n`;
+
   const hyp = args.hypotheses;
   const hypBlock = hyp
-    ? `\nWORKING HYPOTHESES (raw material — do not just restate; rank what matters most):\n` +
+    ? `\nINFERRED HYPOTHESES (gap-fillers — use ONLY to extend verified signals or when no verified signal exists):\n` +
       `- Business model: ${hyp.business_model_summary}\n` +
       `- Customer experience: ${hyp.customer_experience}\n` +
       `- Marketing motion: ${hyp.marketing_motion}\n` +
@@ -613,7 +913,7 @@ async function generatePrioritizedSignals(args: {
     : "";
 
   const facts = args.sourcedFacts.length
-    ? `\nKnown sourced facts:\n` +
+    ? `\nKnown sourced facts (CRM / library):\n` +
       args.sourcedFacts.slice(0, 6).map((f) => `- ${f.claim}`).join("\n") + "\n"
     : "";
 
@@ -622,17 +922,23 @@ async function generatePrioritizedSignals(args: {
     `top 2-3 signals that should drive a first conversation with this account. ` +
     `You ruthlessly cut everything that doesn't matter most. You write signals ` +
     `that are concrete, specific, and tied to real business impact — never ` +
-    `generic categories. The output tells the rep what matters most, not ` +
-    `everything that could matter.`;
+    `generic categories. ` +
+    `VERIFIED-FIRST RULE: when verified signals exist, they MUST take the top ranks. ` +
+    `Inferred hypotheses can only fill remaining slots, and only when they extend ` +
+    `(not duplicate) the verified ones. Never let an inferred angle outrank a ` +
+    `verified one. The output tells the rep what matters most, not everything ` +
+    `that could matter.`;
 
   const user =
     `Account in focus: ${args.entityName}` +
     acctSeed +
+    verifiedBlock +
     hypBlock +
     facts +
     `\nWeb research available this turn: ${args.webResearched ? "yes" : "no"}` +
     `\n\nThe rep's prompt:\n"""${args.userContent.slice(0, 1200)}"""\n\n` +
     SIGNAL_SCHEMA_HINT;
+
 
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 12000);
@@ -688,7 +994,10 @@ async function generatePrioritizedSignals(args: {
     const allowedConfidences: ConfidenceLevel[] = ["high", "medium", "low"];
 
     const haveAccount = !!args.resolvedAccount;
-    const haveWeb = !!args.webResearched;
+    const verifiedWeb = (args.verifiedSignals || []).filter((v) => v.source === "web");
+    const verifiedLib = (args.verifiedSignals || []).filter((v) => v.source === "library" || v.source === "resource");
+    const haveWeb = !!args.webResearched && verifiedWeb.length > 0;
+    const haveLibrary = verifiedLib.length > 0;
 
     const cleaned: PrioritizedSignal[] = [];
     for (let i = 0; i < parsed.signals.length && cleaned.length < 3; i++) {
@@ -722,12 +1031,14 @@ async function generatePrioritizedSignals(args: {
 
       // Trust-down rule: never let the model upgrade a signal beyond
       // what the actual source mix supports. Inference can never
-      // claim "account" or "web" sourcing.
+      // claim "account", "web", or "library" sourcing without backing
+      // verified evidence in the same turn.
       let source: SignalSourceType = allowedSources.includes(s.source_type)
         ? (s.source_type as SignalSourceType)
         : "inference";
       if (source === "account" && !haveAccount) source = "inference";
       if (source === "web" && !haveWeb) source = "inference";
+      if (source === "library" && !haveLibrary) source = "inference";
 
       let confidence: ConfidenceLevel = allowedConfidences.includes(s.confidence)
         ? (s.confidence as ConfidenceLevel)
@@ -735,9 +1046,8 @@ async function generatePrioritizedSignals(args: {
       // Inference can't be high-confidence.
       if (source === "inference" && confidence === "high") confidence = "medium";
 
-      const rank = (cleaned.length + 1) as 1 | 2 | 3;
       cleaned.push({
-        rank,
+        rank: 1, // re-ranked below after verified-first sort
         signal,
         signal_type: type,
         source_type: source,
@@ -756,7 +1066,18 @@ async function generatePrioritizedSignals(args: {
         conversation_angle: angle,
       });
     }
+
+    // VERIFIED-FIRST stable sort: any signal with a verifiable
+    // source_type (account / library / web) outranks inference,
+    // regardless of model-assigned rank. Within each tier, preserve
+    // the model's ordering (it already considered impact / tension).
+    const verifiedFirst = (s: PrioritizedSignal) => s.source_type !== "inference" ? 0 : 1;
+    cleaned.sort((a, b) => verifiedFirst(a) - verifiedFirst(b));
+    cleaned.forEach((s, idx) => {
+      s.rank = ((idx + 1) as 1 | 2 | 3);
+    });
     return cleaned;
+
   } catch (e) {
     console.warn(
       "[currentStateIntelligence] signal prioritization failed:",
@@ -775,8 +1096,10 @@ function buildSkeletonIntelligence(args: {
   resolvedAccount: CurrentStateResult["resolvedAccount"];
   webResearched: boolean;
   hypotheses?: GeneratedHypotheses | null;
+  verifiedSignals?: VerifiedSignal[];
 }): CurrentStateIntelligence {
   const { entityName, resolvedAccount, webResearched, hypotheses } = args;
+  const verifiedSignals = args.verifiedSignals || [];
 
   const sourcedFacts: CurrentStateIntelligence["evidence"]["sourced_facts"] = [];
   if (resolvedAccount) {
@@ -804,6 +1127,20 @@ function buildSkeletonIntelligence(args: {
       });
     }
   }
+
+  // Promote verified signals (web/library/resource) into sourced_facts
+  // so downstream consumers (citation audits, prompt facts list) treat
+  // them as first-class evidence rather than hypotheses.
+  for (const v of verifiedSignals) {
+    if (v.source === "inference") continue;
+    sourcedFacts.push({
+      claim: v.signal,
+      source_url: v.source_url,
+      source_title: v.source_title,
+      confidence: v.confidence,
+    });
+  }
+
 
   const companyConfidence: ConfidenceLevel = resolvedAccount
     ? "high"
@@ -903,6 +1240,7 @@ function buildSkeletonIntelligence(args: {
         ]
         : [],
     },
+    verified_signals: verifiedSignals,
     prioritized_signals: [],
   };
 }
@@ -950,13 +1288,30 @@ function renderPromptBlock(
     ).join("\n\n")
     : "(prioritization pass produced no signals — fall back to the working hypotheses above, but still pick the 2-3 highest-leverage angles yourself before responding, and explain the why behind each.)";
 
-  return `═══ CURRENT STATE INTELLIGENCE (working hypotheses — use these as the basis of your response) ═══
+  // VERIFIED-FIRST block: list real-world signals tagged with source +
+  // confidence. Hypotheses come AFTER and are clearly framed as
+  // gap-fillers. The prose contract below tells the model to LEAD with
+  // verified signals when they exist.
+  const verifiedSigs = (intelligence.verified_signals || []);
+  const verifiedCount = verifiedSigs.filter((v) => v.source !== "inference").length;
+  const inferredCount = verifiedSigs.length - verifiedCount;
+  const verifiedBlock = verifiedSigs.length
+    ? verifiedSigs.map((v, i) =>
+      `${i + 1}. [source:${v.source} · confidence:${v.confidence}${v.kind ? ` · ${v.kind}` : ""}] ${v.signal}` +
+      (v.source_url ? `\n   Source: ${v.source_title || v.source_url} (${v.source_url})` : "")
+    ).join("\n")
+    : "(no verified real-world signals gathered this turn — proceed with hypotheses, framed clearly as assumptions)";
+
+  return `═══ CURRENT STATE INTELLIGENCE (verified-first — lead with what we can verify, extend with what we hypothesize) ═══
 Company: ${c.name}${c.website ? ` (${c.website})` : ""}
 Account context state: ${stateLabel}
 Company confidence: ${c.confidence}
 Web research available this turn: ${webAvailable ? "yes" : "no"}
 
-WORKING HYPOTHESES ABOUT ${c.name.toUpperCase()} (these are reasoned, not sourced — speak in "likely" voice when reflecting them):
+═══ VERIFIED SIGNALS (real-world, source-tagged — PREFER THESE OVER HYPOTHESES) ═══
+${verifiedBlock}
+
+WORKING HYPOTHESES ABOUT ${c.name.toUpperCase()} (used ONLY to extend or fill gaps where verified signals are absent — speak in "likely" voice when reflecting them):
 - Business model: ${bm}
 - Customer experience: ${cx}${mm ? `\n- Marketing current state: ${mm}` : ""}
 - Strategic tension: ${t.strategic_tension}
@@ -965,7 +1320,7 @@ WORKING HYPOTHESES ABOUT ${c.name.toUpperCase()} (these are reasoned, not source
 - Future-state hypothesis: ${t.future_state_hypothesis}
 - Working thesis: ${t.summary}
 
-KNOWN FACTS (sourced):
+KNOWN FACTS (sourced — CRM + verified signals promoted):
 ${facts || "- (none in CRM/library — reason from public knowledge of this company)"}
 
 ═══ PRIORITIZED SIGNALS + STRATEGIC WHY (TOP ${signals.length || "2-3"} — DRIVE YOUR RESPONSE FROM THESE) ═══
@@ -976,6 +1331,8 @@ MUST-CONFIRM DISCOVERY QUESTIONS:
 ${mustConfirm}
 
 GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
+- VERIFIED-FIRST: When a prioritized signal has source_type ∈ {web, account, library}, lead with it. Reference the underlying real-world fact naturally in spoken language (not as a citation footnote). Example shape: "${c.name} has been [verified thing]. If that's true, the conversation I'd lead with is…". Inference is allowed only to extend verified signals or fill gaps where no verified signal exists.
+- Clearly distinguish verified from inferred IN PROSE. Verified: speak with confidence ("they've done X", "they recently launched Y"). Inferred: hedge ("a reasonable assumption is…", "${c.name} likely…", "if that holds…"). Never present an inferred angle as a sourced fact.
 - Your response MUST originate from the PRIORITIZED SIGNALS above. Each conversation path you produce must be traceable to one of those 2-3 ranked signals. Do not invent a fourth.
 - For each path, your prose MUST make the strategic WHY visible — not as headings, but woven into the language. The reader should clearly hear: why this matters, why now, why for ${c.name} specifically, what tension to test, and what to ask. Use spoken-voice openers like "I'd lead here because…", "The reason this matters is…", "The tension I'd test is…", "The question I'd ask is…".
 - Do NOT inventory everything that could matter. Surface ONLY what matters most. Fewer, sharper paths with deeper reasoning beat a long list every time.
@@ -983,15 +1340,15 @@ GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
 - Each path must include the validation question Corey would ask the customer to test the hypothesis. Plain language, the way Corey would actually ask it.
 - Do NOT produce generic lifecycle / marketing / engagement categories ("Acquisition / Activation / Retention / Winback" buckets, "personalize the journey", "build a loyalty program"). The user can already produce that themselves.
 - Frame ideas as conversation strategies, not capability checklists. Angles Corey can lead with, tensions to surface, hypotheses to test.
-- Respect the source_type and confidence on each signal. If source_type=inference, frame it explicitly as a working hypothesis ("a reasonable assumption is…", "${c.name} likely…"). Never present an inferred signal as a sourced fact.
 - Map current state → future state. Each path should imply the gap it closes for ${c.name} specifically.
 - Turn unknowns into discovery questions Corey can ask, not into hedges in your prose.
 - ${
     webAvailable
-      ? "Cite sources when you draw from web research."
-      : "Web research is NOT available this turn — reason from your training knowledge of this company; do not say \"I researched\"."
+      ? "Web research is available — verified web signals above are real; reference them naturally without citation-heavy phrasing."
+      : "Web research is NOT available this turn — verified signals above came from training recall and are tagged accordingly; do not say \"I researched\"."
   }
-═══════════════════════════════════`;
+═══════════════════════════════════
+[Verified-first counters: verified=${verifiedCount}, inferred=${inferredCount}]`;
 }
 
 // ─── Main entry point ──────────────────────────────────────────────
@@ -1081,14 +1438,27 @@ export async function runCurrentStatePreflight(
 
   const webResearched = !!args.webCapabilityAvailable;
 
+  // VERIFIED-FIRST: gather real-world signals BEFORE generating any
+  // hypotheses. When web research is wired (Perplexity), tag signals
+  // as source:"web". Otherwise fall back to model recall tagged as
+  // source:"inference" (so they never masquerade as web-sourced).
+  // Failure is non-fatal — pipeline degrades to pure hypothesis mode.
+  const verifiedSignals = await gatherVerifiedSignals({
+    entityName: entity.name,
+    resolvedAccount,
+    webCapabilityAvailable: webResearched,
+  });
+
   // Generate REAL hypotheses (not placeholder scaffolding) before the
-  // main model runs. This is what gives the current-state block enough
-  // signal to actually steer generation. Failure is non-fatal — we
-  // fall back to hedged prose, never to "[Likely]" tokens.
+  // main model runs. Verified signals are passed in so hypotheses
+  // build ON TOP of them rather than being generated in a vacuum.
+  // Failure is non-fatal — we fall back to hedged prose, never to
+  // "[Likely]" tokens.
   const hypotheses = await generateRealHypotheses({
     entityName: entity.name,
     resolvedAccount,
     userContent: args.userContent || "",
+    verifiedSignals,
   });
 
   const intelligence = buildSkeletonIntelligence({
@@ -1096,11 +1466,12 @@ export async function runCurrentStatePreflight(
     resolvedAccount,
     webResearched,
     hypotheses,
+    verifiedSignals,
   });
 
   // Signal prioritization pass — ranks the top 2-3 highest-leverage
-  // signals from hypotheses + sourced facts. This is what tells the
-  // model what matters most, not everything that could matter.
+  // signals. Verified signals always outrank inferred ones (enforced
+  // by stable verified-first sort inside generatePrioritizedSignals).
   // Failure is non-fatal — promptBlock falls back gracefully.
   const prioritizedSignals = await generatePrioritizedSignals({
     entityName: entity.name,
@@ -1108,6 +1479,7 @@ export async function runCurrentStatePreflight(
     userContent: args.userContent || "",
     hypotheses,
     sourcedFacts: intelligence.evidence.sourced_facts,
+    verifiedSignals,
     webResearched,
   });
   intelligence.prioritized_signals = prioritizedSignals;
@@ -1117,6 +1489,13 @@ export async function runCurrentStatePreflight(
     accountContextState,
     webResearched,
   );
+
+  const verifiedSignalsCount = verifiedSignals.filter((v) => v.source !== "inference").length;
+  const inferredSignalsCount = verifiedSignals.length - verifiedSignalsCount;
+  const verifiedFirstApplied = verifiedSignalsCount > 0;
+  const verifiedTopRanks = prioritizedSignals.filter(
+    (p) => p.source_type !== "inference",
+  ).length;
 
   const log = {
     current_state_preflight: true,
@@ -1135,12 +1514,21 @@ export async function runCurrentStatePreflight(
     },
     current_state_confidence: intelligence.company.confidence,
     hypotheses_generated: !!hypotheses,
+    // ── Verified-first telemetry ──────────────────────────────────
+    verified_signals_count: verifiedSignalsCount,
+    inferred_signals_count: inferredSignalsCount,
+    verified_first_applied: verifiedFirstApplied,
+    verified_signal_sources: verifiedSignals.map((v) => v.source),
+    verified_signal_kinds: verifiedSignals.map((v) => v.kind || "unknown"),
     prioritized_signals_count: prioritizedSignals.length,
     prioritized_signal_types: prioritizedSignals.map((s) => s.signal_type),
+    prioritized_signal_sources: prioritizedSignals.map((s) => s.source_type),
+    prioritized_verified_top_count: verifiedTopRanks,
     unknowns_count: countUnknowns(intelligence),
     injected_current_state_block: true,
     candidates_considered: candidates,
   };
+
 
   return {
     ran: true,
