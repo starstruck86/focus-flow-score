@@ -1105,6 +1105,49 @@ async function generatePrioritizedSignals(args: {
       // Inference can't be high-confidence.
       if (source === "inference" && confidence === "high") confidence = "medium";
 
+      // ── Change Vector (X → Y → Z) — REQUIRED ──────────────────────
+      // We synthesize a safe fallback when the model omits or partially
+      // returns the vector, so older runs and weaker models still ship
+      // a usable shape. Y_basis is trust-down: never "verified" unless
+      // the signal itself is sourced from web/account/library.
+      const cv: any = (s && typeof s.change_vector === "object" && s.change_vector) || {};
+      const trustBasis = (b: unknown): "verified" | "inferred" =>
+        b === "verified" ? "verified" : "inferred";
+      let nowBasis = trustBasis(cv.now_basis);
+      // Y can only claim "verified" when the signal itself is verifiable.
+      if (nowBasis === "verified" && source === "inference") nowBasis = "inferred";
+      let beforeBasis = trustBasis(cv.before_basis);
+      if (beforeBasis === "verified" && source === "inference") beforeBasis = "inferred";
+      // Z (next) is forward-looking; never let it claim verified.
+      const nextBasis: "verified" | "inferred" = "inferred";
+
+      const before = String(cv.before || "").trim();
+      const now = String(cv.now || "").trim();
+      const next = String(cv.next || "").trim();
+      const whatChanged = String(cv.what_changed || "").trim();
+      const cvWhyMatters = String(cv.why_it_matters || "").trim();
+      const whatBreaks = String(cv.what_breaks || "").trim();
+      const opportunity = String(cv.opportunity || "").trim();
+
+      // Drop the signal if the change vector is unusable. We need at
+      // least Y (now) and Z (next) plus what_changed to drive prose.
+      if (!now || !next || !whatChanged) continue;
+      // X and Y must differ — otherwise there's no change to talk about.
+      if (before && before.toLowerCase() === now.toLowerCase()) continue;
+
+      const change_vector: ChangeVector = {
+        before: before || `Prior state of "${signal}" before recent shifts.`,
+        before_basis: beforeBasis,
+        now,
+        now_basis: nowBasis,
+        next,
+        next_basis: nextBasis,
+        what_changed: whatChanged,
+        why_it_matters: cvWhyMatters || whyMatters,
+        what_breaks: whatBreaks || `Risk of falling behind the ${whatChanged} curve.`,
+        opportunity: opportunity || `Lean into the gap created by ${whatChanged}.`,
+      };
+
       cleaned.push({
         rank: 1, // re-ranked below after verified-first sort
         signal,
@@ -1121,6 +1164,7 @@ async function generatePrioritizedSignals(args: {
         strategic_tension: tension,
         conversation_move: move,
         validation_question: validation,
+        change_vector,
         business_impact: impact,
         conversation_angle: angle,
       });
