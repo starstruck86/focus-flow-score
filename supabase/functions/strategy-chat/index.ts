@@ -5882,6 +5882,7 @@ If the output does not meet these criteria:
       position: "top-of-system-prompt",
       block_length: strategyObjectiveBlock.length,
       includes_quality_standard: true,
+      includes_conversation_frame: true,
     })}`,
   );
   const libraryUsageBlock = `
