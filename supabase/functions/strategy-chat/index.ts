@@ -2247,8 +2247,34 @@ serve(async (req) => {
     const workspace = typeof workspaceRaw === 'string' && ALLOWED_WORKSPACES.has(workspaceRaw)
       ? workspaceRaw
       : null;
+    // Phase 7D-fix — workspace truth.
+    // Distinguish "no surface selected" (freeform) from "Work surface" and
+    // from "client sent a key the server doesn't recognize". This makes
+    // diagnostics impossible to misread the way the previous silent
+    // fallback to `'work'` allowed.
+    const ALLOWED_WORKSPACE_SOURCES = new Set(['selected', 'thread-tag', 'default', 'none']);
+    const workspaceSource: 'selected' | 'thread-tag' | 'default' | 'none' | 'unknown' =
+      typeof workspaceSourceRaw === 'string' && ALLOWED_WORKSPACE_SOURCES.has(workspaceSourceRaw)
+        ? (workspaceSourceRaw as 'selected' | 'thread-tag' | 'default' | 'none')
+        : 'unknown';
+    // What the server actually received from the wire — pre-validation. Used
+    // for diagnostics so a typo'd / unknown key doesn't get silently mapped
+    // to `null` without a trace.
+    const workspaceSentRaw: string | null =
+      typeof workspaceRaw === 'string' && workspaceRaw.trim().length > 0
+        ? workspaceRaw
+        : null;
+    const workspaceResolved: string =
+      workspace ?? (workspaceSentRaw ? `invalid:${workspaceSentRaw.slice(0, 32)}` : 'freeform');
+    // Workspaces that may carry a Workspace SOP (matches the resolver:
+    // `work` is freeform and is intentionally excluded).
+    const WORKSPACES_SUPPORTING_SOP = new Set([
+      'brainstorm', 'deep_research', 'refine', 'library', 'artifacts', 'projects',
+    ]);
+    const workspaceSupportsSop = workspace ? WORKSPACES_SUPPORTING_SOP.has(workspace) : false;
+
     console.log(
-      `[strategy-sop] received workspace=${workspace ?? 'none'} taskType=${typeof workflowType === 'string' ? workflowType : 'none'} hasWorkspace=${!!workspace} hasGlobalInstructions=${!!cleanGlobalInstructions}`,
+      `[strategy-sop] received workspace=${workspace ?? 'none'} source=${workspaceSource} sentRaw=${workspaceSentRaw ?? 'null'} taskType=${typeof workflowType === 'string' ? workflowType : 'none'} hasWorkspace=${!!workspace} supportsWorkspaceSop=${workspaceSupportsSop} hasGlobalInstructions=${!!cleanGlobalInstructions}`,
     );
 
     // Phase 2 — Universal Strategy SOP Engine: resolver plumbing.
