@@ -2390,6 +2390,53 @@ serve(async (req) => {
       `[strategy-sop] global-sop received: present=${!!globalSopRaw} sanitized=${!!cleanGlobalSop} length=${cleanGlobalSop?.rawInstructions.length ?? 0}`,
     );
 
+    // ── Phase 7D-fix — Single-line truth diagnostic ─────────────────────
+    // One structured JSON log capturing the full state of workspace + SOP
+    // routing for this request. Lets us read a single line in Supabase
+    // logs and definitively answer:
+    //   • which workspace did the client say it was in?
+    //   • which workspace did the server resolve?
+    //   • where did the workspace value come from? (selected/none/etc.)
+    //   • does that workspace even support a Workspace SOP?
+    //   • Global SOP: config enabled? raw length sent? sanitized? going to inject?
+    //   • Workspace SOP: sent? sanitized? going to inject?
+    // The downstream "[sop-engine]" / "[sop-output-check]" logs continue to
+    // report the actual injection result. This block reports the *inputs*.
+    const globalSopConfigEnabled = !!globalSopRaw && typeof globalSopRaw === 'object';
+    const globalSopRawLength = (globalSopRaw && typeof globalSopRaw === 'object'
+      && typeof (globalSopRaw as Record<string, unknown>).rawInstructions === 'string')
+      ? ((globalSopRaw as Record<string, unknown>).rawInstructions as string).length
+      : 0;
+    const workspaceSopRawLength = (workspaceSopRaw && typeof workspaceSopRaw === 'object'
+      && typeof (workspaceSopRaw as Record<string, unknown>).rawInstructions === 'string')
+      ? ((workspaceSopRaw as Record<string, unknown>).rawInstructions as string).length
+      : 0;
+    const willInjectWorkspaceSop = !!cleanWorkspaceSop;
+    const willInjectGlobalSop = !!cleanGlobalSop;
+    console.log(
+      `[strategy-sop:diagnostics] ${JSON.stringify({
+        // Workspace truth
+        workspace_sent: workspaceSentRaw,
+        workspace_resolved: workspaceResolved,
+        workspace_source: workspaceSource,
+        workspace_supports_sop: workspaceSupportsSop,
+        is_freeform: !workspace,
+        is_task_pipeline: typeof workflowType === 'string' && workflowType.length > 0,
+        // Global SOP lifecycle
+        global_sop_config_enabled: globalSopConfigEnabled,
+        global_sop_sent: globalSopRaw != null,
+        global_sop_raw_length: globalSopRawLength,
+        global_sop_sanitized: !!cleanGlobalSop,
+        global_sop_will_inject: willInjectGlobalSop,
+        // Workspace SOP lifecycle
+        workspace_sop_sent: workspaceSopRaw != null,
+        workspace_sop_raw_length: workspaceSopRawLength,
+        workspace_sop_sanitized: !!cleanWorkspaceSop,
+        workspace_sop_will_inject: willInjectWorkspaceSop,
+        workspace_sop_workspace: cleanWorkspaceSop?.workspace ?? null,
+      })}`,
+    );
+
     // ── Debug: OpenAI key health check ──────────────────────
     // Phase 0 acceptance gate. Returns 200 only when the key is shaped
     // correctly AND a real round-trip to api.openai.com succeeds.
