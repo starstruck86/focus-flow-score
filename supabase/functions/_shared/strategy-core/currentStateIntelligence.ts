@@ -916,6 +916,8 @@ Hard rules:
 - If the underlying basis is inferred (no sourced fact), set source_type = "inference" and confidence = "low" — do NOT pretend it's sourced.
 - Every Why field (why_it_matters, why_now, why_this_company) must be DIFFERENT. If you're tempted to repeat the signal in those fields, you haven't reasoned hard enough.
 - conversation_move and conversation_angle must read like spoken language. No "we should explore...", no headings.
+- change_vector is REQUIRED. X (before) and Z (next) are typically inferred — mark them so. Y (now) MUST be marked "verified" only when it traces to a verified signal or sourced CRM fact in the same turn; otherwise mark "inferred". Never mark Y as verified to sound credible.
+- X, Y, Z must each describe a DIFFERENT state. If X and Y read the same, you haven't found the change — drop the signal.
 - Do NOT include any text outside the JSON object.`;
 
 interface GeneratedSignals {
