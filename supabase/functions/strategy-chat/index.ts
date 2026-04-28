@@ -5271,6 +5271,8 @@ async function buildChatSystemPrompt(args: {
       // selected output mode are present — i.e. the prompt will
       // carry context AND a mode contract together.
       context_and_mode_combined: _currentStateUsed && !!outputModeDecision.mode,
+      prioritized_signals_count: currentStateResult?.intelligence?.prioritized_signals?.length ?? 0,
+      prioritized_signal_types: currentStateResult?.intelligence?.prioritized_signals?.map((s) => s.signal_type) ?? [],
       workspace: workspaceKeyRaw ?? null,
     }),
   );
