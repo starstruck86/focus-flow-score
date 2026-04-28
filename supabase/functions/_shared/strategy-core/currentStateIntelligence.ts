@@ -1723,6 +1723,21 @@ export async function runCurrentStatePreflight(
   });
   intelligence.prioritized_signals = prioritizedSignals;
 
+  // Commercial Insight (Challenger reframe) layer — runs AFTER
+  // verified signals + prioritized signals so the insight is grounded
+  // in real-world evidence and the already-ranked angles. Failure is
+  // non-fatal — promptBlock falls back to signals only.
+  const commercialInsights = await generateCommercialInsights({
+    entityName: entity.name,
+    resolvedAccount,
+    userContent: args.userContent || "",
+    hypotheses,
+    verifiedSignals,
+    prioritizedSignals,
+    webResearched,
+  });
+  intelligence.commercial_insights = commercialInsights;
+
   const promptBlock = renderPromptBlock(
     intelligence,
     accountContextState,
