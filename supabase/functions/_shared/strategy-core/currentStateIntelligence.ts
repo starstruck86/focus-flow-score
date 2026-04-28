@@ -228,10 +228,30 @@ export interface PrioritizedSignal {
   conversation_move: string;          // What Corey should lead with (spoken voice)
   validation_question: string;        // The question Corey should ask to test it
 
+  // ── Change Vector (X → Y → Z) ────────────────────────────────────
+  // Direction of travel for this signal. Y is verified when possible;
+  // X and Z are typically inferred. Captures HOW the business is
+  // changing — not just what it is — so prose can sound like
+  // "they used to… now they're… which means…".
+  change_vector: ChangeVector;
+
   // Back-compat from the earlier Prioritization layer (kept so the
   // conversation-mode digest and any prior consumers don't break):
   business_impact: string;            // 1-line revenue/growth/risk implication
   conversation_angle: string;         // Spoken-language opener
+}
+
+export interface ChangeVector {
+  before: string;          // X — prior state (what they used to do / how they used to operate)
+  before_basis: "verified" | "inferred";
+  now: string;             // Y — current state (verified when possible)
+  now_basis: "verified" | "inferred";
+  next: string;            // Z — direction of travel (inferred unless explicitly signaled)
+  next_basis: "verified" | "inferred";
+  what_changed: string;          // The delta, named concretely
+  why_it_matters: string;        // Why the change matters for the business
+  what_breaks: string;           // What breaks if they don't adapt
+  opportunity: string;           // The opportunity that emerges from the change
 }
 
 export interface CurrentStateResult {
@@ -862,6 +882,19 @@ const SIGNAL_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY this shape:
       "conversation_move": "1-2 sentences in first-person spoken voice. Example shapes: \"I'd lead here because…\", \"The reason this matters is…\", \"The tension I'd test is…\". No headings, no labels, no consultant-speak.",
       "validation_question": "1 sentence: the question Corey should ask the customer to test the hypothesis. Plain language, the way Corey would actually ask it.",
 
+      "change_vector": {
+        "before": "X — what this account USED TO do / how they USED TO operate on this dimension. 1 short sentence, concrete (not 'they had a basic program'). Example: 'Drove repeat purchase entirely through batch promotional email.'",
+        "before_basis": "verified | inferred",
+        "now": "Y — what they are doing / how they operate TODAY. Anchored in verified signals when present. 1 short sentence, concrete. Example: 'Have launched a paid loyalty tier and started personalizing offers by segment.'",
+        "now_basis": "verified | inferred",
+        "next": "Z — the direction of travel: where this is heading next 6-18 months based on signals + business model. 1 short sentence. Example: 'Moving toward a behaviorally-triggered lifecycle motion that monetizes the loyalty signal in real time.'",
+        "next_basis": "verified | inferred",
+        "what_changed": "1 sentence: the delta from X → Y, named concretely. The actual shift, not a vague 'they evolved'.",
+        "why_it_matters": "1 sentence: why this change matters for their business — revenue / customer / margin / risk lens.",
+        "what_breaks": "1 sentence: what breaks or gets left on the table if they don't keep moving toward Z.",
+        "opportunity": "1 sentence: the opportunity that emerges from the X → Y → Z motion — the gap Corey can lean into."
+      },
+
       "business_impact": "1 short sentence summarizing revenue / growth / risk implication (kept for downstream digest reuse).",
       "conversation_angle": "1 short spoken-voice opener (kept for downstream digest reuse). Same energy as conversation_move."
     }
@@ -883,6 +916,8 @@ Hard rules:
 - If the underlying basis is inferred (no sourced fact), set source_type = "inference" and confidence = "low" — do NOT pretend it's sourced.
 - Every Why field (why_it_matters, why_now, why_this_company) must be DIFFERENT. If you're tempted to repeat the signal in those fields, you haven't reasoned hard enough.
 - conversation_move and conversation_angle must read like spoken language. No "we should explore...", no headings.
+- change_vector is REQUIRED. X (before) and Z (next) are typically inferred — mark them so. Y (now) MUST be marked "verified" only when it traces to a verified signal or sourced CRM fact in the same turn; otherwise mark "inferred". Never mark Y as verified to sound credible.
+- X, Y, Z must each describe a DIFFERENT state. If X and Y read the same, you haven't found the change — drop the signal.
 - Do NOT include any text outside the JSON object.`;
 
 interface GeneratedSignals {
@@ -1070,6 +1105,49 @@ async function generatePrioritizedSignals(args: {
       // Inference can't be high-confidence.
       if (source === "inference" && confidence === "high") confidence = "medium";
 
+      // ── Change Vector (X → Y → Z) — REQUIRED ──────────────────────
+      // We synthesize a safe fallback when the model omits or partially
+      // returns the vector, so older runs and weaker models still ship
+      // a usable shape. Y_basis is trust-down: never "verified" unless
+      // the signal itself is sourced from web/account/library.
+      const cv: any = (s && typeof s.change_vector === "object" && s.change_vector) || {};
+      const trustBasis = (b: unknown): "verified" | "inferred" =>
+        b === "verified" ? "verified" : "inferred";
+      let nowBasis = trustBasis(cv.now_basis);
+      // Y can only claim "verified" when the signal itself is verifiable.
+      if (nowBasis === "verified" && source === "inference") nowBasis = "inferred";
+      let beforeBasis = trustBasis(cv.before_basis);
+      if (beforeBasis === "verified" && source === "inference") beforeBasis = "inferred";
+      // Z (next) is forward-looking; never let it claim verified.
+      const nextBasis: "verified" | "inferred" = "inferred";
+
+      const before = String(cv.before || "").trim();
+      const now = String(cv.now || "").trim();
+      const next = String(cv.next || "").trim();
+      const whatChanged = String(cv.what_changed || "").trim();
+      const cvWhyMatters = String(cv.why_it_matters || "").trim();
+      const whatBreaks = String(cv.what_breaks || "").trim();
+      const opportunity = String(cv.opportunity || "").trim();
+
+      // Drop the signal if the change vector is unusable. We need at
+      // least Y (now) and Z (next) plus what_changed to drive prose.
+      if (!now || !next || !whatChanged) continue;
+      // X and Y must differ — otherwise there's no change to talk about.
+      if (before && before.toLowerCase() === now.toLowerCase()) continue;
+
+      const change_vector: ChangeVector = {
+        before: before || `Prior state of "${signal}" before recent shifts.`,
+        before_basis: beforeBasis,
+        now,
+        now_basis: nowBasis,
+        next,
+        next_basis: nextBasis,
+        what_changed: whatChanged,
+        why_it_matters: cvWhyMatters || whyMatters,
+        what_breaks: whatBreaks || `Risk of falling behind the ${whatChanged} curve.`,
+        opportunity: opportunity || `Lean into the gap created by ${whatChanged}.`,
+      };
+
       cleaned.push({
         rank: 1, // re-ranked below after verified-first sort
         signal,
@@ -1086,6 +1164,7 @@ async function generatePrioritizedSignals(args: {
         strategic_tension: tension,
         conversation_move: move,
         validation_question: validation,
+        change_vector,
         business_impact: impact,
         conversation_angle: angle,
       });
@@ -1512,19 +1591,31 @@ function renderPromptBlock(
 
   const signals = intelligence.prioritized_signals || [];
   const signalsBlock = signals.length
-    ? signals.map((s) =>
-      `${s.rank}. [${s.signal_type} · source:${s.source_type} · confidence:${s.confidence}] ${s.signal}\n` +
-      `   Why it matters:        ${s.why_it_matters}\n` +
-      `   Why now:               ${s.why_now}\n` +
-      `   Why this company:      ${s.why_this_company}\n` +
-      `   Business pressure:     ${s.business_pressure}\n` +
-      `   Customer behavior:     ${s.customer_behavior_implication}\n` +
-      `   Marketing motion:      ${s.marketing_motion_implication}\n` +
-      `   Future-state implied:  ${s.future_state_implication}\n` +
-      `   Strategic tension:     ${s.strategic_tension}\n` +
-      `   Conversation move:     ${s.conversation_move}\n` +
-      `   Validation question:   ${s.validation_question}`
-    ).join("\n\n")
+    ? signals.map((s) => {
+      const cv = s.change_vector;
+      const cvLines = cv
+        ? `\n   Change vector (X→Y→Z):\n` +
+          `     X (before · ${cv.before_basis}): ${cv.before}\n` +
+          `     Y (now · ${cv.now_basis}):       ${cv.now}\n` +
+          `     Z (next · ${cv.next_basis}):     ${cv.next}\n` +
+          `     What changed:        ${cv.what_changed}\n` +
+          `     Why it matters:      ${cv.why_it_matters}\n` +
+          `     What breaks:         ${cv.what_breaks}\n` +
+          `     Opportunity:         ${cv.opportunity}`
+        : "";
+      return `${s.rank}. [${s.signal_type} · source:${s.source_type} · confidence:${s.confidence}] ${s.signal}\n` +
+        `   Why it matters:        ${s.why_it_matters}\n` +
+        `   Why now:               ${s.why_now}\n` +
+        `   Why this company:      ${s.why_this_company}\n` +
+        `   Business pressure:     ${s.business_pressure}\n` +
+        `   Customer behavior:     ${s.customer_behavior_implication}\n` +
+        `   Marketing motion:      ${s.marketing_motion_implication}\n` +
+        `   Future-state implied:  ${s.future_state_implication}\n` +
+        `   Strategic tension:     ${s.strategic_tension}\n` +
+        `   Conversation move:     ${s.conversation_move}\n` +
+        `   Validation question:   ${s.validation_question}` +
+        cvLines;
+    }).join("\n\n")
     : "(prioritization pass produced no signals — fall back to the working hypotheses above, but still pick the 2-3 highest-leverage angles yourself before responding, and explain the why behind each.)";
 
   // VERIFIED-FIRST block: list real-world signals tagged with source +
@@ -1600,6 +1691,8 @@ GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
 - Do NOT inventory everything that could matter. Surface ONLY what matters most. Fewer, sharper paths with deeper reasoning beat a long list every time.
 - Each path must connect to business pressure (revenue, growth, margin, risk) AND name the customer-behavior or motion implication — not just the angle.
 - Each path must include the validation question Corey would ask the customer to test the hypothesis. Plain language, the way Corey would actually ask it.
+- CHANGE-VECTOR PROSE (NON-NEGOTIABLE): Every prioritized-signal path MUST be expressed as a direction of travel using its change_vector. Anchor the prose in the X → Y → Z motion — not a static description. Use this spoken shape, adapted naturally: "They used to <X>. Now they're <Y>. Which means <what_changed / why_it_matters>. So I'd push on <opportunity / tension>. The question I'd ask is <validation_question>." Do NOT skip X. Do NOT collapse X and Y into the same idea. Do NOT describe the company as static.
+- Honor change_vector basis tags in prose. Y marked "verified" → speak with confidence ("they've moved to…"). Y or X marked "inferred" → hedge ("they were likely…", "today they appear to be…"). Z is always forward-looking — frame it as direction, not fact ("which points toward…", "the trajectory I'd bet on is…").
 - Do NOT produce generic lifecycle / marketing / engagement categories ("Acquisition / Activation / Retention / Winback" buckets, "personalize the journey", "build a loyalty program"). The user can already produce that themselves.
 - Frame ideas as conversation strategies, not capability checklists. Angles Corey can lead with, tensions to surface, hypotheses to test.
 - Map current state → future state. Each path should imply the gap it closes for ${c.name} specifically.
@@ -1801,6 +1894,14 @@ export async function runCurrentStatePreflight(
     prioritized_signal_types: prioritizedSignals.map((s) => s.signal_type),
     prioritized_signal_sources: prioritizedSignals.map((s) => s.source_type),
     prioritized_verified_top_count: verifiedTopRanks,
+    // ── Change Vector (X → Y → Z) telemetry ───────────────────────
+    change_vectors_count: prioritizedSignals.filter((s) => !!s.change_vector).length,
+    change_vectors_y_verified_count: prioritizedSignals.filter(
+      (s) => s.change_vector?.now_basis === "verified",
+    ).length,
+    change_vectors_y_inferred_count: prioritizedSignals.filter(
+      (s) => s.change_vector?.now_basis === "inferred",
+    ).length,
     // ── Commercial Insight (Challenger) telemetry ─────────────────
     commercial_insights_count: commercialInsights.length,
     commercial_insights_sources: commercialInsights.map((c) => c.source_type),

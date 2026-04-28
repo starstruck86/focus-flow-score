@@ -5280,6 +5280,10 @@ async function buildChatSystemPrompt(args: {
       inferred_signals_count: (currentStateResult?.log as any)?.inferred_signals_count ?? 0,
       verified_first_applied: (currentStateResult?.log as any)?.verified_first_applied ?? false,
       prioritized_verified_top_count: (currentStateResult?.log as any)?.prioritized_verified_top_count ?? 0,
+      // ── Change Vector (X → Y → Z) telemetry ───────────────────────
+      change_vectors_count: (currentStateResult?.log as any)?.change_vectors_count ?? 0,
+      change_vectors_y_verified_count: (currentStateResult?.log as any)?.change_vectors_y_verified_count ?? 0,
+      change_vectors_y_inferred_count: (currentStateResult?.log as any)?.change_vectors_y_inferred_count ?? 0,
       // ── Commercial Insight (Challenger reframe) telemetry ──────────
       commercial_insights_count: (currentStateResult?.log as any)?.commercial_insights_count ?? 0,
       commercial_insights_verified_count: (currentStateResult?.log as any)?.commercial_insights_verified_count ?? 0,
@@ -6509,6 +6513,16 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           lines.push(`     tension to test:  ${s.strategic_tension}`);
           lines.push(`     conversation move:${s.conversation_move}`);
           lines.push(`     validation Q:     ${s.validation_question}`);
+          const cv = (s as any).change_vector;
+          if (cv) {
+            lines.push(`     change vector (use 'used to → now → which means → so I'd push on → question'):`);
+            lines.push(`       X (before · ${cv.before_basis}): ${cv.before}`);
+            lines.push(`       Y (now · ${cv.now_basis}):       ${cv.now}`);
+            lines.push(`       Z (next · ${cv.next_basis}):     ${cv.next}`);
+            lines.push(`       what changed:    ${cv.what_changed}`);
+            lines.push(`       what breaks:     ${cv.what_breaks}`);
+            lines.push(`       opportunity:     ${cv.opportunity}`);
+          }
         }
       }
       return lines.join("\n");
