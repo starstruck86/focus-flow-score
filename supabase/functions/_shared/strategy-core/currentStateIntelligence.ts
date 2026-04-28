@@ -1374,14 +1374,23 @@ Return STRICT JSON in this exact shape:
 {
   "insights": [
     {
-      "insight": "ONE sharp sentence that REFRAMES how this company should think about their own business. Not an idea, not an angle, not a tactic — a new mental model. The customer should read it and think: 'I hadn't framed it that way before.' Bad: 'You should personalize the customer journey.' Good: 'TJX's treasure-hunt model means your most loyal customers are the ones you train to expect scarcity — not the ones you train to expect rewards.'",
+      "insight": "ONE sharp sentence that REFRAMES how this company should think about their own business. Not an idea, not an angle, not a tactic — a new mental model. The customer should read it and think: 'I hadn't framed it that way before.'",
       "current_state": "1 sentence: how this company (and most of the category) thinks about it today — the prevailing assumption.",
       "shift": "1 sentence: what is changing in the market / customer behavior / operating model / technology that makes the old assumption break.",
       "problem": "1 sentence: what concretely BREAKS or gets left on the table if they keep operating on the old assumption.",
       "implication": "1 sentence: the business impact of the reframe — revenue, growth, margin, retention, risk. Quantified or directional, not vague.",
       "tension": "1 sentence: the specific assumption Corey should directly challenge in conversation.",
-      "conversation_entry": "1-2 sentences in first-person spoken voice, MUST start with shape 'I'd start here because…' or 'The reason I'd lead with this is…'. No headings. No 'we should explore'. This is what Corey actually says.",
-      "question": "1 sentence: the validation question Corey asks the customer to test the reframe. Plain spoken language.",
+      "why_anything": "1 sentence: what is structurally wrong / misaligned / the gap that exists for THIS company. Names the broken or flawed assumption — not a generic 'companies should...'.",
+      "why_now": "1 sentence: what is changing right now / what pressure is increasing / what makes this urgent THIS quarter — not 'in the future'.",
+      "why_you": "1 sentence: why OUR company / capability matters here — what we specifically enable that closes the gap. Speak as the seller. No marketing language; name the concrete capability.",
+      "ai_impact": {
+        "makes_easier": "1 sentence: how AI lowers the cost / unlocks the shift / accelerates the move for this company specifically.",
+        "makes_harder": "1 sentence: how AI raises the bar / creates new pressure / makes the old way more dangerous for this company specifically."
+      },
+      "risk": "1 sentence: what happens if they don't change — what they are likely missing or misinterpreting. Concrete consequence, not vague 'they may fall behind'.",
+      "conversation_entry": "1-2 sentences in first-person spoken voice. MUST start with shape 'I'd lead here because…' or 'The reason I'd start here is…'. No headings. This is what Corey actually says.",
+      "conversation_move": "1 sentence in first-person, MUST start with 'I'd lead by…' or 'I'd push on…'. The concrete move Corey makes in the conversation.",
+      "validation_question": "1 sentence: the validation question Corey asks the customer to test the reframe. Plain spoken language, MUST read like 'The question I'd ask is…' (the verbatim phrase is fine).",
       "source_type": "account | library | web | inference",
       "confidence": "high | medium | low",
       "built_on_signal_ranks": [1, 2]
@@ -1394,7 +1403,10 @@ Hard rules:
 - An insight is NOT an idea, an angle, a play, a tactic, or a recommendation. It is a REFRAME of how the customer should understand their own business.
 - The insight must be specific to THIS company — not "retailers should…", not "loyalty programs should…".
 - The insight must EXPOSE a hidden problem or inefficiency, OR introduce a new mental model.
-- The conversation_entry must read like spoken language and must open with "I'd start here because…" (or near equivalent). No consultant-speak.
+- 3 WHY narrative is NON-NEGOTIABLE: every insight must include why_anything (what is broken), why_now (what is changing), why_you (why our solution matters). All three must be filled, all three must be company-specific.
+- AI IMPACT is NON-NEGOTIABLE: every insight must include both makes_easier and makes_harder, framed for THIS company. Do not produce generic "AI will change everything" platitudes.
+- RISK is NON-NEGOTIABLE: every insight must name what concretely happens if they don't act. Used to create urgency in conversation.
+- The conversation_entry, conversation_move, and validation_question are ALL required — Corey must walk out of the call with an opener, a move, and a question. Spoken-voice only.
 - Build each insight on top of the verified signals + prioritized signals provided. If you must use pure inference, set source_type="inference" and confidence="low".
 - Do NOT produce generic lifecycle / marketing categories.
 - Do NOT include text outside the JSON object.`;
