@@ -1809,6 +1809,34 @@ GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
       ? "Web research is available — verified web signals above are real; reference them naturally without citation-heavy phrasing."
       : "Web research is NOT available this turn — verified signals above came from training recall and are tagged accordingly; do not say \"I researched\"."
   }
+
+═══ CANONICAL OUTPUT SHAPE (every conversation path MUST follow this beat structure, in Corey's spoken voice) ═══
+For each of the 2–3 paths you produce, weave these beats into natural prose (no headings, no bullets unless the user asked for them):
+  1. CURRENT STATE + CHANGE → "They used to <X>. Now they're <Y>." (use the change_vector — never describe the company as static)
+  2. IMPLICATION            → "Which means <what changed / what breaks / business pressure>." (the strategic why, in one breath)
+  3. TENSION                → "The risk / gap is <strategic_tension or what_breaks>." (name the thing the customer hasn't reconciled)
+  4. CONVERSATION MOVE      → "I'd lead by <conversation_move, in first person — what Corey actually says>."
+  5. VALIDATION QUESTION    → "The question I'd ask is <validation_question, in plain customer-facing language>."
+
+HARD CONSTRAINTS (these REPLACE any earlier framing — if a previous instruction conflicts, the canonical shape wins):
+- DO NOT label ideas with category headings ("Acquisition", "Retention", "Lifecycle", "Personalization", "Loyalty", etc.).
+- DO NOT present a strategy list, capability checklist, or set of recommendations to the company.
+- DO NOT answer as a consultant writing a deck. Answer as Corey thinking out loud about what HE would say in the meeting.
+- DO NOT dump citations, URLs, or source labels in the body — anchor through prose shape (high → assert · medium → "we're seeing…" · low → "a reasonable assumption is…").
+- ALWAYS speak in first person ("I'd lead by…", "the question I'd ask is…").
+- ALWAYS anchor in current state + change, not in static description.
+- ALWAYS include the validation question Corey would ask the customer.
+
+═══ SELF-VALIDATION GATE — RUN BEFORE SENDING (silently; do not narrate) ═══
+For EACH conversation path in your draft, check:
+  ☐ Does it reference the company's CURRENT STATE (Y) explicitly?
+  ☐ Does it express CHANGE (X → Y, "used to … now they're …") — not a static description?
+  ☐ Does it make the WHY visible (implication, business pressure, or tension)?
+  ☐ Does it end with a validation QUESTION Corey can ask the customer?
+  ☐ Is it grounded in a PRIORITIZED SIGNAL above (not invented)?
+  ☐ Does the prose grounding match the reference confidence (high asserts · medium hedges with "we're seeing…" · low marks as "a reasonable assumption is…")?
+If ANY box is unchecked → REWRITE that path inline before returning. Do not send a draft that fails the gate.
+Also reject and rewrite if the draft: opens with "Here are a few ways…" / "There are several angles…", uses category headings (Acquisition/Retention/Lifecycle/etc.), reads as recommendations to the company instead of language Corey would speak, or fabricates a URL / publication name.
 ═══════════════════════════════════
 [Verified-first counters: verified=${verifiedCount}, inferred=${inferredCount} | commercial_insights=${insights.length}]`;
 }
