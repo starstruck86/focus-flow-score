@@ -6452,6 +6452,16 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       if (cs.current_state_thesis?.strategic_tension) lines.push(`Strategic tension: ${cs.current_state_thesis.strategic_tension}`);
       if (cs.current_state_thesis?.future_state_hypothesis) lines.push(`Future-state hypothesis: ${cs.current_state_thesis.future_state_hypothesis}`);
       if (cs.current_state_thesis?.likely_gap) lines.push(`Likely gap: ${cs.current_state_thesis.likely_gap}`);
+      const sigs = Array.isArray(cs.prioritized_signals) ? cs.prioritized_signals : [];
+      if (sigs.length) {
+        lines.push("");
+        lines.push("PRIORITIZED SIGNALS (drive every angle from these — do not invent a fourth):");
+        for (const s of sigs) {
+          lines.push(`  ${s.rank}. [${s.signal_type}] ${s.signal}`);
+          lines.push(`     impact: ${s.business_impact}`);
+          lines.push(`     angle: ${s.conversation_angle}`);
+        }
+      }
       return lines.join("\n");
     })();
     const _csUsed = !!(currentStateResult?.ran && currentStateResult?.promptBlock);
