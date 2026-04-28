@@ -1943,71 +1943,36 @@ ${signalsBlock}
 MUST-CONFIRM DISCOVERY QUESTIONS:
 ${mustConfirm}
 
-GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
-- INSIGHT-LED OPENING: When a COMMERCIAL INSIGHT is present above, your response MUST open from the insight using its conversation_entry verbatim or near-verbatim — shape: "I'd lead here because…". Do NOT open with "Here are a few ways…", "There are several angles…", or any list-based opener. The insight is the POV; the prioritized signals extend it. The customer should walk away with a NEW way of understanding their business, not a longer to-do list.
-- The insight is a REFRAME, not an idea. Surface the tension. Name what is shifting. Make the implication concrete. Then offer the validation question naturally in prose.
-- 3 WHY NARRATIVE (NON-NEGOTIABLE when an insight is present): the insight prose must weave all three WHYs in this order — (1) why_anything (what is structurally broken / misaligned for THIS company), (2) why_now (what is changing right now / the urgency), (3) why_you (why our capability matters to close the gap). Speak them in natural prose, not as headings. Shape: "What's broken here is… What's changing right now is… The reason we matter in this conversation is…".
-- AI IMPACT (NON-NEGOTIABLE when an insight is present): name BOTH sides naturally — what AI makes easier for them, and what AI makes harder. This creates the tension Corey uses to challenge. Shape: "AI makes <X> dramatically cheaper for them, which is the opportunity. But AI also makes <Y> harder — and that's the part most teams aren't pricing in."
-- RISK (NON-NEGOTIABLE when an insight is present): name the concrete consequence of inaction in the prose — not "they'll fall behind" but a specific, named risk for THIS company. Shape: "If they don't move, what they're risking is…".
-- The insight prose MUST end with the conversation move ("I'd lead here…" / "I'd push on…") and the validation question ("The question I'd ask is…"). Both, in that order. No exceptions.
-- VERIFIED-FIRST: When a prioritized signal has source_type ∈ {web, account, library}, lead with it. Reference the underlying real-world fact naturally in spoken language (not as a citation footnote). Example shape: "${c.name} has been [verified thing]. If that's true, the conversation I'd lead with is…". Inference is allowed only to extend verified signals or fill gaps where no verified signal exists.
-- Clearly distinguish verified from inferred IN PROSE. Verified: speak with confidence ("they've done X", "they recently launched Y"). Inferred: hedge ("a reasonable assumption is…", "${c.name} likely…", "if that holds…"). Never present an inferred angle as a sourced fact.
-- Your response MUST originate from the PRIORITIZED SIGNALS above. Each conversation path you produce must be traceable to one of those 2-3 ranked signals. Do not invent a fourth.
-- For each path, your prose MUST make the strategic WHY visible — not as headings, but woven into the language. The reader should clearly hear: why this matters, why now, why for ${c.name} specifically, what tension to test, and what to ask. Use spoken-voice openers like "I'd lead here because…", "The reason this matters is…", "The tension I'd test is…", "The question I'd ask is…".
-- Do NOT inventory everything that could matter. Surface ONLY what matters most. Fewer, sharper paths with deeper reasoning beat a long list every time.
-- Each path must connect to business pressure (revenue, growth, margin, risk) AND name the customer-behavior or motion implication — not just the angle.
-- Each path must include the validation question Corey would ask the customer to test the hypothesis. Plain language, the way Corey would actually ask it.
-- CHANGE-VECTOR PROSE (NON-NEGOTIABLE): Every prioritized-signal path MUST be expressed as a direction of travel using its change_vector. Anchor the prose in the X → Y → Z motion — not a static description. Use this spoken shape, adapted naturally: "They used to <X>. Now they're <Y>. Which means <what_changed / why_it_matters>. So I'd push on <opportunity / tension>. The question I'd ask is <validation_question>." Do NOT skip X. Do NOT collapse X and Y into the same idea. Do NOT describe the company as static.
-- Honor change_vector basis tags in prose. Y marked "verified" → speak with confidence ("they've moved to…"). Y or X marked "inferred" → hedge ("they were likely…", "today they appear to be…"). Z is always forward-looking — frame it as direction, not fact ("which points toward…", "the trajectory I'd bet on is…").
-- REFERENCE-ANCHORED PROSE (NON-NEGOTIABLE): Every signal MUST be grounded in its reference, but DO NOT dump citations, source labels, or URLs in the body. Express the grounding through prose shape driven by reference.confidence:
-  • high  → state the fact directly: "${c.name} has been [reference_excerpt]…", "Their Q3 earnings flagged…".
-  • medium → soften but anchor: "We're seeing a shift toward…", "Recent reporting suggests…", "Public signals point to…".
-  • low / inference → mark explicitly as a hypothesis: "A reasonable assumption is…", "If the pattern in their category holds…", "I'd hypothesize that…".
-- Always tie the reference to the reasoning. After surfacing the grounded fact, immediately follow with "This matters because…" (or equivalent) so the customer hears the implication, not just the data point.
-- NEVER fabricate a URL, press release, earnings line, or analyst report. If reference_type="inference", the prose MUST signal it as inference and MUST NOT cite a publication name. Defending the claim ("here's why I believe it") matters more than performing certainty.
-- PROBLEM-FIRST / FRICTION PROSE (NON-NEGOTIABLE): Every conversation path MUST OPEN from the friction (what is HARD), not from the solution. Use the friction.conversation_move as your opener. Required shape: "The challenge for a team like this is <what_is_hard>. Which means <implication>. So I'd push on <opportunity / tension>. The question I'd ask is <validation_question>." If your draft for any path starts with a solution verb (Use…, Build…, Implement…, Launch…, Leverage…, Deploy…, Roll out…, Stand up…), REWRITE it to open with the constraint, the tradeoff, or the tension. Identify the problem before you offer any move.
-- The friction is the THESIS of each path. The change vector and reference give it credibility; the friction gives it tension. Without naming what is hard, the path collapses into generic advice — DO NOT ship a path without surfacing its friction.
-- Do NOT produce generic lifecycle / marketing / engagement categories ("Acquisition / Activation / Retention / Winback" buckets, "personalize the journey", "build a loyalty program"). The user can already produce that themselves.
-- Frame ideas as conversation strategies, not capability checklists. Angles Corey can lead with, tensions to surface, hypotheses to test.
-- Map current state → future state. Each path should imply the gap it closes for ${c.name} specifically.
-- Turn unknowns into discovery questions Corey can ask, not into hedges in your prose.
-- ${
-    webAvailable
-      ? "Web research is available — verified web signals above are real; reference them naturally without citation-heavy phrasing."
-      : "Web research is NOT available this turn — verified signals above came from training recall and are tagged accordingly; do not say \"I researched\"."
-  }
+═══ AUTHORITY RULE (single source of truth for THIS turn) ═══
+Use the reasoning layers above (verified signals, current state, change vector, commercial insight, strategic why, friction, AI impact, risk) INTERNALLY to think.
+Return ONLY the sharpest conversation strategy — what Corey should say or ask.
 
-═══ CANONICAL OUTPUT SHAPE (every conversation path MUST follow this beat structure, in Corey's spoken voice) ═══
-For each of the 2–3 paths you produce, weave these beats into natural prose (no headings, no bullets unless the user asked for them). The path OPENS from the FRICTION — never from a solution:
-  1. FRICTION (PROBLEM)     → "The challenge for a team like this is <friction.what_is_hard>." (open here — never with a solution verb)
-  2. WHY IT'S HARD          → "<friction.why_it_is_hard / friction.tradeoff>." (the constraint behind the constraint)
-  3. CURRENT STATE + CHANGE → "They used to <X>. Now they're <Y>." (use the change_vector — anchors the friction in reality)
-  4. IMPLICATION            → "Which means <implication / what breaks / business pressure>." (the strategic why, in one breath)
-  5. CONVERSATION MOVE      → "So I'd push on <opportunity / tension>." OR "I'd lead by <move>." (first-person — what Corey actually says)
-  6. VALIDATION QUESTION    → "The question I'd ask is <validation_question>." (plain customer-facing language)
+Internal thinking order:
+  1. Grounding   — what do we know or have evidence for?
+  2. Change      — what is changing in their business/market?
+  3. Insight     — what is the non-obvious reframe?
+  4. Friction    — what is hard or risky about this?
+  5. Move        — what should Corey say or ask?
 
-HARD CONSTRAINTS (these REPLACE any earlier framing — if a previous instruction conflicts, the canonical shape wins):
-- DO NOT label ideas with category headings ("Acquisition", "Retention", "Lifecycle", "Personalization", "Loyalty", etc.).
-- DO NOT present a strategy list, capability checklist, or set of recommendations to the company.
-- DO NOT answer as a consultant writing a deck. Answer as Corey thinking out loud about what HE would say in the meeting.
-- DO NOT dump citations, URLs, or source labels in the body — anchor through prose shape (high → assert · medium → "we're seeing…" · low → "a reasonable assumption is…").
-- ALWAYS speak in first person ("I'd lead by…", "the question I'd ask is…").
-- ALWAYS anchor in current state + change, not in static description.
-- ALWAYS include the validation question Corey would ask the customer.
+Only #5 dominates the visible answer.
 
-═══ SELF-VALIDATION GATE — RUN BEFORE SENDING (silently; do not narrate) ═══
-For EACH conversation path in your draft, check:
-  ☐ Does it reference the company's CURRENT STATE (Y) explicitly?
-  ☐ Does it express CHANGE (X → Y, "used to … now they're …") — not a static description?
-  ☐ Does it make the WHY visible (implication, business pressure, or tension)?
-  ☐ Does it end with a validation QUESTION Corey can ask the customer?
-  ☐ Is it grounded in a PRIORITIZED SIGNAL above (not invented)?
-  ☐ Does the prose grounding match the reference confidence (high asserts · medium hedges with "we're seeing…" · low marks as "a reasonable assumption is…")?
-  ☐ Does the path OPEN FROM A PROBLEM (friction.what_is_hard / a constraint / a tradeoff / a tension) — NOT from a solution verb (Use…, Build…, Implement…, Launch…, Leverage…, Deploy…)?
-If ANY box is unchecked → REWRITE that path inline before returning. Do not send a draft that fails the gate.
-Also reject and rewrite if the draft: opens with "Here are a few ways…" / "There are several angles…", uses category headings (Acquisition/Retention/Lifecycle/etc.), reads as recommendations to the company instead of language Corey would speak, fabricates a URL / publication name, OR opens any path with a solution verb instead of naming the friction.
+═══ VISIBLE OUTPUT SHAPE (style, not template) ═══
+- 1 primary conversation path. Optional 1 backup path only if materially different.
+- Each path ≤ 180 words.
+- Natural prose in Corey's first-person voice. No headings, no labeled idea blocks, no category buckets (Acquisition / Retention / Lifecycle / Personalization / Loyalty), no recommendation lists to the company, no rigid required phrase template.
+- Anchor in specific current-state or verified-signal facts about ${c.name}. Express change as direction of travel where it sharpens the point. End with the question Corey would ask. Never dump URLs or citation labels in the body.
+- Desired feel (style, do not copy verbatim): "I wouldn't lead with [the obvious]. The thing I'd focus on is that ${c.name} appears to be moving from X to Y. That creates a harder problem: [friction]. The reframe is [insight]. So I'd lead by [move]. The question I'd ask is: [validation question]."
+
+═══ SINGLE GATE — run silently before sending; rewrite once if it fails ═══
+Does the answer:
+  1. reference specific current state or a verified signal for ${c.name}?
+  2. describe what is changing?
+  3. articulate a commercial insight or a friction (a real problem, not a category)?
+  4. tell Corey what to say or ask?
+  5. avoid generic marketing advice (micro-moments, customer engagement, personalized journey, segmentation, loyalty, lifecycle marketing, brand storytelling) UNLESS each phrase is tied to a verified company-specific change or friction?
+If any check fails → rewrite once. Do not narrate the check.
 ═══════════════════════════════════
-[Verified-first counters: verified=${verifiedCount}, inferred=${inferredCount} | commercial_insights=${insights.length} | friction_paths=${signals.filter((s)=>!!s.friction).length}]`;
+[Reasoning layers available — verified=${verifiedCount}, inferred=${inferredCount} · commercial_insights=${insights.length} · friction_paths=${signals.filter((s)=>!!s.friction).length}]`;
 }
 
 // ─── Main entry point ──────────────────────────────────────────────
