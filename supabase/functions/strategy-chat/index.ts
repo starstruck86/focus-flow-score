@@ -5838,7 +5838,7 @@ ${
     : "THIN grounding: open with one honest line stating what was found (e.g. 'Found 1 weakly related resource and no supporting KIs'). Then proceed using general reasoning. Mark assumptions. Offer one specific clarifying question at the end if it would materially sharpen the output. NEVER refuse, NEVER produce a one-line stop."
 }
 Forbidden: canned refusals like "I don't have enough signal" without ALSO producing the best first-pass answer you can.`;
-    effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${preamble}`;
+    effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}${preamble}`;
   }
 
   // ═══════════════════════════════════════════════════════════════
