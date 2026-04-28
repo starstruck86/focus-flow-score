@@ -5296,6 +5296,12 @@ async function buildChatSystemPrompt(args: {
       commercial_insights_count: (currentStateResult?.log as any)?.commercial_insights_count ?? 0,
       commercial_insights_verified_count: (currentStateResult?.log as any)?.commercial_insights_verified_count ?? 0,
       commercial_insights_sources: (currentStateResult?.log as any)?.commercial_insights_sources ?? [],
+      // ── 3 WHY + AI Impact + Risk (Challenger narrative) telemetry ──
+      commercial_insights_three_why_complete_count: (currentStateResult?.log as any)?.commercial_insights_three_why_complete_count ?? 0,
+      commercial_insights_ai_impact_complete_count: (currentStateResult?.log as any)?.commercial_insights_ai_impact_complete_count ?? 0,
+      commercial_insights_risk_complete_count: (currentStateResult?.log as any)?.commercial_insights_risk_complete_count ?? 0,
+      commercial_insights_full_challenger_narrative_count: (currentStateResult?.log as any)?.commercial_insights_full_challenger_narrative_count ?? 0,
+      challenger_layer_applied: (currentStateResult?.log as any)?.challenger_layer_applied ?? false,
       // ── Unified Pipeline (consolidation) telemetry ────────────────
       unified_pipeline_applied: !!(currentStateResult?.ran && currentStateResult?.intelligence),
       pipeline_steps: [
