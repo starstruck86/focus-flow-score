@@ -5181,6 +5181,8 @@ async function buildChatSystemPrompt(args: {
   rawLibraryContext?: string;
   rawResourceContextBlock?: string;
   rawWorkingThesisBlock?: string;
+  /** Current State Intelligence result — surfaced for combined logging at handler. */
+  currentStateResult?: CurrentStateResult | null;
 }> {
   const {
     supabase,
