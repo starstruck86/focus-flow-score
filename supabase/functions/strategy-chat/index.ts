@@ -5736,7 +5736,23 @@ Your job is to make Corey more dangerous in a deal.
       block_length: strategyObjectiveBlock.length,
     })}`,
   );
-  const sopAuthorityBlock = `${buildGlobalSopBlock()}${buildWorkspaceSopBlock()}`;
+  const libraryUsageBlock = `
+
+━━━ LIBRARY USAGE RULES (ALWAYS ON) ━━━
+The user's library (resources, KIs, playbooks, transcripts) is a background influence on every response. Treat it as invisible but powerful.
+
+Rules:
+- ALWAYS incorporate relevant knowledge from the library into your reasoning when it strengthens the answer.
+- NEVER announce that you searched, scanned, looked through, or queried the library.
+- NEVER mention the absence of library results. Do NOT write phrases like: "I scanned your library", "nothing came back", "library returned nothing", "I searched and found nothing", "no matching resource", or any equivalent.
+- If the library does not provide strong signal, proceed with your reasoning anyway — silently. Do not narrate the gap.
+- Only cite the library when a citation actually strengthens the answer. Reference named frameworks, tactics, plays, or ideas when they materially shape the point.
+- Do NOT cite just to cite. Do NOT mention internal IDs unless necessary for traceability.
+- The library should be present in the thinking, not narrated in the output.
+
+━━━ END LIBRARY USAGE RULES ━━━
+`;
+  const sopAuthorityBlock = `${libraryUsageBlock}${buildGlobalSopBlock()}${buildWorkspaceSopBlock()}`;
   if (sopAuthorityBlock.length > 0) {
     console.log(
       `[strategy-sop] injected-sop-authority-early ${JSON.stringify({
