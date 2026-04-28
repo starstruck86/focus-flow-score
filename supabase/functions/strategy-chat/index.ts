@@ -6437,8 +6437,27 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
   // Must be appended AFTER applyGlobalInstructions so global
   // instructions cannot soften or override these rules.
   if (outputModeDecision?.mode === "conversation") {
+    // Build a compact Current State digest so the conversation enforcement
+    // block carries the actual hypotheses inline. This is what prevents
+    // conversation mode from bypassing context: even after Global
+    // Instructions, the model sees the specific facts/tensions it must
+    // anchor every entry to.
+    const _csDigest: string = (() => {
+      const cs = currentStateResult?.intelligence;
+      if (!cs) return "";
+      const lines: string[] = [];
+      if (cs.company?.name) lines.push(`Company: ${cs.company.name}`);
+      if (cs.business_model?.summary) lines.push(`Business model: ${cs.business_model.summary}`);
+      if (cs.current_state_thesis?.summary) lines.push(`Current state: ${cs.current_state_thesis.summary}`);
+      if (cs.current_state_thesis?.strategic_tension) lines.push(`Strategic tension: ${cs.current_state_thesis.strategic_tension}`);
+      if (cs.current_state_thesis?.future_state_hypothesis) lines.push(`Future-state hypothesis: ${cs.current_state_thesis.future_state_hypothesis}`);
+      if (cs.current_state_thesis?.likely_gap) lines.push(`Likely gap: ${cs.current_state_thesis.likely_gap}`);
+      return lines.join("\n");
+    })();
+    const _csUsed = !!(currentStateResult?.ran && currentStateResult?.promptBlock);
     const convoBlock = renderConversationEnforcementBlock(
       workspaceSop?.workspace ?? null,
+      { currentStateDigest: _csDigest, currentStateUsed: _csUsed },
     );
     effectiveSystemPrompt = `${effectiveSystemPrompt}${convoBlock}`;
     console.log(
@@ -6448,6 +6467,9 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         output_mode_reason: outputModeDecision.reason,
         length: convoBlock.length,
         position: "post-global-instructions",
+        current_state_used: _csUsed,
+        current_state_digest_chars: _csDigest.length,
+        context_and_mode_combined: _csUsed,
       })}`,
     );
   }
