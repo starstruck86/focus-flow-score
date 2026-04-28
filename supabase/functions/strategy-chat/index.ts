@@ -5293,6 +5293,17 @@ async function buildChatSystemPrompt(args: {
       commercial_insights_count: (currentStateResult?.log as any)?.commercial_insights_count ?? 0,
       commercial_insights_verified_count: (currentStateResult?.log as any)?.commercial_insights_verified_count ?? 0,
       commercial_insights_sources: (currentStateResult?.log as any)?.commercial_insights_sources ?? [],
+      // ── Unified Pipeline (consolidation) telemetry ────────────────
+      unified_pipeline_applied: !!(currentStateResult?.ran && currentStateResult?.intelligence),
+      pipeline_steps: [
+        "entity_detection",
+        "verified_signal_gathering",
+        "change_vector_construction",
+        "hypothesis_generation",
+        "signal_prioritization",
+        "strategic_why",
+        "conversation_execution_self_validated",
+      ],
       workspace: workspaceKeyRaw ?? null,
     }),
   );
@@ -6539,6 +6550,24 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           }
         }
       }
+
+      // ── UNIFIED PIPELINE CONTRACT (final enforcement — canonical shape + self-rewrite gate) ──
+      // This is the consolidated contract: every conversation path must
+      // follow the X→Y→implication→tension→move→question beat, and the
+      // model must self-validate before sending.
+      lines.push("");
+      lines.push("CANONICAL OUTPUT SHAPE — every conversation path uses this beat (in Corey's voice, woven as prose):");
+      lines.push("  1. \"They used to <X>. Now they're <Y>.\"   (current state + change — never static)");
+      lines.push("  2. \"Which means <implication / pressure>.\" (the why, in one breath)");
+      lines.push("  3. \"The risk / gap is <tension>.\"          (name what the customer hasn't reconciled)");
+      lines.push("  4. \"I'd lead by <move>.\"                   (first-person — what Corey actually says)");
+      lines.push("  5. \"The question I'd ask is <question>.\"   (plain customer-facing language)");
+      lines.push("");
+      lines.push("HARD CONSTRAINTS: no category headings (Acquisition/Retention/Lifecycle/Personalization/Loyalty); no recommendation lists to the company; speak as Corey, not as a consultant; never dump URLs or citation labels in the body.");
+      lines.push("");
+      lines.push("SELF-VALIDATION GATE (run silently before sending — REWRITE inline if any path fails):");
+      lines.push("  ☐ References current state (Y)?  ☐ Expresses change (X → Y)?  ☐ Why visible?  ☐ Ends in a validation question?  ☐ Grounded in a prioritized signal above?  ☐ Prose grounding matches reference confidence (high asserts · medium 'we're seeing…' · low 'a reasonable assumption is…')?");
+      lines.push("If any box is unchecked → rewrite that path before returning. Do not narrate the check.");
       return lines.join("\n");
     })();
     const _csUsed = !!(currentStateResult?.ran && currentStateResult?.promptBlock);
