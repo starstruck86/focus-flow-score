@@ -154,12 +154,43 @@ export function renderBehaviorContract(intent: BehaviorIntent): string {
 Intent: conversation_strategy. All other behaviors are SUPPRESSED for this turn.
 Output is what Corey should SAY or ASK in the upcoming conversation.
 
-Rules (non-negotiable for this intent):
+══ DEPTH PRESERVATION (read this BEFORE the format rules below) ══
+This contract changes HOW the answer is delivered. It does NOT change HOW the
+answer is thought through. The full reasoning stack above this block —
+verified signals, current-state intelligence, change vectors (X→Y→Z),
+commercial insight (3 WHYs + AI impact + risk), strategic why, friction —
+MUST remain active in your thinking and MUST show up as substance in the
+prose. Compression ≠ simplification. If your draft is shorter but weaker,
+shorter but more generic, or shorter but less specific, you have failed
+this contract — regenerate.
+
+Required substance density per path (must all be present, woven into prose,
+NOT labeled as sections):
+  1. A specific anchor — a verified signal or current-state fact about the
+     account (cite it inline, not as a bibliography). No anchor = invalid.
+  2. A change vector — what is moving from X to Y, expressed as direction of
+     travel ("they're shifting from … toward …"). Generic verbs without a
+     from/to don't count.
+  3. A commercial insight or friction — the non-obvious reframe OR the hard
+     problem this creates. Must be specific to this account, not a category.
+  4. A move — what Corey actually says or leads with, in his voice.
+  5. A question — the validation question Corey asks the customer.
+All five must be present. Missing any one = regenerate.
+
+Format rules (delivery only — these never override depth):
   • 1 primary path. Optional 1 backup path only if materially different. Hard cap: 2.
-  • Natural prose in Corey's first-person voice. No headings. No bullet lists. No numbered lists. No category buckets (Acquisition / Retention / Lifecycle / Personalization / Loyalty / Awareness). No "Option A / Option B". No "Here are a few ways…". No "Idea 1 / Idea 2".
-  • Anchor in specific current-state or verified-signal facts about the account. Express change as direction of travel where it sharpens the point.
-  • Each path ends with the question Corey would ask.
-  • Suppressed behaviors: idea_generation (no idea lists), research_analysis (no facts dump), artifact_creation (no email/doc/plan).`;
+  • Each path 90–180 words. Tight, but long enough to carry all 5 substance elements.
+  • Natural prose in Corey's first-person voice. No headings. No bullet lists.
+    No numbered lists. No category buckets (Acquisition / Retention / Lifecycle /
+    Personalization / Loyalty / Awareness). No "Option A / Option B".
+    No "Here are a few ways…". No "Idea 1 / Idea 2".
+  • Specificity test before sending: would this paragraph still make sense if
+    you swapped the company name for any other company? If yes, it's too
+    generic — rewrite with the verified signal / current-state fact made load-bearing.
+  • Suppressed behaviors: idea_generation (no idea lists), research_analysis
+    (no facts dump as separate section), artifact_creation (no email/doc/plan).
+    BUT: the underlying reasoning from those layers IS still required as
+    substance inside the prose.`;
 
     case "idea_generation":
       return `═══ BEHAVIOR LOCK — IDEA GENERATION (exclusive) ═══
