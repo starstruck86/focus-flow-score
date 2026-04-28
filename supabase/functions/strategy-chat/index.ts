@@ -6000,6 +6000,11 @@ You MUST follow these rules:
    - explain when to use them (outbound, discovery, exec meeting, etc.)
 7. If your output is generic, regenerate internally before responding.
 
+Library use in brainstorm:
+- Use the library to generate STRONGER angles — patterns, named tactics, prior plays — but do NOT collapse to a single known tactic.
+- Do NOT default to library-first answers. Combine library patterns + reasoning + new angles.
+- Do NOT announce that you searched the library or that nothing was found.
+
 This is NOT optional. Do not ignore these rules.
 `;
     effectiveSystemPrompt = `${effectiveSystemPrompt}${brainstormBlock}`;
