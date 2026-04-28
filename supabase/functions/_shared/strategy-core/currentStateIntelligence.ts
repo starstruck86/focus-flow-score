@@ -1438,14 +1438,27 @@ export async function runCurrentStatePreflight(
 
   const webResearched = !!args.webCapabilityAvailable;
 
+  // VERIFIED-FIRST: gather real-world signals BEFORE generating any
+  // hypotheses. When web research is wired (Perplexity), tag signals
+  // as source:"web". Otherwise fall back to model recall tagged as
+  // source:"inference" (so they never masquerade as web-sourced).
+  // Failure is non-fatal — pipeline degrades to pure hypothesis mode.
+  const verifiedSignals = await gatherVerifiedSignals({
+    entityName: entity.name,
+    resolvedAccount,
+    webCapabilityAvailable: webResearched,
+  });
+
   // Generate REAL hypotheses (not placeholder scaffolding) before the
-  // main model runs. This is what gives the current-state block enough
-  // signal to actually steer generation. Failure is non-fatal — we
-  // fall back to hedged prose, never to "[Likely]" tokens.
+  // main model runs. Verified signals are passed in so hypotheses
+  // build ON TOP of them rather than being generated in a vacuum.
+  // Failure is non-fatal — we fall back to hedged prose, never to
+  // "[Likely]" tokens.
   const hypotheses = await generateRealHypotheses({
     entityName: entity.name,
     resolvedAccount,
     userContent: args.userContent || "",
+    verifiedSignals,
   });
 
   const intelligence = buildSkeletonIntelligence({
@@ -1453,11 +1466,12 @@ export async function runCurrentStatePreflight(
     resolvedAccount,
     webResearched,
     hypotheses,
+    verifiedSignals,
   });
 
   // Signal prioritization pass — ranks the top 2-3 highest-leverage
-  // signals from hypotheses + sourced facts. This is what tells the
-  // model what matters most, not everything that could matter.
+  // signals. Verified signals always outrank inferred ones (enforced
+  // by stable verified-first sort inside generatePrioritizedSignals).
   // Failure is non-fatal — promptBlock falls back gracefully.
   const prioritizedSignals = await generatePrioritizedSignals({
     entityName: entity.name,
@@ -1465,6 +1479,7 @@ export async function runCurrentStatePreflight(
     userContent: args.userContent || "",
     hypotheses,
     sourcedFacts: intelligence.evidence.sourced_facts,
+    verifiedSignals,
     webResearched,
   });
   intelligence.prioritized_signals = prioritizedSignals;
@@ -1474,6 +1489,13 @@ export async function runCurrentStatePreflight(
     accountContextState,
     webResearched,
   );
+
+  const verifiedSignalsCount = verifiedSignals.filter((v) => v.source !== "inference").length;
+  const inferredSignalsCount = verifiedSignals.length - verifiedSignalsCount;
+  const verifiedFirstApplied = verifiedSignalsCount > 0;
+  const verifiedTopRanks = prioritizedSignals.filter(
+    (p) => p.source_type !== "inference",
+  ).length;
 
   const log = {
     current_state_preflight: true,
@@ -1492,12 +1514,21 @@ export async function runCurrentStatePreflight(
     },
     current_state_confidence: intelligence.company.confidence,
     hypotheses_generated: !!hypotheses,
+    // ── Verified-first telemetry ──────────────────────────────────
+    verified_signals_count: verifiedSignalsCount,
+    inferred_signals_count: inferredSignalsCount,
+    verified_first_applied: verifiedFirstApplied,
+    verified_signal_sources: verifiedSignals.map((v) => v.source),
+    verified_signal_kinds: verifiedSignals.map((v) => v.kind || "unknown"),
     prioritized_signals_count: prioritizedSignals.length,
     prioritized_signal_types: prioritizedSignals.map((s) => s.signal_type),
+    prioritized_signal_sources: prioritizedSignals.map((s) => s.source_type),
+    prioritized_verified_top_count: verifiedTopRanks,
     unknowns_count: countUnknowns(intelligence),
     injected_current_state_block: true,
     candidates_considered: candidates,
   };
+
 
   return {
     ran: true,
