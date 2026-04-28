@@ -6918,7 +6918,26 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         } modified=${subst.modified}`,
       );
     }
-    const visible = subst.text;
+    // Behavior-intent hard guard — enforce exclusivity (e.g. when
+    // intent=conversation_strategy, strip headings, lists, idea
+    // lead-ins, and category buckets that bleed in from other behaviors).
+    const behaviorGuard = behaviorIntent
+      ? enforceBehaviorContract(behaviorIntent.intent, subst.text)
+      : { triggered: false, text: subst.text, violations: [], rewrite_applied: false };
+    if (behaviorGuard.triggered) {
+      console.log(
+        "[behavior-guard] non-stream",
+        JSON.stringify({
+          intent_detected: behaviorIntent?.intent,
+          behavior_selected: behaviorIntent?.intent,
+          suppressed_behaviors: behaviorIntent?.suppressed,
+          guard_triggered: true,
+          violations: behaviorGuard.violations,
+          rewrite_applied: behaviorGuard.rewrite_applied,
+        }),
+      );
+    }
+    const visible = behaviorGuard.text;
     // Citation audit (W5): governed by `retrievalRules.citationMode`
     // from the resolved workspace contract. SHADOW/REPORTING ONLY in
     // W5 — `auditedText` returns the original assistant text for all
