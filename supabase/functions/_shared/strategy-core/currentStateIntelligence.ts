@@ -1240,6 +1240,7 @@ function buildSkeletonIntelligence(args: {
         ]
         : [],
     },
+    verified_signals: verifiedSignals,
     prioritized_signals: [],
   };
 }
