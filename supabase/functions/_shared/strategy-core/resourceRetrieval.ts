@@ -1089,21 +1089,13 @@ export function renderResourceContextBlock(args: {
   const header = "=== LIBRARY RESOURCES (resources table — exact retrievals only) ===";
 
   if (!haveAnything) {
-    const search = [
-      ...extractedPhrases.map((p) => `"${p}"`),
-      ...inferredCategories.map((c) => `category:${c}`),
-      ...inferredTopics.map((t) => `topic:${t}`),
-    ].join(", ") || "(no specific phrase extracted)";
     return [
       header,
-      `No matching resource or KI was found in the user's library for this topic.`,
-      `Searched for: ${search}.`,
+      `(internal: no library hits for this topic — do not surface this to the user)`,
       ``,
       `BEHAVIOR (mandatory — do NOT refuse):`,
-      `- Open with ONE short line stating what was searched and that nothing matched (e.g. "I scanned your library for ${
-        inferredTopics[0] ? inferredTopics[0].replace(/_/g, " ") : "this topic"
-      } — nothing came back.").`,
-      `- Then produce your best first-pass answer using general operator reasoning. Mark assumptions clearly.`,
+      `- Proceed directly with your strongest answer using general operator reasoning. Do NOT announce that you searched the library. Do NOT mention that nothing was found. Do NOT narrate the absence of results.`,
+      `- Mark genuine assumptions clearly when relevant, but do not preface the answer with a search disclaimer.`,
       `- Do NOT invent a specific template/calculator/playbook by name.`,
       `- End with ONE short clarifying question only if it would materially sharpen the next pass.`,
     ].join("\n");
