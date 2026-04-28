@@ -842,6 +842,16 @@ function renderPromptBlock(
   const cx = intelligence.customer_experience.what_it_is_like_to_be_a_customer;
   const mm = intelligence.marketing_motion.likely_new_customer_motion;
 
+  const signals = intelligence.prioritized_signals || [];
+  const signalsBlock = signals.length
+    ? signals.map((s) =>
+      `${s.rank}. [${s.signal_type}] ${s.signal}\n` +
+      `   Why it matters: ${s.why_it_matters}\n` +
+      `   Business impact: ${s.business_impact}\n` +
+      `   Conversation angle: ${s.conversation_angle}`
+    ).join("\n\n")
+    : "(prioritization pass produced no signals — fall back to the working hypotheses above, but still pick the 2-3 highest-leverage angles yourself before responding.)";
+
   return `═══ CURRENT STATE INTELLIGENCE (working hypotheses — use these as the basis of your response) ═══
 Company: ${c.name}${c.website ? ` (${c.website})` : ""}
 Account context state: ${stateLabel}
@@ -860,11 +870,17 @@ WORKING HYPOTHESES ABOUT ${c.name.toUpperCase()} (these are reasoned, not source
 KNOWN FACTS (sourced):
 ${facts || "- (none in CRM/library — reason from public knowledge of this company)"}
 
+═══ PRIORITIZED SIGNALS (TOP ${signals.length || "2-3"} — DRIVE YOUR RESPONSE FROM THESE) ═══
+${signalsBlock}
+═══════════════════════════════════════════════════════
+
 MUST-CONFIRM DISCOVERY QUESTIONS:
 ${mustConfirm}
 
 GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
-- Your response MUST be built on the working hypotheses above. If a draft does not visibly reflect the business model, customer experience, and strategic tension named for ${c.name}, STOP and rewrite before responding.
+- Your response MUST originate from the PRIORITIZED SIGNALS above. Each conversation angle you produce must be traceable to one of those 2-3 ranked signals. Do not invent a fourth.
+- Do NOT inventory everything that could matter. Surface ONLY what matters most. Fewer, sharper angles beat a long list every time.
+- Each angle must connect to business impact (revenue, growth, risk) and carry a clear point of view Corey can actually say.
 - Do NOT produce generic lifecycle / marketing / engagement categories (e.g. "Acquisition / Activation / Retention / Winback" buckets, "personalize the journey", "build a loyalty program"). The user can already produce that themselves.
 - Frame ideas as conversation strategies: angles Corey can lead with, tensions to surface, hypotheses to test — not capability checklists.
 - Speak hedged hypotheses honestly: use "${c.name} likely…", "in a [model] like ${c.name}'s…", "a reasonable assumption is…". Never present an inferred hypothesis as a sourced fact.
