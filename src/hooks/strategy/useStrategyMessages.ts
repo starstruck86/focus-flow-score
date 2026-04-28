@@ -39,7 +39,19 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
 
   const sendMessage = useCallback(async (
     content: string,
-    options?: { depth?: string; pickedResourceIds?: string[]; workspace?: string | null },
+    options?: {
+      depth?: string;
+      pickedResourceIds?: string[];
+      workspace?: string | null;
+      /**
+       * How the workspace value was chosen. Sent verbatim to the server so
+       * logs can distinguish a real workspace selection from the freeform
+       * "no surface active" case. The previous silent fallback to 'work'
+       * made debugging look like a workspace failure when it was actually
+       * the freeform lane.
+       */
+      workspaceSource?: 'selected' | 'thread-tag' | 'default' | 'none';
+    },
   ) => {
     if (!threadId || !user || !content.trim() || isSending) return;
     setIsSending(true);
@@ -53,10 +65,24 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
     };
     setMessages(prev => [...prev, userMsg]);
 
-    // Phase 3 — Unified Strategy SOP Resolver. One pass produces every SOP
-    // payload that leaves the client (resolvedSops + globalSop +
-    // workspaceSop). Chat never sends taskSop — task pipelines own that.
-    const sopWorkspace = options?.workspace ?? 'work';
+    // Phase 7D fix — Workspace payload truth.
+    // The caller is the source of truth for "is a Strategy surface active?".
+    // We do NOT coerce a missing workspace to 'work' anymore — that silently
+    // hid the freeform/no-surface case behind the Work surface in logs.
+    //
+    // Resolver behavior is unchanged: a null/undefined workspace produces no
+    // workspace SOP (freeform mode). We just stop lying about which lane the
+    // user was in.
+    const explicitWorkspace = (typeof options?.workspace === 'string' && options.workspace.trim().length > 0)
+      ? options.workspace
+      : null;
+    const workspaceSource = options?.workspaceSource
+      ?? (explicitWorkspace ? 'selected' : 'none');
+    // SOP resolver still expects a workspace string. When none is selected
+    // we resolve as 'work' (freeform lane) — this matches prior behavior
+    // for SOP selection (no workspace SOP applies) but the server log will
+    // now report `workspace_sent: null` + `workspace_source: 'none'`.
+    const sopWorkspace = explicitWorkspace ?? 'work';
     const { resolvedSops, workspaceSop, globalSop } = buildStrategySopPayloads({
       workspace: sopWorkspace,
       taskType: null,
