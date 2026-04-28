@@ -1180,6 +1180,51 @@ async function generatePrioritizedSignals(args: {
         opportunity: opportunity || `Lean into the gap created by ${whatChanged}.`,
       };
 
+      // ── Reference Anchor — REQUIRED ───────────────────────────────
+      // Trust-down on type: a signal whose source_type was downgraded
+      // to "inference" cannot present a web/account/library reference.
+      // We also strip URLs from inference references so the prose
+      // never implies a citation we don't have.
+      const allowedRefTypes: ReferenceType[] = ["web", "account", "library", "market", "inference"];
+      const refRaw: any = (s && typeof s.reference === "object" && s.reference) || {};
+      let reference_type: ReferenceType = allowedRefTypes.includes(refRaw.reference_type)
+        ? (refRaw.reference_type as ReferenceType)
+        : "inference";
+      // Trust-down: keep reference_type aligned with what the source mix supports.
+      if (reference_type === "account" && !haveAccount) reference_type = "inference";
+      if (reference_type === "web" && !haveWeb) reference_type = "inference";
+      if (reference_type === "library" && !haveLibrary) reference_type = "inference";
+      // If the signal itself was downgraded to inference, the reference must follow.
+      if (source === "inference" && reference_type !== "market") {
+        reference_type = "inference";
+      }
+
+      const reference_source = String(refRaw.reference_source || "").trim() ||
+        (reference_type === "inference" ? "model recall" : "");
+      const reference_url_raw = String(refRaw.reference_url || "").trim();
+      const reference_excerpt = String(refRaw.reference_excerpt || "").trim() || undefined;
+      // Inference references never carry a URL — block any model attempt to cite one.
+      const reference_url = reference_type === "inference" ? undefined : (reference_url_raw || undefined);
+
+      let refConfidence: ConfidenceLevel = allowedConfidences.includes(refRaw.confidence)
+        ? (refRaw.confidence as ConfidenceLevel)
+        : confidence;
+      // Inference can never be high-confidence; cap it.
+      if (reference_type === "inference" && refConfidence === "high") refConfidence = "low";
+      // A reference can't outclaim its underlying signal's confidence by more than one tier.
+      if (confidence === "low" && refConfidence === "high") refConfidence = "medium";
+
+      // Drop the signal if we can't even name a source. We never ship
+      // an unanchored signal — if the model didn't provide one, fall
+      // back to "model recall" / inference (already handled above).
+      const reference: SignalReference = {
+        reference_type,
+        reference_source: reference_source || "model recall",
+        reference_url,
+        reference_excerpt,
+        confidence: refConfidence,
+      };
+
       cleaned.push({
         rank: 1, // re-ranked below after verified-first sort
         signal,
@@ -1197,6 +1242,7 @@ async function generatePrioritizedSignals(args: {
         conversation_move: move,
         validation_question: validation,
         change_vector,
+        reference,
         business_impact: impact,
         conversation_angle: angle,
       });
