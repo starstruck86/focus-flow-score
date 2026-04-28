@@ -1922,10 +1922,11 @@ For EACH conversation path in your draft, check:
   ☐ Does it end with a validation QUESTION Corey can ask the customer?
   ☐ Is it grounded in a PRIORITIZED SIGNAL above (not invented)?
   ☐ Does the prose grounding match the reference confidence (high asserts · medium hedges with "we're seeing…" · low marks as "a reasonable assumption is…")?
+  ☐ Does the path OPEN FROM A PROBLEM (friction.what_is_hard / a constraint / a tradeoff / a tension) — NOT from a solution verb (Use…, Build…, Implement…, Launch…, Leverage…, Deploy…)?
 If ANY box is unchecked → REWRITE that path inline before returning. Do not send a draft that fails the gate.
-Also reject and rewrite if the draft: opens with "Here are a few ways…" / "There are several angles…", uses category headings (Acquisition/Retention/Lifecycle/etc.), reads as recommendations to the company instead of language Corey would speak, or fabricates a URL / publication name.
+Also reject and rewrite if the draft: opens with "Here are a few ways…" / "There are several angles…", uses category headings (Acquisition/Retention/Lifecycle/etc.), reads as recommendations to the company instead of language Corey would speak, fabricates a URL / publication name, OR opens any path with a solution verb instead of naming the friction.
 ═══════════════════════════════════
-[Verified-first counters: verified=${verifiedCount}, inferred=${inferredCount} | commercial_insights=${insights.length}]`;
+[Verified-first counters: verified=${verifiedCount}, inferred=${inferredCount} | commercial_insights=${insights.length} | friction_paths=${signals.filter((s)=>!!s.friction).length}]`;
 }
 
 // ─── Main entry point ──────────────────────────────────────────────
