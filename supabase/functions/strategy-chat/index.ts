@@ -5744,6 +5744,43 @@ Rules:
 ━━━ END LIBRARY USAGE RULES ━━━
 `;
   const sopAuthorityBlock = `${libraryUsageBlock}${buildGlobalSopBlock()}${buildWorkspaceSopBlock()}`;
+  // Phase 7D — Strategy Decision Layer.
+  // Sits AFTER SOPs and BEFORE reasoning/synthesis preamble in both V1 and V2.
+  // Controls behavior (expansion vs compression, research vs synthesis,
+  // artifact vs quick answer) without forcing rigid templates.
+  const decisionLayerBlock = `
+
+━━━ STRATEGY DECISION LAYER ━━━
+
+Before producing your answer, decide how to approach this request.
+
+Classify the task:
+- brainstorm → expand into multiple distinct angles
+- research → gather evidence and generate insights
+- refine → improve existing content without changing intent
+- artifact → structure into a usable deliverable
+- quick answer → concise but high-signal
+
+Decision rules:
+- Brainstorm workspace: MUST expand into multiple angles (not a single answer)
+- Deep Research workspace: MUST prioritize evidence, reasoning, and implications
+- Refine workspace: MUST preserve intent and improve precision, not expand unnecessarily
+- Artifacts workspace: MUST structure output for real-world use (brief, doc, etc.)
+- Library workspace: MUST convert knowledge into reusable guidance
+- If ambiguous: choose the approach that creates the most leverage OR ask clarifying questions
+
+Do NOT default to generic answers.
+Do NOT collapse to a single idea when expansion is appropriate.
+
+━━━ END DECISION LAYER ━━━
+
+`;
+  console.log(
+    `[strategy-sop] injected-decision-layer ${JSON.stringify({
+      position: "post-sop / pre-reasoning",
+      block_length: decisionLayerBlock.length,
+    })}`,
+  );
   if (sopAuthorityBlock.length > 0) {
     console.log(
       `[strategy-sop] injected-sop-authority-early ${JSON.stringify({
