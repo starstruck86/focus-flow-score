@@ -5880,7 +5880,14 @@ If the output does not meet these criteria:
 
 ━━━ STRATEGY EXAMPLE: WHAT GOOD LOOKS LIKE ━━━
 
-Use these as anchor examples for tone, POV, and conversational shape. Do NOT copy the wording. Match the style.
+These examples are not references — they define the expected style.
+Your response should MATCH this style:
+- conversational
+- POV-driven
+- specific
+- usable in a real conversation
+
+Do NOT revert to structured categories or labeled sections.
 
 Example of a strong approach:
 
@@ -5899,6 +5906,19 @@ These are good because:
 - they feel like real conversation openings
 - they create leverage
 
+━━━ ANTI-STRUCTURE RULE ━━━
+
+Do NOT format your response as:
+- titled sections
+- labeled categories
+- grouped themes
+
+Instead:
+- present each idea as a distinct conversational approach
+- write it as how Corey would actually say it
+
+If your response looks like organized marketing advice, rewrite it until it matches the example style.
+
 ━━━ END EXAMPLES ━━━\n\n`;
   console.log(
     `[strategy-sop] injected-strategy-objective ${JSON.stringify({
@@ -5907,6 +5927,7 @@ These are good because:
       includes_quality_standard: true,
       includes_conversation_frame: true,
       includes_anchor_examples: true,
+      includes_anti_structure_rule: true,
     })}`,
   );
   const libraryUsageBlock = `
