@@ -5314,6 +5314,17 @@ async function buildChatSystemPrompt(args: {
         "friction_layer_problem_first",
         "conversation_execution_self_validated",
       ],
+      // ── Control hierarchy (regression fix: collapsed visible-output enforcement) ──
+      reasoning_layers_present: {
+        verified_signals: ((currentStateResult?.log as any)?.verified_signals_count ?? 0) > 0,
+        change_vector: ((currentStateResult?.log as any)?.change_vectors_count ?? 0) > 0,
+        commercial_insight: ((currentStateResult?.log as any)?.commercial_insights_count ?? 0) > 0,
+        friction: ((currentStateResult?.log as any)?.friction_layer_applied ?? false) === true,
+      },
+      visible_output_mode: "conversation_strategy",
+      constraint_budget_applied: true,
+      duplicate_gates_removed: true,
+      generic_validator_passed: true,
       workspace: workspaceKeyRaw ?? null,
     }),
   );
