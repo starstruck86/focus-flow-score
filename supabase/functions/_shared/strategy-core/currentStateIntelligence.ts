@@ -1825,7 +1825,7 @@ function renderPromptBlock(
     ).join("\n\n")
     : "(no commercial insight generated — fall back to leading with the top prioritized signal as the conversation entry, but still open with a POV, not a list)";
 
-  return `═══ UNIFIED STRATEGY PIPELINE (verified → change → prioritized → why → conversation) ═══
+  return `═══ UNIFIED STRATEGY PIPELINE (verified → change → prioritized → why → friction → conversation) ═══
 Pipeline contract for THIS turn (do not skip a step, do not reorder):
   1. Entity detection                         ✓ done
   2. Verified signal gathering (web/account/library)  ✓ see VERIFIED SIGNALS below
@@ -1833,7 +1833,8 @@ Pipeline contract for THIS turn (do not skip a step, do not reorder):
   4. Hypothesis generation (gap-fill only)    ✓ see WORKING HYPOTHESES (use sparingly)
   5. Signal prioritization (top 2–3)          ✓ see PRIORITIZED SIGNALS
   6. Strategic why (matters / now / company)  ✓ embedded in each PRIORITIZED SIGNAL
-  7. Conversation execution (what Corey SAYS) ← YOUR JOB IN THE RESPONSE BELOW
+  7. Friction layer (what is HARD)            ✓ embedded in each PRIORITIZED SIGNAL — open every path from this
+  8. Conversation execution (what Corey SAYS) ← YOUR JOB IN THE RESPONSE BELOW (open from FRICTION, not from a solution)
 
 ═══ CURRENT STATE INTELLIGENCE (verified-first — lead with what we can verify, extend with what we hypothesize) ═══
 Company: ${c.name}${c.website ? ` (${c.website})` : ""}
