@@ -5695,7 +5695,7 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
   // the system prompt becomes. The CURRENT STATE INTELLIGENCE block,
   // when present, sits adjacent to the readability contract so the
   // model treats it as a generation-shaping directive for THIS turn.
-  const prompt = `${modeLockBlock}\n\n${composedCorePrompt}\n${readabilityContract}${currentStateBlock}\n\n${persistenceContract}`;
+  const prompt = `${modeLockBlock}\n\n${behaviorContractBlock}\n\n${composedCorePrompt}\n${readabilityContract}${currentStateBlock}\n\n${persistenceContract}`;
 
   const resourceHits = (resources?.hits || []).map((h) => ({
     id: h.id,
