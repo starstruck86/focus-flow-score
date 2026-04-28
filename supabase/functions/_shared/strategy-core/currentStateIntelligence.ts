@@ -1778,6 +1778,12 @@ export async function runCurrentStatePreflight(
     prioritized_signal_types: prioritizedSignals.map((s) => s.signal_type),
     prioritized_signal_sources: prioritizedSignals.map((s) => s.source_type),
     prioritized_verified_top_count: verifiedTopRanks,
+    // ── Commercial Insight (Challenger) telemetry ─────────────────
+    commercial_insights_count: commercialInsights.length,
+    commercial_insights_sources: commercialInsights.map((c) => c.source_type),
+    commercial_insights_verified_count: commercialInsights.filter(
+      (c) => c.source_type !== "inference",
+    ).length,
     unknowns_count: countUnknowns(intelligence),
     injected_current_state_block: true,
     candidates_considered: candidates,
