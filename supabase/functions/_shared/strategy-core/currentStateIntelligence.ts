@@ -1248,12 +1248,19 @@ async function generatePrioritizedSignals(args: {
       });
     }
 
-    // VERIFIED-FIRST stable sort: any signal with a verifiable
-    // source_type (account / library / web) outranks inference,
-    // regardless of model-assigned rank. Within each tier, preserve
-    // the model's ordering (it already considered impact / tension).
-    const verifiedFirst = (s: PrioritizedSignal) => s.source_type !== "inference" ? 0 : 1;
-    cleaned.sort((a, b) => verifiedFirst(a) - verifiedFirst(b));
+    // REFERENCE-HIERARCHY stable sort: web > account > library > market > inference.
+    // This subsumes the earlier verified-first sort (web/account/library are
+    // the verifiable tiers) AND adds market reports as a defensible
+    // mid-tier above pure inference. Within each tier, preserve the
+    // model's ordering (it already considered impact / tension).
+    const refRank: Record<ReferenceType, number> = {
+      web: 0,
+      account: 1,
+      library: 2,
+      market: 3,
+      inference: 4,
+    };
+    cleaned.sort((a, b) => refRank[a.reference.reference_type] - refRank[b.reference.reference_type]);
     cleaned.forEach((s, idx) => {
       s.rank = ((idx + 1) as 1 | 2 | 3);
     });
