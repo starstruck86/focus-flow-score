@@ -6584,24 +6584,13 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         }
       }
 
-      // ── UNIFIED PIPELINE CONTRACT (final enforcement — canonical shape + self-rewrite gate) ──
-      // This is the consolidated contract: every conversation path must
-      // follow the X→Y→implication→tension→move→question beat, and the
-      // model must self-validate before sending.
+      // ── Authority pointer (no duplicate gate, no duplicate canonical shape) ──
+      // The single authority rule + single gate live in the Current State
+      // prompt block (rendered upstream). We deliberately do NOT restate
+      // them here — duplicate visible-output mandates were the source of
+      // the regression. This digest carries data only.
       lines.push("");
-      lines.push("CANONICAL OUTPUT SHAPE — every conversation path OPENS FROM THE FRICTION (the problem), then anchors in change, then offers the move (in Corey's voice, woven as prose):");
-      lines.push("  1. \"The challenge for a team like this is <friction.what_is_hard>.\"  (PROBLEM-FIRST — never open with Use…/Build…/Implement…/Launch…/Leverage…)");
-      lines.push("  2. \"<friction.why_it_is_hard / friction.tradeoff>.\"                   (the constraint behind the constraint)");
-      lines.push("  3. \"They used to <X>. Now they're <Y>.\"                              (current state + change — anchors the friction in reality)");
-      lines.push("  4. \"Which means <implication / pressure>.\"                            (the why, in one breath)");
-      lines.push("  5. \"So I'd push on <opportunity / tension>.\" or \"I'd lead by <move>.\"  (first-person — what Corey actually says)");
-      lines.push("  6. \"The question I'd ask is <question>.\"                              (plain customer-facing language)");
-      lines.push("");
-      lines.push("HARD CONSTRAINTS: open every path from a PROBLEM/CONSTRAINT/TENSION (never from a solution verb); no category headings (Acquisition/Retention/Lifecycle/Personalization/Loyalty); no recommendation lists to the company; speak as Corey, not as a consultant; never dump URLs or citation labels in the body. If your draft starts with a solution, REWRITE it to start with the friction.");
-      lines.push("");
-      lines.push("SELF-VALIDATION GATE (run silently before sending — REWRITE inline if any path fails):");
-      lines.push("  ☐ Opens from a PROBLEM/CONSTRAINT (not a solution verb)?  ☐ References current state (Y)?  ☐ Expresses change (X → Y)?  ☐ Why visible?  ☐ Ends in a validation question?  ☐ Grounded in a prioritized signal above?  ☐ Prose grounding matches reference confidence (high asserts · medium 'we're seeing…' · low 'a reasonable assumption is…')?");
-      lines.push("If any box is unchecked → rewrite that path before returning. Do not narrate the check.");
+      lines.push("Use the reasoning layers above INTERNALLY. Return ONLY the sharpest conversation strategy — what Corey should say or ask. 1 primary path (optional 1 backup), ≤180 words each, prose, no headings, no category buckets, no generic marketing advice unless tied to a specific verified change or friction for this company.");
       return lines.join("\n");
     })();
     const _csUsed = !!(currentStateResult?.ran && currentStateResult?.promptBlock);
