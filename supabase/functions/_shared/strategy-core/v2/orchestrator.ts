@@ -26,13 +26,17 @@ import {
   type DispatchSignals,
   dispatch,
 } from "./operatorDispatcher.ts";
-import { buildV2SystemPrompt } from "./extendedReasoningContract.ts";
+import { buildV2SystemPromptParts } from "./extendedReasoningContract.ts";
 import { auditQuality, type QualityAuditResult } from "./qualityAudit.ts";
 import { checkWrongQuestion, type WrongQuestionResult } from "./wrongQuestionGuard.ts";
 
 export interface V2OrchestratorPrompt {
   decision: DispatchDecision;
   systemPrompt: string;
+  // Phase 7C-followup: split parts so callers can interleave SOP authority
+  // blocks between operator identity and the V2 reasoning/dispatcher contract.
+  identity: string;
+  reasoning: string;
   userText: string; // cleaned (override stripped)
 }
 
@@ -92,7 +96,7 @@ export function buildV2Prompt(args: {
     /\b(cfo|ceo|coo|cto|vp|director|champion|economic\s+buyer|technical\s+buyer|healthcare|fintech|retail|saas|manufacturing)\b/i
       .test(decision.cleanedUserText);
 
-  const systemPrompt = buildV2SystemPrompt({
+  const builderArgs = {
     decision,
     accountContext: args.accountContext,
     libraryContext: args.libraryContext,
@@ -102,11 +106,15 @@ export function buildV2Prompt(args: {
     resourceTitles: args.resourceTitles,
     kiIds: args.kiIds,
     kiTitles: args.kiTitles,
-  });
+  };
+  const { identity, reasoning } = buildV2SystemPromptParts(builderArgs);
+  const systemPrompt = `${identity}\n\n${reasoning}`;
 
   return {
     decision,
     systemPrompt,
+    identity,
+    reasoning,
     userText: decision.cleanedUserText,
   };
 }

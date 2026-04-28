@@ -5826,10 +5826,14 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         kiTitles: kiHitList.map((k) => k.title),
       });
       v2Decision = v2.decision;
-      // V2 builds its own core identity + reasoning. Re-apply SOP authority
-      // immediately after so the SOP remains the controlling behavioral layer
-      // ahead of standards / global instructions / brainstorm enforcement.
-      effectiveSystemPrompt = `${strategyObjectiveBlock}${v2.systemPrompt}${sopAuthorityBlock}`;
+      // Phase 7C-followup — SOP Authority Ordering parity with V1:
+      // Compose: STRATEGY OBJECTIVE → V2 IDENTITY → SOP AUTHORITY → V2 REASONING.
+      // This puts SOP authority BEFORE the V2 reasoning/dispatcher contract,
+      // matching V1's order (objective → identity → SOPs → reasoning preamble).
+      const v2Identity = (v2 as any).identity ?? "";
+      const v2Reasoning = (v2 as any).reasoning ?? v2.systemPrompt;
+      effectiveSystemPrompt =
+        `${strategyObjectiveBlock}${v2Identity}${sopAuthorityBlock}\n\n${v2Reasoning}`;
       // Stash prior turn for wrong-question check later.
       v2EvidenceBase = {
         decision: v2.decision,
@@ -6008,15 +6012,37 @@ This is NOT optional. Do not ignore these rules.
      const workspaceSopApplied = wsSopLen > 0 && /WORKSPACE SOP/i.test(effectiveSystemPrompt);
      const globalInstructionsApplied = giLen > 0;
 
+     const path = v2Active ? "v2" : "v1";
+     // SOP authority is injected before reasoning in BOTH paths post-Phase 7C
+     // followup. Detect by checking that the GLOBAL/WORKSPACE SOP markers
+     // appear in the prompt BEFORE the V1 reasoning preamble or V2 mode
+     // contract markers.
+     const sopMarkerIdx = (() => {
+       const m = effectiveSystemPrompt.search(/━━━ GLOBAL STRATEGY SOP|━━━ WORKSPACE SOP/);
+       return m >= 0 ? m : Number.POSITIVE_INFINITY;
+     })();
+     const reasoningMarkerIdx = (() => {
+       const m = effectiveSystemPrompt.search(/═══ (LIBRARY-AWARENESS PROTOCOL|SHORT-FORM MODE|MODE: |ASK SHAPE: |FINAL INSTRUCTIONS)/);
+       return m >= 0 ? m : Number.POSITIVE_INFINITY;
+     })();
+     const sopBeforeReasoning =
+       sopMarkerIdx !== Number.POSITIVE_INFINITY &&
+       sopMarkerIdx < reasoningMarkerIdx;
+     const injectionOrder = path === "v2"
+       ? ["strategy_objective", "v2_identity", "global_sop", "workspace_sop", "v2_reasoning", "global_instructions", ...(wsName === "brainstorm" ? ["brainstorm_enforcement"] : [])]
+       : ["strategy_objective", "core_identity", "global_sop", "workspace_sop", "reasoning_preamble", "global_instructions", ...(wsName === "brainstorm" ? ["brainstorm_enforcement"] : [])];
+
      console.log(
        `[strategy-sop][prompt-trace] ${JSON.stringify({
+         path,
+         sop_before_reasoning: sopBeforeReasoning,
          workspace: wsName,
          global_sop_applied: globalSopApplied,
          workspace_sop_applied: workspaceSopApplied,
          global_instructions_applied: globalInstructionsApplied,
          system_prompt_length: effectiveSystemPrompt.length,
          system_prompt_preview: effectiveSystemPrompt.slice(0, 1200),
-         injection_order: ["core", "global_sop", "workspace_sop", "global_instructions", ...(wsName === "brainstorm" ? ["brainstorm_enforcement"] : [])],
+         injection_order: injectionOrder,
        })}`,
      );
 
