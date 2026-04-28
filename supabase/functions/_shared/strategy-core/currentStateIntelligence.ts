@@ -983,7 +983,10 @@ Hard rules:
 - X, Y, Z must each describe a DIFFERENT state. If X and Y read the same, you haven't found the change — drop the signal.
 - reference is REQUIRED. Use the hierarchy: prefer web > account > library > market > inference. Pick the STRONGEST grounding actually available — never invent a URL or fabricate a press release / earnings line. If only model recall supports the signal, set reference_type="inference", confidence="low", reference_source="model recall", and OMIT reference_url.
 - reference.confidence drives prose downstream: high → speak with confidence ("they've done X"), medium → "we're seeing a shift toward…", low → "a reasonable assumption is…". Pick a confidence level you can defend.
-- Do NOT include any text outside the JSON object.`;
+- friction is REQUIRED. Every signal MUST identify what is HARD about acting on it — the constraint, the tradeoff, the tension. If you cannot name a real constraint, the signal is too generic — drop it.
+- friction.conversation_move MUST open from the PROBLEM, not the solution. If your move starts with "Use…", "Build…", "Implement…", "Launch…", "Leverage…", or any solution verb, REWRITE it to open with the constraint ("The challenge for a team like this is…", "What's hard here is…", "The real constraint is…").
+- friction must be DIFFERENT from change_vector.what_breaks. what_breaks = consequence of inaction. friction = the structural reason action is hard right now.
+- Do NOT include any text outside the JSON object.\`;
 
 interface GeneratedSignals {
   signals: PrioritizedSignal[];
