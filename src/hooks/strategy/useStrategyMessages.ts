@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { mapSendErrorToFriendlyMessage } from './sendErrorMapping';
 import { buildGlobalInstructionsPayload } from '@/lib/strategy/buildGlobalInstructionsPayload';
 import { buildStrategySopPayloads } from '@/lib/strategy/buildStrategySopPayloads';
+import { resolveWorkspacePayload } from './resolveWorkspacePayload';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/strategy-chat`;
 
@@ -73,16 +74,14 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
     // Resolver behavior is unchanged: a null/undefined workspace produces no
     // workspace SOP (freeform mode). We just stop lying about which lane the
     // user was in.
-    const explicitWorkspace = (typeof options?.workspace === 'string' && options.workspace.trim().length > 0)
-      ? options.workspace
-      : null;
-    const workspaceSource = options?.workspaceSource
-      ?? (explicitWorkspace ? 'selected' : 'none');
-    // SOP resolver still expects a workspace string. When none is selected
-    // we resolve as 'work' (freeform lane) — this matches prior behavior
-    // for SOP selection (no workspace SOP applies) but the server log will
-    // now report `workspace_sent: null` + `workspace_source: 'none'`.
-    const sopWorkspace = explicitWorkspace ?? 'work';
+    const {
+      workspaceSent: explicitWorkspace,
+      workspaceSource,
+      sopResolverWorkspace: sopWorkspace,
+    } = resolveWorkspacePayload({
+      workspace: options?.workspace,
+      workspaceSource: options?.workspaceSource,
+    });
     const { resolvedSops, workspaceSop, globalSop } = buildStrategySopPayloads({
       workspace: sopWorkspace,
       taskType: null,
