@@ -5293,6 +5293,17 @@ async function buildChatSystemPrompt(args: {
       commercial_insights_count: (currentStateResult?.log as any)?.commercial_insights_count ?? 0,
       commercial_insights_verified_count: (currentStateResult?.log as any)?.commercial_insights_verified_count ?? 0,
       commercial_insights_sources: (currentStateResult?.log as any)?.commercial_insights_sources ?? [],
+      // ── Unified Pipeline (consolidation) telemetry ────────────────
+      unified_pipeline_applied: !!(currentStateResult?.ran && currentStateResult?.intelligence),
+      pipeline_steps: [
+        "entity_detection",
+        "verified_signal_gathering",
+        "change_vector_construction",
+        "hypothesis_generation",
+        "signal_prioritization",
+        "strategic_why",
+        "conversation_execution_self_validated",
+      ],
       workspace: workspaceKeyRaw ?? null,
     }),
   );
