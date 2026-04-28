@@ -2134,6 +2134,12 @@ export async function runCurrentStatePreflight(
     reference_with_url_count: prioritizedSignals.filter(
       (s) => !!s.reference?.reference_url,
     ).length,
+    // ── Friction Layer (problem-first) telemetry ──────────────────
+    friction_layer_applied: prioritizedSignals.every((s) => !!s.friction),
+    friction_signals_count: prioritizedSignals.filter((s) => !!s.friction).length,
+    friction_problem_first_moves: prioritizedSignals
+      .map((s) => s.friction?.conversation_move ?? "")
+      .filter(Boolean),
     // ── Commercial Insight (Challenger) telemetry ─────────────────
     commercial_insights_count: commercialInsights.length,
     commercial_insights_sources: commercialInsights.map((c) => c.source_type),
