@@ -5802,7 +5802,7 @@ Do NOT collapse to a single idea when expansion is appropriate.
   // The preamble is appended; the model must obey the original mode-lock too.
   // SOPs are prepended via sopAuthorityBlock so they sit between core identity
   // and the reasoning preamble.
-  let effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}`;
+  let effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}`;
   if (mode === "short_form") {
     // SHORT-FORM mode-lock: tight output shape, no synthesis scaffolding.
     const shapeRule = shortFormKind === "subject_lines"
