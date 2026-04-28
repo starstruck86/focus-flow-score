@@ -948,6 +948,16 @@ const SIGNAL_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY this shape:
         "confidence": "high | medium | low — driven by how directly the reference supports the signal. high only when web/account/library reference is current and specific."
       },
 
+      "friction": {
+        "what_is_hard": "1 sentence: name the constraint, the hard part, the thing that makes this difficult to execute. Concrete — not 'it's complex'. Examples: 'Their merch margin is too thin to absorb personalization compute at scale', 'Lifecycle and retail are run by different P&Ls with no shared incentive', 'Their ESP can't action behavioral signals in <24h'.",
+        "why_it_is_hard": "1 sentence: the underlying reason — capacity, data, org structure, market dynamic, tooling, or business model. Why this constraint EXISTS, not just that it does.",
+        "tradeoff": "1 sentence: the tradeoff the team is forced to make today — what they sacrifice to keep operating the way they do (e.g. 'They get scale by trading personalization', 'They protect margin by under-investing in repeat-purchase tooling').",
+        "current_state_link": "1 sentence: tie the friction back to the verified or inferred current state (Y of the change vector, or a verified signal). The friction MUST be grounded in what's actually happening — not invented.",
+        "implication": "1 sentence: what BREAKS, gets left on the table, or compounds into bigger pain if the friction isn't named and addressed.",
+        "conversation_move": "1-2 sentences in first-person spoken voice that opens from the PROBLEM, not the solution. Shape: 'The challenge for a team like this is…', 'What's hard here is…', 'The real constraint is…'. NEVER opens with 'Use…', 'Build…', 'Implement…', 'Leverage…', or any solution verb.",
+        "validation_question": "1 sentence: the question Corey would ask the customer to test whether the friction is real and how they're managing the tradeoff. Plain customer language."
+      },
+
       "business_impact": "1 short sentence summarizing revenue / growth / risk implication (kept for downstream digest reuse).",
       "conversation_angle": "1 short spoken-voice opener (kept for downstream digest reuse). Same energy as conversation_move."
     }
