@@ -241,6 +241,12 @@ export interface PrioritizedSignal {
   // BOTH ranking and the prose shape the model uses to express it.
   reference: SignalReference;
 
+  // ── Friction Layer (problem-first thinking) ──────────────────────
+  // Names what is HARD about this signal — the constraint, tradeoff,
+  // or tension that makes it difficult to execute. Forces the
+  // conversation to open from a problem, not from an idea.
+  friction: SignalFriction;
+
   // Back-compat from the earlier Prioritization layer (kept so the
   // conversation-mode digest and any prior consumers don't break):
   business_impact: string;            // 1-line revenue/growth/risk implication
