@@ -150,13 +150,33 @@ export type SignalType =
   | "leadership_or_org"
   | "product_or_launch";
 
+export type SignalSourceType = "account" | "library" | "web" | "inference";
+
 export interface PrioritizedSignal {
   rank: 1 | 2 | 3;
   signal: string;             // The signal itself, named concretely
   signal_type: SignalType;
-  why_it_matters: string;     // What makes this matter for a first conversation
-  business_impact: string;    // Revenue / growth / risk implication
-  conversation_angle: string; // What Corey can actually say to open or drive on this
+  source_type: SignalSourceType;
+  confidence: ConfidenceLevel;
+
+  // ── Strategic Why layer ──────────────────────────────────────────
+  why_it_matters: string;             // What outcome / behavior / model this affects
+  why_now: string;                    // What is changing right now that makes it timely
+  why_this_company: string;           // Why this is uniquely relevant to THIS account
+
+  business_pressure: string;          // Revenue / growth / risk pressure it points to
+  customer_behavior_implication: string; // What customer behavior it suggests
+  marketing_motion_implication: string;  // What it implies about lifecycle / engagement motion
+  future_state_implication: string;   // What ambition / future-state it implies
+
+  strategic_tension: string;          // The assumption Corey should challenge
+  conversation_move: string;          // What Corey should lead with (spoken voice)
+  validation_question: string;        // The question Corey should ask to test it
+
+  // Back-compat from the earlier Prioritization layer (kept so the
+  // conversation-mode digest and any prior consumers don't break):
+  business_impact: string;            // 1-line revenue/growth/risk implication
+  conversation_angle: string;         // Spoken-language opener
 }
 
 export interface CurrentStateResult {
