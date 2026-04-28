@@ -180,6 +180,11 @@ export interface CurrentStateIntelligence {
   commercial_insights: CommercialInsight[];
 }
 
+export interface CommercialInsightAIImpact {
+  makes_easier: string;         // How AI lowers the cost / unlocks the shift
+  makes_harder: string;         // How AI raises the bar / creates new pressure
+}
+
 export interface CommercialInsight {
   insight: string;              // The reframe — one sharp sentence that changes how the customer sees their business
   current_state: string;        // How they (and most of the category) think about it today
@@ -187,8 +192,19 @@ export interface CommercialInsight {
   problem: string;              // What breaks if they keep operating on the old assumption
   implication: string;          // The business impact (revenue / growth / margin / risk) of the reframe
   tension: string;              // The assumption Corey should directly challenge
-  conversation_entry: string;   // Spoken-voice opener — must read like "I'd start here because…"
-  question: string;             // Validation question Corey asks to test the reframe with the customer
+  // ── 3 WHY layer (Challenger narrative) ─────────────────────────────
+  why_anything: string;         // What is structurally wrong / misaligned / the gap that exists
+  why_now: string;              // What is changing / the pressure that makes this urgent
+  why_you: string;              // Why our company / capability matters here — what enables the shift
+  // ── AI Impact layer ───────────────────────────────────────────────
+  ai_impact: CommercialInsightAIImpact;
+  // ── Risk layer ────────────────────────────────────────────────────
+  risk: string;                 // What happens if nothing changes / what they are likely missing
+  // ── Conversation execution ────────────────────────────────────────
+  conversation_entry: string;   // Spoken-voice opener — must read like "I'd lead here because…"
+  conversation_move: string;    // First-person move — must read like "I'd lead here…"
+  question: string;             // Legacy alias — kept for back-compat
+  validation_question: string;  // Validation question — must read like "The question I'd ask is…"
   source_type: SignalSourceType; // account | library | web | inference — trust-down enforced
   confidence: ConfidenceLevel;
   /** Which prioritized-signal rank(s) this insight builds on, when applicable. */
