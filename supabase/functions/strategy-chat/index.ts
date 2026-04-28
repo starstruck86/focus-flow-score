@@ -6509,6 +6509,16 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           lines.push(`     tension to test:  ${s.strategic_tension}`);
           lines.push(`     conversation move:${s.conversation_move}`);
           lines.push(`     validation Q:     ${s.validation_question}`);
+          const cv = (s as any).change_vector;
+          if (cv) {
+            lines.push(`     change vector (use 'used to → now → which means → so I'd push on → question'):`);
+            lines.push(`       X (before · ${cv.before_basis}): ${cv.before}`);
+            lines.push(`       Y (now · ${cv.now_basis}):       ${cv.now}`);
+            lines.push(`       Z (next · ${cv.next_basis}):     ${cv.next}`);
+            lines.push(`       what changed:    ${cv.what_changed}`);
+            lines.push(`       what breaks:     ${cv.what_breaks}`);
+            lines.push(`       opportunity:     ${cv.opportunity}`);
+          }
         }
       }
       return lines.join("\n");
