@@ -26,13 +26,17 @@ import {
   type DispatchSignals,
   dispatch,
 } from "./operatorDispatcher.ts";
-import { buildV2SystemPrompt } from "./extendedReasoningContract.ts";
+import { buildV2SystemPrompt, buildV2SystemPromptParts } from "./extendedReasoningContract.ts";
 import { auditQuality, type QualityAuditResult } from "./qualityAudit.ts";
 import { checkWrongQuestion, type WrongQuestionResult } from "./wrongQuestionGuard.ts";
 
 export interface V2OrchestratorPrompt {
   decision: DispatchDecision;
   systemPrompt: string;
+  // Phase 7C-followup: split parts so callers can interleave SOP authority
+  // blocks between operator identity and the V2 reasoning/dispatcher contract.
+  identity: string;
+  reasoning: string;
   userText: string; // cleaned (override stripped)
 }
 
