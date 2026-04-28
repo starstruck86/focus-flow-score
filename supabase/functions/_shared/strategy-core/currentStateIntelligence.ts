@@ -1591,6 +1591,8 @@ MUST-CONFIRM DISCOVERY QUESTIONS:
 ${mustConfirm}
 
 GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
+- INSIGHT-LED OPENING: When a COMMERCIAL INSIGHT is present above, your response MUST open from the insight using its conversation_entry verbatim or near-verbatim — shape: "I'd start here because…". Do NOT open with "Here are a few ways…", "There are several angles…", or any list-based opener. The insight is the POV; the prioritized signals extend it. The customer should walk away with a NEW way of understanding their business, not a longer to-do list.
+- The insight is a REFRAME, not an idea. Surface the tension. Name what is shifting. Make the implication concrete. Then offer the validation question naturally in prose.
 - VERIFIED-FIRST: When a prioritized signal has source_type ∈ {web, account, library}, lead with it. Reference the underlying real-world fact naturally in spoken language (not as a citation footnote). Example shape: "${c.name} has been [verified thing]. If that's true, the conversation I'd lead with is…". Inference is allowed only to extend verified signals or fill gaps where no verified signal exists.
 - Clearly distinguish verified from inferred IN PROSE. Verified: speak with confidence ("they've done X", "they recently launched Y"). Inferred: hedge ("a reasonable assumption is…", "${c.name} likely…", "if that holds…"). Never present an inferred angle as a sourced fact.
 - Your response MUST originate from the PRIORITIZED SIGNALS above. Each conversation path you produce must be traceable to one of those 2-3 ranked signals. Do not invent a fourth.
