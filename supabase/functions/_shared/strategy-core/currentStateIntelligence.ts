@@ -998,6 +998,20 @@ export async function runCurrentStatePreflight(
     hypotheses,
   });
 
+  // Signal prioritization pass — ranks the top 2-3 highest-leverage
+  // signals from hypotheses + sourced facts. This is what tells the
+  // model what matters most, not everything that could matter.
+  // Failure is non-fatal — promptBlock falls back gracefully.
+  const prioritizedSignals = await generatePrioritizedSignals({
+    entityName: entity.name,
+    resolvedAccount,
+    userContent: args.userContent || "",
+    hypotheses,
+    sourcedFacts: intelligence.evidence.sourced_facts,
+    webResearched,
+  });
+  intelligence.prioritized_signals = prioritizedSignals;
+
   const promptBlock = renderPromptBlock(
     intelligence,
     accountContextState,
@@ -1021,6 +1035,8 @@ export async function runCurrentStatePreflight(
     },
     current_state_confidence: intelligence.company.confidence,
     hypotheses_generated: !!hypotheses,
+    prioritized_signals_count: prioritizedSignals.length,
+    prioritized_signal_types: prioritizedSignals.map((s) => s.signal_type),
     unknowns_count: countUnknowns(intelligence),
     injected_current_state_block: true,
     candidates_considered: candidates,
