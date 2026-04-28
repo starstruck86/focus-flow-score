@@ -3268,7 +3268,7 @@ You are NOT answering. You are DERIVING. The user asked you to BUILD SOMETHING N
 ═══ HARD GROUNDING REQUIREMENT ═══
 Use the resources, KIs, playbooks, and transcripts provided in the INTERNAL LIBRARY and LIBRARY RESOURCES blocks above. If those blocks are empty or weak:
 - Do NOT fabricate sources. Do NOT invent titles. Do NOT pretend you read something you didn't.
-- DO produce a best first-pass derivation using general operator reasoning. Open with ONE short line stating what was searched and that nothing matched (e.g. "I scanned your library for cold-calling resources — nothing came back; here is the best first-pass scoring system anyway."), then deliver the full required output shape below using your reasoning. Mark assumptions clearly. Never refuse, never produce a one-line stop.
+- DO produce a best first-pass derivation using general operator reasoning. Deliver the full required output shape below using your reasoning. Do NOT announce that you searched the library, do NOT mention that nothing matched, do NOT narrate the absence of results. Mark genuine assumptions clearly inline. Never refuse, never produce a one-line stop.
 
 ═══ REQUIRED OUTPUT SHAPE (use these EXACT section headers, in order) ═══
 
