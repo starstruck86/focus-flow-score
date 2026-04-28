@@ -508,6 +508,175 @@ async function generateRealHypotheses(args: {
   }
 }
 
+// ─── Signal Prioritization (LLM-backed) ────────────────────────────
+
+const SIGNAL_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY this shape:
+{
+  "signals": [
+    {
+      "rank": 1,
+      "signal": "Concrete, named signal (not a category). e.g. 'Inventory turns weekly and creates real-time scarcity that lifecycle programs almost never exploit', not 'opportunity in retention'.",
+      "signal_type": "tension | revenue_or_growth | change_in_motion | blind_spot | external_event | competitive_pressure | leadership_or_org | product_or_launch",
+      "why_it_matters": "1 sentence: why THIS signal is the highest-leverage thing to put on the table in a first conversation.",
+      "business_impact": "1 sentence: the revenue, growth, or risk implication if they act vs. ignore.",
+      "conversation_angle": "1-2 sentences in first-person, exactly the way Corey would open or drive on this. No headings, no labels, no consultant-speak. Sounds like real spoken language."
+    }
+  ]
+}
+
+Ranking criteria — apply in order:
+1. What would matter most in a FIRST conversation with this account?
+2. What creates real strategic TENSION (not generic best-practice)?
+3. What impacts REVENUE / GROWTH most directly?
+4. What is CHANGING right now (motion, leadership, market, product)?
+5. What is most likely a BLIND SPOT for the team running it today?
+
+Hard rules:
+- Maximum 3 signals. Prefer 2 strong over 3 mediocre.
+- No generic lifecycle buckets (Acquisition / Activation / Retention / Winback) as signals.
+- No "opportunity to personalize" / "build a loyalty program" / "improve email" — those are not signals.
+- A signal must be specific enough that another rep would say "yes, that's the real thing."
+- conversation_angle must read like spoken language Corey can use. No "we should explore...", no headings.
+- Do NOT include any text outside the JSON object.`;
+
+interface GeneratedSignals {
+  signals: PrioritizedSignal[];
+}
+
+async function generatePrioritizedSignals(args: {
+  entityName: string;
+  resolvedAccount: CurrentStateResult["resolvedAccount"];
+  userContent: string;
+  hypotheses: GeneratedHypotheses | null;
+  sourcedFacts: CurrentStateIntelligence["evidence"]["sourced_facts"];
+  webResearched: boolean;
+}): Promise<PrioritizedSignal[]> {
+  const key = (globalThis as any).Deno?.env?.get?.("LOVABLE_API_KEY");
+  if (!key) return [];
+
+  const acctSeed = args.resolvedAccount
+    ? `\nKnown CRM facts about ${args.resolvedAccount.name}:\n` +
+      `- Website: ${args.resolvedAccount.website ?? "unknown"}\n` +
+      `- Industry: ${args.resolvedAccount.industry ?? "unknown"}\n` +
+      (args.resolvedAccount.notes
+        ? `- CRM note: ${args.resolvedAccount.notes.slice(0, 400)}\n`
+        : "")
+    : "";
+
+  const hyp = args.hypotheses;
+  const hypBlock = hyp
+    ? `\nWORKING HYPOTHESES (raw material — do not just restate; rank what matters most):\n` +
+      `- Business model: ${hyp.business_model_summary}\n` +
+      `- Customer experience: ${hyp.customer_experience}\n` +
+      `- Marketing motion: ${hyp.marketing_motion}\n` +
+      `- Strategic tension: ${hyp.strategic_tension}\n` +
+      `- Likely gap: ${hyp.likely_gap}\n` +
+      `- Why now: ${hyp.why_now}\n` +
+      `- Future-state hypothesis: ${hyp.future_state_hypothesis}\n`
+    : "";
+
+  const facts = args.sourcedFacts.length
+    ? `\nKnown sourced facts:\n` +
+      args.sourcedFacts.slice(0, 6).map((f) => `- ${f.claim}`).join("\n") + "\n"
+    : "";
+
+  const sys =
+    `You are a senior B2B sales strategist. Your job is to RANK and SELECT the ` +
+    `top 2-3 signals that should drive a first conversation with this account. ` +
+    `You ruthlessly cut everything that doesn't matter most. You write signals ` +
+    `that are concrete, specific, and tied to real business impact — never ` +
+    `generic categories. The output tells the rep what matters most, not ` +
+    `everything that could matter.`;
+
+  const user =
+    `Account in focus: ${args.entityName}` +
+    acctSeed +
+    hypBlock +
+    facts +
+    `\nWeb research available this turn: ${args.webResearched ? "yes" : "no"}` +
+    `\n\nThe rep's prompt:\n"""${args.userContent.slice(0, 1200)}"""\n\n` +
+    SIGNAL_SCHEMA_HINT;
+
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const resp = await fetch(
+      "https://ai.gateway.lovable.dev/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+        signal: ctrl.signal,
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          temperature: 0.5,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: sys },
+            { role: "user", content: user },
+          ],
+        }),
+      },
+    );
+    if (!resp.ok) {
+      console.warn(
+        `[currentStateIntelligence] signal prioritization http ${resp.status}`,
+      );
+      return [];
+    }
+    const data = await resp.json();
+    const raw = data.choices?.[0]?.message?.content || "";
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as GeneratedSignals;
+    if (!parsed || !Array.isArray(parsed.signals)) return [];
+
+    const allowedTypes: SignalType[] = [
+      "tension",
+      "revenue_or_growth",
+      "change_in_motion",
+      "blind_spot",
+      "external_event",
+      "competitive_pressure",
+      "leadership_or_org",
+      "product_or_launch",
+    ];
+
+    const cleaned: PrioritizedSignal[] = [];
+    for (let i = 0; i < parsed.signals.length && cleaned.length < 3; i++) {
+      const s: any = parsed.signals[i];
+      if (!s || typeof s !== "object") continue;
+      const signal = String(s.signal || "").trim();
+      const why = String(s.why_it_matters || "").trim();
+      const impact = String(s.business_impact || "").trim();
+      const angle = String(s.conversation_angle || "").trim();
+      if (!signal || !why || !impact || !angle) continue;
+      const type = allowedTypes.includes(s.signal_type)
+        ? (s.signal_type as SignalType)
+        : "tension";
+      const rank = (cleaned.length + 1) as 1 | 2 | 3;
+      cleaned.push({
+        rank,
+        signal,
+        signal_type: type,
+        why_it_matters: why,
+        business_impact: impact,
+        conversation_angle: angle,
+      });
+    }
+    return cleaned;
+  } catch (e) {
+    console.warn(
+      "[currentStateIntelligence] signal prioritization failed:",
+      (e as Error).message,
+    );
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // ─── Inferred current-state builder ────────────────────────────────
 
 function buildSkeletonIntelligence(args: {
