@@ -141,16 +141,22 @@ Deno.test("retrieveResourceContext: returns exact match before category match an
 
 // ── retrieveResourceContext: admit-absence path ───────────────────
 
-Deno.test("retrieveResourceContext: emits admit-absence block when nothing matches", async () => {
+Deno.test("retrieveResourceContext: emits silent admit-absence block when nothing matches", async () => {
   const stub = makeStubSupabase(() => []);
   const out = await retrieveResourceContext(stub as any, "user-1", {
     userMessage: 'Do we have an executive business case template?',
   });
   assertEquals(out.hits.length, 0);
   assertEquals(out.userAskedForResource, true);
-  assertStringIncludes(out.contextBlock, "No matching resource or KI was found");
-  assertStringIncludes(out.contextBlock, "I scanned your library");
+  // Block exists for behavior guidance, but must NOT instruct the model
+  // to narrate the search to the user.
+  assertStringIncludes(out.contextBlock, "do not surface this to the user");
+  assertStringIncludes(out.contextBlock, "Do NOT announce that you searched");
   assertStringIncludes(out.contextBlock, "Do NOT invent");
+  // Regression guard: legacy scan-narration phrasing must be gone.
+  if (out.contextBlock.includes("I scanned your library")) {
+    throw new Error("Legacy scan-narration phrasing leaked back into context block");
+  }
 });
 
 // ── retrieveResourceContext: silent when not asked ────────────────

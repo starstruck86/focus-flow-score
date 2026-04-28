@@ -3268,7 +3268,7 @@ You are NOT answering. You are DERIVING. The user asked you to BUILD SOMETHING N
 ═══ HARD GROUNDING REQUIREMENT ═══
 Use the resources, KIs, playbooks, and transcripts provided in the INTERNAL LIBRARY and LIBRARY RESOURCES blocks above. If those blocks are empty or weak:
 - Do NOT fabricate sources. Do NOT invent titles. Do NOT pretend you read something you didn't.
-- DO produce a best first-pass derivation using general operator reasoning. Open with ONE short line stating what was searched and that nothing matched (e.g. "I scanned your library for cold-calling resources — nothing came back; here is the best first-pass scoring system anyway."), then deliver the full required output shape below using your reasoning. Mark assumptions clearly. Never refuse, never produce a one-line stop.
+- DO produce a best first-pass derivation using general operator reasoning. Deliver the full required output shape below using your reasoning. Do NOT announce that you searched the library, do NOT mention that nothing matched, do NOT narrate the absence of results. Mark genuine assumptions clearly inline. Never refuse, never produce a one-line stop.
 
 ═══ REQUIRED OUTPUT SHAPE (use these EXACT section headers, in order) ═══
 
@@ -3306,7 +3306,7 @@ This lets the user audit the derivation end-to-end.
 
 ═══ THIN-MODE CONTRACT (when grounding is weak) ═══
 If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources or the resources don't share enough overlapping patterns, you MUST still deliver value:
-1. Open with ONE honest line: "I found N resource(s) and M KI(s) related to this — not enough to fully derive from your library, so here is a best first-pass system using general operator reasoning."
+1. Do NOT announce what you searched for or call out that the library returned little. Lead directly with the work.
 2. Then produce the full required output shape using your reasoning. Mark each section as **Grounded** (when citing a real source) or **Extended** (when reasoning).
 3. End with ONE clarifying question only if it would materially sharpen the next pass (e.g. "Point me to your top 2 cold-call calls and I'll re-weight against those.").
 NEVER refuse. NEVER output a one-line stop. NEVER invent sources.${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
@@ -3319,7 +3319,7 @@ You are NOT freestyling. You are BUILDING an asset from the user's OWN materials
 ═══ HARD GROUNDING REQUIREMENT ═══
 Use the resources, KIs, playbooks, and transcripts in the INTERNAL LIBRARY and LIBRARY RESOURCES blocks above. If those blocks are EMPTY:
 - Do NOT fabricate sources. Do NOT invent quotes. Do NOT pretend you read something you didn't.
-- DO build the asset anyway using general operator reasoning. Open with ONE honest line ("Library returned nothing related — building a first-pass asset from operator patterns; mark it as a draft until we anchor it."), then deliver the full required asset using your reasoning. Mark borrowed structure as **Extended** rather than **Reused**. Never refuse.
+- DO build the asset anyway using general operator reasoning. Deliver the full required asset using your reasoning. Do NOT announce that the library returned nothing, do NOT narrate the search. Mark borrowed structure as **Extended** rather than **Reused**. Never refuse.
 
 ═══ REQUIRED OUTPUT SHAPE (use these EXACT section headers, in order) ═══
 
@@ -3346,7 +3346,7 @@ The actual usable output the user can paste. Render it cleanly (no commentary mi
 - Forbidden filler phrases (server guard will FLAG): "based on the resources", "based on your resources", "in general", "best practice", "industry standard", "as a general rule", "typically", "generally speaking".
 
 ═══ THIN-MODE CONTRACT (when grounding is weak) ═══
-If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain ZERO usable resources, you MUST still produce the asset using general operator reasoning. Open with one honest line stating what was searched and that nothing matched, then deliver the full asset under the required headers above. Mark every line under "Reused vs Created" as **Created (extended)** since the library could not anchor it. End with ONE clarifying question only if it would materially sharpen the next pass. NEVER refuse. NEVER output a one-line stop.${operatorReasoningContract}${economicLayer}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain ZERO usable resources, you MUST still produce the asset using general operator reasoning. Deliver the full asset under the required headers above without announcing the absence of library results. Mark every line under "Reused vs Created" as **Created (extended)** since the library could not anchor it. End with ONE clarifying question only if it would materially sharpen the next pass. NEVER refuse. NEVER output a one-line stop.${operatorReasoningContract}${economicLayer}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "evaluation":
       return `═══ MODE LOCK: EVALUATION (COACH USING LIBRARY) ═══
@@ -3355,7 +3355,7 @@ You are NOT rewriting. You are GRADING. The user gave you content (an email, scr
 ═══ HARD GROUNDING REQUIREMENT ═══
 Use the resources, KIs, playbooks, and transcripts in the INTERNAL LIBRARY and LIBRARY RESOURCES blocks above. If those blocks are weak (<2 sources):
 - Do NOT make up standards. Do NOT pretend you read something you didn't.
-- DO grade the asset anyway using general operator reasoning. Open with ONE honest line stating what was searched and that nothing matched, then deliver the full required output shape below. Mark each dimension's "Source" cell as "Operator pattern (no internal source)" when the library couldn't ground it. Never refuse, never output a one-line stop.
+- DO grade the asset anyway using general operator reasoning. Deliver the full required output shape below without announcing what you searched or that nothing matched. Mark each dimension's "Source" cell as "Operator pattern (no internal source)" when the library couldn't ground it. Never refuse, never output a one-line stop.
 
 ═══ REQUIRED OUTPUT SHAPE (use these EXACT section headers, in order) ═══
 
@@ -3392,7 +3392,7 @@ Bulleted map of each cited source → which dimension(s) / improvement(s) it inf
 - Forbidden filler phrases (server guard will FLAG): "based on the resources", "based on your resources", "in general", "best practice", "industry standard", "as a general rule", "typically", "generally speaking".
 
 ═══ THIN-MODE CONTRACT (when grounding is weak) ═══
-If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, you MUST still grade the asset. Open with one honest line stating that the library couldn't anchor the standards, then proceed with the full required output shape using general operator reasoning. Mark each "Source" cell as "Operator pattern" when no internal source exists. End with ONE clarifying question only if it would materially sharpen the next pass. NEVER refuse. NEVER output a one-line stop.${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
+If the INTERNAL LIBRARY and LIBRARY RESOURCES blocks contain fewer than 2 usable resources, you MUST still grade the asset. Proceed directly with the full required output shape using general operator reasoning — do NOT announce that the library couldn't anchor the standards. Mark each "Source" cell as "Operator pattern" when no internal source exists. End with ONE clarifying question only if it would materially sharpen the next pass. NEVER refuse. NEVER output a one-line stop.${operatorReasoningContract}${constraintLine}${substanceContract}${applicationLayer}${bindingClause}`;
 
     case "freeform":
     default:
@@ -5727,7 +5727,23 @@ Your job is to make Corey more dangerous in a deal.
       block_length: strategyObjectiveBlock.length,
     })}`,
   );
-  const sopAuthorityBlock = `${buildGlobalSopBlock()}${buildWorkspaceSopBlock()}`;
+  const libraryUsageBlock = `
+
+━━━ LIBRARY USAGE RULES (ALWAYS ON) ━━━
+The user's library (resources, KIs, playbooks, transcripts) is a background influence on every response. Treat it as invisible but powerful.
+
+Rules:
+- ALWAYS incorporate relevant knowledge from the library into your reasoning when it strengthens the answer.
+- NEVER announce that you searched, scanned, looked through, or queried the library.
+- NEVER mention the absence of library results. Do NOT write phrases like: "I scanned your library", "nothing came back", "library returned nothing", "I searched and found nothing", "no matching resource", or any equivalent.
+- If the library does not provide strong signal, proceed with your reasoning anyway — silently. Do not narrate the gap.
+- Only cite the library when a citation actually strengthens the answer. Reference named frameworks, tactics, plays, or ideas when they materially shape the point.
+- Do NOT cite just to cite. Do NOT mention internal IDs unless necessary for traceability.
+- The library should be present in the thinking, not narrated in the output.
+
+━━━ END LIBRARY USAGE RULES ━━━
+`;
+  const sopAuthorityBlock = `${libraryUsageBlock}${buildGlobalSopBlock()}${buildWorkspaceSopBlock()}`;
   if (sopAuthorityBlock.length > 0) {
     console.log(
       `[strategy-sop] injected-sop-authority-early ${JSON.stringify({
@@ -5983,6 +5999,11 @@ You MUST follow these rules:
    - explain why they matter
    - explain when to use them (outbound, discovery, exec meeting, etc.)
 7. If your output is generic, regenerate internally before responding.
+
+Library use in brainstorm:
+- Use the library to generate STRONGER angles — patterns, named tactics, prior plays — but do NOT collapse to a single known tactic.
+- Do NOT default to library-first answers. Combine library patterns + reasoning + new angles.
+- Do NOT announce that you searched the library or that nothing was found.
 
 This is NOT optional. Do not ignore these rules.
 `;
