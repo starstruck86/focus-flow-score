@@ -491,7 +491,7 @@ function buildSkeletonIntelligence(args: {
   webResearched: boolean;
   hypotheses?: GeneratedHypotheses | null;
 }): CurrentStateIntelligence {
-  const { entityName, resolvedAccount, webResearched } = args;
+  const { entityName, resolvedAccount, webResearched, hypotheses } = args;
 
   const sourcedFacts: CurrentStateIntelligence["evidence"]["sourced_facts"] = [];
   if (resolvedAccount) {
@@ -526,9 +526,13 @@ function buildSkeletonIntelligence(args: {
     ? "medium"
     : "low";
 
-  const sectionConfidence: ConfidenceLevel = resolvedAccount
-    ? "medium"
-    : "low";
+  const sectionConfidence: ConfidenceLevel = resolvedAccount ? "medium" : "low";
+
+  // Fallback prose used ONLY if hypothesis generation fails. Even the
+  // fallback avoids "[Likely]" scaffolding tokens — it's plain prose
+  // hedged with "likely". This keeps the model from seeing placeholder
+  // text it might mirror back.
+  const fb = (s: string) => `Likely ${s}`;
 
   return {
     company: {
@@ -542,8 +546,8 @@ function buildSkeletonIntelligence(args: {
         : "text_inferred",
     },
     business_model: {
-      summary:
-        "[Likely] Describe what business they're really in based on what you know.",
+      summary: hypotheses?.business_model_summary
+        || fb(`${entityName} operates a business model that should be confirmed in discovery; reason from public knowledge of the company and its category.`),
       confidence: sectionConfidence,
       unknowns: [
         "Exact revenue mix (DTC vs wholesale vs marketplace)",
@@ -552,8 +556,8 @@ function buildSkeletonIntelligence(args: {
       ],
     },
     customer_experience: {
-      what_it_is_like_to_be_a_customer:
-        "[Likely] Describe the end-to-end customer journey from first touch to repeat.",
+      what_it_is_like_to_be_a_customer: hypotheses?.customer_experience
+        || fb(`the end-to-end customer journey for ${entityName} skews toward what its category typically rewards; the specifics of discovery, conversion, and repeat should be confirmed.`),
       confidence: sectionConfidence,
       unknowns: [
         "Logged-in / app vs anonymous browsing share",
@@ -562,6 +566,7 @@ function buildSkeletonIntelligence(args: {
       ],
     },
     marketing_motion: {
+      likely_new_customer_motion: hypotheses?.marketing_motion,
       confidence: sectionConfidence,
       unknowns: [
         "Lifecycle triggers currently wired up",
@@ -580,16 +585,16 @@ function buildSkeletonIntelligence(args: {
     },
     lifecycle_opportunity_map: {},
     current_state_thesis: {
-      summary:
-        "[Likely] One-sentence working thesis about where the company is today.",
-      likely_gap:
-        "[Likely] The most plausible gap between current and future state given what we know.",
-      why_now:
-        "[Likely] Why this conversation matters now — market, internal, or competitive pressure.",
-      strategic_tension:
-        "[Likely] The tension Corey can name that the prospect will recognize.",
-      future_state_hypothesis:
-        "[Likely] What they're trying to become and what has to change in customer engagement to get there.",
+      summary: hypotheses?.thesis_summary
+        || fb(`${entityName} is operating where its category and stage suggest it should be; the working thesis should be sharpened in discovery.`),
+      likely_gap: hypotheses?.likely_gap
+        || fb(`there is a gap between current customer engagement maturity and what the future state requires.`),
+      why_now: hypotheses?.why_now
+        || fb(`market and competitive pressure make this conversation timely.`),
+      strategic_tension: hypotheses?.strategic_tension
+        || fb(`the standard playbook may be misaligned with how this company actually wins with customers.`),
+      future_state_hypothesis: hypotheses?.future_state_hypothesis
+        || fb(`the company is trying to deepen customer engagement; getting there will require changes in data, motion, or experience.`),
     },
     discovery_questions: {
       must_confirm: [
@@ -605,7 +610,13 @@ function buildSkeletonIntelligence(args: {
     },
     evidence: {
       sourced_facts: sourcedFacts,
-      inferred_claims: [],
+      inferred_claims: hypotheses
+        ? [
+          { claim: hypotheses.business_model_summary, basis: "model reasoning from public knowledge", confidence: "low" },
+          { claim: hypotheses.customer_experience, basis: "model reasoning from public knowledge", confidence: "low" },
+          { claim: hypotheses.marketing_motion, basis: "model reasoning from public knowledge", confidence: "low" },
+        ]
+        : [],
     },
   };
 }
