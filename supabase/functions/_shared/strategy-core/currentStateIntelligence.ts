@@ -157,6 +157,13 @@ export interface CurrentStateIntelligence {
     }>;
   };
   /**
+   * Verified-first signals gathered BEFORE hypothesis generation.
+   * Each is tagged with its source + confidence. Hypotheses and
+   * prioritization both build on top of these. Empty when no verified
+   * signal could be gathered (web/library/CRM produced nothing).
+   */
+  verified_signals: VerifiedSignal[];
+  /**
    * Top 2–3 ranked signals that should drive the response. Generated
    * after hypotheses by `generatePrioritizedSignals`. Empty when the
    * second pass fails — never fabricated.
