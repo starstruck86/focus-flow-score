@@ -86,6 +86,13 @@ import {
   type OutputModeDecision,
   type ExplicitFormatKind,
 } from "../_shared/strategy-core/outputMode.ts";
+import {
+  classifyBehaviorIntent,
+  renderBehaviorContract,
+  enforceBehaviorContract,
+  type BehaviorIntent,
+  type BehaviorIntentResult,
+} from "../_shared/strategy-core/behaviorIntent.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -5012,9 +5019,11 @@ function buildGenericChatSystemPrompt(
   depth: string,
   contextSection: string,
   modeLockBlock?: string,
+  behaviorContractBlock?: string,
 ): string {
   const lockPrefix = modeLockBlock ? `${modeLockBlock}\n\n` : "";
-  return `${lockPrefix}You are a high-performance sales operator embedded in the rep's Strategy workspace. You produce work the rep can copy and use right now.
+  const behaviorPrefix = behaviorContractBlock ? `${behaviorContractBlock}\n\n` : "";
+  return `${lockPrefix}${behaviorPrefix}You are a high-performance sales operator embedded in the rep's Strategy workspace. You produce work the rep can copy and use right now.
 
 ═══ ELITE OPERATOR CONTRACT ═══
 Every response MUST follow this shape:
@@ -5183,6 +5192,8 @@ async function buildChatSystemPrompt(args: {
   rawWorkingThesisBlock?: string;
   /** Current State Intelligence result — surfaced for combined logging at handler. */
   currentStateResult?: CurrentStateResult | null;
+  /** Behavior-intent classification — surfaced for guard + telemetry. */
+  behaviorIntent?: BehaviorIntentResult;
 }> {
   const {
     supabase,
@@ -5208,6 +5219,28 @@ async function buildChatSystemPrompt(args: {
     hasAccountContext: _hasAccountContext,
   });
   const modeLockBlock = buildModeLockBlock(intent);
+
+  // ── BEHAVIOR INTENT ROUTING (intent → exclusive behavior) ─────
+  // Coarse, mutually-exclusive classifier sitting ABOVE ChatIntent.
+  // Maps to one of: conversation_strategy | idea_generation |
+  // research_analysis | artifact_creation. Drives a single behavior
+  // contract injected into the prompt and a hard guard on the output.
+  const behaviorIntent: BehaviorIntentResult = classifyBehaviorIntent(
+    userContent,
+    { hasAccountContext: _hasAccountContext },
+  );
+  const behaviorContractBlock = renderBehaviorContract(behaviorIntent.intent);
+  console.log(
+    "[behavior-intent] classified",
+    JSON.stringify({
+      intent_detected: behaviorIntent.intent,
+      behavior_selected: behaviorIntent.intent,
+      suppressed_behaviors: behaviorIntent.suppressed,
+      matched_signal: behaviorIntent.matched_signal,
+      confidence: behaviorIntent.confidence,
+      has_account_context: _hasAccountContext,
+    }),
+  );
 
   // ── CURRENT STATE INTELLIGENCE PREFLIGHT (RUNS FIRST) ──────────
   // Per the integration contract: Current State Intelligence MUST run
@@ -5325,6 +5358,12 @@ async function buildChatSystemPrompt(args: {
       constraint_budget_applied: true,
       duplicate_gates_removed: true,
       generic_validator_passed: true,
+      // ── Behavior Intent Routing (intent → exclusive behavior) ─────
+      intent_detected: behaviorIntent.intent,
+      behavior_selected: behaviorIntent.intent,
+      suppressed_behaviors: behaviorIntent.suppressed,
+      behavior_intent_signal: behaviorIntent.matched_signal,
+      behavior_intent_confidence: behaviorIntent.confidence,
       workspace: workspaceKeyRaw ?? null,
     }),
   );
@@ -5373,7 +5412,7 @@ async function buildChatSystemPrompt(args: {
     // an inferred block (e.g. user mentioned a company in chat), we
     // append it so the model is never blind to context that was
     // already detected. Output mode contract still binds tone/shape.
-    const _genericBase = buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock);
+    const _genericBase = buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock, behaviorContractBlock);
     const _csBlock = currentStateResult?.promptBlock
       ? `\n${currentStateResult.promptBlock}\n`
       : "";
@@ -5389,6 +5428,7 @@ async function buildChatSystemPrompt(args: {
       modeLockBlock,
       outputModeDecision,
       currentStateResult,
+      behaviorIntent,
     };
   }
 
@@ -5535,7 +5575,7 @@ async function buildChatSystemPrompt(args: {
 
   if (!useCore) {
     return {
-      prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock),
+      prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock, behaviorContractBlock),
       workingThesis: null,
       resourceHits: [],
       kiHits: [],
@@ -5545,6 +5585,7 @@ async function buildChatSystemPrompt(args: {
       intent,
       modeLockBlock,
       outputModeDecision,
+      behaviorIntent,
     };
   }
 
@@ -5666,7 +5707,7 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
   // the system prompt becomes. The CURRENT STATE INTELLIGENCE block,
   // when present, sits adjacent to the readability contract so the
   // model treats it as a generation-shaping directive for THIS turn.
-  const prompt = `${modeLockBlock}\n\n${composedCorePrompt}\n${readabilityContract}${currentStateBlock}\n\n${persistenceContract}`;
+  const prompt = `${modeLockBlock}\n\n${behaviorContractBlock}\n\n${composedCorePrompt}\n${readabilityContract}${currentStateBlock}\n\n${persistenceContract}`;
 
   const resourceHits = (resources?.hits || []).map((h) => ({
     id: h.id,
@@ -5693,6 +5734,7 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     rawResourceContextBlock: resources?.contextBlock || "",
     rawWorkingThesisBlock: workingThesisBlock || "",
     currentStateResult,
+    behaviorIntent,
   };
 }
 
@@ -5947,6 +5989,7 @@ async function handleChat(
     rawWorkingThesisBlock,
     outputModeDecision,
     currentStateResult,
+    behaviorIntent,
   } = await buildChatSystemPrompt({
     supabase,
     userId,
@@ -6881,7 +6924,26 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         } modified=${subst.modified}`,
       );
     }
-    const visible = subst.text;
+    // Behavior-intent hard guard — enforce exclusivity (e.g. when
+    // intent=conversation_strategy, strip headings, lists, idea
+    // lead-ins, and category buckets that bleed in from other behaviors).
+    const behaviorGuard = behaviorIntent
+      ? enforceBehaviorContract(behaviorIntent.intent, subst.text)
+      : { triggered: false, text: subst.text, violations: [], rewrite_applied: false };
+    if (behaviorGuard.triggered) {
+      console.log(
+        "[behavior-guard] non-stream",
+        JSON.stringify({
+          intent_detected: behaviorIntent?.intent,
+          behavior_selected: behaviorIntent?.intent,
+          suppressed_behaviors: behaviorIntent?.suppressed,
+          guard_triggered: true,
+          violations: behaviorGuard.violations,
+          rewrite_applied: behaviorGuard.rewrite_applied,
+        }),
+      );
+    }
+    const visible = behaviorGuard.text;
     // Citation audit (W5): governed by `retrievalRules.citationMode`
     // from the resolved workspace contract. SHADOW/REPORTING ONLY in
     // W5 — `auditedText` returns the original assistant text for all
@@ -7291,7 +7353,24 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
             } modified=${subst.modified}`,
           );
         }
-        const visible = subst.text;
+        // Step 2c: BEHAVIOR-INTENT HARD GUARD — exclusivity enforcement.
+        const behaviorGuard = behaviorIntent
+          ? enforceBehaviorContract(behaviorIntent.intent, subst.text)
+          : { triggered: false, text: subst.text, violations: [], rewrite_applied: false };
+        if (behaviorGuard.triggered) {
+          console.log(
+            "[behavior-guard] stream",
+            JSON.stringify({
+              intent_detected: behaviorIntent?.intent,
+              behavior_selected: behaviorIntent?.intent,
+              suppressed_behaviors: behaviorIntent?.suppressed,
+              guard_triggered: true,
+              violations: behaviorGuard.violations,
+              rewrite_applied: behaviorGuard.rewrite_applied,
+            }),
+          );
+        }
+        const visible = behaviorGuard.text;
 
         // Step 3: citation audit on the GUARDED text (W5: governed
         // by `retrievalRules.citationMode`). SHADOW/REPORTING ONLY —
