@@ -169,6 +169,30 @@ export interface CurrentStateIntelligence {
    * second pass fails — never fabricated.
    */
   prioritized_signals: PrioritizedSignal[];
+  /**
+   * Commercial Insights (Challenger-style reframes). Generated AFTER
+   * verified signals + prioritized signals so the insight is grounded
+   * in real-world evidence, not pure inference. 1–2 insights max.
+   * Each insight reframes how the customer thinks about their own
+   * business — it is NOT another idea or angle. Empty when generation
+   * fails; never fabricated.
+   */
+  commercial_insights: CommercialInsight[];
+}
+
+export interface CommercialInsight {
+  insight: string;              // The reframe — one sharp sentence that changes how the customer sees their business
+  current_state: string;        // How they (and most of the category) think about it today
+  shift: string;                // What is changing in the world / market / their operating model
+  problem: string;              // What breaks if they keep operating on the old assumption
+  implication: string;          // The business impact (revenue / growth / margin / risk) of the reframe
+  tension: string;              // The assumption Corey should directly challenge
+  conversation_entry: string;   // Spoken-voice opener — must read like "I'd start here because…"
+  question: string;             // Validation question Corey asks to test the reframe with the customer
+  source_type: SignalSourceType; // account | library | web | inference — trust-down enforced
+  confidence: ConfidenceLevel;
+  /** Which prioritized-signal rank(s) this insight builds on, when applicable. */
+  built_on_signal_ranks?: number[];
 }
 
 export type SignalType =
@@ -1089,6 +1113,220 @@ async function generatePrioritizedSignals(args: {
   }
 }
 
+// ─── Commercial Insight (Challenger reframe) layer ─────────────────
+
+const COMMERCIAL_INSIGHT_SCHEMA_HINT = `
+Return STRICT JSON in this exact shape:
+{
+  "insights": [
+    {
+      "insight": "ONE sharp sentence that REFRAMES how this company should think about their own business. Not an idea, not an angle, not a tactic — a new mental model. The customer should read it and think: 'I hadn't framed it that way before.' Bad: 'You should personalize the customer journey.' Good: 'TJX's treasure-hunt model means your most loyal customers are the ones you train to expect scarcity — not the ones you train to expect rewards.'",
+      "current_state": "1 sentence: how this company (and most of the category) thinks about it today — the prevailing assumption.",
+      "shift": "1 sentence: what is changing in the market / customer behavior / operating model / technology that makes the old assumption break.",
+      "problem": "1 sentence: what concretely BREAKS or gets left on the table if they keep operating on the old assumption.",
+      "implication": "1 sentence: the business impact of the reframe — revenue, growth, margin, retention, risk. Quantified or directional, not vague.",
+      "tension": "1 sentence: the specific assumption Corey should directly challenge in conversation.",
+      "conversation_entry": "1-2 sentences in first-person spoken voice, MUST start with shape 'I'd start here because…' or 'The reason I'd lead with this is…'. No headings. No 'we should explore'. This is what Corey actually says.",
+      "question": "1 sentence: the validation question Corey asks the customer to test the reframe. Plain spoken language.",
+      "source_type": "account | library | web | inference",
+      "confidence": "high | medium | low",
+      "built_on_signal_ranks": [1, 2]
+    }
+  ]
+}
+
+Hard rules:
+- 1 or 2 insights MAX. Prefer 1 strong reframe over 2 mediocre ones.
+- An insight is NOT an idea, an angle, a play, a tactic, or a recommendation. It is a REFRAME of how the customer should understand their own business.
+- The insight must be specific to THIS company — not "retailers should…", not "loyalty programs should…".
+- The insight must EXPOSE a hidden problem or inefficiency, OR introduce a new mental model.
+- The conversation_entry must read like spoken language and must open with "I'd start here because…" (or near equivalent). No consultant-speak.
+- Build each insight on top of the verified signals + prioritized signals provided. If you must use pure inference, set source_type="inference" and confidence="low".
+- Do NOT produce generic lifecycle / marketing categories.
+- Do NOT include text outside the JSON object.`;
+
+interface GeneratedCommercialInsights {
+  insights: CommercialInsight[];
+}
+
+async function generateCommercialInsights(args: {
+  entityName: string;
+  resolvedAccount: CurrentStateResult["resolvedAccount"];
+  userContent: string;
+  hypotheses: GeneratedHypotheses | null;
+  verifiedSignals: VerifiedSignal[];
+  prioritizedSignals: PrioritizedSignal[];
+  webResearched: boolean;
+}): Promise<CommercialInsight[]> {
+  const key = (globalThis as any).Deno?.env?.get?.("LOVABLE_API_KEY");
+  if (!key) return [];
+
+  const acctSeed = args.resolvedAccount
+    ? `\nKnown CRM facts about ${args.resolvedAccount.name}:\n` +
+      `- Website: ${args.resolvedAccount.website ?? "unknown"}\n` +
+      `- Industry: ${args.resolvedAccount.industry ?? "unknown"}\n` +
+      (args.resolvedAccount.notes
+        ? `- CRM note: ${args.resolvedAccount.notes.slice(0, 400)}\n`
+        : "")
+    : "";
+
+  const verified = args.verifiedSignals || [];
+  const verifiedBlock = verified.length
+    ? `\nVERIFIED SIGNALS (real-world, source-tagged — anchor insights here when possible):\n` +
+      verified.map((s, i) =>
+        `${i + 1}. [${s.source}·${s.confidence}${s.kind ? `·${s.kind}` : ""}] ${s.signal}` +
+        (s.source_url ? ` (${s.source_url})` : "")
+      ).join("\n") + "\n"
+    : `\nVERIFIED SIGNALS: none gathered — insights will be inference-grade.\n`;
+
+  const prio = args.prioritizedSignals || [];
+  const prioBlock = prio.length
+    ? `\nPRIORITIZED SIGNALS (already-ranked top angles — your insight should REFRAME the thinking behind these, not restate them):\n` +
+      prio.map((s) =>
+        `${s.rank}. [${s.signal_type}·src:${s.source_type}] ${s.signal}\n` +
+        `   tension: ${s.strategic_tension}\n` +
+        `   why now: ${s.why_now}`
+      ).join("\n") + "\n"
+    : "";
+
+  const hyp = args.hypotheses;
+  const hypBlock = hyp
+    ? `\nWORKING HYPOTHESES (business-model / customer / motion):\n` +
+      `- Business model: ${hyp.business_model_summary}\n` +
+      `- Customer experience: ${hyp.customer_experience}\n` +
+      `- Marketing motion: ${hyp.marketing_motion}\n`
+    : "";
+
+  const sys =
+    `You are a senior B2B sales strategist trained in the Challenger Sale framework. ` +
+    `Your job is to produce 1–2 COMMERCIAL INSIGHTS — reframes that change how the ` +
+    `customer thinks about their own business. You do NOT produce ideas, angles, ` +
+    `or tactics. You produce a new mental model the customer hasn't framed for ` +
+    `themselves yet. You expose hidden problems, challenge assumptions, and create ` +
+    `constructive tension. ` +
+    `SOURCE HIERARCHY: build the insight from (1) verified signals, (2) industry ` +
+    `shifts, (3) the company's business model, (4) customer behavior — in that order. ` +
+    `If the basis is pure inference, mark it as such — never pretend it's sourced.`;
+
+  const user =
+    `Account in focus: ${args.entityName}` +
+    acctSeed +
+    verifiedBlock +
+    prioBlock +
+    hypBlock +
+    `\nWeb research available this turn: ${args.webResearched ? "yes" : "no"}` +
+    `\n\nThe rep's prompt:\n"""${args.userContent.slice(0, 1200)}"""\n\n` +
+    COMMERCIAL_INSIGHT_SCHEMA_HINT;
+
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const resp = await fetch(
+      "https://ai.gateway.lovable.dev/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+        signal: ctrl.signal,
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          temperature: 0.6,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: sys },
+            { role: "user", content: user },
+          ],
+        }),
+      },
+    );
+    if (!resp.ok) {
+      console.warn(
+        `[currentStateIntelligence] commercial insights http ${resp.status}`,
+      );
+      return [];
+    }
+    const data = await resp.json();
+    const raw = data.choices?.[0]?.message?.content || "";
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as GeneratedCommercialInsights;
+    if (!parsed || !Array.isArray(parsed.insights)) return [];
+
+    const allowedSources: SignalSourceType[] = ["account", "library", "web", "inference"];
+    const allowedConfidences: ConfidenceLevel[] = ["high", "medium", "low"];
+
+    const haveAccount = !!args.resolvedAccount;
+    const verifiedWeb = verified.filter((v) => v.source === "web");
+    const verifiedLib = verified.filter((v) => v.source === "library" || v.source === "resource");
+    const haveWeb = !!args.webResearched && verifiedWeb.length > 0;
+    const haveLibrary = verifiedLib.length > 0;
+
+    const cleaned: CommercialInsight[] = [];
+    for (let i = 0; i < parsed.insights.length && cleaned.length < 2; i++) {
+      const r: any = parsed.insights[i];
+      if (!r || typeof r !== "object") continue;
+
+      const insight = String(r.insight || "").trim();
+      const current_state = String(r.current_state || "").trim();
+      const shift = String(r.shift || "").trim();
+      const problem = String(r.problem || "").trim();
+      const implication = String(r.implication || "").trim();
+      const tension = String(r.tension || "").trim();
+      const conversation_entry = String(r.conversation_entry || "").trim();
+      const question = String(r.question || "").trim();
+
+      // All fields required — drop incomplete insights so we never ship a half-formed reframe.
+      if (
+        !insight || !current_state || !shift || !problem ||
+        !implication || !tension || !conversation_entry || !question
+      ) continue;
+
+      let source_type: SignalSourceType = allowedSources.includes(r.source_type)
+        ? (r.source_type as SignalSourceType)
+        : "inference";
+      // Trust-down: never let inference upgrade itself.
+      if (source_type === "account" && !haveAccount) source_type = "inference";
+      if (source_type === "web" && !haveWeb) source_type = "inference";
+      if (source_type === "library" && !haveLibrary) source_type = "inference";
+
+      let confidence: ConfidenceLevel = allowedConfidences.includes(r.confidence)
+        ? (r.confidence as ConfidenceLevel)
+        : "low";
+      if (source_type === "inference" && confidence === "high") confidence = "medium";
+
+      const built_on_signal_ranks = Array.isArray(r.built_on_signal_ranks)
+        ? r.built_on_signal_ranks
+            .map((n: any) => Number(n))
+            .filter((n: number) => Number.isFinite(n) && n >= 1 && n <= 3)
+        : undefined;
+
+      cleaned.push({
+        insight,
+        current_state,
+        shift,
+        problem,
+        implication,
+        tension,
+        conversation_entry,
+        question,
+        source_type,
+        confidence,
+        built_on_signal_ranks,
+      });
+    }
+    return cleaned;
+  } catch (e) {
+    console.warn(
+      "[currentStateIntelligence] commercial insights failed:",
+      (e as Error).message,
+    );
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // ─── Inferred current-state builder ────────────────────────────────
 
 function buildSkeletonIntelligence(args: {
@@ -1242,6 +1480,7 @@ function buildSkeletonIntelligence(args: {
     },
     verified_signals: verifiedSignals,
     prioritized_signals: [],
+    commercial_insights: [],
   };
 }
 
@@ -1302,6 +1541,24 @@ function renderPromptBlock(
     ).join("\n")
     : "(no verified real-world signals gathered this turn — proceed with hypotheses, framed clearly as assumptions)";
 
+  // COMMERCIAL INSIGHT (Challenger reframe) block — when present, this
+  // is the single most important block on the page: the response MUST
+  // open from the insight, not from a list of ideas.
+  const insights = intelligence.commercial_insights || [];
+  const insightsBlock = insights.length
+    ? insights.map((ins, i) =>
+      `${i + 1}. [src:${ins.source_type} · conf:${ins.confidence}${ins.built_on_signal_ranks?.length ? ` · built on signal #${ins.built_on_signal_ranks.join(",")}` : ""}]\n` +
+      `   Insight (the reframe):     ${ins.insight}\n` +
+      `   How they think today:      ${ins.current_state}\n` +
+      `   What is shifting:          ${ins.shift}\n` +
+      `   What breaks:               ${ins.problem}\n` +
+      `   Business implication:      ${ins.implication}\n` +
+      `   Tension to challenge:      ${ins.tension}\n` +
+      `   Conversation entry:        ${ins.conversation_entry}\n` +
+      `   Validation question:       ${ins.question}`
+    ).join("\n\n")
+    : "(no commercial insight generated — fall back to leading with the top prioritized signal as the conversation entry, but still open with a POV, not a list)";
+
   return `═══ CURRENT STATE INTELLIGENCE (verified-first — lead with what we can verify, extend with what we hypothesize) ═══
 Company: ${c.name}${c.website ? ` (${c.website})` : ""}
 Account context state: ${stateLabel}
@@ -1323,7 +1580,10 @@ WORKING HYPOTHESES ABOUT ${c.name.toUpperCase()} (used ONLY to extend or fill ga
 KNOWN FACTS (sourced — CRM + verified signals promoted):
 ${facts || "- (none in CRM/library — reason from public knowledge of this company)"}
 
-═══ PRIORITIZED SIGNALS + STRATEGIC WHY (TOP ${signals.length || "2-3"} — DRIVE YOUR RESPONSE FROM THESE) ═══
+═══ COMMERCIAL INSIGHT — CHALLENGER REFRAME (TOP ${insights.length || "1-2"} — OPEN YOUR RESPONSE FROM THE INSIGHT, NOT FROM A LIST) ═══
+${insightsBlock}
+
+═══ PRIORITIZED SIGNALS + STRATEGIC WHY (TOP ${signals.length || "2-3"} — these EXTEND the insight; do not let them replace it) ═══
 ${signalsBlock}
 ═══════════════════════════════════════════════════════════════════════
 
@@ -1331,6 +1591,8 @@ MUST-CONFIRM DISCOVERY QUESTIONS:
 ${mustConfirm}
 
 GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
+- INSIGHT-LED OPENING: When a COMMERCIAL INSIGHT is present above, your response MUST open from the insight using its conversation_entry verbatim or near-verbatim — shape: "I'd start here because…". Do NOT open with "Here are a few ways…", "There are several angles…", or any list-based opener. The insight is the POV; the prioritized signals extend it. The customer should walk away with a NEW way of understanding their business, not a longer to-do list.
+- The insight is a REFRAME, not an idea. Surface the tension. Name what is shifting. Make the implication concrete. Then offer the validation question naturally in prose.
 - VERIFIED-FIRST: When a prioritized signal has source_type ∈ {web, account, library}, lead with it. Reference the underlying real-world fact naturally in spoken language (not as a citation footnote). Example shape: "${c.name} has been [verified thing]. If that's true, the conversation I'd lead with is…". Inference is allowed only to extend verified signals or fill gaps where no verified signal exists.
 - Clearly distinguish verified from inferred IN PROSE. Verified: speak with confidence ("they've done X", "they recently launched Y"). Inferred: hedge ("a reasonable assumption is…", "${c.name} likely…", "if that holds…"). Never present an inferred angle as a sourced fact.
 - Your response MUST originate from the PRIORITIZED SIGNALS above. Each conversation path you produce must be traceable to one of those 2-3 ranked signals. Do not invent a fourth.
@@ -1348,7 +1610,7 @@ GENERATION RULES FOR THIS TURN — NON-NEGOTIABLE:
       : "Web research is NOT available this turn — verified signals above came from training recall and are tagged accordingly; do not say \"I researched\"."
   }
 ═══════════════════════════════════
-[Verified-first counters: verified=${verifiedCount}, inferred=${inferredCount}]`;
+[Verified-first counters: verified=${verifiedCount}, inferred=${inferredCount} | commercial_insights=${insights.length}]`;
 }
 
 // ─── Main entry point ──────────────────────────────────────────────
@@ -1484,6 +1746,21 @@ export async function runCurrentStatePreflight(
   });
   intelligence.prioritized_signals = prioritizedSignals;
 
+  // Commercial Insight (Challenger reframe) layer — runs AFTER
+  // verified signals + prioritized signals so the insight is grounded
+  // in real-world evidence and the already-ranked angles. Failure is
+  // non-fatal — promptBlock falls back to signals only.
+  const commercialInsights = await generateCommercialInsights({
+    entityName: entity.name,
+    resolvedAccount,
+    userContent: args.userContent || "",
+    hypotheses,
+    verifiedSignals,
+    prioritizedSignals,
+    webResearched,
+  });
+  intelligence.commercial_insights = commercialInsights;
+
   const promptBlock = renderPromptBlock(
     intelligence,
     accountContextState,
@@ -1524,6 +1801,12 @@ export async function runCurrentStatePreflight(
     prioritized_signal_types: prioritizedSignals.map((s) => s.signal_type),
     prioritized_signal_sources: prioritizedSignals.map((s) => s.source_type),
     prioritized_verified_top_count: verifiedTopRanks,
+    // ── Commercial Insight (Challenger) telemetry ─────────────────
+    commercial_insights_count: commercialInsights.length,
+    commercial_insights_sources: commercialInsights.map((c) => c.source_type),
+    commercial_insights_verified_count: commercialInsights.filter(
+      (c) => c.source_type !== "inference",
+    ).length,
     unknowns_count: countUnknowns(intelligence),
     injected_current_state_block: true,
     candidates_considered: candidates,

@@ -5280,6 +5280,10 @@ async function buildChatSystemPrompt(args: {
       inferred_signals_count: (currentStateResult?.log as any)?.inferred_signals_count ?? 0,
       verified_first_applied: (currentStateResult?.log as any)?.verified_first_applied ?? false,
       prioritized_verified_top_count: (currentStateResult?.log as any)?.prioritized_verified_top_count ?? 0,
+      // ── Commercial Insight (Challenger reframe) telemetry ──────────
+      commercial_insights_count: (currentStateResult?.log as any)?.commercial_insights_count ?? 0,
+      commercial_insights_verified_count: (currentStateResult?.log as any)?.commercial_insights_verified_count ?? 0,
+      commercial_insights_sources: (currentStateResult?.log as any)?.commercial_insights_sources ?? [],
       workspace: workspaceKeyRaw ?? null,
     }),
   );
@@ -6456,6 +6460,26 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       if (!cs) return "";
       const lines: string[] = [];
       if (cs.company?.name) lines.push(`Company: ${cs.company.name}`);
+
+      // Commercial Insights (Challenger reframe) lead the digest — if
+      // present, the response MUST open from the insight, not a list.
+      const insights = Array.isArray((cs as any).commercial_insights) ? (cs as any).commercial_insights : [];
+      if (insights.length) {
+        lines.push("");
+        lines.push("COMMERCIAL INSIGHT — open your response from this reframe (do NOT lead with 'Here are a few ways…'):");
+        for (const ins of insights) {
+          lines.push(`  ▸ Insight:        ${ins.insight}`);
+          lines.push(`    How they think today: ${ins.current_state}`);
+          lines.push(`    What is shifting:     ${ins.shift}`);
+          lines.push(`    What breaks:          ${ins.problem}`);
+          lines.push(`    Implication:          ${ins.implication}`);
+          lines.push(`    Tension to challenge: ${ins.tension}`);
+          lines.push(`    Conversation entry:   ${ins.conversation_entry}`);
+          lines.push(`    Validation question:  ${ins.question}`);
+        }
+        lines.push("");
+      }
+
       // Verified-first: surface verified signals BEFORE hypotheses so
       // the conversation prose anchors on what's real, not what's guessed.
       const verified = Array.isArray((cs as any).verified_signals) ? (cs as any).verified_signals : [];
