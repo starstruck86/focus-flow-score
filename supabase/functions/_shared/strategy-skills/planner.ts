@@ -28,6 +28,8 @@ export interface PlannerSkillRunState {
   lastSkillId?: string;
   lastResolved?: { inputs: Record<string, string> };
   lastRetrievalPlanHash?: string;
+  /** 3A: previous turn's account id, used for drift detection only. */
+  lastAccountId?: string;
 }
 
 export interface PlannerContext {
