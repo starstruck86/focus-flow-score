@@ -614,12 +614,19 @@ GO requires ALL of:
 [ ] Case 1c  fake-account run shows weaker primary influence than the
              real-account run (or zero primary hits).
 [ ] Case 2   ok=true, behavior_intent=pov_synthesis, hits populated.
-[ ] Case 3a  ok=false, refusal.code=source_mode_gate, gate=refuse,
-             generic_output_risk=high.
-[ ] Case 3b  EITHER ok=true with gate=pass and ≥1 standardish hit,
-             OR ok=false with the same explicit refusal shape as 3a
-             (proves the gate is not a one-way door — it can pass when
-             coverage exists, and refuses honestly when it doesn't).
+[ ] Case 3a  EXPECTED REFUSAL. ok=false, refusal.code=source_mode_gate,
+             gate=refuse, generic_output_risk=high.
+[ ] Case 3b  PASS ATTEMPT. ok=true with gate=pass and ≥1 standardish hit
+             counts as GO. If 3b refuses, mark "COVERAGE GAP" (not GO)
+             and rely on Case 3c instead.
+[ ] Case 3c  METHODOLOGY-HEAVY PASS ATTEMPT (fallback). At least ONE of
+             {3b, 3c} MUST pass honestly (ok=true, gate=pass, ≥1
+             standardish hit) before Phase 3.5 may unblock. If both 3b
+             and 3c refuse, status is "COVERAGE GAP": broaden inputs or
+             extend library, then re-run.
+[ ] library_required proof-burden verdict line prints
+             "GO: library_required both passes (3b or 3c) and refuses
+             (3a) honestly".
 [ ] Case 4a  ok=false, refusal.code=unknown_skill.
 [ ] Case 4b  default path engaged (verdict: PASS), no skill markers.
 [ ] Case 4c  default path engaged (verdict: PASS), no skill markers.
