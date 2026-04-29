@@ -140,12 +140,13 @@ describe('Strategy Skills — Phase 1 (additive, inert)', () => {
     expect(empty.ok).toBe(false);
   });
 
-  it('11. NO runtime/edge code imports the strategy-skills module (inert guarantee)', () => {
+  it('11. NO frontend runtime code imports the strategy-skills module (frontend-inert guarantee)', () => {
+    // Phase 3 note: the SERVER mirror at supabase/functions/_shared/strategy-skills/
+    // is allowed and is wired into a single guarded branch in strategy-chat/index.ts.
+    // The FRONTEND module under src/lib/strategy-skills/ MUST remain inert — no
+    // runtime, hook, or component imports it.
     const repoRoot = resolve(__dirname, '../../../..');
-    const scanRoots = [
-      join(repoRoot, 'src'),
-      join(repoRoot, 'supabase', 'functions'),
-    ];
+    const scanRoots = [join(repoRoot, 'src')];
     const offenders: string[] = [];
     const isCode = (f: string) => /\.(ts|tsx|js|jsx)$/.test(f);
     const isTest = (f: string) => /\.(test|spec)\.(ts|tsx|js|jsx)$/.test(f);
@@ -165,7 +166,7 @@ describe('Strategy Skills — Phase 1 (additive, inert)', () => {
           if (p.includes(`${'lib'}/strategy-skills/`) || p.includes(`${'lib'}\\strategy-skills\\`)) continue;
           let content = '';
           try { content = readFileSync(p, 'utf8'); } catch { continue; }
-          if (content.includes('strategy-skills')) {
+          if (/from ['"][^'"]*strategy-skills/.test(content)) {
             offenders.push(p.replace(repoRoot + '/', ''));
           }
         }
