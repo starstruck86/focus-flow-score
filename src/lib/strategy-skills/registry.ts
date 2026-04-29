@@ -6,28 +6,28 @@
  * only from tests in `src/lib/strategy-skills/__tests__/`.
  */
 import type { SkillManifest } from './types';
-import { povManifest } from './manifests/pov';
-import { researchManifest } from './manifests/research';
-import { conversationManifest } from './manifests/conversation';
-import { refineManifest } from './manifests/refine';
-import { brainstormManifest } from './manifests/brainstorm';
+import { conversationPovManifest } from './manifests/conversationPov';
 import { discoveryPrepManifest } from './manifests/discoveryPrep';
-import { accountBriefManifest } from './manifests/accountBrief';
-import { ninetyDayPlanManifest } from './manifests/ninetyDayPlan';
-import { objectionManifest } from './manifests/objection';
-import { stakeholderMapManifest } from './manifests/stakeholderMap';
+import { commercialInsightManifest } from './manifests/commercialInsight';
+import { accountResearchManifest } from './manifests/accountResearch';
+import { discoveryQuestionsManifest } from './manifests/discoveryQuestions';
+import { meddiccReviewManifest } from './manifests/meddiccReview';
+import { demoStrategyManifest } from './manifests/demoStrategy';
+import { followUpEmailManifest } from './manifests/followUpEmail';
+import { objectionStrategyManifest } from './manifests/objectionStrategy';
+import { executiveBriefManifest } from './manifests/executiveBrief';
 
 export const SKILL_MANIFESTS: ReadonlyArray<SkillManifest> = Object.freeze([
-  povManifest,
-  researchManifest,
-  conversationManifest,
-  refineManifest,
-  brainstormManifest,
+  conversationPovManifest,
   discoveryPrepManifest,
-  accountBriefManifest,
-  ninetyDayPlanManifest,
-  objectionManifest,
-  stakeholderMapManifest,
+  commercialInsightManifest,
+  accountResearchManifest,
+  discoveryQuestionsManifest,
+  meddiccReviewManifest,
+  demoStrategyManifest,
+  followUpEmailManifest,
+  objectionStrategyManifest,
+  executiveBriefManifest,
 ]);
 
 export const SKILL_REGISTRY: Readonly<Record<string, SkillManifest>> = Object.freeze(
