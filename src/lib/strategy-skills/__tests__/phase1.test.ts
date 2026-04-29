@@ -33,16 +33,16 @@ describe('Strategy Skills — Phase 1 (additive, inert)', () => {
     expect(SKILL_MANIFESTS).toHaveLength(10);
     const ids = SKILL_MANIFESTS.map(m => m.id).sort();
     expect(ids).toEqual([
-      'account-brief',
-      'brainstorm',
-      'conversation',
+      'account-research',
+      'commercial-insight',
+      'conversation-pov',
+      'demo-strategy',
       'discovery-prep',
-      'ninety-day-plan',
-      'objection',
-      'pov',
-      'refine',
-      'research',
-      'stakeholder-map',
+      'discovery-questions',
+      'executive-brief',
+      'follow-up-email',
+      'meddicc-review',
+      'objection-strategy',
     ]);
   });
 
@@ -114,15 +114,15 @@ describe('Strategy Skills — Phase 1 (additive, inert)', () => {
     }
   });
 
-  it('9. resolver returns the expected manifest for "/pov" and "pov"', () => {
-    const a = resolveSkill({ token: '/pov' });
-    const b = resolveSkill({ token: 'pov' });
+  it('9. resolver returns the expected manifest for "/conversation-pov" and "conversation-pov"', () => {
+    const a = resolveSkill({ token: '/conversation-pov' });
+    const b = resolveSkill({ token: 'conversation-pov' });
     expect(a.ok && b.ok).toBe(true);
     if (a.ok && b.ok) {
-      expect(a.resolved.manifest).toBe(SKILL_REGISTRY['pov']);
-      expect(b.resolved.manifest).toBe(SKILL_REGISTRY['pov']);
+      expect(a.resolved.manifest).toBe(SKILL_REGISTRY['conversation-pov']);
+      expect(b.resolved.manifest).toBe(SKILL_REGISTRY['conversation-pov']);
       expect(a.resolved.effectiveDepth).toBe('standard');
-      const deep = resolveSkill({ token: '/pov', depthOverride: 'deep' });
+      const deep = resolveSkill({ token: '/conversation-pov', depthOverride: 'deep' });
       expect(deep.ok && deep.resolved.effectiveDepth).toBe('deep');
     }
   });

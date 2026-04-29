@@ -1,9 +1,9 @@
 import type { SkillManifest } from '../types';
 
-export const povManifest: SkillManifest = {
-  id: 'pov',
-  label: 'POV',
-  description: 'Sharpen a single POV with full reasoning, compressed delivery.',
+export const commercialInsightManifest: SkillManifest = {
+  id: 'commercial-insight',
+  label: 'Commercial Insight',
+  description: 'Sharpen a single commercial insight with full reasoning, compressed delivery.',
   behaviorIntent: 'pov_synthesis',
   workspace: 'refine',
   depth: 'standard',

@@ -1,8 +1,8 @@
 import type { SkillManifest } from '../types';
 
-export const conversationManifest: SkillManifest = {
-  id: 'conversation',
-  label: 'Conversation Strategy',
+export const conversationPovManifest: SkillManifest = {
+  id: 'conversation-pov',
+  label: 'Conversation POV',
   description: 'Compressed, POV-bearing prep for an upcoming live conversation.',
   behaviorIntent: 'conversation_strategy',
   workspace: 'work',
