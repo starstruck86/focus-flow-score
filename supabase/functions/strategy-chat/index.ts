@@ -2221,6 +2221,59 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // ── Phase 3 — Strategy Skills passthrough (inert by default) ──
+    // Triple-gated early return:
+    //   1. STRATEGY_SKILLS_ENABLED env flag must be "true"
+    //   2. `x-skill-debug: 1` header must be set (debug-only path)
+    //   3. body.skill must be a well-formed envelope with an `id`
+    //
+    // When ALL three are met, runs the skill runtime end-to-end and
+    // returns the SkillReasoningEnvelope (trace + Show-proof payload).
+    // Does NOT call synthesis, does NOT modify task pipelines, does NOT
+    // touch Discovery Prep. When ANY guard fails, falls through to the
+    // unmodified existing handler — default Strategy chat is byte-identical.
+    try {
+      const skillsFlag = (Deno.env.get("STRATEGY_SKILLS_ENABLED") ?? "").toLowerCase() === "true";
+      const skillDebugHeader = req.headers.get("x-skill-debug") === "1";
+      const skillEnvelope = (body as { skill?: unknown })?.skill;
+      const hasSkillEnvelope = !!skillEnvelope &&
+        typeof skillEnvelope === "object" &&
+        typeof (skillEnvelope as { id?: unknown }).id === "string" &&
+        ((skillEnvelope as { id: string }).id.length > 0);
+
+      if (skillsFlag && skillDebugHeader && hasSkillEnvelope) {
+        const { runSkill } = await import("../_shared/strategy-skills/index.ts");
+        const skillCtx = {
+          thread: typeof body?.threadId === "string" ? { threadId: body.threadId } : undefined,
+        };
+        const result = await runSkill({
+          envelope: skillEnvelope,
+          ctx: skillCtx,
+          supabase,
+          userId,
+        });
+        const status = result.ok ? 200 : 422;
+        console.log(
+          `[skill-passthrough] skill=${(skillEnvelope as { id: string }).id} ok=${result.ok} status=${status}`,
+        );
+        return new Response(
+          JSON.stringify({
+            early_return: true,
+            source: "strategy-skills/passthrough",
+            envelope: result.envelope,
+            ...(result.ok
+              ? { synthesisAddendumPreview: result.synthesisAddendum.slice(0, 800) }
+              : { reason: result.reason, code: result.code }),
+          }),
+          { status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    } catch (e) {
+      // Defensive: never let the skill branch crash the default path.
+      console.warn("[skill-passthrough] error, falling through:", (e as Error).message);
+    }
+
     const {
       action,
       threadId,
