@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Strategy Skills — Phase 1 pure tests.
  *
