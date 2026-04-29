@@ -218,7 +218,7 @@ describe('Strategy Skills — Phase 2 (planner, inert)', () => {
     if (!r.ok) throw new Error();
     const out = buildPlan(r.resolved, {});
     expect(out.ok).toBe(false);
-    if (!out.ok) expect(out.reason).toBe('insufficient_context');
+    if (out.ok === false) expect(out.reason).toBe('insufficient_context');
   });
 
   it('15. confidence: library_required surfaces insufficient when 0 hits; library_first returns low with 1 hit', () => {
