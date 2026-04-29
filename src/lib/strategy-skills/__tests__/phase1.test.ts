@@ -129,11 +129,11 @@ describe('Strategy Skills — Phase 1 (additive, inert)', () => {
   it('10. resolver rejects unknown and invalid tokens', () => {
     const unknown = resolveSkill({ token: '/does-not-exist' });
     expect(unknown.ok).toBe(false);
-    if (!unknown.ok) expect(unknown.reason).toBe('unknown_skill');
+    if (unknown.ok === false) expect(unknown.reason).toBe('unknown_skill');
 
     const invalid = resolveSkill({ token: '///' });
     expect(invalid.ok).toBe(false);
-    if (!invalid.ok) expect(invalid.reason).toBe('invalid_token');
+    if (invalid.ok === false) expect(invalid.reason).toBe('invalid_token');
 
     const empty = resolveSkill({ token: '' });
     expect(empty.ok).toBe(false);
