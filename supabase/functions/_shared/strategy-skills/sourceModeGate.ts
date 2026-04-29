@@ -18,8 +18,8 @@
 import type {
   RetrievalConfidence,
   RetrievalCounts,
-  SkillSourceMode,
 } from "./planner.ts";
+import type { SkillSourceMode } from "./types.ts";
 
 export type SourceGateDecision =
   | { decision: "pass" }
