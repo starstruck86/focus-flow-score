@@ -193,8 +193,14 @@ Deno.test("L. envelope — schema stable, exposes plan hash + counts", () => {
     confidence: "high",
     latencyMs: 42,
     hits: [],
+    influence: { primary: 0, supporting: 0, weak: 0, total: 0, primary_dominant: false },
     gate: { decision: "pass" },
     overridesClamped: [],
+    droppedClientKeys: [],
+    genericOutputRisk: "low",
+    drift: { changed_skill: false, same_account: false, to: "conversation-pov" },
+    chainDepth: 0,
+    whyThisSkill: "test",
   });
   assertEquals(env.schema, "skill_envelope.v1");
   assertEquals(env.trace.schema, "skill_trace.v1");
