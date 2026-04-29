@@ -29,10 +29,19 @@
 #   export REAL_ACCOUNT="Beechwood Hotel"   # optional override
 #   export REAL_PERSONA="GM"           # optional
 #   export REAL_TOPIC="loyalty program"# optional
+#   # Optional broader inputs for Case 3c (methodology-heavy fallback):
+#   export REAL_OPPORTUNITY="Q3 Platform Renewal"
+#   export REAL_METHODOLOGY="MEDDICC"
 #   bash scripts/phase3a-debug-validation.sh
 #
 # Pre-req for cases 1–5, 7a/b, 8, 9: edge env STRATEGY_SKILLS_ENABLED=true
-# Case 10 (flag-off proof) MUST be re-run separately with the flag off.
+# Case 6 (flag-off proof) MUST be re-run separately with the flag off.
+#
+# Phase 3.5 GO requires BOTH:
+#   (a) at least one library_required skill PASSES honestly  (3b OR 3c), and
+#   (b) at least one library_required skill REFUSES honestly (3a).
+# If 3b refuses, status is "coverage gap" — run 3c with broader inputs or
+# extend the library until a library_required skill legitimately passes.
 # ─────────────────────────────────────────────────────────────────────
 set -u
 
