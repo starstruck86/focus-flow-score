@@ -1,5 +1,5 @@
 /**
- * Skill trace summary + envelope (Phase 3, pure).
+ * Skill trace summary + envelope (Phase 3 + 3A hardening, pure).
  *
  * The "Show proof" feature reads from this trace shape. It includes:
  *   • skill identity + version
@@ -7,11 +7,15 @@
  *   • plan hashes (context + plan)
  *   • retrieval counts + confidence
  *   • source-mode gate decision
- *   • overrides that were clamped
- *   • the library hits used (id + title + kind)
+ *   • overrides that were clamped + client keys we dropped
+ *   • the library hits used (id + title + kind + relevance_class)
+ *   • library influence summary
+ *   • generic-output risk
+ *   • drift signal + chain depth
+ *   • why_this_skill rationale
  *
- * The trace is what powers `Show proof`: the client reads it from the
- * envelope returned by the early-return branch. No DB writes.
+ * No DB writes. The client reads the envelope from the early-return
+ * branch returned by the strategy-chat passthrough.
  */
 import type {
   RetrievalConfidence,
@@ -20,6 +24,12 @@ import type {
 } from "./planner.ts";
 import type { LibraryHit } from "./synthesisAddendum.ts";
 import type { SourceGateDecision } from "./sourceModeGate.ts";
+import type {
+  ClassifiedHit,
+  DriftSignal,
+  GenericRisk,
+  LibraryInfluence,
+} from "./hardening.ts";
 
 export interface SkillTrace {
   schema: "skill_trace.v1";
@@ -42,16 +52,27 @@ export interface SkillTrace {
     counts: RetrievalCounts;
     confidence: RetrievalConfidence;
     latency_ms: number;
-    hits: ReadonlyArray<LibraryHit>;
+    hits: ReadonlyArray<ClassifiedHit | LibraryHit>;
+    influence: LibraryInfluence;
   };
   gate: SourceGateDecision;
   overrides_clamped: ReadonlyArray<string>;
+  /** 3A: client-supplied keys we ignored (e.g. "forbidden:sourceMode"). */
+  dropped_client_keys: ReadonlyArray<string>;
+  /** 3A: pre-synthesis estimate of generic-output risk. */
+  generic_output_risk: GenericRisk;
+  /** 3A: same-account / different-skill drift signal. */
+  drift: DriftSignal;
+  /** 3A: chain depth at invocation (0 for top-level). */
+  chain_depth: number;
+  /** 3A: one-line rationale of why this skill ran with these proofs. */
+  why_this_skill: string;
 }
 
 export interface SkillReasoningEnvelope {
   schema: "skill_envelope.v1";
   ok: boolean;
-  /** Present when the runtime refused (gate or planner). */
+  /** Present when the runtime refused (gate, version, chain, or planner). */
   refusal?: { reason: string; code: string };
   trace: SkillTrace;
 }
@@ -69,9 +90,15 @@ export interface BuildEnvelopeInput {
   counts: RetrievalCounts;
   confidence: RetrievalConfidence;
   latencyMs: number;
-  hits: ReadonlyArray<LibraryHit>;
+  hits: ReadonlyArray<ClassifiedHit | LibraryHit>;
+  influence: LibraryInfluence;
   gate: SourceGateDecision;
   overridesClamped: ReadonlyArray<string>;
+  droppedClientKeys: ReadonlyArray<string>;
+  genericOutputRisk: GenericRisk;
+  drift: DriftSignal;
+  chainDepth: number;
+  whyThisSkill: string;
   runId?: string;
 }
 
@@ -98,9 +125,15 @@ export function buildSkillEnvelope(input: BuildEnvelopeInput): SkillReasoningEnv
       confidence: input.confidence,
       latency_ms: input.latencyMs,
       hits: input.hits,
+      influence: input.influence,
     },
     gate: input.gate,
     overrides_clamped: input.overridesClamped,
+    dropped_client_keys: input.droppedClientKeys,
+    generic_output_risk: input.genericOutputRisk,
+    drift: input.drift,
+    chain_depth: input.chainDepth,
+    why_this_skill: input.whyThisSkill,
   };
   return {
     schema: "skill_envelope.v1",
@@ -117,9 +150,19 @@ export function buildSkillEnvelope(input: BuildEnvelopeInput): SkillReasoningEnv
 export interface ProofView {
   skill: { id: string; version: string; depth: string; sourceMode: string };
   plan: { contextHash: string; planHash: string; termSeeds: ReadonlyArray<string> };
-  retrieval: { counts: RetrievalCounts; confidence: string; hits: ReadonlyArray<LibraryHit> };
+  retrieval: {
+    counts: RetrievalCounts;
+    confidence: string;
+    hits: ReadonlyArray<ClassifiedHit | LibraryHit>;
+    influence: LibraryInfluence;
+  };
   gate: SourceGateDecision;
   overridesClamped: ReadonlyArray<string>;
+  droppedClientKeys: ReadonlyArray<string>;
+  genericOutputRisk: GenericRisk;
+  drift: DriftSignal;
+  chainDepth: number;
+  whyThisSkill: string;
 }
 
 export function readProof(envelope: SkillReasoningEnvelope): ProofView | null {
@@ -141,8 +184,14 @@ export function readProof(envelope: SkillReasoningEnvelope): ProofView | null {
       counts: t.retrieval.counts,
       confidence: t.retrieval.confidence,
       hits: t.retrieval.hits,
+      influence: t.retrieval.influence,
     },
     gate: t.gate,
     overridesClamped: t.overrides_clamped,
+    droppedClientKeys: t.dropped_client_keys,
+    genericOutputRisk: t.generic_output_risk,
+    drift: t.drift,
+    chainDepth: t.chain_depth,
+    whyThisSkill: t.why_this_skill,
   };
 }
