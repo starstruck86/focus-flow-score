@@ -153,7 +153,7 @@ describe('Strategy Skills — Phase 2 (planner, inert)', () => {
       expect(r.ok).toBe(true);
       if (!r.ok) continue;
       const out = buildPlan(r.resolved, richContext());
-      expect(out.ok, `${m.id} failed: ${!out.ok ? out.reason : ''}`).toBe(true);
+      expect(out.ok, `${m.id} failed: ${!out.ok ? (out as { reason: string }).reason : ''}`).toBe(true);
       if (!out.ok) continue;
       const manifestScopes = new Set(m.retrieval.scopes);
       for (const s of out.plan.scopes) expect(manifestScopes.has(s)).toBe(true);
