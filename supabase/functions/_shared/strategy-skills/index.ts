@@ -10,4 +10,5 @@ export * from "./adapter.ts";
 export * from "./sourceModeGate.ts";
 export * from "./synthesisAddendum.ts";
 export * from "./trace.ts";
+export * from "./hardening.ts";
 export * from "./runtime.ts";

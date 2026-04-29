@@ -193,8 +193,14 @@ Deno.test("L. envelope — schema stable, exposes plan hash + counts", () => {
     confidence: "high",
     latencyMs: 42,
     hits: [],
+    influence: { primary: 0, supporting: 0, weak: 0, total: 0, primary_dominant: false },
     gate: { decision: "pass" },
     overridesClamped: [],
+    droppedClientKeys: [],
+    genericOutputRisk: "low",
+    drift: { changed_skill: false, same_account: false, to: "conversation-pov" },
+    chainDepth: 0,
+    whyThisSkill: "test",
   });
   assertEquals(env.schema, "skill_envelope.v1");
   assertEquals(env.trace.schema, "skill_trace.v1");
@@ -216,8 +222,14 @@ Deno.test("M. show-proof — read path returns structured view", () => {
     confidence: "high",
     latencyMs: 100,
     hits: [{ kind: "knowledge_item", id: "k1", title: "Discovery KI" }],
+    influence: { primary: 0, supporting: 0, weak: 1, total: 1, primary_dominant: false },
     gate: { decision: "pass" },
     overridesClamped: [],
+    droppedClientKeys: [],
+    genericOutputRisk: "low",
+    drift: { changed_skill: false, same_account: false, to: "discovery-prep" },
+    chainDepth: 0,
+    whyThisSkill: "test",
   });
   const proof = readProof(env);
   assertExists(proof);
