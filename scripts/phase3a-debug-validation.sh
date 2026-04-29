@@ -655,8 +655,12 @@ NO-GO if ANY of:
 [ ] Plan hashes differ between case 1 and case 1b.
 [ ] Show-proof projection is missing skill_id, plan_hash, hits,
     influence, confidence, gate, or why_this_skill.
+[ ] BOTH Case 3b AND Case 3c refused (no library_required skill passed
+    honestly) — this is a COVERAGE GAP and blocks Phase 3.5.
 
-Phase 3.5 (artifact handoff) remains BLOCKED until this checklist is
-fully GREEN against the deployed environment with real account data.
+Phase 3.5 (artifact handoff) remains BLOCKED until:
+  1. at least one library_required skill PASSES honestly (3b or 3c), AND
+  2. at least one library_required skill REFUSES honestly (3a),
+  against the deployed environment with real account data.
 ════════════════════════════════════════════════════════════════════════
 CHECKLIST
