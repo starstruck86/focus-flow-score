@@ -29,10 +29,19 @@
 #   export REAL_ACCOUNT="Beechwood Hotel"   # optional override
 #   export REAL_PERSONA="GM"           # optional
 #   export REAL_TOPIC="loyalty program"# optional
+#   # Optional broader inputs for Case 3c (methodology-heavy fallback):
+#   export REAL_OPPORTUNITY="Q3 Platform Renewal"
+#   export REAL_METHODOLOGY="MEDDICC"
 #   bash scripts/phase3a-debug-validation.sh
 #
 # Pre-req for cases 1–5, 7a/b, 8, 9: edge env STRATEGY_SKILLS_ENABLED=true
-# Case 10 (flag-off proof) MUST be re-run separately with the flag off.
+# Case 6 (flag-off proof) MUST be re-run separately with the flag off.
+#
+# Phase 3.5 GO requires BOTH:
+#   (a) at least one library_required skill PASSES honestly  (3b OR 3c), and
+#   (b) at least one library_required skill REFUSES honestly (3a).
+# If 3b refuses, status is "coverage gap" — run 3c with broader inputs or
+# extend the library until a library_required skill legitimately passes.
 # ─────────────────────────────────────────────────────────────────────
 set -u
 
@@ -45,6 +54,8 @@ REAL_PERSONA="${REAL_PERSONA:-General Manager}"
 REAL_STAGE="${REAL_STAGE:-discovery}"
 REAL_TOPIC="${REAL_TOPIC:-guest experience platform consolidation}"
 REAL_INDUSTRY="${REAL_INDUSTRY:-hospitality}"
+REAL_OPPORTUNITY="${REAL_OPPORTUNITY:-Q3 Platform Renewal}"
+REAL_METHODOLOGY="${REAL_METHODOLOGY:-MEDDICC}"
 
 FAKE_ACCOUNT="ZZ-NoSuchAccount-9999"
 FAKE_PERSONA="ZZ-NoSuchPersona-9999"
@@ -329,12 +340,15 @@ run_case "3a. executive-brief — REFUSAL (library_required, sparse)" "{
 }" "x-skill-debug: 1" "$TMPDIR_TRACE/case3a.json"
 
 # ═════════════════════════════════════════════════════════════════════
-# CASE 3b — proof burden PASS (library_required + REAL inputs) (gap 4)
-# Goal: prove the gate CAN pass, not just refuse. If your real account
-# has insufficient library coverage for executive-brief, this case will
-# refuse — and that is itself a meaningful, real signal.
+# CASE 3b — proof burden PASS ATTEMPT (library_required + REAL inputs)
+#
+# Status semantics (per reviewer):
+#   • ok=true, gate=pass            → GO  (honest pass)
+#   • ok=false, refusal=source_mode_gate → COVERAGE GAP, not GO.
+#     Run Case 3c with broader inputs / methodology-heavy skill until at
+#     least one library_required skill passes honestly.
 # ═════════════════════════════════════════════════════════════════════
-run_case "3b. executive-brief — PASS attempt (library_required, REAL)" "{
+run_case "3b. executive-brief — PASS ATTEMPT (library_required, REAL)" "{
   \"threadId\": \"debug-thread-eb-pass\",
   \"skill\": {
     \"id\": \"executive-brief\",
@@ -347,6 +361,64 @@ run_case "3b. executive-brief — PASS attempt (library_required, REAL)" "{
     \"runId\": \"debug-run-eb-pass-1\"
   }
 }" "x-skill-debug: 1" "$TMPDIR_TRACE/case3b.json"
+
+# ═════════════════════════════════════════════════════════════════════
+# CASE 3c — methodology-heavy library_required PASS attempt (fallback)
+#
+# Use meddicc-review with a real opportunity + an explicit methodology
+# term. Methodology + standards content is typically the densest part of
+# the library, so this is the best chance to legitimately satisfy the
+# library_required proof burden when 3b refuses for coverage reasons.
+#
+# If BOTH 3b and 3c refuse, treat as COVERAGE GAP and broaden inputs
+# (or extend the library) before declaring Phase 3.5 unblocked.
+# ═════════════════════════════════════════════════════════════════════
+run_case "3c. meddicc-review — PASS ATTEMPT (library_required, methodology-heavy)" "{
+  \"threadId\": \"debug-thread-meddicc-pass\",
+  \"skill\": {
+    \"id\": \"meddicc-review\",
+    \"inputs\": {
+      \"account\":      \"${REAL_ACCOUNT}\",
+      \"opportunity\":  \"${REAL_OPPORTUNITY}\",
+      \"stage\":        \"${REAL_STAGE}\",
+      \"persona\":      \"${REAL_PERSONA}\",
+      \"methodology\":  \"${REAL_METHODOLOGY}\"
+    },
+    \"runId\": \"debug-run-meddicc-pass-1\"
+  }
+}" "x-skill-debug: 1" "$TMPDIR_TRACE/case3c.json"
+
+# Cross-case verdict for the library_required proof burden.
+if [ -s "$TMPDIR_TRACE/case3a.json" ] \
+   && { [ -s "$TMPDIR_TRACE/case3b.json" ] || [ -s "$TMPDIR_TRACE/case3c.json" ]; }; then
+  echo
+  echo "── library_required proof-burden verdict (3a refusal + 3b/3c pass) ──"
+  jq -n \
+    --slurpfile a "$TMPDIR_TRACE/case3a.json" \
+    --argjson  hasB "$( [ -s "$TMPDIR_TRACE/case3b.json" ] && echo true || echo false )" \
+    --argjson  hasC "$( [ -s "$TMPDIR_TRACE/case3c.json" ] && echo true || echo false )" \
+    --slurpfile b "${TMPDIR_TRACE}/case3b.json" \
+    --slurpfile c "${TMPDIR_TRACE}/case3c.json" \
+    '
+    def passed(x): (x[0].envelope.ok == true)
+                   and (x[0].envelope.trace.gate.decision == "pass");
+    def refused_honestly(x): (x[0].envelope.ok == false)
+                   and (x[0].envelope.refusal.code == "source_mode_gate");
+    {
+      case_3a_refused_honestly: refused_honestly($a),
+      case_3b_passed:           ($hasB and passed($b)),
+      case_3c_passed:           ($hasC and passed($c)),
+      verdict: (
+        if refused_honestly($a)
+           and (( $hasB and passed($b) ) or ( $hasC and passed($c) ))
+        then "GO: library_required both passes (3b or 3c) and refuses (3a) honestly"
+        elif refused_honestly($a)
+        then "COVERAGE GAP: 3a refuses honestly but no library_required skill passed. Broaden inputs or extend library, then re-run 3c."
+        else "NO-GO: 3a did not refuse honestly — gate is not enforcing library_required."
+        end
+      )
+    }'
+fi
 
 # ═════════════════════════════════════════════════════════════════════
 # CASE 4a — unknown skill id (gap 5)
@@ -542,12 +614,19 @@ GO requires ALL of:
 [ ] Case 1c  fake-account run shows weaker primary influence than the
              real-account run (or zero primary hits).
 [ ] Case 2   ok=true, behavior_intent=pov_synthesis, hits populated.
-[ ] Case 3a  ok=false, refusal.code=source_mode_gate, gate=refuse,
-             generic_output_risk=high.
-[ ] Case 3b  EITHER ok=true with gate=pass and ≥1 standardish hit,
-             OR ok=false with the same explicit refusal shape as 3a
-             (proves the gate is not a one-way door — it can pass when
-             coverage exists, and refuses honestly when it doesn't).
+[ ] Case 3a  EXPECTED REFUSAL. ok=false, refusal.code=source_mode_gate,
+             gate=refuse, generic_output_risk=high.
+[ ] Case 3b  PASS ATTEMPT. ok=true with gate=pass and ≥1 standardish hit
+             counts as GO. If 3b refuses, mark "COVERAGE GAP" (not GO)
+             and rely on Case 3c instead.
+[ ] Case 3c  METHODOLOGY-HEAVY PASS ATTEMPT (fallback). At least ONE of
+             {3b, 3c} MUST pass honestly (ok=true, gate=pass, ≥1
+             standardish hit) before Phase 3.5 may unblock. If both 3b
+             and 3c refuse, status is "COVERAGE GAP": broaden inputs or
+             extend library, then re-run.
+[ ] library_required proof-burden verdict line prints
+             "GO: library_required both passes (3b or 3c) and refuses
+             (3a) honestly".
 [ ] Case 4a  ok=false, refusal.code=unknown_skill.
 [ ] Case 4b  default path engaged (verdict: PASS), no skill markers.
 [ ] Case 4c  default path engaged (verdict: PASS), no skill markers.
@@ -576,8 +655,12 @@ NO-GO if ANY of:
 [ ] Plan hashes differ between case 1 and case 1b.
 [ ] Show-proof projection is missing skill_id, plan_hash, hits,
     influence, confidence, gate, or why_this_skill.
+[ ] BOTH Case 3b AND Case 3c refused (no library_required skill passed
+    honestly) — this is a COVERAGE GAP and blocks Phase 3.5.
 
-Phase 3.5 (artifact handoff) remains BLOCKED until this checklist is
-fully GREEN against the deployed environment with real account data.
+Phase 3.5 (artifact handoff) remains BLOCKED until:
+  1. at least one library_required skill PASSES honestly (3b or 3c), AND
+  2. at least one library_required skill REFUSES honestly (3a),
+  against the deployed environment with real account data.
 ════════════════════════════════════════════════════════════════════════
 CHECKLIST
