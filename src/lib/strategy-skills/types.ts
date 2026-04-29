@@ -53,7 +53,7 @@ export type SkillSourceMode = 'library_first' | 'library_required' | 'library_re
  */
 export interface SkillRetrievalPlan {
   /** Logical scopes the planner should query (KIs, playbooks, standards, exemplars). */
-  scopes: ReadonlyArray<'knowledge_items' | 'playbooks' | 'standards' | 'exemplars' | 'patterns'>;
+  scopes: ReadonlyArray<'knowledge_items' | 'playbooks' | 'standards' | 'exemplars' | 'patterns' | 'templates'>;
   /**
    * Term seeds expressed as input-binding expressions, e.g.
    * `"${inputs.industry}"`, `"${inputs.persona}"`, `"${inputs.methodology}"`.
