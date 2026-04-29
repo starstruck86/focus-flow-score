@@ -4,7 +4,7 @@
  * Typed shapes the planner accepts. The planner does not import from
  * hooks, edge functions, or the runtime. Tests pass fixtures.
  */
-import type { ResolvedSkill, SkillDepth } from '../types';
+import type { SkillDepth, SkillManifest, SkillSourceMode } from '../types';
 
 export type PlannerScope =
   | 'knowledge_items'
@@ -39,7 +39,7 @@ export interface RetrievalQueryPlan {
   skillId: string;
   skillVersion: string;
   depth: SkillDepth;
-  sourceMode: ResolvedSkill['manifest']['sourceMode'];
+  sourceMode: SkillSourceMode;
   entityScoped: boolean;
   entityRefs: ReadonlyArray<{ kind: 'account' | 'opportunity' | 'persona'; id: string }>;
   termSeeds: ReadonlyArray<string>;

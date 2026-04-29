@@ -19,8 +19,8 @@ type Namespace = (typeof ALLOWED_NAMESPACES)[number];
 function readScope(ns: Namespace, key: string, ctx: PlannerContext, inputs: Record<string, unknown>): unknown {
   switch (ns) {
     case 'inputs': return inputs[key];
-    case 'thread': return ctx.thread ? (ctx.thread as Record<string, unknown>)[key] : undefined;
-    case 'account': return ctx.account ? (ctx.account as Record<string, unknown>)[key] : undefined;
+    case 'thread': return ctx.thread ? (ctx.thread as unknown as Record<string, unknown>)[key] : undefined;
+    case 'account': return ctx.account ? (ctx.account as unknown as Record<string, unknown>)[key] : undefined;
     case 'prior': return ctx.prior?.lastResolved?.inputs?.[key];
   }
 }

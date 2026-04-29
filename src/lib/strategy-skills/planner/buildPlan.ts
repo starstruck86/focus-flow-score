@@ -4,7 +4,7 @@
  * Turns a ResolvedSkill + PlannerContext into a RetrievalQueryPlan.
  * Emits parameters only — does NOT call retrieval, does NOT touch IO.
  */
-import type { ResolvedSkill } from '../types';
+import type { ResolvedSkill } from '../resolver';
 import type {
   PlannerContext,
   PlannerResult,
