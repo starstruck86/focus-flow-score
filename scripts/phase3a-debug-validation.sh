@@ -54,6 +54,8 @@ REAL_PERSONA="${REAL_PERSONA:-General Manager}"
 REAL_STAGE="${REAL_STAGE:-discovery}"
 REAL_TOPIC="${REAL_TOPIC:-guest experience platform consolidation}"
 REAL_INDUSTRY="${REAL_INDUSTRY:-hospitality}"
+REAL_OPPORTUNITY="${REAL_OPPORTUNITY:-Q3 Platform Renewal}"
+REAL_METHODOLOGY="${REAL_METHODOLOGY:-MEDDICC}"
 
 FAKE_ACCOUNT="ZZ-NoSuchAccount-9999"
 FAKE_PERSONA="ZZ-NoSuchPersona-9999"
