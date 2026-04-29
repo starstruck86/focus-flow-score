@@ -222,8 +222,14 @@ Deno.test("M. show-proof — read path returns structured view", () => {
     confidence: "high",
     latencyMs: 100,
     hits: [{ kind: "knowledge_item", id: "k1", title: "Discovery KI" }],
+    influence: { primary: 0, supporting: 0, weak: 1, total: 1, primary_dominant: false },
     gate: { decision: "pass" },
     overridesClamped: [],
+    droppedClientKeys: [],
+    genericOutputRisk: "low",
+    drift: { changed_skill: false, same_account: false, to: "discovery-prep" },
+    chainDepth: 0,
+    whyThisSkill: "test",
   });
   const proof = readProof(env);
   assertExists(proof);
