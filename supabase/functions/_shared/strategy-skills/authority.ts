@@ -1,10 +1,11 @@
 /**
- * Authority resolver (Phase 3, pure).
+ * Authority resolver (Phase 3 + 3A hardening, pure).
  *
  * When a `skill` envelope is present, the skill becomes the AUTHORITY:
  *   • behaviorIntent: from manifest, NEVER inferred from message text.
  *   • workspace: from manifest.
- *   • sourceMode: from manifest.
+ *   • sourceMode: from manifest. **Server-only.** Client cannot supply
+ *     `sourceMode` — see `sanitizeClientEnvelope` (forbidden key).
  *   • output shape: from manifest.
  *   • rubric: from manifest.
  *
@@ -12,8 +13,15 @@
  * the manifest. Conflicting client-side `behaviorIntent` / `workspace`
  * fields in the envelope are clamped (downgrade-only) and reported in
  * the trace as `overrides_clamped`.
+ *
+ * 3A additions:
+ *   • Strict envelope sanitizer drops unknown / forbidden keys (e.g.
+ *     any client-supplied `sourceMode`) and surfaces them in the trace.
+ *   • `expectedVersion` mismatch → refusal (no silent drift).
+ *   • `chainDepth` is parsed and clamped (runtime enforces the cap).
  */
 import { SKILL_REGISTRY } from "./manifests.ts";
+import { sanitizeClientEnvelope } from "./hardening.ts";
 import type {
   SkillBehaviorIntent,
   SkillDepth,
@@ -34,6 +42,10 @@ export interface SkillEnvelope {
   workspace?: SkillWorkspace;
   /** Optional run id for trace correlation. */
   runId?: string;
+  /** Optional pinned manifest version — refuse if it doesn't match. */
+  expectedVersion?: string;
+  /** Optional chain depth (runtime caps to MAX_CHAIN_DEPTH). */
+  chainDepth?: number;
 }
 
 export type AuthorityResult =
@@ -43,9 +55,21 @@ export type AuthorityResult =
     effectiveDepth: SkillDepth;
     inputs: Record<string, unknown>;
     overridesClamped: ReadonlyArray<string>;
+    droppedClientKeys: ReadonlyArray<string>;
+    forbiddenAttempted: boolean;
+    chainDepth: number;
     runId?: string;
   }
-  | { ok: false; reason: "unknown_skill" | "invalid_envelope"; token?: string };
+  | {
+    ok: false;
+    reason:
+      | "unknown_skill"
+      | "invalid_envelope"
+      | "version_mismatch";
+    token?: string;
+    expected?: string;
+    actual?: string;
+  };
 
 const VALID_DEPTHS: ReadonlySet<SkillDepth> = new Set(
   ["quick", "standard", "deep", "artifact"],
@@ -69,15 +93,32 @@ function sanitizeInputs(raw: unknown): Record<string, unknown> {
  * any client-side overrides. NEVER throws; returns a refusal instead.
  */
 export function resolveAuthority(envelope: unknown): AuthorityResult {
-  if (!envelope || typeof envelope !== "object") {
+  // Step 1: sanitize the raw envelope. Drops `sourceMode` and any other
+  // forbidden / unknown key, returning what was rejected for the trace.
+  const { sanitized, droppedKeys, forbiddenAttempted } =
+    sanitizeClientEnvelope(envelope);
+  if (Object.keys(sanitized).length === 0) {
     return { ok: false, reason: "invalid_envelope" };
   }
-  const env = envelope as Partial<SkillEnvelope>;
-  const id = typeof env.id === "string" ? env.id.trim().replace(/^\/+/, "").toLowerCase() : "";
+  const env = sanitized as Partial<SkillEnvelope>;
+  const id = typeof env.id === "string"
+    ? env.id.trim().replace(/^\/+/, "").toLowerCase()
+    : "";
   if (!id) return { ok: false, reason: "invalid_envelope" };
 
   const manifest = SKILL_REGISTRY[id];
   if (!manifest) return { ok: false, reason: "unknown_skill", token: id };
+
+  if (typeof env.expectedVersion === "string" &&
+      env.expectedVersion !== manifest.version) {
+    return {
+      ok: false,
+      reason: "version_mismatch",
+      token: id,
+      expected: env.expectedVersion,
+      actual: manifest.version,
+    };
+  }
 
   const overrides: string[] = [];
 
@@ -91,12 +132,20 @@ export function resolveAuthority(envelope: unknown): AuthorityResult {
     }
   }
 
-  if (env.behaviorIntent !== undefined && env.behaviorIntent !== manifest.behaviorIntent) {
+  if (env.behaviorIntent !== undefined &&
+      env.behaviorIntent !== manifest.behaviorIntent) {
     overrides.push("behaviorIntent");
   }
   if (env.workspace !== undefined && env.workspace !== manifest.workspace) {
     overrides.push("workspace");
   }
+
+  // chainDepth is parsed here; the runtime applies the hard cap so
+  // refusals carry full context (manifest + plan stub).
+  const chainDepth = typeof env.chainDepth === "number" &&
+      Number.isFinite(env.chainDepth)
+    ? Math.max(0, Math.floor(env.chainDepth))
+    : 0;
 
   return {
     ok: true,
@@ -104,6 +153,9 @@ export function resolveAuthority(envelope: unknown): AuthorityResult {
     effectiveDepth,
     inputs: sanitizeInputs(env.inputs),
     overridesClamped: Object.freeze(overrides),
+    droppedClientKeys: droppedKeys,
+    forbiddenAttempted,
+    chainDepth,
     runId: typeof env.runId === "string" ? env.runId : undefined,
   };
 }
