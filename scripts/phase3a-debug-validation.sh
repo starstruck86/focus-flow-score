@@ -340,12 +340,15 @@ run_case "3a. executive-brief — REFUSAL (library_required, sparse)" "{
 }" "x-skill-debug: 1" "$TMPDIR_TRACE/case3a.json"
 
 # ═════════════════════════════════════════════════════════════════════
-# CASE 3b — proof burden PASS (library_required + REAL inputs) (gap 4)
-# Goal: prove the gate CAN pass, not just refuse. If your real account
-# has insufficient library coverage for executive-brief, this case will
-# refuse — and that is itself a meaningful, real signal.
+# CASE 3b — proof burden PASS ATTEMPT (library_required + REAL inputs)
+#
+# Status semantics (per reviewer):
+#   • ok=true, gate=pass            → GO  (honest pass)
+#   • ok=false, refusal=source_mode_gate → COVERAGE GAP, not GO.
+#     Run Case 3c with broader inputs / methodology-heavy skill until at
+#     least one library_required skill passes honestly.
 # ═════════════════════════════════════════════════════════════════════
-run_case "3b. executive-brief — PASS attempt (library_required, REAL)" "{
+run_case "3b. executive-brief — PASS ATTEMPT (library_required, REAL)" "{
   \"threadId\": \"debug-thread-eb-pass\",
   \"skill\": {
     \"id\": \"executive-brief\",
@@ -358,6 +361,64 @@ run_case "3b. executive-brief — PASS attempt (library_required, REAL)" "{
     \"runId\": \"debug-run-eb-pass-1\"
   }
 }" "x-skill-debug: 1" "$TMPDIR_TRACE/case3b.json"
+
+# ═════════════════════════════════════════════════════════════════════
+# CASE 3c — methodology-heavy library_required PASS attempt (fallback)
+#
+# Use meddicc-review with a real opportunity + an explicit methodology
+# term. Methodology + standards content is typically the densest part of
+# the library, so this is the best chance to legitimately satisfy the
+# library_required proof burden when 3b refuses for coverage reasons.
+#
+# If BOTH 3b and 3c refuse, treat as COVERAGE GAP and broaden inputs
+# (or extend the library) before declaring Phase 3.5 unblocked.
+# ═════════════════════════════════════════════════════════════════════
+run_case "3c. meddicc-review — PASS ATTEMPT (library_required, methodology-heavy)" "{
+  \"threadId\": \"debug-thread-meddicc-pass\",
+  \"skill\": {
+    \"id\": \"meddicc-review\",
+    \"inputs\": {
+      \"account\":      \"${REAL_ACCOUNT}\",
+      \"opportunity\":  \"${REAL_OPPORTUNITY}\",
+      \"stage\":        \"${REAL_STAGE}\",
+      \"persona\":      \"${REAL_PERSONA}\",
+      \"methodology\":  \"${REAL_METHODOLOGY}\"
+    },
+    \"runId\": \"debug-run-meddicc-pass-1\"
+  }
+}" "x-skill-debug: 1" "$TMPDIR_TRACE/case3c.json"
+
+# Cross-case verdict for the library_required proof burden.
+if [ -s "$TMPDIR_TRACE/case3a.json" ] \
+   && { [ -s "$TMPDIR_TRACE/case3b.json" ] || [ -s "$TMPDIR_TRACE/case3c.json" ]; }; then
+  echo
+  echo "── library_required proof-burden verdict (3a refusal + 3b/3c pass) ──"
+  jq -n \
+    --slurpfile a "$TMPDIR_TRACE/case3a.json" \
+    --argjson  hasB "$( [ -s "$TMPDIR_TRACE/case3b.json" ] && echo true || echo false )" \
+    --argjson  hasC "$( [ -s "$TMPDIR_TRACE/case3c.json" ] && echo true || echo false )" \
+    --slurpfile b "${TMPDIR_TRACE}/case3b.json" \
+    --slurpfile c "${TMPDIR_TRACE}/case3c.json" \
+    '
+    def passed(x): (x[0].envelope.ok == true)
+                   and (x[0].envelope.trace.gate.decision == "pass");
+    def refused_honestly(x): (x[0].envelope.ok == false)
+                   and (x[0].envelope.refusal.code == "source_mode_gate");
+    {
+      case_3a_refused_honestly: refused_honestly($a),
+      case_3b_passed:           ($hasB and passed($b)),
+      case_3c_passed:           ($hasC and passed($c)),
+      verdict: (
+        if refused_honestly($a)
+           and (( $hasB and passed($b) ) or ( $hasC and passed($c) ))
+        then "GO: library_required both passes (3b or 3c) and refuses (3a) honestly"
+        elif refused_honestly($a)
+        then "COVERAGE GAP: 3a refuses honestly but no library_required skill passed. Broaden inputs or extend library, then re-run 3c."
+        else "NO-GO: 3a did not refuse honestly — gate is not enforcing library_required."
+        end
+      )
+    }'
+fi
 
 # ═════════════════════════════════════════════════════════════════════
 # CASE 4a — unknown skill id (gap 5)
