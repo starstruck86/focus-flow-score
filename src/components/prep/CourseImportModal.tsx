@@ -564,6 +564,24 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const handleImport = useCallback(async () => {
     const toImport = lessons.filter((_, i) => selected.has(i));
     if (toImport.length === 0) return;
+
+    // Hard guard: Circle lessons MUST come from browser-assisted capture and
+    // carry captured payload. The legacy server-side fetch_lesson path is
+    // blocked by Circle and would just queue empty title/url shells.
+    if (platform === 'circle') {
+      const missing = toImport.filter(l =>
+        l.importSource !== 'circle_browser_capture' ||
+        (!(l.capturedContent && l.capturedContent.trim().length > 0) &&
+          !l.capturedMediaUrl &&
+          !l.capturedTranscriptSource &&
+          !l.capturedQuality?.metadata_only)
+      );
+      if (missing.length > 0) {
+        toast.error('Circle lessons must be captured with the bookmarklet before importing.');
+        return;
+      }
+    }
+
     console.log('[CourseImport][v2] handleImport started, lessons:', toImport.length);
     setImporting(true);
     setAuthWallHit(false);
@@ -583,19 +601,50 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       setImportProgress({ done: i, total: toImport.length, current: `Fetching: ${lesson.title}` });
 
       let lessonData: any = null;
-      try {
-        const { data, error } = await trackedInvoke<any>('import-course', {
-          body: { url: url.trim(), action: 'fetch_lesson', lesson_url: lesson.url, ...getCredsBody() },
-          timeoutMs: 60_000,
-        });
-        if (error) throw error;
-        lessonData = data;
-      } catch (e: any) {
-        const errMsg = e?.message || 'Failed to fetch lesson';
-        updateLessonResult(i, { status: 'failed', error: errMsg, lessonUrl: lesson.url });
-        await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'fetching_lesson', error: errMsg });
-        setImportProgress({ done: i + 1, total: toImport.length, current: '' });
-        continue;
+
+      // Circle browser-capture lessons already carry their content. Skip the
+      // legacy import-course/fetch_lesson call entirely (Circle blocks it)
+      // and synthesize the same shape downstream code expects.
+      if (lesson.importSource === 'circle_browser_capture') {
+        const isMetaOnly = !!lesson.capturedQuality?.metadata_only;
+        lessonData = {
+          success: true,
+          title: lesson.title,
+          content: lesson.capturedContent || '',
+          media_url: lesson.capturedMediaUrl,
+          metadata_only: isMetaOnly,
+          transcript_source: lesson.capturedTranscriptSource,
+          has_video_transcript: lesson.capturedTranscriptSource === 'dom',
+          requested_lesson_url: lesson.url,
+          final_url: lesson.url,
+          type: lesson.type,
+          quality: {
+            content_length: (lesson.capturedContent || '').length,
+            cleaned_text_length: (lesson.capturedContent || '').length,
+            content_type: lesson.capturedQuality?.content_type || (isMetaOnly ? 'video_only' : 'text'),
+            has_login_wall: false,
+            has_redirect: false,
+            word_count: (lesson.capturedContent || '').split(/\s+/).filter(Boolean).length,
+            video_embeds_found: lesson.capturedMediaUrl ? 1 : 0,
+            issues: [],
+            usable_content: lesson.capturedQuality?.usable_content !== false,
+          },
+        };
+      } else {
+        try {
+          const { data, error } = await trackedInvoke<any>('import-course', {
+            body: { url: url.trim(), action: 'fetch_lesson', lesson_url: lesson.url, ...getCredsBody() },
+            timeoutMs: 60_000,
+          });
+          if (error) throw error;
+          lessonData = data;
+        } catch (e: any) {
+          const errMsg = e?.message || 'Failed to fetch lesson';
+          updateLessonResult(i, { status: 'failed', error: errMsg, lessonUrl: lesson.url });
+          await writeLineageRow({ resourceId: null, lesson, status: 'failed', substatus: 'fetching_lesson', error: errMsg });
+          setImportProgress({ done: i + 1, total: toImport.length, current: '' });
+          continue;
+        }
       }
 
       // Capture server-side quality report
