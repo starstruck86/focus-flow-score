@@ -28,6 +28,17 @@ export interface ValidationCase {
   body: Record<string, unknown>;
   /** When false, omit the x-skill-debug header to prove default path. */
   withSkillDebugHeader: boolean;
+  /**
+   * Optional extra acceptance check. Phase 3B: prove the system-level
+   * Retrieval Expansion Layer (not a per-skill manifest patch) is what
+   * unlocked this case. Currently used only by Case 2 (commercial-insight).
+   */
+  requireExpansionEvidence?: {
+    /** expansion_enabled must be true on the trace. */
+    enabled: true;
+    /** expanded_seeds must include at least one of these tokens (case-insensitive substring). */
+    anyOf: ReadonlyArray<string>;
+  };
 }
 
 export interface ValidationInputs {
@@ -72,13 +83,28 @@ export function buildCases(inputs: ValidationInputs): ReadonlyArray<ValidationCa
       },
     },
 
-    // 2. commercial-insight — REAL inputs
+    // 2. commercial-insight — REAL inputs.
+    //
+    // NOTE (Phase 3B / TODO Phase C):
+    //   commercial-insight currently still carries a TEMPORARY manifest
+    //   patch that adds `${inputs.stage}` and `${inputs.methodology}` to
+    //   termBindings (see src/lib/strategy-skills/manifests/commercialInsight.ts
+    //   and the server mirror). DO NOT REMOVE that patch yet.
+    //   Phase C will retest this case with the patch removed to confirm the
+    //   server-side Retrieval Expansion Layer alone carries it.
+    //
+    // Acceptance is tightened to require expansion evidence so we prove the
+    // system-level vocabulary bridge — not the manifest patch — fixed Case 2.
     {
       id: "2_commercial_insight",
       label: "2 · commercial-insight (real inputs)",
-      description: "Sharpened commercial POV. Expect a successful trace.",
+      description: "Sharpened commercial POV. Expect a successful trace AND expansion evidence.",
       expectation: "success",
       withSkillDebugHeader: true,
+      requireExpansionEvidence: {
+        enabled: true,
+        anyOf: ["discovery", "change management", "business case"],
+      },
       body: {
         threadId: "validation-2",
         skill: {
