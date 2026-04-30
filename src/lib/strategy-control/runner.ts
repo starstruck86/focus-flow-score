@@ -52,6 +52,90 @@ const EMPTY_SIGNALS: CaseSignals = {
   early_return: false,
 };
 
+type InvokeErrorWithContext = {
+  message?: string;
+  context?: Response | { body?: unknown; status?: number } | unknown;
+};
+
+function tryParseJson(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function isResponseLike(value: unknown): value is Response {
+  return !!(
+    value &&
+    typeof value === "object" &&
+    "clone" in value &&
+    typeof (value as { clone?: unknown }).clone === "function" &&
+    "json" in value &&
+    typeof (value as { json?: unknown }).json === "function"
+  );
+}
+
+async function readInvokeBody(
+  data: unknown,
+  error: InvokeErrorWithContext | null,
+  label: string,
+): Promise<{ body: unknown; httpStatus: number | null }> {
+  let body: unknown = tryParseJson(data);
+  let parsedBody: unknown = body;
+  let httpStatus: number | null = null;
+  const ctx = error?.context;
+
+  if (error && (!body || typeof body === "string")) {
+    if (isResponseLike(ctx)) {
+      httpStatus = typeof ctx.status === "number" ? ctx.status : null;
+      try {
+        parsedBody = tryParseJson(await ctx.clone().json());
+        body = parsedBody;
+      } catch {
+        try {
+          parsedBody = tryParseJson(await ctx.clone().text());
+          body = parsedBody;
+        } catch {
+          parsedBody = body;
+        }
+      }
+    } else if (ctx && typeof ctx === "object") {
+      const ctxRecord = ctx as { body?: unknown; status?: unknown };
+      if (typeof ctxRecord.status === "number") httpStatus = ctxRecord.status;
+      if ("body" in ctxRecord) {
+        parsedBody = tryParseJson(ctxRecord.body);
+        body = parsedBody;
+      }
+    }
+  }
+
+  if (!body && error?.message) body = { error: error.message };
+
+  const signals = extractSignals(body);
+  console.debug(`[StrategyControl] ${label}`, {
+    data,
+    error,
+    errorContext: ctx,
+    parsedBody: body,
+    extractedSignals: signals,
+  });
+
+  return { body, httpStatus };
+}
+
+function isSkillBranchBody(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object") return false;
+  const body = raw as Record<string, unknown>;
+  const envelope = body.envelope as Record<string, unknown> | undefined;
+  return (
+    body.early_return === true ||
+    body.source === "strategy-skills/passthrough" ||
+    envelope?.schema === "skill_envelope.v1"
+  );
+}
+
 function pickInfluenceTier(influence: unknown): string | null {
   if (!influence || typeof influence !== "object") return null;
   const inf = influence as Record<string, unknown>;
