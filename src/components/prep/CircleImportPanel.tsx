@@ -127,6 +127,19 @@ function validateCapturePayload(input: any, fallbackSourceUrl: string): Validati
   return { ok: true, payload: obj };
 }
 
+type CapturedLesson = {
+  url: string;
+  title: string;
+  body_text?: string;
+  transcript?: string;
+  media_url?: string;
+  source_url?: string;
+};
+
+function hasContent(l: CapturedLesson): boolean {
+  return !!(l.body_text?.trim() || l.transcript?.trim() || l.media_url?.trim());
+}
+
 export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) {
   const [pastedJson, setPastedJson] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -134,6 +147,10 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   const [stats, setStats] = useState<CaptureStats | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  // Accumulated single-lesson captures awaiting final import.
+  const [capturedLessons, setCapturedLessons] = useState<CapturedLesson[]>([]);
+  // Curriculum map (titles/URLs only) shown as reference, not failure.
+  const [curriculumMap, setCurriculumMap] = useState<{ title: string; lessons: CapturedLesson[] } | null>(null);
   const [manualTitle, setManualTitle] = useState('');
   const [manualLessons, setManualLessons] = useState<ManualLesson[]>([
     { title: '', url: '', body_text: '', transcript: '', media_url: '' },
@@ -152,7 +169,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     [captureHint.bookmarklet_url, captureHint.capture_endpoint],
   );
 
-  // ── Direct POST helper (used by both pasted JSON + manual tab) ──────────
+  // ── Direct POST helper (used by manual tab + final accumulator import) ──
   const postCapture = async (payload: any) => {
     setSubmitting(true);
     setStats(null);
@@ -179,18 +196,11 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
         full_content: fullContent,
         fetch_failed: fetchFailed,
       });
-      const warn = (data.warning as string | undefined)
-        || (data.meta?.lessons_list_only
-          ? 'This capture only includes lesson titles/URLs. No lesson content was captured.'
-          : null);
-      setWarning(warn ?? null);
       setPhase('done');
-      if (warn) {
-        toast.warning(warn);
-      } else if (importable.length === 0) {
-        toast.error('No usable lessons found in capture payload.');
+      if (importable.length === 0) {
+        toast.error('No usable lessons found.');
       } else {
-        toast.success(`Captured ${importable.length} lesson${importable.length === 1 ? '' : 's'}.`);
+        toast.success(`Imported ${importable.length} lesson${importable.length === 1 ? '' : 's'}.`);
       }
       onLessons({ title: data.title || 'Circle Course', lessons, meta: data.meta });
     } catch (e: any) {
@@ -201,8 +211,15 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     }
   };
 
+  // ── Paste handler: route based on payload shape ─────────────────────────
+  //   Single-lesson capture (1 lesson with body/transcript/media)
+  //     → accumulate into capturedLessons (dedupe by URL).
+  //   Curriculum-map capture (many lessons, none with content)
+  //     → show as reference list, NOT a failure.
+  //   Mixed / multi-content capture → send straight to edge function.
   const handleSubmitPasted = async () => {
     setValidationError(null);
+    setWarning(null);
     setPhase('validating');
     let parsed: any;
     try {
@@ -218,7 +235,62 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
       setValidationError(result.error);
       return;
     }
-    await postCapture(result.payload);
+    const payload = result.payload;
+    const lessons: CapturedLesson[] = (payload.lessons as any[]).map(l => ({
+      url: String(l.url),
+      title: String(l.title),
+      body_text: l.body_text,
+      transcript: l.transcript,
+      media_url: l.media_url,
+      source_url: payload.source_url,
+    }));
+    const withContent = lessons.filter(hasContent);
+
+    // Single-lesson capture path → accumulate.
+    if (lessons.length === 1 && hasContent(lessons[0])) {
+      setCapturedLessons(prev => {
+        const map = new Map(prev.map(l => [l.url.split('#')[0], l]));
+        for (const l of lessons) map.set(l.url.split('#')[0], l);
+        return Array.from(map.values());
+      });
+      setPastedJson('');
+      setPhase('idle');
+      toast.success(`Lesson added: "${lessons[0].title}". Paste another or import below.`);
+      return;
+    }
+
+    // Curriculum-map path → show as reference, do not error.
+    if (lessons.length >= 2 && withContent.length === 0) {
+      setCurriculumMap({ title: payload.title || 'Circle Course', lessons });
+      setPastedJson('');
+      setPhase('idle');
+      setWarning(
+        'This is a curriculum map — only lesson titles/URLs were captured. ' +
+        'To import content, open each lesson in Circle and run the bookmarklet on that lesson page.',
+      );
+      toast.info('Curriculum map received. Open lessons individually to capture content.');
+      return;
+    }
+
+    // Mixed / rich multi-lesson capture → send straight through.
+    await postCapture(payload);
+  };
+
+  const removeCaptured = (url: string) =>
+    setCapturedLessons(prev => prev.filter(l => l.url !== url));
+
+  const importAccumulated = async () => {
+    if (capturedLessons.length === 0) {
+      toast.error('No captured lessons yet.');
+      return;
+    }
+    await postCapture({
+      mode: 'capture',
+      source_url: sourceUrl,
+      platform: 'circle',
+      title: curriculumMap?.title || 'Circle Course',
+      lessons: capturedLessons,
+    });
   };
 
   const handleSubmitManual = async () => {
@@ -262,7 +334,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   const phaseLabel: Record<CapturePhase, string | null> = {
     idle: null,
     validating: 'Validating JSON…',
-    normalizing: 'Normalizing lessons…',
+    normalizing: 'Importing lessons…',
     done: 'Done',
   };
 
