@@ -191,8 +191,8 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
       setValidationError('Pasted text is not valid JSON.');
       return;
     }
-    const result = validateCapturePayload(parsed, sourceUrl);
-    if (!result.ok) {
+    const result: ValidationResult = validateCapturePayload(parsed, sourceUrl);
+    if (result.ok === false) {
       setPhase('idle');
       setValidationError(result.error);
       return;
