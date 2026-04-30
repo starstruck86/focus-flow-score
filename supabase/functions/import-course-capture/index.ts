@@ -388,19 +388,18 @@ Deno.serve(async (req) => {
   const metadataOnlyCount = normalized.filter(l => l.quality.metadata_only).length;
   const rejectedCount = normalized.filter(l => !l.imported).length;
   const fetchFailedCount = normalized.filter(l => l.capture_issue === 'fetch_failed').length;
+  const renderFailedCount = normalized.filter(l => l.capture_issue === 'render_failed').length;
+  const transcriptCount = normalized.filter(l => l.transcript_source).length;
+  const resourceCount = normalized.reduce((s, l) => s + (l.resources?.length || 0), 0);
   const listOnly =
     fullContentCount === 0 &&
     metadataOnlyCount === 0 &&
     normalized.length > 0;
 
   const warning = listOnly
-    ? 'Captured lesson list only. No lesson content was found. Open an individual lesson and run the bookmarklet there, or try deep capture again.'
+    ? 'Captured lesson list only. No lesson content was found. Open an individual lesson and run the bookmarklet there.'
     : undefined;
 
-  // The function intentionally does NOT write to `resources` directly here.
-  // It returns a normalized envelope that the existing CourseImportModal flow
-  // (which already creates resources from `lessons[]`) consumes. This keeps
-  // one ingestion path and avoids drift.
   return new Response(
     JSON.stringify({
       success: true,
@@ -411,6 +410,7 @@ Deno.serve(async (req) => {
       meta: {
         platform: 'circle',
         mode: payload.mode,
+        capture_mode: payload.capture_mode,
         source_url: payload.source_url,
         lessons_received: payload.lessons.length,
         lessons_imported: normalized.filter(l => l.imported).length,
@@ -418,6 +418,9 @@ Deno.serve(async (req) => {
         lessons_metadata_only: metadataOnlyCount,
         lessons_rejected: rejectedCount,
         lessons_fetch_failed: fetchFailedCount,
+        lessons_render_failed: renderFailedCount,
+        lessons_with_transcript: transcriptCount,
+        resources_captured: resourceCount,
         lessons_list_only: listOnly,
         auth_status: 'browser_captured',
       },
