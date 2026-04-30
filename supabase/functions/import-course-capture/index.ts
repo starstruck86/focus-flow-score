@@ -150,9 +150,11 @@ export interface NormalizedLesson {
   url: string;
   title: string;
   module?: string;
+  lesson_number?: number;
   content: string;
   media_url?: string;
   transcript_source?: 'dom' | 'caption_track';
+  resources?: Array<{ title?: string; url: string }>;
   capture_issue?: string;
   quality: LessonQuality;
   imported: boolean;
