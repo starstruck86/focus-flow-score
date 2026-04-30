@@ -540,14 +540,125 @@
     };
   }
 
+  // ── Auto-walk: SPA-navigate to each lesson and extract live DOM ──────────
+
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  /**
+   * Wait until the current page's lesson body has meaningful (>100 char) text
+   * or a video iframe appears. Polls every 250ms up to `timeoutMs`.
+   * Also checks that location.href has changed to `expectedUrl` (if provided).
+   */
+  async function waitForLessonRender(expectedUrl, timeoutMs = 6000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      // SPA may not have updated URL yet
+      const urlOk = !expectedUrl || location.href.split('#')[0] === expectedUrl.split('#')[0];
+      const bodyEl =
+        document.querySelector('[data-testid="post-body"]') ||
+        document.querySelector('article') ||
+        document.querySelector('.trix-content');
+      const txt = safeText(bodyEl);
+      const hasVideo = !!document.querySelector(
+        'iframe[src*="wistia"], iframe[src*="vimeo"], iframe[src*="youtube"], iframe[src*="youtu.be"], iframe[src*="loom"], video'
+      );
+      if (urlOk && (txt.length > 100 || hasVideo)) return true;
+      await sleep(250);
+    }
+    return false;
+  }
+
+  /** Find an in-DOM anchor whose href resolves to the lesson URL. */
+  function findLessonAnchor(lessonUrl) {
+    const target = lessonUrl.split('#')[0];
+    const anchors = Array.from(document.querySelectorAll('a[href]'));
+    for (const a of anchors) {
+      const href = a.getAttribute('href') || '';
+      const resolved = abs(href).split('#')[0];
+      if (resolved === target) return a;
+    }
+    return null;
+  }
+
+  /**
+   * Walk the lesson list by clicking each link in turn, waiting for the SPA to
+   * render, and extracting live DOM content. Returns the lessons array,
+   * mutated in place.
+   */
+  async function autoWalkLessons(lessons) {
+    const startUrl = location.href;
+    const total = lessons.length;
+    for (let i = 0; i < total; i++) {
+      const lesson = lessons[i];
+      banner(`Capturing lesson ${i + 1} of ${total}…\n${lesson.title || lesson.url}`, 'info');
+
+      // Already on this lesson? Just extract.
+      const here = location.href.split('#')[0];
+      if (here === lesson.url.split('#')[0]) {
+        await waitForLessonRender(lesson.url, 2000);
+        const got = extractCurrentLessonContent();
+        if (got.body_text) lesson.body_text = got.body_text;
+        if (got.media_url) lesson.media_url = got.media_url;
+        if (got.transcript) lesson.transcript = got.transcript;
+        if (got.title && (!lesson.title || lesson.title === lesson.url)) lesson.title = got.title.slice(0, 300);
+        if (!lesson.body_text && !lesson.media_url) lesson.capture_issue = 'render_failed';
+        continue;
+      }
+
+      // Try to click an in-DOM anchor first (preserves SPA routing).
+      let navigated = false;
+      const a = findLessonAnchor(lesson.url);
+      if (a) {
+        try {
+          a.scrollIntoView({ block: 'center' });
+          a.click();
+          navigated = true;
+        } catch (_) { /* fall through */ }
+      }
+      // Fallback: history.pushState + popstate to nudge SPA router.
+      if (!navigated) {
+        try {
+          history.pushState({}, '', lesson.url);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+          navigated = true;
+        } catch (_) { /* fall through */ }
+      }
+
+      const ok = navigated ? await waitForLessonRender(lesson.url, 6000) : false;
+      if (!ok) {
+        lesson.capture_issue = 'render_failed';
+        continue;
+      }
+
+      const got = extractCurrentLessonContent();
+      if (got.title && (!lesson.title || lesson.title === lesson.url)) lesson.title = got.title.slice(0, 300);
+      if (got.body_text) lesson.body_text = got.body_text;
+      if (got.media_url) lesson.media_url = got.media_url;
+      if (got.transcript) lesson.transcript = got.transcript;
+      if (!lesson.body_text && !lesson.media_url && !lesson.transcript) {
+        lesson.capture_issue = 'render_failed';
+      }
+      // Brief pacing so Circle doesn't throttle / so videos can mount
+      await sleep(400);
+    }
+
+    // Try to return user to where they started
+    try {
+      if (location.href !== startUrl) {
+        history.pushState({}, '', startUrl);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      }
+    } catch (_) {}
+    return lessons;
+  }
+
   // ── Main ─────────────────────────────────────────────────────────────────
   //
   // Strategy:
-  //   • LESSON page → capture this lesson's live-rendered DOM, copy 1-lesson
-  //     JSON to clipboard, instruct user to paste into the app.
-  //   • INDEX page → capture lesson list (no deep-fetch — Circle returns a JS
-  //     shell and lesson bodies don't appear in fetched HTML). Tell user to
-  //     open each lesson and re-run the bookmarklet there.
+  //   • LESSON page → capture this lesson's live-rendered DOM (single lesson).
+  //   • INDEX page → discover all lesson links, then auto-walk by clicking
+  //     each one in sequence, waiting for SPA render, and extracting live DOM.
+  //     Deep-fetch is NOT used (Circle returns a JS shell).
   (async function main() {
     const mode = detectPageMode();
     log('detected page mode:', mode);
@@ -570,10 +681,9 @@
       return;
     }
 
-    const json = JSON.stringify(payload, null, 2);
-    const ok = await copyToClipboard(json);
-
     if (mode === 'lesson') {
+      const json = JSON.stringify(payload, null, 2);
+      const ok = await copyToClipboard(json);
       const l = payload.lessons[0];
       const hasContent = !!(l.body_text || l.media_url || l.transcript);
       if (ok) {
@@ -590,12 +700,24 @@
       return;
     }
 
-    // Course index page
+    // Course index page → auto-walk every lesson by clicking through the SPA.
+    banner(`Found ${payload.lessons.length} lessons. Starting auto-capture…`, 'info');
+    try {
+      await autoWalkLessons(payload.lessons);
+    } catch (err) {
+      log('auto-walk failed', err);
+    }
+    payload.capture_mode = 'auto_walk';
+
+    const withContent = payload.lessons.filter(l => l.body_text || l.media_url || l.transcript).length;
+    const failed = payload.lessons.filter(l => l.capture_issue === 'render_failed').length;
+
+    const json = JSON.stringify(payload, null, 2);
+    const ok = await copyToClipboard(json);
+
+    const summary = `${withContent} of ${payload.lessons.length} lessons captured with content${failed ? ` (${failed} render-failed)` : ''} — return to the app and paste into Circle Import Mode.`;
     if (ok) {
-      banner(
-        `Lesson list copied (${payload.lessons.length} lesson${payload.lessons.length === 1 ? '' : 's'}), but Circle did not expose lesson content here.\nOpen each lesson and run the bookmarklet there to capture content.`,
-        'warn'
-      );
+      banner(summary, withContent === 0 ? 'warn' : 'info');
     } else {
       showJsonModal(json);
       banner('Clipboard blocked — copy the JSON from the dialog and paste it into Circle Import Mode.', 'warn');
