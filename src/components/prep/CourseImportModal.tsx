@@ -23,6 +23,12 @@ type LessonItem = {
   index: number;
   duration?: string;
   type?: string;
+  /** Set when the lesson came from Circle browser-assisted capture and already has content. */
+  importSource?: 'circle_browser_capture';
+  capturedContent?: string;
+  capturedMediaUrl?: string;
+  capturedTranscriptSource?: 'dom' | 'caption_track';
+  capturedQuality?: { metadata_only?: boolean; content_type?: string; usable_content?: boolean };
 };
 
 type LessonImportStatus = 'queued' | 'fetching_lesson' | 'validating_content' | 'saving_resource' | 'transcribing' | 'complete' | 'metadata_only' | 'failed';
