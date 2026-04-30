@@ -122,6 +122,10 @@ function stubPlan(
     totalCap: 0,
     planHash: "00000000",
     contextHash: "00000000",
+    expandedSeeds: [],
+    expansionTrace: [],
+    lexiconVersion: "1",
+    expansionEnabled: false,
   };
 }
 

@@ -13,6 +13,12 @@ import type {
   SkillManifest,
   SkillSourceMode,
 } from "./types.ts";
+import {
+  expandSeeds,
+  readExpansionFlagFromEnv,
+  type ExpansionFlags,
+  type ExpansionTraceEntry,
+} from "./expansion.ts";
 
 // ── Context contracts ──────────────────────────────────────────────
 export interface PlannerThreadContext {
@@ -58,6 +64,15 @@ export interface RetrievalQueryPlan {
   totalCap: number;
   planHash: string;
   contextHash: string;
+  // ── Phase 3B: Retrieval Expansion Layer ──────────────────────────
+  /** Sales-vocabulary terms derived from raw termSeeds + ctx anchors. */
+  expandedSeeds: ReadonlyArray<string>;
+  /** Per-term provenance: source rule + originating input + lexicon ver. */
+  expansionTrace: ReadonlyArray<ExpansionTraceEntry>;
+  /** Lexicon version at planning time; folded into planHash. */
+  lexiconVersion: string;
+  /** Whether STRATEGY_EXPANSION_ENABLED was on at planning time. */
+  expansionEnabled: boolean;
 }
 
 export type PlannerRefusal =
@@ -247,6 +262,7 @@ export function buildPlan(
   effectiveDepth: SkillDepth,
   inputs: Record<string, unknown>,
   ctx: PlannerContext = {},
+  flagsOverride?: ExpansionFlags,
 ): PlannerResult {
   for (const k of FORBIDDEN_STATIC_KEYS) {
     if (k in (manifest as unknown as Record<string, unknown>)) {
@@ -297,6 +313,10 @@ export function buildPlan(
 
   const minRelevantItems = manifest.retrieval.minRelevantItems ?? 1;
 
+  // ── Phase 3B: server-authoritative expansion (additive only) ─────
+  const flags: ExpansionFlags = flagsOverride ?? readExpansionFlagFromEnv();
+  const expansion = expandSeeds(termSeeds, ctx, flags);
+
   const planBody = {
     skillId: manifest.id,
     skillVersion: manifest.version,
@@ -312,6 +332,11 @@ export function buildPlan(
     filters,
     minRelevantItems,
     totalCap,
+    // Expansion fields are part of the plan body so planHash covers them.
+    expandedSeeds: expansion.expandedSeeds,
+    expansionTrace: expansion.expansionTrace,
+    lexiconVersion: expansion.lexiconVersion,
+    expansionEnabled: expansion.expansionEnabled,
   };
 
   const contextHash = hash(stableStringify({
@@ -320,6 +345,10 @@ export function buildPlan(
     filters,
     threadId: ctx.thread?.threadId,
     priorHash: ctx.prior?.lastRetrievalPlanHash,
+    // Expansion changes the effective query → contextHash should reflect it.
+    expandedSeeds: expansion.expandedSeeds,
+    lexiconVersion: expansion.lexiconVersion,
+    expansionEnabled: expansion.expansionEnabled,
   }));
   const planHash = hash(stableStringify(planBody));
 

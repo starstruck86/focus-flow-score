@@ -29,6 +29,8 @@ export function planToRetrievalArgs(plan: RetrievalQueryPlan): ExistingRetrieval
   // (case-insensitive) and trim to keep the keyword payload compact.
   const seen = new Set<string>();
   const keywords: string[] = [];
+
+  // 1) Originals first — they remain authoritative.
   for (const t of plan.termSeeds) {
     const k = t.toLowerCase();
     if (!seen.has(k)) {
@@ -36,7 +38,7 @@ export function planToRetrievalArgs(plan: RetrievalQueryPlan): ExistingRetrieval
       keywords.push(t);
     }
   }
-  // Filter values are also useful retrieval keywords (e.g. industry).
+  // 2) Filter values (e.g. industry) — also useful keywords.
   for (const v of Object.values(plan.filters)) {
     if (typeof v === "string" && v.trim()) {
       const k = v.toLowerCase();
@@ -44,6 +46,15 @@ export function planToRetrievalArgs(plan: RetrievalQueryPlan): ExistingRetrieval
         seen.add(k);
         keywords.push(v);
       }
+    }
+  }
+  // 3) Phase 3B: appended expansions. Originals retain priority by order;
+  //    expansions WIDEN the query but never replace the proof burden.
+  for (const t of plan.expandedSeeds ?? []) {
+    const k = t.toLowerCase();
+    if (!seen.has(k)) {
+      seen.add(k);
+      keywords.push(t);
     }
   }
 

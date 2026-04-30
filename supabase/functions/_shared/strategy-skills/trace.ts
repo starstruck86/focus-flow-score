@@ -47,6 +47,17 @@ export interface SkillTrace {
     unresolved_bindings: ReadonlyArray<string>;
     entity_scoped: boolean;
     scope_budgets: Readonly<Record<string, number>>;
+    // ── Phase 3B: Retrieval Expansion Layer ─────────────────────────
+    expanded_seeds: ReadonlyArray<string>;
+    expansion_trace: ReadonlyArray<{
+      term: string;
+      source: "lexicon" | "context_anchor" | "persona_role";
+      rule: string;
+      fromInput?: string;
+      lexiconVersion: string;
+    }>;
+    lexicon_version: string;
+    expansion_enabled: boolean;
   };
   retrieval: {
     counts: RetrievalCounts;
@@ -119,6 +130,10 @@ export function buildSkillEnvelope(input: BuildEnvelopeInput): SkillReasoningEnv
       unresolved_bindings: input.plan.unresolvedBindings,
       entity_scoped: input.plan.entityScoped,
       scope_budgets: input.plan.scopeBudgets,
+      expanded_seeds: input.plan.expandedSeeds ?? [],
+      expansion_trace: input.plan.expansionTrace ?? [],
+      lexicon_version: input.plan.lexiconVersion ?? "1",
+      expansion_enabled: input.plan.expansionEnabled ?? false,
     },
     retrieval: {
       counts: input.counts,

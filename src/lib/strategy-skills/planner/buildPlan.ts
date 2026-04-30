@@ -14,6 +14,7 @@ import type {
 import { resolveBindings } from './resolveBindings';
 import { budgetsForDepth, TOTAL_CAPS } from './scopeBudgets';
 import { weightsForMode } from './scopeWeights';
+import { expandSeeds, type ExpansionFlags } from './expandSeeds';
 
 const FORBIDDEN_STATIC_KEYS = [
   'resource_ids', 'resourceIds', 'playbook_ids', 'playbookIds',
@@ -41,6 +42,7 @@ function stableStringify(value: unknown): string {
 export function buildPlan(
   resolved: ResolvedSkill,
   ctx: PlannerContext = {},
+  flagsOverride?: ExpansionFlags,
 ): PlannerResult {
   const m = resolved.manifest;
 
@@ -95,6 +97,11 @@ export function buildPlan(
 
   const minRelevantItems = m.retrieval.minRelevantItems ?? 1;
 
+  // Phase 3B mirror: expansion folded into plan body so hashes track it.
+  // Default OFF in the UI mirror (server-controlled in prod).
+  const flags: ExpansionFlags = flagsOverride ?? { enabled: false };
+  const expansion = expandSeeds(termSeeds, ctx, flags);
+
   const planBody = {
     skillId: m.id,
     skillVersion: m.version,
@@ -110,6 +117,10 @@ export function buildPlan(
     filters,
     minRelevantItems,
     totalCap,
+    expandedSeeds: expansion.expandedSeeds,
+    expansionTrace: expansion.expansionTrace,
+    lexiconVersion: expansion.lexiconVersion,
+    expansionEnabled: expansion.expansionEnabled,
   };
 
   // Hashes are deterministic over inputs only — no Date.now, no random.
@@ -119,6 +130,9 @@ export function buildPlan(
     filters,
     threadId: ctx.thread?.threadId,
     priorHash: ctx.prior?.lastRetrievalPlanHash,
+    expandedSeeds: expansion.expandedSeeds,
+    lexiconVersion: expansion.lexiconVersion,
+    expansionEnabled: expansion.expansionEnabled,
   }));
   const planHash = hash(stableStringify(planBody));
 
