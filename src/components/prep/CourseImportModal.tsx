@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { validateLessonContent } from '@/lib/courseImportValidation';
 import { toast } from 'sonner';
+import { CircleImportPanel, type CircleCaptureHint, type CircleNormalizedLesson } from '@/components/prep/CircleImportPanel';
 
 type LessonItem = {
   title: string;
@@ -297,6 +298,10 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const [courseOptions, setCourseOptions] = useState<CourseOption[]>([]);
   const [landingPageResolved, setLandingPageResolved] = useState(false);
   const [resolvedFrom, setResolvedFrom] = useState<string | null>(null);
+
+  // Circle browser-assisted capture
+  const [circleCaptureHint, setCircleCaptureHint] = useState<CircleCaptureHint | null>(null);
+  const [circleSourceUrl, setCircleSourceUrl] = useState<string>('');
 
   const clearCredPassword = () => setCredPassword('');
   const getCredsBody = () => {
