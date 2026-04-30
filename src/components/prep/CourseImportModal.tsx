@@ -327,7 +327,17 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       if (error) throw error;
       if (!data?.success) {
         const errMsg = data?.error || 'Failed to fetch course';
-        if (/credentials|password|email/i.test(errMsg)) {
+        const isCircle = data?.platform === 'circle';
+        const failureType: string | undefined = data?.failure_type;
+        if (isCircle && (failureType === 'mfa_required' || failureType === 'captcha_required' || failureType === 'sso_only' || failureType === 'blocked_bot')) {
+          setAuthError(`Circle automated login is blocked (${failureType.replace('_', ' ')}). Please paste lesson content manually or provide exported course materials.`);
+        } else if (isCircle && failureType === 'no_credentials') {
+          setAuthError('Circle login required — enter your Circle email and password below.');
+          if (!showCreds) setShowCreds(true);
+        } else if (isCircle) {
+          setAuthError(`Circle login required — ${errMsg}`);
+          if (!showCreds) setShowCreds(true);
+        } else if (/credentials|password|email/i.test(errMsg)) {
           setAuthError('Invalid credentials — please check email and password.');
         } else if (/authentication required|login/i.test(errMsg)) {
           setAuthError('Login required — enter your course platform credentials below.');

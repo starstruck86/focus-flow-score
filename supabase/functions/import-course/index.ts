@@ -1,11 +1,22 @@
 /**
- * import-course: Authenticates to Kajabi course platforms and scrapes curriculum.
- * 
+ * import-course: Authenticates to course platforms and scrapes curriculum.
+ *
+ * Supported platforms:
+ *   - Kajabi / Thinkific (legacy code path in this file)
+ *   - Circle (./circle.ts) — auto-detected for *.circle.so and custom domains
+ *     that redirect to login.circle.so
+ *
  * Modes:
  *   { url, action: "discover" } → returns curriculum structure
  *   { url, action: "fetch_lesson", lesson_url } → returns lesson content
  *   { url, action: "debug_login" } → returns login debug info
  */
+import {
+  isCircleUrl,
+  probeRedirectsToCircle,
+  discoverCircleCourse,
+  fetchCircleLesson,
+} from './circle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -2397,6 +2408,83 @@ Deno.serve(async (req) => {
         JSON.stringify({ success: false, error: 'Course URL is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // ── Circle.so dispatch ────────────────────────────────────────────
+    // Detect Circle either by static hostname (*.circle.so) OR by probing
+    // for a redirect to login.circle.so (custom-domain communities).
+    {
+      const probeDebug: string[] = [];
+      let isCircle = isCircleUrl(url);
+      if (!isCircle && action !== 'debug_login' && action !== 'download_asset') {
+        const probe = await probeRedirectsToCircle(url, probeDebug);
+        isCircle = probe.isCircle;
+      }
+
+      if (isCircle) {
+        if (action === 'fetch_lesson') {
+          if (!lesson_url) {
+            return new Response(
+              JSON.stringify({ success: false, error: 'lesson_url is required' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          const result = await fetchCircleLesson(url, lesson_url, creds);
+          const debug = [...probeDebug, ...result.debug];
+          if (!result.success || !result.quality.usable_content) {
+            return new Response(
+              JSON.stringify({
+                success: false,
+                error: result.quality.issues[0] || 'Circle lesson could not be fetched',
+                title: result.title,
+                content: result.content,
+                quality: result.quality,
+                debug,
+                platform: 'circle',
+              }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          return new Response(
+            JSON.stringify({
+              success: true,
+              title: result.title,
+              content: result.content,
+              media_url: result.media_url,
+              transcript_source: result.transcript_source,
+              quality: result.quality,
+              debug,
+              platform: 'circle',
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // discover (default for Circle)
+        const result = await discoverCircleCourse(url, creds);
+        const debug = [...probeDebug, ...result.debug];
+        return new Response(
+          JSON.stringify({
+            success: result.success,
+            platform: 'circle',
+            title: result.title,
+            lessons: result.lessons,
+            auth_failed: result.auth_failed,
+            parser_failure: !result.success,
+            parser_failure_reason: result.failure_message,
+            failure_type: result.failure,
+            error: result.success ? undefined : result.failure_message,
+            debug,
+            meta: {
+              ...result.meta,
+              platform: 'circle',
+              used_request_credentials: !!creds,
+              failure_type: result.failure || null,
+            },
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     if (action === 'fetch_lesson') {
