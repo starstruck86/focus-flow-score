@@ -99,6 +99,9 @@ interface CaptureStats {
   metadata_only: number;
   full_content: number;
   fetch_failed: number;
+  render_failed: number;
+  transcripts: number;
+  resources: number;
 }
 
 /**
