@@ -415,7 +415,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                 <span>{validationError}</span>
               </div>
             )}
-            {warning && phase === 'done' && (
+            {warning && (
               <div className="flex items-start gap-1.5 p-2 rounded-md bg-amber-500/10 border border-amber-500/20 text-[11px] text-foreground">
                 <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0 text-amber-600" />
                 <span>{warning}</span>
