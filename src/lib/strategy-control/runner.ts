@@ -9,6 +9,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ValidationCase, CaseExpectation } from "./cases";
 
+const STRATEGY_CHAT_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/strategy-chat`;
+
 export type CaseStatus = "pass" | "fail" | "expected_refusal" | "coverage_gap";
 
 export interface CaseSignals {
@@ -123,6 +125,26 @@ async function readInvokeBody(
   });
 
   return { body, httpStatus };
+}
+
+async function directStrategyChatFetch(
+  body: Record<string, unknown>,
+  headers: Record<string, string>,
+): Promise<{ body: unknown; httpStatus: number }> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  const response = await fetch(STRATEGY_CHAT_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...headers,
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  return { body: tryParseJson(text), httpStatus: response.status };
 }
 
 function isSkillBranchBody(raw: unknown): boolean {
@@ -360,15 +382,23 @@ export interface PreflightResult {
 }
 
 export async function preflight(): Promise<PreflightResult> {
+  const preflightBody = {
+    threadId: "preflight",
+    skill: { id: "unknown-skill-test", version: "1", inputs: {} },
+  };
+  const preflightHeaders = { "x-skill-debug": "1" };
+
   try {
     const { data, error } = await supabase.functions.invoke("strategy-chat", {
-      body: {
-        threadId: "preflight",
-        skill: { id: "unknown-skill-test", version: "1", inputs: {} },
-      },
-      headers: { "x-skill-debug": "1" },
+      body: preflightBody,
+      headers: preflightHeaders,
     });
-    const { body } = await readInvokeBody(data, error, "preflight");
+    let { body } = await readInvokeBody(data, error, "preflight");
+    if (!isSkillBranchBody(body)) {
+      const direct = await directStrategyChatFetch(preflightBody, preflightHeaders);
+      body = direct.body;
+      console.debug("[StrategyControl] preflight:direct-fetch", direct);
+    }
     const signals = extractSignals(body);
     if (isSkillBranchBody(body)) {
       return { flagOn: true, reason: "skill envelope returned", raw: body };
