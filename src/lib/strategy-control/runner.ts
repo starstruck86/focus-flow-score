@@ -25,6 +25,17 @@ export interface CaseSignals {
   overrides_clamped: ReadonlyArray<string>;
   schema: string | null;          // "skill_envelope.v1" or null
   early_return: boolean;
+  // Phase 3B retrieval-expansion telemetry
+  term_seeds: ReadonlyArray<string>;
+  expanded_seeds: ReadonlyArray<string>;
+  expansion_trace: ReadonlyArray<{
+    expansion: string;
+    source: string;
+    rule: string;
+    fromInput?: string;
+  }>;
+  expansion_enabled: boolean;
+  lexicon_version: string | null;
 }
 
 export interface CaseResult {
@@ -52,6 +63,11 @@ const EMPTY_SIGNALS: CaseSignals = {
   overrides_clamped: [],
   schema: null,
   early_return: false,
+  term_seeds: [],
+  expanded_seeds: [],
+  expansion_trace: [],
+  expansion_enabled: false,
+  lexicon_version: null,
 };
 
 type InvokeErrorWithContext = {
@@ -190,6 +206,7 @@ function extractSignals(raw: unknown): CaseSignals {
   }
   const retrieval = trace.retrieval as Record<string, unknown> | undefined;
   const gate = trace.gate as Record<string, unknown> | undefined;
+  const planNode = trace.plan as Record<string, unknown> | undefined;
   const generic = trace.generic_output_risk as unknown;
   const dropped = Array.isArray(trace.dropped_client_keys)
     ? (trace.dropped_client_keys as unknown[]).filter((k): k is string => typeof k === "string")
@@ -197,6 +214,31 @@ function extractSignals(raw: unknown): CaseSignals {
   const clamped = Array.isArray(trace.overrides_clamped)
     ? (trace.overrides_clamped as unknown[]).filter((k): k is string => typeof k === "string")
     : [];
+  const termSeeds = planNode && Array.isArray(planNode.term_seeds)
+    ? (planNode.term_seeds as unknown[]).filter((k): k is string => typeof k === "string")
+    : [];
+  const expandedSeeds = planNode && Array.isArray(planNode.expanded_seeds)
+    ? (planNode.expanded_seeds as unknown[]).filter((k): k is string => typeof k === "string")
+    : [];
+  const rawExpansionTrace = planNode && Array.isArray(planNode.expansion_trace)
+    ? (planNode.expansion_trace as unknown[])
+    : [];
+  const expansionTrace = rawExpansionTrace
+    .filter((e): e is Record<string, unknown> => !!e && typeof e === "object")
+    .map((e) => ({
+      // server emits `term` (Phase 3B); accept legacy `expansion` too.
+      expansion: typeof e.term === "string"
+        ? e.term
+        : typeof e.expansion === "string" ? e.expansion : "",
+      source: typeof e.source === "string" ? e.source : "",
+      rule: typeof e.rule === "string" ? e.rule : "",
+      fromInput: typeof e.fromInput === "string" ? e.fromInput : undefined,
+    }))
+    .filter((e) => e.expansion.length > 0);
+  const expansionEnabled = !!(planNode && planNode.expansion_enabled === true);
+  const lexiconVersion = planNode && typeof planNode.lexicon_version === "string"
+    ? (planNode.lexicon_version as string)
+    : null;
   return {
     source_mode: typeof trace.source_mode === "string" ? trace.source_mode : null,
     confidence: retrieval && typeof retrieval.confidence === "string"
@@ -217,14 +259,45 @@ function extractSignals(raw: unknown): CaseSignals {
     overrides_clamped: clamped,
     schema,
     early_return: earlyReturn,
+    term_seeds: termSeeds,
+    expanded_seeds: expandedSeeds,
+    expansion_trace: expansionTrace,
+    expansion_enabled: expansionEnabled,
+    lexicon_version: lexiconVersion,
   };
 }
 
+function checkExpansionEvidence(
+  c: ValidationCase,
+  signals: CaseSignals,
+): { ok: true } | { ok: false; reason: string } {
+  const req = c.requireExpansionEvidence;
+  if (!req) return { ok: true };
+  if (!signals.expansion_enabled) {
+    return {
+      ok: false,
+      reason:
+        "expansion evidence missing: expansion_enabled=false (set STRATEGY_EXPANSION_ENABLED=true on the edge function)",
+    };
+  }
+  const want = req.anyOf.map((t) => t.toLowerCase());
+  const have = signals.expanded_seeds.map((t) => t.toLowerCase());
+  const matched = want.filter((w) => have.some((h) => h.includes(w)));
+  if (matched.length === 0) {
+    return {
+      ok: false,
+      reason: `expansion fired but did not include any of [${req.anyOf.join(", ")}]; expanded_seeds=[${signals.expanded_seeds.join(", ") || "—"}]`,
+    };
+  }
+  return { ok: true };
+}
+
 function evaluate(
-  expectation: CaseExpectation,
+  c: ValidationCase,
   signals: CaseSignals,
   raw: unknown,
 ): { status: CaseStatus; reason: string } {
+  const expectation = c.expectation;
   const isSkillEnvelope = signals.schema === "skill_envelope.v1";
   const ok = !!(raw && typeof raw === "object" && (raw as Record<string, unknown>).envelope);
   const refused = !!signals.refusal_code;
@@ -237,7 +310,12 @@ function evaluate(
       if (refused) {
         return { status: "fail", reason: `refused: ${signals.refusal_code}` };
       }
-      return { status: "pass", reason: "ok envelope" };
+      const ev = checkExpansionEvidence(c, signals);
+      if (ev.ok === false) return { status: "fail", reason: ev.reason };
+      const evNote = c.requireExpansionEvidence
+        ? ` (expansion ✓ via [${signals.expanded_seeds.slice(0, 4).join(", ")}${signals.expanded_seeds.length > 4 ? "…" : ""}])`
+        : "";
+      return { status: "pass", reason: `ok envelope${evNote}` };
     }
     case "expected_refusal": {
       if (!isSkillEnvelope) {
@@ -326,7 +404,7 @@ export async function runCase(c: ValidationCase): Promise<CaseResult> {
         console.debug(`[StrategyControl] case:${c.id}:direct-fetch`, direct);
       }
       const signals = extractSignals(raw);
-      const verdict = evaluate(c.expectation, signals, raw);
+      const verdict = evaluate(c, signals, raw);
       return {
         case: c,
         status: verdict.status,
@@ -339,7 +417,7 @@ export async function runCase(c: ValidationCase): Promise<CaseResult> {
       };
     }
     const signals = extractSignals(data);
-    const verdict = evaluate(c.expectation, signals, data);
+    const verdict = evaluate(c, signals, data);
     return {
       case: c,
       status: verdict.status,

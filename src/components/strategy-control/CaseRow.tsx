@@ -123,6 +123,54 @@ export function CaseRow({ result, running, caseLabel, caseDescription }: Props) 
               )}
             </div>
           )}
+          {sig && (
+            <div className="mt-3 rounded border border-border/60 bg-muted/30 p-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Retrieval Expansion (Phase 3B)
+                </span>
+                <Badge
+                  variant="outline"
+                  className={
+                    sig.expansion_enabled
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px]"
+                      : "bg-muted text-muted-foreground text-[10px]"
+                  }
+                >
+                  expansion_enabled: {String(sig.expansion_enabled)}
+                </Badge>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 mt-2">
+                <Signal
+                  label="lexicon_version"
+                  value={sig.lexicon_version}
+                />
+                <Signal
+                  label="raw term_seeds"
+                  value={sig.term_seeds.length ? sig.term_seeds.join(", ") : null}
+                />
+                <Signal
+                  label="expanded_seeds"
+                  value={
+                    sig.expanded_seeds.length ? sig.expanded_seeds.join(", ") : null
+                  }
+                />
+                <Signal
+                  label="expansion_trace"
+                  value={
+                    sig.expansion_trace.length
+                      ? sig.expansion_trace
+                          .map(
+                            (e) =>
+                              `${e.expansion}←${e.source}/${e.rule}${e.fromInput ? `(${e.fromInput})` : ""}`,
+                          )
+                          .join(" · ")
+                      : null
+                  }
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
