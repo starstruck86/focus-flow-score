@@ -262,6 +262,7 @@ export function buildPlan(
   effectiveDepth: SkillDepth,
   inputs: Record<string, unknown>,
   ctx: PlannerContext = {},
+  flagsOverride?: ExpansionFlags,
 ): PlannerResult {
   for (const k of FORBIDDEN_STATIC_KEYS) {
     if (k in (manifest as unknown as Record<string, unknown>)) {
