@@ -44,6 +44,14 @@ export interface CircleNormalizedLesson {
   content: string;
   media_url?: string;
   transcript_source?: 'dom' | 'caption_track';
+  resources?: Array<{
+    title?: string;
+    url: string;
+    type?: 'link' | 'pdf' | 'doc' | 'sheet' | 'slide' | 'download' | 'unknown';
+    source_section?: string;
+    parent_lesson_url?: string;
+    parent_lesson_title?: string;
+  }>;
   quality?: { metadata_only?: boolean; content_type?: string; usable_content?: boolean };
   imported?: boolean;
   reject_reason?: string;
@@ -462,6 +470,11 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                 Import course
               </Button>
             </div>
+            {stats && phase === 'done' && stats.resources > 0 && (
+              <div className="text-[10px] text-muted-foreground">
+                {stats.resources} linked resource{stats.resources === 1 ? '' : 's'} captured. They’ll be added to your library and processed for KIs alongside the lessons.
+              </div>
+            )}
           </div>
 
           {/* ── Accumulated single-lesson captures ─────────────────── */}

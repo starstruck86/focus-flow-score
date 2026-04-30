@@ -16,6 +16,15 @@ import { validateLessonContent } from '@/lib/courseImportValidation';
 import { toast } from 'sonner';
 import { CircleImportPanel, type CircleCaptureHint, type CircleNormalizedLesson } from '@/components/prep/CircleImportPanel';
 
+type CapturedChildResource = {
+  title?: string;
+  url: string;
+  type?: 'link' | 'pdf' | 'doc' | 'sheet' | 'slide' | 'download' | 'unknown';
+  source_section?: string;
+  parent_lesson_url?: string;
+  parent_lesson_title?: string;
+};
+
 type LessonItem = {
   title: string;
   url: string;
@@ -29,6 +38,7 @@ type LessonItem = {
   capturedMediaUrl?: string;
   capturedTranscriptSource?: 'dom' | 'caption_track';
   capturedQuality?: { metadata_only?: boolean; content_type?: string; usable_content?: boolean };
+  capturedResources?: CapturedChildResource[];
 };
 
 type LessonImportStatus = 'queued' | 'fetching_lesson' | 'validating_content' | 'saving_resource' | 'transcribing' | 'complete' | 'metadata_only' | 'failed';
@@ -471,6 +481,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       capturedMediaUrl: l.media_url,
       capturedTranscriptSource: l.transcript_source,
       capturedQuality: l.quality,
+      capturedResources: l.resources,
     }));
     setCourseTitle(args.title || 'Circle Course');
     setPlatform('circle');
@@ -592,6 +603,24 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     lessonResultsRef.current = initialResults;
 
     let successCount = 0;
+    let childResourcesQueued = 0;
+    let childResourcesFailed = 0;
+    const childResourcesSeen = new Set<string>();
+    const normalizeChildUrl = (raw: string): string => {
+      try {
+        const u = new URL(raw);
+        u.hash = '';
+        u.host = u.host.toLowerCase();
+        ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','fbclid','msclkid','ref','source','si','feature']
+          .forEach(p => u.searchParams.delete(p));
+        let p = u.pathname.replace(/\/+$/, '');
+        if (p === '') p = '/';
+        u.pathname = p;
+        return u.toString();
+      } catch {
+        return (raw || '').trim().split('#')[0].replace(/\/+$/, '').toLowerCase();
+      }
+    };
     for (let i = 0; i < toImport.length; i++) {
       const lesson = toImport[i];
       console.log('[CourseImport][v2] Processing lesson', i, lesson.url);
@@ -743,6 +772,53 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         });
 
         successCount++;
+
+        // === INGEST CHILD RESOURCES (Circle: links from "Resources Mentioned"
+        // and the lesson body). Each becomes its own resource in the library
+        // and gets routed through the standard enrichment / KI pipeline by
+        // useAddUrlResource. Dedupe across the whole import session.
+        if (
+          lesson.importSource === 'circle_browser_capture' &&
+          lesson.capturedResources?.length
+        ) {
+          for (const child of lesson.capturedResources) {
+            const norm = normalizeChildUrl(child.url);
+            if (!norm) continue;
+            if (childResourcesSeen.has(norm)) continue;
+            childResourcesSeen.add(norm);
+            try {
+              const childTitle = (child.title || child.url).slice(0, 300);
+              const childTags = Array.from(new Set([
+                'course-resource',
+                courseTitle,
+                child.parent_lesson_title ? `lesson:${child.parent_lesson_title}` : '',
+                child.type ? `circle:${child.type}` : '',
+              ].filter(Boolean)));
+              const childResourceType =
+                child.type === 'pdf' || child.type === 'doc' || child.type === 'sheet' || child.type === 'slide'
+                  ? 'document'
+                  : child.type === 'download'
+                    ? 'document'
+                    : 'article';
+              const childClassification: any = {
+                title: child.parent_lesson_title
+                  ? `${child.parent_lesson_title} · ${childTitle}`
+                  : childTitle,
+                description: child.parent_lesson_title
+                  ? `Resource from lesson "${child.parent_lesson_title}" in ${courseTitle}.`
+                  : `Resource from ${courseTitle}.`,
+                resource_type: childResourceType,
+                tags: childTags,
+                top_folder: 'Tools & Reference' as any,
+              };
+              await addUrl.mutateAsync({ url: child.url, classification: childClassification });
+              childResourcesQueued++;
+            } catch (e) {
+              childResourcesFailed++;
+              console.warn('[CircleImport] child resource ingest failed', child.url, e);
+            }
+          }
+        }
 
         // For Circle browser-capture lessons we already have the rendered
         // transcript (or content) — don't re-transcribe via audio.
@@ -1035,6 +1111,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     if (fullCount > 0) parts.push(`${fullCount} full`);
     if (metaCount > 0) parts.push(`${metaCount} metadata-only`);
     if (failedCount > 0) parts.push(`${failedCount} failed`);
+    if (childResourcesQueued > 0) parts.push(`${childResourcesQueued} linked resource${childResourcesQueued === 1 ? '' : 's'}`);
+    if (childResourcesFailed > 0) parts.push(`${childResourcesFailed} resource${childResourcesFailed === 1 ? '' : 's'} skipped`);
 
     if (failedCount > 0) {
       toast.warning(`Import complete: ${parts.join(', ')}`);
