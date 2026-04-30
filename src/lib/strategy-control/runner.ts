@@ -212,8 +212,18 @@ export async function runCase(c: ValidationCase): Promise<CaseResult> {
     });
     const latencyMs = Math.round(performance.now() - started);
     if (error) {
-      // supabase-js surfaces non-2xx as `error` but `data` may still hold the body.
-      const raw = data ?? { error: error.message };
+      // Non-2xx (e.g. 422 honest refusal). Read the actual JSON body from error.context.
+      let raw: unknown = data;
+      let httpStatus: number | null = null;
+      const ctx = (error as { context?: Response | { body?: unknown; status?: number } }).context;
+      if (ctx instanceof Response) {
+        httpStatus = ctx.status;
+        try { raw = await ctx.clone().json(); } catch { /* keep raw */ }
+      } else if (ctx && typeof ctx === "object") {
+        if ("status" in ctx && typeof ctx.status === "number") httpStatus = ctx.status;
+        if ("body" in ctx) raw = (ctx as { body?: unknown }).body ?? raw;
+      }
+      if (!raw) raw = { error: error.message };
       const signals = extractSignals(raw);
       const verdict = evaluate(c.expectation, signals, raw);
       return {
@@ -221,7 +231,7 @@ export async function runCase(c: ValidationCase): Promise<CaseResult> {
         status: verdict.status,
         reason: verdict.reason || error.message,
         latencyMs,
-        httpStatus: (error as { context?: { status?: number } })?.context?.status ?? null,
+        httpStatus,
         signals,
         raw,
         error: error.message,
