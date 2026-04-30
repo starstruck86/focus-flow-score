@@ -27,18 +27,27 @@ const corsHeaders = {
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
+const ResourceSchema = z.object({
+  title: z.string().trim().max(500).optional(),
+  url: z.string().trim().min(1).max(2048),
+});
+
 const LessonSchema = z.object({
   url: z.string().trim().min(1).max(2048),
   title: z.string().trim().min(1).max(500),
   module: z.string().trim().max(300).optional(),
+  lesson_number: z.number().int().nonnegative().optional(),
+  total_lessons: z.number().int().nonnegative().optional(),
   body_text: z.string().max(500_000).optional(),
   media_url: z.string().trim().max(2048).optional(),
   transcript: z.string().max(500_000).optional(),
+  resources: z.array(ResourceSchema).max(100).optional(),
   capture_issue: z.string().max(100).optional(),
 });
 
 const PayloadSchema = z.object({
   mode: z.enum(['capture', 'manual']).optional().default('capture'),
+  capture_mode: z.string().max(100).optional(),
   source_url: z.string().trim().min(1).max(2048),
   platform: z.enum(['circle']),
   title: z.string().trim().min(1).max(500),
