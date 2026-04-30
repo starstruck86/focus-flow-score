@@ -744,7 +744,11 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
 
         successCount++;
 
-        const shouldTranscribe = Boolean(lessonData?.media_url && resourceId);
+        // For Circle browser-capture lessons we already have the rendered
+        // transcript (or content) — don't re-transcribe via audio.
+        const alreadyHasTranscript = lesson.importSource === 'circle_browser_capture' &&
+          (lessonData?.has_video_transcript || (lessonData?.content || '').length > 0);
+        const shouldTranscribe = Boolean(lessonData?.media_url && resourceId && !alreadyHasTranscript);
 
         if (shouldTranscribe) {
           updateLessonResult(i, { status: 'transcribing' });
