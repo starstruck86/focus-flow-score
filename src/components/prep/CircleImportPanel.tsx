@@ -400,7 +400,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
           <div className="space-y-1.5">
             <label className="text-xs font-medium">
               Paste captured JSON
-              <span className="text-muted-foreground font-normal"> (primary path — clipboard from bookmarklet)</span>
+              <span className="text-muted-foreground font-normal"> (one lesson at a time, from the lesson page)</span>
             </label>
             <Textarea
               value={pastedJson}
