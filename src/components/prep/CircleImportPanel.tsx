@@ -198,6 +198,10 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
         metadata_only: metadataOnly,
         full_content: fullContent,
         fetch_failed: fetchFailed,
+        render_failed: (data.meta?.lessons_render_failed as number | undefined)
+          ?? lessons.filter(l => l.capture_issue === 'render_failed').length,
+        transcripts: (data.meta?.lessons_with_transcript as number | undefined) ?? 0,
+        resources: (data.meta?.resources_captured as number | undefined) ?? 0,
       });
       setPhase('done');
       if (importable.length === 0) {
