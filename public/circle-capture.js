@@ -681,9 +681,6 @@
       return;
     }
 
-    const json = JSON.stringify(payload, null, 2);
-    const ok = await copyToClipboard(json);
-
     if (mode === 'lesson') {
       const json = JSON.stringify(payload, null, 2);
       const ok = await copyToClipboard(json);
