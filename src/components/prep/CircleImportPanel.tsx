@@ -91,9 +91,46 @@ function buildBookmarkletHref(loaderUrl: string, captureEndpoint: string): strin
   return `javascript:${encodeURI(code)}`;
 }
 
+type CapturePhase = 'idle' | 'validating' | 'normalizing' | 'done';
+
+interface CaptureStats {
+  imported: number;
+  rejected: number;
+  metadata_only: number;
+}
+
+/**
+ * Client-side schema check that runs BEFORE we hit the edge function. Returns
+ * a friendly error string when the payload is unusable.
+ */
+type ValidationResult = { ok: true; payload: any } | { ok: false; error: string };
+function validateCapturePayload(input: any, fallbackSourceUrl: string): ValidationResult {
+  // Allow a bare lessons array too.
+  const obj = Array.isArray(input)
+    ? { mode: 'capture', source_url: fallbackSourceUrl, platform: 'circle', title: 'Circle Course', lessons: input }
+    : (input && typeof input === 'object' ? { mode: 'capture', source_url: fallbackSourceUrl, platform: 'circle', ...input } : null);
+
+  if (!obj) return { ok: false, error: 'Pasted JSON must be an object or an array of lessons.' };
+  if (obj.platform !== 'circle') return { ok: false, error: `platform must be "circle" (got "${obj.platform ?? 'missing'}").` };
+  if (typeof obj.source_url !== 'string' || !obj.source_url.trim()) return { ok: false, error: 'source_url is required.' };
+  if (!Array.isArray(obj.lessons)) return { ok: false, error: 'lessons must be an array.' };
+  if (obj.lessons.length === 0) return { ok: false, error: 'lessons array is empty — nothing to import.' };
+
+  for (let i = 0; i < obj.lessons.length; i++) {
+    const l = obj.lessons[i];
+    if (!l || typeof l !== 'object') return { ok: false, error: `lesson #${i + 1} is not an object.` };
+    if (typeof l.title !== 'string' || !l.title.trim()) return { ok: false, error: `lesson #${i + 1} is missing "title".` };
+    if (typeof l.url !== 'string' || !l.url.trim()) return { ok: false, error: `lesson #${i + 1} is missing "url".` };
+  }
+  return { ok: true, payload: obj };
+}
+
 export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) {
   const [pastedJson, setPastedJson] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [phase, setPhase] = useState<CapturePhase>('idle');
+  const [stats, setStats] = useState<CaptureStats | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [manualTitle, setManualTitle] = useState('');
   const [manualLessons, setManualLessons] = useState<ManualLesson[]>([
     { title: '', url: '', body_text: '', transcript: '', media_url: '' },
@@ -115,6 +152,8 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   // ── Direct POST helper (used by both pasted JSON + manual tab) ──────────
   const postCapture = async (payload: any) => {
     setSubmitting(true);
+    setStats(null);
+    setPhase('normalizing');
     try {
       const { data, error } = await supabase.functions.invoke('import-course-capture', {
         body: payload,
@@ -123,6 +162,10 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
       if (!data?.success) throw new Error(data?.error || 'Capture failed');
       const lessons = (data.lessons || []) as CircleNormalizedLesson[];
       const importable = lessons.filter(l => l.imported);
+      const metadataOnly = lessons.filter(l => l.quality?.metadata_only).length;
+      const rejected = lessons.length - importable.length;
+      setStats({ imported: importable.length, rejected, metadata_only: metadataOnly });
+      setPhase('done');
       if (importable.length === 0) {
         toast.error('No usable lessons found in capture payload.');
       } else {
@@ -130,6 +173,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
       }
       onLessons({ title: data.title || 'Circle Course', lessons, meta: data.meta });
     } catch (e: any) {
+      setPhase('idle');
       toast.error(e?.message || 'Capture failed');
     } finally {
       setSubmitting(false);
@@ -137,24 +181,23 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   };
 
   const handleSubmitPasted = async () => {
+    setValidationError(null);
+    setPhase('validating');
     let parsed: any;
     try {
       parsed = JSON.parse(pastedJson);
     } catch {
-      toast.error('Pasted text is not valid JSON.');
+      setPhase('idle');
+      setValidationError('Pasted text is not valid JSON.');
       return;
     }
-    // The bookmarklet emits a full payload; allow a bare lesson array too.
-    const payload = Array.isArray(parsed)
-      ? {
-          mode: 'capture',
-          source_url: sourceUrl,
-          platform: 'circle',
-          title: 'Circle Course',
-          lessons: parsed,
-        }
-      : { mode: 'capture', source_url: sourceUrl, platform: 'circle', ...parsed };
-    await postCapture(payload);
+    const result: ValidationResult = validateCapturePayload(parsed, sourceUrl);
+    if (result.ok === false) {
+      setPhase('idle');
+      setValidationError(result.error);
+      return;
+    }
+    await postCapture(result.payload);
   };
 
   const handleSubmitManual = async () => {
@@ -195,6 +238,13 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     }
   };
 
+  const phaseLabel: Record<CapturePhase, string | null> = {
+    idle: null,
+    validating: 'Validating JSON…',
+    normalizing: 'Normalizing lessons…',
+    done: 'Done',
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-start gap-2 p-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-sm">
@@ -219,8 +269,8 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
           <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
             <li>Drag the bookmarklet to your bookmarks bar (or copy it).</li>
             <li>Open the Circle course in a tab where you’re already signed in.</li>
-            <li>Click the bookmarklet on the course page — it captures lessons and sends them back here.</li>
-            <li>If the direct send is blocked, the bookmarklet copies a JSON payload — paste it below.</li>
+            <li>Click the bookmarklet — it will copy the lesson JSON to your clipboard.</li>
+            <li>Return here and paste it into the box below, then click <em>Import pasted JSON</em>.</li>
           </ol>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -250,15 +300,43 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium">Paste captured JSON (fallback)</label>
+            <label className="text-xs font-medium">
+              Paste captured JSON
+              <span className="text-muted-foreground font-normal"> (primary path — clipboard from bookmarklet)</span>
+            </label>
             <Textarea
               value={pastedJson}
-              onChange={e => setPastedJson(e.target.value)}
+              onChange={e => { setPastedJson(e.target.value); if (validationError) setValidationError(null); }}
               placeholder='Paste the JSON the bookmarklet copied to your clipboard…'
               className="min-h-[120px] font-mono text-[11px]"
               disabled={submitting}
             />
-            <div className="flex justify-end">
+            {validationError && (
+              <div className="flex items-start gap-1.5 text-[11px] text-destructive">
+                <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                <span>{validationError}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[10px] text-muted-foreground flex items-center gap-2 min-h-[16px]">
+                {phaseLabel[phase] && (
+                  <span className="flex items-center gap-1">
+                    {(phase === 'validating' || phase === 'normalizing') && <Loader2 className="h-3 w-3 animate-spin" />}
+                    {phaseLabel[phase]}
+                  </span>
+                )}
+                {stats && phase === 'done' && (
+                  <span className="flex items-center gap-1.5">
+                    <Badge variant="outline" className="text-[9px] h-4">imported {stats.imported}</Badge>
+                    {stats.metadata_only > 0 && (
+                      <Badge variant="outline" className="text-[9px] h-4">metadata-only {stats.metadata_only}</Badge>
+                    )}
+                    {stats.rejected > 0 && (
+                      <Badge variant="outline" className="text-[9px] h-4">rejected {stats.rejected}</Badge>
+                    )}
+                  </span>
+                )}
+              </div>
               <Button onClick={handleSubmitPasted} disabled={submitting || !pastedJson.trim()} size="sm">
                 {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
                 Import pasted JSON

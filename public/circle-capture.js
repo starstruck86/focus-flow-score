@@ -311,10 +311,86 @@
     });
     div.textContent = message;
     document.body.appendChild(div);
-    setTimeout(() => { div.remove(); }, 12000);
+    setTimeout(() => { div.remove(); }, 15000);
+    return div;
+  }
+
+  /**
+   * Last-resort modal: shows the JSON in a textarea + Copy button so the user
+   * can manually grab it when both clipboard APIs are blocked.
+   */
+  function showJsonModal(text) {
+    const id = '__circle_capture_modal';
+    document.getElementById(id)?.remove();
+    const overlay = document.createElement('div');
+    overlay.id = id;
+    Object.assign(overlay.style, {
+      position: 'fixed', inset: '0', zIndex: '2147483646',
+      background: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+    });
+    const card = document.createElement('div');
+    Object.assign(card.style, {
+      background: '#fff', color: '#111', borderRadius: '10px',
+      width: 'min(640px, 92vw)', maxHeight: '80vh',
+      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
+    });
+    const header = document.createElement('div');
+    header.textContent = 'Circle Capture — copy this JSON';
+    Object.assign(header.style, { padding: '12px 16px', fontWeight: '600', borderBottom: '1px solid #e5e7eb', fontSize: '14px' });
+    const body = document.createElement('div');
+    Object.assign(body.style, { padding: '12px 16px', fontSize: '12px', color: '#374151' });
+    body.textContent = 'Clipboard access was blocked. Select all the JSON below, copy it, then paste it into Circle Import Mode in the app.';
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.readOnly = true;
+    Object.assign(ta.style, {
+      flex: '1', margin: '0 16px', minHeight: '240px',
+      fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+      fontSize: '11px', padding: '8px', border: '1px solid #d1d5db',
+      borderRadius: '6px', background: '#f9fafb',
+    });
+    const footer = document.createElement('div');
+    Object.assign(footer.style, { padding: '12px 16px', display: 'flex', gap: '8px', justifyContent: 'flex-end', borderTop: '1px solid #e5e7eb' });
+    const copyBtn = document.createElement('button');
+    copyBtn.textContent = 'Copy JSON';
+    Object.assign(copyBtn.style, {
+      padding: '6px 12px', borderRadius: '6px', border: '0',
+      background: '#15803d', color: '#fff', fontWeight: '600', cursor: 'pointer', fontSize: '12px',
+    });
+    copyBtn.onclick = () => {
+      ta.select();
+      try { document.execCommand('copy'); } catch (_) {}
+      copyBtn.textContent = 'Copied!';
+    };
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Close';
+    Object.assign(closeBtn.style, {
+      padding: '6px 12px', borderRadius: '6px', border: '1px solid #d1d5db',
+      background: '#fff', color: '#111', cursor: 'pointer', fontSize: '12px',
+    });
+    closeBtn.onclick = () => overlay.remove();
+    footer.appendChild(copyBtn);
+    footer.appendChild(closeBtn);
+    card.appendChild(header);
+    card.appendChild(body);
+    card.appendChild(ta);
+    card.appendChild(footer);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    // auto-select for convenience
+    setTimeout(() => { ta.focus(); ta.select(); }, 50);
   }
 
   // ── Main ─────────────────────────────────────────────────────────────────
+  //
+  // Strategy: clipboard-first. Cross-origin POSTs from Circle to the app's
+  // edge function will almost always fail because the Circle origin can't
+  // read the app's Supabase localStorage token. So we make clipboard the
+  // primary, reliable path. POST is only attempted if a token is somehow
+  // available (e.g. user opened the bookmarklet on the app's own origin).
 
   (async function main() {
     let payload;
@@ -329,14 +405,17 @@
     log('payload', payload);
     if (!payload.lessons || payload.lessons.length === 0) {
       banner(
-        'Circle Capture: no lessons found on this page. Open the course page (with the lesson sidebar) and click the bookmarklet again, or paste the JSON manually.',
+        'Circle Capture: no lessons found on this page. Open the course page (with the lesson sidebar visible) and click the bookmarklet again.',
         'warn'
       );
+      return;
     }
 
+    const json = JSON.stringify(payload, null, 2);
     const token = findAuthToken();
 
-    // Try POST first
+    // Optimistic POST attempt only when we actually have a token from the
+    // current origin. Any failure silently degrades to clipboard.
     if (endpoint && token) {
       try {
         const result = await postToBackend(payload, token);
@@ -348,27 +427,20 @@
         return;
       } catch (err) {
         log('POST failed, falling back to clipboard', err);
-        banner(
-          'Circle Capture: could not POST to your app (' +
-            (err?.message || err) +
-            '). Copying JSON to clipboard — paste it into the modal’s “Paste captured JSON” box.',
-          'warn'
-        );
       }
-    } else {
-      log('no endpoint or token; using clipboard fallback');
     }
 
-    const ok = await copyToClipboard(JSON.stringify(payload, null, 2));
+    // Primary path: clipboard.
+    const ok = await copyToClipboard(json);
     if (ok) {
       banner(
-        'Circle Capture: JSON copied to clipboard. Switch back to your app and paste it into the “Paste captured JSON” box.',
+        `JSON copied (${payload.lessons.length} lesson${payload.lessons.length === 1 ? '' : 's'}) — return to the app and paste it into Circle Import Mode.`,
         'info'
       );
     } else {
-      // Last-resort: show the JSON in a prompt for manual copy
-      try { window.prompt('Copy this JSON into your app:', JSON.stringify(payload)); } catch (_) {}
-      banner('Circle Capture: clipboard blocked; JSON shown in dialog.', 'warn');
+      // Final fallback: visible modal with a textarea + Copy button.
+      showJsonModal(json);
+      banner('Clipboard blocked — copy the JSON from the dialog and paste it into Circle Import Mode.', 'warn');
     }
   })();
 })();
