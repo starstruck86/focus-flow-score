@@ -537,9 +537,10 @@
     // Primary path: clipboard.
     const ok = await copyToClipboard(json);
     if (ok) {
+      const noteFail = fetchFailed > 0 ? `, ${fetchFailed} fetch-failed` : '';
       banner(
-        `JSON copied (${payload.lessons.length} lesson${payload.lessons.length === 1 ? '' : 's'}) — return to the app and paste it into Circle Import Mode.`,
-        'info'
+        `JSON copied (${payload.lessons.length} lesson${payload.lessons.length === 1 ? '' : 's'}, ${withContent} with content${noteFail}) — return to the app and paste it into Circle Import Mode.`,
+        withContent === 0 ? 'warn' : 'info'
       );
     } else {
       // Final fallback: visible modal with a textarea + Copy button.
