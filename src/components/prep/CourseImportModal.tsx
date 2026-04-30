@@ -481,6 +481,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       capturedMediaUrl: l.media_url,
       capturedTranscriptSource: l.transcript_source,
       capturedQuality: l.quality,
+      capturedResources: l.resources,
     }));
     setCourseTitle(args.title || 'Circle Course');
     setPlatform('circle');
