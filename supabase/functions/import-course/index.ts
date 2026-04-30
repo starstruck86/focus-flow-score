@@ -15,7 +15,6 @@ import {
   isCircleUrl,
   probeRedirectsToCircle,
   discoverCircleCourse,
-  fetchCircleLesson,
 } from './circle.ts';
 
 const corsHeaders = {
