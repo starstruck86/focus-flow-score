@@ -538,11 +538,11 @@
   // lesson. Only strict lesson URLs or specific lesson content containers count.
   function detectPageMode() {
     const path = location.pathname || '';
-    const lessonLinks = collectLessonLinks();
+    const discoveryDebug = {};
+    const lessonLinks = collectLessonLinks(discoveryDebug);
     const lessonLinkCount = lessonLinks.length;
     const hasLessonUrl = /\/lessons\/[^/?#]+|\/posts\/[^/?#]+/i.test(path);
 
-    // Specific lesson/post content containers — generic <article>/<main> do NOT count.
     const hasPostBody = !!document.querySelector('[data-testid="post-body"]');
     const hasLessonContentContainer = !!document.querySelector(
       '[data-testid*="lesson-content"], [data-testid*="post-content"], .trix-content'
@@ -559,20 +559,68 @@
       mode = 'index';
     }
 
+    const firstLessons = lessonLinks.slice(0, 5).map(l => ({ url: l.url, title: l.title }));
     const detection = {
       path,
       hasLessonUrl,
       lessonLinkCount,
+      duplicatesRemoved: discoveryDebug.duplicatesRemoved || 0,
+      rejected: discoveryDebug.rejected || 0,
+      totalAnchors: discoveryDebug.totalAnchors || 0,
       hasPostBody,
       hasLessonContentContainer,
+      firstLessons,
       mode,
     };
 
     try {
       console.log('[Circle Capture] mode detection', detection);
+      console.log('[Circle Capture] first lessons', firstLessons);
     } catch (_) {}
 
-    showDebugBanner(`Circle mode: ${mode}; lesson links: ${lessonLinkCount}; path: ${path}`);
+    showDebugBanner(
+      `Circle mode: ${mode}\nlesson links: ${lessonLinkCount} (dupes removed: ${detection.duplicatesRemoved})\npath: ${path}`
+    );
+
+    const isCourseRoot = /^\/c\/[^/]+\/?$/i.test(path);
+    if (isCourseRoot && lessonLinkCount < 2) {
+      try {
+        const sampleHrefs = Array.from(document.querySelectorAll('a[href]'))
+          .slice(0, 40)
+          .map(a => a.getAttribute('href'))
+          .filter(Boolean);
+        const debugInfo = {
+          path,
+          location: location.href,
+          pageTitle: document.title,
+          lessonLinkCount,
+          duplicatesRemoved: detection.duplicatesRemoved,
+          rejected: detection.rejected,
+          totalAnchors: detection.totalAnchors,
+          hasPostBody,
+          hasLessonContentContainer,
+          detectedSelectors: {
+            postBody: document.querySelectorAll('[data-testid="post-body"]').length,
+            lessonContent: document.querySelectorAll('[data-testid*="lesson-content"]').length,
+            curriculum: document.querySelectorAll('[data-testid*="curriculum"]').length,
+            lessonTestid: document.querySelectorAll('[data-testid*="lesson"]').length,
+            postTestid: document.querySelectorAll('[data-testid*="post"]').length,
+            anchorsLessons: document.querySelectorAll('a[href*="/lessons/"]').length,
+            anchorsPosts: document.querySelectorAll('a[href*="/posts/"]').length,
+          },
+          hrefSamples: sampleHrefs,
+          firstLessons,
+        };
+        copyToClipboard(JSON.stringify(debugInfo, null, 2)).then(ok => {
+          banner(
+            ok
+              ? 'Could not detect lesson links. Debug info copied to clipboard — please send it to Lovable.'
+              : 'Could not detect lesson links. Open the browser console for debug info to send to Lovable.',
+            'warn'
+          );
+        });
+      } catch (_) {}
+    }
 
     return mode;
   }
