@@ -1,11 +1,22 @@
 /**
- * import-course: Authenticates to Kajabi course platforms and scrapes curriculum.
- * 
+ * import-course: Authenticates to course platforms and scrapes curriculum.
+ *
+ * Supported platforms:
+ *   - Kajabi / Thinkific (legacy code path in this file)
+ *   - Circle (./circle.ts) — auto-detected for *.circle.so and custom domains
+ *     that redirect to login.circle.so
+ *
  * Modes:
  *   { url, action: "discover" } → returns curriculum structure
  *   { url, action: "fetch_lesson", lesson_url } → returns lesson content
  *   { url, action: "debug_login" } → returns login debug info
  */
+import {
+  isCircleUrl,
+  probeRedirectsToCircle,
+  discoverCircleCourse,
+  fetchCircleLesson,
+} from './circle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
