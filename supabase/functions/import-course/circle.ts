@@ -629,7 +629,7 @@ export async function fetchCircleLesson(
       word_count: wordCount,
       content_type: contentType,
       has_login_wall: false,
-      usable_content: contentType !== 'empty' && contentType !== 'login_page' && wordCount >= 5,
+      usable_content: contentType !== 'empty' && wordCount >= 5,
       issues: [],
     },
     debug,
