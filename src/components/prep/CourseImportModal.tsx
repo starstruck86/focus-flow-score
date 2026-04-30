@@ -1039,7 +1039,17 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
             </div>
           )}
 
-          {/* Optional per-import credentials */}
+          {/* Circle browser-assisted capture — replaces credentials/no-lessons UI */}
+          {circleCaptureHint && lessons.length === 0 && !importing && (
+            <CircleImportPanel
+              sourceUrl={circleSourceUrl || url}
+              captureHint={circleCaptureHint}
+              onLessons={handleCircleLessons}
+            />
+          )}
+
+          {/* Optional per-import credentials (hidden for Circle browser-capture) */}
+          {!circleCaptureHint && (
           <Collapsible open={showCreds} onOpenChange={setShowCreds} className="flex-shrink-0">
             <CollapsibleTrigger asChild>
               <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full">
@@ -1072,6 +1082,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
               />
             </CollapsibleContent>
           </Collapsible>
+          )}
 
           {/* Discovery metadata */}
           {discoverMeta && !importing && (
@@ -1126,8 +1137,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
             </div>
           )}
 
-          {/* No course found error for landing pages */}
-          {!fetching && !importing && lessons.length === 0 && courseOptions.length === 0 && discoverMeta && discoverMeta.lessons_discovered === 0 && !authError && (
+          {/* No course found error for landing pages (skipped for Circle capture flow) */}
+          {!circleCaptureHint && !fetching && !importing && lessons.length === 0 && courseOptions.length === 0 && discoverMeta && discoverMeta.lessons_discovered === 0 && !authError && (
             <div className="flex items-start gap-2 p-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-sm flex-shrink-0">
               <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-600" />
               <span className="text-muted-foreground">
