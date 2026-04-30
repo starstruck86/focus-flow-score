@@ -347,13 +347,16 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                   </span>
                 )}
                 {stats && phase === 'done' && (
-                  <span className="flex items-center gap-1.5">
-                    <Badge variant="outline" className="text-[9px] h-4">imported {stats.imported}</Badge>
+                  <span className="flex items-center gap-1.5 flex-wrap">
+                    <Badge variant="outline" className="text-[9px] h-4">full-content {stats.full_content}</Badge>
                     {stats.metadata_only > 0 && (
                       <Badge variant="outline" className="text-[9px] h-4">metadata-only {stats.metadata_only}</Badge>
                     )}
                     {stats.rejected > 0 && (
                       <Badge variant="outline" className="text-[9px] h-4">rejected {stats.rejected}</Badge>
+                    )}
+                    {stats.fetch_failed > 0 && (
+                      <Badge variant="outline" className="text-[9px] h-4">fetch-failed {stats.fetch_failed}</Badge>
                     )}
                   </span>
                 )}
