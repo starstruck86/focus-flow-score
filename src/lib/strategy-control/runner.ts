@@ -318,7 +318,13 @@ export async function runCase(c: ValidationCase): Promise<CaseResult> {
     });
     const latencyMs = Math.round(performance.now() - started);
     if (error) {
-      const { body: raw, httpStatus } = await readInvokeBody(data, error, `case:${c.id}`);
+      let { body: raw, httpStatus } = await readInvokeBody(data, error, `case:${c.id}`);
+      if (c.withSkillDebugHeader && !isSkillBranchBody(raw)) {
+        const direct = await directStrategyChatFetch(c.body, headers);
+        raw = direct.body;
+        httpStatus = direct.httpStatus;
+        console.debug(`[StrategyControl] case:${c.id}:direct-fetch`, direct);
+      }
       const signals = extractSignals(raw);
       const verdict = evaluate(c.expectation, signals, raw);
       return {
