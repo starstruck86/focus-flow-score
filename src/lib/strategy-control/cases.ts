@@ -88,6 +88,8 @@ export function buildCases(inputs: ValidationInputs): ReadonlyArray<ValidationCa
             topic: inputs.topic,
             industry: "hospitality",
             persona: inputs.persona,
+            stage: inputs.stage,
+            methodology: inputs.methodology,
           },
         },
       },
