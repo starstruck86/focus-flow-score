@@ -146,9 +146,101 @@ export interface NormalizedLesson {
   reject_reason?: string;
 }
 
+/**
+ * Normalize a lesson URL for dedupe purposes:
+ *   - lowercase host
+ *   - strip hash fragment
+ *   - strip trailing slash (except root)
+ * Query string is preserved (Circle sometimes uses it for lesson IDs).
+ */
+export function normalizeLessonUrl(raw: string): string {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return '';
+  try {
+    const u = new URL(trimmed);
+    u.hash = '';
+    u.host = u.host.toLowerCase();
+    let path = u.pathname.replace(/\/+$/, '');
+    if (path === '') path = '/';
+    u.pathname = path;
+    return u.toString();
+  } catch {
+    // Not an absolute URL — best-effort string normalization.
+    return trimmed.split('#')[0].replace(/\/+$/, '').toLowerCase();
+  }
+}
+
+/**
+ * Richness score for dedupe tie-breaking.
+ * Higher wins. transcript > body_text > media_url-only > title-only.
+ */
+function lessonRichness(l: { body_text?: string; transcript?: string; media_url?: string; title?: string }): number {
+  let score = 0;
+  if (l.transcript && l.transcript.trim().length > 0) score += 1000 + Math.min(l.transcript.length, 100_000) / 1000;
+  if (l.body_text && l.body_text.trim().length > 0) score += 100 + Math.min(l.body_text.length, 100_000) / 1000;
+  if (l.media_url && l.media_url.trim().length > 0) score += 10;
+  if (l.title && l.title.trim().length > 0) score += 1;
+  return score;
+}
+
+/**
+ * Merge two duplicate lessons, preferring richer fields. Title prefers the
+ * non-empty / longer one; module prefers existing then incoming.
+ */
+function mergeLessons<T extends {
+  url: string; title: string; module?: string;
+  body_text?: string; transcript?: string; media_url?: string;
+}>(a: T, b: T): T {
+  const pick = (x?: string, y?: string) => {
+    const xs = (x || '').trim();
+    const ys = (y || '').trim();
+    if (xs && ys) return xs.length >= ys.length ? xs : ys;
+    return xs || ys || undefined;
+  };
+  return {
+    ...a,
+    title: pick(a.title, b.title) || a.title,
+    module: pick(a.module, b.module),
+    body_text: pick(a.body_text, b.body_text),
+    transcript: pick(a.transcript, b.transcript),
+    media_url: pick(a.media_url, b.media_url),
+  };
+}
+
+/**
+ * Dedupe lessons by normalized URL. Keeps the richer version when duplicates
+ * are found (transcript > body_text > media_url-only > title-only), merging
+ * non-empty fields from the loser.
+ */
+export function dedupeLessons<T extends {
+  url: string; title: string; module?: string;
+  body_text?: string; transcript?: string; media_url?: string;
+}>(lessons: T[], debug?: string[]): T[] {
+  const byKey = new Map<string, T>();
+  let collisions = 0;
+  for (const lesson of lessons) {
+    const key = normalizeLessonUrl(lesson.url);
+    if (!key) continue;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, { ...lesson, url: key });
+      continue;
+    }
+    collisions++;
+    const winner = lessonRichness(lesson) > lessonRichness(existing) ? lesson : existing;
+    const loser = winner === lesson ? existing : lesson;
+    byKey.set(key, { ...mergeLessons(winner, loser), url: key });
+  }
+  if (debug && collisions > 0) {
+    debug.push(`[Capture] dedupe collapsed ${collisions} duplicate lesson URL${collisions === 1 ? '' : 's'}`);
+  }
+  return Array.from(byKey.values());
+}
+
 export function normalizeLessons(payload: CapturePayload, debug: string[]): NormalizedLesson[] {
+  const deduped = dedupeLessons(payload.lessons, debug);
   const out: NormalizedLesson[] = [];
-  for (const lesson of payload.lessons) {
+  for (const lesson of deduped) {
     const quality = classifyLessonContent({
       body_text: lesson.body_text,
       transcript: lesson.transcript,
