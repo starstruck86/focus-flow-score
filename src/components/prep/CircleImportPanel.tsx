@@ -446,10 +446,89 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
               </div>
               <Button onClick={handleSubmitPasted} disabled={submitting || !pastedJson.trim()} size="sm">
                 {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
-                Import pasted JSON
+                Add lesson / Import
               </Button>
             </div>
           </div>
+
+          {/* ── Accumulated single-lesson captures ─────────────────── */}
+          {capturedLessons.length > 0 && (
+            <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-2.5">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-foreground">
+                  {capturedLessons.length} lesson{capturedLessons.length === 1 ? '' : 's'} ready to import
+                </div>
+                <Button size="sm" onClick={importAccumulated} disabled={submitting}>
+                  {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
+                  Import captured lessons
+                </Button>
+              </div>
+              <ul className="space-y-1 max-h-48 overflow-y-auto">
+                {capturedLessons.map(l => (
+                  <li key={l.url} className="flex items-center justify-between gap-2 text-[11px]">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium">{l.title}</div>
+                      <div className="truncate text-muted-foreground">{l.url}</div>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {l.body_text && <Badge variant="outline" className="text-[9px] h-4">text</Badge>}
+                      {l.media_url && <Badge variant="outline" className="text-[9px] h-4">video</Badge>}
+                      {l.transcript && <Badge variant="outline" className="text-[9px] h-4">transcript</Badge>}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground"
+                        onClick={() => removeCaptured(l.url)}
+                        disabled={submitting}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="text-[10px] text-muted-foreground">
+                Paste another lesson JSON above to keep adding. Duplicates (by URL) are merged automatically.
+              </div>
+            </div>
+          )}
+
+          {/* ── Curriculum map reference (titles/URLs only) ────────── */}
+          {curriculumMap && (
+            <div className="space-y-2 rounded-md border border-border bg-muted/30 p-2.5">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-foreground">
+                  Curriculum map · {curriculumMap.lessons.length} lesson{curriculumMap.lessons.length === 1 ? '' : 's'}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-[11px] text-muted-foreground"
+                  onClick={() => setCurriculumMap(null)}
+                >
+                  Dismiss
+                </Button>
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                Reference list only — open each lesson in Circle and run the bookmarklet to capture content.
+              </div>
+              <ul className="space-y-0.5 max-h-40 overflow-y-auto text-[11px]">
+                {curriculumMap.lessons.map(l => (
+                  <li key={l.url} className="flex items-center gap-2">
+                    <a
+                      href={l.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="truncate flex-1 hover:underline text-foreground"
+                    >
+                      {l.title}
+                    </a>
+                    <ExternalLink className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </TabsContent>
 
         {/* ── Tab B: Manual paste ───────────────────────────────────── */}
