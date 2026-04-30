@@ -479,17 +479,14 @@
 
   // ── Page-mode detection ──────────────────────────────────────────────────
   //
-  // We treat the page as an INDIVIDUAL LESSON page when:
-  //   • URL path includes /lessons/ or /posts/
-  //   • OR the DOM exposes a meaningful post body / article / .trix-content
-  //   • OR there is a visible video embed
-  //
-  // Otherwise we treat it as a COURSE INDEX / curriculum page and capture
-  // only the lesson list (titles + URLs).
+  // Curriculum detection must win over any content signals because Circle
+  // course indexes can expose generic body/sidebar/video DOM that looks like a
+  // lesson. Only strict lesson URLs or specific lesson content containers count.
   function detectPageMode() {
     const path = location.pathname || '';
-    const hasLessonUrl = /\/lessons\/[^/]+|\/posts\/[^/]+/i.test(path);
-    const isCourseRoot = /^\/c\/[^/]+\/?$/i.test(path);
+    const lessonLinks = collectLessonLinks();
+    const lessonLinkCount = lessonLinks.length;
+    const hasLessonUrl = /\/lessons\/[^/?#]+|\/posts\/[^/?#]+/i.test(path);
 
     // Specific lesson/post content containers — generic <article>/<main> do NOT count.
     const hasPostBody = !!document.querySelector('[data-testid="post-body"]');
@@ -497,39 +494,59 @@
       '[data-testid*="lesson-content"], [data-testid*="post-content"], .trix-content'
     );
 
-    const hasVideo = !!document.querySelector(
-      'iframe[src*="wistia"], iframe[src*="vimeo"], iframe[src*="youtube"], iframe[src*="youtu.be"], iframe[src*="loom"], video'
-    );
-
-    const lessonLinkCount = document.querySelectorAll(
-      'a[href*="/lessons/"], a[href*="/posts/"]'
-    ).length;
-
     let mode;
-    if (hasLessonUrl) {
+    if (lessonLinkCount >= 2 && !hasLessonUrl) {
+      mode = 'index';
+    } else if (hasLessonUrl) {
       mode = 'lesson';
-    } else if (hasPostBody || hasLessonContentContainer) {
-      mode = 'lesson';
-    } else if (hasVideo && !isCourseRoot && lessonLinkCount < 3) {
+    } else if (lessonLinkCount < 2 && (hasPostBody || hasLessonContentContainer)) {
       mode = 'lesson';
     } else {
       mode = 'index';
     }
 
+    const detection = {
+      path,
+      hasLessonUrl,
+      lessonLinkCount,
+      hasPostBody,
+      hasLessonContentContainer,
+      mode,
+    };
+
     try {
-      console.log('[Circle Capture] mode detection', {
-        path,
-        hasLessonUrl,
-        lessonLinkCount,
-        hasPostBody,
-        hasLessonContentContainer,
-        hasVideo,
-        isCourseRoot,
-        mode,
-      });
+      console.log('[Circle Capture] mode detection', detection);
     } catch (_) {}
 
+    showDebugBanner(`Circle mode: ${mode}; lesson links: ${lessonLinkCount}; path: ${path}`);
+
     return mode;
+  }
+
+  function showDebugBanner(message) {
+    const id = '__circle_capture_debug_banner';
+    document.getElementById(id)?.remove();
+    const div = document.createElement('div');
+    div.id = id;
+    Object.assign(div.style, {
+      position: 'fixed',
+      top: '12px',
+      left: '12px',
+      maxWidth: '520px',
+      zIndex: '2147483647',
+      background: '#1f2937',
+      color: '#fff',
+      padding: '8px 12px',
+      borderRadius: '8px',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      fontSize: '12px',
+      lineHeight: '1.35',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+      whiteSpace: 'pre-wrap',
+    });
+    div.textContent = message;
+    document.body.appendChild(div);
+    setTimeout(() => { div.remove(); }, 15000);
   }
 
   function buildSingleLessonPayload() {
