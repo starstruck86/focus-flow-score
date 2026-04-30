@@ -370,12 +370,13 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
             <li>Drag the bookmarklet to your bookmarks bar (or copy it).</li>
             <li>Open Circle in a tab where you’re already signed in.</li>
             <li>
-              <span className="font-medium text-foreground">Open a lesson page</span> (URL contains
-              <code className="mx-1">/lessons/</code> or <code>/posts/</code>) and click the bookmarklet
-              — it copies that lesson’s content as JSON.
+              <span className="font-medium text-foreground">Open any lesson page</span> (you should
+              see <em>“Lesson X of Y”</em> above the lesson title) and click the bookmarklet{' '}
+              <span className="font-medium text-foreground">once</span>. It will walk through the
+              entire course automatically — capturing video, captions, takeaways, transcripts,
+              and resources for every lesson.
             </li>
-            <li>Return here, paste below, click <em>Add lesson / Import</em>. Repeat for each lesson.</li>
-            <li>When all desired lessons are pasted, click <em>Import captured lessons</em>.</li>
+            <li>When the banner reads <em>“N lessons captured”</em>, return here and paste the JSON below.</li>
           </ol>
 
           <div className="flex flex-wrap items-center gap-2">
