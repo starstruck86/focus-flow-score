@@ -52,6 +52,17 @@ export interface RetrievalQueryPlan {
   totalCap: number;
   planHash: string;
   contextHash: string;
+  // Phase 3B mirror — server is authoritative.
+  expandedSeeds: ReadonlyArray<string>;
+  expansionTrace: ReadonlyArray<{
+    term: string;
+    source: 'lexicon' | 'context_anchor' | 'persona_role';
+    rule: string;
+    fromInput?: string;
+    lexiconVersion: string;
+  }>;
+  lexiconVersion: string;
+  expansionEnabled: boolean;
 }
 
 export type PlannerRefusal =
