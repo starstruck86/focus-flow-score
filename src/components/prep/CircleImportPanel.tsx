@@ -97,6 +97,8 @@ interface CaptureStats {
   imported: number;
   rejected: number;
   metadata_only: number;
+  full_content: number;
+  fetch_failed: number;
 }
 
 /**
@@ -130,6 +132,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   const [submitting, setSubmitting] = useState(false);
   const [phase, setPhase] = useState<CapturePhase>('idle');
   const [stats, setStats] = useState<CaptureStats | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [manualTitle, setManualTitle] = useState('');
   const [manualLessons, setManualLessons] = useState<ManualLesson[]>([
@@ -153,6 +156,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   const postCapture = async (payload: any) => {
     setSubmitting(true);
     setStats(null);
+    setWarning(null);
     setPhase('normalizing');
     try {
       const { data, error } = await supabase.functions.invoke('import-course-capture', {
@@ -160,13 +164,30 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'Capture failed');
-      const lessons = (data.lessons || []) as CircleNormalizedLesson[];
+      const lessons = (data.lessons || []) as Array<CircleNormalizedLesson & { capture_issue?: string }>;
       const importable = lessons.filter(l => l.imported);
       const metadataOnly = lessons.filter(l => l.quality?.metadata_only).length;
+      const fullContent = (data.meta?.lessons_full_content as number | undefined)
+        ?? lessons.filter(l => l.imported && !l.quality?.metadata_only && (l.content?.trim().length ?? 0) > 0).length;
+      const fetchFailed = (data.meta?.lessons_fetch_failed as number | undefined)
+        ?? lessons.filter(l => l.capture_issue === 'fetch_failed').length;
       const rejected = lessons.length - importable.length;
-      setStats({ imported: importable.length, rejected, metadata_only: metadataOnly });
+      setStats({
+        imported: importable.length,
+        rejected,
+        metadata_only: metadataOnly,
+        full_content: fullContent,
+        fetch_failed: fetchFailed,
+      });
+      const warn = (data.warning as string | undefined)
+        || (data.meta?.lessons_list_only
+          ? 'This capture only includes lesson titles/URLs. No lesson content was captured.'
+          : null);
+      setWarning(warn ?? null);
       setPhase('done');
-      if (importable.length === 0) {
+      if (warn) {
+        toast.warning(warn);
+      } else if (importable.length === 0) {
         toast.error('No usable lessons found in capture payload.');
       } else {
         toast.success(`Captured ${importable.length} lesson${importable.length === 1 ? '' : 's'}.`);
@@ -317,6 +338,12 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                 <span>{validationError}</span>
               </div>
             )}
+            {warning && phase === 'done' && (
+              <div className="flex items-start gap-1.5 p-2 rounded-md bg-amber-500/10 border border-amber-500/20 text-[11px] text-foreground">
+                <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0 text-amber-600" />
+                <span>{warning}</span>
+              </div>
+            )}
             <div className="flex items-center justify-between gap-2">
               <div className="text-[10px] text-muted-foreground flex items-center gap-2 min-h-[16px]">
                 {phaseLabel[phase] && (
@@ -326,13 +353,16 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                   </span>
                 )}
                 {stats && phase === 'done' && (
-                  <span className="flex items-center gap-1.5">
-                    <Badge variant="outline" className="text-[9px] h-4">imported {stats.imported}</Badge>
+                  <span className="flex items-center gap-1.5 flex-wrap">
+                    <Badge variant="outline" className="text-[9px] h-4">full-content {stats.full_content}</Badge>
                     {stats.metadata_only > 0 && (
                       <Badge variant="outline" className="text-[9px] h-4">metadata-only {stats.metadata_only}</Badge>
                     )}
                     {stats.rejected > 0 && (
                       <Badge variant="outline" className="text-[9px] h-4">rejected {stats.rejected}</Badge>
+                    )}
+                    {stats.fetch_failed > 0 && (
+                      <Badge variant="outline" className="text-[9px] h-4">fetch-failed {stats.fetch_failed}</Badge>
                     )}
                   </span>
                 )}
