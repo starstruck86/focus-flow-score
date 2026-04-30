@@ -324,6 +324,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     setCourseOptions([]);
     setLandingPageResolved(false);
     setResolvedFrom(null);
+    setCircleCaptureHint(null);
+    setCircleSourceUrl('');
     try {
       const { data, error } = await trackedInvoke<any>('import-course', {
         body: { url: courseUrl.trim(), action: 'discover', ...getCredsBody() },
@@ -334,6 +336,21 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         const errMsg = data?.error || 'Failed to fetch course';
         const isCircle = data?.platform === 'circle';
         const failureType: string | undefined = data?.failure_type;
+
+        // NEW: Circle browser-assisted capture path. Server returns
+        // `needs_browser_capture: true` with a capture_hint instead of
+        // attempting (and failing) server-side login.
+        if (isCircle && data?.needs_browser_capture && data?.capture_hint) {
+          setCircleCaptureHint(data.capture_hint as CircleCaptureHint);
+          setCircleSourceUrl(courseUrl.trim());
+          setPlatform('circle');
+          setCourseTitle(data.title || 'Circle Course');
+          if (data.meta) setDiscoverMeta(data.meta);
+          // Do NOT set authError or open the credentials drawer — we render
+          // CircleImportPanel instead. Return cleanly (not a thrown error).
+          return;
+        }
+
         if (isCircle && (failureType === 'mfa_required' || failureType === 'captcha_required' || failureType === 'sso_only' || failureType === 'blocked_bot')) {
           setAuthError(`Circle automated login is blocked (${failureType.replace('_', ' ')}). Please paste lesson content manually or provide exported course materials.`);
         } else if (isCircle && failureType === 'no_credentials') {
