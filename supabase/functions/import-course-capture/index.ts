@@ -30,7 +30,18 @@ const corsHeaders = {
 const ResourceSchema = z.object({
   title: z.string().trim().max(500).optional(),
   url: z.string().trim().min(1).max(2048),
+  type: z.enum(['link', 'pdf', 'doc', 'sheet', 'slide', 'download', 'unknown']).optional(),
+  source_section: z.string().trim().max(100).optional(),
 });
+
+export type CapturedResource = {
+  title?: string;
+  url: string;
+  type?: 'link' | 'pdf' | 'doc' | 'sheet' | 'slide' | 'download' | 'unknown';
+  source_section?: string;
+  parent_lesson_url?: string;
+  parent_lesson_title?: string;
+};
 
 const LessonSchema = z.object({
   url: z.string().trim().min(1).max(2048),
