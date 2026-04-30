@@ -212,8 +212,18 @@ export async function runCase(c: ValidationCase): Promise<CaseResult> {
     });
     const latencyMs = Math.round(performance.now() - started);
     if (error) {
-      // supabase-js surfaces non-2xx as `error` but `data` may still hold the body.
-      const raw = data ?? { error: error.message };
+      // Non-2xx (e.g. 422 honest refusal). Read the actual JSON body from error.context.
+      let raw: unknown = data;
+      let httpStatus: number | null = null;
+      const ctx = (error as { context?: Response | { body?: unknown; status?: number } }).context;
+      if (ctx instanceof Response) {
+        httpStatus = ctx.status;
+        try { raw = await ctx.clone().json(); } catch { /* keep raw */ }
+      } else if (ctx && typeof ctx === "object") {
+        if ("status" in ctx && typeof ctx.status === "number") httpStatus = ctx.status;
+        if ("body" in ctx) raw = (ctx as { body?: unknown }).body ?? raw;
+      }
+      if (!raw) raw = { error: error.message };
       const signals = extractSignals(raw);
       const verdict = evaluate(c.expectation, signals, raw);
       return {
@@ -221,7 +231,7 @@ export async function runCase(c: ValidationCase): Promise<CaseResult> {
         status: verdict.status,
         reason: verdict.reason || error.message,
         latencyMs,
-        httpStatus: (error as { context?: { status?: number } })?.context?.status ?? null,
+        httpStatus,
         signals,
         raw,
         error: error.message,
@@ -278,21 +288,32 @@ export interface PreflightResult {
 
 export async function preflight(): Promise<PreflightResult> {
   try {
-    const { data } = await supabase.functions.invoke("strategy-chat", {
+    const { data, error } = await supabase.functions.invoke("strategy-chat", {
       body: {
         threadId: "preflight",
         skill: { id: "unknown-skill-test", version: "1", inputs: {} },
       },
       headers: { "x-skill-debug": "1" },
     });
-    const signals = extractSignals(data);
+    // The skill branch returns HTTP 422 on unknown_skill (refusal). supabase-js
+    // surfaces that as `error` with the JSON body inside error.context. Read it.
+    let body: unknown = data;
+    if (!body && error) {
+      const ctx = (error as { context?: Response | { body?: unknown } }).context;
+      if (ctx instanceof Response) {
+        try { body = await ctx.clone().json(); } catch { body = null; }
+      } else if (ctx && typeof ctx === "object" && "body" in ctx) {
+        body = (ctx as { body?: unknown }).body;
+      }
+    }
+    const signals = extractSignals(body);
     if (signals.schema === "skill_envelope.v1") {
-      return { flagOn: true, reason: "skill envelope returned", raw: data };
+      return { flagOn: true, reason: "skill envelope returned", raw: body };
     }
     return {
       flagOn: false,
       reason: "no skill envelope — flag likely OFF",
-      raw: data,
+      raw: body ?? data,
     };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
