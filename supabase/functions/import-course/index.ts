@@ -15,7 +15,6 @@ import {
   isCircleUrl,
   probeRedirectsToCircle,
   discoverCircleCourse,
-  fetchCircleLesson,
 } from './circle.ts';
 
 const corsHeaders = {
@@ -2411,75 +2410,48 @@ Deno.serve(async (req) => {
     }
 
     // ── Circle.so dispatch ────────────────────────────────────────────
-    // Detect Circle either by static hostname (*.circle.so) OR by probing
-    // for a redirect to login.circle.so (custom-domain communities).
+    // Circle is auth-gated, React-rendered, and Cloudflare-protected. We
+    // never attempt server-side login — instead we return a structured
+    // `needs_browser_capture` envelope. The client renders CircleImportPanel,
+    // which uses the bookmarklet (public/circle-capture.js) to capture
+    // lessons from the user's already-authenticated browser tab and POST
+    // them to import-course-capture.
     {
       const probeDebug: string[] = [];
       let isCircle = isCircleUrl(url);
-      if (!isCircle && action !== 'debug_login' && action !== 'download_asset') {
+      if (!isCircle && action !== 'debug_login' && action !== 'download_asset' && action !== 'fetch_lesson') {
         const probe = await probeRedirectsToCircle(url, probeDebug);
         isCircle = probe.isCircle;
       }
 
       if (isCircle) {
-        if (action === 'fetch_lesson') {
-          if (!lesson_url) {
-            return new Response(
-              JSON.stringify({ success: false, error: 'lesson_url is required' }),
-              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-          }
-          const result = await fetchCircleLesson(url, lesson_url, creds);
-          const debug = [...probeDebug, ...result.debug];
-          if (!result.success || !result.quality.usable_content) {
-            return new Response(
-              JSON.stringify({
-                success: false,
-                error: result.quality.issues[0] || 'Circle lesson could not be fetched',
-                title: result.title,
-                content: result.content,
-                quality: result.quality,
-                debug,
-                platform: 'circle',
-              }),
-              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-          }
-          return new Response(
-            JSON.stringify({
-              success: true,
-              title: result.title,
-              content: result.content,
-              media_url: result.media_url,
-              transcript_source: result.transcript_source,
-              quality: result.quality,
-              debug,
-              platform: 'circle',
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
+        // Determine the app origin so we can build absolute bookmarklet /
+        // capture-endpoint URLs in the response.
+        const reqOrigin = req.headers.get('origin') || req.headers.get('referer') || '';
+        let appOrigin = '';
+        try { appOrigin = reqOrigin ? new URL(reqOrigin).origin : ''; } catch { /* noop */ }
 
-        // discover (default for Circle)
-        const result = await discoverCircleCourse(url, creds);
+        const result = await discoverCircleCourse(url, appOrigin || undefined);
         const debug = [...probeDebug, ...result.debug];
         return new Response(
           JSON.stringify({
-            success: result.success,
+            success: false,
             platform: 'circle',
             title: result.title,
-            lessons: result.lessons,
-            auth_failed: result.auth_failed,
-            parser_failure: !result.success,
-            parser_failure_reason: result.failure_message,
-            failure_type: result.failure,
-            error: result.success ? undefined : result.failure_message,
+            lessons: [],
+            needs_browser_capture: true,
+            capture_hint: result.capture_hint,
+            parser_failure: true,
+            parser_failure_reason: result.parser_failure_reason,
+            failure_type: 'needs_browser_capture',
+            error: result.parser_failure_reason,
             debug,
             meta: {
               ...result.meta,
               platform: 'circle',
-              used_request_credentials: !!creds,
-              failure_type: result.failure || null,
+              used_request_credentials: false,
+              failure_type: 'needs_browser_capture',
+              auth_status: 'needs_browser_capture',
             },
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
