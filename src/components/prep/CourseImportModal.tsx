@@ -809,7 +809,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
                   : `Resource from ${courseTitle}.`,
                 resource_type: childResourceType,
                 tags: childTags,
-                top_folder: 'Resources' as any,
+                top_folder: 'Tools & Reference' as any,
               };
               await addUrl.mutateAsync({ url: child.url, classification: childClassification });
               childResourcesQueued++;
