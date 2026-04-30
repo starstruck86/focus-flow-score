@@ -443,14 +443,34 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     lessons: CircleNormalizedLesson[];
     meta?: Record<string, any>;
   }) => {
-    const importable = args.lessons.filter(l => l.imported);
-    if (importable.length === 0) return;
+    // Only accept Circle lessons that the browser-capture endpoint marked as
+    // imported AND that actually carry usable payload (content, transcript,
+    // or media_url). Title/url-only curriculum-map items are rejected here so
+    // the rest of the modal can never queue them through the legacy
+    // fetch_lesson path (which Circle blocks).
+    const importable = args.lessons.filter(l => {
+      if (!l.imported) return false;
+      const hasContent = (l.content || '').trim().length > 0;
+      const hasMedia = !!(l.media_url && l.media_url.trim().length > 0);
+      const hasTranscript = !!l.transcript_source;
+      const isMetaOnly = !!l.quality?.metadata_only;
+      return hasContent || hasMedia || hasTranscript || isMetaOnly;
+    });
+    if (importable.length === 0) {
+      toast.error('No Circle lessons with captured content. Re-run the bookmarklet on a lesson page.');
+      return;
+    }
     const items: LessonItem[] = importable.map((l, i) => ({
       title: l.title,
       url: l.url,
       module: l.module || 'Circle Course',
       index: i,
-      type: l.quality?.metadata_only ? 'video' : 'text',
+      type: l.quality?.metadata_only ? 'video' : (l.media_url ? 'video' : 'text'),
+      importSource: 'circle_browser_capture',
+      capturedContent: l.content || '',
+      capturedMediaUrl: l.media_url,
+      capturedTranscriptSource: l.transcript_source,
+      capturedQuality: l.quality,
     }));
     setCourseTitle(args.title || 'Circle Course');
     setPlatform('circle');
