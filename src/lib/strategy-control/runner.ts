@@ -206,6 +206,7 @@ function extractSignals(raw: unknown): CaseSignals {
   }
   const retrieval = trace.retrieval as Record<string, unknown> | undefined;
   const gate = trace.gate as Record<string, unknown> | undefined;
+  const planNode = trace.plan as Record<string, unknown> | undefined;
   const generic = trace.generic_output_risk as unknown;
   const dropped = Array.isArray(trace.dropped_client_keys)
     ? (trace.dropped_client_keys as unknown[]).filter((k): k is string => typeof k === "string")
@@ -213,6 +214,31 @@ function extractSignals(raw: unknown): CaseSignals {
   const clamped = Array.isArray(trace.overrides_clamped)
     ? (trace.overrides_clamped as unknown[]).filter((k): k is string => typeof k === "string")
     : [];
+  const termSeeds = planNode && Array.isArray(planNode.term_seeds)
+    ? (planNode.term_seeds as unknown[]).filter((k): k is string => typeof k === "string")
+    : [];
+  const expandedSeeds = planNode && Array.isArray(planNode.expanded_seeds)
+    ? (planNode.expanded_seeds as unknown[]).filter((k): k is string => typeof k === "string")
+    : [];
+  const rawExpansionTrace = planNode && Array.isArray(planNode.expansion_trace)
+    ? (planNode.expansion_trace as unknown[])
+    : [];
+  const expansionTrace = rawExpansionTrace
+    .filter((e): e is Record<string, unknown> => !!e && typeof e === "object")
+    .map((e) => ({
+      // server emits `term` (Phase 3B); accept legacy `expansion` too.
+      expansion: typeof e.term === "string"
+        ? e.term
+        : typeof e.expansion === "string" ? e.expansion : "",
+      source: typeof e.source === "string" ? e.source : "",
+      rule: typeof e.rule === "string" ? e.rule : "",
+      fromInput: typeof e.fromInput === "string" ? e.fromInput : undefined,
+    }))
+    .filter((e) => e.expansion.length > 0);
+  const expansionEnabled = !!(planNode && planNode.expansion_enabled === true);
+  const lexiconVersion = planNode && typeof planNode.lexicon_version === "string"
+    ? (planNode.lexicon_version as string)
+    : null;
   return {
     source_mode: typeof trace.source_mode === "string" ? trace.source_mode : null,
     confidence: retrieval && typeof retrieval.confidence === "string"
@@ -233,6 +259,11 @@ function extractSignals(raw: unknown): CaseSignals {
     overrides_clamped: clamped,
     schema,
     early_return: earlyReturn,
+    term_seeds: termSeeds,
+    expanded_seeds: expandedSeeds,
+    expansion_trace: expansionTrace,
+    expansion_enabled: expansionEnabled,
+    lexicon_version: lexiconVersion,
   };
 }
 
