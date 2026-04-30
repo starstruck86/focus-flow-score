@@ -44,6 +44,14 @@ export interface CircleNormalizedLesson {
   content: string;
   media_url?: string;
   transcript_source?: 'dom' | 'caption_track';
+  resources?: Array<{
+    title?: string;
+    url: string;
+    type?: 'link' | 'pdf' | 'doc' | 'sheet' | 'slide' | 'download' | 'unknown';
+    source_section?: string;
+    parent_lesson_url?: string;
+    parent_lesson_title?: string;
+  }>;
   quality?: { metadata_only?: boolean; content_type?: string; usable_content?: boolean };
   imported?: boolean;
   reject_reason?: string;
