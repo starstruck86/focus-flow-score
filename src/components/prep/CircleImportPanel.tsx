@@ -338,6 +338,12 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                 <span>{validationError}</span>
               </div>
             )}
+            {warning && phase === 'done' && (
+              <div className="flex items-start gap-1.5 p-2 rounded-md bg-amber-500/10 border border-amber-500/20 text-[11px] text-foreground">
+                <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0 text-amber-600" />
+                <span>{warning}</span>
+              </div>
+            )}
             <div className="flex items-center justify-between gap-2">
               <div className="text-[10px] text-muted-foreground flex items-center gap-2 min-h-[16px]">
                 {phaseLabel[phase] && (
