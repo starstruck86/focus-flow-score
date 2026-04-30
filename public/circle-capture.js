@@ -701,14 +701,21 @@
     const failed = lessons.filter(l => l.capture_issue === 'render_failed').length;
     const transcripts = lessons.filter(l => l.transcript).length;
     const resources = lessons.reduce((s, l) => s + (l.resources?.length || 0), 0);
+    const withBody = lessons.filter(l => l.body_text && l.body_text.length > 0).length;
 
     const json = JSON.stringify(payload, null, 2);
     const ok = await copyToClipboard(json);
-    const summary =
-      `${captured} lessons captured` +
-      (failed ? `, ${failed} failed` : '') +
-      `, ${transcripts} transcripts, ${resources} resources.\n` +
-      'JSON copied — return to the app and paste it into the Circle Import panel.';
+
+    const lines = [`${captured} lesson${captured === 1 ? '' : 's'} captured`];
+    if (withBody) lines.push(`✓ ${withBody} with content`);
+    if (transcripts) lines.push(`✓ ${transcripts} transcript${transcripts === 1 ? '' : 's'}`);
+    if (resources) lines.push(`✓ ${resources} resource${resources === 1 ? '' : 's'}`);
+    if (failed) lines.push(`⚠ ${failed} failed`);
+    if (!withBody && !transcripts && !resources) {
+      lines.push('⚠ no content/transcript/resources detected — open browser console for [Circle Capture] debug logs');
+    }
+    const summary = lines.join('\n') +
+      '\nJSON copied — return to the app and paste it into the Circle Import panel.';
 
     if (ok) {
       showBanner(summary, captured === 0 ? 'warn' : 'info');
