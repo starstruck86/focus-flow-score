@@ -47,6 +47,17 @@ export interface SkillTrace {
     unresolved_bindings: ReadonlyArray<string>;
     entity_scoped: boolean;
     scope_budgets: Readonly<Record<string, number>>;
+    // ── Phase 3B: Retrieval Expansion Layer ─────────────────────────
+    expanded_seeds: ReadonlyArray<string>;
+    expansion_trace: ReadonlyArray<{
+      term: string;
+      source: "lexicon" | "context_anchor" | "persona_role";
+      rule: string;
+      fromInput?: string;
+      lexiconVersion: string;
+    }>;
+    lexicon_version: string;
+    expansion_enabled: boolean;
   };
   retrieval: {
     counts: RetrievalCounts;
