@@ -130,6 +130,10 @@ export function buildSkillEnvelope(input: BuildEnvelopeInput): SkillReasoningEnv
       unresolved_bindings: input.plan.unresolvedBindings,
       entity_scoped: input.plan.entityScoped,
       scope_budgets: input.plan.scopeBudgets,
+      expanded_seeds: input.plan.expandedSeeds ?? [],
+      expansion_trace: input.plan.expansionTrace ?? [],
+      lexicon_version: input.plan.lexiconVersion ?? "1",
+      expansion_enabled: input.plan.expansionEnabled ?? false,
     },
     retrieval: {
       counts: input.counts,
