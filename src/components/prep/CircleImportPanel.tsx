@@ -91,9 +91,45 @@ function buildBookmarkletHref(loaderUrl: string, captureEndpoint: string): strin
   return `javascript:${encodeURI(code)}`;
 }
 
+type CapturePhase = 'idle' | 'validating' | 'normalizing' | 'done';
+
+interface CaptureStats {
+  imported: number;
+  rejected: number;
+  metadata_only: number;
+}
+
+/**
+ * Client-side schema check that runs BEFORE we hit the edge function. Returns
+ * a friendly error string when the payload is unusable.
+ */
+function validateCapturePayload(input: any, fallbackSourceUrl: string): { ok: true; payload: any } | { ok: false; error: string } {
+  // Allow a bare lessons array too.
+  const obj = Array.isArray(input)
+    ? { mode: 'capture', source_url: fallbackSourceUrl, platform: 'circle', title: 'Circle Course', lessons: input }
+    : (input && typeof input === 'object' ? { mode: 'capture', source_url: fallbackSourceUrl, platform: 'circle', ...input } : null);
+
+  if (!obj) return { ok: false, error: 'Pasted JSON must be an object or an array of lessons.' };
+  if (obj.platform !== 'circle') return { ok: false, error: `platform must be "circle" (got "${obj.platform ?? 'missing'}").` };
+  if (typeof obj.source_url !== 'string' || !obj.source_url.trim()) return { ok: false, error: 'source_url is required.' };
+  if (!Array.isArray(obj.lessons)) return { ok: false, error: 'lessons must be an array.' };
+  if (obj.lessons.length === 0) return { ok: false, error: 'lessons array is empty — nothing to import.' };
+
+  for (let i = 0; i < obj.lessons.length; i++) {
+    const l = obj.lessons[i];
+    if (!l || typeof l !== 'object') return { ok: false, error: `lesson #${i + 1} is not an object.` };
+    if (typeof l.title !== 'string' || !l.title.trim()) return { ok: false, error: `lesson #${i + 1} is missing "title".` };
+    if (typeof l.url !== 'string' || !l.url.trim()) return { ok: false, error: `lesson #${i + 1} is missing "url".` };
+  }
+  return { ok: true, payload: obj };
+}
+
 export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) {
   const [pastedJson, setPastedJson] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [phase, setPhase] = useState<CapturePhase>('idle');
+  const [stats, setStats] = useState<CaptureStats | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [manualTitle, setManualTitle] = useState('');
   const [manualLessons, setManualLessons] = useState<ManualLesson[]>([
     { title: '', url: '', body_text: '', transcript: '', media_url: '' },
@@ -115,6 +151,8 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   // ── Direct POST helper (used by both pasted JSON + manual tab) ──────────
   const postCapture = async (payload: any) => {
     setSubmitting(true);
+    setStats(null);
+    setPhase('normalizing');
     try {
       const { data, error } = await supabase.functions.invoke('import-course-capture', {
         body: payload,
@@ -123,6 +161,10 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
       if (!data?.success) throw new Error(data?.error || 'Capture failed');
       const lessons = (data.lessons || []) as CircleNormalizedLesson[];
       const importable = lessons.filter(l => l.imported);
+      const metadataOnly = lessons.filter(l => l.quality?.metadata_only).length;
+      const rejected = lessons.length - importable.length;
+      setStats({ imported: importable.length, rejected, metadata_only: metadataOnly });
+      setPhase('done');
       if (importable.length === 0) {
         toast.error('No usable lessons found in capture payload.');
       } else {
@@ -130,6 +172,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
       }
       onLessons({ title: data.title || 'Circle Course', lessons, meta: data.meta });
     } catch (e: any) {
+      setPhase('idle');
       toast.error(e?.message || 'Capture failed');
     } finally {
       setSubmitting(false);
@@ -137,24 +180,23 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   };
 
   const handleSubmitPasted = async () => {
+    setValidationError(null);
+    setPhase('validating');
     let parsed: any;
     try {
       parsed = JSON.parse(pastedJson);
     } catch {
-      toast.error('Pasted text is not valid JSON.');
+      setPhase('idle');
+      setValidationError('Pasted text is not valid JSON.');
       return;
     }
-    // The bookmarklet emits a full payload; allow a bare lesson array too.
-    const payload = Array.isArray(parsed)
-      ? {
-          mode: 'capture',
-          source_url: sourceUrl,
-          platform: 'circle',
-          title: 'Circle Course',
-          lessons: parsed,
-        }
-      : { mode: 'capture', source_url: sourceUrl, platform: 'circle', ...parsed };
-    await postCapture(payload);
+    const result = validateCapturePayload(parsed, sourceUrl);
+    if (!result.ok) {
+      setPhase('idle');
+      setValidationError(result.error);
+      return;
+    }
+    await postCapture(result.payload);
   };
 
   const handleSubmitManual = async () => {
@@ -193,6 +235,13 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     } catch {
       toast.error('Clipboard copy blocked — drag the link to your bookmarks bar instead.');
     }
+  };
+
+  const phaseLabel: Record<CapturePhase, string | null> = {
+    idle: null,
+    validating: 'Validating JSON…',
+    normalizing: 'Normalizing lessons…',
+    done: 'Done',
   };
 
   return (
