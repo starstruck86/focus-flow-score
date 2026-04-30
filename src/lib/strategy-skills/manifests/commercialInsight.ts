@@ -10,7 +10,13 @@ export const commercialInsightManifest: SkillManifest = {
   sourceMode: 'library_first',
   retrieval: {
     scopes: ['knowledge_items', 'standards', 'exemplars'],
-    termBindings: ['${inputs.topic}', '${inputs.industry}', '${inputs.persona}'],
+    termBindings: [
+      '${inputs.topic}',
+      '${inputs.industry}',
+      '${inputs.persona}',
+      '${inputs.stage}',
+      '${inputs.methodology}',
+    ],
     minRelevantItems: 2,
   },
   output: {
