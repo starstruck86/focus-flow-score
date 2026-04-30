@@ -408,7 +408,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
           <div className="space-y-1.5">
             <label className="text-xs font-medium">
               Paste captured JSON
-              <span className="text-muted-foreground font-normal"> (one lesson at a time, from the lesson page)</span>
+              <span className="text-muted-foreground font-normal"> (one payload per course — produced by the bookmarklet)</span>
             </label>
             <Textarea
               value={pastedJson}
@@ -439,22 +439,25 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                 )}
                 {stats && phase === 'done' && (
                   <span className="flex items-center gap-1.5 flex-wrap">
+                    <Badge variant="outline" className="text-[9px] h-4">lessons {stats.imported}</Badge>
                     <Badge variant="outline" className="text-[9px] h-4">full-content {stats.full_content}</Badge>
+                    <Badge variant="outline" className="text-[9px] h-4">transcripts {stats.transcripts}</Badge>
+                    <Badge variant="outline" className="text-[9px] h-4">resources {stats.resources}</Badge>
                     {stats.metadata_only > 0 && (
                       <Badge variant="outline" className="text-[9px] h-4">metadata-only {stats.metadata_only}</Badge>
                     )}
                     {stats.rejected > 0 && (
                       <Badge variant="outline" className="text-[9px] h-4">rejected {stats.rejected}</Badge>
                     )}
-                    {stats.fetch_failed > 0 && (
-                      <Badge variant="outline" className="text-[9px] h-4">fetch-failed {stats.fetch_failed}</Badge>
+                    {stats.render_failed > 0 && (
+                      <Badge variant="outline" className="text-[9px] h-4">failed {stats.render_failed}</Badge>
                     )}
                   </span>
                 )}
               </div>
               <Button onClick={handleSubmitPasted} disabled={submitting || !pastedJson.trim()} size="sm">
                 {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
-                Add lesson / Import
+                Import course
               </Button>
             </div>
           </div>
