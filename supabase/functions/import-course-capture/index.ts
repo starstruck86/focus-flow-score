@@ -302,6 +302,7 @@ export function normalizeLessons(payload: CapturePayload, debug: string[]): Norm
       quality,
       imported,
       reject_reason: imported ? undefined : (quality.issues[0] || quality.content_type),
+      import_source: 'circle_browser_capture',
     });
   }
   debug.push(
