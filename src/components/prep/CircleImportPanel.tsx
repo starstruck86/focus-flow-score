@@ -43,9 +43,11 @@ export interface CircleNormalizedLesson {
   module?: string;
   content: string;
   media_url?: string;
-  quality?: { metadata_only?: boolean; content_type?: string };
+  transcript_source?: 'dom' | 'caption_track';
+  quality?: { metadata_only?: boolean; content_type?: string; usable_content?: boolean };
   imported?: boolean;
   reject_reason?: string;
+  import_source?: 'circle_browser_capture';
 }
 
 interface Props {
