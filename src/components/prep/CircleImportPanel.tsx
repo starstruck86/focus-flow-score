@@ -132,6 +132,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   const [submitting, setSubmitting] = useState(false);
   const [phase, setPhase] = useState<CapturePhase>('idle');
   const [stats, setStats] = useState<CaptureStats | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [manualTitle, setManualTitle] = useState('');
   const [manualLessons, setManualLessons] = useState<ManualLesson[]>([
