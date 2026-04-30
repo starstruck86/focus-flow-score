@@ -103,7 +103,8 @@ interface CaptureStats {
  * Client-side schema check that runs BEFORE we hit the edge function. Returns
  * a friendly error string when the payload is unusable.
  */
-function validateCapturePayload(input: any, fallbackSourceUrl: string): { ok: true; payload: any } | { ok: false; error: string } {
+type ValidationResult = { ok: true; payload: any } | { ok: false; error: string };
+function validateCapturePayload(input: any, fallbackSourceUrl: string): ValidationResult {
   // Allow a bare lessons array too.
   const obj = Array.isArray(input)
     ? { mode: 'capture', source_url: fallbackSourceUrl, platform: 'circle', title: 'Circle Course', lessons: input }
