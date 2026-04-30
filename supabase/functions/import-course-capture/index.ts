@@ -269,6 +269,7 @@ export function normalizeLessons(payload: CapturePayload, debug: string[]): Norm
       content,
       media_url: lesson.media_url,
       transcript_source: lesson.transcript ? 'dom' : undefined,
+      capture_issue: (lesson as any).capture_issue,
       quality,
       imported,
       reject_reason: imported ? undefined : (quality.issues[0] || quality.content_type),
