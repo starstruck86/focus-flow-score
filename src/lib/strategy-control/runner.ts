@@ -267,11 +267,37 @@ function extractSignals(raw: unknown): CaseSignals {
   };
 }
 
+function checkExpansionEvidence(
+  c: ValidationCase,
+  signals: CaseSignals,
+): { ok: true } | { ok: false; reason: string } {
+  const req = c.requireExpansionEvidence;
+  if (!req) return { ok: true };
+  if (!signals.expansion_enabled) {
+    return {
+      ok: false,
+      reason:
+        "expansion evidence missing: expansion_enabled=false (set STRATEGY_EXPANSION_ENABLED=true on the edge function)",
+    };
+  }
+  const want = req.anyOf.map((t) => t.toLowerCase());
+  const have = signals.expanded_seeds.map((t) => t.toLowerCase());
+  const matched = want.filter((w) => have.some((h) => h.includes(w)));
+  if (matched.length === 0) {
+    return {
+      ok: false,
+      reason: `expansion fired but did not include any of [${req.anyOf.join(", ")}]; expanded_seeds=[${signals.expanded_seeds.join(", ") || "—"}]`,
+    };
+  }
+  return { ok: true };
+}
+
 function evaluate(
-  expectation: CaseExpectation,
+  c: ValidationCase,
   signals: CaseSignals,
   raw: unknown,
 ): { status: CaseStatus; reason: string } {
+  const expectation = c.expectation;
   const isSkillEnvelope = signals.schema === "skill_envelope.v1";
   const ok = !!(raw && typeof raw === "object" && (raw as Record<string, unknown>).envelope);
   const refused = !!signals.refusal_code;
@@ -284,7 +310,12 @@ function evaluate(
       if (refused) {
         return { status: "fail", reason: `refused: ${signals.refusal_code}` };
       }
-      return { status: "pass", reason: "ok envelope" };
+      const ev = checkExpansionEvidence(c, signals);
+      if (!ev.ok) return { status: "fail", reason: ev.reason };
+      const evNote = c.requireExpansionEvidence
+        ? ` (expansion ✓ via [${signals.expanded_seeds.slice(0, 4).join(", ")}${signals.expanded_seeds.length > 4 ? "…" : ""}])`
+        : "";
+      return { status: "pass", reason: `ok envelope${evNote}` };
     }
     case "expected_refusal": {
       if (!isSkillEnvelope) {
