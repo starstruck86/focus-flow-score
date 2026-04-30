@@ -34,6 +34,7 @@ const LessonSchema = z.object({
   body_text: z.string().max(500_000).optional(),
   media_url: z.string().trim().max(2048).optional(),
   transcript: z.string().max(500_000).optional(),
+  capture_issue: z.string().max(100).optional(),
 });
 
 const PayloadSchema = z.object({
