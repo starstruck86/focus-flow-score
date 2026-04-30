@@ -3,7 +3,7 @@
  */
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { classifyLessonContent, normalizeLessons } from "./index.ts";
+import { classifyLessonContent, normalizeLessons, normalizeLessonUrl, dedupeLessons } from "./index.ts";
 
 Deno.test("classifyLessonContent: rich text → usable", () => {
   const q = classifyLessonContent({ body_text: "This is a real lesson about discovery techniques. ".repeat(10) });
