@@ -142,6 +142,7 @@ export interface NormalizedLesson {
   content: string;
   media_url?: string;
   transcript_source?: 'dom' | 'caption_track';
+  capture_issue?: string;
   quality: LessonQuality;
   imported: boolean;
   reject_reason?: string;
