@@ -1,7 +1,7 @@
 /**
  * Sales Lexicon — UI/debug mirror of the SERVER-AUTHORITATIVE lexicon.
  *
- * The SERVER (`supabase/functions/_shared/strategy-skills/salesLexicon.ts`)
+ * The SERVER (`the server salesLexicon module`)
  * is the source of truth. This file MUST be kept structurally identical
  * for cross-runtime hash parity in tests and for the Strategy Control
  * Panel debug view. Do not diverge.

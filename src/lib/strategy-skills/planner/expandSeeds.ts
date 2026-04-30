@@ -2,7 +2,7 @@
  * Retrieval Expansion Layer — UI/debug MIRROR.
  *
  * Source of truth lives at
- * `supabase/functions/_shared/strategy-skills/expansion.ts`. This file
+ * `the server expansion module`. This file
  * exists so the Strategy Control Panel and frontend tests can simulate
  * the server's planning output WITHOUT calling the edge function. The
  * server NEVER trusts this output — it rebuilds the plan itself.
