@@ -437,34 +437,67 @@
     const indicator = findLessonOfIndicator();
     const title = findLessonTitle(indicator?.el);
     const media_url = findVideoUrl();
+    const selectorsMatched = [];
 
-    // Caption text under video — the small text right under the video frame
-    // (e.g. "Alright. This module isn't gonna teach you every last thing").
-    // We grab the takeaways + resources sections explicitly and combine.
     const takeaways = captureSectionByHeading(/^takeaways?$/i);
+    if (takeaways) selectorsMatched.push('takeaways');
     const { resources, text: resourcesText } = captureResources();
+    if (resources.length) selectorsMatched.push(`resources(${resources.length})`);
 
-    // Body region for caption + everything else not already covered.
-    const bodyEl =
-      document.querySelector('[data-testid="post-body"]') ||
-      document.querySelector('article') ||
-      document.querySelector('.trix-content') ||
-      document.querySelector('main');
-    let bodyAll = safeText(bodyEl);
+    // Body region — try multiple selectors, prefer ones with the most text.
+    const candidates = [
+      ['[data-testid="post-body"]', document.querySelector('[data-testid="post-body"]')],
+      ['[data-testid*="lesson-content"]', document.querySelector('[data-testid*="lesson-content"]')],
+      ['[data-testid*="post-content"]', document.querySelector('[data-testid*="post-content"]')],
+      ['article', document.querySelector('article')],
+      ['.trix-content', document.querySelector('.trix-content')],
+      ['main', document.querySelector('main')],
+    ].filter(([, el]) => el);
 
-    // Strip the takeaways/resources sub-text from the bulk body to avoid dupes
-    // when we re-compose body_text.
+    // Anchor-based fallback: section containing "Takeaways" or "Resources Mentioned".
+    const anchorEl = (() => {
+      const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,strong,[class*="heading"]'));
+      const h = headings.find(el => /takeaways?|resources?\s+mentioned/i.test(safeText(el)));
+      if (!h) return null;
+      // climb to a meaningful parent section
+      let p = h.parentElement, best = h;
+      for (let i = 0; i < 5 && p; i++, p = p.parentElement) {
+        if (safeText(p).length > safeText(best).length) best = p;
+      }
+      return best;
+    })();
+    if (anchorEl) candidates.push(['anchor:takeaways/resources', anchorEl]);
+
+    // Pick the candidate with the most text.
+    let bodyEl = null, bodyAll = '';
+    for (const [name, el] of candidates) {
+      const t = safeText(el);
+      if (t.length > bodyAll.length) { bodyAll = t; bodyEl = el; selectorsMatched.push(`body:${name}`); }
+    }
+
     if (takeaways) bodyAll = bodyAll.replace(takeaways, '').replace(/\s+/g, ' ').trim();
     if (resourcesText) bodyAll = bodyAll.replace(resourcesText, '').replace(/\s+/g, ' ').trim();
 
     const transcript = await captureTranscript();
-    if (transcript) bodyAll = bodyAll.replace(transcript, '').replace(/\s+/g, ' ').trim();
+    if (transcript) {
+      selectorsMatched.push('transcript');
+      bodyAll = bodyAll.replace(transcript, '').replace(/\s+/g, ' ').trim();
+    }
 
     const parts = [];
     if (bodyAll) parts.push(bodyAll);
     if (takeaways) parts.push(`\n\nTakeaways\n${takeaways}`);
     if (resourcesText) parts.push(`\n\nResources Mentioned\n${resourcesText}`);
     const body_text = parts.join('').trim() || undefined;
+
+    const debugInfo = {
+      hasBodyText: body_text ? body_text.length : 0,
+      hasTranscript: !!transcript,
+      resourceCount: resources.length,
+      hasMedia: !!media_url,
+      selectorsMatched,
+    };
+    log('lesson extraction', debugInfo);
 
     return {
       url: location.href.split('#')[0],
@@ -475,6 +508,7 @@
       media_url,
       transcript: transcript || undefined,
       resources: resources.length ? resources : undefined,
+      _debug: debugInfo,
     };
   }
 
