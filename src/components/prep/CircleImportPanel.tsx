@@ -156,6 +156,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   const postCapture = async (payload: any) => {
     setSubmitting(true);
     setStats(null);
+    setWarning(null);
     setPhase('normalizing');
     try {
       const { data, error } = await supabase.functions.invoke('import-course-capture', {
@@ -163,13 +164,30 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'Capture failed');
-      const lessons = (data.lessons || []) as CircleNormalizedLesson[];
+      const lessons = (data.lessons || []) as Array<CircleNormalizedLesson & { capture_issue?: string }>;
       const importable = lessons.filter(l => l.imported);
       const metadataOnly = lessons.filter(l => l.quality?.metadata_only).length;
+      const fullContent = (data.meta?.lessons_full_content as number | undefined)
+        ?? lessons.filter(l => l.imported && !l.quality?.metadata_only && (l.content?.trim().length ?? 0) > 0).length;
+      const fetchFailed = (data.meta?.lessons_fetch_failed as number | undefined)
+        ?? lessons.filter(l => l.capture_issue === 'fetch_failed').length;
       const rejected = lessons.length - importable.length;
-      setStats({ imported: importable.length, rejected, metadata_only: metadataOnly });
+      setStats({
+        imported: importable.length,
+        rejected,
+        metadata_only: metadataOnly,
+        full_content: fullContent,
+        fetch_failed: fetchFailed,
+      });
+      const warn = (data.warning as string | undefined)
+        || (data.meta?.lessons_list_only
+          ? 'This capture only includes lesson titles/URLs. No lesson content was captured.'
+          : null);
+      setWarning(warn ?? null);
       setPhase('done');
-      if (importable.length === 0) {
+      if (warn) {
+        toast.warning(warn);
+      } else if (importable.length === 0) {
         toast.error('No usable lessons found in capture payload.');
       } else {
         toast.success(`Captured ${importable.length} lesson${importable.length === 1 ? '' : 's'}.`);
