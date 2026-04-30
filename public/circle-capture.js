@@ -495,7 +495,7 @@
       return;
     }
 
-    log('payload', payload);
+    log('payload (pre-hydrate)', payload);
     if (!payload.lessons || payload.lessons.length === 0) {
       banner(
         'Circle Capture: no lessons found on this page. Open the course page (with the lesson sidebar visible) and click the bookmarklet again.',
@@ -503,6 +503,17 @@
       );
       return;
     }
+
+    // Deep-fetch each lesson same-origin to pull body/media/transcript.
+    try {
+      await hydrateLessons(payload.lessons);
+    } catch (err) {
+      log('hydrate failed', err);
+    }
+
+    const withContent = payload.lessons.filter(l => l.body_text || l.media_url || l.transcript).length;
+    const fetchFailed = payload.lessons.filter(l => l.capture_issue === 'fetch_failed').length;
+    log('payload (post-hydrate)', { total: payload.lessons.length, withContent, fetchFailed });
 
     const json = JSON.stringify(payload, null, 2);
     const token = findAuthToken();
