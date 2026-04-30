@@ -150,36 +150,129 @@
     }
   }
 
-  // ── Lesson body / media / transcript extraction (current page only) ──────
+  // ── Lesson body / media / transcript extraction ─────────────────────────
+  //
+  // Two flavors:
+  //   extractFromDoc(doc)  — pure: pulls content out of any Document
+  //   extractCurrentLessonContent() — convenience for the current page
 
-  function extractCurrentLessonContent() {
+  function extractFromDoc(doc) {
     const bodyEl =
-      document.querySelector('[data-testid="post-body"]') ||
-      document.querySelector('article') ||
-      document.querySelector('.trix-content') ||
-      document.querySelector('main');
-    const body_text = safeText(bodyEl);
+      doc.querySelector('[data-testid="post-body"]') ||
+      doc.querySelector('article') ||
+      doc.querySelector('.trix-content') ||
+      doc.querySelector('main');
+    let body_text = safeText(bodyEl);
 
-    // Embedded video
+    // Fallback: body innerText, with a best-effort strip of nav/sidebar noise.
+    if (!body_text || body_text.length < 50) {
+      const clone = doc.body ? doc.body.cloneNode(true) : null;
+      if (clone) {
+        clone.querySelectorAll(
+          'nav, header, footer, aside, [role="navigation"], [data-testid*="sidebar" i], [class*="sidebar" i], [class*="navbar" i], script, style'
+        ).forEach(n => n.remove());
+        const fallback = (clone.innerText || clone.textContent || '').replace(/\s+/g, ' ').trim();
+        if (fallback && fallback.length > body_text.length) body_text = fallback;
+      }
+    }
+
+    // Embedded video — iframe first, then anchors/scripts referencing known providers.
     let media_url;
-    const iframe = document.querySelector(
+    const iframe = doc.querySelector(
       'iframe[src*="wistia"], iframe[src*="vimeo"], iframe[src*="youtube"], iframe[src*="youtu.be"], iframe[src*="loom"]'
     );
     if (iframe) media_url = iframe.getAttribute('src') || undefined;
+    if (!media_url) {
+      const a = doc.querySelector(
+        'a[href*="wistia"], a[href*="vimeo"], a[href*="youtube"], a[href*="youtu.be"], a[href*="loom"]'
+      );
+      if (a) media_url = a.getAttribute('href') || undefined;
+    }
+    if (!media_url) {
+      // Scan script tags for provider URLs (Wistia embeds via script.fast.wistia.com)
+      const scripts = Array.from(doc.querySelectorAll('script[src]'));
+      const hit = scripts.find(s => /wistia|vimeo|youtube|youtu\.be|loom/i.test(s.getAttribute('src') || ''));
+      if (hit) media_url = hit.getAttribute('src') || undefined;
+    }
 
     // Transcript blocks in DOM
     let transcript = '';
-    document.querySelectorAll('[id*="transcript" i], [class*="transcript" i], [class*="caption" i]').forEach(el => {
+    doc.querySelectorAll('[id*="transcript" i], [class*="transcript" i], [class*="caption" i]').forEach(el => {
       const t = safeText(el);
       if (t.length > 50) transcript += (transcript ? '\n\n' : '') + t;
     });
-    // <track> elements (rare to be readable but include if so)
-    document.querySelectorAll('track[kind="captions"], track[kind="subtitles"]').forEach(t => {
+    doc.querySelectorAll('track[kind="captions"], track[kind="subtitles"]').forEach(t => {
       const src = t.getAttribute('src');
-      if (src) transcript += (transcript ? '\n\n' : '') + `[caption track: ${abs(src)}]`;
+      if (src) transcript += (transcript ? '\n\n' : '') + `[caption track: ${src}]`;
     });
 
-    return { body_text: body_text || undefined, media_url, transcript: transcript || undefined };
+    // Title from doc (used by deep-fetch path)
+    const title = safeText(doc.querySelector('h1')) || safeText(doc.querySelector('title'));
+
+    return {
+      title: title || undefined,
+      body_text: body_text || undefined,
+      media_url,
+      transcript: transcript || undefined,
+    };
+  }
+
+  function extractCurrentLessonContent() {
+    return extractFromDoc(document);
+  }
+
+  // ── Deep fetch: hydrate each lesson by fetching its URL same-origin ──────
+
+  async function fetchLessonContent(url) {
+    try {
+      const resp = await fetch(url, { credentials: 'include', redirect: 'follow' });
+      if (!resp.ok) return { capture_issue: 'fetch_failed', _status: resp.status };
+      const html = await resp.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      return extractFromDoc(doc);
+    } catch (err) {
+      log('lesson fetch failed', url, err);
+      return { capture_issue: 'fetch_failed' };
+    }
+  }
+
+  /** Run async tasks with bounded concurrency, calling onProgress(done,total). */
+  async function runWithConcurrency(items, limit, worker, onProgress) {
+    const total = items.length;
+    let done = 0;
+    let cursor = 0;
+    const runners = new Array(Math.min(limit, total)).fill(0).map(async () => {
+      while (true) {
+        const i = cursor++;
+        if (i >= total) return;
+        try { await worker(items[i], i); } catch (_) { /* swallow */ }
+        done++;
+        try { onProgress && onProgress(done, total); } catch (_) {}
+      }
+    });
+    await Promise.all(runners);
+  }
+
+  async function hydrateLessons(lessons) {
+    if (!lessons || lessons.length === 0) return;
+    showBanner(`Capturing lesson 0 of ${lessons.length}…`, 'info');
+    await runWithConcurrency(lessons, 3, async (lesson) => {
+      const here = location.href.split('#')[0];
+      // Skip the current page — already extracted inline.
+      if (lesson.url === here && (lesson.body_text || lesson.media_url || lesson.transcript)) return;
+      const got = await fetchLessonContent(lesson.url);
+      if (got && got.capture_issue) {
+        lesson.capture_issue = got.capture_issue;
+        return;
+      }
+      // Merge: keep existing fields if non-empty, otherwise use fetched ones.
+      if (got.title && (!lesson.title || lesson.title === lesson.url)) lesson.title = got.title.slice(0, 300);
+      if (!lesson.body_text && got.body_text) lesson.body_text = got.body_text;
+      if (!lesson.media_url && got.media_url) lesson.media_url = got.media_url;
+      if (!lesson.transcript && got.transcript) lesson.transcript = got.transcript;
+    }, (done, total) => {
+      showBanner(`Capturing lesson ${done} of ${total}…`, 'info');
+    });
   }
 
   // ── Build payload ────────────────────────────────────────────────────────
