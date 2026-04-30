@@ -64,6 +64,15 @@ export interface RetrievalQueryPlan {
   totalCap: number;
   planHash: string;
   contextHash: string;
+  // ── Phase 3B: Retrieval Expansion Layer ──────────────────────────
+  /** Sales-vocabulary terms derived from raw termSeeds + ctx anchors. */
+  expandedSeeds: ReadonlyArray<string>;
+  /** Per-term provenance: source rule + originating input + lexicon ver. */
+  expansionTrace: ReadonlyArray<ExpansionTraceEntry>;
+  /** Lexicon version at planning time; folded into planHash. */
+  lexiconVersion: string;
+  /** Whether STRATEGY_EXPANSION_ENABLED was on at planning time. */
+  expansionEnabled: boolean;
 }
 
 export type PlannerRefusal =
