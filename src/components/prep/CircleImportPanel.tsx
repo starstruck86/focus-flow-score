@@ -269,8 +269,8 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
           <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
             <li>Drag the bookmarklet to your bookmarks bar (or copy it).</li>
             <li>Open the Circle course in a tab where you’re already signed in.</li>
-            <li>Click the bookmarklet on the course page — it captures lessons and sends them back here.</li>
-            <li>If the direct send is blocked, the bookmarklet copies a JSON payload — paste it below.</li>
+            <li>Click the bookmarklet — it will copy the lesson JSON to your clipboard.</li>
+            <li>Return here and paste it into the box below, then click <em>Import pasted JSON</em>.</li>
           </ol>
 
           <div className="flex flex-wrap items-center gap-2">
