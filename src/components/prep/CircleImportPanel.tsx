@@ -99,6 +99,9 @@ interface CaptureStats {
   metadata_only: number;
   full_content: number;
   fetch_failed: number;
+  render_failed: number;
+  transcripts: number;
+  resources: number;
 }
 
 /**
@@ -195,6 +198,10 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
         metadata_only: metadataOnly,
         full_content: fullContent,
         fetch_failed: fetchFailed,
+        render_failed: (data.meta?.lessons_render_failed as number | undefined)
+          ?? lessons.filter(l => l.capture_issue === 'render_failed').length,
+        transcripts: (data.meta?.lessons_with_transcript as number | undefined) ?? 0,
+        resources: (data.meta?.resources_captured as number | undefined) ?? 0,
       });
       setPhase('done');
       if (importable.length === 0) {
@@ -363,12 +370,13 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
             <li>Drag the bookmarklet to your bookmarks bar (or copy it).</li>
             <li>Open Circle in a tab where you’re already signed in.</li>
             <li>
-              <span className="font-medium text-foreground">Open a lesson page</span> (URL contains
-              <code className="mx-1">/lessons/</code> or <code>/posts/</code>) and click the bookmarklet
-              — it copies that lesson’s content as JSON.
+              <span className="font-medium text-foreground">Open any lesson page</span> (you should
+              see <em>“Lesson X of Y”</em> above the lesson title) and click the bookmarklet{' '}
+              <span className="font-medium text-foreground">once</span>. It will walk through the
+              entire course automatically — capturing video, captions, takeaways, transcripts,
+              and resources for every lesson.
             </li>
-            <li>Return here, paste below, click <em>Add lesson / Import</em>. Repeat for each lesson.</li>
-            <li>When all desired lessons are pasted, click <em>Import captured lessons</em>.</li>
+            <li>When the banner reads <em>“N lessons captured”</em>, return here and paste the JSON below.</li>
           </ol>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -400,7 +408,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
           <div className="space-y-1.5">
             <label className="text-xs font-medium">
               Paste captured JSON
-              <span className="text-muted-foreground font-normal"> (one lesson at a time, from the lesson page)</span>
+              <span className="text-muted-foreground font-normal"> (one payload per course — produced by the bookmarklet)</span>
             </label>
             <Textarea
               value={pastedJson}
@@ -431,22 +439,25 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                 )}
                 {stats && phase === 'done' && (
                   <span className="flex items-center gap-1.5 flex-wrap">
+                    <Badge variant="outline" className="text-[9px] h-4">lessons {stats.imported}</Badge>
                     <Badge variant="outline" className="text-[9px] h-4">full-content {stats.full_content}</Badge>
+                    <Badge variant="outline" className="text-[9px] h-4">transcripts {stats.transcripts}</Badge>
+                    <Badge variant="outline" className="text-[9px] h-4">resources {stats.resources}</Badge>
                     {stats.metadata_only > 0 && (
                       <Badge variant="outline" className="text-[9px] h-4">metadata-only {stats.metadata_only}</Badge>
                     )}
                     {stats.rejected > 0 && (
                       <Badge variant="outline" className="text-[9px] h-4">rejected {stats.rejected}</Badge>
                     )}
-                    {stats.fetch_failed > 0 && (
-                      <Badge variant="outline" className="text-[9px] h-4">fetch-failed {stats.fetch_failed}</Badge>
+                    {stats.render_failed > 0 && (
+                      <Badge variant="outline" className="text-[9px] h-4">failed {stats.render_failed}</Badge>
                     )}
                   </span>
                 )}
               </div>
               <Button onClick={handleSubmitPasted} disabled={submitting || !pastedJson.trim()} size="sm">
                 {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
-                Add lesson / Import
+                Import course
               </Button>
             </div>
           </div>

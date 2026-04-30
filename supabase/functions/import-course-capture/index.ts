@@ -27,18 +27,27 @@ const corsHeaders = {
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
+const ResourceSchema = z.object({
+  title: z.string().trim().max(500).optional(),
+  url: z.string().trim().min(1).max(2048),
+});
+
 const LessonSchema = z.object({
   url: z.string().trim().min(1).max(2048),
   title: z.string().trim().min(1).max(500),
   module: z.string().trim().max(300).optional(),
+  lesson_number: z.number().int().nonnegative().optional(),
+  total_lessons: z.number().int().nonnegative().optional(),
   body_text: z.string().max(500_000).optional(),
   media_url: z.string().trim().max(2048).optional(),
   transcript: z.string().max(500_000).optional(),
+  resources: z.array(ResourceSchema).max(100).optional(),
   capture_issue: z.string().max(100).optional(),
 });
 
 const PayloadSchema = z.object({
   mode: z.enum(['capture', 'manual']).optional().default('capture'),
+  capture_mode: z.string().max(100).optional(),
   source_url: z.string().trim().min(1).max(2048),
   platform: z.enum(['circle']),
   title: z.string().trim().min(1).max(500),
@@ -114,12 +123,14 @@ export function classifyLessonContent(args: {
   }
 
   const blocked = new Set<ContentType>(['login_page', 'empty', 'html_junk']);
-  // video_only is NOT usable as full content unless we recovered a transcript
-  const videoOnlyHasTranscript = contentType === 'video_only' && transcript.length > 0 && wordCount >= 50;
+  // A video lesson is usable as full content if we recovered a transcript OR
+  // substantive body text (e.g. Takeaways/Resources captured from the DOM).
+  const videoOnlyHasContent =
+    contentType === 'video_only' && ((transcript.length > 0 && wordCount >= 50) || wordCount >= 30);
   const usable =
     !blocked.has(contentType) &&
     !hasLoginWall &&
-    (wordCount >= 5 || videoOnlyHasTranscript || contentType === 'mixed');
+    (wordCount >= 5 || videoOnlyHasContent || contentType === 'mixed');
 
   return {
     content_length: combined.length,
@@ -128,7 +139,7 @@ export function classifyLessonContent(args: {
     content_type: contentType,
     has_login_wall: hasLoginWall,
     usable_content: usable,
-    metadata_only: contentType === 'video_only' && !videoOnlyHasTranscript,
+    metadata_only: contentType === 'video_only' && !videoOnlyHasContent,
     issues,
   };
 }
@@ -139,9 +150,11 @@ export interface NormalizedLesson {
   url: string;
   title: string;
   module?: string;
+  lesson_number?: number;
   content: string;
   media_url?: string;
   transcript_source?: 'dom' | 'caption_track';
+  resources?: Array<{ title?: string; url: string }>;
   capture_issue?: string;
   quality: LessonQuality;
   imported: boolean;
@@ -243,32 +256,47 @@ export function normalizeLessons(payload: CapturePayload, debug: string[]): Norm
   const deduped = dedupeLessons(payload.lessons, debug);
   const out: NormalizedLesson[] = [];
   for (const lesson of deduped) {
+    const resources = (lesson as any).resources as Array<{ title?: string; url: string }> | undefined;
+
+    // Compose body_text used for classification: include resources text so a
+    // video-only lesson with rich Resources/Takeaways still classifies as
+    // having usable content.
+    let composedBody = (lesson.body_text || '').trim();
+    if (resources && resources.length) {
+      const resText = resources
+        .map(r => `${(r.title || r.url).trim()} — ${r.url}`)
+        .join('\n');
+      composedBody = composedBody
+        ? `${composedBody}\n\n[Resources]\n${resText}`
+        : `[Resources]\n${resText}`;
+    }
+
     const quality = classifyLessonContent({
-      body_text: lesson.body_text,
+      body_text: composedBody,
       transcript: lesson.transcript,
       media_url: lesson.media_url,
     });
 
-    // Build content: prefer body, append transcript if present
+    // Final saved content: body + transcript section.
     const parts: string[] = [];
-    if (lesson.body_text) parts.push(lesson.body_text.trim());
+    if (composedBody) parts.push(composedBody);
     if (lesson.transcript) parts.push(`\n\n[Transcript]\n${lesson.transcript.trim()}`);
     const content = parts.join('').trim();
 
     const blocked = new Set<ContentType>(['login_page', 'empty', 'html_junk']);
     const imported =
       !blocked.has(quality.content_type) &&
-      // Allow lesson rows to be created even if metadata_only — caller may
-      // still want them as stubs; classifier flags them appropriately.
       (quality.usable_content || quality.metadata_only || quality.content_type === 'mixed');
 
     out.push({
       url: lesson.url,
       title: lesson.title,
       module: lesson.module,
+      lesson_number: (lesson as any).lesson_number,
       content,
       media_url: lesson.media_url,
       transcript_source: lesson.transcript ? 'dom' : undefined,
+      resources: resources && resources.length ? resources : undefined,
       capture_issue: (lesson as any).capture_issue,
       quality,
       imported,
@@ -279,7 +307,9 @@ export function normalizeLessons(payload: CapturePayload, debug: string[]): Norm
     `[Capture] normalized ${out.length} lessons; ` +
       `imported=${out.filter(l => l.imported).length}, ` +
       `metadata_only=${out.filter(l => l.quality.metadata_only).length}, ` +
-      `rejected=${out.filter(l => !l.imported).length}`
+      `rejected=${out.filter(l => !l.imported).length}, ` +
+      `transcripts=${out.filter(l => l.transcript_source).length}, ` +
+      `resources=${out.reduce((s, l) => s + (l.resources?.length || 0), 0)}`
   );
   return out;
 }
@@ -358,19 +388,18 @@ Deno.serve(async (req) => {
   const metadataOnlyCount = normalized.filter(l => l.quality.metadata_only).length;
   const rejectedCount = normalized.filter(l => !l.imported).length;
   const fetchFailedCount = normalized.filter(l => l.capture_issue === 'fetch_failed').length;
+  const renderFailedCount = normalized.filter(l => l.capture_issue === 'render_failed').length;
+  const transcriptCount = normalized.filter(l => l.transcript_source).length;
+  const resourceCount = normalized.reduce((s, l) => s + (l.resources?.length || 0), 0);
   const listOnly =
     fullContentCount === 0 &&
     metadataOnlyCount === 0 &&
     normalized.length > 0;
 
   const warning = listOnly
-    ? 'Captured lesson list only. No lesson content was found. Open an individual lesson and run the bookmarklet there, or try deep capture again.'
+    ? 'Captured lesson list only. No lesson content was found. Open an individual lesson and run the bookmarklet there.'
     : undefined;
 
-  // The function intentionally does NOT write to `resources` directly here.
-  // It returns a normalized envelope that the existing CourseImportModal flow
-  // (which already creates resources from `lessons[]`) consumes. This keeps
-  // one ingestion path and avoids drift.
   return new Response(
     JSON.stringify({
       success: true,
@@ -381,6 +410,7 @@ Deno.serve(async (req) => {
       meta: {
         platform: 'circle',
         mode: payload.mode,
+        capture_mode: payload.capture_mode,
         source_url: payload.source_url,
         lessons_received: payload.lessons.length,
         lessons_imported: normalized.filter(l => l.imported).length,
@@ -388,6 +418,9 @@ Deno.serve(async (req) => {
         lessons_metadata_only: metadataOnlyCount,
         lessons_rejected: rejectedCount,
         lessons_fetch_failed: fetchFailedCount,
+        lessons_render_failed: renderFailedCount,
+        lessons_with_transcript: transcriptCount,
+        resources_captured: resourceCount,
         lessons_list_only: listOnly,
         auth_status: 'browser_captured',
       },
