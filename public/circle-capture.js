@@ -187,36 +187,49 @@
    * no transcript was found).
    */
   async function captureTranscript() {
-    // Look for "Show transcript" button/link.
-    const all = Array.from(document.querySelectorAll('button, a, [role="button"]'));
-    const trigger = all.find(el => /show transcript|view transcript|transcript/i.test(safeText(el)));
-    if (!trigger) return '';
+    // Look for "Show transcript" trigger — match short labels first to avoid
+    // accidentally clicking transcript text already on the page.
+    const all = Array.from(document.querySelectorAll('button, a, [role="button"], summary, [aria-expanded]'));
+    const triggers = all.filter(el => {
+      const t = safeText(el);
+      if (!t || t.length > 60) return false;
+      return /\b(show|view|open|toggle|expand)\s+transcript\b/i.test(t) || /^transcript$/i.test(t);
+    });
 
-    // Snapshot existing transcript-ish containers BEFORE click so we can
-    // detect new ones that appear afterward.
-    const beforeIds = new Set(
-      Array.from(document.querySelectorAll('[id*="transcript" i], [class*="transcript" i]')).map(el => el)
-    );
+    // Snapshot existing transcript text so we can detect *new* content.
+    const snapshot = (() => {
+      const m = new Map();
+      document.querySelectorAll('[id*="transcript" i], [class*="transcript" i], [data-testid*="transcript" i]')
+        .forEach(el => m.set(el, safeText(el).length));
+      return m;
+    })();
 
-    try { trigger.click(); } catch (_) { return ''; }
+    for (const trigger of triggers) {
+      try { trigger.scrollIntoView({ block: 'center' }); } catch (_) {}
+      try { trigger.click(); } catch (_) { continue; }
+      await sleep(300);
+    }
 
-    // Poll for a transcript container that has substantive text.
+    // Poll for a transcript container that grew or newly appeared.
     const start = Date.now();
     let transcriptText = '';
-    while (Date.now() - start < 5000) {
-      await sleep(200);
+    while (Date.now() - start < 6000) {
+      await sleep(250);
       const containers = Array.from(document.querySelectorAll(
-        '[id*="transcript" i], [class*="transcript" i], [data-testid*="transcript" i]'
+        '[id*="transcript" i], [class*="transcript" i], [data-testid*="transcript" i], [class*="caption" i]'
       ));
       for (const c of containers) {
         const t = safeText(c);
-        if (t.length > 80) {
+        const prev = snapshot.get(c) || 0;
+        // accept if it's substantively bigger than before, or a brand-new container
+        if (t.length > 120 && t.length > prev + 80) {
           transcriptText = t;
           break;
         }
       }
       if (transcriptText) break;
     }
+    log('transcript capture', { triggersFound: triggers.length, length: transcriptText.length });
     return transcriptText;
   }
 
