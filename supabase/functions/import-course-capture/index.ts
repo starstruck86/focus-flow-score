@@ -256,32 +256,47 @@ export function normalizeLessons(payload: CapturePayload, debug: string[]): Norm
   const deduped = dedupeLessons(payload.lessons, debug);
   const out: NormalizedLesson[] = [];
   for (const lesson of deduped) {
+    const resources = (lesson as any).resources as Array<{ title?: string; url: string }> | undefined;
+
+    // Compose body_text used for classification: include resources text so a
+    // video-only lesson with rich Resources/Takeaways still classifies as
+    // having usable content.
+    let composedBody = (lesson.body_text || '').trim();
+    if (resources && resources.length) {
+      const resText = resources
+        .map(r => `${(r.title || r.url).trim()} — ${r.url}`)
+        .join('\n');
+      composedBody = composedBody
+        ? `${composedBody}\n\n[Resources]\n${resText}`
+        : `[Resources]\n${resText}`;
+    }
+
     const quality = classifyLessonContent({
-      body_text: lesson.body_text,
+      body_text: composedBody,
       transcript: lesson.transcript,
       media_url: lesson.media_url,
     });
 
-    // Build content: prefer body, append transcript if present
+    // Final saved content: body + transcript section.
     const parts: string[] = [];
-    if (lesson.body_text) parts.push(lesson.body_text.trim());
+    if (composedBody) parts.push(composedBody);
     if (lesson.transcript) parts.push(`\n\n[Transcript]\n${lesson.transcript.trim()}`);
     const content = parts.join('').trim();
 
     const blocked = new Set<ContentType>(['login_page', 'empty', 'html_junk']);
     const imported =
       !blocked.has(quality.content_type) &&
-      // Allow lesson rows to be created even if metadata_only — caller may
-      // still want them as stubs; classifier flags them appropriately.
       (quality.usable_content || quality.metadata_only || quality.content_type === 'mixed');
 
     out.push({
       url: lesson.url,
       title: lesson.title,
       module: lesson.module,
+      lesson_number: (lesson as any).lesson_number,
       content,
       media_url: lesson.media_url,
       transcript_source: lesson.transcript ? 'dom' : undefined,
+      resources: resources && resources.length ? resources : undefined,
       capture_issue: (lesson as any).capture_issue,
       quality,
       imported,
@@ -292,7 +307,9 @@ export function normalizeLessons(payload: CapturePayload, debug: string[]): Norm
     `[Capture] normalized ${out.length} lessons; ` +
       `imported=${out.filter(l => l.imported).length}, ` +
       `metadata_only=${out.filter(l => l.quality.metadata_only).length}, ` +
-      `rejected=${out.filter(l => !l.imported).length}`
+      `rejected=${out.filter(l => !l.imported).length}, ` +
+      `transcripts=${out.filter(l => l.transcript_source).length}, ` +
+      `resources=${out.reduce((s, l) => s + (l.resources?.length || 0), 0)}`
   );
   return out;
 }
