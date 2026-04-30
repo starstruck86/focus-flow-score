@@ -127,6 +127,19 @@ function validateCapturePayload(input: any, fallbackSourceUrl: string): Validati
   return { ok: true, payload: obj };
 }
 
+type CapturedLesson = {
+  url: string;
+  title: string;
+  body_text?: string;
+  transcript?: string;
+  media_url?: string;
+  source_url?: string;
+};
+
+function hasContent(l: CapturedLesson): boolean {
+  return !!(l.body_text?.trim() || l.transcript?.trim() || l.media_url?.trim());
+}
+
 export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) {
   const [pastedJson, setPastedJson] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -134,6 +147,10 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   const [stats, setStats] = useState<CaptureStats | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  // Accumulated single-lesson captures awaiting final import.
+  const [capturedLessons, setCapturedLessons] = useState<CapturedLesson[]>([]);
+  // Curriculum map (titles/URLs only) shown as reference, not failure.
+  const [curriculumMap, setCurriculumMap] = useState<{ title: string; lessons: CapturedLesson[] } | null>(null);
   const [manualTitle, setManualTitle] = useState('');
   const [manualLessons, setManualLessons] = useState<ManualLesson[]>([
     { title: '', url: '', body_text: '', transcript: '', media_url: '' },
@@ -152,7 +169,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     [captureHint.bookmarklet_url, captureHint.capture_endpoint],
   );
 
-  // ── Direct POST helper (used by both pasted JSON + manual tab) ──────────
+  // ── Direct POST helper (used by manual tab + final accumulator import) ──
   const postCapture = async (payload: any) => {
     setSubmitting(true);
     setStats(null);
@@ -179,18 +196,11 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
         full_content: fullContent,
         fetch_failed: fetchFailed,
       });
-      const warn = (data.warning as string | undefined)
-        || (data.meta?.lessons_list_only
-          ? 'This capture only includes lesson titles/URLs. No lesson content was captured.'
-          : null);
-      setWarning(warn ?? null);
       setPhase('done');
-      if (warn) {
-        toast.warning(warn);
-      } else if (importable.length === 0) {
-        toast.error('No usable lessons found in capture payload.');
+      if (importable.length === 0) {
+        toast.error('No usable lessons found.');
       } else {
-        toast.success(`Captured ${importable.length} lesson${importable.length === 1 ? '' : 's'}.`);
+        toast.success(`Imported ${importable.length} lesson${importable.length === 1 ? '' : 's'}.`);
       }
       onLessons({ title: data.title || 'Circle Course', lessons, meta: data.meta });
     } catch (e: any) {
@@ -201,8 +211,15 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     }
   };
 
+  // ── Paste handler: route based on payload shape ─────────────────────────
+  //   Single-lesson capture (1 lesson with body/transcript/media)
+  //     → accumulate into capturedLessons (dedupe by URL).
+  //   Curriculum-map capture (many lessons, none with content)
+  //     → show as reference list, NOT a failure.
+  //   Mixed / multi-content capture → send straight to edge function.
   const handleSubmitPasted = async () => {
     setValidationError(null);
+    setWarning(null);
     setPhase('validating');
     let parsed: any;
     try {
@@ -218,7 +235,62 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
       setValidationError(result.error);
       return;
     }
-    await postCapture(result.payload);
+    const payload = result.payload;
+    const lessons: CapturedLesson[] = (payload.lessons as any[]).map(l => ({
+      url: String(l.url),
+      title: String(l.title),
+      body_text: l.body_text,
+      transcript: l.transcript,
+      media_url: l.media_url,
+      source_url: payload.source_url,
+    }));
+    const withContent = lessons.filter(hasContent);
+
+    // Single-lesson capture path → accumulate.
+    if (lessons.length === 1 && hasContent(lessons[0])) {
+      setCapturedLessons(prev => {
+        const map = new Map(prev.map(l => [l.url.split('#')[0], l]));
+        for (const l of lessons) map.set(l.url.split('#')[0], l);
+        return Array.from(map.values());
+      });
+      setPastedJson('');
+      setPhase('idle');
+      toast.success(`Lesson added: "${lessons[0].title}". Paste another or import below.`);
+      return;
+    }
+
+    // Curriculum-map path → show as reference, do not error.
+    if (lessons.length >= 2 && withContent.length === 0) {
+      setCurriculumMap({ title: payload.title || 'Circle Course', lessons });
+      setPastedJson('');
+      setPhase('idle');
+      setWarning(
+        'This is a curriculum map — only lesson titles/URLs were captured. ' +
+        'To import content, open each lesson in Circle and run the bookmarklet on that lesson page.',
+      );
+      toast.info('Curriculum map received. Open lessons individually to capture content.');
+      return;
+    }
+
+    // Mixed / rich multi-lesson capture → send straight through.
+    await postCapture(payload);
+  };
+
+  const removeCaptured = (url: string) =>
+    setCapturedLessons(prev => prev.filter(l => l.url !== url));
+
+  const importAccumulated = async () => {
+    if (capturedLessons.length === 0) {
+      toast.error('No captured lessons yet.');
+      return;
+    }
+    await postCapture({
+      mode: 'capture',
+      source_url: sourceUrl,
+      platform: 'circle',
+      title: curriculumMap?.title || 'Circle Course',
+      lessons: capturedLessons,
+    });
   };
 
   const handleSubmitManual = async () => {
@@ -262,7 +334,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   const phaseLabel: Record<CapturePhase, string | null> = {
     idle: null,
     validating: 'Validating JSON…',
-    normalizing: 'Normalizing lessons…',
+    normalizing: 'Importing lessons…',
     done: 'Done',
   };
 
@@ -289,9 +361,14 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
         <TabsContent value="capture" className="space-y-3 pt-3">
           <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
             <li>Drag the bookmarklet to your bookmarks bar (or copy it).</li>
-            <li>Open the Circle course in a tab where you’re already signed in.</li>
-            <li>Click the bookmarklet — it will copy the lesson JSON to your clipboard.</li>
-            <li>Return here and paste it into the box below, then click <em>Import pasted JSON</em>.</li>
+            <li>Open Circle in a tab where you’re already signed in.</li>
+            <li>
+              <span className="font-medium text-foreground">Open a lesson page</span> (URL contains
+              <code className="mx-1">/lessons/</code> or <code>/posts/</code>) and click the bookmarklet
+              — it copies that lesson’s content as JSON.
+            </li>
+            <li>Return here, paste below, click <em>Add lesson / Import</em>. Repeat for each lesson.</li>
+            <li>When all desired lessons are pasted, click <em>Import captured lessons</em>.</li>
           </ol>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -323,7 +400,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
           <div className="space-y-1.5">
             <label className="text-xs font-medium">
               Paste captured JSON
-              <span className="text-muted-foreground font-normal"> (primary path — clipboard from bookmarklet)</span>
+              <span className="text-muted-foreground font-normal"> (one lesson at a time, from the lesson page)</span>
             </label>
             <Textarea
               value={pastedJson}
@@ -338,7 +415,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                 <span>{validationError}</span>
               </div>
             )}
-            {warning && phase === 'done' && (
+            {warning && (
               <div className="flex items-start gap-1.5 p-2 rounded-md bg-amber-500/10 border border-amber-500/20 text-[11px] text-foreground">
                 <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0 text-amber-600" />
                 <span>{warning}</span>
@@ -369,10 +446,89 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
               </div>
               <Button onClick={handleSubmitPasted} disabled={submitting || !pastedJson.trim()} size="sm">
                 {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
-                Import pasted JSON
+                Add lesson / Import
               </Button>
             </div>
           </div>
+
+          {/* ── Accumulated single-lesson captures ─────────────────── */}
+          {capturedLessons.length > 0 && (
+            <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-2.5">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-foreground">
+                  {capturedLessons.length} lesson{capturedLessons.length === 1 ? '' : 's'} ready to import
+                </div>
+                <Button size="sm" onClick={importAccumulated} disabled={submitting}>
+                  {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
+                  Import captured lessons
+                </Button>
+              </div>
+              <ul className="space-y-1 max-h-48 overflow-y-auto">
+                {capturedLessons.map(l => (
+                  <li key={l.url} className="flex items-center justify-between gap-2 text-[11px]">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium">{l.title}</div>
+                      <div className="truncate text-muted-foreground">{l.url}</div>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {l.body_text && <Badge variant="outline" className="text-[9px] h-4">text</Badge>}
+                      {l.media_url && <Badge variant="outline" className="text-[9px] h-4">video</Badge>}
+                      {l.transcript && <Badge variant="outline" className="text-[9px] h-4">transcript</Badge>}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground"
+                        onClick={() => removeCaptured(l.url)}
+                        disabled={submitting}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="text-[10px] text-muted-foreground">
+                Paste another lesson JSON above to keep adding. Duplicates (by URL) are merged automatically.
+              </div>
+            </div>
+          )}
+
+          {/* ── Curriculum map reference (titles/URLs only) ────────── */}
+          {curriculumMap && (
+            <div className="space-y-2 rounded-md border border-border bg-muted/30 p-2.5">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-foreground">
+                  Curriculum map · {curriculumMap.lessons.length} lesson{curriculumMap.lessons.length === 1 ? '' : 's'}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-[11px] text-muted-foreground"
+                  onClick={() => setCurriculumMap(null)}
+                >
+                  Dismiss
+                </Button>
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                Reference list only — open each lesson in Circle and run the bookmarklet to capture content.
+              </div>
+              <ul className="space-y-0.5 max-h-40 overflow-y-auto text-[11px]">
+                {curriculumMap.lessons.map(l => (
+                  <li key={l.url} className="flex items-center gap-2">
+                    <a
+                      href={l.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="truncate flex-1 hover:underline text-foreground"
+                    >
+                      {l.title}
+                    </a>
+                    <ExternalLink className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </TabsContent>
 
         {/* ── Tab B: Manual paste ───────────────────────────────────── */}

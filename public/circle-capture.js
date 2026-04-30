@@ -477,73 +477,126 @@
     setTimeout(() => { ta.focus(); ta.select(); }, 50);
   }
 
+  // ── Page-mode detection ──────────────────────────────────────────────────
+  //
+  // We treat the page as an INDIVIDUAL LESSON page when:
+  //   • URL path includes /lessons/ or /posts/
+  //   • OR the DOM exposes a meaningful post body / article / .trix-content
+  //   • OR there is a visible video embed
+  //
+  // Otherwise we treat it as a COURSE INDEX / curriculum page and capture
+  // only the lesson list (titles + URLs).
+  function detectPageMode() {
+    const path = location.pathname || '';
+    const urlMatch = /\/lessons\/[^/]+|\/posts\/[^/]+/i.test(path);
+
+    const bodyEl =
+      document.querySelector('[data-testid="post-body"]') ||
+      document.querySelector('article') ||
+      document.querySelector('.trix-content');
+    const bodyText = safeText(bodyEl);
+    const hasMeaningfulBody = bodyText.length > 80;
+
+    const hasVideo = !!document.querySelector(
+      'iframe[src*="wistia"], iframe[src*="vimeo"], iframe[src*="youtube"], iframe[src*="youtu.be"], iframe[src*="loom"], video'
+    );
+
+    if (urlMatch || hasMeaningfulBody || hasVideo) return 'lesson';
+    return 'index';
+  }
+
+  function buildSingleLessonPayload() {
+    const inline = extractCurrentLessonContent();
+    const title =
+      safeText(document.querySelector('h1')) ||
+      inline.title ||
+      document.title ||
+      'Untitled Lesson';
+    const lesson = {
+      url: location.href.split('#')[0],
+      title: title.slice(0, 300),
+      body_text: inline.body_text,
+      media_url: inline.media_url,
+      transcript: inline.transcript,
+    };
+    return {
+      source_url: location.href,
+      platform: 'circle',
+      capture_mode: 'single_lesson',
+      title: lesson.title,
+      lessons: [lesson],
+    };
+  }
+
+  function buildIndexPayload() {
+    const title = deriveTitle();
+    const lessons = collectLessonLinks();
+    return {
+      source_url: location.href,
+      platform: 'circle',
+      capture_mode: 'course_index',
+      title,
+      lessons,
+    };
+  }
+
   // ── Main ─────────────────────────────────────────────────────────────────
   //
-  // Strategy: clipboard-first. Cross-origin POSTs from Circle to the app's
-  // edge function will almost always fail because the Circle origin can't
-  // read the app's Supabase localStorage token. So we make clipboard the
-  // primary, reliable path. POST is only attempted if a token is somehow
-  // available (e.g. user opened the bookmarklet on the app's own origin).
-
+  // Strategy:
+  //   • LESSON page → capture this lesson's live-rendered DOM, copy 1-lesson
+  //     JSON to clipboard, instruct user to paste into the app.
+  //   • INDEX page → capture lesson list (no deep-fetch — Circle returns a JS
+  //     shell and lesson bodies don't appear in fetched HTML). Tell user to
+  //     open each lesson and re-run the bookmarklet there.
   (async function main() {
+    const mode = detectPageMode();
+    log('detected page mode:', mode);
+
     let payload;
     try {
-      payload = buildPayload();
+      payload = mode === 'lesson' ? buildSingleLessonPayload() : buildIndexPayload();
     } catch (err) {
       log('build payload failed', err);
       banner('Circle Capture failed to read this page: ' + (err?.message || err), 'error');
       return;
     }
+    log('payload', payload);
 
-    log('payload (pre-hydrate)', payload);
     if (!payload.lessons || payload.lessons.length === 0) {
       banner(
-        'Circle Capture: no lessons found on this page. Open the course page (with the lesson sidebar visible) and click the bookmarklet again.',
+        'Circle Capture: nothing to capture on this page. Open a lesson page and click the bookmarklet again.',
         'warn'
       );
       return;
     }
 
-    // Deep-fetch each lesson same-origin to pull body/media/transcript.
-    try {
-      await hydrateLessons(payload.lessons);
-    } catch (err) {
-      log('hydrate failed', err);
-    }
-
-    const withContent = payload.lessons.filter(l => l.body_text || l.media_url || l.transcript).length;
-    const fetchFailed = payload.lessons.filter(l => l.capture_issue === 'fetch_failed').length;
-    log('payload (post-hydrate)', { total: payload.lessons.length, withContent, fetchFailed });
-
     const json = JSON.stringify(payload, null, 2);
-    const token = findAuthToken();
+    const ok = await copyToClipboard(json);
 
-    // Optimistic POST attempt only when we actually have a token from the
-    // current origin. Any failure silently degrades to clipboard.
-    if (endpoint && token) {
-      try {
-        const result = await postToBackend(payload, token);
+    if (mode === 'lesson') {
+      const l = payload.lessons[0];
+      const hasContent = !!(l.body_text || l.media_url || l.transcript);
+      if (ok) {
         banner(
-          `Circle Capture: imported ${result?.lessons?.length ?? payload.lessons.length} lessons into your app. You can close this tab.`,
-          'info'
+          hasContent
+            ? `Lesson content copied — return to the app and paste it into Circle Import Mode.\n("${l.title}")`
+            : `Lesson copied, but no body/video/transcript was found in the DOM. Return to the app and paste it anyway, or scroll the lesson into view and re-run.`,
+          hasContent ? 'info' : 'warn'
         );
-        log('posted ok', result);
-        return;
-      } catch (err) {
-        log('POST failed, falling back to clipboard', err);
+      } else {
+        showJsonModal(json);
+        banner('Clipboard blocked — copy the JSON from the dialog and paste it into Circle Import Mode.', 'warn');
       }
+      return;
     }
 
-    // Primary path: clipboard.
-    const ok = await copyToClipboard(json);
+    // Course index page
     if (ok) {
-      const noteFail = fetchFailed > 0 ? `, ${fetchFailed} fetch-failed` : '';
       banner(
-        `JSON copied (${payload.lessons.length} lesson${payload.lessons.length === 1 ? '' : 's'}, ${withContent} with content${noteFail}) — return to the app and paste it into Circle Import Mode.`,
-        withContent === 0 ? 'warn' : 'info'
+        `Lesson list copied (${payload.lessons.length} lesson${payload.lessons.length === 1 ? '' : 's'}), but Circle did not expose lesson content here.\nOpen each lesson and run the bookmarklet there to capture content.`,
+        'warn'
       );
     } else {
-      // Final fallback: visible modal with a textarea + Copy button.
       showJsonModal(json);
       banner('Clipboard blocked — copy the JSON from the dialog and paste it into Circle Import Mode.', 'warn');
     }
