@@ -42,6 +42,7 @@ function stableStringify(value: unknown): string {
 export function buildPlan(
   resolved: ResolvedSkill,
   ctx: PlannerContext = {},
+  flagsOverride?: ExpansionFlags,
 ): PlannerResult {
   const m = resolved.manifest;
 
