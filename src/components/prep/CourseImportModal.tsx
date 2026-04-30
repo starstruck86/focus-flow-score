@@ -16,6 +16,15 @@ import { validateLessonContent } from '@/lib/courseImportValidation';
 import { toast } from 'sonner';
 import { CircleImportPanel, type CircleCaptureHint, type CircleNormalizedLesson } from '@/components/prep/CircleImportPanel';
 
+type CapturedChildResource = {
+  title?: string;
+  url: string;
+  type?: 'link' | 'pdf' | 'doc' | 'sheet' | 'slide' | 'download' | 'unknown';
+  source_section?: string;
+  parent_lesson_url?: string;
+  parent_lesson_title?: string;
+};
+
 type LessonItem = {
   title: string;
   url: string;
@@ -29,6 +38,7 @@ type LessonItem = {
   capturedMediaUrl?: string;
   capturedTranscriptSource?: 'dom' | 'caption_track';
   capturedQuality?: { metadata_only?: boolean; content_type?: string; usable_content?: boolean };
+  capturedResources?: CapturedChildResource[];
 };
 
 type LessonImportStatus = 'queued' | 'fetching_lesson' | 'validating_content' | 'saving_resource' | 'transcribing' | 'complete' | 'metadata_only' | 'failed';
