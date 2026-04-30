@@ -123,12 +123,14 @@ export function classifyLessonContent(args: {
   }
 
   const blocked = new Set<ContentType>(['login_page', 'empty', 'html_junk']);
-  // video_only is NOT usable as full content unless we recovered a transcript
-  const videoOnlyHasTranscript = contentType === 'video_only' && transcript.length > 0 && wordCount >= 50;
+  // A video lesson is usable as full content if we recovered a transcript OR
+  // substantive body text (e.g. Takeaways/Resources captured from the DOM).
+  const videoOnlyHasContent =
+    contentType === 'video_only' && ((transcript.length > 0 && wordCount >= 50) || wordCount >= 30);
   const usable =
     !blocked.has(contentType) &&
     !hasLoginWall &&
-    (wordCount >= 5 || videoOnlyHasTranscript || contentType === 'mixed');
+    (wordCount >= 5 || videoOnlyHasContent || contentType === 'mixed');
 
   return {
     content_length: combined.length,
@@ -137,7 +139,7 @@ export function classifyLessonContent(args: {
     content_type: contentType,
     has_login_wall: hasLoginWall,
     usable_content: usable,
-    metadata_only: contentType === 'video_only' && !videoOnlyHasTranscript,
+    metadata_only: contentType === 'video_only' && !videoOnlyHasContent,
     issues,
   };
 }
