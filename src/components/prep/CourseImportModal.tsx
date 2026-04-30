@@ -603,6 +603,24 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     lessonResultsRef.current = initialResults;
 
     let successCount = 0;
+    let childResourcesQueued = 0;
+    let childResourcesFailed = 0;
+    const childResourcesSeen = new Set<string>();
+    const normalizeChildUrl = (raw: string): string => {
+      try {
+        const u = new URL(raw);
+        u.hash = '';
+        u.host = u.host.toLowerCase();
+        ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','fbclid','msclkid','ref','source','si','feature']
+          .forEach(p => u.searchParams.delete(p));
+        let p = u.pathname.replace(/\/+$/, '');
+        if (p === '') p = '/';
+        u.pathname = p;
+        return u.toString();
+      } catch {
+        return (raw || '').trim().split('#')[0].replace(/\/+$/, '').toLowerCase();
+      }
+    };
     for (let i = 0; i < toImport.length; i++) {
       const lesson = toImport[i];
       console.log('[CourseImport][v2] Processing lesson', i, lesson.url);
