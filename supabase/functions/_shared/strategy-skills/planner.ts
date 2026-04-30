@@ -313,6 +313,10 @@ export function buildPlan(
 
   const minRelevantItems = manifest.retrieval.minRelevantItems ?? 1;
 
+  // ── Phase 3B: server-authoritative expansion (additive only) ─────
+  const flags: ExpansionFlags = flagsOverride ?? readExpansionFlagFromEnv();
+  const expansion = expandSeeds(termSeeds, ctx, flags);
+
   const planBody = {
     skillId: manifest.id,
     skillVersion: manifest.version,
@@ -328,6 +332,11 @@ export function buildPlan(
     filters,
     minRelevantItems,
     totalCap,
+    // Expansion fields are part of the plan body so planHash covers them.
+    expandedSeeds: expansion.expandedSeeds,
+    expansionTrace: expansion.expansionTrace,
+    lexiconVersion: expansion.lexiconVersion,
+    expansionEnabled: expansion.expansionEnabled,
   };
 
   const contextHash = hash(stableStringify({
@@ -336,6 +345,10 @@ export function buildPlan(
     filters,
     threadId: ctx.thread?.threadId,
     priorHash: ctx.prior?.lastRetrievalPlanHash,
+    // Expansion changes the effective query → contextHash should reflect it.
+    expandedSeeds: expansion.expandedSeeds,
+    lexiconVersion: expansion.lexiconVersion,
+    expansionEnabled: expansion.expansionEnabled,
   }));
   const planHash = hash(stableStringify(planBody));
 
