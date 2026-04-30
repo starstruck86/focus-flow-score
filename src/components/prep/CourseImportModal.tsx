@@ -1111,6 +1111,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     if (fullCount > 0) parts.push(`${fullCount} full`);
     if (metaCount > 0) parts.push(`${metaCount} metadata-only`);
     if (failedCount > 0) parts.push(`${failedCount} failed`);
+    if (childResourcesQueued > 0) parts.push(`${childResourcesQueued} linked resource${childResourcesQueued === 1 ? '' : 's'}`);
+    if (childResourcesFailed > 0) parts.push(`${childResourcesFailed} resource${childResourcesFailed === 1 ? '' : 's'} skipped`);
 
     if (failedCount > 0) {
       toast.warning(`Import complete: ${parts.join(', ')}`);
