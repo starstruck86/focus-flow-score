@@ -13,6 +13,12 @@ import type {
   SkillManifest,
   SkillSourceMode,
 } from "./types.ts";
+import {
+  expandSeeds,
+  readExpansionFlagFromEnv,
+  type ExpansionFlags,
+  type ExpansionTraceEntry,
+} from "./expansion.ts";
 
 // ── Context contracts ──────────────────────────────────────────────
 export interface PlannerThreadContext {
