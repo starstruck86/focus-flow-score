@@ -773,6 +773,53 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
 
         successCount++;
 
+        // === INGEST CHILD RESOURCES (Circle: links from "Resources Mentioned"
+        // and the lesson body). Each becomes its own resource in the library
+        // and gets routed through the standard enrichment / KI pipeline by
+        // useAddUrlResource. Dedupe across the whole import session.
+        if (
+          lesson.importSource === 'circle_browser_capture' &&
+          lesson.capturedResources?.length
+        ) {
+          for (const child of lesson.capturedResources) {
+            const norm = normalizeChildUrl(child.url);
+            if (!norm) continue;
+            if (childResourcesSeen.has(norm)) continue;
+            childResourcesSeen.add(norm);
+            try {
+              const childTitle = (child.title || child.url).slice(0, 300);
+              const childTags = Array.from(new Set([
+                'course-resource',
+                courseTitle,
+                child.parent_lesson_title ? `lesson:${child.parent_lesson_title}` : '',
+                child.type ? `circle:${child.type}` : '',
+              ].filter(Boolean)));
+              const childResourceType =
+                child.type === 'pdf' || child.type === 'doc' || child.type === 'sheet' || child.type === 'slide'
+                  ? 'document'
+                  : child.type === 'download'
+                    ? 'document'
+                    : 'article';
+              const childClassification: any = {
+                title: child.parent_lesson_title
+                  ? `${child.parent_lesson_title} · ${childTitle}`
+                  : childTitle,
+                description: child.parent_lesson_title
+                  ? `Resource from lesson "${child.parent_lesson_title}" in ${courseTitle}.`
+                  : `Resource from ${courseTitle}.`,
+                resource_type: childResourceType,
+                tags: childTags,
+                top_folder: 'Resources' as any,
+              };
+              await addUrl.mutateAsync({ url: child.url, classification: childClassification });
+              childResourcesQueued++;
+            } catch (e) {
+              childResourcesFailed++;
+              console.warn('[CircleImport] child resource ingest failed', child.url, e);
+            }
+          }
+        }
+
         // For Circle browser-capture lessons we already have the rendered
         // transcript (or content) — don't re-transcribe via audio.
         const alreadyHasTranscript = lesson.importSource === 'circle_browser_capture' &&
