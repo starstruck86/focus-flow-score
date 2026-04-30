@@ -78,50 +78,99 @@
 
   // ── Lesson link discovery ────────────────────────────────────────────────
 
-  function collectLessonLinks() {
-    const seen = new Map(); // url -> { url, title, module }
+  // Path looks like a Circle lesson/post.
+  const LESSON_PATH_RE = /(\/lessons\/[^/?#]+|\/posts\/[^/?#]+|\/c\/[^/]+\/sections\/[^/]+\/lessons\/[^/?#]+)/i;
+  // Stuff we never want as a "lesson".
+  const EXCLUDE_PATH_RE = /\/(settings|profile|members|notifications|messages|sign[-_ ]?in|sign[-_ ]?up|login|logout|account|search|home|feed)(\/|$)/i;
+  // Strip trailing time-codes like " 04:53" or " (12:34)" from titles.
+  function cleanTitle(raw) {
+    if (!raw) return '';
+    let t = String(raw).replace(/\s+/g, ' ').trim();
+    const stripped = t.replace(/\s*[\(\[]?\d{1,2}:\d{2}(?::\d{2})?[\)\]]?\s*$/g, '').trim();
+    if (stripped && stripped.length >= 3) t = stripped;
+    return t.slice(0, 300);
+  }
+
+  function pickTitleFromAnchor(a) {
+    const candidates = [
+      safeText(a),
+      a.getAttribute('aria-label') || '',
+      a.getAttribute('title') || '',
+    ];
+    // Nearest list-item-ish parent text
+    const parent = a.closest('li, [role="listitem"], [data-testid*="lesson"], [data-testid*="post"], [class*="lesson"], [class*="curriculum-item"]');
+    if (parent && parent !== a) candidates.push(safeText(parent));
+    for (const c of candidates) {
+      const cleaned = cleanTitle(c);
+      if (cleaned) return cleaned;
+    }
+    return '';
+  }
+
+  function collectLessonLinks(debug) {
+    const seen = new Map(); // key -> { url, title, module }
     const here = location.host;
+    const courseRootRe = /^\/c\/[^/]+\/?$/i;
+    const currentPath = location.pathname || '';
+    const isOnCourseRoot = courseRootRe.test(currentPath);
+    let duplicates = 0;
+    let rejected = 0;
 
     const push = (url, title, module) => {
       const a = abs(url);
-      if (!a) return;
-      let host;
-      try { host = new URL(a).host; } catch (_) { return; }
-      if (host !== here) return;
-      const path = new URL(a).pathname;
-      // Accept lesson-like paths only
-      if (!/\/c\/[^/]+\/(lessons|sections|modules)\/|\/lessons\/|\/posts\/[^/]+\/?$/i.test(path)) return;
-      const key = a.split('#')[0];
+      if (!a) { rejected++; return; }
+      let parsed;
+      try { parsed = new URL(a); } catch (_) { rejected++; return; }
+      if (parsed.host !== here) { rejected++; return; }
+      const path = parsed.pathname || '';
+      if (EXCLUDE_PATH_RE.test(path)) { rejected++; return; }
+      // Skip the current course root itself
+      if (courseRootRe.test(path) && (isOnCourseRoot || path === currentPath)) { rejected++; return; }
+      if (!LESSON_PATH_RE.test(path)) { rejected++; return; }
+
+      const key = (parsed.origin + parsed.pathname).replace(/\/$/, '');
+      const cleanedTitle = cleanTitle(title);
+      const hasIdInUrl = /\/(lessons|posts)\/[^/?#]+/i.test(path);
+      if (!cleanedTitle && !hasIdInUrl) { rejected++; return; }
+
       if (seen.has(key)) {
-        // Upgrade title if previous was empty
+        duplicates++;
         const prev = seen.get(key);
-        if (!prev.title && title) prev.title = title.slice(0, 300);
-        if (!prev.module && module) prev.module = module.slice(0, 200);
+        if ((!prev.title || prev.title === prev.url) && cleanedTitle) prev.title = cleanedTitle;
+        if (!prev.module && module) prev.module = String(module).slice(0, 200);
         return;
       }
       seen.set(key, {
         url: key,
-        title: (title || key).slice(0, 300),
-        module: module ? module.slice(0, 200) : undefined,
+        title: cleanedTitle || key,
+        module: module ? String(module).slice(0, 200) : undefined,
       });
     };
 
-    // 1. Anchor scan
-    document.querySelectorAll('a[href*="/lessons/"], a[href*="/posts/"], a[href*="/sections/"], a[href*="/modules/"]')
-      .forEach(a => {
-        const href = a.getAttribute('href') || '';
-        const text = safeText(a);
-        // Try to find the nearest section header for "module"
-        const moduleEl = a.closest('[data-testid*="section"], [class*="section"], [class*="module"]');
-        const moduleTitle = moduleEl ? safeText(moduleEl.querySelector('h2, h3, [class*="title"]')) : '';
-        push(href, text, moduleTitle);
-      });
+    // 1. Scan ALL anchors, filter by path.
+    const allAnchors = Array.from(document.querySelectorAll('a[href]'));
+    for (const a of allAnchors) {
+      const href = a.getAttribute('href') || '';
+      if (!href) continue;
+      const resolved = abs(href);
+      if (!resolved) continue;
+      let path = '';
+      try { path = new URL(resolved).pathname; } catch (_) { continue; }
+      if (!LESSON_PATH_RE.test(path)) continue;
+      const title = pickTitleFromAnchor(a);
+      const moduleEl = a.closest('[data-testid*="section"], [class*="section"], [class*="module"]');
+      const moduleTitle = moduleEl ? safeText(moduleEl.querySelector('h2, h3, [class*="title"]')) : '';
+      push(href, title, moduleTitle);
+    }
 
-    // 2. data-testid sidebar items (Circle uses these for course curriculum)
-    document.querySelectorAll('[data-testid*="lesson"], [data-testid*="curriculum"] a').forEach(el => {
-      const a = el.tagName === 'A' ? el : el.querySelector('a');
-      if (!a) return;
-      push(a.getAttribute('href') || '', safeText(el));
+    // 2. Circle data attributes (anchors or wrappers carrying lesson/post ids)
+    document.querySelectorAll(
+      '[data-testid*="lesson"], [data-testid*="post"], [data-lesson-id], [data-post-id], [data-testid*="curriculum"] a'
+    ).forEach(el => {
+      const anchor = el.tagName === 'A' ? el : el.querySelector('a[href]');
+      if (anchor && anchor.getAttribute('href')) {
+        push(anchor.getAttribute('href'), pickTitleFromAnchor(anchor));
+      }
     });
 
     // 3. Walk __NEXT_DATA__
@@ -132,6 +181,11 @@
     const init = readInitialState();
     if (init) walkJson(init, push);
 
+    if (debug && typeof debug === 'object') {
+      debug.duplicatesRemoved = duplicates;
+      debug.rejected = rejected;
+      debug.totalAnchors = allAnchors.length;
+    }
     return Array.from(seen.values());
   }
 
@@ -484,11 +538,11 @@
   // lesson. Only strict lesson URLs or specific lesson content containers count.
   function detectPageMode() {
     const path = location.pathname || '';
-    const lessonLinks = collectLessonLinks();
+    const discoveryDebug = {};
+    const lessonLinks = collectLessonLinks(discoveryDebug);
     const lessonLinkCount = lessonLinks.length;
     const hasLessonUrl = /\/lessons\/[^/?#]+|\/posts\/[^/?#]+/i.test(path);
 
-    // Specific lesson/post content containers — generic <article>/<main> do NOT count.
     const hasPostBody = !!document.querySelector('[data-testid="post-body"]');
     const hasLessonContentContainer = !!document.querySelector(
       '[data-testid*="lesson-content"], [data-testid*="post-content"], .trix-content'
@@ -505,20 +559,68 @@
       mode = 'index';
     }
 
+    const firstLessons = lessonLinks.slice(0, 5).map(l => ({ url: l.url, title: l.title }));
     const detection = {
       path,
       hasLessonUrl,
       lessonLinkCount,
+      duplicatesRemoved: discoveryDebug.duplicatesRemoved || 0,
+      rejected: discoveryDebug.rejected || 0,
+      totalAnchors: discoveryDebug.totalAnchors || 0,
       hasPostBody,
       hasLessonContentContainer,
+      firstLessons,
       mode,
     };
 
     try {
       console.log('[Circle Capture] mode detection', detection);
+      console.log('[Circle Capture] first lessons', firstLessons);
     } catch (_) {}
 
-    showDebugBanner(`Circle mode: ${mode}; lesson links: ${lessonLinkCount}; path: ${path}`);
+    showDebugBanner(
+      `Circle mode: ${mode}\nlesson links: ${lessonLinkCount} (dupes removed: ${detection.duplicatesRemoved})\npath: ${path}`
+    );
+
+    const isCourseRoot = /^\/c\/[^/]+\/?$/i.test(path);
+    if (isCourseRoot && lessonLinkCount < 2) {
+      try {
+        const sampleHrefs = Array.from(document.querySelectorAll('a[href]'))
+          .slice(0, 40)
+          .map(a => a.getAttribute('href'))
+          .filter(Boolean);
+        const debugInfo = {
+          path,
+          location: location.href,
+          pageTitle: document.title,
+          lessonLinkCount,
+          duplicatesRemoved: detection.duplicatesRemoved,
+          rejected: detection.rejected,
+          totalAnchors: detection.totalAnchors,
+          hasPostBody,
+          hasLessonContentContainer,
+          detectedSelectors: {
+            postBody: document.querySelectorAll('[data-testid="post-body"]').length,
+            lessonContent: document.querySelectorAll('[data-testid*="lesson-content"]').length,
+            curriculum: document.querySelectorAll('[data-testid*="curriculum"]').length,
+            lessonTestid: document.querySelectorAll('[data-testid*="lesson"]').length,
+            postTestid: document.querySelectorAll('[data-testid*="post"]').length,
+            anchorsLessons: document.querySelectorAll('a[href*="/lessons/"]').length,
+            anchorsPosts: document.querySelectorAll('a[href*="/posts/"]').length,
+          },
+          hrefSamples: sampleHrefs,
+          firstLessons,
+        };
+        copyToClipboard(JSON.stringify(debugInfo, null, 2)).then(ok => {
+          banner(
+            ok
+              ? 'Could not detect lesson links. Debug info copied to clipboard — please send it to Lovable.'
+              : 'Could not detect lesson links. Open the browser console for debug info to send to Lovable.',
+            'warn'
+          );
+        });
+      } catch (_) {}
+    }
 
     return mode;
   }
