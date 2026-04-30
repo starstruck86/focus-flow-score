@@ -159,6 +159,7 @@ export interface NormalizedLesson {
   quality: LessonQuality;
   imported: boolean;
   reject_reason?: string;
+  import_source: 'circle_browser_capture';
 }
 
 /**
