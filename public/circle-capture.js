@@ -221,42 +221,131 @@
   }
 
   /**
-   * Find the "Resources Mentioned" section and pull its links.
-   * Returns { resources: [{title, url}], text: 'rendered section text' }.
+   * Classify a URL into a coarse resource type used downstream.
+   */
+  function inferResourceType(url) {
+    const u = (url || '').toLowerCase();
+    if (/\.pdf(\?|#|$)/.test(u)) return 'pdf';
+    if (/\.(docx?|rtf|odt)(\?|#|$)/.test(u) || /docs\.google\.com\/document/.test(u)) return 'doc';
+    if (/\.(xlsx?|csv|ods)(\?|#|$)/.test(u) || /docs\.google\.com\/spreadsheets/.test(u)) return 'sheet';
+    if (/\.(pptx?|key|odp)(\?|#|$)/.test(u) || /docs\.google\.com\/presentation/.test(u)) return 'slide';
+    if (/\bdownload\b/.test(u) || /\.(zip|rar|7z|tar|gz)(\?|#|$)/.test(u)) return 'download';
+    if (/notion\.so|notion\.site/.test(u)) return 'doc';
+    if (/^https?:\/\//.test(u)) return 'link';
+    return 'unknown';
+  }
+
+  /**
+   * Decide whether a URL should be excluded (Circle nav, sidebar, profile,
+   * lesson/section/post links inside Circle, anchors, mailto, javascript:).
+   */
+  function isExcludedResourceUrl(url) {
+    const raw = (url || '').trim();
+    if (!raw) return true;
+    if (/^(mailto:|javascript:|tel:|#)/i.test(raw)) return true;
+    let u;
+    try { u = new URL(raw, location.href); } catch { return true; }
+    // Strip pure same-page anchors (no path, no host change).
+    if (!u.host) return true;
+    // Exclude Circle internal navigation (lessons, posts, sections, members,
+    // settings, notifications, search, etc.) — but only on the same Circle host.
+    if (u.host === location.host) {
+      const p = u.pathname || '';
+      if (
+        /\/lessons?\//i.test(p) ||
+        /\/posts?\//i.test(p) ||
+        /\/sections?\//i.test(p) ||
+        /\/members?\//i.test(p) ||
+        /\/profile/i.test(p) ||
+        /\/settings/i.test(p) ||
+        /\/notifications/i.test(p) ||
+        /\/search/i.test(p) ||
+        /\/spaces?\//i.test(p) ||
+        /\/c\/[^/]+\/?$/i.test(p) ||      // course root
+        p === '/' || p === ''
+      ) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Collect external link from one DOM block, pushing into out & seen-set.
+   */
+  function collectLinksFrom(block, out, seen, sourceLabel) {
+    if (!block) return '';
+    const anchors = block.querySelectorAll('a[href]');
+    anchors.forEach(a => {
+      const href = a.getAttribute('href');
+      const url = abs(href);
+      if (!url || isExcludedResourceUrl(url)) return;
+      const norm = url.split('#')[0].replace(/\/+$/, '').toLowerCase();
+      if (seen.has(norm)) return;
+      seen.add(norm);
+      const title =
+        safeText(a) ||
+        a.getAttribute('aria-label') ||
+        a.getAttribute('title') ||
+        url;
+      out.push({
+        title: title.slice(0, 300),
+        url,
+        type: inferResourceType(url),
+        source_section: sourceLabel,
+      });
+    });
+    return safeText(block);
+  }
+
+  /**
+   * Collect resources mentioned in the lesson:
+   *   1. Explicit "Resources Mentioned" section (highest priority)
+   *   2. Any other external links inside the lesson body container
+   * Returns { resources, text } where `text` is the rendered "Resources Mentioned"
+   * section text used for display.
    */
   function captureResources() {
+    const resources = [];
+    const seen = new Set();
+    let text = '';
+
+    // 1. Explicit Resources section.
     const headings = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, strong, [class*="heading"]'));
     const heading = headings.find(h => /resources?\s+mentioned/i.test(safeText(h)));
-    const resources = [];
-    let text = '';
-    if (!heading) return { resources, text };
-
-    // Gather siblings until the next heading.
-    const collected = [];
-    let n = heading.nextElementSibling;
-    let safety = 0;
-    while (n && safety++ < 50) {
-      if (/^H[1-6]$/.test(n.tagName)) break;
-      collected.push(n);
-      n = n.nextElementSibling;
-    }
-    // If there are no element siblings (heading is wrapped), use parent's tail.
-    if (collected.length === 0 && heading.parentElement) {
-      const sibs = Array.from(heading.parentElement.children);
-      const idx = sibs.indexOf(heading);
-      for (let i = idx + 1; i < sibs.length; i++) {
-        if (/^H[1-6]$/.test(sibs[i].tagName)) break;
-        collected.push(sibs[i]);
+    if (heading) {
+      const collected = [];
+      let n = heading.nextElementSibling;
+      let safety = 0;
+      while (n && safety++ < 50) {
+        if (/^H[1-6]$/.test(n.tagName)) break;
+        collected.push(n);
+        n = n.nextElementSibling;
+      }
+      if (collected.length === 0 && heading.parentElement) {
+        const sibs = Array.from(heading.parentElement.children);
+        const idx = sibs.indexOf(heading);
+        for (let i = idx + 1; i < sibs.length; i++) {
+          if (/^H[1-6]$/.test(sibs[i].tagName)) break;
+          collected.push(sibs[i]);
+        }
+      }
+      for (const block of collected) {
+        const t = collectLinksFrom(block, resources, seen, 'resources_mentioned');
+        text += (text ? '\n' : '') + t;
       }
     }
-    for (const block of collected) {
-      block.querySelectorAll('a[href]').forEach(a => {
-        const url = abs(a.getAttribute('href'));
-        const title = safeText(a) || a.getAttribute('aria-label') || a.getAttribute('title') || url;
-        if (url) resources.push({ title: title.slice(0, 300), url });
-      });
-      text += (text ? '\n' : '') + safeText(block);
-    }
+
+    // 2. All other in-body links — anything inside the main lesson container
+    // that isn't a Circle internal nav. This catches inline links and
+    // download links that aren't under a "Resources Mentioned" heading.
+    const bodyEl =
+      document.querySelector('[data-testid="post-body"]') ||
+      document.querySelector('[data-testid*="lesson-content"]') ||
+      document.querySelector('[data-testid*="post-content"]') ||
+      document.querySelector('article') ||
+      document.querySelector('.trix-content') ||
+      document.querySelector('main');
+    if (bodyEl) collectLinksFrom(bodyEl, resources, seen, 'lesson_body');
+
     return { resources, text };
   }
 
