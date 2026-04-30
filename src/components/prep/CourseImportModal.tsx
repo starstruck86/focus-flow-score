@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { validateLessonContent } from '@/lib/courseImportValidation';
 import { toast } from 'sonner';
+import { CircleImportPanel, type CircleCaptureHint, type CircleNormalizedLesson } from '@/components/prep/CircleImportPanel';
 
 type LessonItem = {
   title: string;
@@ -298,6 +299,10 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   const [landingPageResolved, setLandingPageResolved] = useState(false);
   const [resolvedFrom, setResolvedFrom] = useState<string | null>(null);
 
+  // Circle browser-assisted capture
+  const [circleCaptureHint, setCircleCaptureHint] = useState<CircleCaptureHint | null>(null);
+  const [circleSourceUrl, setCircleSourceUrl] = useState<string>('');
+
   const clearCredPassword = () => setCredPassword('');
   const getCredsBody = () => {
     if (credEmail.trim() && credPassword) {
@@ -319,6 +324,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     setCourseOptions([]);
     setLandingPageResolved(false);
     setResolvedFrom(null);
+    setCircleCaptureHint(null);
+    setCircleSourceUrl('');
     try {
       const { data, error } = await trackedInvoke<any>('import-course', {
         body: { url: courseUrl.trim(), action: 'discover', ...getCredsBody() },
@@ -329,6 +336,21 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
         const errMsg = data?.error || 'Failed to fetch course';
         const isCircle = data?.platform === 'circle';
         const failureType: string | undefined = data?.failure_type;
+
+        // NEW: Circle browser-assisted capture path. Server returns
+        // `needs_browser_capture: true` with a capture_hint instead of
+        // attempting (and failing) server-side login.
+        if (isCircle && data?.needs_browser_capture && data?.capture_hint) {
+          setCircleCaptureHint(data.capture_hint as CircleCaptureHint);
+          setCircleSourceUrl(courseUrl.trim());
+          setPlatform('circle');
+          setCourseTitle(data.title || 'Circle Course');
+          if (data.meta) setDiscoverMeta(data.meta);
+          // Do NOT set authError or open the credentials drawer — we render
+          // CircleImportPanel instead. Return cleanly (not a thrown error).
+          return;
+        }
+
         if (isCircle && (failureType === 'mfa_required' || failureType === 'captcha_required' || failureType === 'sso_only' || failureType === 'blocked_bot')) {
           setAuthError(`Circle automated login is blocked (${failureType.replace('_', ' ')}). Please paste lesson content manually or provide exported course materials.`);
         } else if (isCircle && failureType === 'no_credentials') {
@@ -404,6 +426,34 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
     setCourseOptions([]);
     await discoverCourse(option.url);
   }, [discoverCourse]);
+
+  /**
+   * Receive normalized lessons from CircleImportPanel (browser-assisted
+   * capture or manual paste) and feed them into the same `lessons` state
+   * the rest of the modal already drives the import flow from.
+   */
+  const handleCircleLessons = useCallback((args: {
+    title: string;
+    lessons: CircleNormalizedLesson[];
+    meta?: Record<string, any>;
+  }) => {
+    const importable = args.lessons.filter(l => l.imported);
+    if (importable.length === 0) return;
+    const items: LessonItem[] = importable.map((l, i) => ({
+      title: l.title,
+      url: l.url,
+      module: l.module || 'Circle Course',
+      index: i,
+      type: l.quality?.metadata_only ? 'video' : 'text',
+    }));
+    setCourseTitle(args.title || 'Circle Course');
+    setPlatform('circle');
+    setLessons(items);
+    setSelected(new Set(items.map((_, i) => i)));
+    if (args.meta) setDiscoverMeta(args.meta);
+    // Hide the panel once we have lessons; user proceeds to normal import UI.
+    setCircleCaptureHint(null);
+  }, []);
 
   const toggleLesson = (index: number) => {
     setSelected(prev => {
@@ -945,6 +995,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       setCourseOptions([]);
       setLandingPageResolved(false);
       setResolvedFrom(null);
+      setCircleCaptureHint(null);
+      setCircleSourceUrl('');
     }
     onOpenChange(newOpen);
   };
@@ -987,7 +1039,17 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
             </div>
           )}
 
-          {/* Optional per-import credentials */}
+          {/* Circle browser-assisted capture — replaces credentials/no-lessons UI */}
+          {circleCaptureHint && lessons.length === 0 && !importing && (
+            <CircleImportPanel
+              sourceUrl={circleSourceUrl || url}
+              captureHint={circleCaptureHint}
+              onLessons={handleCircleLessons}
+            />
+          )}
+
+          {/* Optional per-import credentials (hidden for Circle browser-capture) */}
+          {!circleCaptureHint && (
           <Collapsible open={showCreds} onOpenChange={setShowCreds} className="flex-shrink-0">
             <CollapsibleTrigger asChild>
               <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full">
@@ -1020,6 +1082,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
               />
             </CollapsibleContent>
           </Collapsible>
+          )}
 
           {/* Discovery metadata */}
           {discoverMeta && !importing && (
@@ -1074,8 +1137,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
             </div>
           )}
 
-          {/* No course found error for landing pages */}
-          {!fetching && !importing && lessons.length === 0 && courseOptions.length === 0 && discoverMeta && discoverMeta.lessons_discovered === 0 && !authError && (
+          {/* No course found error for landing pages (skipped for Circle capture flow) */}
+          {!circleCaptureHint && !fetching && !importing && lessons.length === 0 && courseOptions.length === 0 && discoverMeta && discoverMeta.lessons_discovered === 0 && !authError && (
             <div className="flex items-start gap-2 p-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-sm flex-shrink-0">
               <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-600" />
               <span className="text-muted-foreground">
