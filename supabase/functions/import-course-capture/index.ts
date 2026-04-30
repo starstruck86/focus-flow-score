@@ -349,6 +349,24 @@ Deno.serve(async (req) => {
   ];
   const normalized = normalizeLessons(payload, debug);
 
+  // Detect "lesson list only" payloads — the bookmarklet ran on a curriculum
+  // page and we never got body/media/transcript for any lesson. We do NOT
+  // call this an auth failure; we surface a friendlier hint upstream.
+  const fullContentCount = normalized.filter(
+    l => l.imported && l.quality.content_type !== 'video_only' && l.content.trim().length > 0
+  ).length;
+  const metadataOnlyCount = normalized.filter(l => l.quality.metadata_only).length;
+  const rejectedCount = normalized.filter(l => !l.imported).length;
+  const fetchFailedCount = normalized.filter(l => l.capture_issue === 'fetch_failed').length;
+  const listOnly =
+    fullContentCount === 0 &&
+    metadataOnlyCount === 0 &&
+    normalized.length > 0;
+
+  const warning = listOnly
+    ? 'Captured lesson list only. No lesson content was found. Open an individual lesson and run the bookmarklet there, or try deep capture again.'
+    : undefined;
+
   // The function intentionally does NOT write to `resources` directly here.
   // It returns a normalized envelope that the existing CourseImportModal flow
   // (which already creates resources from `lessons[]`) consumes. This keeps
@@ -359,14 +377,18 @@ Deno.serve(async (req) => {
       platform: 'circle',
       title: payload.title,
       lessons: normalized,
+      warning,
       meta: {
         platform: 'circle',
         mode: payload.mode,
         source_url: payload.source_url,
         lessons_received: payload.lessons.length,
         lessons_imported: normalized.filter(l => l.imported).length,
-        lessons_metadata_only: normalized.filter(l => l.quality.metadata_only).length,
-        lessons_rejected: normalized.filter(l => !l.imported).length,
+        lessons_full_content: fullContentCount,
+        lessons_metadata_only: metadataOnlyCount,
+        lessons_rejected: rejectedCount,
+        lessons_fetch_failed: fetchFailedCount,
+        lessons_list_only: listOnly,
         auth_status: 'browser_captured',
       },
       debug,
