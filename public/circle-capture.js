@@ -187,36 +187,49 @@
    * no transcript was found).
    */
   async function captureTranscript() {
-    // Look for "Show transcript" button/link.
-    const all = Array.from(document.querySelectorAll('button, a, [role="button"]'));
-    const trigger = all.find(el => /show transcript|view transcript|transcript/i.test(safeText(el)));
-    if (!trigger) return '';
+    // Look for "Show transcript" trigger — match short labels first to avoid
+    // accidentally clicking transcript text already on the page.
+    const all = Array.from(document.querySelectorAll('button, a, [role="button"], summary, [aria-expanded]'));
+    const triggers = all.filter(el => {
+      const t = safeText(el);
+      if (!t || t.length > 60) return false;
+      return /\b(show|view|open|toggle|expand)\s+transcript\b/i.test(t) || /^transcript$/i.test(t);
+    });
 
-    // Snapshot existing transcript-ish containers BEFORE click so we can
-    // detect new ones that appear afterward.
-    const beforeIds = new Set(
-      Array.from(document.querySelectorAll('[id*="transcript" i], [class*="transcript" i]')).map(el => el)
-    );
+    // Snapshot existing transcript text so we can detect *new* content.
+    const snapshot = (() => {
+      const m = new Map();
+      document.querySelectorAll('[id*="transcript" i], [class*="transcript" i], [data-testid*="transcript" i]')
+        .forEach(el => m.set(el, safeText(el).length));
+      return m;
+    })();
 
-    try { trigger.click(); } catch (_) { return ''; }
+    for (const trigger of triggers) {
+      try { trigger.scrollIntoView({ block: 'center' }); } catch (_) {}
+      try { trigger.click(); } catch (_) { continue; }
+      await sleep(300);
+    }
 
-    // Poll for a transcript container that has substantive text.
+    // Poll for a transcript container that grew or newly appeared.
     const start = Date.now();
     let transcriptText = '';
-    while (Date.now() - start < 5000) {
-      await sleep(200);
+    while (Date.now() - start < 6000) {
+      await sleep(250);
       const containers = Array.from(document.querySelectorAll(
-        '[id*="transcript" i], [class*="transcript" i], [data-testid*="transcript" i]'
+        '[id*="transcript" i], [class*="transcript" i], [data-testid*="transcript" i], [class*="caption" i]'
       ));
       for (const c of containers) {
         const t = safeText(c);
-        if (t.length > 80) {
+        const prev = snapshot.get(c) || 0;
+        // accept if it's substantively bigger than before, or a brand-new container
+        if (t.length > 120 && t.length > prev + 80) {
           transcriptText = t;
           break;
         }
       }
       if (transcriptText) break;
     }
+    log('transcript capture', { triggersFound: triggers.length, length: transcriptText.length });
     return transcriptText;
   }
 
@@ -424,34 +437,67 @@
     const indicator = findLessonOfIndicator();
     const title = findLessonTitle(indicator?.el);
     const media_url = findVideoUrl();
+    const selectorsMatched = [];
 
-    // Caption text under video — the small text right under the video frame
-    // (e.g. "Alright. This module isn't gonna teach you every last thing").
-    // We grab the takeaways + resources sections explicitly and combine.
     const takeaways = captureSectionByHeading(/^takeaways?$/i);
+    if (takeaways) selectorsMatched.push('takeaways');
     const { resources, text: resourcesText } = captureResources();
+    if (resources.length) selectorsMatched.push(`resources(${resources.length})`);
 
-    // Body region for caption + everything else not already covered.
-    const bodyEl =
-      document.querySelector('[data-testid="post-body"]') ||
-      document.querySelector('article') ||
-      document.querySelector('.trix-content') ||
-      document.querySelector('main');
-    let bodyAll = safeText(bodyEl);
+    // Body region — try multiple selectors, prefer ones with the most text.
+    const candidates = [
+      ['[data-testid="post-body"]', document.querySelector('[data-testid="post-body"]')],
+      ['[data-testid*="lesson-content"]', document.querySelector('[data-testid*="lesson-content"]')],
+      ['[data-testid*="post-content"]', document.querySelector('[data-testid*="post-content"]')],
+      ['article', document.querySelector('article')],
+      ['.trix-content', document.querySelector('.trix-content')],
+      ['main', document.querySelector('main')],
+    ].filter(([, el]) => el);
 
-    // Strip the takeaways/resources sub-text from the bulk body to avoid dupes
-    // when we re-compose body_text.
+    // Anchor-based fallback: section containing "Takeaways" or "Resources Mentioned".
+    const anchorEl = (() => {
+      const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,strong,[class*="heading"]'));
+      const h = headings.find(el => /takeaways?|resources?\s+mentioned/i.test(safeText(el)));
+      if (!h) return null;
+      // climb to a meaningful parent section
+      let p = h.parentElement, best = h;
+      for (let i = 0; i < 5 && p; i++, p = p.parentElement) {
+        if (safeText(p).length > safeText(best).length) best = p;
+      }
+      return best;
+    })();
+    if (anchorEl) candidates.push(['anchor:takeaways/resources', anchorEl]);
+
+    // Pick the candidate with the most text.
+    let bodyEl = null, bodyAll = '';
+    for (const [name, el] of candidates) {
+      const t = safeText(el);
+      if (t.length > bodyAll.length) { bodyAll = t; bodyEl = el; selectorsMatched.push(`body:${name}`); }
+    }
+
     if (takeaways) bodyAll = bodyAll.replace(takeaways, '').replace(/\s+/g, ' ').trim();
     if (resourcesText) bodyAll = bodyAll.replace(resourcesText, '').replace(/\s+/g, ' ').trim();
 
     const transcript = await captureTranscript();
-    if (transcript) bodyAll = bodyAll.replace(transcript, '').replace(/\s+/g, ' ').trim();
+    if (transcript) {
+      selectorsMatched.push('transcript');
+      bodyAll = bodyAll.replace(transcript, '').replace(/\s+/g, ' ').trim();
+    }
 
     const parts = [];
     if (bodyAll) parts.push(bodyAll);
     if (takeaways) parts.push(`\n\nTakeaways\n${takeaways}`);
     if (resourcesText) parts.push(`\n\nResources Mentioned\n${resourcesText}`);
     const body_text = parts.join('').trim() || undefined;
+
+    const debugInfo = {
+      hasBodyText: body_text ? body_text.length : 0,
+      hasTranscript: !!transcript,
+      resourceCount: resources.length,
+      hasMedia: !!media_url,
+      selectorsMatched,
+    };
+    log('lesson extraction', debugInfo);
 
     return {
       url: location.href.split('#')[0],
@@ -462,6 +508,7 @@
       media_url,
       transcript: transcript || undefined,
       resources: resources.length ? resources : undefined,
+      _debug: debugInfo,
     };
   }
 
@@ -654,14 +701,21 @@
     const failed = lessons.filter(l => l.capture_issue === 'render_failed').length;
     const transcripts = lessons.filter(l => l.transcript).length;
     const resources = lessons.reduce((s, l) => s + (l.resources?.length || 0), 0);
+    const withBody = lessons.filter(l => l.body_text && l.body_text.length > 0).length;
 
     const json = JSON.stringify(payload, null, 2);
     const ok = await copyToClipboard(json);
-    const summary =
-      `${captured} lessons captured` +
-      (failed ? `, ${failed} failed` : '') +
-      `, ${transcripts} transcripts, ${resources} resources.\n` +
-      'JSON copied — return to the app and paste it into the Circle Import panel.';
+
+    const lines = [`${captured} lesson${captured === 1 ? '' : 's'} captured`];
+    if (withBody) lines.push(`✓ ${withBody} with content`);
+    if (transcripts) lines.push(`✓ ${transcripts} transcript${transcripts === 1 ? '' : 's'}`);
+    if (resources) lines.push(`✓ ${resources} resource${resources === 1 ? '' : 's'}`);
+    if (failed) lines.push(`⚠ ${failed} failed`);
+    if (!withBody && !transcripts && !resources) {
+      lines.push('⚠ no content/transcript/resources detected — open browser console for [Circle Capture] debug logs');
+    }
+    const summary = lines.join('\n') +
+      '\nJSON copied — return to the app and paste it into the Circle Import panel.';
 
     if (ok) {
       showBanner(summary, captured === 0 ? 'warn' : 'info');
