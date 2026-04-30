@@ -296,18 +296,7 @@ export async function runCase(c: ValidationCase): Promise<CaseResult> {
     });
     const latencyMs = Math.round(performance.now() - started);
     if (error) {
-      // Non-2xx (e.g. 422 honest refusal). Read the actual JSON body from error.context.
-      let raw: unknown = data;
-      let httpStatus: number | null = null;
-      const ctx = (error as { context?: Response | { body?: unknown; status?: number } }).context;
-      if (ctx instanceof Response) {
-        httpStatus = ctx.status;
-        try { raw = await ctx.clone().json(); } catch { /* keep raw */ }
-      } else if (ctx && typeof ctx === "object") {
-        if ("status" in ctx && typeof ctx.status === "number") httpStatus = ctx.status;
-        if ("body" in ctx) raw = (ctx as { body?: unknown }).body ?? raw;
-      }
-      if (!raw) raw = { error: error.message };
+      const { body: raw, httpStatus } = await readInvokeBody(data, error, `case:${c.id}`);
       const signals = extractSignals(raw);
       const verdict = evaluate(c.expectation, signals, raw);
       return {
@@ -379,24 +368,14 @@ export async function preflight(): Promise<PreflightResult> {
       },
       headers: { "x-skill-debug": "1" },
     });
-    // The skill branch returns HTTP 422 on unknown_skill (refusal). supabase-js
-    // surfaces that as `error` with the JSON body inside error.context. Read it.
-    let body: unknown = data;
-    if (!body && error) {
-      const ctx = (error as { context?: Response | { body?: unknown } }).context;
-      if (ctx instanceof Response) {
-        try { body = await ctx.clone().json(); } catch { body = null; }
-      } else if (ctx && typeof ctx === "object" && "body" in ctx) {
-        body = (ctx as { body?: unknown }).body;
-      }
-    }
+    const { body } = await readInvokeBody(data, error, "preflight");
     const signals = extractSignals(body);
-    if (signals.schema === "skill_envelope.v1") {
+    if (isSkillBranchBody(body)) {
       return { flagOn: true, reason: "skill envelope returned", raw: body };
     }
     return {
       flagOn: false,
-      reason: "no skill envelope — flag likely OFF",
+      reason: `no skill envelope returned (schema=${signals.schema ?? "none"}, early_return=${String(signals.early_return)})`,
       raw: body ?? data,
     };
   } catch (e) {
