@@ -995,6 +995,8 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
       setCourseOptions([]);
       setLandingPageResolved(false);
       setResolvedFrom(null);
+      setCircleCaptureHint(null);
+      setCircleSourceUrl('');
     }
     onOpenChange(newOpen);
   };
