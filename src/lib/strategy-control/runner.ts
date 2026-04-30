@@ -311,7 +311,7 @@ function evaluate(
         return { status: "fail", reason: `refused: ${signals.refusal_code}` };
       }
       const ev = checkExpansionEvidence(c, signals);
-      if (!ev.ok) return { status: "fail", reason: ev.reason };
+      if (ev.ok === false) return { status: "fail", reason: ev.reason };
       const evNote = c.requireExpansionEvidence
         ? ` (expansion ✓ via [${signals.expanded_seeds.slice(0, 4).join(", ")}${signals.expanded_seeds.length > 4 ? "…" : ""}])`
         : "";
