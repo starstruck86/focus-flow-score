@@ -404,7 +404,7 @@ export async function runCase(c: ValidationCase): Promise<CaseResult> {
         console.debug(`[StrategyControl] case:${c.id}:direct-fetch`, direct);
       }
       const signals = extractSignals(raw);
-      const verdict = evaluate(c.expectation, signals, raw);
+      const verdict = evaluate(c, signals, raw);
       return {
         case: c,
         status: verdict.status,
@@ -417,7 +417,7 @@ export async function runCase(c: ValidationCase): Promise<CaseResult> {
       };
     }
     const signals = extractSignals(data);
-    const verdict = evaluate(c.expectation, signals, data);
+    const verdict = evaluate(c, signals, data);
     return {
       case: c,
       status: verdict.status,
