@@ -97,6 +97,8 @@ interface CaptureStats {
   imported: number;
   rejected: number;
   metadata_only: number;
+  full_content: number;
+  fetch_failed: number;
 }
 
 /**
