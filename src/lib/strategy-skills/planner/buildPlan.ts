@@ -14,6 +14,7 @@ import type {
 import { resolveBindings } from './resolveBindings';
 import { budgetsForDepth, TOTAL_CAPS } from './scopeBudgets';
 import { weightsForMode } from './scopeWeights';
+import { expandSeeds, type ExpansionFlags } from './expandSeeds';
 
 const FORBIDDEN_STATIC_KEYS = [
   'resource_ids', 'resourceIds', 'playbook_ids', 'playbookIds',
