@@ -9,7 +9,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ValidationCase, CaseExpectation } from "./cases";
 
-const STRATEGY_CHAT_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/strategy-chat`;
+const STRATEGY_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/strategy-chat`;
 
 export type CaseStatus = "pass" | "fail" | "expected_refusal" | "coverage_gap";
 
