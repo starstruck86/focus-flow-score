@@ -25,6 +25,17 @@ export interface CaseSignals {
   overrides_clamped: ReadonlyArray<string>;
   schema: string | null;          // "skill_envelope.v1" or null
   early_return: boolean;
+  // Phase 3B retrieval-expansion telemetry
+  term_seeds: ReadonlyArray<string>;
+  expanded_seeds: ReadonlyArray<string>;
+  expansion_trace: ReadonlyArray<{
+    expansion: string;
+    source: string;
+    rule: string;
+    fromInput?: string;
+  }>;
+  expansion_enabled: boolean;
+  lexicon_version: string | null;
 }
 
 export interface CaseResult {
@@ -52,6 +63,11 @@ const EMPTY_SIGNALS: CaseSignals = {
   overrides_clamped: [],
   schema: null,
   early_return: false,
+  term_seeds: [],
+  expanded_seeds: [],
+  expansion_trace: [],
+  expansion_enabled: false,
+  lexicon_version: null,
 };
 
 type InvokeErrorWithContext = {
