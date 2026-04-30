@@ -89,7 +89,7 @@ async function readInvokeBody(
   let httpStatus: number | null = null;
   const ctx = error?.context;
 
-  if (error && (!body || typeof body === "string")) {
+  if (error && !isSkillBranchBody(body)) {
     if (isResponseLike(ctx)) {
       httpStatus = typeof ctx.status === "number" ? ctx.status : null;
       try {
