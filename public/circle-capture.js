@@ -685,6 +685,8 @@
     const ok = await copyToClipboard(json);
 
     if (mode === 'lesson') {
+      const json = JSON.stringify(payload, null, 2);
+      const ok = await copyToClipboard(json);
       const l = payload.lessons[0];
       const hasContent = !!(l.body_text || l.media_url || l.transcript);
       if (ok) {
@@ -701,12 +703,24 @@
       return;
     }
 
-    // Course index page
+    // Course index page → auto-walk every lesson by clicking through the SPA.
+    banner(`Found ${payload.lessons.length} lessons. Starting auto-capture…`, 'info');
+    try {
+      await autoWalkLessons(payload.lessons);
+    } catch (err) {
+      log('auto-walk failed', err);
+    }
+    payload.capture_mode = 'auto_walk';
+
+    const withContent = payload.lessons.filter(l => l.body_text || l.media_url || l.transcript).length;
+    const failed = payload.lessons.filter(l => l.capture_issue === 'render_failed').length;
+
+    const json = JSON.stringify(payload, null, 2);
+    const ok = await copyToClipboard(json);
+
+    const summary = `${withContent} of ${payload.lessons.length} lessons captured with content${failed ? ` (${failed} render-failed)` : ''} — return to the app and paste into Circle Import Mode.`;
     if (ok) {
-      banner(
-        `Lesson list copied (${payload.lessons.length} lesson${payload.lessons.length === 1 ? '' : 's'}), but Circle did not expose lesson content here.\nOpen each lesson and run the bookmarklet there to capture content.`,
-        'warn'
-      );
+      banner(summary, withContent === 0 ? 'warn' : 'info');
     } else {
       showJsonModal(json);
       banner('Clipboard blocked — copy the JSON from the dialog and paste it into Circle Import Mode.', 'warn');
