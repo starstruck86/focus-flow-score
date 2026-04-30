@@ -278,21 +278,32 @@ export interface PreflightResult {
 
 export async function preflight(): Promise<PreflightResult> {
   try {
-    const { data } = await supabase.functions.invoke("strategy-chat", {
+    const { data, error } = await supabase.functions.invoke("strategy-chat", {
       body: {
         threadId: "preflight",
         skill: { id: "unknown-skill-test", version: "1", inputs: {} },
       },
       headers: { "x-skill-debug": "1" },
     });
-    const signals = extractSignals(data);
+    // The skill branch returns HTTP 422 on unknown_skill (refusal). supabase-js
+    // surfaces that as `error` with the JSON body inside error.context. Read it.
+    let body: unknown = data;
+    if (!body && error) {
+      const ctx = (error as { context?: Response | { body?: unknown } }).context;
+      if (ctx instanceof Response) {
+        try { body = await ctx.clone().json(); } catch { body = null; }
+      } else if (ctx && typeof ctx === "object" && "body" in ctx) {
+        body = (ctx as { body?: unknown }).body;
+      }
+    }
+    const signals = extractSignals(body);
     if (signals.schema === "skill_envelope.v1") {
-      return { flagOn: true, reason: "skill envelope returned", raw: data };
+      return { flagOn: true, reason: "skill envelope returned", raw: body };
     }
     return {
       flagOn: false,
       reason: "no skill envelope — flag likely OFF",
-      raw: data,
+      raw: body ?? data,
     };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
