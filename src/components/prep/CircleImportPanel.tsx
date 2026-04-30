@@ -300,15 +300,43 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium">Paste captured JSON (fallback)</label>
+            <label className="text-xs font-medium">
+              Paste captured JSON
+              <span className="text-muted-foreground font-normal"> (primary path — clipboard from bookmarklet)</span>
+            </label>
             <Textarea
               value={pastedJson}
-              onChange={e => setPastedJson(e.target.value)}
+              onChange={e => { setPastedJson(e.target.value); if (validationError) setValidationError(null); }}
               placeholder='Paste the JSON the bookmarklet copied to your clipboard…'
               className="min-h-[120px] font-mono text-[11px]"
               disabled={submitting}
             />
-            <div className="flex justify-end">
+            {validationError && (
+              <div className="flex items-start gap-1.5 text-[11px] text-destructive">
+                <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                <span>{validationError}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[10px] text-muted-foreground flex items-center gap-2 min-h-[16px]">
+                {phaseLabel[phase] && (
+                  <span className="flex items-center gap-1">
+                    {(phase === 'validating' || phase === 'normalizing') && <Loader2 className="h-3 w-3 animate-spin" />}
+                    {phaseLabel[phase]}
+                  </span>
+                )}
+                {stats && phase === 'done' && (
+                  <span className="flex items-center gap-1.5">
+                    <Badge variant="outline" className="text-[9px] h-4">imported {stats.imported}</Badge>
+                    {stats.metadata_only > 0 && (
+                      <Badge variant="outline" className="text-[9px] h-4">metadata-only {stats.metadata_only}</Badge>
+                    )}
+                    {stats.rejected > 0 && (
+                      <Badge variant="outline" className="text-[9px] h-4">rejected {stats.rejected}</Badge>
+                    )}
+                  </span>
+                )}
+              </div>
               <Button onClick={handleSubmitPasted} disabled={submitting || !pastedJson.trim()} size="sm">
                 {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
                 Import pasted JSON
