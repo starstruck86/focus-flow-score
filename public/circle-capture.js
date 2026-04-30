@@ -488,21 +488,48 @@
   // only the lesson list (titles + URLs).
   function detectPageMode() {
     const path = location.pathname || '';
-    const urlMatch = /\/lessons\/[^/]+|\/posts\/[^/]+/i.test(path);
+    const hasLessonUrl = /\/lessons\/[^/]+|\/posts\/[^/]+/i.test(path);
+    const isCourseRoot = /^\/c\/[^/]+\/?$/i.test(path);
 
-    const bodyEl =
-      document.querySelector('[data-testid="post-body"]') ||
-      document.querySelector('article') ||
-      document.querySelector('.trix-content');
-    const bodyText = safeText(bodyEl);
-    const hasMeaningfulBody = bodyText.length > 80;
+    // Specific lesson/post content containers — generic <article>/<main> do NOT count.
+    const hasPostBody = !!document.querySelector('[data-testid="post-body"]');
+    const hasLessonContentContainer = !!document.querySelector(
+      '[data-testid*="lesson-content"], [data-testid*="post-content"], .trix-content'
+    );
 
     const hasVideo = !!document.querySelector(
       'iframe[src*="wistia"], iframe[src*="vimeo"], iframe[src*="youtube"], iframe[src*="youtu.be"], iframe[src*="loom"], video'
     );
 
-    if (urlMatch || hasMeaningfulBody || hasVideo) return 'lesson';
-    return 'index';
+    const lessonLinkCount = document.querySelectorAll(
+      'a[href*="/lessons/"], a[href*="/posts/"]'
+    ).length;
+
+    let mode;
+    if (hasLessonUrl) {
+      mode = 'lesson';
+    } else if (hasPostBody || hasLessonContentContainer) {
+      mode = 'lesson';
+    } else if (hasVideo && !isCourseRoot && lessonLinkCount < 3) {
+      mode = 'lesson';
+    } else {
+      mode = 'index';
+    }
+
+    try {
+      console.log('[Circle Capture] mode detection', {
+        path,
+        hasLessonUrl,
+        lessonLinkCount,
+        hasPostBody,
+        hasLessonContentContainer,
+        hasVideo,
+        isCourseRoot,
+        mode,
+      });
+    } catch (_) {}
+
+    return mode;
   }
 
   function buildSingleLessonPayload() {
