@@ -264,19 +264,74 @@ export function dedupeLessons<T extends {
   return Array.from(byKey.values());
 }
 
+/**
+ * Normalize a resource URL for cross-lesson dedupe (lowercase host, strip
+ * hash + tracking params, strip trailing slash).
+ */
+export function normalizeResourceUrl(raw: string): string {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return '';
+  try {
+    const u = new URL(trimmed);
+    u.hash = '';
+    u.host = u.host.toLowerCase();
+    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+     'gclid', 'fbclid', 'msclkid', 'ref', 'source', 'si', 'feature']
+      .forEach(p => u.searchParams.delete(p));
+    let path = u.pathname.replace(/\/+$/, '');
+    if (path === '') path = '/';
+    u.pathname = path;
+    return u.toString();
+  } catch {
+    return trimmed.split('#')[0].replace(/\/+$/, '').toLowerCase();
+  }
+}
+
 export function normalizeLessons(payload: CapturePayload, debug: string[]): NormalizedLesson[] {
   const deduped = dedupeLessons(payload.lessons, debug);
   const out: NormalizedLesson[] = [];
+
+  // Cross-lesson resource dedupe — first lesson to mention a URL "owns" it.
+  const seenResourceUrls = new Set<string>();
+  let resourceCollisions = 0;
+
   for (const lesson of deduped) {
-    const resources = (lesson as any).resources as Array<{ title?: string; url: string }> | undefined;
+    const rawResources = (lesson as any).resources as
+      | Array<{ title?: string; url: string; type?: CapturedResource['type']; source_section?: string }>
+      | undefined;
+
+    // Per-lesson dedupe + cross-lesson dedupe + parent stamping.
+    const lessonResources: CapturedResource[] = [];
+    const seenInLesson = new Set<string>();
+    if (rawResources) {
+      for (const r of rawResources) {
+        const norm = normalizeResourceUrl(r.url);
+        if (!norm) continue;
+        if (seenInLesson.has(norm)) continue;
+        seenInLesson.add(norm);
+        if (seenResourceUrls.has(norm)) {
+          resourceCollisions++;
+          continue;
+        }
+        seenResourceUrls.add(norm);
+        lessonResources.push({
+          title: r.title,
+          url: norm,
+          type: r.type,
+          source_section: r.source_section,
+          parent_lesson_url: lesson.url,
+          parent_lesson_title: lesson.title,
+        });
+      }
+    }
 
     // Compose body_text used for classification: include resources text so a
     // video-only lesson with rich Resources/Takeaways still classifies as
     // having usable content.
     let composedBody = (lesson.body_text || '').trim();
-    if (resources && resources.length) {
-      const resText = resources
-        .map(r => `${(r.title || r.url).trim()} — ${r.url}`)
+    if (lessonResources.length) {
+      const resText = lessonResources
+        .map(r => `- ${(r.title || r.url).trim()}: ${r.url}`)
         .join('\n');
       composedBody = composedBody
         ? `${composedBody}\n\n[Resources]\n${resText}`
@@ -308,7 +363,7 @@ export function normalizeLessons(payload: CapturePayload, debug: string[]): Norm
       content,
       media_url: lesson.media_url,
       transcript_source: lesson.transcript ? 'dom' : undefined,
-      resources: resources && resources.length ? resources : undefined,
+      resources: lessonResources.length ? lessonResources : undefined,
       capture_issue: (lesson as any).capture_issue,
       quality,
       imported,
@@ -322,7 +377,8 @@ export function normalizeLessons(payload: CapturePayload, debug: string[]): Norm
       `metadata_only=${out.filter(l => l.quality.metadata_only).length}, ` +
       `rejected=${out.filter(l => !l.imported).length}, ` +
       `transcripts=${out.filter(l => l.transcript_source).length}, ` +
-      `resources=${out.reduce((s, l) => s + (l.resources?.length || 0), 0)}`
+      `resources=${out.reduce((s, l) => s + (l.resources?.length || 0), 0)}` +
+      (resourceCollisions ? `, resource_dupes_dropped=${resourceCollisions}` : '')
   );
   return out;
 }
