@@ -863,6 +863,7 @@
       urlBefore: state.url,
       titleBefore: state.title,
       visibleButtonsNearHeader: scan.buttons.map(stripButtonInfo),
+      candidateButtonsAfterFilter: scan.buttons.filter(b => !b.rejectedReason).map(stripButtonInfo),
       candidateNextButton: direction === 'prev' ? null : stripButtonInfo(candidate),
       candidatePreviousButton: direction === 'prev' ? stripButtonInfo(candidate) : null,
       headerRegion: scan.header.headerRect,
