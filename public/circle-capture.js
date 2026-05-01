@@ -757,18 +757,26 @@
 
   function scanVisibleButtonsNearHeader() {
     const header = getLessonHeaderRegion();
+    const indicatorRect = header.indicatorRect;
     const video = Array.from(document.querySelectorAll('iframe, video')).find(isVisible);
     const videoTop = video ? video.getBoundingClientRect().top : null;
-    const allButtons = Array.from(document.querySelectorAll('button,[role="button"],a[href],a'));
+    // Scope search to main content area only — exclude global nav
+    const mainEl = document.querySelector('main') || document.body;
+    const allButtons = Array.from(mainEl.querySelectorAll('button,[role="button"],a[href],a'));
     const buttons = [];
+
+    // Tight vertical band around the lesson indicator
+    const yMin = indicatorRect ? indicatorRect.top - 30 : header.headerRect.top;
+    const yMax = indicatorRect ? indicatorRect.top + 160 : header.headerRect.bottom;
+    // Only buttons to the right of the indicator (for next) or left (for prev)
+    const xMinForScan = indicatorRect ? indicatorRect.right - 50 : header.headerRect.left;
 
     for (const el of allButtons) {
       if (!isVisible(el)) continue;
       const r = el.getBoundingClientRect();
-      const centerX = (r.left + r.right) / 2;
       const centerY = (r.top + r.bottom) / 2;
-      if (r.bottom < header.headerRect.top || r.top > header.headerRect.bottom) continue;
-      if (centerX < header.headerRect.left - 16 || centerX > header.headerRect.right + 16) continue;
+      // Must be within the tight vertical band around the lesson indicator
+      if (r.top < yMin || r.top > yMax) continue;
       if (videoTop != null && r.top > videoTop + 12) continue;
       if (isLikelySidebarButton(el)) continue;
 
@@ -803,6 +811,10 @@
         if (!right.svgDirection) right.svgDirection = 'right-by-geometry';
       }
     }
+
+    // Debug: log filtered candidates
+    const candidatesAfterFilter = buttons.filter(b => !b.rejectedReason).map(stripButtonInfo);
+    log('candidateButtonsAfterFilter', candidatesAfterFilter);
 
     return { header, buttons };
   }
