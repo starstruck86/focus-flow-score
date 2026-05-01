@@ -541,6 +541,8 @@
     const debugInfo = {
       hasBodyText: body_text ? body_text.length : 0,
       hasTranscript: !!transcript,
+      transcript_modal_found: transcriptResult.transcript_modal_found,
+      transcript_chars: transcriptResult.transcript_chars,
       resourceCount: resources.length,
       hasMedia: !!media_url,
       selectorsMatched,
