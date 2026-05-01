@@ -639,75 +639,103 @@
 
   /**
    * Walk every lesson starting from the current one. Returns array of lessons.
+   *
+   * Key resilience rules (React SPA):
+   *   – NEVER store DOM node references across iterations
+   *   – Re-query navigation controls fresh every iteration
+   *   – Prefer next-arrow over sidebar clicking
+   *   – Never break on individual failure — mark and continue
    */
   async function autoWalk(startIndicator) {
     const total = startIndicator.total;
     const lessons = [];
-    let safety = 0;
 
-    // Capture the starting lesson first.
+    // ── Capture the starting lesson ──
     showBanner(`Capturing lesson ${startIndicator.current} of ${total}…`, 'info', true);
-    let current = await extractCurrentLesson();
-    lessons.push(current);
-    log('captured', current);
+    let captured;
+    try { captured = await extractCurrentLesson(); } catch (e) {
+      log('first lesson capture error', e);
+      captured = { url: location.href.split('#')[0], lesson_number: startIndicator.current, title: `Lesson ${startIndicator.current}`, capture_issue: 'render_failed' };
+    }
+    lessons.push(captured);
+    log('captured #' + (captured.lesson_number || 1), captured.title);
 
-    while (current.lesson_number && current.lesson_number < total && safety++ < total + 3) {
-      const targetIndex = current.lesson_number + 1;
-      const next = findNextArrow();
+    // Track position by index. If we started at lesson 5, we still walk forward to `total`.
+    let currentNum = captured.lesson_number || startIndicator.current;
+    let currentTitle = captured.title || '';
+    let currentUrl = captured.url || location.href.split('#')[0];
+
+    for (let targetNum = currentNum + 1; targetNum <= total; targetNum++) {
+      log(`--- navigating to lesson ${targetNum} of ${total} ---`);
+
+      // ── Step 1: Try to navigate ──
       let navigated = false;
-      if (next && !next.disabled && next.getAttribute('aria-disabled') !== 'true') {
-        try { next.scrollIntoView({ block: 'center' }); next.click(); navigated = true; } catch (_) {}
+
+      // Strategy A: fresh-query the next arrow
+      for (let attempt = 0; attempt < 3 && !navigated; attempt++) {
+        const nextBtn = findNextArrow();
+        if (nextBtn && !nextBtn.disabled && nextBtn.getAttribute('aria-disabled') !== 'true') {
+          try { nextBtn.scrollIntoView({ block: 'center' }); await sleep(100); nextBtn.click(); navigated = true; } catch (_) {}
+        }
+        if (!navigated) await sleep(500); // DOM may still be settling
       }
+
+      // Strategy B: sidebar fallback (re-queried fresh)
       if (!navigated) {
-        // Sidebar fallback
-        const row = findSidebarLessonByIndex(targetIndex);
-        if (row) {
-          try { row.scrollIntoView({ block: 'center' }); row.click(); navigated = true; } catch (_) {}
+        for (let attempt = 0; attempt < 2 && !navigated; attempt++) {
+          const row = findSidebarLessonByIndex(targetNum);
+          if (row) {
+            try { row.scrollIntoView({ block: 'center' }); await sleep(100); row.click(); navigated = true; } catch (_) {}
+          }
+          if (!navigated) await sleep(500);
         }
       }
+
       if (!navigated) {
-        log('could not find navigation control to advance from lesson', current.lesson_number);
-        lessons.push({
-          url: location.href.split('#')[0],
-          lesson_number: targetIndex,
-          title: `Lesson ${targetIndex}`,
-          capture_issue: 'render_failed',
-        });
-        break;
-      }
-
-      const ok = await waitForLessonChange({
-        lesson_number: current.lesson_number,
-        title: current.title,
-        url: current.url,
-      }, 8000);
-
-      if (!ok) {
-        lessons.push({
-          url: location.href.split('#')[0],
-          lesson_number: targetIndex,
-          title: `Lesson ${targetIndex}`,
-          capture_issue: 'render_failed',
-        });
-        // Try to keep going — push past stuck lesson.
-        current = { lesson_number: targetIndex, title: '', url: location.href.split('#')[0] };
+        log('SKIP lesson ' + targetNum + ': no navigation control found');
+        lessons.push({ url: location.href.split('#')[0], lesson_number: targetNum, title: `Lesson ${targetNum}`, capture_issue: 'nav_failed' });
+        // Don't break — try next lesson anyway (the button may reappear)
         continue;
       }
 
-      const captured = await extractCurrentLesson();
-      lessons.push(captured);
+      // ── Step 2: Wait for lesson change ──
+      const changed = await waitForLessonChange({ lesson_number: currentNum, title: currentTitle, url: currentUrl }, 8000);
+
+      if (!changed) {
+        log('SKIP lesson ' + targetNum + ': DOM did not update after navigation');
+        lessons.push({ url: location.href.split('#')[0], lesson_number: targetNum, title: `Lesson ${targetNum}`, capture_issue: 'render_failed' });
+        // Update tracking so next waitForLessonChange doesn't compare stale values
+        currentNum = targetNum;
+        currentTitle = '';
+        currentUrl = location.href.split('#')[0];
+        continue;
+      }
+
+      // ── Step 3: Extract lesson (fresh DOM queries) ──
+      let lessonData;
+      try {
+        lessonData = await extractCurrentLesson();
+      } catch (err) {
+        log('capture error on lesson ' + targetNum, err);
+        lessonData = { url: location.href.split('#')[0], lesson_number: targetNum, title: `Lesson ${targetNum}`, capture_issue: 'extract_failed' };
+      }
+      lessons.push(lessonData);
+
+      // Update tracking from actual DOM state
+      currentNum = lessonData.lesson_number || targetNum;
+      currentTitle = lessonData.title || '';
+      currentUrl = lessonData.url || location.href.split('#')[0];
+
       const transcriptCount = lessons.filter(l => l.transcript).length;
       const resourceCount = lessons.reduce((s, l) => s + (l.resources?.length || 0), 0);
+      const failCount = lessons.filter(l => l.capture_issue).length;
       showBanner(
-        `Capturing lesson ${captured.lesson_number || targetIndex} of ${total}: ${captured.title}\n` +
+        `Lesson ${currentNum} of ${total}: ${currentTitle}\n` +
+          `Progress: ${lessons.length} captured · ${failCount ? failCount + ' failed · ' : ''}` +
           `Transcripts: ${transcriptCount} · Resources: ${resourceCount}`,
         'info', true
       );
-      current = {
-        lesson_number: captured.lesson_number || targetIndex,
-        title: captured.title,
-        url: captured.url,
-      };
+      log('captured #' + currentNum, currentTitle, lessonData._debug || '');
     }
 
     return lessons;
