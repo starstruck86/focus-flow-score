@@ -79,7 +79,9 @@ type ManualLesson = {
 
 const projectRef = (import.meta as any).env?.VITE_SUPABASE_PROJECT_ID || '';
 
-function buildBookmarkletHref(loaderUrl: string, captureEndpoint: string, mode: 'single' | 'course' = 'course'): string {
+type CircleBookmarkletMode = 'single' | 'course' | 'debug-nav';
+
+function buildBookmarkletHref(loaderUrl: string, captureEndpoint: string, mode: CircleBookmarkletMode = 'course'): string {
   const loaderWithParams = (() => {
     try {
       const u = new URL(loaderUrl, window.location.origin);
@@ -194,6 +196,11 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
 
   const bookmarkletCourseHref = useMemo(
     () => buildBookmarkletHref(captureHint.bookmarklet_url, captureHint.capture_endpoint, 'course'),
+    [captureHint.bookmarklet_url, captureHint.capture_endpoint],
+  );
+
+  const bookmarkletNavDebugHref = useMemo(
+    () => buildBookmarkletHref(captureHint.bookmarklet_url, captureHint.capture_endpoint, 'debug-nav'),
     [captureHint.bookmarklet_url, captureHint.capture_endpoint],
   );
 
