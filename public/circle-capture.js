@@ -1518,6 +1518,18 @@
       return;
     }
 
+    if (CAPTURE_MODE === 'inspect') {
+      showBanner('Running Circle navigation inspector…', 'info', true);
+      await runInspectMode();
+      return;
+    }
+
+    if (CAPTURE_MODE === 'probe') {
+      showBanner('Running Circle navigation probe…', 'info', true);
+      await runProbeMode();
+      return;
+    }
+
     if (CAPTURE_MODE === 'debug-nav') {
       showBanner('Running Circle navigation diagnostics…', 'info', true);
       await runNavigationDebugCapture();
