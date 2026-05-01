@@ -35,10 +35,10 @@
       if (last) {
         const u = new URL(last.src);
         const m = u.searchParams.get('mode');
-        if (m === 'single' || m === 'course' || m === 'debug-nav') return m;
+        if (['single','course','debug-nav','inspect','probe'].includes(m)) return m;
       }
     } catch (_) {}
-    return 'course'; // default to course for backward compat
+    return 'course';
   })();
 
   log('starting, mode=' + CAPTURE_MODE);
@@ -1026,6 +1026,335 @@
     }
   }
 
+  // ── Navigation Inspector (inspect mode) ─────────────────────────────────
+  // Collects a comprehensive DOM inventory of ALL clickable elements.
+  // Does NOT click anything. Does NOT navigate. Pure read-only inspection.
+
+  function collectAllClickableElements() {
+    const results = [];
+    const allEls = Array.from(document.querySelectorAll('a[href], button, [role="button"], [onclick], [tabindex="0"]'));
+    for (const el of allEls) {
+      if (!isVisible(el)) continue;
+      const r = el.getBoundingClientRect();
+      const parentText = (() => {
+        let p = el.parentElement;
+        for (let i = 0; i < 3 && p; i++) {
+          const t = safeText(p);
+          if (t && t !== safeText(el) && t.length < 200) return t;
+          p = p.parentElement;
+        }
+        return '';
+      })();
+      results.push({
+        tag: el.tagName.toLowerCase(),
+        role: el.getAttribute('role') || '',
+        text: safeText(el).slice(0, 200),
+        ariaLabel: el.getAttribute('aria-label') || '',
+        title: el.getAttribute('title') || '',
+        href: el.getAttribute('href') || '',
+        className: (el.className && typeof el.className === 'string') ? el.className.slice(0, 200) : '',
+        dataTestId: el.getAttribute('data-testid') || '',
+        rect: { top: Math.round(r.top), left: Math.round(r.left), right: Math.round(r.right), bottom: Math.round(r.bottom), width: Math.round(r.width), height: Math.round(r.height) },
+        closestParentText: parentText.slice(0, 200),
+        disabled: isDisabled(el),
+        inSidebar: !!el.closest('aside, [data-testid*="sidebar" i], [class*="sidebar" i]'),
+        inNav: !!el.closest('nav, header, [role="navigation"], [role="banner"]'),
+        inMain: !!el.closest('main'),
+        svgDirection: detectSvgDirection(el),
+        _el: el, // stripped before output
+      });
+    }
+    return results;
+  }
+
+  function collectSidebarLessonRows() {
+    const sidebar = document.querySelector('aside, [data-testid*="sidebar" i], [class*="sidebar" i]');
+    if (!sidebar) return [];
+    // Look for lesson-like rows: links or clickable items with lesson-like text
+    const rows = Array.from(sidebar.querySelectorAll('a[href], button, [role="button"], li, [role="listitem"]'));
+    const seen = new Set();
+    const results = [];
+    for (const el of rows) {
+      const text = safeText(el);
+      if (!text || text.length < 3 || text.length > 300) continue;
+      const key = text.slice(0, 80);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      const href = el.getAttribute('href') || '';
+      const isClickable = el.tagName === 'A' || el.tagName === 'BUTTON' || el.getAttribute('role') === 'button' || el.getAttribute('tabindex') === '0';
+      results.push({
+        text: text.slice(0, 200),
+        href,
+        tag: el.tagName.toLowerCase(),
+        rect: { top: Math.round(r.top), left: Math.round(r.left), width: Math.round(r.width), height: Math.round(r.height) },
+        isClickable,
+        ariaLabel: el.getAttribute('aria-label') || '',
+        className: (el.className && typeof el.className === 'string') ? el.className.slice(0, 150) : '',
+        _el: el,
+      });
+    }
+    return results;
+  }
+
+  function rankNextButtonCandidates(allClickable, indicator) {
+    if (!indicator) return [];
+    const indicatorEl = indicator.el;
+    const indicatorRect = indicatorEl ? indicatorEl.getBoundingClientRect() : null;
+    const scored = [];
+
+    for (const item of allClickable) {
+      if (item.disabled) continue;
+      if (item.inNav) continue; // skip global nav
+      let score = 0;
+      const reasons = [];
+
+      // SVG direction
+      if (/right|next|forward/i.test(item.svgDirection)) { score += 40; reasons.push('svg_direction_right'); }
+      if (/left|prev|back/i.test(item.svgDirection)) { score -= 50; reasons.push('svg_direction_left_penalty'); }
+
+      // Text/aria hints
+      const combined = `${item.text} ${item.ariaLabel} ${item.title}`.toLowerCase();
+      if (/\bnext\b/.test(combined)) { score += 30; reasons.push('text_next'); }
+      if (/\bprev(ious)?\b|\bback\b/.test(combined)) { score -= 40; reasons.push('text_prev_penalty'); }
+      if (/\blesson\b/.test(combined)) { score += 10; reasons.push('text_lesson'); }
+      if (/\b(bookmark|search|profile|settings|notification|menu|sidebar|complete|overview|home)\b/.test(combined)) { score -= 60; reasons.push('excluded_keyword'); }
+
+      // Proximity to indicator
+      if (indicatorRect && item.rect) {
+        const vDist = Math.abs((item.rect.top + item.rect.bottom) / 2 - (indicatorRect.top + indicatorRect.bottom) / 2);
+        if (vDist < 40) { score += 25; reasons.push('near_indicator_v'); }
+        else if (vDist < 120) { score += 10; reasons.push('moderate_v_dist'); }
+        // To the right of indicator = good for next
+        if (item.rect.left > indicatorRect.right - 10) { score += 15; reasons.push('right_of_indicator'); }
+      }
+
+      // Small circular = likely icon button
+      const w = item.rect.width, h = item.rect.height;
+      if (w >= 20 && w <= 82 && h >= 20 && h <= 82 && Math.abs(w - h) <= 28) {
+        score += 10; reasons.push('small_circular');
+      }
+
+      // In sidebar = less likely to be next arrow
+      if (item.inSidebar) { score -= 20; reasons.push('in_sidebar'); }
+
+      // href to course root = bad
+      if (item.href) {
+        try {
+          if (isCourseRootUrl(new URL(item.href, location.href).href)) { score -= 50; reasons.push('href_course_root'); }
+        } catch (_) {}
+      }
+
+      scored.push({
+        text: item.text,
+        ariaLabel: item.ariaLabel,
+        title: item.title,
+        tag: item.tag,
+        href: item.href,
+        className: item.className,
+        dataTestId: item.dataTestId,
+        rect: item.rect,
+        svgDirection: item.svgDirection,
+        score,
+        reasons,
+        _el: item._el,
+      });
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, 10); // top 10
+  }
+
+  async function runInspectMode() {
+    const state = getLessonState();
+    const indicator = findLessonOfIndicator();
+    const allClickable = collectAllClickableElements();
+    const sidebarRows = collectSidebarLessonRows();
+    const ranked = rankNextButtonCandidates(allClickable, indicator);
+
+    // Strip _el from output
+    const strip = (arr) => arr.map(({ _el, ...rest }) => rest);
+
+    const report = {
+      mode: 'inspect',
+      timestamp: new Date().toISOString(),
+      current_url: state.url,
+      lesson_label: indicator ? `Lesson ${indicator.current} of ${indicator.total}` : null,
+      lesson_title: state.title,
+      indicator_rect: indicator?.el ? rectInfo(indicator.el) : null,
+      total_clickable_elements: allClickable.length,
+      clickable_in_main: allClickable.filter(e => e.inMain && !e.inNav).length,
+      clickable_in_sidebar: allClickable.filter(e => e.inSidebar).length,
+      clickable_in_nav: allClickable.filter(e => e.inNav).length,
+      top_5_next_candidates: strip(ranked.slice(0, 5)),
+      all_ranked_candidates: strip(ranked),
+      sidebar_lesson_rows: strip(sidebarRows),
+      all_clickable_in_main: strip(allClickable.filter(e => e.inMain && !e.inNav && !e.inSidebar)),
+      all_clickable_in_sidebar: strip(allClickable.filter(e => e.inSidebar)),
+    };
+
+    log('inspect report', report);
+    const json = JSON.stringify(report, null, 2);
+    const ok = await copyToClipboard(json);
+    if (ok) {
+      showBanner(`Navigation inspector copied (${allClickable.length} elements, top 5 candidates ranked).\nPaste this into Lovable.`, 'info', true);
+    } else {
+      showJsonModal(json);
+      showBanner('Clipboard blocked — copy from the dialog. Paste into Lovable.', 'warn', true);
+    }
+  }
+
+  // ── Navigation Probe (probe mode) ───────────────────────────────────────
+  // Tests candidates one at a time. After each click, checks if lesson moved
+  // forward. If not, restores via history.back(). Stops when one works.
+
+  async function runProbeMode() {
+    const indicator = findLessonOfIndicator();
+    if (!indicator) {
+      showBanner('No "Lesson X of Y" found. Open a lesson page first.', 'warn', true);
+      return;
+    }
+
+    const allClickable = collectAllClickableElements();
+    const ranked = rankNextButtonCandidates(allClickable, indicator);
+    const candidates = ranked.slice(0, 5); // probe top 5 only
+
+    if (candidates.length === 0) {
+      const json = JSON.stringify({ mode: 'probe', error: 'no_candidates', total_clickable: allClickable.length }, null, 2);
+      await copyToClipboard(json);
+      showBanner('No navigation candidates found. Run inspect mode and paste into Lovable.', 'error', true);
+      return;
+    }
+
+    showBanner(`Probing ${candidates.length} candidates…`, 'info', true);
+    const probeResults = [];
+    let winner = null;
+
+    for (let i = 0; i < candidates.length; i++) {
+      const c = candidates[i];
+      const el = c._el;
+      if (!el || !isVisible(el)) {
+        probeResults.push({ index: i, text: c.text, ariaLabel: c.ariaLabel, score: c.score, result: 'not_visible' });
+        continue;
+      }
+
+      const before = getLessonState();
+      showBanner(`Probing candidate ${i + 1}/${candidates.length}: "${c.text || c.ariaLabel || c.tag}"…`, 'info', true);
+
+      try {
+        el.scrollIntoView({ block: 'center', inline: 'center' });
+        await sleep(100);
+        el.click();
+      } catch (err) {
+        probeResults.push({ index: i, text: c.text, ariaLabel: c.ariaLabel, score: c.score, result: 'click_error', error: String(err) });
+        continue;
+      }
+
+      const change = await waitForLessonChange(before, 6000);
+      const after = change.state || getLessonState();
+
+      // Check if we went to course root
+      if (isCourseRootUrl(after.url) && !isCourseRootUrl(before.url)) {
+        try { history.back(); } catch (_) {}
+        await sleep(2000);
+        probeResults.push({
+          index: i, text: c.text, ariaLabel: c.ariaLabel, href: c.href, score: c.score,
+          result: 'navigated_to_course_root',
+          url_before: before.url, url_after: after.url,
+        });
+        continue;
+      }
+
+      // Check if indicator disappeared
+      const afterIndicator = findLessonOfIndicator();
+      if (!afterIndicator && before.lesson_number) {
+        try { history.back(); } catch (_) {}
+        await sleep(2000);
+        probeResults.push({
+          index: i, text: c.text, ariaLabel: c.ariaLabel, href: c.href, score: c.score,
+          result: 'indicator_disappeared',
+          url_before: before.url, url_after: after.url,
+        });
+        continue;
+      }
+
+      const moved = change.changed && afterIndicator &&
+        afterIndicator.current > before.lesson_number;
+
+      if (moved) {
+        probeResults.push({
+          index: i, text: c.text, ariaLabel: c.ariaLabel, href: c.href, className: c.className,
+          dataTestId: c.dataTestId, tag: c.tag, rect: c.rect, svgDirection: c.svgDirection,
+          score: c.score, reasons: c.reasons,
+          result: 'SUCCESS',
+          lesson_before: before.lesson_number, lesson_after: afterIndicator.current,
+          title_before: before.title, title_after: findLessonTitle(afterIndicator.el),
+          url_before: before.url, url_after: location.href.split('#')[0],
+          h1_before: before.title, h1_after: findLessonTitle(afterIndicator.el),
+          content_hash_before: before.content_hash, content_hash_after: getLessonState().content_hash,
+        });
+        winner = probeResults[probeResults.length - 1];
+        // Restore to original lesson
+        try { history.back(); } catch (_) {}
+        await sleep(2000);
+        break;
+      } else {
+        // Didn't move forward — restore
+        if (change.changed) {
+          try { history.back(); } catch (_) {}
+          await sleep(2000);
+        }
+        probeResults.push({
+          index: i, text: c.text, ariaLabel: c.ariaLabel, href: c.href, score: c.score,
+          result: 'no_forward_movement',
+          lesson_before: before.lesson_number, lesson_after: afterIndicator?.current,
+          url_before: before.url, url_after: after.url,
+          change_detected: change.changed,
+        });
+      }
+    }
+
+    const report = {
+      mode: 'probe',
+      timestamp: new Date().toISOString(),
+      starting_lesson: indicator.current,
+      total_lessons: indicator.total,
+      candidates_tested: probeResults.length,
+      winner: winner ? {
+        text: winner.text,
+        ariaLabel: winner.ariaLabel,
+        tag: winner.tag,
+        className: winner.className,
+        dataTestId: winner.dataTestId,
+        href: winner.href,
+        svgDirection: winner.svgDirection,
+        rect: winner.rect,
+        lesson_before: winner.lesson_before,
+        lesson_after: winner.lesson_after,
+      } : null,
+      probeResults,
+    };
+
+    log('probe report', report);
+    const json = JSON.stringify(report, null, 2);
+    const ok = await copyToClipboard(json);
+    if (winner) {
+      showBanner(
+        `✓ Proven: "${winner.text || winner.ariaLabel || winner.tag}" moves Lesson ${winner.lesson_before} → ${winner.lesson_after}.\n` +
+        `Navigation probe copied. Paste into Lovable.`,
+        'info', true
+      );
+    } else {
+      if (ok) {
+        showBanner(`No working next candidate found (${probeResults.length} tested). Probe report copied.\nPaste into Lovable.`, 'error', true);
+      } else {
+        showJsonModal(json);
+        showBanner('No working candidate. Copy from dialog and paste into Lovable.', 'error', true);
+      }
+    }
+  }
+
   /**
    * Wait until the rendered lesson changes — either lesson_number advances,
    * the title text changes, the URL changes, or the main content hash changes.
@@ -1186,6 +1515,18 @@
           'Tip: click any lesson in the right-hand "Lessons" sidebar so the URL contains /lessons/ or /posts/ and "Lesson X of Y" is visible.',
         'warn'
       );
+      return;
+    }
+
+    if (CAPTURE_MODE === 'inspect') {
+      showBanner('Running Circle navigation inspector…', 'info', true);
+      await runInspectMode();
+      return;
+    }
+
+    if (CAPTURE_MODE === 'probe') {
+      showBanner('Running Circle navigation probe…', 'info', true);
+      await runProbeMode();
       return;
     }
 

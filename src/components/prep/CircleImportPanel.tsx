@@ -79,7 +79,7 @@ type ManualLesson = {
 
 const projectRef = (import.meta as any).env?.VITE_SUPABASE_PROJECT_ID || '';
 
-type CircleBookmarkletMode = 'single' | 'course' | 'debug-nav';
+type CircleBookmarkletMode = 'single' | 'course' | 'debug-nav' | 'inspect' | 'probe';
 
 function buildBookmarkletHref(loaderUrl: string, captureEndpoint: string, mode: CircleBookmarkletMode = 'course'): string {
   const loaderWithParams = (() => {
@@ -201,6 +201,16 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
 
   const bookmarkletNavDebugHref = useMemo(
     () => buildBookmarkletHref(captureHint.bookmarklet_url, captureHint.capture_endpoint, 'debug-nav'),
+    [captureHint.bookmarklet_url, captureHint.capture_endpoint],
+  );
+
+  const bookmarkletInspectHref = useMemo(
+    () => buildBookmarkletHref(captureHint.bookmarklet_url, captureHint.capture_endpoint, 'inspect'),
+    [captureHint.bookmarklet_url, captureHint.capture_endpoint],
+  );
+
+  const bookmarkletProbeHref = useMemo(
+    () => buildBookmarkletHref(captureHint.bookmarklet_url, captureHint.capture_endpoint, 'probe'),
     [captureHint.bookmarklet_url, captureHint.capture_endpoint],
   );
 
@@ -404,8 +414,22 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   const removeManual = (i: number) => setManualLessons(prev => prev.filter((_, idx) => idx !== i));
 
   const copyBookmarklet = async (mode: CircleBookmarkletMode) => {
-    const href = mode === 'single' ? bookmarkletSingleHref : mode === 'debug-nav' ? bookmarkletNavDebugHref : bookmarkletCourseHref;
-    const label = mode === 'single' ? 'single lesson' : mode === 'debug-nav' ? 'navigation debug' : 'entire course';
+    const hrefMap: Record<CircleBookmarkletMode, string> = {
+      single: bookmarkletSingleHref,
+      course: bookmarkletCourseHref,
+      'debug-nav': bookmarkletNavDebugHref,
+      inspect: bookmarkletInspectHref,
+      probe: bookmarkletProbeHref,
+    };
+    const labelMap: Record<CircleBookmarkletMode, string> = {
+      single: 'single lesson',
+      course: 'entire course',
+      'debug-nav': 'navigation debug',
+      inspect: 'navigation inspector',
+      probe: 'navigation probe',
+    };
+    const href = hrefMap[mode];
+    const label = labelMap[mode];
     try {
       await navigator.clipboard.writeText(href);
       toast.success(`Bookmarklet copied (${label}). Create a new bookmark and paste this as the URL.`);
@@ -482,7 +506,41 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                 <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy
               </Button>
             </div>
-            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mt-2">Debug Circle navigation</div>
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mt-2">Navigation Inspector <Badge variant="outline" className="text-[9px] h-4 ml-1">step 1</Badge></div>
+            <div className="text-[10px] text-muted-foreground mb-1">Read-only DOM scan. Copies all clickable elements + ranked candidates. Does NOT click anything.</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={bookmarkletInspectHref}
+                draggable
+                onClick={e => e.preventDefault()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
+                title="Drag me to your bookmarks bar"
+              >
+                <Bookmark className="h-3.5 w-3.5" />
+                Inspect navigation
+              </a>
+              <Button variant="outline" size="sm" onClick={() => copyBookmarklet('inspect')}>
+                <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy
+              </Button>
+            </div>
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mt-2">Navigation Probe <Badge variant="outline" className="text-[9px] h-4 ml-1">step 2</Badge></div>
+            <div className="text-[10px] text-muted-foreground mb-1">Tests top 5 candidates one at a time. Proves which click moves Lesson X → X+1. Restores after each test.</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={bookmarkletProbeHref}
+                draggable
+                onClick={e => e.preventDefault()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
+                title="Drag me to your bookmarks bar"
+              >
+                <Bookmark className="h-3.5 w-3.5" />
+                Probe navigation
+              </a>
+              <Button variant="outline" size="sm" onClick={() => copyBookmarklet('probe')}>
+                <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy
+              </Button>
+            </div>
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mt-2">Debug Circle navigation <span className="normal-case font-normal">(legacy)</span></div>
             <div className="flex flex-wrap items-center gap-2">
               <a
                 href={bookmarkletNavDebugHref}
