@@ -187,8 +187,13 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     }
   }, [captureHint.capture_endpoint]);
 
-  const bookmarkletHref = useMemo(
-    () => buildBookmarkletHref(captureHint.bookmarklet_url, captureHint.capture_endpoint),
+  const bookmarkletSingleHref = useMemo(
+    () => buildBookmarkletHref(captureHint.bookmarklet_url, captureHint.capture_endpoint, 'single'),
+    [captureHint.bookmarklet_url, captureHint.capture_endpoint],
+  );
+
+  const bookmarkletCourseHref = useMemo(
+    () => buildBookmarkletHref(captureHint.bookmarklet_url, captureHint.capture_endpoint, 'course'),
     [captureHint.bookmarklet_url, captureHint.capture_endpoint],
   );
 
