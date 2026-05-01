@@ -1055,6 +1055,12 @@
       return;
     }
 
+    if (CAPTURE_MODE === 'debug-nav') {
+      showBanner('Running Circle navigation diagnostics…', 'info', true);
+      await runNavigationDebugCapture();
+      return;
+    }
+
     // ── Single-lesson mode: capture only the current page ──────────────
     if (CAPTURE_MODE === 'single') {
       showBanner('Capturing current lesson…', 'info', true);
@@ -1105,12 +1111,22 @@
     const courseTitle = deriveCourseTitle();
     showBanner(`Starting auto-capture from lesson ${indicator.current} of ${indicator.total}…`, 'info', true);
 
-    let lessons;
+    let walkResult;
     try {
-      lessons = await autoWalk(indicator);
+      walkResult = await autoWalk(indicator);
     } catch (err) {
       log('auto-walk failed', err);
       showBanner('Capture failed: ' + (err?.message || err), 'error');
+      return;
+    }
+    const lessons = walkResult.lessons || [];
+
+    if (walkResult.fatalNavigationFailure) {
+      const report = walkResult.debugReport || buildNavigationDiagnostics('next');
+      const json = JSON.stringify(report, null, 2);
+      const ok = await copyToClipboard(json);
+      if (!ok) showJsonModal(json);
+      showBanner('Navigation failed. Use current lesson capture or manual lesson-by-lesson capture.', 'error', true);
       return;
     }
 
