@@ -435,32 +435,48 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
         {/* ── Tab A: Browser-assisted capture ───────────────────────── */}
         <TabsContent value="capture" className="space-y-3 pt-3">
           <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
-            <li>Drag the bookmarklet to your bookmarks bar (or copy it).</li>
             <li>Open Circle in a tab where you’re already signed in.</li>
-            <li>
-              <span className="font-medium text-foreground">Open any lesson page</span> (you should
-              see <em>“Lesson X of Y”</em> above the lesson title) and click the bookmarklet{' '}
-              <span className="font-medium text-foreground">once</span>. It will walk through the
-              entire course automatically — capturing video, captions, takeaways, transcripts,
-              and resources for every lesson.
-            </li>
+            <li>Navigate to <span className="font-medium text-foreground">any lesson page</span> (you should see <em>“Lesson X of Y”</em>).</li>
+            <li>Click one of the bookmarklets below. <span className="font-medium text-foreground">Capture entire course</span> is recommended.</li>
             <li>When the banner reads <em>“N lessons captured”</em>, return here and paste the JSON below.</li>
           </ol>
 
+          <div className="space-y-2">
+            <div className="text-[10px] font-medium text-foreground uppercase tracking-wide">Capture entire course <Badge variant="outline" className="text-[9px] h-4 ml-1">recommended</Badge></div>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={bookmarkletCourseHref}
+                draggable
+                onClick={e => e.preventDefault()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+                title="Drag me to your bookmarks bar"
+              >
+                <Bookmark className="h-3.5 w-3.5" />
+                Capture entire course
+              </a>
+              <Button variant="outline" size="sm" onClick={() => copyBookmarklet('course')}>
+                <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy
+              </Button>
+            </div>
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mt-2">Capture current lesson only</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={bookmarkletSingleHref}
+                draggable
+                onClick={e => e.preventDefault()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
+                title="Drag me to your bookmarks bar"
+              >
+                <Bookmark className="h-3.5 w-3.5" />
+                Capture current lesson
+              </a>
+              <Button variant="outline" size="sm" onClick={() => copyBookmarklet('single')}>
+                <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy
+              </Button>
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center gap-2">
-            <a
-              href={bookmarkletHref}
-              draggable
-              onClick={e => e.preventDefault()}
-              className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
-              title="Drag me to your bookmarks bar"
-            >
-              <Bookmark className="h-3.5 w-3.5" />
-              Import Circle Course
-            </a>
-            <Button variant="outline" size="sm" onClick={copyBookmarklet}>
-              <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy bookmarklet
-            </Button>
             <Button variant="outline" size="sm" asChild>
               <a href={sourceUrl} target="_blank" rel="noreferrer">
                 <ExternalLink className="h-3.5 w-3.5 mr-1.5" /> Open Circle course
