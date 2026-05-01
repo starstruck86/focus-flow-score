@@ -249,6 +249,9 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   const handleSubmitPasted = async () => {
     setValidationError(null);
     setWarning(null);
+    setPreImportSummary(null);
+    setPendingPayload(null);
+    setEmptyCaptureBlocked(false);
     setPhase('validating');
     let parsed: any;
     try {
@@ -274,6 +277,35 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
       source_url: payload.source_url,
     }));
     const withContent = lessons.filter(hasContent);
+
+    // Compute pre-import summary (always shown for transparency).
+    const withBody = lessons.filter(l => (l.body_text?.trim().length ?? 0) > 0).length;
+    const withTranscript = lessons.filter(l => (l.transcript?.trim().length ?? 0) > 0).length;
+    const totalResources = (payload.lessons as any[]).reduce(
+      (n, l) => n + (Array.isArray(l.resources) ? l.resources.length : 0),
+      0,
+    );
+    const first = lessons[0];
+    const summary = {
+      lessonsCount: lessons.length,
+      withBody,
+      withTranscript,
+      totalResources,
+      firstTitle: first?.title ?? '',
+      firstBodyLen: first?.body_text?.trim().length ?? 0,
+      firstTranscriptLen: first?.transcript?.trim().length ?? 0,
+    };
+    setPreImportSummary(summary);
+
+    // Hard-stop: nothing usable. Do NOT auto-import. Surface debug guidance.
+    if (withBody === 0 && withTranscript === 0 && totalResources === 0) {
+      setPhase('idle');
+      setEmptyCaptureBlocked(true);
+      setValidationError(
+        'Capture did not include lesson content. Open browser console and send [Circle Capture] debug logs.',
+      );
+      return;
+    }
 
     // Single-lesson capture path → accumulate.
     if (lessons.length === 1 && hasContent(lessons[0])) {
@@ -301,9 +333,19 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
       return;
     }
 
-    // Mixed / rich multi-lesson capture → send straight through.
+    // Mixed / rich multi-lesson capture → require explicit confirmation
+    // after showing the pre-import summary.
+    setPendingPayload(payload);
+    setPhase('idle');
+  };
+
+  const confirmPendingImport = async () => {
+    if (!pendingPayload) return;
+    const payload = pendingPayload;
+    setPendingPayload(null);
     await postCapture(payload);
   };
+
 
   const removeCaptured = (url: string) =>
     setCapturedLessons(prev => prev.filter(l => l.url !== url));
