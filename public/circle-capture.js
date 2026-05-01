@@ -954,6 +954,24 @@
         return { lessons: [], fatalNavigationFailure: true, debugReport: { ...startDiagnostics, clickResult: { success: false, attempts: proof.attempts }, urlAfter: proof.after?.url, titleAfter: proof.after?.title } };
       }
       if (proof.method === 'keyboard') navigationMethod = 'keyboard';
+
+      const returnFromProof = await navigateAdjacentLesson('prev', navigationMethod);
+      log('navigation proof: return to starting lesson', returnFromProof);
+      if (!returnFromProof.success) {
+        return { lessons: [], fatalNavigationFailure: true, debugReport: { ...startDiagnostics, clickResult: { success: false, reason: 'next_worked_but_previous_return_failed', attempts: returnFromProof.attempts }, urlAfter: returnFromProof.after?.url, titleAfter: returnFromProof.after?.title } };
+      }
+      if (returnFromProof.method === 'keyboard') navigationMethod = 'keyboard';
+
+      showBanner('Navigation works. Rewinding to lesson 1…', 'info', true);
+      let guard = 0;
+      while ((getLessonState().lesson_number || 1) > 1 && guard++ < total + 2) {
+        const prev = await navigateAdjacentLesson('prev', navigationMethod);
+        log('rewind step', prev);
+        if (!prev.success) {
+          return { lessons: [], fatalNavigationFailure: true, debugReport: { ...startDiagnostics, clickResult: { success: false, reason: 'could_not_rewind_to_first_lesson', attempts: prev.attempts }, urlAfter: prev.after?.url, titleAfter: prev.after?.title } };
+        }
+        if (prev.method === 'keyboard') navigationMethod = 'keyboard';
+      }
     }
 
     let consecutiveNavigationFailures = 0;
