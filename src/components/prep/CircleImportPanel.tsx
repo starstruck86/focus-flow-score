@@ -79,20 +79,18 @@ type ManualLesson = {
 
 const projectRef = (import.meta as any).env?.VITE_SUPABASE_PROJECT_ID || '';
 
-function buildBookmarkletHref(loaderUrl: string, captureEndpoint: string): string {
-  // Build absolute capture endpoint param so the loader script can post even
-  // when running on a different origin (Circle).
+function buildBookmarkletHref(loaderUrl: string, captureEndpoint: string, mode: 'single' | 'course' = 'course'): string {
   const loaderWithParams = (() => {
     try {
       const u = new URL(loaderUrl, window.location.origin);
       u.searchParams.set('endpoint', new URL(captureEndpoint, window.location.origin).toString());
+      u.searchParams.set('mode', mode);
       if (projectRef) u.searchParams.set('project', projectRef);
       return u.toString();
     } catch {
       return loaderUrl;
     }
   })();
-  // javascript: bookmarklet that injects the loader script into the current page.
   const code =
     `(function(){var s=document.createElement('script');` +
     `s.src=${JSON.stringify(loaderWithParams)};` +
