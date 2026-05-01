@@ -930,6 +930,8 @@
     const total = startIndicator.total;
     const lessons = [];
     let navigationMethod = 'geometry';
+    let fatalNavigationFailure = false;
+    let fatalDebugReport = null;
 
     const startDiagnostics = buildNavigationDiagnostics('next');
     log('navigation diagnostics', startDiagnostics);
@@ -952,17 +954,6 @@
         return { lessons: [], fatalNavigationFailure: true, debugReport: { ...startDiagnostics, clickResult: { success: false, attempts: proof.attempts }, urlAfter: proof.after?.url, titleAfter: proof.after?.title } };
       }
       if (proof.method === 'keyboard') navigationMethod = 'keyboard';
-
-      showBanner('Navigation works. Rewinding to lesson 1…', 'info', true);
-      let guard = 0;
-      while ((getLessonState().lesson_number || 1) > 1 && guard++ < total + 2) {
-        const prev = await navigateAdjacentLesson('prev', navigationMethod);
-        log('rewind step', prev);
-        if (!prev.success) {
-          return { lessons: [], fatalNavigationFailure: true, debugReport: { ...startDiagnostics, clickResult: { success: false, reason: 'could_not_rewind_to_first_lesson', attempts: prev.attempts }, urlAfter: prev.after?.url, titleAfter: prev.after?.title } };
-        }
-        if (prev.method === 'keyboard') navigationMethod = 'keyboard';
-      }
     }
 
     let consecutiveNavigationFailures = 0;
@@ -1004,6 +995,7 @@
       if (!nav.success) {
         consecutiveNavigationFailures += 1;
         const failedFrom = (latest.lesson_number || lessonNum) + 1;
+        fatalDebugReport = { ...startDiagnostics, clickResult: { success: false, reason: 'navigation_failed_during_course_capture', attempts: nav.attempts }, urlAfter: nav.after?.url, titleAfter: nav.after?.title };
         lessons.push({
           lesson_number: failedFrom,
           title: `Lesson ${failedFrom}`,
@@ -1011,6 +1003,7 @@
           _debug: { navigation: { attempts: nav.attempts, diagnostics: nav.diagnostics } },
         });
         if (consecutiveNavigationFailures >= 2) {
+          fatalNavigationFailure = true;
           for (let n = failedFrom + 1; n <= total; n++) {
             lessons.push({ lesson_number: n, title: `Lesson ${n}`, capture_issue: 'navigation_failed', _debug: { navigation: { reason: 'stopped_after_two_consecutive_navigation_failures' } } });
           }
@@ -1027,7 +1020,7 @@
       }
     }
 
-    return { lessons, fatalNavigationFailure: false, debugReport: startDiagnostics };
+    return { lessons, fatalNavigationFailure, debugReport: fatalDebugReport || startDiagnostics };
   }
 
   // ── Main ─────────────────────────────────────────────────────────────────
