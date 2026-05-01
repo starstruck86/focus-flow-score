@@ -201,50 +201,83 @@
    * no transcript was found).
    */
   async function captureTranscript() {
-    // Look for "Show transcript" trigger — match short labels first to avoid
-    // accidentally clicking transcript text already on the page.
-    const all = Array.from(document.querySelectorAll('button, a, [role="button"], summary, [aria-expanded]'));
+    // Look for "Show transcript" trigger.
+    const all = Array.from(document.querySelectorAll('button, a, [role="button"], summary, [aria-expanded], span, div'));
     const triggers = all.filter(el => {
       const t = safeText(el);
       if (!t || t.length > 60) return false;
       return /\b(show|view|open|toggle|expand)\s+transcript\b/i.test(t) || /^transcript$/i.test(t);
     });
 
-    // Snapshot existing transcript text so we can detect *new* content.
-    const snapshot = (() => {
-      const m = new Map();
-      document.querySelectorAll('[id*="transcript" i], [class*="transcript" i], [data-testid*="transcript" i]')
-        .forEach(el => m.set(el, safeText(el).length));
-      return m;
-    })();
+    let transcriptText = '';
+    let transcriptModalFound = false;
+    let transcriptChars = 0;
+
+    if (triggers.length === 0) {
+      log('transcript capture: no trigger found');
+      return { text: '', transcript_modal_found: false, transcript_chars: 0 };
+    }
+
+    // Count existing dialogs before click so we can detect new ones.
+    const dialogsBefore = document.querySelectorAll('[role="dialog"]').length;
 
     for (const trigger of triggers) {
       try { trigger.scrollIntoView({ block: 'center' }); } catch (_) {}
       try { trigger.click(); } catch (_) { continue; }
-      await sleep(300);
-    }
+      await sleep(400);
 
-    // Poll for a transcript container that grew or newly appeared.
-    const start = Date.now();
-    let transcriptText = '';
-    while (Date.now() - start < 6000) {
-      await sleep(250);
+      // Strategy 1: Wait for a [role="dialog"] modal to appear.
+      const start = Date.now();
+      let modal = null;
+      while (Date.now() - start < 5000) {
+        const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
+        // Pick a dialog that appeared after the click.
+        modal = dialogs.length > dialogsBefore ? dialogs[dialogs.length - 1] : null;
+        // Also check if any dialog now has substantial text (>120 chars).
+        if (!modal) {
+          modal = dialogs.find(d => safeText(d).length > 120);
+        }
+        if (modal && safeText(modal).length > 120) break;
+        modal = null;
+        await sleep(200);
+      }
+
+      if (modal) {
+        transcriptModalFound = true;
+        transcriptText = safeText(modal);
+        transcriptChars = transcriptText.length;
+        log('transcript capture: modal found', { chars: transcriptChars });
+
+        // Close the modal.
+        const closeBtn = modal.querySelector('button[aria-label="Close"], button[aria-label="close"], [class*="close"]');
+        if (closeBtn) {
+          try { closeBtn.click(); } catch (_) {}
+        } else {
+          // Try pressing Escape.
+          try { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch (_) {}
+        }
+        await sleep(300);
+        break;
+      }
+
+      // Strategy 2: Fallback — check for transcript containers that appeared inline.
       const containers = Array.from(document.querySelectorAll(
         '[id*="transcript" i], [class*="transcript" i], [data-testid*="transcript" i], [class*="caption" i]'
       ));
       for (const c of containers) {
         const t = safeText(c);
-        const prev = snapshot.get(c) || 0;
-        // accept if it's substantively bigger than before, or a brand-new container
-        if (t.length > 120 && t.length > prev + 80) {
+        if (t.length > 120) {
           transcriptText = t;
+          transcriptChars = t.length;
+          log('transcript capture: inline container found', { chars: transcriptChars });
           break;
         }
       }
       if (transcriptText) break;
     }
-    log('transcript capture', { triggersFound: triggers.length, length: transcriptText.length });
-    return transcriptText;
+
+    log('transcript capture result', { triggersFound: triggers.length, modal: transcriptModalFound, chars: transcriptChars });
+    return { text: transcriptText, transcript_modal_found: transcriptModalFound, transcript_chars: transcriptChars };
   }
 
   /**
@@ -492,7 +525,8 @@
     if (takeaways) bodyAll = bodyAll.replace(takeaways, '').replace(/\s+/g, ' ').trim();
     if (resourcesText) bodyAll = bodyAll.replace(resourcesText, '').replace(/\s+/g, ' ').trim();
 
-    const transcript = await captureTranscript();
+    const transcriptResult = await captureTranscript();
+    const transcript = transcriptResult.text || '';
     if (transcript) {
       selectorsMatched.push('transcript');
       bodyAll = bodyAll.replace(transcript, '').replace(/\s+/g, ' ').trim();
@@ -507,6 +541,8 @@
     const debugInfo = {
       hasBodyText: body_text ? body_text.length : 0,
       hasTranscript: !!transcript,
+      transcript_modal_found: transcriptResult.transcript_modal_found,
+      transcript_chars: transcriptResult.transcript_chars,
       resourceCount: resources.length,
       hasMedia: !!media_url,
       selectorsMatched,
