@@ -681,19 +681,18 @@
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       await sleep(250);
-      const ind = findLessonOfIndicator();
-      const titleNow = findLessonTitle(ind?.el);
-      const urlNow = location.href.split('#')[0];
-      const numChanged = ind && prev.lesson_number != null && ind.current !== prev.lesson_number;
-      const titleChanged = titleNow && prev.title && titleNow !== prev.title;
-      const urlChanged = urlNow !== prev.url;
-      if (numChanged || titleChanged || urlChanged) {
+      const now = getLessonState();
+      const lessonNumberChanged = now.lesson_number != null && prev.lesson_number != null && now.lesson_number !== prev.lesson_number;
+      const titleChanged = !!(now.title && prev.title && now.title !== prev.title);
+      const urlChanged = now.url !== prev.url;
+      const contentHashChanged = !!(now.content_hash && prev.content_hash && now.content_hash !== prev.content_hash);
+      if (lessonNumberChanged || titleChanged || urlChanged || contentHashChanged) {
         // Give content a beat to mount fully.
         await sleep(400);
-        return true;
+        return { changed: true, lessonNumberChanged, titleChanged, urlChanged, contentHashChanged, state: getLessonState() };
       }
     }
-    return false;
+    return { changed: false, lessonNumberChanged: false, titleChanged: false, urlChanged: false, contentHashChanged: false, state: getLessonState() };
   }
 
   /**
