@@ -713,7 +713,15 @@
       if (lessonNumberChanged || titleChanged || urlChanged || contentHashChanged) {
         // Give content a beat to mount fully.
         await sleep(400);
-        return { changed: true, lessonNumberChanged, titleChanged, urlChanged, contentHashChanged, state: getLessonState() };
+        const settled = getLessonState();
+        return {
+          changed: true,
+          lessonNumberChanged: settled.lesson_number != null && prev.lesson_number != null && settled.lesson_number !== prev.lesson_number,
+          titleChanged: !!(settled.title && prev.title && settled.title !== prev.title),
+          urlChanged: settled.url !== prev.url,
+          contentHashChanged: !!(settled.content_hash && prev.content_hash && settled.content_hash !== prev.content_hash),
+          state: settled,
+        };
       }
     }
     return { changed: false, lessonNumberChanged: false, titleChanged: false, urlChanged: false, contentHashChanged: false, state: getLessonState() };
