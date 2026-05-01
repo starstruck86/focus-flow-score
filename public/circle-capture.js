@@ -1025,13 +1025,6 @@
           lessons.push({ lesson_number: n, title: `Lesson ${n}`, capture_issue: 'navigation_failed', _debug: { navigation: { reason: 'stopped_after_navigation_failure' } } });
         }
         break;
-        if (consecutiveNavigationFailures >= 2) {
-          fatalNavigationFailure = true;
-          for (let n = failedFrom + 1; n <= total; n++) {
-            lessons.push({ lesson_number: n, title: `Lesson ${n}`, capture_issue: 'navigation_failed', _debug: { navigation: { reason: 'stopped_after_two_consecutive_navigation_failures' } } });
-          }
-          break;
-        }
       } else {
         consecutiveNavigationFailures = 0;
         const afterNum = nav.after?.lesson_number;
