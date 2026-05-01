@@ -637,6 +637,10 @@
     if (/\b(complete|mark\s+as|completed|finish)\b/.test(combined)) return 'completion_button';
     // Exclude section header links
     if (/\b(section|module|chapter)\b/.test(combined) && !/lesson/i.test(combined)) return 'section_header';
+    // Exclude top-nav header icons (bookmarks, table of contents, courses, etc.)
+    if (/\b(bookmark|table\s+of\s+content|courses|notification|search|profile|settings|account)\b/.test(combined)) return 'header_icon';
+    // Exclude links to /courses
+    if (href === '/courses' || href.startsWith('/courses?')) return 'courses_link';
 
     // Exclude links whose href resolves to course root
     if (href && el.tagName === 'A') {
@@ -645,6 +649,9 @@
         if (isCourseRootUrl(resolved)) return 'href_is_course_root';
       } catch (_) {}
     }
+
+    // Exclude elements inside global nav/header (not lesson content)
+    if (el.closest('nav, header, [role="navigation"], [role="banner"]')) return 'global_nav';
 
     return null; // Not bad
   }
