@@ -519,11 +519,51 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                   </span>
                 )}
               </div>
-              <Button onClick={handleSubmitPasted} disabled={submitting || !pastedJson.trim()} size="sm">
+              <Button
+                onClick={pendingPayload ? confirmPendingImport : handleSubmitPasted}
+                disabled={submitting || (!pendingPayload && !pastedJson.trim())}
+                size="sm"
+              >
                 {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
-                Import course
+                {pendingPayload ? 'Confirm import' : 'Review capture'}
               </Button>
             </div>
+            {preImportSummary && (
+              <div className="space-y-1.5 rounded-md border border-border bg-muted/30 p-2.5 text-[11px]">
+                <div className="text-xs font-medium text-foreground">Capture summary</div>
+                <div className="flex flex-wrap gap-1.5">
+                  <Badge variant="outline" className="text-[9px] h-4">lessons {preImportSummary.lessonsCount}</Badge>
+                  <Badge variant="outline" className="text-[9px] h-4">with body {preImportSummary.withBody}</Badge>
+                  <Badge variant="outline" className="text-[9px] h-4">with transcript {preImportSummary.withTranscript}</Badge>
+                  <Badge variant="outline" className="text-[9px] h-4">resources {preImportSummary.totalResources}</Badge>
+                </div>
+                {preImportSummary.firstTitle && (
+                  <div className="text-muted-foreground space-y-0.5">
+                    <div>
+                      <span className="font-medium text-foreground">First lesson:</span>{' '}
+                      <span className="break-words">{preImportSummary.firstTitle}</span>
+                    </div>
+                    <div>
+                      body_text {preImportSummary.firstBodyLen} chars · transcript {preImportSummary.firstTranscriptLen} chars
+                    </div>
+                  </div>
+                )}
+                {emptyCaptureBlocked && (
+                  <div className="flex items-start gap-1.5 text-destructive">
+                    <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                    <span>
+                      Capture did not include lesson content. Open browser console and send{' '}
+                      <code className="font-mono">[Circle Capture]</code> debug logs.
+                    </span>
+                  </div>
+                )}
+                {pendingPayload && !emptyCaptureBlocked && (
+                  <div className="text-muted-foreground">
+                    Review the counts above, then click <span className="font-medium text-foreground">Confirm import</span>.
+                  </div>
+                )}
+              </div>
+            )}
             {stats && phase === 'done' && stats.resources > 0 && (
               <div className="text-[10px] text-muted-foreground">
                 {stats.resources} linked resource{stats.resources === 1 ? '' : 's'} captured. They’ll be added to your library and processed for KIs alongside the lessons.
