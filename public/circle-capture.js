@@ -605,19 +605,44 @@
    * of two adjacent round nav buttons.
    */
   function findNextArrow() {
-    const candidates = Array.from(document.querySelectorAll('button, a[role="button"], a'));
-    // 1. By aria-label / title containing "next"
-    let hit = candidates.find(el => /\bnext\b/i.test(el.getAttribute('aria-label') || ''));
+    const isVisible = (el) => {
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    };
+    const isDisabled = (el) => el.disabled || el.getAttribute('aria-disabled') === 'true' || el.closest('[aria-disabled="true"]');
+    const candidates = Array.from(document.querySelectorAll('button, [role="button"], a[href], a')).filter(el => isVisible(el) && !isDisabled(el));
+
+    // Required selector order: explicit Next labels first.
+    let hit = document.querySelector('button[aria-label*="Next" i]') || document.querySelector('[aria-label*="Next" i]');
+    if (hit && isVisible(hit) && !isDisabled(hit)) return hit;
+
+    // Button containing right-arrow-ish SVG/path/icon, excluding obvious previous arrows.
+    hit = candidates.find(el => {
+      const label = `${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''} ${safeText(el)}`;
+      if (/\b(prev|previous|back)\b/i.test(label)) return false;
+      const svgText = Array.from(el.querySelectorAll('svg, path, use')).map(n => n.outerHTML || '').join(' ');
+      return /→|›|chevron.?right|arrow.?right|M\s*9\s|right/i.test(label + ' ' + svgText);
+    });
     if (hit) return hit;
-    hit = candidates.find(el => /\bnext\b/i.test(el.getAttribute('title') || ''));
-    if (hit) return hit;
-    // 2. Pair of nav arrows: find a "previous" then take its pair.
-    const prev = candidates.find(el => /\bprev/i.test(el.getAttribute('aria-label') || el.getAttribute('title') || ''));
-    if (prev && prev.parentElement) {
-      const sibs = Array.from(prev.parentElement.querySelectorAll('button, a[role="button"], a'));
-      const idx = sibs.indexOf(prev);
-      if (idx >= 0 && sibs[idx + 1]) return sibs[idx + 1];
+
+    const state = getLessonState();
+    const headerRect = state.indicator_el?.getBoundingClientRect();
+    if (headerRect) {
+      const nearHeader = candidates
+        .map(el => ({ el, rect: el.getBoundingClientRect(), text: safeText(el) || el.getAttribute('aria-label') || el.getAttribute('title') || '' }))
+        .filter(({ rect }) => Math.abs((rect.top + rect.bottom) / 2 - (headerRect.top + headerRect.bottom) / 2) < 140)
+        .sort((a, b) => a.rect.left - b.rect.left);
+      // Visible button near the Lesson X of Y heading and to the right side.
+      hit = nearHeader.find(({ rect, text }) => rect.left > headerRect.right && !/\b(prev|previous|back)\b/i.test(text))?.el;
+      if (hit) return hit;
+      // Fallback: button whose bounding box is near the header and right of a back arrow.
+      const backIdx = nearHeader.findIndex(({ text }) => /\b(prev|previous|back)\b/i.test(text));
+      if (backIdx >= 0 && nearHeader[backIdx + 1]) return nearHeader[backIdx + 1].el;
+      if (nearHeader.length >= 2) return nearHeader[nearHeader.length - 1].el;
     }
+
     return null;
   }
 
