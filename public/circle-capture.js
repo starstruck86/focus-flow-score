@@ -35,7 +35,7 @@
       if (last) {
         const u = new URL(last.src);
         const m = u.searchParams.get('mode');
-        if (m === 'single' || m === 'course') return m;
+        if (m === 'single' || m === 'course' || m === 'debug-nav') return m;
       }
     } catch (_) {}
     return 'course'; // default to course for backward compat
