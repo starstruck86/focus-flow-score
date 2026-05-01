@@ -682,10 +682,57 @@
   (async function main() {
     const { mode, indicator } = detectPageMode();
 
-    if (mode !== 'lesson' || !indicator) {
+    if (mode !== 'lesson') {
       showBanner(
         'Open any lesson in this Circle course, then run the bookmarklet again.\n' +
           'Tip: click any lesson in the right-hand "Lessons" sidebar so the URL contains /lessons/ or /posts/ and "Lesson X of Y" is visible.',
+        'warn'
+      );
+      return;
+    }
+
+    // ── Single-lesson mode: capture only the current page ──────────────
+    if (CAPTURE_MODE === 'single') {
+      showBanner('Capturing current lesson…', 'info', true);
+      const courseTitle = deriveCourseTitle();
+      let lesson;
+      try {
+        lesson = await extractCurrentLesson();
+      } catch (err) {
+        log('single capture failed', err);
+        showBanner('Capture failed: ' + (err?.message || err), 'error');
+        return;
+      }
+      const payload = {
+        source_url: location.href,
+        platform: 'circle',
+        capture_mode: 'single_lesson',
+        title: courseTitle,
+        lessons: [lesson],
+      };
+      const json = JSON.stringify(payload, null, 2);
+      const ok = await copyToClipboard(json);
+      const hasContent = !!(lesson.body_text || lesson.transcript || lesson.resources?.length);
+      const lines = ['1 lesson captured: ' + lesson.title];
+      if (lesson.body_text) lines.push('✓ body text (' + lesson.body_text.length + ' chars)');
+      if (lesson.transcript) lines.push('✓ transcript (' + lesson.transcript.length + ' chars)');
+      if (lesson.resources?.length) lines.push('✓ ' + lesson.resources.length + ' resource(s)');
+      if (!hasContent) lines.push('⚠ no content detected');
+      lines.push('\nJSON copied — paste into Circle Import panel.');
+      if (ok) {
+        showBanner(lines.join('\n'), hasContent ? 'info' : 'warn');
+      } else {
+        showJsonModal(json);
+        showBanner('Clipboard blocked — copy from the dialog.', 'warn');
+      }
+      return;
+    }
+
+    // ── Course mode: auto-walk all lessons ─────────────────────────────
+    if (!indicator) {
+      showBanner(
+        'Could not find "Lesson X of Y" indicator. Make sure you are on a lesson page.\n' +
+          'Tip: the lesson page should show "Lesson X of Y" above the lesson title.',
         'warn'
       );
       return;
