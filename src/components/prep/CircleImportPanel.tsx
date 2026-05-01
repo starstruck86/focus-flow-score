@@ -164,6 +164,18 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   const [capturedLessons, setCapturedLessons] = useState<CapturedLesson[]>([]);
   // Curriculum map (titles/URLs only) shown as reference, not failure.
   const [curriculumMap, setCurriculumMap] = useState<{ title: string; lessons: CapturedLesson[] } | null>(null);
+  // Pre-import summary computed from pasted JSON, awaiting user confirmation.
+  const [pendingPayload, setPendingPayload] = useState<any | null>(null);
+  const [preImportSummary, setPreImportSummary] = useState<{
+    lessonsCount: number;
+    withBody: number;
+    withTranscript: number;
+    totalResources: number;
+    firstTitle: string;
+    firstBodyLen: number;
+    firstTranscriptLen: number;
+  } | null>(null);
+  const [emptyCaptureBlocked, setEmptyCaptureBlocked] = useState(false);
   const [manualTitle, setManualTitle] = useState('');
   const [manualLessons, setManualLessons] = useState<ManualLesson[]>([
     { title: '', url: '', body_text: '', transcript: '', media_url: '' },
