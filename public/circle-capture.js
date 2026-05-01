@@ -1030,6 +1030,8 @@
         const afterNum = nav.after?.lesson_number;
         if (afterNum && seenLessonNumbers.has(afterNum)) {
           log('navigation loop detected', { afterNum, seen: Array.from(seenLessonNumbers) });
+          fatalNavigationFailure = true;
+          fatalDebugReport = { ...startDiagnostics, clickResult: { success: false, reason: 'navigation_loop_detected', attempts: nav.attempts }, urlAfter: nav.after?.url, titleAfter: nav.after?.title };
           for (let n = lessons.length + 1; n <= total; n++) lessons.push({ lesson_number: n, title: `Lesson ${n}`, capture_issue: 'navigation_failed', _debug: { navigation: { reason: 'navigation_loop_detected' } } });
           break;
         }
@@ -1133,6 +1135,7 @@
       platform: 'circle',
       capture_mode: 'auto_walk_lesson_ui',
       title: courseTitle,
+      navigation_debug: walkResult.debugReport,
       lessons,
     };
 
