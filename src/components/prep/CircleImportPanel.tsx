@@ -204,6 +204,16 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     [captureHint.bookmarklet_url, captureHint.capture_endpoint],
   );
 
+  const bookmarkletInspectHref = useMemo(
+    () => buildBookmarkletHref(captureHint.bookmarklet_url, captureHint.capture_endpoint, 'inspect'),
+    [captureHint.bookmarklet_url, captureHint.capture_endpoint],
+  );
+
+  const bookmarkletProbeHref = useMemo(
+    () => buildBookmarkletHref(captureHint.bookmarklet_url, captureHint.capture_endpoint, 'probe'),
+    [captureHint.bookmarklet_url, captureHint.capture_endpoint],
+  );
+
   // ── Direct POST helper (used by manual tab + final accumulator import) ──
   const postCapture = async (payload: any) => {
     setSubmitting(true);
