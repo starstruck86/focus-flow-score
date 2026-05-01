@@ -79,7 +79,9 @@ type ManualLesson = {
 
 const projectRef = (import.meta as any).env?.VITE_SUPABASE_PROJECT_ID || '';
 
-function buildBookmarkletHref(loaderUrl: string, captureEndpoint: string, mode: 'single' | 'course' = 'course'): string {
+type CircleBookmarkletMode = 'single' | 'course' | 'debug-nav';
+
+function buildBookmarkletHref(loaderUrl: string, captureEndpoint: string, mode: CircleBookmarkletMode = 'course'): string {
   const loaderWithParams = (() => {
     try {
       const u = new URL(loaderUrl, window.location.origin);
@@ -194,6 +196,11 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
 
   const bookmarkletCourseHref = useMemo(
     () => buildBookmarkletHref(captureHint.bookmarklet_url, captureHint.capture_endpoint, 'course'),
+    [captureHint.bookmarklet_url, captureHint.capture_endpoint],
+  );
+
+  const bookmarkletNavDebugHref = useMemo(
+    () => buildBookmarkletHref(captureHint.bookmarklet_url, captureHint.capture_endpoint, 'debug-nav'),
     [captureHint.bookmarklet_url, captureHint.capture_endpoint],
   );
 
@@ -396,11 +403,12 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     setManualLessons(prev => [...prev, { title: '', url: '', body_text: '', transcript: '', media_url: '' }]);
   const removeManual = (i: number) => setManualLessons(prev => prev.filter((_, idx) => idx !== i));
 
-  const copyBookmarklet = async (mode: 'single' | 'course') => {
-    const href = mode === 'single' ? bookmarkletSingleHref : bookmarkletCourseHref;
+  const copyBookmarklet = async (mode: CircleBookmarkletMode) => {
+    const href = mode === 'single' ? bookmarkletSingleHref : mode === 'debug-nav' ? bookmarkletNavDebugHref : bookmarkletCourseHref;
+    const label = mode === 'single' ? 'single lesson' : mode === 'debug-nav' ? 'navigation debug' : 'entire course';
     try {
       await navigator.clipboard.writeText(href);
-      toast.success(`Bookmarklet copied (${mode === 'single' ? 'single lesson' : 'entire course'}). Create a new bookmark and paste this as the URL.`);
+      toast.success(`Bookmarklet copied (${label}). Create a new bookmark and paste this as the URL.`);
     } catch {
       toast.error('Clipboard copy blocked — drag the link to your bookmarks bar instead.');
     }
@@ -471,6 +479,22 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                 Capture current lesson
               </a>
               <Button variant="outline" size="sm" onClick={() => copyBookmarklet('single')}>
+                <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy
+              </Button>
+            </div>
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mt-2">Debug Circle navigation</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={bookmarkletNavDebugHref}
+                draggable
+                onClick={e => e.preventDefault()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
+                title="Drag me to your bookmarks bar"
+              >
+                <Bookmark className="h-3.5 w-3.5" />
+                Debug Circle navigation
+              </a>
+              <Button variant="outline" size="sm" onClick={() => copyBookmarklet('debug-nav')}>
                 <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy
               </Button>
             </div>
