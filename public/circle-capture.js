@@ -672,6 +672,30 @@
     return null;
   }
 
+  function collectLessonMetadata(total) {
+    const containers = [
+      document.querySelector('aside'),
+      document.querySelector('[data-testid*="sidebar"]'),
+      document.querySelector('[role="navigation"]'),
+    ].filter(Boolean);
+    const items = [];
+    const seen = new Set();
+    for (const c of containers) {
+      const rows = Array.from(c.querySelectorAll('a[href], button, [role="button"]'));
+      for (const row of rows) {
+        const title = safeText(row).replace(/^Lesson\s+\d+\s*(of\s*\d+)?\s*/i, '').trim();
+        if (!title || title.length < 3 || /^section\s+\w+:?/i.test(title) || /^(next|previous|back)$/i.test(title)) continue;
+        const key = title.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        items.push({ index: items.length + 1, title: title.slice(0, 300), url: row.href || '' });
+        if (total && items.length >= total) break;
+      }
+      if (total && items.length >= total) break;
+    }
+    return items;
+  }
+
   /**
    * Wait until the rendered lesson changes — either lesson_number advances,
    * the title text changes, or the URL changes.
