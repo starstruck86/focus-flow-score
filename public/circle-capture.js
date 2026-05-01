@@ -598,6 +598,57 @@
 
   // ── Auto-walk navigation ────────────────────────────────────────────────
 
+  /**
+   * Determine if a URL looks like the course root / index page.
+   * Course roots: /c/<slug>, /c/<slug>/, /c/<slug>?..., or path ending without /lessons/ or /posts/.
+   */
+  function isCourseRootUrl(url) {
+    if (!url) return false;
+    try {
+      const u = new URL(url, location.href);
+      const p = u.pathname.replace(/\/+$/, '');
+      // Course root patterns: /c/<slug> with no deeper path
+      if (/^\/c\/[^/]+$/.test(p)) return true;
+      // No /lessons/ or /posts/ segment = likely not a lesson page
+      if (!/\/(lessons?|posts?)\//.test(p)) return true;
+      return false;
+    } catch (_) { return false; }
+  }
+
+  /**
+   * Check if a candidate button/link should be excluded from navigation.
+   * Excludes: back buttons, course title links, overview links, sidebar toggles,
+   * completed buttons, section headers.
+   */
+  function isBadNavigationCandidate(el) {
+    const text = safeText(el).toLowerCase();
+    const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+    const title = (el.getAttribute('title') || '').toLowerCase();
+    const href = (el.getAttribute('href') || '').toLowerCase();
+    const combined = `${text} ${ariaLabel} ${title}`;
+
+    // Exclude back/overview/home links
+    if (/\b(back|overview|home|all\s+lessons|course\s+home|return|go\s+back)\b/.test(combined)) return 'back/overview/home';
+    // Exclude course title links (long text, not arrow-like)
+    if (text.length > 40) return 'text_too_long';
+    // Exclude sidebar open/close toggles
+    if (/\b(menu|sidebar|hamburger|toggle\s+nav|close\s+nav|open\s+nav)\b/.test(combined)) return 'sidebar_toggle';
+    // Exclude completion/mark-complete buttons
+    if (/\b(complete|mark\s+as|completed|finish)\b/.test(combined)) return 'completion_button';
+    // Exclude section header links
+    if (/\b(section|module|chapter)\b/.test(combined) && !/lesson/i.test(combined)) return 'section_header';
+
+    // Exclude links whose href resolves to course root
+    if (href && el.tagName === 'A') {
+      try {
+        const resolved = new URL(href, location.href).href;
+        if (isCourseRootUrl(resolved)) return 'href_is_course_root';
+      } catch (_) {}
+    }
+
+    return null; // Not bad
+  }
+
   function rectInfo(el) {
     if (!el) return null;
     const r = el.getBoundingClientRect();
@@ -714,22 +765,26 @@
       if (videoTop != null && r.top > videoTop + 12) continue;
       if (isLikelySidebarButton(el)) continue;
 
+      const rejectedReason = isBadNavigationCandidate(el);
+
       buttons.push({
         el,
         text: safeText(el).slice(0, 120),
         ariaLabel: el.getAttribute('aria-label') || '',
         title: el.getAttribute('title') || '',
+        href: el.getAttribute('href') || '',
         role: el.getAttribute('role') || el.tagName.toLowerCase(),
         disabled: isDisabled(el),
         rect: rectInfo(el),
         svgDirection: detectSvgDirection(el),
         smallCircular: r.width >= 20 && r.height >= 20 && r.width <= 82 && r.height <= 82 && Math.abs(r.width - r.height) <= 28,
         distanceFromLessonLabelY: Math.round(Math.abs(centerY - header.centerY)),
+        rejectedReason: rejectedReason || null,
       });
     }
 
     const small = buttons
-      .filter(b => b.smallCircular)
+      .filter(b => b.smallCircular && !b.rejectedReason)
       .sort((a, b) => a.rect.left - b.rect.left);
     for (let i = 0; i < small.length - 1; i++) {
       const left = small[i];
@@ -746,7 +801,8 @@
   }
 
   function chooseHeaderArrowCandidate(direction, scan) {
-    const active = scan.buttons.filter(b => !b.disabled && b.smallCircular);
+    // Filter out rejected candidates
+    const active = scan.buttons.filter(b => !b.disabled && b.smallCircular && !b.rejectedReason);
     const sorted = active.slice().sort((a, b) => a.rect.left - b.rect.left);
     const pairs = [];
 
@@ -819,6 +875,22 @@
         lastDiagnostics = diagnostics;
         const scan = scanVisibleButtonsNearHeader();
         const candidate = chooseHeaderArrowCandidate(direction, scan);
+
+        // Debug: log the candidate we're about to click
+        if (candidate) {
+          log('nav candidate', {
+            strategy: 'geometry',
+            text: candidate.text,
+            href: candidate.href || '',
+            ariaLabel: candidate.ariaLabel,
+            svgDirection: candidate.svgDirection,
+            selector: candidate.el?.tagName + (candidate.el?.className ? '.' + String(candidate.el.className).split(' ')[0] : ''),
+            urlBefore: before.url,
+            titleBefore: before.title,
+            lessonBefore: before.lesson_number,
+          });
+        }
+
         attempt.candidateButton = stripButtonInfo(candidate);
         if (!candidate?.el) {
           attempt.reason = 'no_header_arrow_candidate';
@@ -836,14 +908,57 @@
           continue;
         }
       } else {
+        log('nav candidate', { strategy: 'keyboard', direction, urlBefore: before.url, lessonBefore: before.lesson_number });
         await dispatchArrowNavigation(direction);
       }
 
       const change = await waitForLessonChange(before, 8000);
       const after = change.state || getLessonState();
+
+      // ── GUARDRAIL: detect if we navigated to course root ──
+      if (isCourseRootUrl(after.url) && !isCourseRootUrl(before.url)) {
+        log('GUARDRAIL: navigated to course root! Going back.', { urlBefore: before.url, urlAfter: after.url });
+        try { history.back(); } catch (_) {}
+        await sleep(1500);
+        attempt.success = false;
+        attempt.reason = 'navigated_to_course_root';
+        attempt.urlBefore = before.url;
+        attempt.urlAfter = after.url;
+        attempt.titleBefore = before.title;
+        attempt.titleAfter = after.title;
+        attempts.push(attempt);
+        continue;
+      }
+
+      // ── GUARDRAIL: detect if lesson indicator disappeared (course home has none) ──
+      const afterIndicator = findLessonOfIndicator();
+      if (!afterIndicator && before.lesson_number) {
+        log('GUARDRAIL: lesson indicator disappeared after click! Going back.', { urlBefore: before.url, urlAfter: after.url });
+        try { history.back(); } catch (_) {}
+        await sleep(1500);
+        attempt.success = false;
+        attempt.reason = 'lesson_indicator_disappeared';
+        attempt.urlBefore = before.url;
+        attempt.urlAfter = after.url;
+        attempts.push(attempt);
+        continue;
+      }
+
       const numberChanged = before.lesson_number != null && after.lesson_number != null && after.lesson_number !== before.lesson_number;
       const wrongDirection = numberChanged && (direction === 'prev' ? after.lesson_number > before.lesson_number : after.lesson_number < before.lesson_number);
       const success = !!(change.changed && !wrongDirection);
+
+      log('nav result', {
+        strategy: method,
+        success,
+        urlBefore: before.url,
+        urlAfter: after.url,
+        titleBefore: before.title,
+        titleAfter: after.title,
+        lessonBefore: before.lesson_number,
+        lessonAfter: after.lesson_number,
+      });
+
       Object.assign(attempt, {
         success,
         urlBefore: before.url,
