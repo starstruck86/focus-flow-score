@@ -477,6 +477,40 @@
     return '';
   }
 
+  function getMainContentText() {
+    const el =
+      document.querySelector('[data-testid="post-body"]') ||
+      document.querySelector('[data-testid*="lesson-content"]') ||
+      document.querySelector('[data-testid*="post-content"]') ||
+      document.querySelector('article') ||
+      document.querySelector('.trix-content') ||
+      document.querySelector('main') ||
+      document.body;
+    return safeText(el);
+  }
+
+  function textHash(text) {
+    let h = 0;
+    const s = text || '';
+    for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+    return String(h);
+  }
+
+  function getLessonState() {
+    const indicator = findLessonOfIndicator();
+    const title = findLessonTitle(indicator?.el);
+    const mainText = getMainContentText();
+    return {
+      url: location.href.split('#')[0],
+      title,
+      lesson_number: indicator?.current,
+      total_lessons: indicator?.total,
+      content_hash: textHash(mainText),
+      content_chars: mainText.length,
+      indicator_el: indicator?.el || null,
+    };
+  }
+
   /**
    * Extract everything for the currently rendered lesson.
    */
@@ -571,19 +605,44 @@
    * of two adjacent round nav buttons.
    */
   function findNextArrow() {
-    const candidates = Array.from(document.querySelectorAll('button, a[role="button"], a'));
-    // 1. By aria-label / title containing "next"
-    let hit = candidates.find(el => /\bnext\b/i.test(el.getAttribute('aria-label') || ''));
+    const isVisible = (el) => {
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    };
+    const isDisabled = (el) => el.disabled || el.getAttribute('aria-disabled') === 'true' || el.closest('[aria-disabled="true"]');
+    const candidates = Array.from(document.querySelectorAll('button, [role="button"], a[href], a')).filter(el => isVisible(el) && !isDisabled(el));
+
+    // Required selector order: explicit Next labels first.
+    let hit = document.querySelector('button[aria-label*="Next" i]') || document.querySelector('[aria-label*="Next" i]');
+    if (hit && isVisible(hit) && !isDisabled(hit)) return hit;
+
+    // Button containing right-arrow-ish SVG/path/icon, excluding obvious previous arrows.
+    hit = candidates.find(el => {
+      const label = `${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''} ${safeText(el)}`;
+      if (/\b(prev|previous|back)\b/i.test(label)) return false;
+      const svgText = Array.from(el.querySelectorAll('svg, path, use')).map(n => n.outerHTML || '').join(' ');
+      return /→|›|chevron.?right|arrow.?right|M\s*9\s|right/i.test(label + ' ' + svgText);
+    });
     if (hit) return hit;
-    hit = candidates.find(el => /\bnext\b/i.test(el.getAttribute('title') || ''));
-    if (hit) return hit;
-    // 2. Pair of nav arrows: find a "previous" then take its pair.
-    const prev = candidates.find(el => /\bprev/i.test(el.getAttribute('aria-label') || el.getAttribute('title') || ''));
-    if (prev && prev.parentElement) {
-      const sibs = Array.from(prev.parentElement.querySelectorAll('button, a[role="button"], a'));
-      const idx = sibs.indexOf(prev);
-      if (idx >= 0 && sibs[idx + 1]) return sibs[idx + 1];
+
+    const state = getLessonState();
+    const headerRect = state.indicator_el?.getBoundingClientRect();
+    if (headerRect) {
+      const nearHeader = candidates
+        .map(el => ({ el, rect: el.getBoundingClientRect(), text: safeText(el) || el.getAttribute('aria-label') || el.getAttribute('title') || '' }))
+        .filter(({ rect }) => Math.abs((rect.top + rect.bottom) / 2 - (headerRect.top + headerRect.bottom) / 2) < 140)
+        .sort((a, b) => a.rect.left - b.rect.left);
+      // Visible button near the Lesson X of Y heading and to the right side.
+      hit = nearHeader.find(({ rect, text }) => rect.left > headerRect.right && !/\b(prev|previous|back)\b/i.test(text))?.el;
+      if (hit) return hit;
+      // Fallback: button whose bounding box is near the header and right of a back arrow.
+      const backIdx = nearHeader.findIndex(({ text }) => /\b(prev|previous|back)\b/i.test(text));
+      if (backIdx >= 0 && nearHeader[backIdx + 1]) return nearHeader[backIdx + 1].el;
+      if (nearHeader.length >= 2) return nearHeader[nearHeader.length - 1].el;
     }
+
     return null;
   }
 
@@ -613,6 +672,30 @@
     return null;
   }
 
+  function collectLessonMetadata(total) {
+    const containers = [
+      document.querySelector('aside'),
+      document.querySelector('[data-testid*="sidebar"]'),
+      document.querySelector('[role="navigation"]'),
+    ].filter(Boolean);
+    const items = [];
+    const seen = new Set();
+    for (const c of containers) {
+      const rows = Array.from(c.querySelectorAll('a[href], button, [role="button"]'));
+      for (const row of rows) {
+        const title = safeText(row).replace(/^Lesson\s+\d+\s*(of\s*\d+)?\s*/i, '').trim();
+        if (!title || title.length < 3 || /^section\s+\w+:?/i.test(title) || /^(next|previous|back)$/i.test(title)) continue;
+        const key = title.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        items.push({ index: items.length + 1, title: title.slice(0, 300), url: row.href || '' });
+        if (total && items.length >= total) break;
+      }
+      if (total && items.length >= total) break;
+    }
+    return items;
+  }
+
   /**
    * Wait until the rendered lesson changes — either lesson_number advances,
    * the title text changes, or the URL changes.
@@ -622,19 +705,26 @@
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       await sleep(250);
-      const ind = findLessonOfIndicator();
-      const titleNow = findLessonTitle(ind?.el);
-      const urlNow = location.href.split('#')[0];
-      const numChanged = ind && prev.lesson_number != null && ind.current !== prev.lesson_number;
-      const titleChanged = titleNow && prev.title && titleNow !== prev.title;
-      const urlChanged = urlNow !== prev.url;
-      if (numChanged || titleChanged || urlChanged) {
+      const now = getLessonState();
+      const lessonNumberChanged = now.lesson_number != null && prev.lesson_number != null && now.lesson_number !== prev.lesson_number;
+      const titleChanged = !!(now.title && prev.title && now.title !== prev.title);
+      const urlChanged = now.url !== prev.url;
+      const contentHashChanged = !!(now.content_hash && prev.content_hash && now.content_hash !== prev.content_hash);
+      if (lessonNumberChanged || titleChanged || urlChanged || contentHashChanged) {
         // Give content a beat to mount fully.
         await sleep(400);
-        return true;
+        const settled = getLessonState();
+        return {
+          changed: true,
+          lessonNumberChanged: settled.lesson_number != null && prev.lesson_number != null && settled.lesson_number !== prev.lesson_number,
+          titleChanged: !!(settled.title && prev.title && settled.title !== prev.title),
+          urlChanged: settled.url !== prev.url,
+          contentHashChanged: !!(settled.content_hash && prev.content_hash && settled.content_hash !== prev.content_hash),
+          state: settled,
+        };
       }
     }
-    return false;
+    return { changed: false, lessonNumberChanged: false, titleChanged: false, urlChanged: false, contentHashChanged: false, state: getLessonState() };
   }
 
   /**
@@ -648,7 +738,9 @@
    */
   async function autoWalk(startIndicator) {
     const total = startIndicator.total;
+    const lessonMeta = collectLessonMetadata(total);
     const lessons = [];
+    const navDebug = [];
 
     // ── Capture the starting lesson ──
     showBanner(`Capturing lesson ${startIndicator.current} of ${total}…`, 'info', true);
@@ -660,56 +752,75 @@
     lessons.push(captured);
     log('captured #' + (captured.lesson_number || 1), captured.title);
 
-    // Track position by index. If we started at lesson 5, we still walk forward to `total`.
-    let currentNum = captured.lesson_number || startIndicator.current;
-    let currentTitle = captured.title || '';
-    let currentUrl = captured.url || location.href.split('#')[0];
+    let consecutiveNavigationFailures = 0;
 
-    for (let targetNum = currentNum + 1; targetNum <= total; targetNum++) {
+    while (true) {
+      const before = getLessonState();
+      const currentNum = before.lesson_number || lessons[lessons.length - 1]?.lesson_number || startIndicator.current;
+      if (before.total_lessons && before.lesson_number === before.total_lessons) break;
+      if (currentNum >= total) break;
+
+      const targetNum = currentNum + 1;
+      const targetMeta = lessonMeta[targetNum - 1] || {};
+      const targetTitle = targetMeta.title || `Lesson ${targetNum}`;
       log(`--- navigating to lesson ${targetNum} of ${total} ---`);
 
-      // ── Step 1: Try to navigate ──
-      let navigated = false;
+      const nextBtn = findNextArrow();
+      const clickedElementText = nextBtn ? (safeText(nextBtn) || nextBtn.getAttribute('aria-label') || nextBtn.getAttribute('title') || '[next arrow]') : '[missing next arrow]';
+      const debug = {
+        target_lesson_title: targetTitle,
+        current_url_before_click: before.url,
+        current_title_before_click: before.title,
+        clicked_element_text: clickedElementText,
+        current_url_after_click: before.url,
+        current_title_after_click: before.title,
+        title_changed: false,
+        lesson_number_changed: false,
+        url_changed: false,
+        content_hash_changed: false,
+        body_text_length: 0,
+        transcript_length: 0,
+        resources_count: 0,
+      };
 
-      // Strategy A: fresh-query the next arrow
-      for (let attempt = 0; attempt < 3 && !navigated; attempt++) {
-        const nextBtn = findNextArrow();
-        if (nextBtn && !nextBtn.disabled && nextBtn.getAttribute('aria-disabled') !== 'true') {
-          try { nextBtn.scrollIntoView({ block: 'center' }); await sleep(100); nextBtn.click(); navigated = true; } catch (_) {}
-        }
-        if (!navigated) await sleep(500); // DOM may still be settling
+      if (!nextBtn) {
+        debug.capture_issue = 'navigation_failed';
+        debug.reason = 'next_arrow_missing_or_disabled';
+        log('navigation proof', debug);
+        for (let n = targetNum; n <= total; n++) lessons.push({ lesson_number: n, title: lessonMeta[n - 1]?.title || `Lesson ${n}`, capture_issue: 'navigation_failed', _debug: { navigation: { ...debug, target_lesson_title: lessonMeta[n - 1]?.title || `Lesson ${n}` } } });
+        break;
       }
 
-      // Strategy B: sidebar fallback (re-queried fresh)
-      if (!navigated) {
-        for (let attempt = 0; attempt < 2 && !navigated; attempt++) {
-          const row = findSidebarLessonByIndex(targetNum);
-          if (row) {
-            try { row.scrollIntoView({ block: 'center' }); await sleep(100); row.click(); navigated = true; } catch (_) {}
-          }
-          if (!navigated) await sleep(500);
-        }
-      }
+      try { nextBtn.scrollIntoView({ block: 'center' }); await sleep(100); nextBtn.click(); } catch (e) { debug.click_error = String(e?.message || e); }
 
-      if (!navigated) {
-        log('SKIP lesson ' + targetNum + ': no navigation control found');
-        lessons.push({ url: location.href.split('#')[0], lesson_number: targetNum, title: `Lesson ${targetNum}`, capture_issue: 'nav_failed' });
-        // Don't break — try next lesson anyway (the button may reappear)
+      const change = await waitForLessonChange(before, 8000);
+      const after = change.state || getLessonState();
+      const titleMatchesTarget = !!(targetMeta.title && after.title && after.title.toLowerCase().includes(targetMeta.title.toLowerCase().slice(0, 80)));
+      const navigationProven = !!(titleMatchesTarget || change.lessonNumberChanged || change.urlChanged);
+      Object.assign(debug, {
+        current_url_after_click: after.url,
+        current_title_after_click: after.title,
+        title_changed: titleMatchesTarget || change.titleChanged,
+        title_matches_target: titleMatchesTarget,
+        lesson_number_changed: change.lessonNumberChanged,
+        url_changed: change.urlChanged,
+        content_hash_changed: change.contentHashChanged,
+        navigation_proven: navigationProven,
+      });
+
+      if (!navigationProven) {
+        consecutiveNavigationFailures += 1;
+        debug.capture_issue = 'navigation_failed';
+        log('navigation proof', debug);
+        lessons.push({ lesson_number: targetNum, title: targetTitle, capture_issue: 'navigation_failed', _debug: { navigation: debug } });
+        if (consecutiveNavigationFailures >= 2) {
+          for (let n = targetNum + 1; n <= total; n++) lessons.push({ lesson_number: n, title: lessonMeta[n - 1]?.title || `Lesson ${n}`, capture_issue: 'navigation_failed', _debug: { navigation: { reason: 'stopped_after_two_consecutive_navigation_failures' } } });
+          break;
+        }
         continue;
       }
 
-      // ── Step 2: Wait for lesson change ──
-      const changed = await waitForLessonChange({ lesson_number: currentNum, title: currentTitle, url: currentUrl }, 8000);
-
-      if (!changed) {
-        log('SKIP lesson ' + targetNum + ': DOM did not update after navigation');
-        lessons.push({ url: location.href.split('#')[0], lesson_number: targetNum, title: `Lesson ${targetNum}`, capture_issue: 'render_failed' });
-        // Update tracking so next waitForLessonChange doesn't compare stale values
-        currentNum = targetNum;
-        currentTitle = '';
-        currentUrl = location.href.split('#')[0];
-        continue;
-      }
+      consecutiveNavigationFailures = 0;
 
       // ── Step 3: Extract lesson (fresh DOM queries) ──
       let lessonData;
@@ -717,25 +828,27 @@
         lessonData = await extractCurrentLesson();
       } catch (err) {
         log('capture error on lesson ' + targetNum, err);
-        lessonData = { url: location.href.split('#')[0], lesson_number: targetNum, title: `Lesson ${targetNum}`, capture_issue: 'extract_failed' };
+        lessonData = { url: location.href.split('#')[0], lesson_number: targetNum, title: targetTitle, capture_issue: 'extract_failed' };
       }
+      debug.body_text_length = lessonData.body_text?.length || 0;
+      debug.transcript_length = lessonData.transcript?.length || 0;
+      debug.resources_count = lessonData.resources?.length || 0;
+      lessonData._debug = { ...(lessonData._debug || {}), navigation: debug };
+      navDebug.push(debug);
+      log('navigation proof', debug);
       lessons.push(lessonData);
-
-      // Update tracking from actual DOM state
-      currentNum = lessonData.lesson_number || targetNum;
-      currentTitle = lessonData.title || '';
-      currentUrl = lessonData.url || location.href.split('#')[0];
 
       const transcriptCount = lessons.filter(l => l.transcript).length;
       const resourceCount = lessons.reduce((s, l) => s + (l.resources?.length || 0), 0);
-      const failCount = lessons.filter(l => l.capture_issue).length;
+      const failCount = lessons.filter(l => l.capture_issue === 'navigation_failed').length;
+      const withContentCount = lessons.filter(l => l.body_text || l.transcript || l.resources?.length).length;
       showBanner(
-        `Lesson ${currentNum} of ${total}: ${currentTitle}\n` +
-          `Progress: ${lessons.length} captured · ${failCount ? failCount + ' failed · ' : ''}` +
+        `${total} discovered · ${withContentCount} captured with content · ${failCount} navigation failed\n` +
+          `Current: ${lessonData.lesson_number || targetNum} of ${total}: ${lessonData.title || targetTitle}\n` +
           `Transcripts: ${transcriptCount} · Resources: ${resourceCount}`,
         'info', true
       );
-      log('captured #' + currentNum, currentTitle, lessonData._debug || '');
+      log('captured #' + (lessonData.lesson_number || targetNum), lessonData.title, lessonData._debug || '');
     }
 
     return lessons;
@@ -822,28 +935,28 @@
       lessons,
     };
 
-    const captured = lessons.length;
-    const failed = lessons.filter(l => l.capture_issue === 'render_failed').length;
+    const discovered = indicator.total || lessons.length;
+    const navigationFailed = lessons.filter(l => l.capture_issue === 'navigation_failed').length;
+    const failed = lessons.filter(l => l.capture_issue && l.capture_issue !== 'navigation_failed').length;
     const transcripts = lessons.filter(l => l.transcript).length;
     const resources = lessons.reduce((s, l) => s + (l.resources?.length || 0), 0);
-    const withBody = lessons.filter(l => l.body_text && l.body_text.length > 0).length;
+    const withContent = lessons.filter(l => l.body_text || l.transcript || l.resources?.length).length;
 
     const json = JSON.stringify(payload, null, 2);
     const ok = await copyToClipboard(json);
 
-    const lines = [`${captured} lesson${captured === 1 ? '' : 's'} captured`];
-    if (withBody) lines.push(`✓ ${withBody} with content`);
+    const lines = [`${discovered} discovered, ${withContent} captured with content, ${navigationFailed} navigation failed.`];
     if (transcripts) lines.push(`✓ ${transcripts} transcript${transcripts === 1 ? '' : 's'}`);
     if (resources) lines.push(`✓ ${resources} resource${resources === 1 ? '' : 's'}`);
     if (failed) lines.push(`⚠ ${failed} failed`);
-    if (!withBody && !transcripts && !resources) {
+    if (!withContent) {
       lines.push('⚠ no content/transcript/resources detected — open browser console for [Circle Capture] debug logs');
     }
     const summary = lines.join('\n') +
       '\nJSON copied — return to the app and paste it into the Circle Import panel.';
 
     if (ok) {
-      showBanner(summary, captured === 0 ? 'warn' : 'info');
+      showBanner(summary, withContent === 0 || navigationFailed > 0 ? 'warn' : 'info');
     } else {
       showJsonModal(json);
       showBanner('Clipboard blocked — copy the JSON from the dialog and paste into Circle Import.', 'warn');
