@@ -79,7 +79,7 @@ type ManualLesson = {
 
 const projectRef = (import.meta as any).env?.VITE_SUPABASE_PROJECT_ID || '';
 
-type CircleBookmarkletMode = 'single' | 'course' | 'debug-nav';
+type CircleBookmarkletMode = 'single' | 'course' | 'debug-nav' | 'inspect' | 'probe';
 
 function buildBookmarkletHref(loaderUrl: string, captureEndpoint: string, mode: CircleBookmarkletMode = 'course'): string {
   const loaderWithParams = (() => {
