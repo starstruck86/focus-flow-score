@@ -27,7 +27,21 @@
   const safeText = (el) => el ? (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim() : '';
   const abs = (url) => { try { return new URL(url, location.href).toString(); } catch (_) { return ''; } };
 
-  log('starting');
+  // ── Read mode from script URL params ─────────────────────────────────────
+  const CAPTURE_MODE = (() => {
+    try {
+      const scripts = document.querySelectorAll('script[src*="circle-capture"]');
+      const last = scripts[scripts.length - 1];
+      if (last) {
+        const u = new URL(last.src);
+        const m = u.searchParams.get('mode');
+        if (m === 'single' || m === 'course') return m;
+      }
+    } catch (_) {}
+    return 'course'; // default to course for backward compat
+  })();
+
+  log('starting, mode=' + CAPTURE_MODE);
 
   // ── Banner UI ────────────────────────────────────────────────────────────
 
