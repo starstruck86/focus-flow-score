@@ -79,20 +79,18 @@ type ManualLesson = {
 
 const projectRef = (import.meta as any).env?.VITE_SUPABASE_PROJECT_ID || '';
 
-function buildBookmarkletHref(loaderUrl: string, captureEndpoint: string): string {
-  // Build absolute capture endpoint param so the loader script can post even
-  // when running on a different origin (Circle).
+function buildBookmarkletHref(loaderUrl: string, captureEndpoint: string, mode: 'single' | 'course' = 'course'): string {
   const loaderWithParams = (() => {
     try {
       const u = new URL(loaderUrl, window.location.origin);
       u.searchParams.set('endpoint', new URL(captureEndpoint, window.location.origin).toString());
+      u.searchParams.set('mode', mode);
       if (projectRef) u.searchParams.set('project', projectRef);
       return u.toString();
     } catch {
       return loaderUrl;
     }
   })();
-  // javascript: bookmarklet that injects the loader script into the current page.
   const code =
     `(function(){var s=document.createElement('script');` +
     `s.src=${JSON.stringify(loaderWithParams)};` +
@@ -189,8 +187,13 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     }
   }, [captureHint.capture_endpoint]);
 
-  const bookmarkletHref = useMemo(
-    () => buildBookmarkletHref(captureHint.bookmarklet_url, captureHint.capture_endpoint),
+  const bookmarkletSingleHref = useMemo(
+    () => buildBookmarkletHref(captureHint.bookmarklet_url, captureHint.capture_endpoint, 'single'),
+    [captureHint.bookmarklet_url, captureHint.capture_endpoint],
+  );
+
+  const bookmarkletCourseHref = useMemo(
+    () => buildBookmarkletHref(captureHint.bookmarklet_url, captureHint.capture_endpoint, 'course'),
     [captureHint.bookmarklet_url, captureHint.capture_endpoint],
   );
 
@@ -393,10 +396,11 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     setManualLessons(prev => [...prev, { title: '', url: '', body_text: '', transcript: '', media_url: '' }]);
   const removeManual = (i: number) => setManualLessons(prev => prev.filter((_, idx) => idx !== i));
 
-  const copyBookmarklet = async () => {
+  const copyBookmarklet = async (mode: 'single' | 'course') => {
+    const href = mode === 'single' ? bookmarkletSingleHref : bookmarkletCourseHref;
     try {
-      await navigator.clipboard.writeText(bookmarkletHref);
-      toast.success('Bookmarklet copied. Create a new bookmark and paste this as the URL.');
+      await navigator.clipboard.writeText(href);
+      toast.success(`Bookmarklet copied (${mode === 'single' ? 'single lesson' : 'entire course'}). Create a new bookmark and paste this as the URL.`);
     } catch {
       toast.error('Clipboard copy blocked — drag the link to your bookmarks bar instead.');
     }
@@ -431,32 +435,48 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
         {/* ── Tab A: Browser-assisted capture ───────────────────────── */}
         <TabsContent value="capture" className="space-y-3 pt-3">
           <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
-            <li>Drag the bookmarklet to your bookmarks bar (or copy it).</li>
             <li>Open Circle in a tab where you’re already signed in.</li>
-            <li>
-              <span className="font-medium text-foreground">Open any lesson page</span> (you should
-              see <em>“Lesson X of Y”</em> above the lesson title) and click the bookmarklet{' '}
-              <span className="font-medium text-foreground">once</span>. It will walk through the
-              entire course automatically — capturing video, captions, takeaways, transcripts,
-              and resources for every lesson.
-            </li>
+            <li>Navigate to <span className="font-medium text-foreground">any lesson page</span> (you should see <em>“Lesson X of Y”</em>).</li>
+            <li>Click one of the bookmarklets below. <span className="font-medium text-foreground">Capture entire course</span> is recommended.</li>
             <li>When the banner reads <em>“N lessons captured”</em>, return here and paste the JSON below.</li>
           </ol>
 
+          <div className="space-y-2">
+            <div className="text-[10px] font-medium text-foreground uppercase tracking-wide">Capture entire course <Badge variant="outline" className="text-[9px] h-4 ml-1">recommended</Badge></div>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={bookmarkletCourseHref}
+                draggable
+                onClick={e => e.preventDefault()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+                title="Drag me to your bookmarks bar"
+              >
+                <Bookmark className="h-3.5 w-3.5" />
+                Capture entire course
+              </a>
+              <Button variant="outline" size="sm" onClick={() => copyBookmarklet('course')}>
+                <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy
+              </Button>
+            </div>
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mt-2">Capture current lesson only</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={bookmarkletSingleHref}
+                draggable
+                onClick={e => e.preventDefault()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
+                title="Drag me to your bookmarks bar"
+              >
+                <Bookmark className="h-3.5 w-3.5" />
+                Capture current lesson
+              </a>
+              <Button variant="outline" size="sm" onClick={() => copyBookmarklet('single')}>
+                <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy
+              </Button>
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center gap-2">
-            <a
-              href={bookmarkletHref}
-              draggable
-              onClick={e => e.preventDefault()}
-              className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
-              title="Drag me to your bookmarks bar"
-            >
-              <Bookmark className="h-3.5 w-3.5" />
-              Import Circle Course
-            </a>
-            <Button variant="outline" size="sm" onClick={copyBookmarklet}>
-              <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy bookmarklet
-            </Button>
             <Button variant="outline" size="sm" asChild>
               <a href={sourceUrl} target="_blank" rel="noreferrer">
                 <ExternalLink className="h-3.5 w-3.5 mr-1.5" /> Open Circle course
