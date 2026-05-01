@@ -396,10 +396,11 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     setManualLessons(prev => [...prev, { title: '', url: '', body_text: '', transcript: '', media_url: '' }]);
   const removeManual = (i: number) => setManualLessons(prev => prev.filter((_, idx) => idx !== i));
 
-  const copyBookmarklet = async () => {
+  const copyBookmarklet = async (mode: 'single' | 'course') => {
+    const href = mode === 'single' ? bookmarkletSingleHref : bookmarkletCourseHref;
     try {
-      await navigator.clipboard.writeText(bookmarkletHref);
-      toast.success('Bookmarklet copied. Create a new bookmark and paste this as the URL.');
+      await navigator.clipboard.writeText(href);
+      toast.success(`Bookmarklet copied (${mode === 'single' ? 'single lesson' : 'entire course'}). Create a new bookmark and paste this as the URL.`);
     } catch {
       toast.error('Clipboard copy blocked — drag the link to your bookmarks bar instead.');
     }
