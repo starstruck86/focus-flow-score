@@ -525,7 +525,8 @@
     if (takeaways) bodyAll = bodyAll.replace(takeaways, '').replace(/\s+/g, ' ').trim();
     if (resourcesText) bodyAll = bodyAll.replace(resourcesText, '').replace(/\s+/g, ' ').trim();
 
-    const transcript = await captureTranscript();
+    const transcriptResult = await captureTranscript();
+    const transcript = transcriptResult.text || '';
     if (transcript) {
       selectorsMatched.push('transcript');
       bodyAll = bodyAll.replace(transcript, '').replace(/\s+/g, ' ').trim();
