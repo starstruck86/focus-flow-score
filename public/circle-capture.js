@@ -35,10 +35,10 @@
       if (last) {
         const u = new URL(last.src);
         const m = u.searchParams.get('mode');
-        if (m === 'single' || m === 'course' || m === 'debug-nav') return m;
+        if (['single','course','debug-nav','inspect','probe'].includes(m)) return m;
       }
     } catch (_) {}
-    return 'course'; // default to course for backward compat
+    return 'course';
   })();
 
   log('starting, mode=' + CAPTURE_MODE);
