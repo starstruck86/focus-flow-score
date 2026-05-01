@@ -841,10 +841,9 @@
 
       const change = await waitForLessonChange(before, 8000);
       const after = change.state || getLessonState();
-      const numberMovedCorrectly = before.lesson_number != null && after.lesson_number != null
-        ? (direction === 'prev' ? after.lesson_number < before.lesson_number : after.lesson_number > before.lesson_number)
-        : true;
-      const success = !!(change.changed && numberMovedCorrectly);
+      const numberChanged = before.lesson_number != null && after.lesson_number != null && after.lesson_number !== before.lesson_number;
+      const wrongDirection = numberChanged && (direction === 'prev' ? after.lesson_number > before.lesson_number : after.lesson_number < before.lesson_number);
+      const success = !!(change.changed && !wrongDirection);
       Object.assign(attempt, {
         success,
         urlBefore: before.url,
