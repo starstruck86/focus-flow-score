@@ -414,8 +414,22 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   const removeManual = (i: number) => setManualLessons(prev => prev.filter((_, idx) => idx !== i));
 
   const copyBookmarklet = async (mode: CircleBookmarkletMode) => {
-    const href = mode === 'single' ? bookmarkletSingleHref : mode === 'debug-nav' ? bookmarkletNavDebugHref : bookmarkletCourseHref;
-    const label = mode === 'single' ? 'single lesson' : mode === 'debug-nav' ? 'navigation debug' : 'entire course';
+    const hrefMap: Record<CircleBookmarkletMode, string> = {
+      single: bookmarkletSingleHref,
+      course: bookmarkletCourseHref,
+      'debug-nav': bookmarkletNavDebugHref,
+      inspect: bookmarkletInspectHref,
+      probe: bookmarkletProbeHref,
+    };
+    const labelMap: Record<CircleBookmarkletMode, string> = {
+      single: 'single lesson',
+      course: 'entire course',
+      'debug-nav': 'navigation debug',
+      inspect: 'navigation inspector',
+      probe: 'navigation probe',
+    };
+    const href = hrefMap[mode];
+    const label = labelMap[mode];
     try {
       await navigator.clipboard.writeText(href);
       toast.success(`Bookmarklet copied (${label}). Create a new bookmark and paste this as the URL.`);
