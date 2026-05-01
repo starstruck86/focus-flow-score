@@ -1014,12 +1014,17 @@
         consecutiveNavigationFailures += 1;
         const failedFrom = (latest.lesson_number || lessonNum) + 1;
         fatalDebugReport = { ...startDiagnostics, clickResult: { success: false, reason: 'navigation_failed_during_course_capture', attempts: nav.attempts }, urlAfter: nav.after?.url, titleAfter: nav.after?.title };
+        fatalNavigationFailure = true;
         lessons.push({
           lesson_number: failedFrom,
           title: `Lesson ${failedFrom}`,
           capture_issue: 'navigation_failed',
           _debug: { navigation: { attempts: nav.attempts, diagnostics: nav.diagnostics } },
         });
+        for (let n = failedFrom + 1; n <= total; n++) {
+          lessons.push({ lesson_number: n, title: `Lesson ${n}`, capture_issue: 'navigation_failed', _debug: { navigation: { reason: 'stopped_after_navigation_failure' } } });
+        }
+        break;
         if (consecutiveNavigationFailures >= 2) {
           fatalNavigationFailure = true;
           for (let n = failedFrom + 1; n <= total; n++) {
