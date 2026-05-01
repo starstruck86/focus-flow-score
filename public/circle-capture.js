@@ -477,6 +477,40 @@
     return '';
   }
 
+  function getMainContentText() {
+    const el =
+      document.querySelector('[data-testid="post-body"]') ||
+      document.querySelector('[data-testid*="lesson-content"]') ||
+      document.querySelector('[data-testid*="post-content"]') ||
+      document.querySelector('article') ||
+      document.querySelector('.trix-content') ||
+      document.querySelector('main') ||
+      document.body;
+    return safeText(el);
+  }
+
+  function textHash(text) {
+    let h = 0;
+    const s = text || '';
+    for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+    return String(h);
+  }
+
+  function getLessonState() {
+    const indicator = findLessonOfIndicator();
+    const title = findLessonTitle(indicator?.el);
+    const mainText = getMainContentText();
+    return {
+      url: location.href.split('#')[0],
+      title,
+      lesson_number: indicator?.current,
+      total_lessons: indicator?.total,
+      content_hash: textHash(mainText),
+      content_chars: mainText.length,
+      indicator_el: indicator?.el || null,
+    };
+  }
+
   /**
    * Extract everything for the currently rendered lesson.
    */
