@@ -482,6 +482,22 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                 <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy
               </Button>
             </div>
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mt-2">Debug Circle navigation</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={bookmarkletNavDebugHref}
+                draggable
+                onClick={e => e.preventDefault()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
+                title="Drag me to your bookmarks bar"
+              >
+                <Bookmark className="h-3.5 w-3.5" />
+                Debug Circle navigation
+              </a>
+              <Button variant="outline" size="sm" onClick={() => copyBookmarklet('debug-nav')}>
+                <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy
+              </Button>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
