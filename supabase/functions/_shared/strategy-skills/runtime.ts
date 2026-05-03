@@ -350,12 +350,14 @@ export async function runSkill(
     counts,
     entityScoped: plan.entityScoped,
     minRelevantItems: plan.minRelevantItems,
+    influence: { primary: influence.primary, supporting: influence.supporting, weak: influence.weak },
   });
   const gate: SourceGateDecision = applySourceModeGate({
     sourceMode: plan.sourceMode,
     counts,
     confidence,
     minRelevantItems: plan.minRelevantItems,
+    influence: { primary: influence.primary, supporting: influence.supporting, weak: influence.weak },
   });
 
   const drift: DriftSignal = computeDrift({

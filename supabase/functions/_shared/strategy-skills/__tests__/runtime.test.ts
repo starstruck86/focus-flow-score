@@ -105,15 +105,25 @@ Deno.test("E. source-mode — library_required refuses on zero hits", () => {
 });
 
 // ── F ────────────────────────────────────────────────────────────────
-Deno.test("F. source-mode — library_required passes with KI-dominant proof (no standardish needed)", () => {
-  // KI-dominant: 5 KIs >= minRelevantItems=3 → pass even without standards/playbooks
+Deno.test("F. source-mode — library_required passes with KI-dominant proof (meaningful influence)", () => {
+  // KI-dominant with meaningful influence: 5 KIs, 3 supporting → pass
   const g = applySourceModeGate({
     sourceMode: "library_required",
-    counts: { knowledge_items: 5 }, // no standards / playbooks
+    counts: { knowledge_items: 5 },
+    confidence: "medium",
+    minRelevantItems: 3,
+    influence: { primary: 2, supporting: 3, weak: 0 },
+  });
+  assertEquals(g.decision, "pass");
+
+  // Without influence data, falls back to count-based check → pass
+  const g_noInf = applySourceModeGate({
+    sourceMode: "library_required",
+    counts: { knowledge_items: 5 },
     confidence: "medium",
     minRelevantItems: 3,
   });
-  assertEquals(g.decision, "pass");
+  assertEquals(g_noInf.decision, "pass");
 
   // Below KI threshold AND no standardish → warn (partial proof)
   const g2 = applySourceModeGate({
@@ -121,6 +131,7 @@ Deno.test("F. source-mode — library_required passes with KI-dominant proof (no
     counts: { knowledge_items: 1 },
     confidence: "low",
     minRelevantItems: 3,
+    influence: { primary: 0, supporting: 1, weak: 0 },
   });
   assertEquals(g2.decision, "warn");
 });
@@ -349,4 +360,145 @@ Deno.test("confidence — high requires entity + threshold + strong proof (stand
   assertEquals(scoreConfidence({ counts: { knowledge_items: 3, standards: 1 }, entityScoped: true, minRelevantItems: 2 }), "high");
   // KI-only without entity scoping → medium (not high)
   assertEquals(scoreConfidence({ counts: { knowledge_items: 3 }, entityScoped: false, minRelevantItems: 2 }), "medium");
+});
+
+// ── P: quality-aware gate — weak-only KIs refuse for library_required ─
+Deno.test("P. gate — library_required + 4 weak KIs + 0 primary/supporting → refuse", () => {
+  const g = applySourceModeGate({
+    sourceMode: "library_required",
+    counts: { knowledge_items: 4 },
+    confidence: "low",
+    minRelevantItems: 3,
+    influence: { primary: 0, supporting: 0, weak: 4 },
+  });
+  assertEquals(g.decision, "refuse");
+});
+
+// ── Q: quality-aware gate — 3 supporting KIs pass ───────────────────
+Deno.test("Q. gate — library_required + 3 supporting KIs → pass", () => {
+  const g = applySourceModeGate({
+    sourceMode: "library_required",
+    counts: { knowledge_items: 3 },
+    confidence: "medium",
+    minRelevantItems: 3,
+    influence: { primary: 0, supporting: 3, weak: 0 },
+  });
+  assertEquals(g.decision, "pass");
+});
+
+// ── R: quality-aware gate — 1 primary + total >= minRelevantItems → pass
+Deno.test("R. gate — library_required + 1 primary + total >= min → pass", () => {
+  const g = applySourceModeGate({
+    sourceMode: "library_required",
+    counts: { knowledge_items: 4 },
+    confidence: "medium",
+    minRelevantItems: 3,
+    influence: { primary: 1, supporting: 1, weak: 2 },
+  });
+  assertEquals(g.decision, "pass");
+});
+
+// ── S: library_first + 0 hits → warn, not refuse ───────────────────
+Deno.test("S. gate — library_first + 0 hits → warn (SOP-driven), not refuse", () => {
+  const g = applySourceModeGate({
+    sourceMode: "library_first",
+    counts: {},
+    confidence: "insufficient",
+    minRelevantItems: 2,
+  });
+  assertEquals(g.decision, "warn");
+  assert(g.decision !== "refuse");
+});
+
+// ── T: confidence — all-weak hits should be low, not medium ─────────
+Deno.test("T. confidence — all-weak influence caps at low", () => {
+  // Without influence: medium (count-based)
+  assertEquals(scoreConfidence({ counts: { knowledge_items: 4 }, entityScoped: false, minRelevantItems: 3 }), "medium");
+  // With all-weak influence: low
+  assertEquals(scoreConfidence({
+    counts: { knowledge_items: 4 },
+    entityScoped: false,
+    minRelevantItems: 3,
+    influence: { primary: 0, supporting: 0, weak: 4 },
+  }), "low");
+  // With some meaningful influence: medium
+  assertEquals(scoreConfidence({
+    counts: { knowledge_items: 4 },
+    entityScoped: false,
+    minRelevantItems: 3,
+    influence: { primary: 1, supporting: 1, weak: 2 },
+  }), "medium");
+});
+
+// ── U: expansion produces non-empty seeds for business language ─────
+Deno.test("U. expansion — produces non-empty expanded_seeds for business language", async () => {
+  const { expandSeeds } = await import("../expansion.ts");
+  const r = expandSeeds(
+    ["guest experience platform consolidation"],
+    { thread: { threadId: "t-test" } },
+    { enabled: true },
+  );
+  assert(r.expansionEnabled);
+  assert(r.expandedSeeds.length > 0, `expected non-empty expanded_seeds, got ${r.expandedSeeds.length}`);
+});
+
+// ── V: E2E runtime — discovery-prep with 4 weak KIs → refuse ───────
+Deno.test("V. E2E — discovery-prep with 4 weak-only KIs refuses at source_mode_gate", async () => {
+  // Fake retriever returns 4 KIs whose titles won't match any term seeds
+  // → classifyHits will classify all as "weak"
+  const fakeRetrieve = async () => ({
+    knowledgeItems: [
+      { id: "k-w1", title: "Unrelated topic alpha" },
+      { id: "k-w2", title: "Unrelated topic beta" },
+      { id: "k-w3", title: "Unrelated topic gamma" },
+      { id: "k-w4", title: "Unrelated topic delta" },
+    ],
+    playbooks: [],
+    contextString: "",
+    counts: { kis: 4, playbooks: 0 },
+  });
+  const result = await runSkill({
+    envelope: {
+      id: "discovery-prep",
+      inputs: { account: "Acme", persona: "CIO", stage: "discovery", topic: "consolidation" },
+    },
+    ctx: { thread: { threadId: "t1", account: { id: "a1" } } },
+    supabase: {},
+    userId: "u1",
+  }, { retrieve: fakeRetrieve as any });
+
+  assert(!result.ok, "expected refusal for weak-only KIs");
+  if (result.ok) return;
+  assertEquals(result.code, "source_mode_gate");
+  assertEquals(result.envelope.trace.gate.decision, "refuse");
+  // Confidence should be low (not medium) due to all-weak influence
+  const conf = result.envelope.trace.retrieval.confidence;
+  assert(conf === "low" || conf === "insufficient", `expected low/insufficient, got ${conf}`);
+});
+
+// ── W: E2E runtime — discovery-prep with 3 supporting KIs → pass ───
+Deno.test("W. E2E — discovery-prep with 3 supporting KIs passes", async () => {
+  // Fake retriever returns 3 KIs with titles matching ONE term seed
+  // → classifyHits will classify as "supporting" (1 token match)
+  const fakeRetrieve = async () => ({
+    knowledgeItems: [
+      { id: "k-s1", title: "Discovery framework overview" },
+      { id: "k-s2", title: "Discovery call structure" },
+      { id: "k-s3", title: "Discovery questioning technique" },
+    ],
+    playbooks: [],
+    contextString: "",
+    counts: { kis: 3, playbooks: 0 },
+  });
+  const result = await runSkill({
+    envelope: {
+      id: "discovery-prep",
+      inputs: { account: "Acme", persona: "CIO", stage: "discovery", topic: "consolidation" },
+    },
+    ctx: { thread: { threadId: "t1", account: { id: "a1" } } },
+    supabase: {},
+    userId: "u1",
+  }, { retrieve: fakeRetrieve as any });
+
+  assert(result.ok, `expected pass, got refusal: ${result.ok ? "" : result.reason}`);
 });

@@ -134,13 +134,3 @@ export function applySourceModeGate(input: SourceGateInput): SourceGateDecision 
   }
   return { decision: "pass" };
 }
-
-  // library_relevant
-  if (total === 0) {
-    return {
-      decision: "warn",
-      reason: "library_relevant: no library matches — answering from general reasoning",
-    };
-  }
-  return { decision: "pass" };
-}
