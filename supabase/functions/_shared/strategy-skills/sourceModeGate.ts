@@ -3,10 +3,14 @@
  *
  * Enforces the proof burden each `sourceMode` declares:
  *
- *   library_required  → must have real library proof. Accepts ANY of:
- *                       • standardish (playbooks/standards) ≥ 1
- *                       • knowledge_items dominant (KIs ≥ minRelevantItems)
- *                       Refuses ONLY when total === 0 or confidence === insufficient.
+ *   library_required  → must have real library proof with quality awareness.
+ *                       Accepts if:
+ *                       • standardish (playbooks/standards) ≥ 1, OR
+ *                       • KI influence quality meets proof burden:
+ *                         - primary + supporting >= minRelevantItems, OR
+ *                         - primary >= 1 AND total >= minRelevantItems
+ *                       Refuses when total === 0, confidence === insufficient,
+ *                       or ALL KIs are weak (no primary/supporting influence).
  *
  *   library_first     → prefers library but NEVER hard-refuses.
  *                       0 hits → WARN (proceed with SOP).
@@ -29,11 +33,20 @@ export type SourceGateDecision =
   | { decision: "warn"; reason: string }
   | { decision: "refuse"; reason: string };
 
+/** Optional influence quality breakdown for KIs. */
+export interface InfluenceCounts {
+  primary?: number;
+  supporting?: number;
+  weak?: number;
+}
+
 export interface SourceGateInput {
   sourceMode: SkillSourceMode;
   counts: RetrievalCounts;
   confidence: RetrievalConfidence;
   minRelevantItems: number;
+  /** When provided, enables quality-aware proof for library_required. */
+  influence?: InfluenceCounts;
 }
 
 function totalHits(c: RetrievalCounts): number {
@@ -57,16 +70,38 @@ export function applySourceModeGate(input: SourceGateInput): SourceGateDecision 
         reason: "library_required: no library hits — refusing to answer without proof",
       };
     }
-    // Accept if ANY strong proof path exists:
-    //   1. standardish (playbooks/standards) present
-    //   2. KIs are dominant (meet the minimum on their own)
-    const hasStandardishProof = standardish >= 1;
-    const hasKIDominantProof = kiHits >= input.minRelevantItems;
-    if (hasStandardishProof || hasKIDominantProof) {
+    // Accept if standardish proof exists (playbooks/standards)
+    if (standardish >= 1) {
       return { decision: "pass" };
     }
-    // Some hits but below proof threshold → warn, not refuse
-    // (partial library coverage should degrade, not block)
+    // Quality-aware KI proof: if influence data is available, require meaningful influence
+    const inf = input.influence;
+    if (inf) {
+      const primary = inf.primary ?? 0;
+      const supporting = inf.supporting ?? 0;
+      const meaningful = primary + supporting;
+      // All KIs are weak — no meaningful influence → refuse for artifact-grade
+      if (meaningful === 0 && kiHits > 0) {
+        return {
+          decision: "refuse",
+          reason: `library_required: ${kiHits} KIs but all weak influence (p=${primary}, s=${supporting}, w=${inf.weak ?? 0}) — refusing artifact-grade execution`,
+        };
+      }
+      // KI-dominant proof: meaningful influence meets threshold
+      if (meaningful >= input.minRelevantItems || (primary >= 1 && total >= input.minRelevantItems)) {
+        return { decision: "pass" };
+      }
+      // Some meaningful but not enough
+      return {
+        decision: "warn",
+        reason: `library_required: meaningful=${meaningful}, total=${total} — partial proof, proceeding with caveat`,
+      };
+    }
+    // No influence data provided — fall back to count-based KI-dominant check
+    if (kiHits >= input.minRelevantItems) {
+      return { decision: "pass" };
+    }
+    // Some hits but below proof threshold → warn
     return {
       decision: "warn",
       reason: `library_required: hits=${total}, ki=${kiHits}, standardish=${standardish} — partial proof, proceeding with caveat`,
@@ -89,6 +124,16 @@ export function applySourceModeGate(input: SourceGateInput): SourceGateDecision 
     }
     return { decision: "pass" };
   }
+
+  // library_relevant
+  if (total === 0) {
+    return {
+      decision: "warn",
+      reason: "library_relevant: no library matches — answering from general reasoning",
+    };
+  }
+  return { decision: "pass" };
+}
 
   // library_relevant
   if (total === 0) {
