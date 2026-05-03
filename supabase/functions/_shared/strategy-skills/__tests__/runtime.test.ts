@@ -105,15 +105,25 @@ Deno.test("E. source-mode — library_required refuses on zero hits", () => {
 });
 
 // ── F ────────────────────────────────────────────────────────────────
-Deno.test("F. source-mode — library_required passes with KI-dominant proof (no standardish needed)", () => {
-  // KI-dominant: 5 KIs >= minRelevantItems=3 → pass even without standards/playbooks
+Deno.test("F. source-mode — library_required passes with KI-dominant proof (meaningful influence)", () => {
+  // KI-dominant with meaningful influence: 5 KIs, 3 supporting → pass
   const g = applySourceModeGate({
     sourceMode: "library_required",
-    counts: { knowledge_items: 5 }, // no standards / playbooks
+    counts: { knowledge_items: 5 },
+    confidence: "medium",
+    minRelevantItems: 3,
+    influence: { primary: 2, supporting: 3, weak: 0 },
+  });
+  assertEquals(g.decision, "pass");
+
+  // Without influence data, falls back to count-based check → pass
+  const g_noInf = applySourceModeGate({
+    sourceMode: "library_required",
+    counts: { knowledge_items: 5 },
     confidence: "medium",
     minRelevantItems: 3,
   });
-  assertEquals(g.decision, "pass");
+  assertEquals(g_noInf.decision, "pass");
 
   // Below KI threshold AND no standardish → warn (partial proof)
   const g2 = applySourceModeGate({
@@ -121,6 +131,7 @@ Deno.test("F. source-mode — library_required passes with KI-dominant proof (no
     counts: { knowledge_items: 1 },
     confidence: "low",
     minRelevantItems: 3,
+    influence: { primary: 0, supporting: 1, weak: 0 },
   });
   assertEquals(g2.decision, "warn");
 });
