@@ -16,8 +16,10 @@ export function scoreConfidence(input: ConfidenceInputs): RetrievalConfidence {
 
   const standardish =
     (input.counts.standards ?? 0) + (input.counts.playbooks ?? 0);
+  const kiHits = input.counts.knowledge_items ?? 0;
 
-  if (input.entityScoped && totals >= input.minRelevantItems && standardish >= 1) {
+  // High: entity-scoped + meets minimum + has strong proof (standardish OR KI-dominant)
+  if (input.entityScoped && totals >= input.minRelevantItems && (standardish >= 1 || kiHits >= input.minRelevantItems)) {
     return 'high';
   }
   if (totals >= input.minRelevantItems) return 'medium';
