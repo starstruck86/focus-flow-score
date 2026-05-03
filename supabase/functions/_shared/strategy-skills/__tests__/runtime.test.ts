@@ -105,23 +105,34 @@ Deno.test("E. source-mode — library_required refuses on zero hits", () => {
 });
 
 // ── F ────────────────────────────────────────────────────────────────
-Deno.test("F. source-mode — library_required refuses without standardish hit", () => {
+Deno.test("F. source-mode — library_required passes with KI-dominant proof (no standardish needed)", () => {
+  // KI-dominant: 5 KIs >= minRelevantItems=3 → pass even without standards/playbooks
   const g = applySourceModeGate({
     sourceMode: "library_required",
     counts: { knowledge_items: 5 }, // no standards / playbooks
     confidence: "medium",
     minRelevantItems: 3,
   });
-  assertEquals(g.decision, "refuse");
+  assertEquals(g.decision, "pass");
+
+  // Below KI threshold AND no standardish → warn (partial proof)
+  const g2 = applySourceModeGate({
+    sourceMode: "library_required",
+    counts: { knowledge_items: 1 },
+    confidence: "low",
+    minRelevantItems: 3,
+  });
+  assertEquals(g2.decision, "warn");
 });
 
 // ── G ────────────────────────────────────────────────────────────────
-Deno.test("G. source-mode — library_first warns under threshold, refuses at zero", () => {
-  const refuse = applySourceModeGate({
+Deno.test("G. source-mode — library_first warns at zero and under threshold, never refuses", () => {
+  // Zero hits → WARN (not refuse)
+  const warn0 = applySourceModeGate({
     sourceMode: "library_first", counts: {},
     confidence: "insufficient", minRelevantItems: 2,
   });
-  assertEquals(refuse.decision, "refuse");
+  assertEquals(warn0.decision, "warn");
 
   const warn = applySourceModeGate({
     sourceMode: "library_first", counts: { knowledge_items: 1 },
@@ -331,8 +342,11 @@ Deno.test("bindings — stop-list filters generic terms, dedupes case-insensitiv
 });
 
 // ── extra: confidence scorer ─────────────────────────────────────
-Deno.test("confidence — high requires entity + threshold + standardish", () => {
+Deno.test("confidence — high requires entity + threshold + strong proof (standardish OR KI-dominant)", () => {
   assertEquals(scoreConfidence({ counts: {}, entityScoped: false, minRelevantItems: 1 }), "insufficient");
-  assertEquals(scoreConfidence({ counts: { knowledge_items: 3 }, entityScoped: true, minRelevantItems: 2 }), "medium");
+  // KI-only with entity scoping → high (KI-dominant path)
+  assertEquals(scoreConfidence({ counts: { knowledge_items: 3 }, entityScoped: true, minRelevantItems: 2 }), "high");
   assertEquals(scoreConfidence({ counts: { knowledge_items: 3, standards: 1 }, entityScoped: true, minRelevantItems: 2 }), "high");
+  // KI-only without entity scoping → medium (not high)
+  assertEquals(scoreConfidence({ counts: { knowledge_items: 3 }, entityScoped: false, minRelevantItems: 2 }), "medium");
 });
