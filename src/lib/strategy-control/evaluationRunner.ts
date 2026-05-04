@@ -112,6 +112,7 @@ export async function runEvaluation(
       result: baselineResult,
       text: baselineResult.text,
       score: comparison.baseline_score,
+      trace: baselineResult.trace,
     },
     comparison,
     inputTerms,
