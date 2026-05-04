@@ -47,6 +47,7 @@ import { VerdictHeader } from "@/components/strategy-control/VerdictHeader";
 import { CaseRow } from "@/components/strategy-control/CaseRow";
 
 const BUILD_STAMP = typeof __BUILD_TIMESTAMP__ !== "undefined" ? __BUILD_TIMESTAMP__ : "unknown";
+const OWNER_EMAIL = "corey.hartin@gmail.com";
 
 function downloadBlob(content: string, filename: string, mime: string) {
   const blob = new Blob([content], { type: mime });
