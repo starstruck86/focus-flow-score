@@ -13,7 +13,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, Play, Trophy, Minus, Eye } from "lucide-react";
+import { ChevronDown, Play, Trophy, Minus, Eye, Download } from "lucide-react";
 import type { ValidationCase } from "@/lib/strategy-control/cases";
 import {
   buildDefaultEvalCases,
@@ -22,6 +22,7 @@ import {
   type EvaluationCase,
 } from "@/lib/strategy-control/evaluationRunner";
 import type { OutputScore } from "@/lib/strategy-control/outputScorer";
+import { BASELINE_PROMPT_VERSION } from "@/lib/strategy-control/baselineGenerator";
 
 interface Props {
   cases: ReadonlyArray<ValidationCase>;
