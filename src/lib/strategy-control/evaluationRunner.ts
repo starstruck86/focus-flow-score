@@ -13,7 +13,7 @@
  */
 import type { ValidationCase } from "./cases";
 import type { BaselineTrace } from "./baselineGenerator";
-import { generateBaseline, type BaselineResult } from "./baselineGenerator";
+import { generateBaseline, type BaselineResult, type BaselineOutputContract } from "./baselineGenerator";
 import { compareOutputs, type ComparisonResult, type OutputScore, type ScoringContext } from "./outputScorer";
 import { conversationPovManifest } from "@/lib/strategy-skills/manifests/conversationPov";
 import { commercialInsightManifest } from "@/lib/strategy-skills/manifests/commercialInsight";
@@ -92,6 +92,19 @@ function buildScoringContext(evalCase: EvaluationCase): ScoringContext {
     forbid: manifest.output.forbid ? [...manifest.output.forbid] : [],
     skillId,
     mustHave: [...manifest.rubric.mustHave],
+    targetWords: manifest.output.targetWords ? { ...manifest.output.targetWords } : undefined,
+  };
+}
+
+/**
+ * Build a BaselineOutputContract from the scoring context for per-case baselines.
+ */
+function buildBaselineContract(ctx: ScoringContext): BaselineOutputContract {
+  return {
+    shape: ctx.shape ?? "unknown",
+    targetWords: ctx.targetWords,
+    forbid: ctx.forbid,
+    skillId: ctx.skillId,
   };
 }
 
@@ -219,19 +232,23 @@ export async function runEvaluation(
   onProgress?.("strategy");
   const strategyResult = await runStrategyEvalSynthesis(evalCase);
 
-  // 2. Run Baseline output (same inputs, no library)
+  // 2. Run Baseline output (same inputs, same output contract, no library)
   onProgress?.("baseline");
+  const scoringCtx = buildScoringContext(evalCase);
+  const baselineContract = buildBaselineContract(scoringCtx);
   const skill = evalCase.case.body.skill as { inputs?: Record<string, string> } | undefined;
   const baselineResult = await generateBaseline({
     account: skill?.inputs?.account ?? "",
     persona: skill?.inputs?.persona ?? "",
     stage: skill?.inputs?.stage ?? "",
     topic: skill?.inputs?.topic ?? "",
-  });
+    opportunity: skill?.inputs?.opportunity,
+    methodology: skill?.inputs?.methodology,
+    industry: skill?.inputs?.industry,
+  }, baselineContract);
 
   // 3. Score both with format-aware context from the skill manifest
   onProgress?.("scoring");
-  const scoringCtx = buildScoringContext(evalCase);
   const comparison = compareOutputs(strategyResult.text, baselineResult.text, inputTerms, scoringCtx);
 
   return {
