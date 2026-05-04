@@ -13,7 +13,7 @@
  */
 import type { ValidationCase } from "./cases";
 import type { BaselineTrace } from "./baselineGenerator";
-import { generateBaseline, type BaselineResult } from "./baselineGenerator";
+import { generateBaseline, type BaselineResult, type BaselineOutputContract } from "./baselineGenerator";
 import { compareOutputs, type ComparisonResult, type OutputScore, type ScoringContext } from "./outputScorer";
 import { conversationPovManifest } from "@/lib/strategy-skills/manifests/conversationPov";
 import { commercialInsightManifest } from "@/lib/strategy-skills/manifests/commercialInsight";
