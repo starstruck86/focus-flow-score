@@ -270,14 +270,21 @@ export function buildDefaultEvalCases(
 ): EvaluationCase[] {
   const evalCases: EvaluationCase[] = [];
 
+  // Phase 3.5B — 5 required eval cases
   const c1 = cases.find(c => c.id === "1_conversation_pov");
   if (c1) evalCases.push({ case: c1, tier: "strong" });
+
+  const c2 = cases.find(c => c.id === "2_commercial_insight");
+  if (c2) evalCases.push({ case: c2, tier: "strong" });
 
   const c3b = cases.find(c => c.id === "3b_discovery_prep_real");
   if (c3b) evalCases.push({ case: c3b, tier: "partial" });
 
-  const c3a = cases.find(c => c.id === "3a_discovery_prep_sparse");
-  if (c3a) evalCases.push({ case: c3a, tier: "weak" });
+  const c3c = cases.find(c => c.id === "3c_meddicc_review_real");
+  if (c3c) evalCases.push({ case: c3c, tier: "partial" });
+
+  const c5b = cases.find(c => c.id === "5b_executive_brief_real");
+  if (c5b) evalCases.push({ case: c5b, tier: "partial" });
 
   return evalCases;
 }
