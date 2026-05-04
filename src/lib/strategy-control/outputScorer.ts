@@ -180,6 +180,15 @@ function scoreJsonDepth(obj: unknown, depth = 0): number {
     const keys = Object.keys(obj as Record<string, unknown>);
     if (keys.length === 0) return 2;
 
+    // Unwrap single-key root wrappers (e.g. {"discovery_prep": {...}})
+    // so the actual content depth is scored, not just the wrapper.
+    if (keys.length === 1 && depth === 0) {
+      const inner = (obj as Record<string, unknown>)[keys[0]];
+      if (typeof inner === "object" && inner !== null && !Array.isArray(inner)) {
+        return scoreJsonDepth(inner, depth);
+      }
+    }
+
     let score = 2;
     // Named sections / keys
     if (keys.length >= 5) score += 1;
