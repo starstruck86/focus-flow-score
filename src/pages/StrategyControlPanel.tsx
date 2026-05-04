@@ -418,3 +418,68 @@ function Placeholder({ title }: { title: string }) {
     </Card>
   );
 }
+
+/* ── Helper components for Last Run Summary ── */
+
+function verdictVariant(v: string): "ok" | "warn" | "bad" {
+  if (v === "GO") return "ok";
+  if (v === "COVERAGE_GAP") return "warn";
+  return "bad";
+}
+
+function expansionStatus(report: ValidationReport): string {
+  const anyEnabled = [
+    ...report.standardMatrix.results,
+    ...report.weakCaseMatrix.results,
+  ].some((r) => r.signals.expansion_enabled);
+  return anyEnabled ? "active" : "inactive";
+}
+
+function findResult(results: ReadonlyArray<CaseResult>, id: string): CaseResult | undefined {
+  return results.find((r) => r.case.id === id);
+}
+
+function SummaryItem({ label, value, variant }: { label: string; value: string; variant: "ok" | "warn" | "bad" }) {
+  const color = variant === "ok"
+    ? "text-emerald-400"
+    : variant === "warn"
+      ? "text-amber-400"
+      : "text-destructive";
+  return (
+    <div className="rounded bg-muted/30 p-2">
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</div>
+      <div className={`text-sm font-semibold ${color}`}>{value}</div>
+    </div>
+  );
+}
+
+function CaseStatusChip({ label, result }: { label: string; result: CaseResult | undefined }) {
+  const status = result?.status ?? "pending";
+  const color =
+    status === "pass" || status === "expected_refusal"
+      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+      : status === "coverage_gap"
+        ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+        : status === "fail"
+          ? "bg-destructive/15 text-destructive border-destructive/30"
+          : "bg-muted text-muted-foreground border-border";
+  return (
+    <div className={`rounded border px-2 py-1.5 ${color}`}>
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+      <div className="text-xs font-semibold">{status.toUpperCase().replace("_", " ")}</div>
+    </div>
+  );
+}
+
+function IntegrityRow({ label, files, ok }: { label: string; files: string; ok: boolean }) {
+  return (
+    <div className="flex items-start gap-2 rounded bg-muted/30 p-2">
+      <span className="text-sm mt-0.5">{ok ? "✅" : "❌"}</span>
+      <div>
+        <div className="font-semibold">{label}</div>
+        <div className="text-muted-foreground font-mono text-[10px] leading-relaxed">{files}</div>
+        <div className={ok ? "text-emerald-400" : "text-destructive"}>{ok ? "Not modified" : "MODIFIED"}</div>
+      </div>
+    </div>
+  );
+}
