@@ -31,6 +31,7 @@ export interface EvaluationResult {
     result: BaselineResult;
     text: string;
     score: OutputScore;
+    trace: BaselineTrace;
   };
   comparison: ComparisonResult;
   inputTerms: string[];
