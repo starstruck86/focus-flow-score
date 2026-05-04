@@ -318,3 +318,153 @@ describe("buildExportCase", () => {
     expect((exported.strategy_score as any).business_impact).toBe(3);
   });
 });
+
+/* ------------------------------------------------------------------ */
+/*  6. Format-Aware Scoring Calibration (Phase 3.5B-Fix)               */
+/* ------------------------------------------------------------------ */
+
+describe("Format-Aware Scoring — Structure", () => {
+  const proseCtx: ScoringContext = { shape: "prose", forbid: ["headings", "bullets"], skillId: "conversation-pov" };
+  const artifactCtx: ScoringContext = { shape: "structured_artifact", forbid: [], skillId: "discovery-prep" };
+
+  it("prose with forbid headings/bullets should NOT lose structure to markdown baseline", () => {
+    const strategyProse = `Beechwood's consolidation initiative exposes a critical dependency on legacy guest systems. Specifically, their current architecture fragments guest data across three platforms, creating a 23% data reconciliation overhead. However, the real risk is competitive: Marriott and Hilton have already unified their stacks, meaning Beechwood's delay increases switching cost exposure quarterly.
+
+Therefore, the conversation should anchor on quantified fragmentation cost. Because their VP of Operations has signaled frustration with manual reconciliation, this creates a natural entry point. Notably, the consolidation timeline aligns with their Q3 budget cycle, creating urgency that should be leveraged.
+
+Given that their current vendor contract expires in 8 months, the strategic window is narrow. The hypothesis: Beechwood will lose 15% of their loyalty program efficiency every quarter they delay, making inaction the most expensive option.`;
+
+    const baselineMarkdown = `## Conversation POV
+
+### Key Points
+- Beechwood is consolidating guest platforms
+- They need better data management
+- Competition is advancing
+
+### Recommendations
+- Ask about their timeline
+- Understand their needs
+- Build rapport with stakeholders
+
+### Next Steps
+- Schedule a follow-up meeting
+- Send proposal document`;
+
+    const strategyScore = scoreOutput(strategyProse, ["Beechwood", "guest", "consolidation"], proseCtx);
+    const baselineScore = scoreOutput(baselineMarkdown, ["Beechwood", "guest", "consolidation"]);
+
+    // Strategy prose should NOT lose structure just because baseline has markdown headings/bullets
+    expect(strategyScore.structure).toBeGreaterThanOrEqual(baselineScore.structure);
+  });
+
+  it("structured JSON artifact with nested sections should score high on structure", () => {
+    const jsonArtifact = `\`\`\`json
+{
+  "situation": {
+    "current_state": "Beechwood operates fragmented guest data across 3 systems",
+    "pain_points": ["23% reconciliation overhead", "competitive gap vs Marriott"],
+    "timeline": "Q3 budget cycle, 8-month vendor contract window"
+  },
+  "commercial_insight": "Consolidation delay costs 15% loyalty efficiency per quarter",
+  "strategic_why": "VP Operations frustrated with manual reconciliation — natural entry",
+  "risks": [
+    {"risk": "Competitive displacement", "impact": "High", "timeline": "Quarterly"},
+    {"risk": "Vendor lock-in", "impact": "Medium", "timeline": "8 months"}
+  ],
+  "specific_asks": ["Quantify fragmentation cost", "Map decision process", "Identify champion"],
+  "next_steps": ["Discovery call with VP Ops", "ROI model draft", "Competitive analysis"]
+}
+\`\`\``;
+
+    const score = scoreOutput(jsonArtifact, ["Beechwood"], artifactCtx);
+    expect(score.structure).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("Format-Aware Scoring — Actionability", () => {
+  it("JSON arrays of discovery_questions/next_steps should score actionability", () => {
+    const jsonOutput = `\`\`\`json
+{
+  "discovery_questions": [
+    "What is the annual cost of maintaining three separate guest data systems?",
+    "How does the current fragmentation impact your loyalty program retention rates?",
+    "Who owns the consolidation decision — is this IT-led or Operations-led?",
+    "What would a unified guest view enable that you cannot do today?"
+  ],
+  "next_steps": [
+    "Schedule discovery call with VP Operations",
+    "Prepare ROI model comparing current vs consolidated state",
+    "Map decision criteria and approval process"
+  ],
+  "recommendations": [
+    "Lead with quantified fragmentation cost to create urgency",
+    "Position against Marriott/Hilton unified stacks as competitive risk"
+  ]
+}
+\`\`\``;
+
+    const ctx: ScoringContext = { shape: "list", forbid: [], skillId: "discovery-questions" };
+    const score = scoreOutput(jsonOutput, ["Beechwood", "guest"], ctx);
+    expect(score.actionability).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("Format-Aware Scoring — Relevance", () => {
+  it("generic baseline repeating input terms without action/evidence should get penalized", () => {
+    const genericBaseline = `Beechwood guest experience platform consolidation is important. The Beechwood guest experience platform consolidation project requires attention. When thinking about Beechwood guest experience platform consolidation, we should consider best practices. The Beechwood guest experience platform consolidation will be beneficial. Overall, the Beechwood guest experience platform consolidation looks promising and the team should continue with the Beechwood guest experience platform consolidation effort.`;
+
+    const score = scoreOutput(genericBaseline, ["Beechwood", "guest", "experience", "platform", "consolidation"]);
+    // Should not get max relevance for pure repetition without substance
+    expect(score.relevance).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("Format-Aware Scoring — Business Impact in JSON", () => {
+  it("detects strategic_why, commercial_insight, risks, change_vectors, metrics in JSON fields", () => {
+    const jsonArtifact = `\`\`\`json
+{
+  "strategic_why": "VP Operations frustration with manual reconciliation creates natural entry point",
+  "commercial_insight": "Consolidation delay costs 15% loyalty efficiency per quarter of inaction",
+  "change_vectors": ["Digital transformation mandate", "Competitive pressure from Marriott"],
+  "risks": [
+    {"name": "Competitive displacement", "consequence": "Market share erosion", "timeline": "Q3"}
+  ],
+  "metrics": {"current_churn": "23%", "target_retention": "85%", "roi_estimate": "$2.1M"},
+  "current_state_reasoning": "Fragmented stack creates 23% overhead and blocks loyalty innovation",
+  "quantified_pain": "$1.2M annual reconciliation cost plus $800K opportunity cost"
+}
+\`\`\``;
+
+    const ctx: ScoringContext = { shape: "structured_artifact", forbid: [], skillId: "executive-brief" };
+    const score = scoreOutput(jsonArtifact, ["Beechwood"], ctx);
+    expect(score.business_impact).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("Format-Aware compareOutputs", () => {
+  it("normalizes comparison so baseline does not win structure from forbidden formatting", () => {
+    const strategyProse = `The consolidation initiative requires immediate attention because fragmentation costs are compounding quarterly. Specifically, three separate guest data systems create a 23% reconciliation overhead that directly impacts loyalty program efficiency. However, the competitive dimension is equally urgent — Marriott completed their unified stack 18 months ago.
+
+Therefore, the conversation must anchor on quantified business impact rather than technical features. Because the VP of Operations has expressed frustration with manual data reconciliation, this creates a natural champion pathway. The strategic window narrows as their vendor contract expires in 8 months.`;
+
+    const baselineMd = `## POV for Beechwood
+
+### Background
+- Beechwood is consolidating systems
+- They need to improve guest experience
+
+### Approach
+- Understand their needs
+- Build rapport
+- Present our solution
+
+### Next Steps
+- Follow up next week`;
+
+    const ctx: ScoringContext = { shape: "prose", forbid: ["headings", "bullets"], skillId: "conversation-pov" };
+    const result = compareOutputs(strategyProse, baselineMd, ["Beechwood", "consolidation"], ctx);
+
+    // Strategy should not lose structure when it correctly avoids forbidden formatting
+    expect(result.dimension_winners.structure).not.toBe("baseline");
+  });
+});
