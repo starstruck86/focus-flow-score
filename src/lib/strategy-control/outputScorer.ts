@@ -28,6 +28,8 @@ export interface ScoringContext {
   forbid?: string[];
   skillId?: string;
   mustHave?: string[];
+  /** Word budget from manifest — used for density normalization */
+  targetWords?: { min: number; max: number };
 }
 
 export interface ComparisonResult {
