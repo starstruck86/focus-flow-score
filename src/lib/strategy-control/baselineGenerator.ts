@@ -40,7 +40,17 @@ export interface BaselineResult {
   latencyMs: number;
   error: string | null;
   trace: BaselineTrace;
+  /** The exact system prompt sent to the baseline LLM */
+  systemPrompt: string;
+  /** The exact user prompt sent to the baseline LLM */
+  userPrompt: string;
 }
+
+const BASELINE_SYSTEM_PROMPT =
+  "You are a helpful sales strategy assistant. " +
+  "Answer the user's question with actionable, specific advice. " +
+  "Do not reference any internal library, playbook, or proprietary methodology. " +
+  "Use only general sales knowledge.";
 
 const CLEAN_TRACE: BaselineTrace = {
   baseline_mode: "clean_baseline",
