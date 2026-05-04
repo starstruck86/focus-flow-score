@@ -412,9 +412,15 @@ export function compareOutputs(
   inputTerms: string[],
   strategyCtx?: ScoringContext,
 ): ComparisonResult {
-  // Strategy scored with its manifest context; baseline always scored as generic prose
+  // Strategy scored with its manifest context.
+  // Baseline structure is scored with the SAME contract context so the comparison
+  // is apples-to-apples: if Strategy is forbidden from using headings/bullets,
+  // baseline shouldn't get free structure points from markdown formatting either.
   const strategy_score = scoreOutput(strategyText, inputTerms, strategyCtx);
-  const baseline_score = scoreOutput(baselineText, inputTerms);
+  const baselineCtx: ScoringContext | undefined = strategyCtx
+    ? { shape: strategyCtx.shape, forbid: strategyCtx.forbid, skillId: strategyCtx.skillId }
+    : undefined;
+  const baseline_score = scoreOutput(baselineText, inputTerms, baselineCtx);
 
   const dims = ["specificity", "actionability", "structure", "evidence", "relevance", "business_impact"] as const;
   const dimension_winners: Record<string, "strategy" | "baseline" | "tie"> = {};
