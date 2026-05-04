@@ -163,7 +163,8 @@ export async function runFullValidation(
 
 function caseRow(r: CaseResult): string {
   const s = r.signals;
-  return `| ${r.case.id} | ${r.status.toUpperCase()} | ${s.source_mode ?? "—"} | ${s.confidence ?? "—"} | ${s.gate_decision ?? "—"} | ${s.influence ?? "—"} | ${r.latencyMs}ms | ${r.reason} |`;
+  const expSeeds = s.expanded_seeds.length ? s.expanded_seeds.join(", ") : "—";
+  return `| ${r.case.id} | ${r.status.toUpperCase()} | ${s.source_mode ?? "—"} | ${s.confidence ?? "—"} | ${s.gate_decision ?? "—"} | ${s.influence ?? "—"} | ${s.expansion_enabled ? "✅" : "—"} | ${expSeeds} | ${r.latencyMs}ms | ${r.reason} |`;
 }
 
 export function toMarkdown(report: ValidationReport): string {
@@ -183,8 +184,8 @@ export function toMarkdown(report: ValidationReport): string {
   lines.push(`## Standard Matrix (${report.standardMatrix.results.length} cases)`);
   lines.push(`**Verdict:** ${report.standardMatrix.verdict.verdict} — ${report.standardMatrix.verdict.reason}`);
   lines.push("");
-  lines.push(`| Case | Status | Source Mode | Confidence | Gate | Influence | Latency | Reason |`);
-  lines.push(`|------|--------|-------------|------------|------|-----------|---------|--------|`);
+  lines.push(`| Case | Status | Source Mode | Confidence | Gate | Influence | Expansion | Expanded Seeds | Latency | Reason |`);
+  lines.push(`|------|--------|-------------|------------|------|-----------|-----------|----------------|---------|--------|`);
   report.standardMatrix.results.forEach((r) => lines.push(caseRow(r)));
   lines.push("");
 
@@ -198,8 +199,8 @@ export function toMarkdown(report: ValidationReport): string {
   lines.push(`## Weak-Case Isolation Matrix (${report.weakCaseMatrix.results.length} cases)`);
   lines.push(`**All expected refusals fired:** ${report.weakCaseMatrix.allRefused ? "✅ YES" : "⚠️ NO"}`);
   lines.push("");
-  lines.push(`| Case | Status | Source Mode | Confidence | Gate | Influence | Latency | Reason |`);
-  lines.push(`|------|--------|-------------|------------|------|-----------|---------|--------|`);
+  lines.push(`| Case | Status | Source Mode | Confidence | Gate | Influence | Expansion | Expanded Seeds | Latency | Reason |`);
+  lines.push(`|------|--------|-------------|------------|------|-----------|-----------|----------------|---------|--------|`);
   report.weakCaseMatrix.results.forEach((r) => lines.push(caseRow(r)));
   lines.push("");
 
