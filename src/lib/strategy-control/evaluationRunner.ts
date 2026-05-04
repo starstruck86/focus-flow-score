@@ -92,6 +92,19 @@ function buildScoringContext(evalCase: EvaluationCase): ScoringContext {
     forbid: manifest.output.forbid ? [...manifest.output.forbid] : [],
     skillId,
     mustHave: [...manifest.rubric.mustHave],
+    targetWords: manifest.output.targetWords ? { ...manifest.output.targetWords } : undefined,
+  };
+}
+
+/**
+ * Build a BaselineOutputContract from the scoring context for per-case baselines.
+ */
+function buildBaselineContract(ctx: ScoringContext): BaselineOutputContract {
+  return {
+    shape: ctx.shape ?? "unknown",
+    targetWords: ctx.targetWords,
+    forbid: ctx.forbid,
+    skillId: ctx.skillId,
   };
 }
 
