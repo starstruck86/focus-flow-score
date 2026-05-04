@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Unit tests for Output Evaluation layer logic.
  * Covers contamination detection, aggregate counting, and export shape.
