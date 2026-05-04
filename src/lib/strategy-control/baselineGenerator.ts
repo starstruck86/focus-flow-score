@@ -47,7 +47,7 @@ const CLEAN_TRACE: BaselineTrace = {
   baseline_context_used: false,
   baseline_library_used: false,
   baseline_memory_used: false,
-  model: "openai/gpt-5-mini",
+  model: "google/gemini-2.5-flash",
 };
 
 function buildBaselinePrompt(req: BaselineRequest): string {
