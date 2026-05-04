@@ -73,11 +73,19 @@ function Signal({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-export function CaseRow({ result, running, caseLabel, caseDescription }: Props) {
+export function CaseRow({ result, running, caseLabel, caseDescription, sentBody, assertionError }: Props) {
   const [open, setOpen] = useState(false);
+  const [inputsOpen, setInputsOpen] = useState(false);
   const status = result?.status ?? null;
   const sig = result?.signals;
 
+  // Extract skill inputs for display
+  const skillInputs = sentBody?.skill && typeof sentBody.skill === "object"
+    ? (sentBody.skill as Record<string, unknown>).inputs as Record<string, unknown> | undefined
+    : undefined;
+  const runId = sentBody?.skill && typeof sentBody.skill === "object"
+    ? (sentBody.skill as Record<string, unknown>).runId as string | undefined
+    : undefined;
   return (
     <Card className="p-3">
       <div className="flex items-start justify-between gap-3">
