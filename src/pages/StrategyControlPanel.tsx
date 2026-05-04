@@ -45,6 +45,7 @@ import {
 } from "@/lib/strategy-control/reportRunner";
 import { VerdictHeader } from "@/components/strategy-control/VerdictHeader";
 import { CaseRow } from "@/components/strategy-control/CaseRow";
+import { OutputEvaluationTab } from "@/components/strategy-control/OutputEvaluationTab";
 
 const BUILD_STAMP = typeof __BUILD_TIMESTAMP__ !== "undefined" ? __BUILD_TIMESTAMP__ : "unknown";
 const OWNER_EMAIL = "corey.hartin@gmail.com";
@@ -199,9 +200,9 @@ export default function StrategyControlPanel() {
         <Tabs defaultValue="validation">
           <TabsList>
             <TabsTrigger value="validation">Validation</TabsTrigger>
+            <TabsTrigger value="evaluation">Output Evaluation</TabsTrigger>
             <TabsTrigger value="single" disabled>Single Skill Run</TabsTrigger>
             <TabsTrigger value="trace" disabled>Trace Inspector</TabsTrigger>
-            <TabsTrigger value="compare" disabled>Compare Runs</TabsTrigger>
           </TabsList>
 
           <TabsContent value="validation" className="space-y-4 mt-4">
@@ -428,14 +429,14 @@ export default function StrategyControlPanel() {
             )}
           </TabsContent>
 
+          <TabsContent value="evaluation" className="space-y-4 mt-4">
+            <OutputEvaluationTab cases={cases} />
+          </TabsContent>
           <TabsContent value="single">
             <Placeholder title="Single Skill Run" />
           </TabsContent>
           <TabsContent value="trace">
             <Placeholder title="Trace Inspector" />
-          </TabsContent>
-          <TabsContent value="compare">
-            <Placeholder title="Compare Runs" />
           </TabsContent>
         </Tabs>
       </SafePage>
