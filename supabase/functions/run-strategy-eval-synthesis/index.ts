@@ -17,7 +17,19 @@ const CORS = {
 };
 
 // ── Versioned synthesis prompt ──────────────────────────────────────
-export const STRATEGY_EVAL_SYNTHESIS_PROMPT_VERSION = "1.0.0";
+export const STRATEGY_EVAL_SYNTHESIS_PROMPT_VERSION = "2.0.0";
+
+/**
+ * Detect if the output contract demands constrained prose:
+ * shape=prose + forbid includes headings or bullets + short targetWords.
+ */
+function isConstrainedProse(
+  outputContract: { shape: string; targetWords?: { min: number; max: number }; forbid?: string[] },
+): boolean {
+  if (outputContract.shape !== "prose") return false;
+  const hasForbid = outputContract.forbid?.some(f => f === "headings" || f === "bullets");
+  return !!hasForbid;
+}
 
 function buildEvalSynthesisSystemPrompt(
   inputs: Record<string, string>,
@@ -52,6 +64,27 @@ function buildEvalSynthesisSystemPrompt(
     sections.push(`Forbidden formatting: ${outputContract.forbid.join(", ")}`);
   }
   sections.push("");
+
+  // ── V2: Prose density instructions for constrained prose skills
+  if (isConstrainedProse(outputContract)) {
+    sections.push("=== PROSE DENSITY REQUIREMENTS (V2) ===");
+    sections.push("Because this skill demands constrained prose with no headings or bullets,");
+    sections.push("every sentence must carry maximum business weight. Within the word limit:");
+    sections.push("");
+    sections.push("MANDATORY ELEMENTS (weave into flowing prose, do NOT use headings/bullets):");
+    sections.push("1. BEFORE/CURRENT STATE — Name a specific, concrete current-state condition the buyer faces.");
+    sections.push("2. COST-OF-INACTION — State the negative consequence of not acting: lost revenue, pipeline leakage, extended cycles, churn risk, margin erosion, or competitive exposure.");
+    sections.push("3. AFTER-STATE / BUSINESS OUTCOME — Describe the measurable improvement: shorter cycles, higher conversion, increased pipeline velocity, reduced risk, or revenue uplift.");
+    sections.push("4. REQUIRED CAPABILITY — Name the specific capability or behavior shift needed (e.g., \"structured discovery qualification\" not \"better process\").");
+    sections.push("5. METRIC-ORIENTED PHRASE — Include at least one concrete metric reference: a percentage, a time frame, a dollar impact, or a named KPI (e.g., \"stage-2 conversion\" or \"30% faster qualification\").");
+    sections.push("6. SELLER ACTION — End with or embed one concrete talk-track move, question, or positioning statement the seller can use verbatim in the conversation.");
+    sections.push("");
+    sections.push("TONE: Write as a sharp commercial POV — not a summary, not advice, not a framework description.");
+    sections.push("Connect the business issue directly to money, risk, time, pipeline, conversion, retention, or operating efficiency.");
+    sections.push("Include a clear \"so what\" for the buyer — why this matters to THEM specifically.");
+    sections.push("The output must read like something a prepared seller would say, not like a consultant's memo.");
+    sections.push("");
+  }
 
   // ── Quality rubric
   sections.push("=== QUALITY RUBRIC ===");
