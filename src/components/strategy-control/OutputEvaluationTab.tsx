@@ -460,6 +460,16 @@ export function OutputEvaluationTab({ cases }: Props) {
                 {showWhy ? "Hide" : "Show"} Why Strategy Won
               </Button>
             )}
+            {results.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => exportJSON(results)}>
+                <Download className="h-3 w-3 mr-1" /> JSON
+              </Button>
+            )}
+            {results.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => exportMarkdown(results)}>
+                <Download className="h-3 w-3 mr-1" /> Markdown
+              </Button>
+            )}
             {progress && (
               <span className="text-xs text-muted-foreground animate-pulse">{progress}</span>
             )}
