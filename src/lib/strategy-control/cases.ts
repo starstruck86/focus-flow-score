@@ -122,10 +122,13 @@ export function buildCases(inputs: ValidationInputs): ReadonlyArray<ValidationCa
     },
 
     // 3a. discovery-prep — FAKE / sparse → expected refusal
+    // NOTE: Stage is intentionally empty to prevent the expansion layer
+    // from pulling real KIs via the "discovery" seed. This isolates the
+    // sparse-input refusal path. See W1–W3 for the same pattern.
     {
       id: "3a_discovery_prep_sparse",
       label: "3a · discovery-prep (sparse) — expected refusal",
-      description: "library_required skill with thin inputs. An honest refusal is the correct outcome.",
+      description: "library_required skill with fake account, no stage seed, irrelevant topic. An honest refusal is the correct outcome.",
       expectation: "expected_refusal",
       withSkillDebugHeader: true,
       body: {
@@ -136,8 +139,8 @@ export function buildCases(inputs: ValidationInputs): ReadonlyArray<ValidationCa
           inputs: {
             account: "Acme Test Co (fake)",
             persona: "Buyer",
-            stage: "discovery",
-            topic: "general platform consolidation",
+            stage: "",
+            topic: "quantum entanglement for supply chain optimization",
           },
         },
       },
