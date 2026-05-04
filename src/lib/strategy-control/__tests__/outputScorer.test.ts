@@ -68,3 +68,76 @@ describe("scoreJsonDepth — semantic section completeness", () => {
     expect(richScore.structure).toBeGreaterThan(shallowScore.structure);
   });
 });
+
+describe("Completeness scoring — structured artifact evaluation", () => {
+  const mustHaveSections = ["metrics", "champion", "decision criteria", "decision process", "identified pain", "risks", "next steps"];
+  const fullCtx: ScoringContext = { shape: "structured_artifact", mustHave: mustHaveSections };
+
+  it("Test 1 — Incomplete artifact loses structure to complete artifact", () => {
+    // Baseline missing 2 sections (champion, risks)
+    const incomplete = "```json\n" + JSON.stringify({
+      metrics: { current: "12%", target: "20%" },
+      decision_criteria: ["Speed", "Integration", "Cost"],
+      decision_process: { steps: ["Technical eval", "Business case"], timeline: "Q3" },
+      identified_pain: "Manual pipeline reviews costing 8 hrs/week",
+      next_steps: ["Schedule exec sponsor meeting", "Deliver ROI model"],
+    }) + "\n```";
+
+    // Strategy includes all 7 sections
+    const complete = "```json\n" + JSON.stringify({
+      metrics: { current: "12%", target: "20%" },
+      champion: "VP Sales — strong internal advocate",
+      decision_criteria: ["Speed", "Integration", "Cost"],
+      decision_process: { steps: ["Technical eval", "Business case", "Legal"], timeline: "Q3" },
+      identified_pain: "Manual pipeline reviews costing 8 hrs/week per rep",
+      risks: [{ label: "Budget freeze", severity: "high" }, { label: "Competitor eval", severity: "medium" }],
+      next_steps: ["Schedule exec sponsor meeting", "Deliver ROI model", "Map decision process"],
+    }) + "\n```";
+
+    const result = compareOutputs(complete, incomplete, ["pipeline", "champion"], fullCtx);
+    expect(result.dimension_winners.structure).toBe("strategy");
+  });
+
+  it("Test 2 — Complete but shallow loses to complete + deep", () => {
+    // Both have all sections, but shallow has minimal content
+    const shallow = "```json\n" + JSON.stringify({
+      metrics: "12%",
+      champion: "VP Sales",
+      decision_criteria: ["Speed"],
+      decision_process: "Standard",
+      identified_pain: "Manual reviews",
+      risks: ["Budget"],
+      next_steps: ["Meeting"],
+    }) + "\n```";
+
+    const deep = "```json\n" + JSON.stringify({
+      metrics: { current: "12% win rate", target: "20%", gap_analysis: "8pt improvement needed" },
+      champion: "VP Sales — has budget authority, personally impacted by pipeline visibility gaps",
+      decision_criteria: ["Speed to value (<90 days)", "Native CRM integration", "Cost below $50k/yr"],
+      decision_process: { steps: ["Technical eval", "Business case review", "Legal/procurement"], timeline: "Q3", blockers: ["CFO approval"] },
+      identified_pain: "Manual pipeline reviews consuming 8 hrs/week per manager, leading to delayed forecasts",
+      risks: [{ label: "Budget freeze in Q4", severity: "high", mitigation: "Accelerate timeline" }, { label: "Competitor eval", severity: "medium" }],
+      next_steps: ["Schedule exec sponsor meeting by Friday", "Deliver ROI model with CFO metrics", "Map full decision process with champion"],
+    }) + "\n```";
+
+    const result = compareOutputs(deep, shallow, ["pipeline", "champion"], fullCtx);
+    // Deep should win or tie on structure (depth component gives it the edge)
+    expect(result.dimension_winners.structure).not.toBe("baseline");
+  });
+
+  it("Test 3 — MustHave enforcement caps structure when section missing", () => {
+    // Remove "champion" from artifact
+    const missingChampion = "```json\n" + JSON.stringify({
+      metrics: { current: "12%", target: "20%" },
+      decision_criteria: ["Speed", "Integration"],
+      decision_process: { steps: ["Technical eval"], timeline: "Q3" },
+      identified_pain: "Manual pipeline reviews",
+      risks: [{ label: "Budget freeze", severity: "high" }],
+      next_steps: ["Schedule meeting"],
+    }) + "\n```";
+
+    const score = scoreOutput(missingChampion, ["pipeline"], fullCtx);
+    // Missing 1 section → completeness=4, cap applies → structure ≤ 4
+    expect(score.structure).toBeLessThanOrEqual(4);
+  });
+});
