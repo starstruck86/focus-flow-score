@@ -187,8 +187,16 @@ function scoreStructureProse(text: string): number {
   // Weights: coherence 30%, density 25%, flow 15%, bizScore 30%
   // Flow is down-weighted to prevent transition-word variance from deciding scores.
   const rawSum = coherence * 1.2 + density * 1.0 + flow * 0.6 + bizScore * 1.2; // 0–4
-  // Map: 0→1, 1→2, 2→3, 3→4, 4→5
-  return clamp(Math.round(rawSum) + 1, 1, 5);
+  // Use floor-based thresholds to create wider bands.
+  // This ensures small fractional differences (e.g. 3.4 vs 3.7) map to the same integer.
+  // Bands: [0,1)→1, [1,2)→2, [2,2.75)→3, [2.75,3.5)→4, [3.5,4]→5
+  let score: number;
+  if (rawSum >= 3.5) score = 5;
+  else if (rawSum >= 2.75) score = 4;
+  else if (rawSum >= 2.0) score = 3;
+  else if (rawSum >= 1.0) score = 2;
+  else score = 1;
+  return score;
 }
 
 function scoreStructureArtifact(text: string): number {
