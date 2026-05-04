@@ -229,9 +229,10 @@ export async function runEvaluation(
     topic: skill?.inputs?.topic ?? "",
   });
 
-  // 3. Score both
+  // 3. Score both with format-aware context from the skill manifest
   onProgress?.("scoring");
-  const comparison = compareOutputs(strategyResult.text, baselineResult.text, inputTerms);
+  const scoringCtx = buildScoringContext(evalCase);
+  const comparison = compareOutputs(strategyResult.text, baselineResult.text, inputTerms, scoringCtx);
 
   return {
     evalCase,
