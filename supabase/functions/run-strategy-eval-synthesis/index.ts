@@ -1,0 +1,330 @@
+/**
+ * Phase 3.5B — Strategy Evaluation Synthesis Endpoint.
+ *
+ * Evaluation-only: runs the full skill runtime (retrieval + gate),
+ * then calls the LLM with a dedicated versioned synthesis prompt
+ * to generate a REAL Strategy answer.
+ *
+ * Does NOT touch Discovery Prep templates, artifacts, or task pipelines.
+ * Does NOT modify any production paths.
+ */
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
+
+// ── Versioned synthesis prompt ──────────────────────────────────────
+export const STRATEGY_EVAL_SYNTHESIS_PROMPT_VERSION = "1.0.0";
+
+function buildEvalSynthesisSystemPrompt(
+  inputs: Record<string, string>,
+  manifest: { id: string; label: string; behaviorIntent: string; workspace: string },
+  outputContract: { shape: string; targetWords?: { min: number; max: number }; forbid?: string[] },
+  rubric: { mustHave: string[]; genericMarkers: string[]; maxGenericMarkers: number },
+  synthesisAddendum: string,
+  libraryHits: Array<{ kind: string; id: string; title: string; context?: string | null }>,
+  expansionTrace: Array<{ term: string; source: string; rule: string }>,
+): string {
+  const sections: string[] = [];
+
+  // ── Identity & purpose
+  sections.push(`You are a Strategy synthesis engine generating a ${manifest.label} for evaluation.`);
+  sections.push(`Skill: ${manifest.id} | Behavior: ${manifest.behaviorIntent} | Workspace: ${manifest.workspace}`);
+  sections.push("");
+
+  // ── Original inputs
+  sections.push("=== ORIGINAL INPUTS ===");
+  for (const [k, v] of Object.entries(inputs)) {
+    if (v && v.trim()) sections.push(`${k}: ${v}`);
+  }
+  sections.push("");
+
+  // ── Output contract
+  sections.push("=== OUTPUT CONTRACT ===");
+  sections.push(`Shape: ${outputContract.shape}`);
+  if (outputContract.targetWords) {
+    sections.push(`Target length: ${outputContract.targetWords.min}–${outputContract.targetWords.max} words`);
+  }
+  if (outputContract.forbid?.length) {
+    sections.push(`Forbidden formatting: ${outputContract.forbid.join(", ")}`);
+  }
+  sections.push("");
+
+  // ── Quality rubric
+  sections.push("=== QUALITY RUBRIC ===");
+  sections.push(`MUST cover: ${rubric.mustHave.join(", ")}`);
+  sections.push(`AVOID generic phrases: ${rubric.genericMarkers.map(g => `"${g}"`).join(", ")}`);
+  sections.push(`Max generic markers allowed: ${rubric.maxGenericMarkers}`);
+  sections.push("");
+
+  // ── Library proof (retrieved KIs/playbooks)
+  sections.push("=== LIBRARY PROOF (Retrieved Knowledge Items & Playbooks) ===");
+  if (libraryHits.length === 0) {
+    sections.push("No library hits retrieved. State this explicitly — do not fabricate library references.");
+  } else {
+    for (const hit of libraryHits.slice(0, 15)) {
+      const kind = hit.kind === "knowledge_item" ? "KI" : "PB";
+      const ctx = hit.context ? ` — ${hit.context}` : "";
+      sections.push(`- [${kind}:${hit.id.slice(0, 8)}] ${hit.title}${ctx}`);
+    }
+  }
+  sections.push("");
+
+  // ── Expansion trace
+  if (expansionTrace.length > 0) {
+    sections.push("=== RETRIEVAL EXPANSION TRACE ===");
+    for (const e of expansionTrace.slice(0, 10)) {
+      sections.push(`- "${e.term}" via ${e.source} (${e.rule})`);
+    }
+    sections.push("");
+  }
+
+  // ── Synthesis addendum (skill-level control context)
+  sections.push("=== SKILL SYNTHESIS ADDENDUM (control context — DO NOT treat as the sole prompt) ===");
+  sections.push(synthesisAddendum);
+  sections.push("");
+
+  // ── Hard rules
+  sections.push("=== NON-NEGOTIABLE RULES ===");
+  sections.push("1. Ground every claim in the retrieved library items above. Name the KI/PB ID when citing.");
+  sections.push("2. Do NOT invent library citations. If a tactic is not in the retrieved items, say so.");
+  sections.push("3. Do NOT produce generic filler. Every sentence must be specific to the inputs.");
+  sections.push("4. Do NOT reference tools, templates, or artifacts not present in the library proof.");
+  sections.push("5. If library coverage is insufficient, state what is missing rather than fabricating.");
+  sections.push("6. Tie recommendations to business impact: before-state, negative consequences, after-state, required capabilities, metrics.");
+  sections.push("7. The manifest rubric is AUTHORITATIVE. Do not deviate based on prompt phrasing.");
+
+  return sections.join("\n");
+}
+
+function buildEvalSynthesisUserPrompt(
+  inputs: Record<string, string>,
+  manifest: { label: string; behaviorIntent: string },
+): string {
+  const parts: string[] = [];
+  parts.push(`Generate a ${manifest.label} for the following scenario:`);
+  if (inputs.account) parts.push(`Account: ${inputs.account}`);
+  if (inputs.persona) parts.push(`Persona: ${inputs.persona}`);
+  if (inputs.stage) parts.push(`Stage: ${inputs.stage}`);
+  if (inputs.topic) parts.push(`Topic: ${inputs.topic}`);
+  if (inputs.opportunity) parts.push(`Opportunity: ${inputs.opportunity}`);
+  if (inputs.industry) parts.push(`Industry: ${inputs.industry}`);
+  if (inputs.objection) parts.push(`Objection: ${inputs.objection}`);
+  if (inputs.use_case) parts.push(`Use Case: ${inputs.use_case}`);
+  parts.push("");
+  parts.push("Produce a complete, actionable, library-grounded answer. Follow the output contract and rubric exactly.");
+  return parts.join("\n");
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: CORS });
+  }
+
+  try {
+    // ── Auth
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Authorization required" }),
+        { status: 401, headers: { ...CORS, "Content-Type": "application/json" } },
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...CORS, "Content-Type": "application/json" } },
+      );
+    }
+
+    // ── Parse body
+    const body = await req.json();
+    const skillPayload = body.skill;
+    if (!skillPayload || typeof skillPayload !== "object" || !skillPayload.id) {
+      return new Response(
+        JSON.stringify({ error: "skill.id is required" }),
+        { status: 400, headers: { ...CORS, "Content-Type": "application/json" } },
+      );
+    }
+
+    const skillInputs: Record<string, string> = skillPayload.inputs ?? {};
+
+    // ── Run skill runtime (retrieval + gate)
+    const { runSkill } = await import("../_shared/strategy-skills/index.ts");
+
+    const skillResult = await runSkill({
+      envelope: skillPayload,
+      ctx: { thread: body.threadId ? { threadId: body.threadId } : undefined },
+      supabase,
+      userId: user.id,
+    });
+
+    // If gate refused, return refusal with envelope
+    if (!skillResult.ok) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          source: "strategy-eval-synthesis",
+          prompt_version: STRATEGY_EVAL_SYNTHESIS_PROMPT_VERSION,
+          refusal: skillResult.envelope.refusal,
+          envelope: skillResult.envelope,
+          reason: skillResult.reason,
+          code: skillResult.code,
+        }),
+        { status: 422, headers: { ...CORS, "Content-Type": "application/json" } },
+      );
+    }
+
+    // ── Extract manifest info from envelope trace
+    const trace = skillResult.envelope.trace;
+    const manifest = {
+      id: trace.skill_id,
+      label: trace.skill_id, // Will be enriched below
+      behaviorIntent: trace.behavior_intent,
+      workspace: trace.workspace,
+    };
+
+    // Enrich label from registry
+    try {
+      const { SKILL_REGISTRY } = await import("../_shared/strategy-skills/manifests.ts");
+      const m = SKILL_REGISTRY[trace.skill_id];
+      if (m) {
+        manifest.label = m.label;
+      }
+    } catch { /* use id as label */ }
+
+    // Get full manifest for output contract + rubric
+    let outputContract = { shape: "prose" as string, targetWords: undefined as { min: number; max: number } | undefined, forbid: undefined as string[] | undefined };
+    let rubric = { mustHave: [] as string[], genericMarkers: [] as string[], maxGenericMarkers: 1 };
+    try {
+      const { SKILL_REGISTRY } = await import("../_shared/strategy-skills/manifests.ts");
+      const m = SKILL_REGISTRY[trace.skill_id];
+      if (m) {
+        outputContract = {
+          shape: m.output.shape,
+          targetWords: m.output.targetWords,
+          forbid: m.output.forbid as string[] | undefined,
+        };
+        rubric = {
+          mustHave: [...m.rubric.mustHave],
+          genericMarkers: [...m.rubric.genericMarkers],
+          maxGenericMarkers: m.rubric.maxGenericMarkers,
+        };
+      }
+    } catch { /* defaults */ }
+
+    // ── Build library hits summary
+    const libraryHits = (skillResult.hits ?? []).map((h: any) => ({
+      kind: h.kind ?? "knowledge_item",
+      id: String(h.id ?? ""),
+      title: String(h.title ?? "(untitled)"),
+      context: h.context ?? null,
+    }));
+
+    // ── Build expansion trace summary
+    const expansionTrace = (trace.plan.expansion_trace ?? []).map((e: any) => ({
+      term: String(e.term ?? ""),
+      source: String(e.source ?? ""),
+      rule: String(e.rule ?? ""),
+    }));
+
+    // ── Build dedicated synthesis prompt
+    const systemPrompt = buildEvalSynthesisSystemPrompt(
+      skillInputs,
+      manifest,
+      outputContract,
+      rubric,
+      skillResult.synthesisAddendum,
+      libraryHits,
+      expansionTrace,
+    );
+
+    const userPrompt = buildEvalSynthesisUserPrompt(skillInputs, manifest);
+
+    // ── Call LLM
+    const apiKey = Deno.env.get("LOVABLE_API_KEY");
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({ error: "LOVABLE_API_KEY not configured" }),
+        { status: 500, headers: { ...CORS, "Content-Type": "application/json" } },
+      );
+    }
+
+    const synthesisModel = "google/gemini-2.5-flash";
+    const started = Date.now();
+
+    const llmResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: synthesisModel,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.7,
+        max_completion_tokens: 4096,
+      }),
+    });
+
+    const synthesisLatencyMs = Date.now() - started;
+
+    if (!llmResp.ok) {
+      const errText = await llmResp.text().catch(() => "");
+      const status = llmResp.status === 429 ? 429 : llmResp.status === 402 ? 402 : 502;
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          source: "strategy-eval-synthesis",
+          error: `LLM error: ${llmResp.status}`,
+          detail: errText.slice(0, 500),
+          envelope: skillResult.envelope,
+          prompt_version: STRATEGY_EVAL_SYNTHESIS_PROMPT_VERSION,
+        }),
+        { status, headers: { ...CORS, "Content-Type": "application/json" } },
+      );
+    }
+
+    const llmData = await llmResp.json();
+    const generatedText = llmData?.choices?.[0]?.message?.content ?? "";
+
+    // ── Return full result
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        source: "strategy-eval-synthesis",
+        prompt_version: STRATEGY_EVAL_SYNTHESIS_PROMPT_VERSION,
+        generated_text: generatedText,
+        synthesis_latency_ms: synthesisLatencyMs,
+        model: synthesisModel,
+        envelope: skillResult.envelope,
+        synthesis_addendum: skillResult.synthesisAddendum,
+        library_hits: libraryHits.map((h: any) => ({ id: h.id, title: h.title, kind: h.kind })),
+        expansion_trace: expansionTrace,
+        system_prompt: systemPrompt,
+        user_prompt: userPrompt,
+      }),
+      { status: 200, headers: { ...CORS, "Content-Type": "application/json" } },
+    );
+  } catch (e) {
+    console.error("[run-strategy-eval-synthesis] error:", (e as Error).message);
+    return new Response(
+      JSON.stringify({ error: (e as Error).message }),
+      { status: 500, headers: { ...CORS, "Content-Type": "application/json" } },
+    );
+  }
+});
