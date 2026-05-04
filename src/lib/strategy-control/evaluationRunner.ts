@@ -67,6 +67,34 @@ export interface EvaluationResult {
   timestamp: string;
 }
 
+const MANIFEST_REGISTRY: Record<string, SkillManifest> = {
+  "conversation-pov": conversationPovManifest,
+  "commercial-insight": commercialInsightManifest,
+  "discovery-prep": discoveryPrepManifest,
+  "discovery-questions": discoveryQuestionsManifest,
+  "executive-brief": executiveBriefManifest,
+  "meddicc-review": meddiccReviewManifest,
+};
+
+function buildScoringContext(evalCase: EvaluationCase): ScoringContext {
+  const skill = evalCase.case.body.skill as { id?: string } | undefined;
+  const skillId = skill?.id;
+  if (!skillId) return { shape: "unknown" };
+
+  const manifest = MANIFEST_REGISTRY[skillId];
+  if (!manifest) return { shape: "unknown", skillId };
+
+  return {
+    shape: manifest.output.shape === "list" ? "list"
+      : manifest.output.shape === "structured_artifact"
+        ? (skillId === "executive-brief" ? "executive_brief" : "structured_artifact")
+        : "prose",
+    forbid: manifest.output.forbid ? [...manifest.output.forbid] : [],
+    skillId,
+    mustHave: [...manifest.rubric.mustHave],
+  };
+}
+
 function extractInputTerms(c: ValidationCase): string[] {
   const skill = c.body.skill as { inputs?: Record<string, unknown> } | undefined;
   if (!skill?.inputs) return [];
