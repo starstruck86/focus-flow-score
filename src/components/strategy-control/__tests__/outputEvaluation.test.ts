@@ -19,7 +19,7 @@ import {
   computeAggregates,
 } from "../outputEvaluationLogic";
 import { BASELINE_PROMPT_VERSION } from "@/lib/strategy-control/baselineGenerator";
-import { scoreOutput } from "@/lib/strategy-control/outputScorer";
+import { scoreOutput, compareOutputs, type ScoringContext } from "@/lib/strategy-control/outputScorer";
 import type { EvaluationResult, StrategyEvalTrace } from "@/lib/strategy-control/evaluationRunner";
 import type { BaselineTrace } from "@/lib/strategy-control/baselineGenerator";
 
