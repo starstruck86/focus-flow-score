@@ -52,12 +52,12 @@ function clamp(v: number, min: number, max: number): number {
 
 function isJsonLike(text: string): boolean {
   const t = text.trim();
-  return t.startsWith("{") || t.startsWith("[") || t.includes("```json");
+  return t.startsWith("{") || t.startsWith("[") || t.includes("```json") || t.includes("```structured_artifact");
 }
 
 function extractJsonContent(text: string): string {
-  // Extract JSON from code fences or raw JSON
-  const fenceMatch = text.match(/```json\s*([\s\S]*?)```/);
+  // Extract JSON from code fences (json or structured_artifact) or raw JSON
+  const fenceMatch = text.match(/```(?:json|structured_artifact)\s*([\s\S]*?)```/);
   if (fenceMatch) return fenceMatch[1];
   const t = text.trim();
   if (t.startsWith("{") || t.startsWith("[")) return t;
