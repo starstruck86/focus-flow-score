@@ -558,7 +558,7 @@ export function compareOutputs(
   // Score both with the SAME contract context for apples-to-apples comparison
   const strategy_raw = scoreOutput(strategyText, inputTerms, strategyCtx);
   const baselineCtx: ScoringContext | undefined = strategyCtx
-    ? { shape: strategyCtx.shape, forbid: strategyCtx.forbid, skillId: strategyCtx.skillId, targetWords: strategyCtx.targetWords }
+    ? { shape: strategyCtx.shape, forbid: strategyCtx.forbid, skillId: strategyCtx.skillId, targetWords: strategyCtx.targetWords, mustHave: strategyCtx.mustHave }
     : undefined;
   const baseline_raw = scoreOutput(baselineText, inputTerms, baselineCtx);
 
