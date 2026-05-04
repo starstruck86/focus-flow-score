@@ -76,7 +76,7 @@ function extractKiEvidence(result: CaseResult): WeakPassEvidence | null {
             ? (it.matched_terms as unknown[]).filter((t): t is string => typeof t === "string")
             : [],
         );
-      matchedTerms = [...new Set(matchedTerms)];
+      matchedTerms = Array.from(new Set(matchedTerms));
     }
     // Fallback: summary fields
     if (kiTitles.length === 0 && Array.isArray(retrieval.ki_titles)) {
