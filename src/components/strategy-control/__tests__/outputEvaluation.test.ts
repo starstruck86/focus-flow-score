@@ -29,7 +29,7 @@ function makeTrace(overrides: Partial<BaselineTrace> = {}): BaselineTrace {
   } as BaselineTrace;
 }
 
-const dummyScore = { specificity: 3, actionability: 3, structure: 3, evidence: 3, relevance: 3, total: 15 };
+const dummyScore = { specificity: 3, actionability: 3, structure: 3, evidence: 3, relevance: 3, total: 15, normalized: 3 };
 
 function makeResult(
   traceOverrides: Partial<BaselineTrace> = {},
