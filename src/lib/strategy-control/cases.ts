@@ -122,6 +122,13 @@ export function buildCases(inputs: ValidationInputs): ReadonlyArray<ValidationCa
     },
 
     // 3a. discovery-prep — FAKE / sparse → expected refusal
+    //
+    // IMPORTANT: stage MUST be empty (""), NOT "discovery".
+    // Using stage:"discovery" feeds the Retrieval Expansion Layer a real
+    // seed that matches ~20 legitimate KIs, causing the gate to pass.
+    // That would make this case indistinguishable from a real-input case
+    // and defeat the purpose of testing weak-retrieval refusal behavior.
+    //
     // All inputs are deliberately irrelevant: no stage seed, fake persona,
     // fake topic. Mirrors W1 pattern to guarantee zero retrieval hits.
     {
