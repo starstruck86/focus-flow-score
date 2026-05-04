@@ -362,6 +362,9 @@ export function OutputEvaluationTab({ cases }: Props) {
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="text-sm font-semibold">
                 Aggregate: Strategy {strategyWins} · Baseline {baselineWins} · Tie {ties}
+                {contaminated.length > 0 && (
+                  <span className="text-red-400 ml-2">({contaminated.length} contaminated, excluded)</span>
+                )}
               </div>
               <Badge
                 className={
