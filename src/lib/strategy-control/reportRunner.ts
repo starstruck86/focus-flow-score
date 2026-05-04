@@ -163,7 +163,8 @@ export async function runFullValidation(
 
 function caseRow(r: CaseResult): string {
   const s = r.signals;
-  return `| ${r.case.id} | ${r.status.toUpperCase()} | ${s.source_mode ?? "—"} | ${s.confidence ?? "—"} | ${s.gate_decision ?? "—"} | ${s.influence ?? "—"} | ${r.latencyMs}ms | ${r.reason} |`;
+  const expSeeds = s.expanded_seeds.length ? s.expanded_seeds.join(", ") : "—";
+  return `| ${r.case.id} | ${r.status.toUpperCase()} | ${s.source_mode ?? "—"} | ${s.confidence ?? "—"} | ${s.gate_decision ?? "—"} | ${s.influence ?? "—"} | ${s.expansion_enabled ? "✅" : "—"} | ${expSeeds} | ${r.latencyMs}ms | ${r.reason} |`;
 }
 
 export function toMarkdown(report: ValidationReport): string {
