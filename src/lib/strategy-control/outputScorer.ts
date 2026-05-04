@@ -1,12 +1,12 @@
 /**
- * Phase 3.5B — Deterministic Output Scorer.
+ * Phase 3.5B-Fix — Format-Aware Deterministic Output Scorer.
  *
  * Scores a text output on 6 dimensions (1–5 each):
  *   1. Specificity     — concrete entities/numbers vs generic filler
  *   2. Actionability   — clear next steps, imperatives, calls-to-action
- *   3. Structure       — headings, bullets, sections, logical flow
+ *   3. Structure       — contract-aware: prose clarity OR artifact depth
  *   4. Evidence        — citations, KI references, data points
- *   5. Relevance       — input terms echoed meaningfully
+ *   5. Relevance       — input terms echoed meaningfully (with generic penalty)
  *   6. Business Impact — before/after, neg consequences, required capabilities, metrics
  *
  * All scoring is deterministic (regex / counting). No LLM judge.
@@ -21,6 +21,13 @@ export interface OutputScore {
   business_impact: number;
   total: number;        // sum /30
   normalized: number;   // 0–5 avg
+}
+
+export interface ScoringContext {
+  shape?: "prose" | "list" | "structured_artifact" | "executive_brief" | "unknown";
+  forbid?: string[];
+  skillId?: string;
+  mustHave?: string[];
 }
 
 export interface ComparisonResult {
@@ -39,6 +46,20 @@ function countMatches(text: string, pattern: RegExp): number {
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
+}
+
+function isJsonLike(text: string): boolean {
+  const t = text.trim();
+  return t.startsWith("{") || t.startsWith("[") || t.includes("```json");
+}
+
+function extractJsonContent(text: string): string {
+  // Extract JSON from code fences or raw JSON
+  const fenceMatch = text.match(/```json\s*([\s\S]*?)```/);
+  if (fenceMatch) return fenceMatch[1];
+  const t = text.trim();
+  if (t.startsWith("{") || t.startsWith("[")) return t;
+  return "";
 }
 
 // ── Dimension scorers ──
@@ -72,12 +93,31 @@ function scoreSpecificity(text: string): number {
   return clamp(score, 1, 5);
 }
 
-function scoreActionability(text: string): number {
+function scoreActionability(text: string, ctx?: ScoringContext): number {
+  // Standard imperative/line-start detection (works for prose/baseline)
   const imperatives = countMatches(text, /(?:^|\n|•|[-*])\s*(?:Ask|Propose|Send|Schedule|Confirm|Validate|Map|Identify|Prepare|Draft|Review|Challenge|Test|Open|Frame|Position|Present|Quantify|Document|Follow[- ]up)\b/gi);
   const nextSteps = countMatches(text, /\b(?:next step|action item|to[- ]do|follow[- ]up|recommendation)\b/gi);
   const questions = countMatches(text, /\?/g);
 
-  const signals = imperatives + nextSteps * 1.5 + questions * 0.5;
+  let signals = imperatives + nextSteps * 1.5 + questions * 0.5;
+
+  // Format-aware: detect embedded action language in prose
+  const embeddedActions = countMatches(text, /\b(?:should|must|need to|recommend|ensure|prioritize|leverage|execute|implement|deploy|establish|secure|drive|accelerate|align|address|mitigate|explore|investigate|pursue|negotiate|articulate)\b/gi);
+  signals += embeddedActions * 0.3;
+
+  // Format-aware: detect structured artifact action fields
+  if (ctx?.shape === "structured_artifact" || ctx?.shape === "list" || isJsonLike(text)) {
+    const jsonContent = extractJsonContent(text);
+    const lower = (jsonContent || text).toLowerCase();
+
+    // Count action-bearing JSON fields
+    const actionFields = countMatches(lower, /["'](?:next_steps?|recommendations?|specific_asks?|action_items?|gaps?|risks?|questions_to_ask|discovery_questions|follow_ups?)["']\s*:/g);
+    signals += actionFields * 2;
+
+    // Count items in JSON arrays that look like actions/questions
+    const arrayItems = countMatches(text, /["'][^"']{10,}\?["']/g); // questions in arrays
+    signals += arrayItems * 0.5;
+  }
 
   if (signals >= 6) return 5;
   if (signals >= 4) return 4;
@@ -86,7 +126,79 @@ function scoreActionability(text: string): number {
   return 1;
 }
 
-function scoreStructure(text: string): number {
+function scoreStructureProse(text: string): number {
+  // For prose: paragraph clarity, sentence density, logical flow
+  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+  const sentences = countMatches(text, /[.!?]\s/g) + 1;
+  const words = text.split(/\s+/).length;
+
+  let score = 2;
+
+  // Multiple coherent paragraphs = good structure
+  if (paragraphs.length >= 4) score += 1;
+  else if (paragraphs.length >= 2) score += 0.5;
+
+  // Reasonable sentence density (not a wall of text)
+  const avgWordsPerSentence = words / Math.max(sentences, 1);
+  if (avgWordsPerSentence >= 10 && avgWordsPerSentence <= 30) score += 1;
+
+  // Transition/flow signals
+  const transitions = countMatches(text, /\b(?:however|therefore|specifically|because|given that|as a result|in contrast|for example|notably|critically|importantly|additionally|furthermore|meanwhile)\b/gi);
+  if (transitions >= 3) score += 1;
+  else if (transitions >= 1) score += 0.5;
+
+  return clamp(Math.round(score), 1, 5);
+}
+
+function scoreStructureArtifact(text: string): number {
+  const jsonContent = extractJsonContent(text);
+  if (!jsonContent) {
+    // Fallback to markdown structure if no JSON
+    return scoreStructureMarkdown(text);
+  }
+
+  try {
+    const parsed = JSON.parse(jsonContent);
+    return scoreJsonDepth(parsed);
+  } catch {
+    // Might be partial JSON or code-fenced non-JSON
+    return scoreStructureMarkdown(text);
+  }
+}
+
+function scoreJsonDepth(obj: unknown, depth = 0): number {
+  if (depth > 5) return 5;
+  if (obj === null || obj === undefined) return 1;
+
+  if (Array.isArray(obj)) {
+    if (obj.length === 0) return 2;
+    const maxChild = Math.max(...obj.map(item => scoreJsonDepth(item, depth + 1)));
+    return clamp(Math.min(obj.length, 3) + maxChild - 1, 2, 5);
+  }
+
+  if (typeof obj === "object") {
+    const keys = Object.keys(obj as Record<string, unknown>);
+    if (keys.length === 0) return 2;
+
+    let score = 2;
+    // Named sections / keys
+    if (keys.length >= 5) score += 1;
+    if (keys.length >= 8) score += 1;
+
+    // Nested depth
+    const hasNested = keys.some(k => {
+      const v = (obj as Record<string, unknown>)[k];
+      return typeof v === "object" && v !== null;
+    });
+    if (hasNested) score += 1;
+
+    return clamp(score, 2, 5);
+  }
+
+  return 2;
+}
+
+function scoreStructureMarkdown(text: string): number {
   const headings = countMatches(text, /^#+\s+.+$/gm) + countMatches(text, /^[A-Z][A-Z\s&]+:?\s*$/gm);
   const bullets = countMatches(text, /^[\s]*[-•*]\s+/gm);
   const numberedItems = countMatches(text, /^\s*\d+[.)]\s+/gm);
@@ -99,6 +211,32 @@ function scoreStructure(text: string): number {
   if (structureSignals >= 3) return 3;
   if (structureSignals >= 1) return 2;
   return 1;
+}
+
+function scoreStructure(text: string, ctx?: ScoringContext): number {
+  const shape = ctx?.shape ?? "unknown";
+  const forbid = ctx?.forbid ?? [];
+
+  // Structured artifact: score JSON depth, not markdown
+  if (shape === "structured_artifact" || shape === "executive_brief") {
+    if (isJsonLike(text)) return scoreStructureArtifact(text);
+    // If artifact shape but no JSON, check markdown
+    return scoreStructureMarkdown(text);
+  }
+
+  // Prose with forbidden formatting: score prose quality, not markdown
+  if (shape === "prose" && (forbid.includes("headings") || forbid.includes("bullets"))) {
+    return scoreStructureProse(text);
+  }
+
+  // List shape: could be markdown bullets or JSON array
+  if (shape === "list") {
+    if (isJsonLike(text)) return scoreStructureArtifact(text);
+    return scoreStructureMarkdown(text);
+  }
+
+  // Default / unknown / baseline: use markdown scoring
+  return scoreStructureMarkdown(text);
 }
 
 function scoreEvidence(text: string): number {
@@ -116,31 +254,54 @@ function scoreEvidence(text: string): number {
   return 1;
 }
 
-function scoreRelevance(text: string, inputTerms: string[]): number {
+function scoreRelevance(text: string, inputTerms: string[], ctx?: ScoringContext): number {
   if (inputTerms.length === 0) return 3;
   const lower = text.toLowerCase();
   const matched = inputTerms.filter(t => t.length > 2 && lower.includes(t.toLowerCase()));
   const ratio = matched.length / inputTerms.length;
 
-  if (ratio >= 0.8) return 5;
-  if (ratio >= 0.6) return 4;
-  if (ratio >= 0.4) return 3;
-  if (ratio >= 0.2) return 2;
-  return 1;
+  let baseScore: number;
+  if (ratio >= 0.8) baseScore = 5;
+  else if (ratio >= 0.6) baseScore = 4;
+  else if (ratio >= 0.4) baseScore = 3;
+  else if (ratio >= 0.2) baseScore = 2;
+  else baseScore = 1;
+
+  // Generic repetition penalty: if input terms are repeated many times
+  // without evidence/business-impact/action specificity, penalize
+  if (inputTerms.length > 0 && baseScore >= 4) {
+    const totalMentions = inputTerms.reduce((sum, t) => {
+      if (t.length <= 2) return sum;
+      const re = new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+      return sum + countMatches(lower, re);
+    }, 0);
+
+    const avgMentions = totalMentions / Math.max(matched.length, 1);
+
+    // High repetition with low substance = generic padding
+    if (avgMentions > 4) {
+      const evidenceCount = countMatches(text, /\b(?:according to|based on|per the|KI|playbook|framework|methodology|data shows|research)\b/gi);
+      const actionCount = countMatches(text, /\b(?:must|recommend|propose|validate|schedule|prepare|draft|challenge|quantify|map|identify)\b/gi);
+      const bizImpactCount = countMatches(lower, /\b(?:risk|cost|roi|revenue|churn|metric|pain|gap|savings|retention|conversion)\b/g);
+
+      const substanceSignals = evidenceCount + actionCount + bizImpactCount;
+      // Need meaningful substance, not just one incidental word
+      if (substanceSignals < 3) {
+        baseScore = clamp(baseScore - 1, 1, 5);
+      }
+    }
+  }
+
+  return baseScore;
 }
 
 /**
  * Business Impact — Command of the Message / Value Framework alignment.
  *
- * Detects presence and density of:
- *   - Before/current state language
- *   - Negative consequences / cost-of-inaction
- *   - After state / positive business outcomes
- *   - Required capabilities
- *   - Metrics / ROI / quantified impact
- *   - MEDDPICC signals (champion, economic buyer, decision criteria)
+ * Detects presence and density of business impact signals in both
+ * prose text AND structured JSON fields.
  */
-function scoreBusinessImpact(text: string): number {
+function scoreBusinessImpact(text: string, ctx?: ScoringContext): number {
   const lower = text.toLowerCase();
 
   // Before / current state
@@ -166,6 +327,26 @@ function scoreBusinessImpact(text: string): number {
   // Value framework sections
   const valueFramework = countMatches(lower, /\b(?:make[- ]money|save[- ]money|reduce[- ]risk|value driver|business case|commercial insight|pov|point of view|hypothesis)\b/g);
 
+  // JSON/artifact field detection for structured outputs
+  let artifactFieldBonus = 0;
+  if (ctx?.shape === "structured_artifact" || ctx?.shape === "executive_brief" || ctx?.shape === "list" || isJsonLike(text)) {
+    const fieldPatterns = [
+      /["'](?:strategic_why|strategic_reasoning)["']\s*:/gi,
+      /["'](?:commercial_insight|commercial_pov)["']\s*:/gi,
+      /["'](?:change_vectors?|transformation_drivers?)["']\s*:/gi,
+      /["'](?:risks?|risk_factors?)["']\s*:\s*[\[{]/gi,
+      /["'](?:metrics|kpis?|measurements?)["']\s*:/gi,
+      /["'](?:value|business_value|value_drivers?)["']\s*:/gi,
+      /["'](?:business_case|justification)["']\s*:/gi,
+      /["'](?:quantified_pain|pain_points?)["']\s*:/gi,
+      /["'](?:current_state(?:_reasoning)?|before_state)["']\s*:/gi,
+      /["'](?:negative_consequences?|cost_of_inaction)["']\s*:/gi,
+    ];
+    for (const p of fieldPatterns) {
+      if (p.test(text)) artifactFieldBonus += 1.5;
+    }
+  }
+
   const totalSignals =
     Math.min(beforeState, 3) * 1 +
     Math.min(negConsequences, 4) * 1.5 +
@@ -173,7 +354,8 @@ function scoreBusinessImpact(text: string): number {
     Math.min(capabilities, 3) * 1 +
     Math.min(metrics + percentages + dollarAmounts, 5) * 1.5 +
     Math.min(meddpicc, 4) * 1 +
-    Math.min(valueFramework, 3) * 1;
+    Math.min(valueFramework, 3) * 1 +
+    artifactFieldBonus;
 
   if (totalSignals >= 15) return 5;
   if (totalSignals >= 10) return 4;
@@ -184,17 +366,17 @@ function scoreBusinessImpact(text: string): number {
 
 // ── Public API ──
 
-export function scoreOutput(text: string, inputTerms: string[]): OutputScore {
+export function scoreOutput(text: string, inputTerms: string[], ctx?: ScoringContext): OutputScore {
   if (!text || text.trim().length === 0) {
     return { specificity: 1, actionability: 1, structure: 1, evidence: 1, relevance: 1, business_impact: 1, total: 6, normalized: 1 };
   }
 
   const specificity = scoreSpecificity(text);
-  const actionability = scoreActionability(text);
-  const structure = scoreStructure(text);
+  const actionability = scoreActionability(text, ctx);
+  const structure = scoreStructure(text, ctx);
   const evidence = scoreEvidence(text);
-  const relevance = scoreRelevance(text, inputTerms);
-  const business_impact = scoreBusinessImpact(text);
+  const relevance = scoreRelevance(text, inputTerms, ctx);
+  const business_impact = scoreBusinessImpact(text, ctx);
   const total = specificity + actionability + structure + evidence + relevance + business_impact;
 
   return {
@@ -213,8 +395,10 @@ export function compareOutputs(
   strategyText: string,
   baselineText: string,
   inputTerms: string[],
+  strategyCtx?: ScoringContext,
 ): ComparisonResult {
-  const strategy_score = scoreOutput(strategyText, inputTerms);
+  // Strategy scored with its manifest context; baseline always scored as generic prose
+  const strategy_score = scoreOutput(strategyText, inputTerms, strategyCtx);
   const baseline_score = scoreOutput(baselineText, inputTerms);
 
   const dims = ["specificity", "actionability", "structure", "evidence", "relevance", "business_impact"] as const;

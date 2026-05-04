@@ -14,7 +14,14 @@
 import type { ValidationCase } from "./cases";
 import type { BaselineTrace } from "./baselineGenerator";
 import { generateBaseline, type BaselineResult } from "./baselineGenerator";
-import { compareOutputs, type ComparisonResult, type OutputScore } from "./outputScorer";
+import { compareOutputs, type ComparisonResult, type OutputScore, type ScoringContext } from "./outputScorer";
+import { conversationPovManifest } from "@/lib/strategy-skills/manifests/conversationPov";
+import { commercialInsightManifest } from "@/lib/strategy-skills/manifests/commercialInsight";
+import { discoveryPrepManifest } from "@/lib/strategy-skills/manifests/discoveryPrep";
+import { discoveryQuestionsManifest } from "@/lib/strategy-skills/manifests/discoveryQuestions";
+import { executiveBriefManifest } from "@/lib/strategy-skills/manifests/executiveBrief";
+import { meddiccReviewManifest } from "@/lib/strategy-skills/manifests/meddiccReview";
+import type { SkillManifest } from "@/lib/strategy-skills/types";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface EvaluationCase {
@@ -58,6 +65,34 @@ export interface EvaluationResult {
   comparison: ComparisonResult;
   inputTerms: string[];
   timestamp: string;
+}
+
+const MANIFEST_REGISTRY: Record<string, SkillManifest> = {
+  "conversation-pov": conversationPovManifest,
+  "commercial-insight": commercialInsightManifest,
+  "discovery-prep": discoveryPrepManifest,
+  "discovery-questions": discoveryQuestionsManifest,
+  "executive-brief": executiveBriefManifest,
+  "meddicc-review": meddiccReviewManifest,
+};
+
+function buildScoringContext(evalCase: EvaluationCase): ScoringContext {
+  const skill = evalCase.case.body.skill as { id?: string } | undefined;
+  const skillId = skill?.id;
+  if (!skillId) return { shape: "unknown" };
+
+  const manifest = MANIFEST_REGISTRY[skillId];
+  if (!manifest) return { shape: "unknown", skillId };
+
+  return {
+    shape: manifest.output.shape === "list" ? "list"
+      : manifest.output.shape === "structured_artifact"
+        ? (skillId === "executive-brief" ? "executive_brief" : "structured_artifact")
+        : "prose",
+    forbid: manifest.output.forbid ? [...manifest.output.forbid] : [],
+    skillId,
+    mustHave: [...manifest.rubric.mustHave],
+  };
 }
 
 function extractInputTerms(c: ValidationCase): string[] {
@@ -194,9 +229,10 @@ export async function runEvaluation(
     topic: skill?.inputs?.topic ?? "",
   });
 
-  // 3. Score both
+  // 3. Score both with format-aware context from the skill manifest
   onProgress?.("scoring");
-  const comparison = compareOutputs(strategyResult.text, baselineResult.text, inputTerms);
+  const scoringCtx = buildScoringContext(evalCase);
+  const comparison = compareOutputs(strategyResult.text, baselineResult.text, inputTerms, scoringCtx);
 
   return {
     evalCase,
