@@ -184,8 +184,8 @@ export function toMarkdown(report: ValidationReport): string {
   lines.push(`## Standard Matrix (${report.standardMatrix.results.length} cases)`);
   lines.push(`**Verdict:** ${report.standardMatrix.verdict.verdict} — ${report.standardMatrix.verdict.reason}`);
   lines.push("");
-  lines.push(`| Case | Status | Source Mode | Confidence | Gate | Influence | Latency | Reason |`);
-  lines.push(`|------|--------|-------------|------------|------|-----------|---------|--------|`);
+  lines.push(`| Case | Status | Source Mode | Confidence | Gate | Influence | Expansion | Expanded Seeds | Latency | Reason |`);
+  lines.push(`|------|--------|-------------|------------|------|-----------|-----------|----------------|---------|--------|`);
   report.standardMatrix.results.forEach((r) => lines.push(caseRow(r)));
   lines.push("");
 
