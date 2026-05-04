@@ -169,12 +169,14 @@ function scoreStructureProse(text: string): number {
   if (avgWordsPerSentence >= 10 && avgWordsPerSentence <= 30) density = 1;
   else if (avgWordsPerSentence >= 8 && avgWordsPerSentence <= 35) density = 0.5;
 
-  // ── C. Logical flow markers — BUCKETED so ±1 word cannot change score (0–1) ──
+  // ── C. Logical flow markers — wide buckets so ±1-2 words cannot swing score (0–1) ──
+  // Include both explicit transitions AND implicit logical connectors
   const transitions = countMatches(text, /\b(?:however|therefore|specifically|because|given that|as a result|in contrast|for example|notably|critically|importantly|additionally|furthermore|meanwhile|this means|this isn't|in other words|the goal|by contrast|which means|leading to|ensuring|ultimately|while|although|yet|so|thus|hence|accordingly|consequently)\b/gi);
-  // Buckets: 0→0, 1-2→0.5, 3+→1  (a delta of 1 within a bucket has no effect)
+  // Wide buckets: 0→0, 1+→0.75, 4+→1.0
+  // Having ANY flow marker gets you 75% credit; only zero is truly unstructured.
   let flow = 0;
-  if (transitions >= 3) flow = 1;
-  else if (transitions >= 1) flow = 0.5;
+  if (transitions >= 4) flow = 1;
+  else if (transitions >= 1) flow = 0.75;
 
   // ── D. Business-flow signals — domain progression language (0–1) ──
   const bizFlow = countMatches(text, /\b(?:current state|cost|risk|requires?|outcome|question|today|before|after|result|gap|pain|opportunity|impact|goal|target|because of|in order to|which leads to|this creates|the problem|the challenge|the opportunity|moving from|enabling|preventing|addressing)\b/gi);
