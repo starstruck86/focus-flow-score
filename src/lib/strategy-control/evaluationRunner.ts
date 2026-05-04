@@ -14,7 +14,14 @@
 import type { ValidationCase } from "./cases";
 import type { BaselineTrace } from "./baselineGenerator";
 import { generateBaseline, type BaselineResult } from "./baselineGenerator";
-import { compareOutputs, type ComparisonResult, type OutputScore } from "./outputScorer";
+import { compareOutputs, type ComparisonResult, type OutputScore, type ScoringContext } from "./outputScorer";
+import { conversationPovManifest } from "@/lib/strategy-skills/manifests/conversationPov";
+import { commercialInsightManifest } from "@/lib/strategy-skills/manifests/commercialInsight";
+import { discoveryPrepManifest } from "@/lib/strategy-skills/manifests/discoveryPrep";
+import { discoveryQuestionsManifest } from "@/lib/strategy-skills/manifests/discoveryQuestions";
+import { executiveBriefManifest } from "@/lib/strategy-skills/manifests/executiveBrief";
+import { meddiccReviewManifest } from "@/lib/strategy-skills/manifests/meddiccReview";
+import type { SkillManifest } from "@/lib/strategy-skills/types";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface EvaluationCase {
