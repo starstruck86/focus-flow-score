@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
         baseline_context_used: false,
         baseline_library_used: false,
         baseline_memory_used: false,
-        model: "openai/gpt-5-mini",
+        model: "google/gemini-2.5-flash",
       }),
       { status: 200, headers: { ...CORS, "Content-Type": "application/json" } },
     );
