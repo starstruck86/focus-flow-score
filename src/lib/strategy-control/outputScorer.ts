@@ -148,11 +148,14 @@ function scoreStructureProse(text: string): number {
   const words = text.split(/\s+/).length;
 
   // ── A. Paragraph / sentence coherence (0–1) ──
+  // For short constrained prose, a single dense paragraph with adequate
+  // sentence count is structurally equivalent to multiple short paragraphs.
+  // This prevents paragraph-count variance from deciding structure scores.
   let coherence = 0;
   if (words < 250) {
-    // Short prose: even 1 paragraph with 3+ sentences is coherent
-    if (paragraphs.length >= 2) coherence = 1;
-    else if (sentences >= 3) coherence = 0.75;
+    // Short prose: sentence count is the primary coherence signal
+    if (sentences >= 4) coherence = 1;         // 4+ sentences = full coherence regardless of para count
+    else if (paragraphs.length >= 2 || sentences >= 3) coherence = 0.75;
     else if (sentences >= 2) coherence = 0.5;
   } else {
     if (paragraphs.length >= 4) coherence = 1;
