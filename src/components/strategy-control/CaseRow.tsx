@@ -21,6 +21,10 @@ interface Props {
   running: boolean;
   caseLabel: string;
   caseDescription: string;
+  /** The exact payload body sent (for transparency). */
+  sentBody?: Record<string, unknown>;
+  /** Client-side assertion errors (e.g. Case 3a pre-exec checks). */
+  assertionError?: string | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
