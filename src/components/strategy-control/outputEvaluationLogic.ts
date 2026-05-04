@@ -15,12 +15,19 @@ export function isBaselineContaminated(result: EvaluationResult): boolean {
   return false;
 }
 
+export function isStrategyOutputInvalid(result: EvaluationResult): boolean {
+  return !result.strategy.trace.output_valid;
+}
+
 export function computeAggregates(results: EvaluationResult[]) {
-  const clean = results.filter(r => !isBaselineContaminated(r));
+  const clean = results.filter(r => !isBaselineContaminated(r) && !isStrategyOutputInvalid(r));
+  const contaminated = results.filter(r => isBaselineContaminated(r)).length;
+  const strategyInvalid = results.filter(r => !isBaselineContaminated(r) && isStrategyOutputInvalid(r)).length;
   return {
     total: results.length,
     valid: clean.length,
-    contaminated: results.length - clean.length,
+    contaminated,
+    strategy_invalid: strategyInvalid,
     strategy_wins: clean.filter(r => r.comparison.winner === "strategy").length,
     baseline_wins: clean.filter(r => r.comparison.winner === "baseline").length,
     ties: clean.filter(r => r.comparison.winner === "tie").length,
@@ -29,13 +36,23 @@ export function computeAggregates(results: EvaluationResult[]) {
 
 export function buildExportCase(r: EvaluationResult) {
   const contaminated = isBaselineContaminated(r);
+  const strategyInvalid = isStrategyOutputInvalid(r);
+  const status = contaminated
+    ? "EVALUATION_INVALID"
+    : strategyInvalid
+      ? "STRATEGY_OUTPUT_INVALID"
+      : "VALID";
+
   return {
     case_id: r.evalCase.case.id,
     label: r.evalCase.case.label,
     tier: r.evalCase.tier,
-    status: contaminated ? "EVALUATION_INVALID" : "VALID",
+    status,
     timestamp: r.timestamp,
     prompt_version: BASELINE_PROMPT_VERSION,
+    strategy_prompt_version: r.strategy.trace.prompt_version,
+    strategy_source: r.strategy.trace.source,
+    strategy_model: r.strategy.trace.model,
     input_terms: r.inputTerms,
     baseline_integrity: {
       mode: r.baseline.trace.baseline_mode,
@@ -48,12 +65,18 @@ export function buildExportCase(r: EvaluationResult) {
       system_prompt: r.baseline.result.systemPrompt,
       user_prompt: r.baseline.result.userPrompt,
     },
-    ...(contaminated
-      ? {}
-      : {
+    strategy_trace: {
+      library_hits: r.strategy.trace.library_hits,
+      expansion_trace: r.strategy.trace.expansion_trace,
+      gate_decision: r.strategy.trace.gate_decision,
+      output_valid: r.strategy.trace.output_valid,
+    },
+    ...(status === "VALID"
+      ? {
           strategy_score: r.strategy.score,
           baseline_score: r.baseline.score,
           comparison: r.comparison,
-        }),
+        }
+      : {}),
   };
 }
