@@ -287,6 +287,44 @@ export default function StrategyControlPanel() {
               )}
             </div>
 
+            {/* Per-case detail rows */}
+            {(results.length > 0 || weakResults.length > 0) && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Standard Cases ({results.length}/{cases.length})
+                </p>
+                {cases.map((c, i) => (
+                  <CaseRow
+                    key={c.id}
+                    result={results[i] ?? null}
+                    running={isRunningAny}
+                    caseLabel={c.label}
+                    caseDescription={c.description}
+                    sentBody={c.body}
+                    assertionError={assert3aInputs(c)}
+                  />
+                ))}
+                {weakResults.length > 0 && (
+                  <>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-4">
+                      Weak Cases ({weakResults.length}/{weakCases.length})
+                    </p>
+                    {weakCases.map((c, i) => (
+                      <CaseRow
+                        key={c.id}
+                        result={weakResults[i] ?? null}
+                        running={isRunningAny}
+                        caseLabel={c.label}
+                        caseDescription={c.description}
+                        sentBody={c.body}
+                        assertionError={null}
+                      />
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+
             {/* Last Run Summary */}
             {lastReport && (
               <Card className={
