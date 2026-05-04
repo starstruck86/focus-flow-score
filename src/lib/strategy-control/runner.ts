@@ -384,14 +384,55 @@ function evaluate(
   }
 }
 
+/**
+ * CASE 3a PRE-EXEC ASSERTION
+ * Hard client-side check: if the case is 3a, the inputs must have zero real signal.
+ * Returns an error string if the assertion fails, null if OK.
+ */
+const BANNED_3A_TERMS = ["discovery", "qualification", "meddicc", "champion", "pov", "pain", "buyer"];
+
+export function assert3aInputs(c: ValidationCase): string | null {
+  if (!c.id.startsWith("3a")) return null;
+  const skill = c.body.skill as { inputs?: Record<string, unknown> } | undefined;
+  if (!skill?.inputs) return "Case 3a has no skill.inputs";
+  const { stage, topic, persona } = skill.inputs as Record<string, string>;
+  if (stage && stage.trim().length > 0) {
+    return `Case 3a stage is non-empty: "${stage}" — must be ""`;
+  }
+  const allText = `${topic ?? ""} ${persona ?? ""}`.toLowerCase();
+  for (const term of BANNED_3A_TERMS) {
+    if (allText.includes(term)) {
+      return `Case 3a topic/persona contains banned term "${term}" in: "${allText.trim()}"`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Inject a cache-busting runId into every skill payload.
+ */
+function injectRunId(c: ValidationCase): Record<string, unknown> {
+  const body = { ...c.body };
+  if (body.skill && typeof body.skill === "object") {
+    body.skill = {
+      ...(body.skill as Record<string, unknown>),
+      runId: `phase3a-${c.id}-${Date.now()}`,
+    };
+  }
+  return body;
+}
+
 export async function runCase(c: ValidationCase): Promise<CaseResult> {
   const started = performance.now();
   const headers: Record<string, string> = {};
   if (c.withSkillDebugHeader) headers["x-skill-debug"] = "1";
 
+  // Inject cache-busting runId
+  const body = injectRunId(c);
+
   try {
     const { data, error } = await supabase.functions.invoke("strategy-chat", {
-      body: c.body,
+      body,
       headers,
     });
     const latencyMs = Math.round(performance.now() - started);
