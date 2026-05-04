@@ -134,16 +134,22 @@ function scoreStructureProse(text: string): number {
 
   let score = 2;
 
-  // Multiple coherent paragraphs = good structure
-  if (paragraphs.length >= 4) score += 1;
-  else if (paragraphs.length >= 2) score += 0.5;
+  // For short constrained prose (<250 words), a single dense paragraph is valid structure.
+  // Only penalize paragraph count for longer texts.
+  if (words < 250) {
+    if (paragraphs.length >= 2) score += 1;
+    else if (sentences >= 3) score += 0.5; // dense single paragraph with multiple sentences
+  } else {
+    if (paragraphs.length >= 4) score += 1;
+    else if (paragraphs.length >= 2) score += 0.5;
+  }
 
   // Reasonable sentence density (not a wall of text)
   const avgWordsPerSentence = words / Math.max(sentences, 1);
   if (avgWordsPerSentence >= 10 && avgWordsPerSentence <= 30) score += 1;
 
-  // Transition/flow signals
-  const transitions = countMatches(text, /\b(?:however|therefore|specifically|because|given that|as a result|in contrast|for example|notably|critically|importantly|additionally|furthermore|meanwhile)\b/gi);
+  // Transition/flow signals — include conversational connectors for talk-track prose
+  const transitions = countMatches(text, /\b(?:however|therefore|specifically|because|given that|as a result|in contrast|for example|notably|critically|importantly|additionally|furthermore|meanwhile|this means|this isn't|in other words|the goal|by contrast|which means|leading to|ensuring|ultimately)\b/gi);
   if (transitions >= 3) score += 1;
   else if (transitions >= 1) score += 0.5;
 
