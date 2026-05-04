@@ -172,6 +172,19 @@ function scoreStructureArtifact(text: string): number {
   }
 }
 
+/**
+ * Scores semantic section completeness of a JSON structure.
+ *
+ * Principle: A well-formed structured artifact should be judged by the
+ * richness of its semantic sections (meaningful keys, nesting depth,
+ * populated arrays/objects) — NOT by hitting an arbitrary key-count
+ * threshold. This is universal: no skill-specific logic.
+ *
+ * Scoring budget (base 2, max 5):
+ *   +1  — 5+ top-level semantic keys (meaningful breadth)
+ *   +1  — nested objects or arrays exist (depth)
+ *   +1  — rich nesting: either 7+ keys OR deep/populated nested structures
+ */
 function scoreJsonDepth(obj: unknown, depth = 0): number {
   if (depth > 5) return 5;
   if (obj === null || obj === undefined) return 1;
@@ -187,7 +200,6 @@ function scoreJsonDepth(obj: unknown, depth = 0): number {
     if (keys.length === 0) return 2;
 
     // Unwrap single-key root wrappers (e.g. {"discovery_prep": {...}})
-    // so the actual content depth is scored, not just the wrapper.
     if (keys.length === 1 && depth === 0) {
       const inner = (obj as Record<string, unknown>)[keys[0]];
       if (typeof inner === "object" && inner !== null && !Array.isArray(inner)) {
@@ -196,16 +208,38 @@ function scoreJsonDepth(obj: unknown, depth = 0): number {
     }
 
     let score = 2;
-    // Named sections / keys
-    if (keys.length >= 5) score += 1;
-    if (keys.length >= 8) score += 1;
 
-    // Nested depth
-    const hasNested = keys.some(k => {
+    // Breadth: 5+ semantic sections
+    if (keys.length >= 5) score += 1;
+
+    // Depth: any nested objects or arrays
+    const nestedKeys = keys.filter(k => {
       const v = (obj as Record<string, unknown>)[k];
       return typeof v === "object" && v !== null;
     });
+    const hasNested = nestedKeys.length > 0;
     if (hasNested) score += 1;
+
+    // Richness: 7+ keys with nesting, OR deep/populated nested structures
+    // (arrays with 2+ items, or nested objects with their own children)
+    if (keys.length >= 7 && hasNested) {
+      score += 1;
+    } else if (hasNested) {
+      // Check for structural richness: populated arrays or multi-level nesting
+      const hasRichNesting = nestedKeys.some(k => {
+        const v = (obj as Record<string, unknown>)[k];
+        if (Array.isArray(v) && v.length >= 2) return true;
+        if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+          const innerKeys = Object.keys(v as Record<string, unknown>);
+          return innerKeys.length >= 3 || innerKeys.some(ik => {
+            const iv = (v as Record<string, unknown>)[ik];
+            return typeof iv === "object" && iv !== null;
+          });
+        }
+        return false;
+      });
+      if (hasRichNesting) score += 1;
+    }
 
     return clamp(score, 2, 5);
   }
