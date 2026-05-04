@@ -264,15 +264,90 @@ function scoreStructureMarkdown(text: string): number {
   return 1;
 }
 
+/**
+ * Completeness scoring — measures how many required sections (mustHave)
+ * are present in the output. Universal: no skill-specific logic.
+ *
+ * Only meaningful when ctx.mustHave is provided.
+ * Score: 5 (all present) → 1 (barebones).
+ */
+function scoreCompleteness(text: string, ctx?: ScoringContext): number {
+  const mustHave = ctx?.mustHave;
+  if (!mustHave || mustHave.length === 0) return 5; // no requirements = full marks
+
+  const lower = text.toLowerCase();
+
+  // Also try to parse JSON keys for structured artifacts
+  let jsonKeys: string[] = [];
+  const jsonContent = extractJsonContent(text);
+  if (jsonContent) {
+    try {
+      const parsed = JSON.parse(jsonContent);
+      if (typeof parsed === "object" && parsed !== null) {
+        // Collect all keys recursively (up to 2 levels)
+        const collectKeys = (obj: Record<string, unknown>, depth: number): string[] => {
+          if (depth > 2) return [];
+          const keys: string[] = [];
+          for (const k of Object.keys(obj)) {
+            keys.push(k.toLowerCase());
+            const v = obj[k];
+            if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+              keys.push(...collectKeys(v as Record<string, unknown>, depth + 1));
+            }
+          }
+          return keys;
+        };
+        jsonKeys = collectKeys(parsed as Record<string, unknown>, 0);
+      }
+    } catch { /* not valid JSON, rely on text matching */ }
+  }
+
+  let found = 0;
+  for (const section of mustHave) {
+    const sectionLower = section.toLowerCase();
+    // Match by: JSON key (exact or underscore-separated), or text mention
+    const underscored = sectionLower.replace(/\s+/g, "_");
+    if (
+      lower.includes(sectionLower) ||
+      jsonKeys.includes(underscored) ||
+      jsonKeys.includes(sectionLower)
+    ) {
+      found++;
+    }
+  }
+
+  const missing = mustHave.length - found;
+  if (missing === 0) return 5;
+  if (missing === 1) return 4;
+  if (missing <= 3) return 3;
+  if (missing <= mustHave.length - 1) return 2;
+  return 1;
+}
+
 function scoreStructure(text: string, ctx?: ScoringContext): number {
   const shape = ctx?.shape ?? "unknown";
   const forbid = ctx?.forbid ?? [];
 
-  // Structured artifact: score JSON depth, not markdown
+  // Structured artifact: blend depth + completeness
   if (shape === "structured_artifact" || shape === "executive_brief") {
-    if (isJsonLike(text)) return scoreStructureArtifact(text);
-    // If artifact shape but no JSON, check markdown
-    return scoreStructureMarkdown(text);
+    let depthScore: number;
+    if (isJsonLike(text)) {
+      depthScore = scoreStructureArtifact(text);
+    } else {
+      depthScore = scoreStructureMarkdown(text);
+    }
+
+    // Blend: 60% completeness, 40% depth
+    const completeness = scoreCompleteness(text, ctx);
+    const blended = Math.round(completeness * 0.6 + depthScore * 0.4);
+    let finalScore = clamp(blended, 1, 5);
+
+    // Hard signal: if mustHave exists and sections are missing, cap at 4
+    if (ctx?.mustHave && ctx.mustHave.length > 0 && completeness < 5) {
+      finalScore = Math.min(finalScore, 4);
+    }
+
+    return finalScore;
   }
 
   // Prose with forbidden formatting: score prose quality, not markdown
@@ -483,7 +558,7 @@ export function compareOutputs(
   // Score both with the SAME contract context for apples-to-apples comparison
   const strategy_raw = scoreOutput(strategyText, inputTerms, strategyCtx);
   const baselineCtx: ScoringContext | undefined = strategyCtx
-    ? { shape: strategyCtx.shape, forbid: strategyCtx.forbid, skillId: strategyCtx.skillId, targetWords: strategyCtx.targetWords }
+    ? { shape: strategyCtx.shape, forbid: strategyCtx.forbid, skillId: strategyCtx.skillId, targetWords: strategyCtx.targetWords, mustHave: strategyCtx.mustHave }
     : undefined;
   const baseline_raw = scoreOutput(baselineText, inputTerms, baselineCtx);
 
