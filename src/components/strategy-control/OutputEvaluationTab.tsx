@@ -216,6 +216,7 @@ function exportMarkdown(results: EvaluationResult[]) {
   downloadFile(lines.join("\n"), `eval-${Date.now()}.md`, "text/markdown");
 }
 
+function EvalResultCard({ result, showWhy }: { result: EvaluationResult; showWhy: boolean }) {
   const [strategyOpen, setStrategyOpen] = useState(false);
   const [baselineOpen, setBaselineOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
