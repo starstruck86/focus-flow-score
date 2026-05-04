@@ -141,3 +141,32 @@ describe("Completeness scoring — structured artifact evaluation", () => {
     expect(score.structure).toBeLessThanOrEqual(4);
   });
 });
+
+describe("scoreStructureProse — constrained prose robustness", () => {
+  const proseCtx: ScoringContext = { shape: "prose", forbid: ["headings", "bullets"] };
+
+  it("Regression: 1 transition-word delta does NOT cause structure loss", () => {
+    // Strategy: 2 transitions, strong business-flow signals
+    const strategy = `Our current platform creates significant risk for the sales org. Today, reps spend 8 hours weekly on manual pipeline reviews because the existing tooling lacks native CRM integration. This leads to delayed forecasts and missed opportunities.
+
+However, consolidating onto a single platform would reduce vendor cost by $120k annually while improving rep productivity by 15%. The goal is to move from fragmented tooling to a unified system that enables real-time pipeline visibility. This requires executive sponsorship and a phased rollout to mitigate adoption risk.`;
+
+    // Baseline: 3 transitions (one more), but similar business content
+    const baseline = `The current state of pipeline management is suboptimal. Today, reps are doing manual reviews. However, there is an opportunity to consolidate. Furthermore, this would save money. Additionally, it would improve productivity.
+
+The question is whether leadership will sponsor the initiative. The outcome would be better forecasting accuracy.`;
+
+    const result = compareOutputs(strategy, baseline, ["pipeline", "consolidation"], proseCtx);
+    // Strategy must NOT lose structure despite having fewer transition words
+    expect(result.dimension_winners.structure).not.toBe("baseline");
+  });
+
+  it("constrained prose with business-flow signals scores well without headings/bullets", () => {
+    const prose = `The current state exposes the team to significant risk. Because reps lack real-time visibility, pipeline reviews cost 8 hours per week. This creates a gap between forecast accuracy and actual outcomes.
+
+Moving from manual processes to an integrated platform requires investment but the result is measurable: 15% productivity uplift and $120k in annual savings. The opportunity is clear, and the question is whether we can secure executive sponsorship before Q4.`;
+
+    const score = scoreOutput(prose, ["pipeline", "visibility"], proseCtx);
+    expect(score.structure).toBeGreaterThanOrEqual(4);
+  });
+});
