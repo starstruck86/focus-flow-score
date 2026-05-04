@@ -83,7 +83,7 @@ export async function generateBaseline(req: BaselineRequest): Promise<BaselineRe
     const latencyMs = Math.round(performance.now() - started);
 
     if (error) {
-      return { text: "", latencyMs, error: error.message, trace: CLEAN_TRACE };
+      return { text: "", latencyMs, error: error.message, trace: CLEAN_TRACE, systemPrompt: BASELINE_SYSTEM_PROMPT, userPrompt: prompt };
     }
 
     const d = data as Record<string, unknown> | null;
@@ -96,7 +96,7 @@ export async function generateBaseline(req: BaselineRequest): Promise<BaselineRe
       model: typeof d?.model === "string" ? d.model : "unknown",
     } as BaselineTrace;
 
-    return { text, latencyMs, error: null, trace: serverTrace };
+    return { text, latencyMs, error: null, trace: serverTrace, systemPrompt: BASELINE_SYSTEM_PROMPT, userPrompt: prompt };
   } catch (e) {
     const latencyMs = Math.round(performance.now() - started);
     return {
@@ -104,6 +104,8 @@ export async function generateBaseline(req: BaselineRequest): Promise<BaselineRe
       latencyMs,
       error: e instanceof Error ? e.message : String(e),
       trace: CLEAN_TRACE,
+      systemPrompt: BASELINE_SYSTEM_PROMPT,
+      userPrompt: prompt,
     };
   }
 }
