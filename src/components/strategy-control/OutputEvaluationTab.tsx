@@ -109,18 +109,10 @@ function downloadFile(content: string, filename: string, mime: string) {
 // buildExportCase is now imported from outputEvaluationLogic
 
 function exportJSON(results: EvaluationResult[]) {
-  const clean = results.filter(r => !isBaselineContaminated(r));
   const payload = {
     export_timestamp: new Date().toISOString(),
     prompt_version: BASELINE_PROMPT_VERSION,
-    aggregate: {
-      total: results.length,
-      valid: clean.length,
-      contaminated: results.length - clean.length,
-      strategy_wins: clean.filter(r => r.comparison.winner === "strategy").length,
-      baseline_wins: clean.filter(r => r.comparison.winner === "baseline").length,
-      ties: clean.filter(r => r.comparison.winner === "tie").length,
-    },
+    aggregate: computeAggregates(results),
     cases: results.map(buildExportCase),
   };
   downloadFile(JSON.stringify(payload, null, 2), `eval-${Date.now()}.json`, "application/json");
