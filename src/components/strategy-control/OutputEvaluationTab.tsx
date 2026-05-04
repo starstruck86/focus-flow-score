@@ -114,6 +114,26 @@ function EvalResultCard({ result, showWhy }: { result: EvaluationResult; showWhy
           )}
         </div>
 
+        {/* Baseline contamination check */}
+        {result.baseline.trace && (
+          <div className={`text-xs rounded p-2 border ${
+            result.baseline.trace.baseline_mode === "clean_baseline"
+              ? "bg-emerald-500/10 border-emerald-500/30"
+              : "bg-red-500/10 border-red-500/30"
+          }`}>
+            <div className="font-semibold mb-1">
+              {result.baseline.trace.baseline_mode === "clean_baseline" ? "✅" : "⚠️"} Baseline Integrity
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 font-mono">
+              <div>mode: {result.baseline.trace.baseline_mode}</div>
+              <div>model: {result.baseline.trace.model}</div>
+              <div>context: {String(result.baseline.trace.baseline_context_used)}</div>
+              <div>library: {String(result.baseline.trace.baseline_library_used)}</div>
+              <div>memory: {String(result.baseline.trace.baseline_memory_used)}</div>
+            </div>
+          </div>
+        )}
+
         {/* Scorecards side by side */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="border border-emerald-500/20 rounded-lg p-3">
