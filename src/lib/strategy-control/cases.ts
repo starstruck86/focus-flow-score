@@ -244,6 +244,28 @@ export function buildCases(inputs: ValidationInputs): ReadonlyArray<ValidationCa
       },
     },
 
+    // 5b. executive-brief — REAL account
+    {
+      id: "5b_executive_brief_real",
+      label: "5b · executive-brief (real account) — pass attempt",
+      description: "Executive brief artifact with real account inputs.",
+      expectation: "pass_attempt",
+      withSkillDebugHeader: true,
+      body: {
+        threadId: "validation-5b",
+        skill: {
+          id: "executive-brief",
+          version: "1",
+          inputs: {
+            account: inputs.account,
+            persona: inputs.persona,
+            stage: inputs.stage,
+            topic: inputs.topic,
+          },
+        },
+      },
+    },
+
     // 6. flag OFF simulation — no skill envelope at all
     {
       id: "6_no_skill_envelope",
