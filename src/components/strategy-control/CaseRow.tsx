@@ -21,6 +21,10 @@ interface Props {
   running: boolean;
   caseLabel: string;
   caseDescription: string;
+  /** The exact payload body sent (for transparency). */
+  sentBody?: Record<string, unknown>;
+  /** Client-side assertion errors (e.g. Case 3a pre-exec checks). */
+  assertionError?: string | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -69,11 +73,19 @@ function Signal({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-export function CaseRow({ result, running, caseLabel, caseDescription }: Props) {
+export function CaseRow({ result, running, caseLabel, caseDescription, sentBody, assertionError }: Props) {
   const [open, setOpen] = useState(false);
+  const [inputsOpen, setInputsOpen] = useState(false);
   const status = result?.status ?? null;
   const sig = result?.signals;
 
+  // Extract skill inputs for display
+  const skillInputs = sentBody?.skill && typeof sentBody.skill === "object"
+    ? (sentBody.skill as Record<string, unknown>).inputs as Record<string, unknown> | undefined
+    : undefined;
+  const runId = sentBody?.skill && typeof sentBody.skill === "object"
+    ? (sentBody.skill as Record<string, unknown>).runId as string | undefined
+    : undefined;
   return (
     <Card className="p-3">
       <div className="flex items-start justify-between gap-3">
@@ -95,6 +107,48 @@ export function CaseRow({ result, running, caseLabel, caseDescription }: Props) 
             )}
           </div>
           <p className="text-xs text-muted-foreground mt-1">{caseDescription}</p>
+
+          {/* Assertion error (e.g. Case 3a pre-exec guard) */}
+          {assertionError && (
+            <div className="mt-2 rounded border border-destructive/50 bg-destructive/10 p-2 text-xs text-destructive font-mono">
+              ⛔ PRE-EXEC ASSERTION FAILED: {assertionError}
+            </div>
+          )}
+
+          {/* Sent Inputs block — always visible so user can confirm exact payload */}
+          {sentBody && (
+            <Collapsible open={inputsOpen} onOpenChange={setInputsOpen} className="mt-2">
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px] text-muted-foreground">
+                  <ChevronDown className={`h-3 w-3 mr-1 transition-transform ${inputsOpen ? "rotate-180" : ""}`} />
+                  {inputsOpen ? "Hide" : "Show"} sent inputs{runId ? ` · ${runId}` : ""}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-1">
+                <div className="rounded bg-muted/40 p-2 text-[11px] font-mono space-y-1">
+                  {skillInputs && Object.entries(skillInputs).map(([k, v]) => (
+                    <div key={k}>
+                      <span className="text-muted-foreground">{k}:</span>{" "}
+                      <span className={
+                        k === "stage" && (v === "" || v === null || v === undefined)
+                          ? "text-amber-400 font-semibold"
+                          : ""
+                      }>
+                        {v === "" ? '""' : String(v ?? "null")}
+                      </span>
+                    </div>
+                  ))}
+                  {runId && (
+                    <div>
+                      <span className="text-muted-foreground">runId:</span>{" "}
+                      <span className="text-sky-400">{runId}</span>
+                    </div>
+                  )}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
           {result && (
             <p className="text-xs mt-2">
               <span className="text-muted-foreground">reason:</span> {result.reason}

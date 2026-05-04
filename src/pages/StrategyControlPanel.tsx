@@ -31,6 +31,7 @@ import { buildWeakCases } from "@/lib/strategy-control/weakCases";
 import {
   preflight,
   runAllCases,
+  assert3aInputs,
   type CaseResult,
   type PreflightResult,
 } from "@/lib/strategy-control/runner";
@@ -45,6 +46,7 @@ import {
 import { VerdictHeader } from "@/components/strategy-control/VerdictHeader";
 import { CaseRow } from "@/components/strategy-control/CaseRow";
 
+const BUILD_STAMP = typeof __BUILD_TIMESTAMP__ !== "undefined" ? __BUILD_TIMESTAMP__ : "unknown";
 const OWNER_EMAIL = "corey.hartin@gmail.com";
 
 function downloadBlob(content: string, filename: string, mime: string) {
@@ -187,6 +189,11 @@ export default function StrategyControlPanel() {
           <p className="text-sm text-muted-foreground">
             Phase 3A validation suite. Real auth · real library · existing strategy-chat endpoint only.
           </p>
+          <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground bg-muted/30 rounded px-2 py-1 w-fit">
+            <span>Build: {BUILD_STAMP}</span>
+            <span>·</span>
+            <span>Loaded: {new Date().toISOString()}</span>
+          </div>
         </header>
 
         <Tabs defaultValue="validation">
@@ -279,6 +286,44 @@ export default function StrategyControlPanel() {
                 </span>
               )}
             </div>
+
+            {/* Per-case detail rows */}
+            {(results.length > 0 || weakResults.length > 0) && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Standard Cases ({results.length}/{cases.length})
+                </p>
+                {cases.map((c, i) => (
+                  <CaseRow
+                    key={c.id}
+                    result={results[i] ?? null}
+                    running={isRunningAny}
+                    caseLabel={c.label}
+                    caseDescription={c.description}
+                    sentBody={c.body}
+                    assertionError={assert3aInputs(c)}
+                  />
+                ))}
+                {weakResults.length > 0 && (
+                  <>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-4">
+                      Weak Cases ({weakResults.length}/{weakCases.length})
+                    </p>
+                    {weakCases.map((c, i) => (
+                      <CaseRow
+                        key={c.id}
+                        result={weakResults[i] ?? null}
+                        running={isRunningAny}
+                        caseLabel={c.label}
+                        caseDescription={c.description}
+                        sentBody={c.body}
+                        assertionError={null}
+                      />
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Last Run Summary */}
             {lastReport && (
