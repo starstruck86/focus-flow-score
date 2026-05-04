@@ -442,21 +442,54 @@ export function scoreOutput(text: string, inputTerms: string[], ctx?: ScoringCon
   };
 }
 
+/**
+ * Density normalization: if a word budget exists and a text exceeds it by
+ * more than 2x, apply a volume-padding penalty to signal-count dimensions
+ * (specificity, actionability, evidence, relevance, business_impact).
+ * Structure is exempt — it's already format-aware.
+ *
+ * Penalty: -1 per dimension for each 2x overshoot (max -2).
+ * This prevents a 800-word generic dump from accumulating keyword hits
+ * that a 120-word constrained output can never match.
+ */
+function applyDensityPenalty(score: OutputScore, text: string, ctx?: ScoringContext): OutputScore {
+  if (!ctx?.targetWords?.max) return score;
+  const wordCount = text.split(/\s+/).length;
+  const maxWords = ctx.targetWords.max;
+  if (wordCount <= maxWords * 1.5) return score; // within reasonable range
+
+  const overshootRatio = wordCount / maxWords;
+  // Penalty: 1 point per 2x overshoot, capped at 2
+  const penalty = clamp(Math.floor(overshootRatio / 2), 0, 2);
+  if (penalty === 0) return score;
+
+  const adjusted = { ...score };
+  const volumeDims: (keyof OutputScore)[] = ["specificity", "actionability", "evidence", "relevance", "business_impact"];
+  for (const dim of volumeDims) {
+    adjusted[dim] = clamp(adjusted[dim] - penalty, 1, 5);
+  }
+  adjusted.total = adjusted.specificity + adjusted.actionability + adjusted.structure +
+    adjusted.evidence + adjusted.relevance + adjusted.business_impact;
+  adjusted.normalized = Math.round((adjusted.total / 6) * 10) / 10;
+  return adjusted;
+}
+
 export function compareOutputs(
   strategyText: string,
   baselineText: string,
   inputTerms: string[],
   strategyCtx?: ScoringContext,
 ): ComparisonResult {
-  // Strategy scored with its manifest context.
-  // Baseline structure is scored with the SAME contract context so the comparison
-  // is apples-to-apples: if Strategy is forbidden from using headings/bullets,
-  // baseline shouldn't get free structure points from markdown formatting either.
-  const strategy_score = scoreOutput(strategyText, inputTerms, strategyCtx);
+  // Score both with the SAME contract context for apples-to-apples comparison
+  const strategy_raw = scoreOutput(strategyText, inputTerms, strategyCtx);
   const baselineCtx: ScoringContext | undefined = strategyCtx
-    ? { shape: strategyCtx.shape, forbid: strategyCtx.forbid, skillId: strategyCtx.skillId }
+    ? { shape: strategyCtx.shape, forbid: strategyCtx.forbid, skillId: strategyCtx.skillId, targetWords: strategyCtx.targetWords }
     : undefined;
-  const baseline_score = scoreOutput(baselineText, inputTerms, baselineCtx);
+  const baseline_raw = scoreOutput(baselineText, inputTerms, baselineCtx);
+
+  // Apply density normalization — penalize volume padding beyond word budget
+  const strategy_score = applyDensityPenalty(strategy_raw, strategyText, strategyCtx);
+  const baseline_score = applyDensityPenalty(baseline_raw, baselineText, strategyCtx);
 
   const dims = ["specificity", "actionability", "structure", "evidence", "relevance", "business_impact"] as const;
   const dimension_winners: Record<string, "strategy" | "baseline" | "tie"> = {};
