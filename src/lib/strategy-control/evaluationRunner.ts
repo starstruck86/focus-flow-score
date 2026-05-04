@@ -232,19 +232,23 @@ export async function runEvaluation(
   onProgress?.("strategy");
   const strategyResult = await runStrategyEvalSynthesis(evalCase);
 
-  // 2. Run Baseline output (same inputs, no library)
+  // 2. Run Baseline output (same inputs, same output contract, no library)
   onProgress?.("baseline");
+  const scoringCtx = buildScoringContext(evalCase);
+  const baselineContract = buildBaselineContract(scoringCtx);
   const skill = evalCase.case.body.skill as { inputs?: Record<string, string> } | undefined;
   const baselineResult = await generateBaseline({
     account: skill?.inputs?.account ?? "",
     persona: skill?.inputs?.persona ?? "",
     stage: skill?.inputs?.stage ?? "",
     topic: skill?.inputs?.topic ?? "",
-  });
+    opportunity: skill?.inputs?.opportunity,
+    methodology: skill?.inputs?.methodology,
+    industry: skill?.inputs?.industry,
+  }, baselineContract);
 
   // 3. Score both with format-aware context from the skill manifest
   onProgress?.("scoring");
-  const scoringCtx = buildScoringContext(evalCase);
   const comparison = compareOutputs(strategyResult.text, baselineResult.text, inputTerms, scoringCtx);
 
   return {
