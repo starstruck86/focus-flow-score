@@ -31,6 +31,7 @@ import { buildWeakCases } from "@/lib/strategy-control/weakCases";
 import {
   preflight,
   runAllCases,
+  assert3aInputs,
   type CaseResult,
   type PreflightResult,
 } from "@/lib/strategy-control/runner";
