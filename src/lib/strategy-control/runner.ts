@@ -439,7 +439,7 @@ export async function runCase(c: ValidationCase): Promise<CaseResult> {
     if (error) {
       let { body: raw, httpStatus } = await readInvokeBody(data, error, `case:${c.id}`);
       if (c.withSkillDebugHeader && !isSkillBranchBody(raw)) {
-        const direct = await directStrategyChatFetch(c.body, headers);
+        const direct = await directStrategyChatFetch(body, headers);
         raw = direct.body;
         httpStatus = direct.httpStatus;
         console.debug(`[StrategyControl] case:${c.id}:direct-fetch`, direct);
