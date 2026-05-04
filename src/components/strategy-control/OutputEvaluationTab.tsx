@@ -306,10 +306,12 @@ export function OutputEvaluationTab({ cases }: Props) {
     setRunning(false);
   }, [evalCases]);
 
-  // Aggregate stats
-  const strategyWins = results.filter(r => r.comparison.winner === "strategy").length;
-  const baselineWins = results.filter(r => r.comparison.winner === "baseline").length;
-  const ties = results.filter(r => r.comparison.winner === "tie").length;
+  // Aggregate stats — exclude contaminated results
+  const clean = results.filter(r => !isBaselineContaminated(r));
+  const contaminated = results.filter(r => isBaselineContaminated(r));
+  const strategyWins = clean.filter(r => r.comparison.winner === "strategy").length;
+  const baselineWins = clean.filter(r => r.comparison.winner === "baseline").length;
+  const ties = clean.filter(r => r.comparison.winner === "tie").length;
 
   return (
     <div className="space-y-4">
