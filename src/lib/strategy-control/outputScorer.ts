@@ -183,8 +183,10 @@ function scoreStructureProse(text: string): number {
   else if (bizFlow >= 2) bizScore = 0.75;
   else if (bizFlow >= 1) bizScore = 0.5;
 
-  // ── Combine: 4 signals (0–4) → scale to 1–5 ──
-  const rawSum = coherence + density + flow + bizScore; // 0–4
+  // ── Combine: weighted sum → scale to 1–5 ──
+  // Weights: coherence 30%, density 25%, flow 15%, bizScore 30%
+  // Flow is down-weighted to prevent transition-word variance from deciding scores.
+  const rawSum = coherence * 1.2 + density * 1.0 + flow * 0.6 + bizScore * 1.2; // 0–4
   // Map: 0→1, 1→2, 2→3, 3→4, 4→5
   return clamp(Math.round(rawSum) + 1, 1, 5);
 }
