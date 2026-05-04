@@ -3,11 +3,12 @@
  *
  * For a given case:
  *   1. Runs Strategy output (via existing skill pipeline)
- *   2. Runs Baseline output (via freeform path, no library)
+ *   2. Runs Baseline output (clean-baseline endpoint, ZERO Strategy context)
  *   3. Scores both deterministically
  *   4. Returns comparison
  */
 import type { ValidationCase } from "./cases";
+import type { BaselineTrace } from "./baselineGenerator";
 import { runCase, type CaseResult } from "./runner";
 import { generateBaseline, type BaselineResult } from "./baselineGenerator";
 import { compareOutputs, type ComparisonResult, type OutputScore } from "./outputScorer";
