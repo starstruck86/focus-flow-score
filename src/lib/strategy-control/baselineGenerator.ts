@@ -46,6 +46,8 @@ export interface BaselineResult {
   userPrompt: string;
 }
 
+export const BASELINE_PROMPT_VERSION = "1.0.0";
+
 const BASELINE_SYSTEM_PROMPT =
   "You are a helpful sales strategy assistant. " +
   "Answer the user's question with actionable, specific advice. " +
