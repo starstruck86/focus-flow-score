@@ -189,6 +189,11 @@ export default function StrategyControlPanel() {
           <p className="text-sm text-muted-foreground">
             Phase 3A validation suite. Real auth · real library · existing strategy-chat endpoint only.
           </p>
+          <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground bg-muted/30 rounded px-2 py-1 w-fit">
+            <span>Build: {BUILD_STAMP}</span>
+            <span>·</span>
+            <span>Loaded: {new Date().toISOString()}</span>
+          </div>
         </header>
 
         <Tabs defaultValue="validation">
