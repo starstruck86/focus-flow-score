@@ -199,8 +199,8 @@ export function toMarkdown(report: ValidationReport): string {
   lines.push(`## Weak-Case Isolation Matrix (${report.weakCaseMatrix.results.length} cases)`);
   lines.push(`**All expected refusals fired:** ${report.weakCaseMatrix.allRefused ? "✅ YES" : "⚠️ NO"}`);
   lines.push("");
-  lines.push(`| Case | Status | Source Mode | Confidence | Gate | Influence | Latency | Reason |`);
-  lines.push(`|------|--------|-------------|------------|------|-----------|---------|--------|`);
+  lines.push(`| Case | Status | Source Mode | Confidence | Gate | Influence | Expansion | Expanded Seeds | Latency | Reason |`);
+  lines.push(`|------|--------|-------------|------------|------|-----------|-----------|----------------|---------|--------|`);
   report.weakCaseMatrix.results.forEach((r) => lines.push(caseRow(r)));
   lines.push("");
 
