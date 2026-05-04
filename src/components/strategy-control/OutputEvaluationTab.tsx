@@ -88,10 +88,22 @@ function WinnerBadge({ winner }: { winner: "strategy" | "baseline" | "tie" }) {
   );
 }
 
+function isBaselineContaminated(result: EvaluationResult): boolean {
+  const t = result.baseline.trace;
+  if (!t) return true;
+  if (t.baseline_mode !== "clean_baseline") return true;
+  if (t.baseline_context_used) return true;
+  if (t.baseline_library_used) return true;
+  if (t.baseline_memory_used) return true;
+  return false;
+}
+
 function EvalResultCard({ result, showWhy }: { result: EvaluationResult; showWhy: boolean }) {
   const [strategyOpen, setStrategyOpen] = useState(false);
   const [baselineOpen, setBaselineOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const { comparison } = result;
+  const contaminated = isBaselineContaminated(result);
 
   return (
     <Card className="border-border/60">
@@ -103,7 +115,13 @@ function EvalResultCard({ result, showWhy }: { result: EvaluationResult; showWhy
             </Badge>
             <CardTitle className="text-sm">{result.evalCase.case.label}</CardTitle>
           </div>
-          <WinnerBadge winner={comparison.winner} />
+          {contaminated ? (
+            <Badge className="bg-red-500/15 text-red-400 border-red-500/30 text-sm px-3 py-1">
+              ⛔ CONTAMINATED
+            </Badge>
+          ) : (
+            <WinnerBadge winner={comparison.winner} />
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -117,12 +135,12 @@ function EvalResultCard({ result, showWhy }: { result: EvaluationResult; showWhy
         {/* Baseline contamination check */}
         {result.baseline.trace && (
           <div className={`text-xs rounded p-2 border ${
-            result.baseline.trace.baseline_mode === "clean_baseline"
-              ? "bg-emerald-500/10 border-emerald-500/30"
-              : "bg-red-500/10 border-red-500/30"
+            contaminated
+              ? "bg-red-500/10 border-red-500/30"
+              : "bg-emerald-500/10 border-emerald-500/30"
           }`}>
             <div className="font-semibold mb-1">
-              {result.baseline.trace.baseline_mode === "clean_baseline" ? "✅" : "⚠️"} Baseline Integrity
+              {contaminated ? "⛔" : "✅"} Baseline Integrity
             </div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 font-mono">
               <div>mode: {result.baseline.trace.baseline_mode}</div>
@@ -134,66 +152,96 @@ function EvalResultCard({ result, showWhy }: { result: EvaluationResult; showWhy
           </div>
         )}
 
-        {/* Scorecards side by side */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="border border-emerald-500/20 rounded-lg p-3">
-            <ScoreCard label="Strategy (with library)" score={result.strategy.score} variant="strategy" />
+        {/* Hard fail: contaminated baseline */}
+        {contaminated && (
+          <div className="bg-red-500/10 border border-red-500/40 rounded p-3 text-sm text-red-400 font-semibold">
+            Baseline contaminated — evaluation invalid. Scores are suppressed.
           </div>
-          <div className="border border-sky-500/20 rounded-lg p-3">
-            <ScoreCard label="Baseline (no library)" score={result.baseline.score} variant="baseline" />
-          </div>
-        </div>
+        )}
 
-        {/* Reasoning */}
-        <div className="text-sm bg-muted/20 rounded p-3">
-          <span className="text-muted-foreground">Verdict:</span> {comparison.reasoning}
-        </div>
+        {/* Baseline Request Inspector */}
+        <Collapsible open={inspectorOpen} onOpenChange={setInspectorOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px]">
+              <ChevronDown className={`h-3 w-3 mr-1 transition-transform ${inspectorOpen ? "rotate-180" : ""}`} />
+              Baseline Request Inspector
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="space-y-2 text-[11px] font-mono bg-muted/20 p-3 rounded">
+              <div>
+                <span className="text-muted-foreground font-semibold">System Prompt:</span>
+                <pre className="whitespace-pre-wrap mt-1 bg-muted/30 p-2 rounded">{result.baseline.result.systemPrompt ?? "(unavailable)"}</pre>
+              </div>
+              <div>
+                <span className="text-muted-foreground font-semibold">User Prompt:</span>
+                <pre className="whitespace-pre-wrap mt-1 bg-muted/30 p-2 rounded">{result.baseline.result.userPrompt ?? "(unavailable)"}</pre>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
-        {/* Dimension breakdown */}
-        <div className="grid grid-cols-5 gap-1 text-[10px] text-center">
-          {DIMS.map(d => {
-            const w = comparison.dimension_winners[d];
-            const bg = w === "strategy" ? "bg-emerald-500/10" : w === "baseline" ? "bg-red-500/10" : "bg-muted/30";
-            return (
-              <div key={d} className={`rounded p-1.5 ${bg}`}>
-                <div className="font-semibold capitalize">{d}</div>
-                <div className="font-mono">{result.strategy.score[d]} vs {result.baseline.score[d]}</div>
-                <div className="text-muted-foreground">{w}</div>
+        {/* Scorecards — only if NOT contaminated */}
+        {!contaminated && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="border border-emerald-500/20 rounded-lg p-3">
+                <ScoreCard label="Strategy (with library)" score={result.strategy.score} variant="strategy" />
               </div>
-            );
-          })}
-        </div>
+              <div className="border border-sky-500/20 rounded-lg p-3">
+                <ScoreCard label="Baseline (no library)" score={result.baseline.score} variant="baseline" />
+              </div>
+            </div>
 
-        {/* Show Why toggle — KI influence + expansion impact */}
-        {showWhy && (
-          <div className="border-t pt-3 space-y-2">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Why Strategy {comparison.winner === "strategy" ? "Won" : comparison.winner === "baseline" ? "Lost" : "Tied"}
-            </p>
-            {result.strategy.caseResult.signals.influence && (
-              <div className="text-xs">
-                <span className="text-muted-foreground">Library influence:</span>{" "}
-                <span className="font-mono">{result.strategy.caseResult.signals.influence}</span>
+            <div className="text-sm bg-muted/20 rounded p-3">
+              <span className="text-muted-foreground">Verdict:</span> {comparison.reasoning}
+            </div>
+
+            <div className="grid grid-cols-5 gap-1 text-[10px] text-center">
+              {DIMS.map(d => {
+                const w = comparison.dimension_winners[d];
+                const bg = w === "strategy" ? "bg-emerald-500/10" : w === "baseline" ? "bg-red-500/10" : "bg-muted/30";
+                return (
+                  <div key={d} className={`rounded p-1.5 ${bg}`}>
+                    <div className="font-semibold capitalize">{d}</div>
+                    <div className="font-mono">{result.strategy.score[d]} vs {result.baseline.score[d]}</div>
+                    <div className="text-muted-foreground">{w}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {showWhy && (
+              <div className="border-t pt-3 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Why Strategy {comparison.winner === "strategy" ? "Won" : comparison.winner === "baseline" ? "Lost" : "Tied"}
+                </p>
+                {result.strategy.caseResult.signals.influence && (
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Library influence:</span>{" "}
+                    <span className="font-mono">{result.strategy.caseResult.signals.influence}</span>
+                  </div>
+                )}
+                {result.strategy.caseResult.signals.expanded_seeds.length > 0 && (
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Expansion terms that mattered:</span>{" "}
+                    <span className="font-mono">{result.strategy.caseResult.signals.expanded_seeds.join(", ")}</span>
+                  </div>
+                )}
+                {result.strategy.caseResult.signals.confidence && (
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Retrieval confidence:</span>{" "}
+                    <span className="font-mono">{result.strategy.caseResult.signals.confidence}</span>
+                  </div>
+                )}
+                {comparison.winner === "baseline" && (
+                  <div className="text-xs text-amber-400">
+                    ⚠ Baseline outperformed Strategy. Check if library coverage is insufficient or output is too constrained.
+                  </div>
+                )}
               </div>
             )}
-            {result.strategy.caseResult.signals.expanded_seeds.length > 0 && (
-              <div className="text-xs">
-                <span className="text-muted-foreground">Expansion terms that mattered:</span>{" "}
-                <span className="font-mono">{result.strategy.caseResult.signals.expanded_seeds.join(", ")}</span>
-              </div>
-            )}
-            {result.strategy.caseResult.signals.confidence && (
-              <div className="text-xs">
-                <span className="text-muted-foreground">Retrieval confidence:</span>{" "}
-                <span className="font-mono">{result.strategy.caseResult.signals.confidence}</span>
-              </div>
-            )}
-            {comparison.winner === "baseline" && (
-              <div className="text-xs text-amber-400">
-                ⚠ Baseline outperformed Strategy. Check if library coverage is insufficient or output is too constrained.
-              </div>
-            )}
-          </div>
+          </>
         )}
 
         {/* Collapsible raw outputs */}
@@ -258,10 +306,12 @@ export function OutputEvaluationTab({ cases }: Props) {
     setRunning(false);
   }, [evalCases]);
 
-  // Aggregate stats
-  const strategyWins = results.filter(r => r.comparison.winner === "strategy").length;
-  const baselineWins = results.filter(r => r.comparison.winner === "baseline").length;
-  const ties = results.filter(r => r.comparison.winner === "tie").length;
+  // Aggregate stats — exclude contaminated results
+  const clean = results.filter(r => !isBaselineContaminated(r));
+  const contaminated = results.filter(r => isBaselineContaminated(r));
+  const strategyWins = clean.filter(r => r.comparison.winner === "strategy").length;
+  const baselineWins = clean.filter(r => r.comparison.winner === "baseline").length;
+  const ties = clean.filter(r => r.comparison.winner === "tie").length;
 
   return (
     <div className="space-y-4">
@@ -312,6 +362,9 @@ export function OutputEvaluationTab({ cases }: Props) {
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="text-sm font-semibold">
                 Aggregate: Strategy {strategyWins} · Baseline {baselineWins} · Tie {ties}
+                {contaminated.length > 0 && (
+                  <span className="text-red-400 ml-2">({contaminated.length} contaminated, excluded)</span>
+                )}
               </div>
               <Badge
                 className={

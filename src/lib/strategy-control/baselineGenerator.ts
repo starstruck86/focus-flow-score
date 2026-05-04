@@ -40,7 +40,17 @@ export interface BaselineResult {
   latencyMs: number;
   error: string | null;
   trace: BaselineTrace;
+  /** The exact system prompt sent to the baseline LLM */
+  systemPrompt: string;
+  /** The exact user prompt sent to the baseline LLM */
+  userPrompt: string;
 }
+
+const BASELINE_SYSTEM_PROMPT =
+  "You are a helpful sales strategy assistant. " +
+  "Answer the user's question with actionable, specific advice. " +
+  "Do not reference any internal library, playbook, or proprietary methodology. " +
+  "Use only general sales knowledge.";
 
 const CLEAN_TRACE: BaselineTrace = {
   baseline_mode: "clean_baseline",
@@ -73,7 +83,7 @@ export async function generateBaseline(req: BaselineRequest): Promise<BaselineRe
     const latencyMs = Math.round(performance.now() - started);
 
     if (error) {
-      return { text: "", latencyMs, error: error.message, trace: CLEAN_TRACE };
+      return { text: "", latencyMs, error: error.message, trace: CLEAN_TRACE, systemPrompt: BASELINE_SYSTEM_PROMPT, userPrompt: prompt };
     }
 
     const d = data as Record<string, unknown> | null;
@@ -86,7 +96,7 @@ export async function generateBaseline(req: BaselineRequest): Promise<BaselineRe
       model: typeof d?.model === "string" ? d.model : "unknown",
     } as BaselineTrace;
 
-    return { text, latencyMs, error: null, trace: serverTrace };
+    return { text, latencyMs, error: null, trace: serverTrace, systemPrompt: BASELINE_SYSTEM_PROMPT, userPrompt: prompt };
   } catch (e) {
     const latencyMs = Math.round(performance.now() - started);
     return {
@@ -94,6 +104,8 @@ export async function generateBaseline(req: BaselineRequest): Promise<BaselineRe
       latencyMs,
       error: e instanceof Error ? e.message : String(e),
       trace: CLEAN_TRACE,
+      systemPrompt: BASELINE_SYSTEM_PROMPT,
+      userPrompt: prompt,
     };
   }
 }
