@@ -122,10 +122,12 @@ export function buildCases(inputs: ValidationInputs): ReadonlyArray<ValidationCa
     },
 
     // 3a. discovery-prep — FAKE / sparse → expected refusal
+    // All inputs are deliberately irrelevant: no stage seed, fake persona,
+    // fake topic. Mirrors W1 pattern to guarantee zero retrieval hits.
     {
       id: "3a_discovery_prep_sparse",
       label: "3a · discovery-prep (sparse) — expected refusal",
-      description: "library_required skill with thin inputs. An honest refusal is the correct outcome.",
+      description: "library_required skill with fake account, fake persona, no stage seed, irrelevant topic. An honest refusal is the correct outcome.",
       expectation: "expected_refusal",
       withSkillDebugHeader: true,
       body: {
@@ -135,9 +137,9 @@ export function buildCases(inputs: ValidationInputs): ReadonlyArray<ValidationCa
           version: "1",
           inputs: {
             account: "Acme Test Co (fake)",
-            persona: "Buyer",
-            stage: "discovery",
-            topic: "general platform consolidation",
+            persona: "Chief Vibe Officer",
+            stage: "",
+            topic: "quantum entanglement for pet grooming",
           },
         },
       },
