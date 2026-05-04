@@ -278,13 +278,15 @@ function scoreRelevance(text: string, inputTerms: string[], ctx?: ScoringContext
 
     const avgMentions = totalMentions / Math.max(matched.length, 1);
 
-    // High repetition with low evidence/action = generic padding
+    // High repetition with low substance = generic padding
     if (avgMentions > 4) {
-      const hasEvidence = countMatches(text, /\b(?:according to|based on|per the|KI|playbook|framework)\b/gi) > 0;
-      const hasAction = countMatches(text, /\b(?:should|must|recommend|ask|propose|validate)\b/gi) > 0;
-      const hasBizImpact = countMatches(lower, /\b(?:risk|cost|roi|revenue|churn|metric|pain|gap)\b/g) > 0;
+      const evidenceCount = countMatches(text, /\b(?:according to|based on|per the|KI|playbook|framework|methodology|data shows|research)\b/gi);
+      const actionCount = countMatches(text, /\b(?:must|recommend|propose|validate|schedule|prepare|draft|challenge|quantify|map|identify)\b/gi);
+      const bizImpactCount = countMatches(lower, /\b(?:risk|cost|roi|revenue|churn|metric|pain|gap|savings|retention|conversion)\b/g);
 
-      if (!hasEvidence && !hasAction && !hasBizImpact) {
+      const substanceSignals = evidenceCount + actionCount + bizImpactCount;
+      // Need meaningful substance, not just one incidental word
+      if (substanceSignals < 3) {
         baseScore = clamp(baseScore - 1, 1, 5);
       }
     }
