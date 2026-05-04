@@ -5,7 +5,13 @@
  *
  * Does NOT touch Strategy runtime, Discovery Prep, tasks, artifacts, or synthesis.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// Mock supabase client to avoid localStorage reference in node environment
+vi.mock("@/integrations/supabase/client", () => ({
+  supabase: {},
+}));
+
 import {
   isBaselineContaminated,
   buildExportCase,
