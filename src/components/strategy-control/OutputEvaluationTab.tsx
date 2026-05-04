@@ -106,36 +106,7 @@ function downloadFile(content: string, filename: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
-function buildExportCase(r: EvaluationResult) {
-  const contaminated = isBaselineContaminated(r);
-  return {
-    case_id: r.evalCase.case.id,
-    label: r.evalCase.case.label,
-    tier: r.evalCase.tier,
-    status: contaminated ? "EVALUATION_INVALID" : "VALID",
-    timestamp: r.timestamp,
-    prompt_version: BASELINE_PROMPT_VERSION,
-    input_terms: r.inputTerms,
-    baseline_integrity: {
-      mode: r.baseline.trace.baseline_mode,
-      model: r.baseline.trace.model,
-      context_used: r.baseline.trace.baseline_context_used,
-      library_used: r.baseline.trace.baseline_library_used,
-      memory_used: r.baseline.trace.baseline_memory_used,
-    },
-    baseline_prompts: {
-      system_prompt: r.baseline.result.systemPrompt,
-      user_prompt: r.baseline.result.userPrompt,
-    },
-    ...(contaminated
-      ? {}
-      : {
-          strategy_score: r.strategy.score,
-          baseline_score: r.baseline.score,
-          comparison: r.comparison,
-        }),
-  };
-}
+// buildExportCase is now imported from outputEvaluationLogic
 
 function exportJSON(results: EvaluationResult[]) {
   const clean = results.filter(r => !isBaselineContaminated(r));
