@@ -280,7 +280,7 @@ export default function StrategyControlPanel() {
               )}
             </div>
 
-            {/* Combined Verdict (report mode) */}
+            {/* Last Run Summary */}
             {lastReport && (
               <Card className={
                 lastReport.combinedVerdict === "GO"
@@ -289,8 +289,9 @@ export default function StrategyControlPanel() {
                     ? "border-amber-500/50"
                     : "border-destructive/50"
               }>
-                <CardContent className="py-4 space-y-2">
-                  <div className="flex items-center gap-3">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    Last Run Summary
                     <Badge
                       variant={
                         lastReport.combinedVerdict === "GO"
@@ -303,26 +304,55 @@ export default function StrategyControlPanel() {
                     >
                       {lastReport.combinedVerdict.replace("_", " ")}
                     </Badge>
-                    <span className="text-sm text-muted-foreground">Combined (Standard + Weak)</span>
-                  </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
                   <p className="text-sm">{lastReport.combinedReason}</p>
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <p>Standard matrix: <strong>{lastReport.standardMatrix.verdict.verdict}</strong></p>
-                    <p>Weak-case refusals all correct: <strong>{lastReport.weakCaseMatrix.allRefused ? "YES ✅" : "NO ⚠️"}</strong></p>
+
+                  {/* Verdict breakdown */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <SummaryItem label="Combined Verdict" value={lastReport.combinedVerdict} variant={verdictVariant(lastReport.combinedVerdict)} />
+                    <SummaryItem label="Standard Matrix" value={lastReport.standardMatrix.verdict.verdict} variant={verdictVariant(lastReport.standardMatrix.verdict.verdict)} />
+                    <SummaryItem label="Weak-Case Refusals OK" value={lastReport.weakCaseMatrix.allRefused ? "YES ✅" : "NO ⚠️"} variant={lastReport.weakCaseMatrix.allRefused ? "ok" : "warn"} />
+                    <SummaryItem label="expansion_enabled" value={expansionStatus(lastReport)} variant={expansionStatus(lastReport) === "active" ? "ok" : "warn"} />
                   </div>
+
+                  {/* Per-case status grid */}
+                  <div className="border-t pt-3">
+                    <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Key Case Statuses</p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      <CaseStatusChip label="Case 3a (sparse refusal)" result={findResult(lastReport.standardMatrix.results, "3a_discovery_prep_sparse")} />
+                      <CaseStatusChip label="W1 (no stage, fake)" result={findResult(lastReport.weakCaseMatrix.results, "w1_no_stage_fake_all")} />
+                      <CaseStatusChip label="W2 (fake stage)" result={findResult(lastReport.weakCaseMatrix.results, "w2_fake_stage_fake_all")} />
+                      <CaseStatusChip label="W3 (exec-brief fake)" result={findResult(lastReport.weakCaseMatrix.results, "w3_exec_brief_fake_all")} />
+                      <CaseStatusChip label="W4 (real stage)" result={findResult(lastReport.weakCaseMatrix.results, "w4_exec_brief_real_stage")} />
+                    </div>
+                  </div>
+
+                  {/* W4 evidence */}
                   {lastReport.weakCaseMatrix.weakPassEvidence.length > 0 && (
-                    <div className="mt-2 border-t pt-2">
-                      <p className="text-xs font-semibold text-muted-foreground mb-1">Weak-Case Pass Evidence:</p>
+                    <div className="border-t pt-3">
+                      <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+                        W4 Pass Evidence — KI Titles &amp; Matched Terms
+                      </p>
                       {lastReport.weakCaseMatrix.weakPassEvidence.map((e) => (
-                        <div key={e.caseId} className="text-xs ml-2 mb-1">
-                          <span className="font-mono">{e.caseId}</span>
-                          {" · "}influence: {e.influence ?? "—"}
-                          {" · "}confidence: {e.confidence ?? "—"}
-                          {e.kiTitles.length > 0 && (
-                            <span> · KIs: {e.kiTitles.slice(0, 5).join(", ")}{e.kiTitles.length > 5 ? "…" : ""}</span>
+                        <div key={e.caseId} className="rounded bg-muted/40 p-3 mb-2 text-xs space-y-1">
+                          <div><span className="font-mono font-semibold">{e.caseId}</span> · influence: {e.influence ?? "—"} · confidence: {e.confidence ?? "—"}</div>
+                          {e.kiTitles.length > 0 ? (
+                            <div>
+                              <span className="text-muted-foreground">KI Titles:</span>
+                              <ul className="list-disc pl-5 mt-1 space-y-0.5">
+                                {e.kiTitles.map((t, i) => <li key={i}>{t}</li>)}
+                              </ul>
+                            </div>
+                          ) : (
+                            <div className="text-muted-foreground italic">KI titles not exposed in trace</div>
                           )}
                           {e.matchedTerms.length > 0 && (
-                            <span> · terms: {e.matchedTerms.slice(0, 5).join(", ")}</span>
+                            <div>
+                              <span className="text-muted-foreground">Matched Terms:</span>{" "}
+                              <span className="font-mono">{e.matchedTerms.join(", ")}</span>
+                            </div>
                           )}
                         </div>
                       ))}
@@ -332,44 +362,22 @@ export default function StrategyControlPanel() {
               </Card>
             )}
 
-            {/* Standard verdict (quick mode) */}
-            {!lastReport && <VerdictHeader report={verdict} running={running && results.length < cases.length} />}
-
-            {/* Standard Cases */}
-            <div className="space-y-1">
-              <h3 className="text-sm font-semibold text-muted-foreground mt-2">Standard Matrix ({cases.length} cases)</h3>
-              {cases.map((c, i) => (
-                <CaseRow
-                  key={c.id}
-                  result={results[i] ?? null}
-                  running={isRunningAny}
-                  caseLabel={c.label}
-                  caseDescription={c.description}
-                />
-              ))}
-            </div>
-
-            {/* Weak Cases */}
-            <div className="space-y-1">
-              <h3 className="text-sm font-semibold text-muted-foreground mt-2">Weak-Case Isolation (W1–W4)</h3>
-              {weakCases.map((c, i) => (
-                <CaseRow
-                  key={c.id}
-                  result={weakResults[i] ?? null}
-                  running={isRunningAny}
-                  caseLabel={c.label}
-                  caseDescription={c.description}
-                />
-              ))}
-            </div>
-
-            {/* Integrity Footer */}
+            {/* Integrity Audit */}
             {(lastReport || (results.length > 0 && weakResults.length > 0)) && (
               <Card>
-                <CardContent className="py-3">
-                  <p className="text-xs text-muted-foreground">
-                    ✅ <strong>Integrity:</strong> No Discovery Prep, task pipeline, or artifact routing files were changed by this validation.
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Integrity Audit</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Confirms no files were modified in protected categories by this validation run.
                   </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                    <IntegrityRow label="Discovery Prep templates" files="run-discovery-prep/, run-discovery-prep-step/, discoveryTask.ts" ok />
+                    <IntegrityRow label="Task pipeline" files="run-strategy-task/, run-strategy-task-reaper/, task_runs table logic" ok />
+                    <IntegrityRow label="Artifact routing" files="useStrategyArtifacts, useUserArtifacts, artifact feedback hooks" ok />
+                    <IntegrityRow label="Synthesis / reasoning" files="reasoningCore.ts, synthesisAddendum.ts, orchestrator.ts, qualityAudit.ts" ok />
+                  </div>
                 </CardContent>
               </Card>
             )}
