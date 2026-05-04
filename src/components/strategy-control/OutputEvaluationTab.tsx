@@ -99,7 +99,123 @@ function isBaselineContaminated(result: EvaluationResult): boolean {
   return false;
 }
 
-function EvalResultCard({ result, showWhy }: { result: EvaluationResult; showWhy: boolean }) {
+function downloadFile(content: string, filename: string, mime: string) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildExportCase(r: EvaluationResult) {
+  const contaminated = isBaselineContaminated(r);
+  return {
+    case_id: r.evalCase.case.id,
+    label: r.evalCase.case.label,
+    tier: r.evalCase.tier,
+    status: contaminated ? "EVALUATION_INVALID" : "VALID",
+    timestamp: r.timestamp,
+    prompt_version: BASELINE_PROMPT_VERSION,
+    input_terms: r.inputTerms,
+    baseline_integrity: {
+      mode: r.baseline.trace.baseline_mode,
+      model: r.baseline.trace.model,
+      context_used: r.baseline.trace.baseline_context_used,
+      library_used: r.baseline.trace.baseline_library_used,
+      memory_used: r.baseline.trace.baseline_memory_used,
+    },
+    baseline_prompts: {
+      system_prompt: r.baseline.result.systemPrompt,
+      user_prompt: r.baseline.result.userPrompt,
+    },
+    ...(contaminated
+      ? {}
+      : {
+          strategy_score: r.strategy.score,
+          baseline_score: r.baseline.score,
+          comparison: r.comparison,
+        }),
+  };
+}
+
+function exportJSON(results: EvaluationResult[]) {
+  const clean = results.filter(r => !isBaselineContaminated(r));
+  const payload = {
+    export_timestamp: new Date().toISOString(),
+    prompt_version: BASELINE_PROMPT_VERSION,
+    aggregate: {
+      total: results.length,
+      valid: clean.length,
+      contaminated: results.length - clean.length,
+      strategy_wins: clean.filter(r => r.comparison.winner === "strategy").length,
+      baseline_wins: clean.filter(r => r.comparison.winner === "baseline").length,
+      ties: clean.filter(r => r.comparison.winner === "tie").length,
+    },
+    cases: results.map(buildExportCase),
+  };
+  downloadFile(JSON.stringify(payload, null, 2), `eval-${Date.now()}.json`, "application/json");
+}
+
+function exportMarkdown(results: EvaluationResult[]) {
+  const clean = results.filter(r => !isBaselineContaminated(r));
+  const sWins = clean.filter(r => r.comparison.winner === "strategy").length;
+  const bWins = clean.filter(r => r.comparison.winner === "baseline").length;
+  const ties = clean.filter(r => r.comparison.winner === "tie").length;
+  const lines: string[] = [
+    "# Output Evaluation Report",
+    "",
+    `**Exported:** ${new Date().toISOString()}`,
+    `**Prompt Version:** ${BASELINE_PROMPT_VERSION}`,
+    `**Total Cases:** ${results.length} (${clean.length} valid, ${results.length - clean.length} contaminated)`,
+    `**Aggregate:** Strategy ${sWins} · Baseline ${bWins} · Tie ${ties}`,
+    "",
+  ];
+
+  for (const r of results) {
+    const contaminated = isBaselineContaminated(r);
+    lines.push(`## ${r.evalCase.tier.toUpperCase()} — ${r.evalCase.case.label}`);
+    lines.push(`- **Status:** ${contaminated ? "EVALUATION_INVALID" : "VALID"}`);
+    lines.push(`- **Case ID:** ${r.evalCase.case.id}`);
+    lines.push(`- **Prompt Version:** ${BASELINE_PROMPT_VERSION}`);
+    lines.push("");
+    lines.push("### Baseline Integrity");
+    lines.push(`- Mode: ${r.baseline.trace.baseline_mode}`);
+    lines.push(`- Model: ${r.baseline.trace.model}`);
+    lines.push(`- Context used: ${r.baseline.trace.baseline_context_used}`);
+    lines.push(`- Library used: ${r.baseline.trace.baseline_library_used}`);
+    lines.push(`- Memory used: ${r.baseline.trace.baseline_memory_used}`);
+    lines.push("");
+    lines.push("### Baseline Prompts");
+    lines.push("**System Prompt:**");
+    lines.push("```");
+    lines.push(r.baseline.result.systemPrompt ?? "(unavailable)");
+    lines.push("```");
+    lines.push("**User Prompt:**");
+    lines.push("```");
+    lines.push(r.baseline.result.userPrompt ?? "(unavailable)");
+    lines.push("```");
+    lines.push("");
+
+    if (!contaminated) {
+      lines.push("### Scores");
+      lines.push(`- Strategy: ${r.strategy.score.total}/25`);
+      lines.push(`- Baseline: ${r.baseline.score.total}/25`);
+      lines.push(`- Winner: ${r.comparison.winner}`);
+      lines.push(`- Reasoning: ${r.comparison.reasoning}`);
+      lines.push("");
+    } else {
+      lines.push("*Scores suppressed — baseline contaminated.*");
+      lines.push("");
+    }
+    lines.push("---");
+    lines.push("");
+  }
+
+  downloadFile(lines.join("\n"), `eval-${Date.now()}.md`, "text/markdown");
+}
+
   const [strategyOpen, setStrategyOpen] = useState(false);
   const [baselineOpen, setBaselineOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
