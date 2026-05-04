@@ -89,15 +89,12 @@ function WinnerBadge({ winner }: { winner: "strategy" | "baseline" | "tie" }) {
   );
 }
 
-function isBaselineContaminated(result: EvaluationResult): boolean {
-  const t = result.baseline.trace;
-  if (!t) return true;
-  if (t.baseline_mode !== "clean_baseline") return true;
-  if (t.baseline_context_used) return true;
-  if (t.baseline_library_used) return true;
-  if (t.baseline_memory_used) return true;
-  return false;
-}
+// Re-export from extracted logic module
+import {
+  isBaselineContaminated,
+  buildExportCase,
+  computeAggregates,
+} from "./outputEvaluationLogic";
 
 function downloadFile(content: string, filename: string, mime: string) {
   const blob = new Blob([content], { type: mime });
