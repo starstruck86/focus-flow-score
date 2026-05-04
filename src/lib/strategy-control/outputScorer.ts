@@ -128,34 +128,62 @@ function scoreActionability(text: string, ctx?: ScoringContext): number {
   return 1;
 }
 
+/**
+ * Prose structure scoring — robust multi-signal model.
+ *
+ * Principle: constrained prose structure should NOT be decided by a tiny
+ * transition-word delta. Instead we evaluate 4 orthogonal signals, each
+ * contributing a fractional score, then round. This makes a 1-word
+ * difference in any single signal unable to swing the final integer score.
+ *
+ * Signals (each 0–1, summed then scaled to 1–5):
+ *   A. Paragraph / sentence coherence  (0–1)
+ *   B. Sentence density in budget      (0–1)
+ *   C. Logical flow markers            (0–1)  — transition words, BUT bucketed
+ *   D. Business-flow signals           (0–1)  — domain progression language
+ */
 function scoreStructureProse(text: string): number {
-  // For prose: paragraph clarity, sentence density, logical flow
   const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
   const sentences = countMatches(text, /[.!?]\s/g) + 1;
   const words = text.split(/\s+/).length;
 
-  let score = 2;
-
-  // For short constrained prose (<250 words), a single dense paragraph is valid structure.
-  // Only penalize paragraph count for longer texts.
+  // ── A. Paragraph / sentence coherence (0–1) ──
+  let coherence = 0;
   if (words < 250) {
-    if (paragraphs.length >= 2) score += 1;
-    else if (sentences >= 3) score += 0.5; // dense single paragraph with multiple sentences
+    // Short prose: even 1 paragraph with 3+ sentences is coherent
+    if (paragraphs.length >= 2) coherence = 1;
+    else if (sentences >= 3) coherence = 0.75;
+    else if (sentences >= 2) coherence = 0.5;
   } else {
-    if (paragraphs.length >= 4) score += 1;
-    else if (paragraphs.length >= 2) score += 0.5;
+    if (paragraphs.length >= 4) coherence = 1;
+    else if (paragraphs.length >= 2) coherence = 0.75;
+    else if (paragraphs.length >= 1 && sentences >= 4) coherence = 0.5;
   }
 
-  // Reasonable sentence density (not a wall of text)
+  // ── B. Sentence density — readable range (0–1) ──
   const avgWordsPerSentence = words / Math.max(sentences, 1);
-  if (avgWordsPerSentence >= 10 && avgWordsPerSentence <= 30) score += 1;
+  let density = 0;
+  if (avgWordsPerSentence >= 10 && avgWordsPerSentence <= 30) density = 1;
+  else if (avgWordsPerSentence >= 8 && avgWordsPerSentence <= 35) density = 0.5;
 
-  // Transition/flow signals — include conversational connectors for talk-track prose
-  const transitions = countMatches(text, /\b(?:however|therefore|specifically|because|given that|as a result|in contrast|for example|notably|critically|importantly|additionally|furthermore|meanwhile|this means|this isn't|in other words|the goal|by contrast|which means|leading to|ensuring|ultimately)\b/gi);
-  if (transitions >= 3) score += 1;
-  else if (transitions >= 1) score += 0.5;
+  // ── C. Logical flow markers — BUCKETED so ±1 word cannot change score (0–1) ──
+  const transitions = countMatches(text, /\b(?:however|therefore|specifically|because|given that|as a result|in contrast|for example|notably|critically|importantly|additionally|furthermore|meanwhile|this means|this isn't|in other words|the goal|by contrast|which means|leading to|ensuring|ultimately|while|although|yet|so|thus|hence|accordingly|consequently)\b/gi);
+  // Buckets: 0→0, 1-2→0.5, 3+→1  (a delta of 1 within a bucket has no effect)
+  let flow = 0;
+  if (transitions >= 3) flow = 1;
+  else if (transitions >= 1) flow = 0.5;
 
-  return clamp(Math.round(score), 1, 5);
+  // ── D. Business-flow signals — domain progression language (0–1) ──
+  const bizFlow = countMatches(text, /\b(?:current state|cost|risk|requires?|outcome|question|today|before|after|result|gap|pain|opportunity|impact|goal|target|because of|in order to|which leads to|this creates|the problem|the challenge|the opportunity|moving from|enabling|preventing|addressing)\b/gi);
+  let bizScore = 0;
+  if (bizFlow >= 4) bizScore = 1;
+  else if (bizFlow >= 2) bizScore = 0.75;
+  else if (bizFlow >= 1) bizScore = 0.5;
+
+  // ── Combine: 4 signals (0–4) → scale to 1–5 ──
+  const rawSum = coherence + density + flow + bizScore; // 0–4
+  // Map: 0→1, 1→2, 2→3, 3→4, 4→5
+  return clamp(Math.round(rawSum) + 1, 1, 5);
 }
 
 function scoreStructureArtifact(text: string): number {
