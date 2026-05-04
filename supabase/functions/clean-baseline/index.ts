@@ -1,25 +1,22 @@
 /**
- * Phase 3.5A — Clean Baseline Endpoint.
+ * Phase 3.5B-Fix — Clean Baseline Endpoint.
  *
- * Calls the Lovable AI gateway with ZERO Strategy context:
- *   - No library retrieval
- *   - No account/opportunity memory
- *   - No Strategy system prompts or SOP
- *   - No expansion, synthesis, or workspace contracts
- *   - No working thesis, resource retrieval, or V2 reasoning
- *
- * This produces what a user would get from a generic LLM (ChatGPT-equivalent)
- * given only the raw user prompt and a minimal assistant instruction.
- *
- * Used exclusively by the Phase 3.5A Output Evaluation comparison.
+ * Calls the Lovable AI gateway with ZERO Strategy context.
+ * Now accepts an optional custom systemPrompt to enforce the same
+ * output contract as the Strategy skill being compared.
  */
-import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.49.1/dist/module/lib/constants.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+const DEFAULT_SYSTEM_PROMPT =
+  "You are a helpful sales strategy assistant. " +
+  "Answer the user's question with actionable, specific advice. " +
+  "Do not reference any internal library, playbook, or proprietary methodology. " +
+  "Use only general sales knowledge.";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -28,7 +25,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { prompt } = body as { prompt: string };
+    const { prompt, systemPrompt } = body as { prompt: string; systemPrompt?: string };
 
     if (!prompt || typeof prompt !== "string") {
       return new Response(
@@ -45,6 +42,10 @@ Deno.serve(async (req) => {
       );
     }
 
+    const system = (typeof systemPrompt === "string" && systemPrompt.trim())
+      ? systemPrompt
+      : DEFAULT_SYSTEM_PROMPT;
+
     const started = Date.now();
 
     const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -56,14 +57,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          {
-            role: "system",
-            content:
-              "You are a helpful sales strategy assistant. " +
-              "Answer the user's question with actionable, specific advice. " +
-              "Do not reference any internal library, playbook, or proprietary methodology. " +
-              "Use only general sales knowledge.",
-          },
+          { role: "system", content: system },
           { role: "user", content: prompt },
         ],
         temperature: 0.7,
