@@ -17,7 +17,7 @@ const CORS = {
 };
 
 // ── Versioned synthesis prompt ──────────────────────────────────────
-export const STRATEGY_EVAL_SYNTHESIS_PROMPT_VERSION = "3.0.0-adversarial";
+export const STRATEGY_EVAL_SYNTHESIS_PROMPT_VERSION = "3.1.0-structural-diff";
 const MAX_ADVERSARIAL_ITERATIONS = 2;
 /**
  * Detect if the output contract demands constrained prose:
@@ -311,6 +311,37 @@ function buildEvalSynthesisSystemPrompt(
     sections.push("");
   }
 
+  // ── T9: Structural Differentiation (universal — makes output impossible for generic AI to replicate)
+  sections.push("═══ TRANSFORMATION 9: STRUCTURAL DIFFERENTIATION (MANDATORY) ═══");
+  sections.push("Before returning, verify ALL FOUR of the following are present in your output.");
+  sections.push("If ANY are missing, REWRITE until they appear. This is non-negotiable.");
+  sections.push("");
+  sections.push("  1. QUANTIFIED CONSEQUENCE");
+  sections.push("     At least one number, percentage, dollar figure, or time metric tied to business impact.");
+  sections.push("     Must describe cost-of-inaction OR missed opportunity with specifics.");
+  sections.push("     ✗ 'significant revenue impact' → ✓ '$2.3M in pipeline at risk across 4 open opps this quarter'");
+  sections.push("     ✗ 'potential cost savings' → ✓ '~18% reduction in evaluation cycle time, saving 6 weeks per vendor review'");
+  sections.push("");
+  sections.push("  2. NAMED ENTITY + METRIC");
+  sections.push("     A specific role, team, department, or stakeholder tied to a measurable outcome they own.");
+  sections.push("     ✗ 'leadership alignment' → ✓ 'VP Sales owns pipeline conversion, currently at 22% vs 31% benchmark'");
+  sections.push("     ✗ 'the team should focus' → ✓ 'SDR team's meeting-to-opp rate dropped from 38% to 24% after Q2 territory changes'");
+  sections.push("");
+  sections.push("  3. CAUSAL CHAIN");
+  sections.push("     At least one explicit X → Y → Z reasoning chain showing cause and downstream effect.");
+  sections.push("     ✗ 'fragmented data leads to problems' → ✓ 'Fragmented guest profiles → duplicate outreach across properties → 12% opt-out rate on loyalty comms → $1.8M annual retention leakage'");
+  sections.push("     The chain must be specific to THIS account/situation, not a generic industry pattern.");
+  sections.push("");
+  sections.push("  4. STAKEHOLDER-TIED ACTION");
+  sections.push("     At least one action using an executable verb (Ask / Confirm / Map / Validate / Challenge / Quantify / Draft / Position)");
+  sections.push("     directed at a SPECIFIC persona or role.");
+  sections.push("     ✗ 'Discuss priorities with the team' → ✓ 'Ask the VP Revenue: What is the cost per month of running 3 separate guest databases?'");
+  sections.push("     ✗ 'Validate alignment' → ✓ 'Confirm with IT Director whether the PMS integration timeline blocks Q1 renewal decision'");
+  sections.push("");
+  sections.push("SELF-CHECK: Read your output. For each of the 4 elements, find the EXACT sentence that satisfies it.");
+  sections.push("If you cannot point to a specific sentence for any element, your output FAILS. Rewrite.");
+  sections.push("");
+
   // ── Final quality gate
   sections.push("═══ FINAL QUALITY GATE ═══");
   sections.push("Before returning, read your ENTIRE output one more time and answer:");
@@ -585,6 +616,12 @@ Deno.serve(async (req) => {
       lines.push("4. HEDGING: List any hedged statements ('might', 'could potentially', 'it may be worth'). Quote them.");
       lines.push("5. BASELINE MATCH: Could a generic AI without any library produce an equally specific and actionable output for these same inputs? Answer YES or NO with reasoning.");
       lines.push("6. STRUCTURAL GAPS: Are any required sections (from the manifest) missing, thin, or lacking the micro-spine (state → gap → implication → action)?");
+      lines.push("7. STRUCTURAL DIFFERENTIATION FAILURE: Check ALL four:");
+      lines.push("   a) QUANTIFIED CONSEQUENCE: Is there at least one number/$/% tied to business impact or cost-of-inaction? If missing, say what is missing.");
+      lines.push("   b) NAMED ENTITY + METRIC: Is there a specific role/team/stakeholder tied to a measurable outcome they own? If missing, say what is missing.");
+      lines.push("   c) CAUSAL CHAIN: Is there at least one explicit X → Y → Z reasoning chain specific to this account? If missing, say what is missing.");
+      lines.push("   d) STAKEHOLDER-TIED ACTION: Is there at least one executable action (Ask/Confirm/Map/Validate/Challenge) directed at a specific persona? If missing, say what is missing.");
+      lines.push("   If ANY of a-d are missing, this is a STRUCTURAL DIFFERENTIATION FAILURE.");
       lines.push("");
       lines.push("=== RESPONSE FORMAT (strict JSON) ===");
       lines.push("Return ONLY valid JSON with this schema:");
@@ -597,6 +634,13 @@ Deno.serve(async (req) => {
         baseline_could_match: false,
         baseline_reasoning: "why or why not",
         structural_gaps: ["gap description"],
+        structural_differentiation: {
+          quantified_consequence: true,
+          named_entity_metric: true,
+          causal_chain: true,
+          stakeholder_action: true,
+          failures: ["description of each missing element"]
+        },
         rewrite_instructions: ["specific instruction for each weakness"]
       }, null, 2));
       return lines.join("\n");
@@ -611,7 +655,9 @@ Deno.serve(async (req) => {
       lines.push("- Do NOT regenerate the entire output.");
       lines.push("- PRESERVE all strong sections exactly as they are.");
       lines.push("- REWRITE only the sections identified as weak.");
-      lines.push("- Every rewrite must be MORE specific, MORE quantified, MORE actionable than the original.");
+      lines.push("- Every rewrite must INCREASE specificity, causality, and decision pressure.");
+      lines.push("- If a rewrite instruction mentions STRUCTURAL DIFFERENTIATION FAILURE, ensure the fix adds the missing element (quantified consequence, named entity+metric, causal chain, or stakeholder-tied action).");
+      lines.push("- Do NOT expand length unnecessarily. Do NOT change output format.");
       lines.push("- Maintain the same output format/shape.");
       lines.push(`- Output shape: ${outputContract.shape}`);
       if (outputContract.targetWords) {
@@ -692,6 +738,17 @@ Deno.serve(async (req) => {
       }
       if (criticResult.structural_gaps?.length > 0) {
         issues.push(...criticResult.structural_gaps.map((s: string) => `Structural gap: ${s}`));
+      }
+      // T9: Structural differentiation failures
+      const sd = criticResult.structural_differentiation;
+      if (sd) {
+        if (sd.quantified_consequence === false) issues.push("STRUCTURAL DIFFERENTIATION FAILURE: Missing quantified consequence — add a specific number/$/% tied to business impact");
+        if (sd.named_entity_metric === false) issues.push("STRUCTURAL DIFFERENTIATION FAILURE: Missing named entity + metric — tie a specific role/team to a measurable outcome");
+        if (sd.causal_chain === false) issues.push("STRUCTURAL DIFFERENTIATION FAILURE: Missing causal chain — add explicit X → Y → Z reasoning specific to this account");
+        if (sd.stakeholder_action === false) issues.push("STRUCTURAL DIFFERENTIATION FAILURE: Missing stakeholder-tied action — add Ask/Confirm/Map/Validate directed at a specific persona");
+        if (sd.failures?.length > 0) {
+          issues.push(...sd.failures.map((f: string) => `Structural differentiation detail: ${f}`));
+        }
       }
 
       // Use rewrite_instructions if provided, otherwise use collected issues
