@@ -838,6 +838,30 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     // We now (a) bind the failure write to EdgeRuntime.waitUntil so the
     // platform keeps the worker alive until the write lands, and (b) still
     // await it so the surrounding `throw` cannot race the DB call.
+    // Phase 3.6 — persist telemetry even on authoring failure path
+    const authoringFailTotalMs = Date.now() - pipelineStartMs;
+    const authoringFailMeta: Record<string, unknown> = {};
+    if (planResult.ok) {
+      authoringFailMeta.planner = {
+        plan_hash: planResult.plan.planHash,
+        term_seeds_count: planResult.plan.termSeeds.length,
+        methodology_seeds_injected: (taskManifest.retrieval.methodologySeeds ?? []).length > 0,
+        scopes: plannerRetrievalArgs?.scopes ?? derivedScopes,
+      };
+    }
+    authoringFailMeta.performance = {
+      total_latency_ms: authoringFailTotalMs,
+      generation_latency_ms: durationMs,
+      gate_latency_ms: 0,
+    };
+    const authoringFailAnomalyFlags: Record<string, boolean> = {
+      latency_violation: authoringFailTotalMs > 12_000,
+    };
+    if (planResult.ok && planResult.plan.termSeeds.length < 3) authoringFailAnomalyFlags.weak_retrieval = true;
+    authoringFailMeta.anomaly_flags = authoringFailAnomalyFlags;
+    authoringFailMeta.authoring_failure = true;
+    if (fallbackMeta) authoringFailMeta.authoring_fallback = fallbackMeta;
+
     const failureWrite = supabase
       .from("task_runs")
       .update({
@@ -846,6 +870,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         error: prefixed.slice(0, 1000),
         completed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        meta: authoringFailMeta,
       })
       .eq("id", runId);
 
