@@ -60,7 +60,7 @@ function extractTelemetry(meta: any) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  // ── Auth: STRATEGY_VALIDATION_KEY or service-role key ─────────
+  // ── Auth: validation key, service-role, OR owner session ─────
   const validationKey = req.headers.get("x-strategy-validation-key");
   const expectedKey = Deno.env.get("STRATEGY_VALIDATION_KEY");
   const authHeader = req.headers.get("authorization") || "";
@@ -70,8 +70,24 @@ Deno.serve(async (req) => {
   const validViaKey = expectedKey && validationKey && validationKey === expectedKey;
   const validViaServiceRole = serviceRoleKey && bearerToken === serviceRoleKey;
 
-  if (!validViaKey && !validViaServiceRole) {
-    return jsonResponse({ error: "Unauthorized — validation key or service role required" }, 401);
+  // Also allow the owner to invoke via normal session auth
+  let validViaOwnerSession = false;
+  let ownerUserId: string | null = null;
+  if (!validViaKey && !validViaServiceRole && authHeader) {
+    const userClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: { user } } = await userClient.auth.getUser();
+    if (user?.email === OWNER_EMAIL) {
+      validViaOwnerSession = true;
+      ownerUserId = user.id;
+    }
+  }
+
+  if (!validViaKey && !validViaServiceRole && !validViaOwnerSession) {
+    return jsonResponse({ error: "Unauthorized — validation key, service role, or owner session required" }, 401);
   }
 
   try {
