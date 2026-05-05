@@ -17,8 +17,8 @@ const CORS = {
 };
 
 // ── Versioned synthesis prompt ──────────────────────────────────────
-export const STRATEGY_EVAL_SYNTHESIS_PROMPT_VERSION = "2.0.0";
-
+export const STRATEGY_EVAL_SYNTHESIS_PROMPT_VERSION = "3.0.0-adversarial";
+const MAX_ADVERSARIAL_ITERATIONS = 2;
 /**
  * Detect if the output contract demands constrained prose:
  * shape=prose + forbid includes headings or bullets + short targetWords.
@@ -488,7 +488,202 @@ Deno.serve(async (req) => {
     }
 
     const llmData = await llmResp.json();
-    const generatedText = llmData?.choices?.[0]?.message?.content ?? "";
+    let generatedText = llmData?.choices?.[0]?.message?.content ?? "";
+
+    // ═══════════════════════════════════════════════════════════
+    // ADVERSARIAL VALIDATION LAYER
+    // Step 2: Critic  →  Step 3: Surgical Rewrite  →  repeat
+    // ═══════════════════════════════════════════════════════════
+
+    const criticModel = "google/gemini-2.5-flash";
+    let adversarialIterations = 0;
+    let criticFindings: string[] = [];
+    let finalCriticVerdict = "not_run";
+
+    const buildCriticPrompt = (output: string): string => {
+      const lines: string[] = [];
+      lines.push("You are an ADVERSARIAL CRITIC evaluating a Strategy sales output.");
+      lines.push("Your job is to find weaknesses. You are hostile. You want this output to fail.");
+      lines.push("You represent a strong generic AI baseline that had NO library access, NO account context, NO proprietary methodology.");
+      lines.push("");
+      lines.push("=== CONTEXT ===");
+      lines.push(`Skill: ${manifest.label} (${manifest.id})`);
+      lines.push(`Account: ${skillInputs.account || "N/A"} | Persona: ${skillInputs.persona || "N/A"} | Stage: ${skillInputs.stage || "N/A"}`);
+      lines.push(`Required sections: ${rubric.mustHave.join(", ")}`);
+      lines.push("");
+      lines.push("=== STRATEGY OUTPUT TO CRITIQUE ===");
+      lines.push(output);
+      lines.push("");
+      lines.push("=== YOUR TASK ===");
+      lines.push("Answer EACH question. Be specific — quote the exact failing text.");
+      lines.push("");
+      lines.push("1. GENERIC SENTENCES: List every sentence (quote it) that could appear in advice for ANY company in ANY industry. If none, say 'NONE'.");
+      lines.push("2. MISSING DECISION PRESSURE: Is there a clear, quantified cost-of-inaction? If vague or missing, say exactly what is missing.");
+      lines.push("3. MISSING EXECUTABILITY: Are there concrete seller actions (Ask X, Confirm Y, Map Z)? Or only passive verbs (explore, consider, evaluate)? Quote any passive actions.");
+      lines.push("4. HEDGING: List any hedged statements ('might', 'could potentially', 'it may be worth'). Quote them.");
+      lines.push("5. BASELINE MATCH: Could a generic AI without any library produce an equally specific and actionable output for these same inputs? Answer YES or NO with reasoning.");
+      lines.push("6. STRUCTURAL GAPS: Are any required sections (from the manifest) missing, thin, or lacking the micro-spine (state → gap → implication → action)?");
+      lines.push("");
+      lines.push("=== RESPONSE FORMAT (strict JSON) ===");
+      lines.push("Return ONLY valid JSON with this schema:");
+      lines.push(JSON.stringify({
+        pass: false,
+        generic_sentences: ["quoted sentence 1"],
+        missing_pressure: "description or NONE",
+        passive_actions: ["quoted passive action"],
+        hedging: ["quoted hedge"],
+        baseline_could_match: false,
+        baseline_reasoning: "why or why not",
+        structural_gaps: ["gap description"],
+        rewrite_instructions: ["specific instruction for each weakness"]
+      }, null, 2));
+      return lines.join("\n");
+    };
+
+    const buildRewritePrompt = (original: string, instructions: string[]): string => {
+      const lines: string[] = [];
+      lines.push("You are performing a SURGICAL REWRITE of a Strategy output.");
+      lines.push("An adversarial critic found weaknesses. You must fix ONLY the weak sections.");
+      lines.push("");
+      lines.push("RULES:");
+      lines.push("- Do NOT regenerate the entire output.");
+      lines.push("- PRESERVE all strong sections exactly as they are.");
+      lines.push("- REWRITE only the sections identified as weak.");
+      lines.push("- Every rewrite must be MORE specific, MORE quantified, MORE actionable than the original.");
+      lines.push("- Maintain the same output format/shape.");
+      lines.push(`- Output shape: ${outputContract.shape}`);
+      if (outputContract.targetWords) {
+        lines.push(`- STRICT word limit: ${outputContract.targetWords.min}–${outputContract.targetWords.max} words. Do NOT exceed.`);
+      }
+      if (outputContract.forbid?.length) {
+        lines.push(`- FORBIDDEN formatting: ${outputContract.forbid.join(", ")}. Do NOT add headings, bullets, or lists if forbidden.`);
+      }
+      lines.push("");
+      lines.push("=== ORIGINAL OUTPUT ===");
+      lines.push(original);
+      lines.push("");
+      lines.push("=== REQUIRED REWRITES ===");
+      for (let i = 0; i < instructions.length; i++) {
+        lines.push(`${i + 1}. ${instructions[i]}`);
+      }
+      lines.push("");
+      lines.push("=== CONTEXT (for rewrites) ===");
+      lines.push(`Account: ${skillInputs.account || "N/A"} | Persona: ${skillInputs.persona || "N/A"} | Stage: ${skillInputs.stage || "N/A"}`);
+      lines.push(`Required sections: ${rubric.mustHave.join(", ")}`);
+      lines.push("");
+      lines.push("Return the COMPLETE output with surgical fixes applied. No commentary.");
+      return lines.join("\n");
+    };
+
+    for (let iteration = 0; iteration < MAX_ADVERSARIAL_ITERATIONS; iteration++) {
+      adversarialIterations++;
+
+      // ── Step 2: Adversarial Critic
+      const criticResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: criticModel,
+          messages: [{ role: "user", content: buildCriticPrompt(generatedText) }],
+          temperature: 0.3,
+          max_completion_tokens: 2048,
+        }),
+      });
+
+      if (!criticResp.ok) {
+        console.error(`[adversarial] critic call failed iteration ${iteration}: ${criticResp.status}`);
+        finalCriticVerdict = "critic_error";
+        break;
+      }
+
+      const criticData = await criticResp.json();
+      const criticRaw = criticData?.choices?.[0]?.message?.content ?? "";
+
+      // Parse critic JSON (extract from code fences if needed)
+      let criticResult: any = null;
+      try {
+        const jsonMatch = criticRaw.match(/```(?:json)?\s*([\s\S]*?)```/);
+        const jsonStr = jsonMatch ? jsonMatch[1].trim() : criticRaw.trim();
+        criticResult = JSON.parse(jsonStr);
+      } catch {
+        console.error(`[adversarial] critic JSON parse failed iteration ${iteration}`);
+        finalCriticVerdict = "parse_error";
+        break;
+      }
+
+      // Collect findings
+      const issues: string[] = [];
+      if (criticResult.generic_sentences?.length > 0 && criticResult.generic_sentences[0] !== "NONE") {
+        issues.push(...criticResult.generic_sentences.map((s: string) => `Generic sentence found: "${s}" — rewrite with account-specific detail`));
+      }
+      if (criticResult.missing_pressure && criticResult.missing_pressure !== "NONE") {
+        issues.push(`Missing decision pressure: ${criticResult.missing_pressure}`);
+      }
+      if (criticResult.passive_actions?.length > 0) {
+        issues.push(...criticResult.passive_actions.map((s: string) => `Passive action: "${s}" — replace with executable verb (Ask/Confirm/Map/Draft)`));
+      }
+      if (criticResult.hedging?.length > 0) {
+        issues.push(...criticResult.hedging.map((s: string) => `Hedging: "${s}" — rewrite as committed position`));
+      }
+      if (criticResult.baseline_could_match === true) {
+        issues.push(`Baseline could match: ${criticResult.baseline_reasoning} — add library-grounded specificity`);
+      }
+      if (criticResult.structural_gaps?.length > 0) {
+        issues.push(...criticResult.structural_gaps.map((s: string) => `Structural gap: ${s}`));
+      }
+
+      // Use rewrite_instructions if provided, otherwise use collected issues
+      const rewriteInstructions = criticResult.rewrite_instructions?.length > 0
+        ? criticResult.rewrite_instructions
+        : issues;
+
+      criticFindings = issues;
+
+      // ── Check pass condition
+      if (issues.length === 0 || criticResult.pass === true) {
+        finalCriticVerdict = "pass";
+        break;
+      }
+
+      // ── Step 3: Surgical Rewrite
+      const rewriteResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: synthesisModel,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: buildRewritePrompt(generatedText, rewriteInstructions) },
+          ],
+          temperature: 0.5,
+          max_completion_tokens: 4096,
+        }),
+      });
+
+      if (!rewriteResp.ok) {
+        console.error(`[adversarial] rewrite call failed iteration ${iteration}: ${rewriteResp.status}`);
+        finalCriticVerdict = "rewrite_error";
+        break;
+      }
+
+      const rewriteData = await rewriteResp.json();
+      const rewrittenText = rewriteData?.choices?.[0]?.message?.content ?? "";
+
+      if (rewrittenText.length > generatedText.length * 0.3) {
+        generatedText = rewrittenText;
+      } else {
+        console.error(`[adversarial] rewrite too short, keeping original`);
+        finalCriticVerdict = "rewrite_too_short";
+        break;
+      }
+
+      // If last iteration, mark as max_iterations
+      if (iteration === MAX_ADVERSARIAL_ITERATIONS - 1) {
+        finalCriticVerdict = "max_iterations";
+      }
+    }
+
+    const totalLatencyMs = Date.now() - started;
 
     // ── Return full result
     return new Response(
@@ -498,7 +693,14 @@ Deno.serve(async (req) => {
         prompt_version: STRATEGY_EVAL_SYNTHESIS_PROMPT_VERSION,
         generated_text: generatedText,
         synthesis_latency_ms: synthesisLatencyMs,
+        total_latency_ms: totalLatencyMs,
         model: synthesisModel,
+        adversarial: {
+          iterations: adversarialIterations,
+          verdict: finalCriticVerdict,
+          findings_last_pass: criticFindings,
+          critic_model: criticModel,
+        },
         envelope: skillResult.envelope,
         synthesis_addendum: skillResult.synthesisAddendum,
         library_hits: libraryHits.map((h: any) => ({ id: h.id, title: h.title, kind: h.kind })),
