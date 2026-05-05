@@ -635,7 +635,15 @@ function scoreOutput(text: string, inputTerms: string[], shape: string, forbid?:
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
-  // Temporary validation runner — no auth required. Will be deleted after Phase 3.5B.
+  // ── Auth gate: require STRATEGY_VALIDATION_KEY ──────────────
+  const validationKey = Deno.env.get("STRATEGY_VALIDATION_KEY") || "";
+  const providedKey = req.headers.get("x-validation-key") || "";
+  if (!validationKey || providedKey !== validationKey) {
+    return new Response(JSON.stringify({ error: "Unauthorized — x-validation-key required" }), {
+      status: 401, headers: { ...CORS, "Content-Type": "application/json" },
+    });
+  }
+
   const url = new URL(req.url);
   const caseId = url.searchParams.get("case");
   const casesToRun = caseId ? CASES.filter(c => c.id === caseId) : CASES;
@@ -647,7 +655,6 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const lovableKey = Deno.env.get("LOVABLE_API_KEY")!;
-  const validationKey = Deno.env.get("STRATEGY_VALIDATION_KEY") || "";
 
   const results: Array<Record<string, unknown>> = [];
 
@@ -725,9 +732,27 @@ Deno.serve(async (req) => {
   // New standard: 0 baseline wins, Strategy must win majority
   const allPass = baselineWins === 0 && strategyWins > ties && structureLosses === 0 && bizLosses === 0 && invalidOutputs === 0 && contaminatedBaselines === 0;
 
+  const attemptId = crypto.randomUUID();
+  const errors = results.filter(r => r.error).length;
+
   return new Response(JSON.stringify({
+    attempt_id: attemptId,
     timestamp: new Date().toISOString(),
+    cases_requested: casesToRun.map(c => c.id),
+    cases_completed: results.filter(r => !r.error).length,
+    cases_errored: errors,
     results,
-    acceptance: { winRate, strategyWins, baselineWins, ties, total: results.length, structureLosses, bizLosses, invalidOutputs, contaminatedBaselines, verdict: allPass ? "PASS" : "FAIL" },
+    acceptance: {
+      winRate, strategyWins, baselineWins, ties,
+      total: results.length, structureLosses, bizLosses,
+      invalidOutputs, contaminatedBaselines,
+      all_cases_ran: errors === 0 && results.length === casesToRun.length,
+      verdict: allPass && errors === 0 ? "PASS" : "FAIL",
+    },
+    rollback: {
+      commit: "f1cc7e55",
+      command: "git revert f1cc7e55",
+      scope: "Reverts cross-section causality gate, business impact causal chain gate, and causality bonus. Does not revert synthesis prompt or adversarial loop.",
+    },
   }, null, 2), { headers: { ...CORS, "Content-Type": "application/json" } });
 });
