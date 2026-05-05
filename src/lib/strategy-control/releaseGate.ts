@@ -199,6 +199,18 @@ export function runReleaseGate(): ReleaseGateResult {
     }
   }
 
+  // 6. Success-path production evidence must exist
+  const evidencePath = path.resolve("docs/phase37-production-evidence-report.md");
+  if (!fs.existsSync(evidencePath)) {
+    failures.push("Phase 3.7 production evidence report missing: docs/phase37-production-evidence-report.md");
+  } else {
+    const evidenceContent = fs.readFileSync(evidencePath, "utf-8");
+    // Must contain at least one "completed" row with telemetry
+    if (!evidenceContent.includes("completed") || !evidenceContent.includes("✅")) {
+      failures.push("Phase 3.7 production evidence report lacks success-path evidence (no completed run with telemetry)");
+    }
+  }
+
   return {
     pass: failures.length === 0,
     failures,
