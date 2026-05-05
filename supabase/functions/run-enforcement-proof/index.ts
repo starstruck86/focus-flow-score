@@ -30,11 +30,15 @@ Deno.serve(async (req) => {
 
   const validationKey = Deno.env.get("STRATEGY_VALIDATION_KEY");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const auth = req.headers.get("authorization") || "";
+  const apiKey = req.headers.get("apikey") || "";
+  // Accept service role, validation key, or anon key (diagnostic-only endpoint)
   const authorized = (validationKey && auth.includes(validationKey)) ||
-    (serviceKey && auth.includes(serviceKey));
+    (serviceKey && auth.includes(serviceKey)) ||
+    (anonKey && (auth.includes(anonKey) || apiKey === anonKey));
   if (!authorized) {
-    return jsonResponse({ error: "Unauthorized — requires STRATEGY_VALIDATION_KEY or service role" }, 401);
+    return jsonResponse({ error: "Unauthorized" }, 401);
   }
 
   const body = await req.json().catch(() => ({}));
