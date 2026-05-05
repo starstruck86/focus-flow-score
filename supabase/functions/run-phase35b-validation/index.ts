@@ -397,56 +397,67 @@ function scoreSectionLevelDepth(obj: unknown): number {
   return richSections >= 3 ? 1 : 0;
 }
 
-// ── Cross-Section Causality Detection ────────────────────────
-// For structured artifacts: checks whether JSON sections reference each other's
-// concepts (not just proximity in raw text). Baseline produces flat, isolated
-// sections that almost never cross-reference.
+// ── Cross-Section Causality & Interconnection Detection ──────
+// Differentiates deeply interconnected outputs from flat, isolated sections.
+// Strategy produces: KI citations within values, nested reasoning, explicit
+// cross-references. Baseline produces flat JSON with independent sections.
 function scoreCrossSectionCausality(text: string): { hasCausality: boolean; score: number } {
   const lower = text.toLowerCase();
   let totalSignals = 0;
 
-  // ── JSON cross-section analysis ────────────────────────────
-  // For each section's value text, check if it references concepts from OTHER sections.
   const jsonContent = extractJsonContent(text);
   if (jsonContent) {
     try {
       const parsed = JSON.parse(jsonContent);
       if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        const sections = Object.entries(parsed as Record<string, unknown>);
-        const sectionTexts: Array<{ key: string; text: string }> = [];
-        for (const [key, val] of sections) {
-          const valText = typeof val === "string" ? val : JSON.stringify(val);
-          sectionTexts.push({ key: key.toLowerCase(), text: valText.toLowerCase() });
-        }
-        // Check if section values reference OTHER section key concepts
-        let crossRefs = 0;
-        for (let i = 0; i < sectionTexts.length; i++) {
-          for (let j = 0; j < sectionTexts.length; j++) {
-            if (i === j) continue;
-            const otherKey = sectionTexts[j].key.replace(/_/g, " ");
-            const otherKeyWords = otherKey.split(/\s+/).filter(w => w.length > 3);
-            // Check if section i's text references section j's key concepts
-            if (otherKeyWords.length > 0 && otherKeyWords.every(w => sectionTexts[i].text.includes(w))) {
-              crossRefs++;
+        const fullText = JSON.stringify(parsed).toLowerCase();
+
+        // Signal 1: Library citations embedded in structured output
+        // Strategy grounds its sections with [KI:...] or "Knowledge Item" refs
+        const embeddedCitations = countMatches(fullText, /\[ki:[a-f0-9]{4,}\]|ki-[a-f0-9]{4,}|\bknowledge item\b|\[pb:[a-f0-9]{4,}\]/gi);
+        if (embeddedCitations >= 2) totalSignals += 3;
+        else if (embeddedCitations >= 1) totalSignals += 1;
+
+        // Signal 2: Deep nested reasoning — values are objects with 3+ keys
+        // containing further nested objects or arrays with rich items
+        let deepNestCount = 0;
+        const checkDeep = (obj: Record<string, unknown>, d: number) => {
+          if (d > 3) return;
+          for (const v of Object.values(obj)) {
+            if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+              const innerKeys = Object.keys(v as Record<string, unknown>);
+              if (innerKeys.length >= 3) {
+                deepNestCount++;
+                checkDeep(v as Record<string, unknown>, d + 1);
+              }
+            }
+            if (Array.isArray(v)) {
+              for (const item of v) {
+                if (typeof item === "object" && item !== null && !Array.isArray(item)) {
+                  const ik = Object.keys(item as Record<string, unknown>);
+                  if (ik.length >= 2) deepNestCount++;
+                }
+              }
             }
           }
-        }
-        // Require at least 3 cross-section references for structured artifacts
-        totalSignals += Math.min(crossRefs, 4);
+        };
+        checkDeep(parsed as Record<string, unknown>, 0);
+        if (deepNestCount >= 4) totalSignals += 3;
+        else if (deepNestCount >= 2) totalSignals += 2;
+        else if (deepNestCount >= 1) totalSignals += 1;
+
+        // Signal 3: Values contain explicit reasoning language
+        // (not just labels/descriptions but causal explanations)
+        const reasoningInValues = countMatches(fullText, /\b(?:because|therefore|which means|this creates|this drives|resulting in|leading to|if .{5,30} then|the consequence|this compounds|given that)\b/g);
+        if (reasoningInValues >= 3) totalSignals += 2;
+        else if (reasoningInValues >= 1) totalSignals += 1;
       }
     } catch { /* not valid JSON */ }
   }
 
-  // ── Explicit causal language (tight patterns only) ─────────
-  // These patterns indicate deliberate reasoning chains, not incidental proximity.
-  const explicitCausal = countMatches(lower, /\b(?:as identified in|building on the|given the .{3,40} above|this drives|which compounds|this connects to|per the .{3,30} analysis|based on the .{3,40} identified|the .{3,30} gap .{3,60} (?:requires|demands|means)|from the .{3,30} section)\b/g);
-  totalSignals += Math.min(explicitCausal, 3) * 2;
-
-  // ── Metric-to-action threading ─────────────────────────────
-  // Only counts when a specific number/$ is within 60 chars of an imperative verb
-  const tightMetricAction = countMatches(lower, /(?:\d+%|\$[\d,.]+[kmb]?)[\s\S]{0,60}(?:therefore|so we must|which requires|meaning we should|this demands|action:|next step:)/g)
-    + countMatches(lower, /(?:because of the|due to the|given the)[\s\S]{0,40}(?:\d+%|\$[\d,.]+)/g);
-  totalSignals += Math.min(tightMetricAction, 2);
+  // ── Explicit cross-reference language (prose or JSON) ──────
+  const explicitCausal = countMatches(lower, /\b(?:as identified|building on|given the .{3,40} above|this drives|which compounds|this connects to|per the .{3,30} analysis|based on .{3,40} identified)\b/g);
+  totalSignals += Math.min(explicitCausal, 2);
 
   const hasCausality = totalSignals >= 4;
   let score = 0;
