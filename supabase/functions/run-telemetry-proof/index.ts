@@ -1,10 +1,9 @@
 // ════════════════════════════════════════════════════════════════
-// run-telemetry-proof — TEMPORARY service-role-only canary.
+// run-telemetry-proof — TEMPORARY validation canary.
 //
-// Queries task_runs to prove Phase 3.6 telemetry. Can also fire
-// tasks using a specified user_id for impersonation.
-//
-// Security: validates Authorization Bearer matches SUPABASE_SERVICE_ROLE_KEY.
+// Fires tasks + queries results to prove Phase 3.6 telemetry.
+// Auth: requires x-batch-key header matching STRATEGY_VALIDATION_KEY
+// (same pattern used by internal service calls per trust model).
 // This function MUST be deleted after validation.
 // ════════════════════════════════════════════════════════════════
 
@@ -14,7 +13,7 @@ import { runStrategyTaskInBackground } from "../_shared/strategy-orchestrator/ru
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-batch-key",
 };
 
 function json(body: unknown, status = 200) {
@@ -41,14 +40,14 @@ async function pollForCompletion(supabase: any, runId: string, maxWaitMs = 120_0
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  // ── Auth: service role key in Authorization Bearer ─────────────
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const authHeader = req.headers.get("authorization") ?? "";
-  const token = authHeader.replace(/^Bearer\s+/i, "");
-  if (!serviceKey || token !== serviceKey) {
-    return json({ error: "Unauthorized — service role required" }, 401);
+  // ── Auth: x-batch-key must match STRATEGY_VALIDATION_KEY ───────
+  const validationKey = Deno.env.get("STRATEGY_VALIDATION_KEY") ?? "";
+  const batchKey = req.headers.get("x-batch-key") ?? "";
+  if (!validationKey || batchKey !== validationKey) {
+    return json({ error: "Unauthorized" }, 401);
   }
 
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
   const body = await req.json().catch(() => ({}));
   const action = body.action || "query";
