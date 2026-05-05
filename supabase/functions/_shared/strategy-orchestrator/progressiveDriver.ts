@@ -25,6 +25,9 @@ import { DISCOVERY_PREP_SECTIONS } from "./handlers/discoveryPrepTemplate.ts";
 import { callOpenAI, safeParseJSON } from "./providers.ts";
 import { getHandler } from "./registry.ts";
 import { validateDraftAgainstSop, type SopContractLike } from "./sopValidator.ts";
+import { runArtifactGate, type ArtifactGateTelemetry } from "./artifactGateEnforcement.ts";
+import { getTaskManifest, toArtifactManifest } from "./taskManifestMap.ts";
+import type { TaskType } from "./types.ts";
 
 /** Persist the synthesis artifact + prompt material into task_runs.meta
  *  so each subsequent step can reconstruct the authoring inputs without
