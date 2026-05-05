@@ -922,9 +922,13 @@ Deno.serve(async (req) => {
     }
     // --- End inline artifact gate ---
 
+    const artifactGateStartMs = Date.now();
     let artifactGateResult = _runArtifactGate(generatedText, artGateManifest);
     let artifactGateRegenerated = false;
+    let artifactGateRegenSuccess = false;
     let artifactGateFailed = false;
+    let artifactGateRegenAttempts = 0;
+    const MAX_ARTIFACT_GATE_REGEN = 1;
 
     if (!artifactGateResult.pass) {
       console.log(`[artifact-gate] FAIL on first pass: ${JSON.stringify(artifactGateResult.failed_dimensions)}`);
@@ -957,6 +961,7 @@ Deno.serve(async (req) => {
       regenLines.push("Return the COMPLETE fixed output. No commentary.");
 
       try {
+        artifactGateRegenAttempts = 1;
         const regenResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -982,6 +987,8 @@ Deno.serve(async (req) => {
             if (!artifactGateResult.pass) {
               console.log(`[artifact-gate] FAIL on regen: ${JSON.stringify(artifactGateResult.failed_dimensions)}`);
               artifactGateFailed = true;
+            } else {
+              artifactGateRegenSuccess = true;
             }
           } else {
             console.error("[artifact-gate] regen too short, marking failed");
@@ -996,6 +1003,14 @@ Deno.serve(async (req) => {
         artifactGateFailed = true;
       }
     }
+    const artifactGateLatencyMs = Date.now() - artifactGateStartMs;
+
+    // Compute failure reason counts
+    const failureReasonCounts: Record<string, number> = {};
+    for (const g of artifactGateResult.gates) {
+      if (!g.pass) failureReasonCounts[g.gate] = g.diagnostics.length;
+    }
+    const topFailureDimension = artifactGateResult.failed_dimensions[0] || null;
 
     const totalLatencyMs = Date.now() - started;
 
@@ -1020,6 +1035,12 @@ Deno.serve(async (req) => {
           failed_dimensions: artifactGateResult.failed_dimensions,
           gates: artifactGateResult.gates,
           regenerated: artifactGateRegenerated,
+          regen_success: artifactGateRegenSuccess,
+          failure_reason_counts: failureReasonCounts,
+          top_failure_dimension: topFailureDimension,
+          regen_attempts: artifactGateRegenAttempts,
+          max_regen_attempts: MAX_ARTIFACT_GATE_REGEN,
+          total_gate_latency_ms: artifactGateLatencyMs,
         },
         artifact_gate_failed: artifactGateFailed,
         envelope: skillResult.envelope,

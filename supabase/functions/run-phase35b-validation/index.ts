@@ -812,7 +812,14 @@ Deno.serve(async (req) => {
         baseline_word_count: baselineText.split(/\s+/).length,
         gate_decision: stratData.refusal ? "refuse" : "pass",
         refusal: stratData.refusal || null,
-        artifact_gate: { pass: artifactGate.pass, failed_dimensions: artifactGate.failed_dimensions },
+        artifact_gate: {
+          pass: artifactGate.pass,
+          failed_dimensions: artifactGate.failed_dimensions,
+          gates: artifactGate.gates,
+        },
+        // Include synthesis artifact gate metadata if available
+        artifact_gate_regenerated: (stratData.artifact_gate as any)?.regenerated || false,
+        artifact_gate_regen_success: (stratData.artifact_gate as any)?.regen_success || false,
       });
     } catch (e) {
       results.push({ label: c.label, error: (e as Error).message });
@@ -827,7 +834,9 @@ Deno.serve(async (req) => {
   const bizLosses = results.filter(r => r.biz_impact_winner === "baseline").length;
   const invalidOutputs = results.filter(r => r.strategy_valid === false).length;
   const contaminatedBaselines = results.filter(r => r.baseline_clean === false).length;
-  const artifactGateFailures = results.filter(r => r.artifact_gate && !r.artifact_gate.pass).length;
+  const artifactGateFailures = results.filter(r => r.artifact_gate && !(r.artifact_gate as any).pass).length;
+  const artifactGateRegens = results.filter(r => r.artifact_gate_regenerated === true).length;
+  const artifactGateRegenSuccesses = results.filter(r => r.artifact_gate_regen_success === true).length;
   const allPass = baselineWins === 0 && strategyWins > ties && structureLosses === 0 && bizLosses === 0 && invalidOutputs === 0 && contaminatedBaselines === 0 && artifactGateFailures === 0;
 
   const attemptId = crypto.randomUUID();
@@ -844,6 +853,7 @@ Deno.serve(async (req) => {
       winRate, strategyWins, baselineWins, ties,
       total: results.length, structureLosses, bizLosses,
       invalidOutputs, contaminatedBaselines, artifactGateFailures,
+      artifactGateRegens, artifactGateRegenSuccesses,
       all_cases_ran: errors === 0 && results.length === casesToRun.length,
       verdict: allPass && errors === 0 ? "PASS" : "FAIL",
     },
