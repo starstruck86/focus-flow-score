@@ -517,6 +517,6 @@ Deno.serve(async (req) => {
   return new Response(JSON.stringify({
     timestamp: new Date().toISOString(),
     results,
-    acceptance: { winRate, strategyWins, total: results.length, structureLosses, bizLosses, invalidOutputs, contaminatedBaselines, verdict: allPass ? "PASS" : "FAIL" },
+    acceptance: { winRate, strategyWins, baselineWins, ties, total: results.length, structureLosses, bizLosses, invalidOutputs, contaminatedBaselines, verdict: allPass ? "PASS" : "FAIL" },
   }, null, 2), { headers: { ...CORS, "Content-Type": "application/json" } });
 });
