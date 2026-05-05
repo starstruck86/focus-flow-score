@@ -29,9 +29,12 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const validationKey = Deno.env.get("STRATEGY_VALIDATION_KEY");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const auth = req.headers.get("authorization") || "";
-  if (!validationKey || !auth.includes(validationKey)) {
-    return jsonResponse({ error: "Unauthorized — requires STRATEGY_VALIDATION_KEY" }, 401);
+  const authorized = (validationKey && auth.includes(validationKey)) ||
+    (serviceKey && auth.includes(serviceKey));
+  if (!authorized) {
+    return jsonResponse({ error: "Unauthorized — requires STRATEGY_VALIDATION_KEY or service role" }, 401);
   }
 
   const body = await req.json().catch(() => ({}));
