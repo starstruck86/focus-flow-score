@@ -64,7 +64,7 @@ function checkNoBypassPatterns(): string[] {
 
 // ── Temp endpoints ───────────────────────────────────────────
 // Built dynamically to avoid tripping source-scan security tests
-const TEMP_ENDPOINT_SUFFIXES = ["enforcement-proof", "telemetry-proof", "telemetry-canary"];
+const TEMP_ENDPOINT_SUFFIXES = ["enforcement-proof", "telemetry-proof", "telemetry-canary", "production-evidence"];
 const TEMP_ENDPOINTS = TEMP_ENDPOINT_SUFFIXES.map(s => `run-${s}`);
 
 function checkNoTempEndpoints(): string[] {
@@ -196,6 +196,18 @@ export function runReleaseGate(): ReleaseGateResult {
     const hardcodedKeys = src.match(/["']eyJhbGciOi[A-Za-z0-9_-]{50,}["']/g);
     if (hardcodedKeys) {
       failures.push(`Hardcoded key in ${fn}/index.ts`);
+    }
+  }
+
+  // 6. Success-path production evidence must exist
+  const evidencePath = path.resolve("docs/phase37-production-evidence-report.md");
+  if (!fs.existsSync(evidencePath)) {
+    failures.push("Phase 3.7 production evidence report missing: docs/phase37-production-evidence-report.md");
+  } else {
+    const evidenceContent = fs.readFileSync(evidencePath, "utf-8");
+    // Must contain at least one "completed" row with telemetry
+    if (!evidenceContent.includes("completed") || !evidenceContent.includes("✅")) {
+      failures.push("Phase 3.7 production evidence report lacks success-path evidence (no completed run with telemetry)");
     }
   }
 
