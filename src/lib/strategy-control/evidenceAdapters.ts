@@ -78,6 +78,7 @@ export interface ChatMessageRow {
   thread_id: string;
   content_json: Record<string, unknown> | null;
   message_type?: string | null;
+  manifest_id?: string | null;
   created_at: string;
   latency_ms?: number | null;
   provider_used?: string | null;
