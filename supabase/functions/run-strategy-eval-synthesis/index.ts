@@ -156,12 +156,20 @@ function buildEvalSynthesisSystemPrompt(
 
   // ── Phase 3.5C: Evidence placement enforcement
   sections.push("=== EVIDENCE PLACEMENT RULES (Phase 3.5C — DETERMINISTIC GATE) ===");
-  sections.push("Every citation ([KI:...], [PB:...], [SRC:...]) MUST sit inside or immediately next to a sentence containing causal reasoning.");
-  sections.push("Causal language = because, therefore, resulting in, which means, this creates, this drives, demonstrates, validates, confirms, consequently, as a result.");
-  sections.push("A citation sentence or its immediate neighbor (±1 sentence) MUST contain at least one of these causal words.");
-  sections.push("Max 3 citations per sentence. No citation lists at the end unless each cited source is explained with a causal reason.");
-  sections.push("FAIL EXAMPLE: 'The market is growing [KI:abc123].' — no causal language, citation is decorative.");
-  sections.push("PASS EXAMPLE: 'Fragmented guest data drives $420K in annual redundant licensing because each property maintains separate systems [KI:abc123].'");
+  sections.push("A DETERMINISTIC GATE will check these rules. Violations = automatic rejection:");
+  sections.push("");
+  sections.push("RULE 1: Max 3 citations per sentence. NEVER put 4+ citations in one sentence. Spread them across sentences.");
+  sections.push("RULE 2: Every citation MUST have causal language in the SAME sentence or the sentence immediately before/after.");
+  sections.push("  Causal words: because, therefore, resulting in, which means, this creates, this drives, demonstrates, validates, confirms, consequently, as a result, leading to, supporting.");
+  sections.push("RULE 3: No citation lists or reference sections at the end. Each citation must be inline with reasoning.");
+  sections.push("");
+  sections.push("PATTERN TO FOLLOW for EVERY citation:");
+  sections.push("  '[Causal claim] because [evidence reasoning] [KI:xxxxxxxx].'");
+  sections.push("  OR: '[KI:xxxxxxxx] demonstrates that [specific claim], resulting in [consequence].'");
+  sections.push("");
+  sections.push("PATTERN TO AVOID:");
+  sections.push("  'The team should focus on improvement [KI:abc123].' — NO causal word = GATE FAIL");
+  sections.push("  'Sources: [KI:abc] [KI:def] [KI:ghi] [KI:jkl]' — 4 citations in one sentence = GATE FAIL");
   sections.push("");
 
   // ── Library proof (retrieved KIs/playbooks)
