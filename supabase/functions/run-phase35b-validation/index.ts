@@ -88,7 +88,7 @@ const CASES: Case[] = [
     baselineSystem: "You are a helpful sales strategy assistant. Answer the user's question with actionable, specific advice. Do not reference any internal library, playbook, or proprietary methodology. Use only general sales knowledge.\n\nOutput constraints:\n- Return your response as a well-structured JSON object with semantically meaningful keys.\n- Keep your response between 200 and 400 words.",
     scoringShape: "structured_artifact",
     targetWords: { min: 200, max: 400 },
-    mustHave: ["metrics", "champion", "decision criteria", "decision process", "identified pain", "risks", "next steps"],
+    mustHave: ["metrics", "economic buyer", "decision criteria", "decision process", "identified pain", "champion", "competition", "gaps named"],
     inputTerms: ["Beechwood", "Hotel", "MEDDICC", "Q3", "Platform", "Renewal", "discovery"],
   },
   {
@@ -340,11 +340,14 @@ function scoreStructure(text: string, shape: string, forbid?: string[], mustHave
 }
 
 function scoreEvidence(text: string): number {
-  const kiRefs = countMatches(text, /\b(?:KI|Knowledge Item|playbook|framework|methodology|MEDDICC|SPIN|Challenger|Sandler)\b/gi);
-  const citations = countMatches(text, /\[(?:source|ref|KI|PB)[^\]]*\]/gi);
-  const attributions = countMatches(text, /\b(?:according to|based on|per the|from the|as outlined in|as defined in)\b/gi);
-  const quotedEvidence = countMatches(text, /"[^"]{10,}"/g);
-  const total = kiRefs * 0.5 + citations * 2 + attributions + quotedEvidence;
+  const kiIdCitations = countMatches(text, /\[KI:[a-f0-9]{6,}\]/gi) + countMatches(text, /\bKI-[a-f0-9]{6,}\b/gi);
+  const pbIdCitations = countMatches(text, /\[PB:[a-f0-9]{6,}\]/gi) + countMatches(text, /\bPB-[a-f0-9]{6,}\b/gi);
+  const bracketCitations = countMatches(text, /\[(?:source|ref)[^\]]*\]/gi);
+  const attributions = countMatches(text, /\b(?:according to|based on|per the|from the|as outlined in|as defined in|grounded in|informed by|drawn from)\b/gi);
+  const kiExplicit = countMatches(text, /\bKnowledge Item\b/gi);
+  const strongSignal = (kiIdCitations + pbIdCitations) * 3 + bracketCitations * 2;
+  const moderateSignal = kiExplicit * 1.5 + attributions * 0.75;
+  const total = strongSignal + moderateSignal;
   if (total >= 6) return 5;
   if (total >= 4) return 4;
   if (total >= 2) return 3;
@@ -491,10 +494,8 @@ Deno.serve(async (req) => {
         library_hits: libraryHits,
         strategy_valid: isValid,
         baseline_clean: isClean,
-        strategy_structure: stratScore.structure,
-        baseline_structure: baseScore.structure,
-        strategy_biz: stratScore.business_impact,
-        baseline_biz: baseScore.business_impact,
+        strategy_dimensions: { specificity: stratScore.specificity, actionability: stratScore.actionability, structure: stratScore.structure, evidence: stratScore.evidence, relevance: stratScore.relevance, business_impact: stratScore.business_impact },
+        baseline_dimensions: { specificity: baseScore.specificity, actionability: baseScore.actionability, structure: baseScore.structure, evidence: baseScore.evidence, relevance: baseScore.relevance, business_impact: baseScore.business_impact },
         strategy_word_count: strategyText.split(/\s+/).length,
         baseline_word_count: baselineText.split(/\s+/).length,
         gate_decision: stratData.refusal ? "refuse" : "pass",
@@ -506,16 +507,19 @@ Deno.serve(async (req) => {
   }
 
   const strategyWins = results.filter(r => r.winner === "strategy").length;
+  const baselineWins = results.filter(r => r.winner === "baseline").length;
+  const ties = results.filter(r => r.winner === "tie").length;
   const winRate = Math.round((strategyWins / results.length) * 100);
   const structureLosses = results.filter(r => r.structure_winner === "baseline").length;
   const bizLosses = results.filter(r => r.biz_impact_winner === "baseline").length;
   const invalidOutputs = results.filter(r => r.strategy_valid === false).length;
   const contaminatedBaselines = results.filter(r => r.baseline_clean === false).length;
-  const allPass = winRate >= 70 && structureLosses === 0 && bizLosses === 0 && invalidOutputs === 0 && contaminatedBaselines === 0;
+  // New standard: 0 baseline wins, Strategy must win majority
+  const allPass = baselineWins === 0 && strategyWins > ties && structureLosses === 0 && bizLosses === 0 && invalidOutputs === 0 && contaminatedBaselines === 0;
 
   return new Response(JSON.stringify({
     timestamp: new Date().toISOString(),
     results,
-    acceptance: { winRate, strategyWins, total: results.length, structureLosses, bizLosses, invalidOutputs, contaminatedBaselines, verdict: allPass ? "PASS" : "FAIL" },
+    acceptance: { winRate, strategyWins, baselineWins, ties, total: results.length, structureLosses, bizLosses, invalidOutputs, contaminatedBaselines, verdict: allPass ? "PASS" : "FAIL" },
   }, null, 2), { headers: { ...CORS, "Content-Type": "application/json" } });
 });

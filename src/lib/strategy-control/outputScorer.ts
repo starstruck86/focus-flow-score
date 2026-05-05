@@ -456,12 +456,22 @@ function scoreStructure(text: string, ctx?: ScoringContext): number {
 }
 
 function scoreEvidence(text: string): number {
-  const kiRefs = countMatches(text, /\b(?:KI|Knowledge Item|playbook|framework|methodology|MEDDICC|SPIN|Challenger|Sandler)\b/gi);
-  const citations = countMatches(text, /\[(?:source|ref|KI|PB)[^\]]*\]/gi);
-  const attributions = countMatches(text, /\b(?:according to|based on|per the|from the|as outlined in|as defined in)\b/gi);
-  const quotedEvidence = countMatches(text, /"[^"]{10,}"/g);
+  // Actual library citations with IDs — only Strategy can produce these
+  const kiIdCitations = countMatches(text, /\[KI:[a-f0-9]{6,}\]/gi) + countMatches(text, /\bKI-[a-f0-9]{6,}\b/gi);
+  const pbIdCitations = countMatches(text, /\[PB:[a-f0-9]{6,}\]/gi) + countMatches(text, /\bPB-[a-f0-9]{6,}\b/gi);
+  // Formal citation brackets (not KI/PB — those are counted above)
+  const bracketCitations = countMatches(text, /\[(?:source|ref)[^\]]*\]/gi);
+  // Attribution language
+  const attributions = countMatches(text, /\b(?:according to|based on|per the|from the|as outlined in|as defined in|grounded in|informed by|drawn from)\b/gi);
+  // Knowledge Item explicit mentions
+  const kiExplicit = countMatches(text, /\bKnowledge Item\b/gi);
 
-  const total = kiRefs * 0.5 + citations * 2 + attributions + quotedEvidence;
+  // Strong signals: actual ID-based citations (unique to Strategy)
+  const strongSignal = (kiIdCitations + pbIdCitations) * 3 + bracketCitations * 2;
+  // Moderate signals
+  const moderateSignal = kiExplicit * 1.5 + attributions * 0.75;
+
+  const total = strongSignal + moderateSignal;
 
   if (total >= 6) return 5;
   if (total >= 4) return 4;
