@@ -179,17 +179,31 @@ export function checkSectionCompleteness(
   const diagnostics: string[] = [];
   const lower = output.toLowerCase();
 
+  // Try to parse as JSON for structured artifacts
+  let parsedJson: Record<string, unknown> | null = null;
+  try {
+    const fenceMatch = output.match(/```(?:json|structured_artifact)\s*([\s\S]*?)```/);
+    const raw = fenceMatch ? fenceMatch[1] : output.trim();
+    if (raw.startsWith("{")) {
+      parsedJson = JSON.parse(raw);
+    }
+  } catch { /* not JSON */ }
+
   for (const req of mustHave) {
     const norm = req.toLowerCase();
-
-    // Find the section content — look for heading or JSON key
     let sectionContent = "";
 
-    // Try JSON key extraction
-    const keyPattern = new RegExp(`"[^"]*${norm.replace(/\s+/g, "[\\s_]*")}[^"]*"\\s*:\\s*(?:"([^"]*(?:\\\\.[^"]*)*)"|\\{([^}]*)\\}|\\[([^\\]]*)\\])`, "i");
-    const keyMatch = output.match(keyPattern);
-    if (keyMatch) {
-      sectionContent = keyMatch[1] || keyMatch[2] || keyMatch[3] || "";
+    // For parsed JSON: find matching key and stringify its value
+    if (parsedJson) {
+      const matchingKey = Object.keys(parsedJson).find(k => {
+        const nk = normalizeKey(k);
+        const nr = normalizeKey(req);
+        return nk.includes(nr) || nr.includes(nk);
+      });
+      if (matchingKey) {
+        const val = parsedJson[matchingKey];
+        sectionContent = typeof val === "string" ? val : JSON.stringify(val);
+      }
     }
 
     // Try heading-based section extraction
