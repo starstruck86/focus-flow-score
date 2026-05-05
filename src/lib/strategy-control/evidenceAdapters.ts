@@ -1,8 +1,9 @@
 /**
- * Phase 3.7B — Evidence Adapters.
+ * Phase 4 — Evidence Adapters.
  *
- * Transform existing telemetry shapes (task_runs.meta, chat messages)
- * into the universal StrategyExecutionEvidence contract.
+ * Transform existing telemetry shapes (task_runs.meta, chat messages,
+ * strategy_outputs, transform results) into the universal
+ * StrategyExecutionEvidence contract.
  *
  * Each adapter is surface-specific but the output is universal.
  * No hardcoded task types — adapters use manifest_id from the registry.
@@ -78,12 +79,15 @@ export interface ChatMessageRow {
   content_json: Record<string, unknown> | null;
   message_type?: string | null;
   created_at: string;
+  latency_ms?: number | null;
+  provider_used?: string | null;
+  model_used?: string | null;
 }
 
 /**
  * Convert a strategy_messages row (with artifact content) to evidence.
- * Chat artifacts don't have the full task pipeline telemetry,
- * so many fields will be null until Phase 4 adapters are built.
+ * Chat messages already persist routing_decision, retrieval_meta,
+ * gate_check, calibration, and latency_ms in content_json.
  */
 export function adaptChatArtifact(
   row: ChatMessageRow,
@@ -91,6 +95,40 @@ export function adaptChatArtifact(
 ): StrategyExecutionEvidence {
   const contentJson = row.content_json || {};
   const routingDecision = contentJson.routing_decision as Record<string, unknown> | undefined;
+  const retrievalMeta = contentJson.retrieval_meta as Record<string, unknown> | undefined;
+  const gateCheck = contentJson.gate_check as Record<string, unknown> | undefined;
+
+  // Extract retrieval telemetry from routing_decision or retrieval_meta
+  let retrieval: StrategyExecutionEvidence["retrieval"] = null;
+  if (routingDecision) {
+    retrieval = {
+      ki_count: (routingDecision.ki_hits as number) ?? 0,
+      playbook_count: 0,
+      content_chars: (routingDecision.content_chars as number) ?? 0,
+      source_mode: (routingDecision.source_mode as string) ?? "library_first",
+    };
+  } else if (retrievalMeta) {
+    retrieval = {
+      ki_count: (retrievalMeta.ki_count as number) ?? (retrievalMeta.ki_hits as number) ?? 0,
+      playbook_count: (retrievalMeta.playbook_count as number) ?? 0,
+      content_chars: (retrievalMeta.content_chars as number) ?? 0,
+      source_mode: (retrievalMeta.source_mode as string) ?? "library_first",
+    };
+  }
+
+  // Extract performance from latency_ms
+  const performance: StrategyExecutionEvidence["performance"] = row.latency_ms
+    ? { total_latency_ms: row.latency_ms }
+    : null;
+
+  // Extract anomaly flags from gate_check or routing_decision
+  let anomalyFlags: StrategyExecutionEvidence["anomaly_flags"] = null;
+  if (gateCheck || routingDecision) {
+    anomalyFlags = {
+      weak_retrieval: retrieval ? retrieval.ki_count === 0 : undefined,
+      latency_violation: row.latency_ms ? row.latency_ms > 30000 : undefined,
+    };
+  }
 
   return {
     execution_surface: "chat_artifact",
@@ -102,16 +140,62 @@ export function adaptChatArtifact(
     output_present: !!(contentJson.text || contentJson.content),
     final_status: "completed",
 
-    // Chat currently doesn't emit structured planner/gate telemetry
-    planner: null,
-    retrieval: routingDecision ? {
-      ki_count: (routingDecision.ki_count as number) ?? 0,
-      playbook_count: (routingDecision.playbook_count as number) ?? 0,
-      content_chars: (routingDecision.content_chars as number) ?? 0,
-      source_mode: (routingDecision.source_mode as string) ?? "unknown",
-    } : null,
-    artifact_gate: null,
-    performance: null,
+    planner: null, // Chat uses routing_decision, not a planner block
+    retrieval,
+    artifact_gate: null, // Chat uses inline citation audit, not artifact gate
+    performance,
+    anomaly_flags: anomalyFlags,
+    failure_patterns: null,
+
+    created_at: row.created_at,
+    captured_at: new Date().toISOString(),
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Transform Output Adapter — converts strategy_outputs to evidence
+// ═══════════════════════════════════════════════════════════════════
+
+export interface TransformOutputRow {
+  id: string;
+  thread_id: string | null;
+  output_type: string;
+  content_json: Record<string, unknown> | null;
+  rendered_text: string | null;
+  created_at: string;
+  latency_ms?: number | null;
+  provider_used?: string | null;
+  model_used?: string | null;
+}
+
+/**
+ * Convert a strategy_outputs or DOCX render result into evidence.
+ * Transform outputs re-render existing artifacts — they carry
+ * performance telemetry but no planner/retrieval/gate.
+ */
+export function adaptTransformOutput(
+  row: TransformOutputRow,
+  manifestId: string,
+): StrategyExecutionEvidence {
+  const contentJson = row.content_json || {};
+  const hasOutput = !!(row.rendered_text || Object.keys(contentJson).length > 0);
+
+  return {
+    execution_surface: "transform",
+    manifest_id: manifestId,
+    run_id: row.id,
+    thread_id: row.thread_id ?? undefined,
+
+    output_shape: row.rendered_text ? "prose" : "structured_artifact",
+    output_present: hasOutput,
+    final_status: hasOutput ? "completed" : "failed",
+
+    planner: null,        // Transforms re-render, no planning
+    retrieval: null,      // No retrieval on transforms
+    artifact_gate: null,  // No quality gate on re-renders
+    performance: row.latency_ms
+      ? { total_latency_ms: row.latency_ms }
+      : null,
     anomaly_flags: null,
     failure_patterns: null,
 
@@ -138,7 +222,6 @@ function extractRetrievalTelemetry(
   meta: Record<string, unknown>,
 ): StrategyExecutionEvidence["retrieval"] {
   // The planner block sometimes carries retrieval counts
-  const planner = meta.planner as Record<string, unknown> | undefined;
   const libraryCounts = meta.library_counts as Record<string, number> | undefined;
 
   if (libraryCounts) {
