@@ -655,7 +655,9 @@ Deno.serve(async (req) => {
       lines.push("- Do NOT regenerate the entire output.");
       lines.push("- PRESERVE all strong sections exactly as they are.");
       lines.push("- REWRITE only the sections identified as weak.");
-      lines.push("- Every rewrite must be MORE specific, MORE quantified, MORE actionable than the original.");
+      lines.push("- Every rewrite must INCREASE specificity, causality, and decision pressure.");
+      lines.push("- If a rewrite instruction mentions STRUCTURAL DIFFERENTIATION FAILURE, ensure the fix adds the missing element (quantified consequence, named entity+metric, causal chain, or stakeholder-tied action).");
+      lines.push("- Do NOT expand length unnecessarily. Do NOT change output format.");
       lines.push("- Maintain the same output format/shape.");
       lines.push(`- Output shape: ${outputContract.shape}`);
       if (outputContract.targetWords) {
