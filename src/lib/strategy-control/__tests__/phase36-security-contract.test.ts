@@ -107,6 +107,16 @@ describe("Phase 3.6 — Security Contract", () => {
       expect(fs.existsSync(proofDir)).toBe(false);
     });
 
+    it("run-telemetry-proof does not exist", () => {
+      const dir = path.resolve("supabase/functions/run-telemetry-proof");
+      expect(fs.existsSync(dir)).toBe(false);
+    });
+
+    it("run-telemetry-canary does not exist", () => {
+      const dir = path.resolve("supabase/functions/run-telemetry-canary");
+      expect(fs.existsSync(dir)).toBe(false);
+    });
+
     it("no anon-key-only diagnostic endpoints", () => {
       // Diagnostic endpoints must require more than just anon key
       const diagnosticPatterns = [
@@ -140,6 +150,38 @@ describe("Phase 3.6 — Security Contract", () => {
         if (!hasAuth) unguarded.push(fn);
       }
       expect(unguarded).toEqual([]);
+    });
+  });
+
+  describe("No Inline Hardcoded Keys", () => {
+    it("no hardcoded JWT keys in edge functions", () => {
+      for (const fn of edgeFunctions) {
+        const source = readEdgeFunctionSource(fn);
+        if (!source) continue;
+        const hardcoded = source.match(/["']eyJhbGciOi[A-Za-z0-9_-]{50,}["']/g);
+        expect(hardcoded).toBeNull();
+      }
+    });
+
+    it("no raw service-role key exposure in edge functions", () => {
+      for (const fn of edgeFunctions) {
+        const source = readEdgeFunctionSource(fn);
+        if (!source) continue;
+        // Should use Deno.env.get, not inline the key
+        expect(source).not.toMatch(/SUPABASE_SERVICE_ROLE_KEY\s*=\s*["']/);
+      }
+    });
+  });
+
+  describe("No Temporary Auth Patterns", () => {
+    it("no TODO/FIXME auth bypasses", () => {
+      for (const fn of edgeFunctions) {
+        const source = readEdgeFunctionSource(fn);
+        if (!source) continue;
+        expect(source).not.toMatch(/TODO.*auth/i);
+        expect(source).not.toMatch(/FIXME.*auth/i);
+        expect(source).not.toMatch(/temporary.*auth/i);
+      }
     });
   });
 });
