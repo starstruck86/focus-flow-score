@@ -944,6 +944,40 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         telemetry: artifactGateTelemetry,
       }));
 
+      // Phase 3.6 — persist full telemetry even on hard-fail path
+      const hardFailTotalLatencyMs = Date.now() - pipelineStartMs;
+      const hardFailGenLatencyMs = Date.now() - authoringStartedAt;
+      const hardFailMeta: Record<string, unknown> = {
+        artifact_gate: artifactGateTelemetry,
+        artifact_gate_failed: true,
+      };
+      if (planResult.ok) {
+        hardFailMeta.planner = {
+          plan_hash: planResult.plan.planHash,
+          term_seeds_count: planResult.plan.termSeeds.length,
+          methodology_seeds_injected: (taskManifest.retrieval.methodologySeeds ?? []).length > 0,
+          scopes: plannerRetrievalArgs?.scopes ?? derivedScopes,
+        };
+      }
+      hardFailMeta.performance = {
+        total_latency_ms: hardFailTotalLatencyMs,
+        generation_latency_ms: hardFailGenLatencyMs,
+        gate_latency_ms: artifactGateTelemetry.total_gate_latency_ms,
+      };
+      const hardFailAnomalyFlags: Record<string, boolean> = {
+        artifact_failure: true,
+        regen_triggered: true,
+      };
+      if (planResult.ok && planResult.plan.termSeeds.length < 3) hardFailAnomalyFlags.weak_retrieval = true;
+      if (hardFailTotalLatencyMs > 12_000) hardFailAnomalyFlags.latency_violation = true;
+      hardFailMeta.anomaly_flags = hardFailAnomalyFlags;
+      // Failure patterns
+      const hardFailPatterns: Record<string, number> = {};
+      for (const dim of gateResult.failed_dimensions) {
+        hardFailPatterns[dim] = (hardFailPatterns[dim] ?? 0) + 1;
+      }
+      hardFailMeta.failure_patterns = hardFailPatterns;
+
       await supabase
         .from("task_runs")
         .update({
@@ -952,10 +986,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
           error: failMsg.slice(0, 1000),
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          meta: {
-            artifact_gate: artifactGateTelemetry,
-            artifact_gate_failed: true,
-          },
+          meta: hardFailMeta,
         })
         .eq("id", runId);
       return;
