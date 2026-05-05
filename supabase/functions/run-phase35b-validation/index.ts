@@ -170,38 +170,66 @@ function scoreActionability(text: string, shape?: string): number {
 }
 
 function scoreStructureProse(text: string): number {
-  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-  const sentences = countMatches(text, /[.!?]\s/g) + 1;
+  const lower = text.toLowerCase();
   const words = text.split(/\s+/).length;
-  let coherence = 0;
-  if (words < 250) {
-    if (sentences >= 4) coherence = 1;
-    else if (paragraphs.length >= 2 || sentences >= 3) coherence = 0.75;
-    else if (sentences >= 2) coherence = 0.5;
-  } else {
-    if (paragraphs.length >= 4) coherence = 1;
-    else if (paragraphs.length >= 2) coherence = 0.75;
-    else if (paragraphs.length >= 1 && sentences >= 4) coherence = 0.5;
+  if (words < 10) return 1;
+
+  // ── Business Spine Detection (dominant signal) ──────────────
+  // A well-structured prose output follows: Context → Consequence → Insight → Action
+  const spinePhases = [
+    // Phase 1: Current state / context / situation
+    /\b(?:current(?:ly)?|today|right now|existing|as of|at present|status quo|their (?:team|org|pipeline|process)|the (?:problem|challenge|situation|reality)|facing|experiencing|struggling|dealing with)\b/i,
+    // Phase 2: Consequence / risk / cost / pain
+    /\b(?:cost|risk|consequence|impact|result(?:ing)?|leading to|which (?:means|creates|causes|drives)|this (?:means|creates|causes|drives|leaves)|without|if (?:not|they don't)|losing|missed|gap|erosion|pressure|threat|exposure|vulnerability|at stake|delay)\b/i,
+    // Phase 3: Insight / POV / thesis / change vector
+    /\b(?:insight|the (?:real|core|key|critical|fundamental) (?:issue|question|shift|opportunity)|what (?:this means|matters|changes)|the shift|the opportunity|our (?:view|position|thesis|pov|perspective)|the way forward|reframe|rethink|reconsider|the unlock|differentiat)\b/i,
+    // Phase 4: Action / question / seller move / next step
+    /\b(?:ask|propose|confirm|validate|test|open with|frame|position|question|next step|action|recommend|should|must|need to|start by|begin with|prioritize|lead with|anchor on)\b/i,
+  ];
+  let spineHits = 0;
+  for (const phase of spinePhases) {
+    if (phase.test(lower)) spineHits++;
   }
+  // Spine progression: reward having all 4 phases present
+  let spineScore = 0;
+  if (spineHits >= 4) spineScore = 1.0;
+  else if (spineHits >= 3) spineScore = 0.75;
+  else if (spineHits >= 2) spineScore = 0.5;
+  else if (spineHits >= 1) spineScore = 0.25;
+
+  // ── Account / Persona Specificity in Progression ───────────
+  // Generic prose that could apply to any company should be penalized
+  const GENERIC_PROSE = [/\bleverage\b/gi, /\bbest practices?\b/gi, /\bsynerg/gi, /\bholistic\b/gi, /\bscalable solution/gi, /\binnovative approach/gi, /\bworld[- ]class\b/gi, /\bin today'?s (?:landscape|environment|market)\b/gi, /\bstreamline (?:operations|processes)\b/gi, /\bdrive (?:growth|value|results)\b/gi, /\bkey stakeholders?\b/gi, /\bunlock (?:potential|value|growth)\b/gi];
+  const genericHits = GENERIC_PROSE.reduce((n, p) => n + countMatches(text, p), 0);
+  let genericPenalty = 0;
+  if (genericHits >= 4) genericPenalty = 0.4;
+  else if (genericHits >= 2) genericPenalty = 0.2;
+
+  // ── Sentence Density (light signal) ────────────────────────
+  const sentences = countMatches(text, /[.!?]\s/g) + 1;
   const avgWordsPerSentence = words / Math.max(sentences, 1);
   let density = 0;
   if (avgWordsPerSentence >= 10 && avgWordsPerSentence <= 30) density = 1;
   else if (avgWordsPerSentence >= 8 && avgWordsPerSentence <= 35) density = 0.5;
-  const transitions = countMatches(text, /\b(?:however|therefore|specifically|because|given that|as a result|in contrast|for example|notably|critically|importantly|additionally|furthermore|meanwhile|this means|this isn't|in other words|the goal|by contrast|which means|leading to|ensuring|ultimately|while|although|yet|so|thus|hence|accordingly|consequently)\b/gi);
+
+  // ── Transition Flow (minor signal — cannot dominate) ───────
+  const transitions = countMatches(text, /\b(?:however|therefore|specifically|because|given that|as a result|in contrast|for example|notably|critically|importantly|furthermore|meanwhile|this means|in other words|by contrast|which means|leading to|ensuring|ultimately|although|yet|thus|hence|accordingly|consequently)\b/gi);
   let flow = 0;
-  if (transitions >= 4) flow = 1;
-  else if (transitions >= 1) flow = 0.75;
-  const bizFlow = countMatches(text, /\b(?:current state|cost|risk|requires?|outcome|question|today|before|after|result|gap|pain|opportunity|impact|goal|target|because of|in order to|which leads to|this creates|the problem|the challenge|the opportunity|moving from|enabling|preventing|addressing)\b/gi);
-  let bizScore = 0;
-  if (bizFlow >= 4) bizScore = 1;
-  else if (bizFlow >= 2) bizScore = 0.75;
-  else if (bizFlow >= 1) bizScore = 0.5;
-  const rawSum = coherence * 1.2 + density * 1.0 + flow * 0.6 + bizScore * 1.2;
+  if (transitions >= 3) flow = 1;
+  else if (transitions >= 1) flow = 0.5;
+
+  // ── Weighted Sum: Spine dominates ──────────────────────────
+  // Spine: 2.0 weight (dominant)
+  // Density: 0.8 weight (readability)
+  // Flow: 0.4 weight (capped — transitions alone cannot win)
+  // Generic penalty subtracted
+  const rawSum = spineScore * 2.0 + density * 0.8 + flow * 0.4 - genericPenalty;
+
   let score: number;
-  if (rawSum >= 3.5) score = 5;
-  else if (rawSum >= 2.75) score = 4;
-  else if (rawSum >= 2.0) score = 3;
-  else if (rawSum >= 1.0) score = 2;
+  if (rawSum >= 2.8) score = 5;
+  else if (rawSum >= 2.2) score = 4;
+  else if (rawSum >= 1.5) score = 3;
+  else if (rawSum >= 0.8) score = 2;
   else score = 1;
   return score;
 }
