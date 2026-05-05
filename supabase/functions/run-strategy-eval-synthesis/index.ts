@@ -90,8 +90,9 @@ function buildEvalSynthesisSystemPrompt(
     sections.push("every sentence must carry maximum business weight. Within the word limit:");
     sections.push("");
     sections.push("MANDATORY SEQUENTIAL STRUCTURE — your prose MUST follow this exact progression:");
-    sections.push("The output is ONE flowing passage. No headings, no bullets, no labels.");
-    sections.push("But the INTERNAL logic must proceed in this exact order:");
+    sections.push("The output is flowing prose with NO headings, NO bullets, NO labels.");
+    sections.push("PARAGRAPH RULE: Break into 2-4 SHORT paragraphs (max 100 words each) separated by blank lines.");
+    sections.push("Each paragraph maps to one phase of the progression below:");
     sections.push("");
     sections.push("  SENTENCE 1-2: CURRENT STATE — Open by naming what is concretely true right now for this account.");
     sections.push("    Use phrases like 'Currently...', 'Today...', 'Right now...', 'The [persona] is facing...'");
