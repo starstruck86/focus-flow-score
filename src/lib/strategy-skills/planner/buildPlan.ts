@@ -57,11 +57,22 @@ export function buildPlan(
   }
 
   const inputs = (resolved.inputs ?? {}) as Record<string, unknown>;
-  const { termSeeds, unresolvedBindings } = resolveBindings(
+  const { termSeeds: resolvedSeeds, unresolvedBindings } = resolveBindings(
     m.retrieval.termBindings,
     inputs,
     ctx,
   );
+
+  // Universal: inject static methodology/domain seeds (deduped against resolved terms)
+  const termSeeds = [...resolvedSeeds];
+  const seenLower = new Set(termSeeds.map(s => s.toLowerCase()));
+  for (const seed of m.retrieval.methodologySeeds ?? []) {
+    const lower = seed.toLowerCase();
+    if (!seenLower.has(lower)) {
+      seenLower.add(lower);
+      termSeeds.push(seed);
+    }
+  }
 
   // Entity refs from context (typed allowlist only — no PII echo).
   const entityRefs: Array<{ kind: 'account' | 'opportunity' | 'persona'; id: string }> = [];
