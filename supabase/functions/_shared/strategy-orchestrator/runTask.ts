@@ -856,7 +856,104 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     throw wrapped;
   }
 
-  // ── Stage 4: Review (Lovable AI, playbook-grounded) ──────────
+  // ── Phase 3.5D: Artifact Gate Enforcement ────────────────────────
+  // Run the deterministic artifact gate AFTER generation. If it fails,
+  // attempt ONE regen. If regen also fails → HARD FAIL the run.
+  // No silent success. No degraded output. No partial credit.
+  const artifactManifest = toArtifactManifest(taskManifest);
+  const gateStartMs = Date.now();
+  let artifactGateTelemetry: ArtifactGateTelemetry = {
+    pass: false,
+    failed_dimensions: [],
+    regen_attempts: 0,
+    regen_success: false,
+    total_gate_latency_ms: 0,
+  };
+
+  const draftText = typeof draftOutput === "string" ? draftOutput : JSON.stringify(draftOutput);
+  let gateResult = runArtifactGate(draftText, artifactManifest);
+
+  if (!gateResult.pass) {
+    console.warn(JSON.stringify({
+      tag: "[phase35d:artifact_gate_failed]",
+      run_id: runId,
+      task_type: taskType,
+      failed_dimensions: gateResult.failed_dimensions,
+      diagnostics: gateResult.gates.flatMap(g => g.diagnostics).slice(0, 10),
+    }));
+
+    // ONE regen attempt — use the same authoring pipeline
+    artifactGateTelemetry.regen_attempts = 1;
+    await setProgress(supabase, runId, "artifact_gate_regen");
+    try {
+      const regenRaw = await callOpenAI([
+        { role: "system", content: `${overlayPrefix}${handler.buildDocumentSystemPrompt()}\n\nIMPORTANT: Your previous output failed quality gates. Fix these issues:\n${gateResult.gates.flatMap(g => g.diagnostics).join("\n")}` },
+        { role: "user", content: handler.buildDocumentUserPrompt(inputs, synthesis, library) },
+      ], { model: "gpt-5-mini", maxTokens: 16000 });
+      const regenParsed = safeParseJSON<any>(regenRaw);
+      if (regenParsed && typeof regenParsed === "object" && Array.isArray(regenParsed.sections)) {
+        const regenText = JSON.stringify(regenParsed);
+        const regenGate = runArtifactGate(regenText, artifactManifest);
+        if (regenGate.pass) {
+          draftOutput = regenParsed;
+          sectionCount = regenParsed.sections.length;
+          gateResult = regenGate;
+          artifactGateTelemetry.regen_success = true;
+          console.log(JSON.stringify({
+            tag: "[phase35d:artifact_gate_regen_success]",
+            run_id: runId,
+          }));
+        } else {
+          console.error(JSON.stringify({
+            tag: "[phase35d:artifact_gate_regen_also_failed]",
+            run_id: runId,
+            failed_dimensions: regenGate.failed_dimensions,
+          }));
+        }
+      }
+    } catch (regenErr) {
+      console.error(JSON.stringify({
+        tag: "[phase35d:artifact_gate_regen_error]",
+        run_id: runId,
+        error: String((regenErr as Error)?.message ?? regenErr).slice(0, 300),
+      }));
+    }
+
+    // If gate STILL fails after regen → HARD FAIL
+    if (!gateResult.pass) {
+      artifactGateTelemetry.pass = false;
+      artifactGateTelemetry.failed_dimensions = gateResult.failed_dimensions;
+      artifactGateTelemetry.total_gate_latency_ms = Date.now() - gateStartMs;
+
+      const failMsg = `[artifact_gate_failed] Dimensions: ${gateResult.failed_dimensions.join(", ")}`;
+      console.error(JSON.stringify({
+        tag: "[phase35d:artifact_gate_hard_fail]",
+        run_id: runId,
+        task_type: taskType,
+        telemetry: artifactGateTelemetry,
+      }));
+
+      await supabase
+        .from("task_runs")
+        .update({
+          status: "failed",
+          progress_step: "failed",
+          error: failMsg.slice(0, 1000),
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          meta: {
+            artifact_gate: artifactGateTelemetry,
+            artifact_gate_failed: true,
+          },
+        })
+        .eq("id", runId);
+      return;
+    }
+  }
+
+  artifactGateTelemetry.pass = gateResult.pass;
+  artifactGateTelemetry.failed_dimensions = gateResult.failed_dimensions;
+  artifactGateTelemetry.total_gate_latency_ms = Date.now() - gateStartMs;
   let reviewOutput: any = { strengths: [], redlines: [], library_coverage: { used: [], gaps: [] } };
   if (sectionCount > 0) {
     await setProgress(supabase, runId, "review");
