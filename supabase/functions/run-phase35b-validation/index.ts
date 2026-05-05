@@ -335,16 +335,42 @@ function scoreCompleteness(text: string, mustHave?: string[]): number {
       }
     } catch { /* */ }
   }
+
+  // Universal synonym map: concept → alternative phrases that prove presence
+  const CONCEPT_SYNONYMS: Record<string, string[]> = {
+    "decision thesis": ["decision", "thesis", "recommendation", "core argument", "central premise"],
+    "risk of delay": ["risk", "delay", "cost of inaction", "cost of waiting", "urgency", "time pressure", "window closing"],
+    "commercial stakes": ["commercial", "revenue impact", "financial impact", "business impact", "dollar", "pipeline", "quota"],
+    "recommended action": ["recommend", "action plan", "next move", "proposed approach", "path forward"],
+    "seller next move": ["seller", "next step", "follow-up", "call to action", "immediate action"],
+    "objection": ["objection", "friction", "pushback", "concern", "resistance", "blocker", "obstacle"],
+    "proof": ["proof", "evidence", "validation", "case study", "data point", "metric", "demonstrated"],
+    "current state": ["current state", "current situation", "today", "as-is", "status quo", "right now"],
+    "cost or risk": ["cost", "risk", "consequence", "impact", "threat", "exposure"],
+    "change hypothesis": ["change", "hypothesis", "shift", "transformation", "opportunity", "thesis"],
+    "open question": ["question", "ask", "discover", "explore", "probe", "inquire"],
+    "insight": ["insight", "observation", "finding", "perspective", "point of view"],
+    "commercial impact": ["commercial", "revenue", "financial", "business impact", "economic"],
+    "supporting evidence": ["evidence", "data", "proof", "validation", "based on", "according to"],
+    "discovery questions": ["question", "ask", "discover", "probe", "inquire", "what", "how", "why"],
+    "risks": ["risk", "threat", "concern", "vulnerability", "exposure", "danger"],
+    "next steps": ["next step", "action", "follow-up", "recommend", "plan"],
+    "gaps named": ["gap", "missing", "unknown", "unclear", "need to confirm", "validate"],
+  };
+
   let found = 0;
   for (const section of mustHave) {
     const sl = section.toLowerCase();
     const underscored = sl.replace(/\s+/g, "_");
-    const words = sl.split(/\s+/);
-    // Match if: exact text, exact key, underscored key, or all words present in text/keys
+    const words = sl.split(/\s+/).filter(w => w.length > 2); // skip short words like "of"
+    // Match if: exact text, exact key, underscored key, or all significant words present
     const exactMatch = lower.includes(sl) || jsonKeys.includes(underscored) || jsonKeys.includes(sl);
     const wordMatch = words.length > 1 && words.every(w => lower.includes(w));
     const keyWordMatch = words.length > 1 && jsonKeys.some(k => words.every(w => k.includes(w)));
-    if (exactMatch || wordMatch || keyWordMatch) found++;
+    // Synonym expansion: check if any synonym phrase appears
+    const synonyms = CONCEPT_SYNONYMS[sl];
+    const synonymMatch = synonyms ? synonyms.some(syn => lower.includes(syn)) : false;
+    if (exactMatch || wordMatch || keyWordMatch || synonymMatch) found++;
   }
   const missing = mustHave.length - found;
   if (missing === 0) return 5;
