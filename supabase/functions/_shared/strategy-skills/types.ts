@@ -47,6 +47,12 @@ export type PlannerScope =
 export interface SkillRetrievalPlan {
   scopes: ReadonlyArray<PlannerScope>;
   termBindings: ReadonlyArray<string>;
+  /**
+   * Static methodology terms always injected into retrieval alongside
+   * resolved bindings. These are NOT user inputs — they are the skill's
+   * inherent domain vocabulary (e.g. MEDDICC components for a MEDDICC review).
+   */
+  methodologySeeds?: ReadonlyArray<string>;
   filters?: Readonly<Record<string, string>>;
   minRelevantItems?: number;
 }

@@ -61,6 +61,12 @@ export interface SkillRetrievalPlan {
    * library content.
    */
   termBindings: ReadonlyArray<string>;
+  /**
+   * Static methodology terms always injected into retrieval alongside
+   * resolved bindings. These are the skill's inherent domain vocabulary
+   * (e.g. MEDDICC components for a MEDDICC review).
+   */
+  methodologySeeds?: ReadonlyArray<string>;
   /** Optional structural filters (knowledge_type, chapter, etc.). */
   filters?: Readonly<Record<string, string>>;
   /** Minimum number of relevant items before the skill should warn (not block) the user. */
