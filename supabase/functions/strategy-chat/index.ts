@@ -7274,6 +7274,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       user_id: userId,
       role: "assistant",
       message_type: "chat",
+      manifest_id: __chatManifestId,
       provider_used: result.provider,
       model_used: result.model,
       fallback_used: result.fallbackUsed,
