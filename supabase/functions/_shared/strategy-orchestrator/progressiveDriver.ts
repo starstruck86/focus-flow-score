@@ -432,6 +432,43 @@ export async function assembleAndFinalize(args: {
         telemetry: artifactGateTelemetry,
       }));
 
+      // Phase 3.6: Include planner + performance + anomaly + failure_patterns on hard fail
+      const failMeta = (runRow?.meta as any) || {};
+      const failPlannerCF: PlannerCarryForward | null = failMeta.planner_carry_forward ?? null;
+      const failTotalLatencyMs = failPlannerCF?.pipeline_start_ms ? Date.now() - failPlannerCF.pipeline_start_ms : 0;
+      const failAnomalyFlags: Record<string, boolean> = { artifact_failure: true };
+      if (artifactGateTelemetry.regen_attempts > 0) failAnomalyFlags.regen_triggered = true;
+      if (failPlannerCF && failPlannerCF.term_seeds_count < 3) failAnomalyFlags.weak_retrieval = true;
+      if (failTotalLatencyMs > 12_000) failAnomalyFlags.latency_violation = true;
+      const failurePatterns: Record<string, number> = {};
+      for (const dim of gateResult.failed_dimensions) {
+        failurePatterns[dim] = (failurePatterns[dim] ?? 0) + 1;
+      }
+      const hardFailMeta: Record<string, unknown> = {
+        ...failMeta,
+        artifact_gate: artifactGateTelemetry,
+        artifact_gate_failed: true,
+        anomaly_flags: failAnomalyFlags,
+        failure_patterns: failurePatterns,
+        performance: {
+          total_latency_ms: failTotalLatencyMs,
+          generation_latency_ms: failTotalLatencyMs,
+          gate_latency_ms: artifactGateTelemetry.total_gate_latency_ms,
+          regen_latency_ms: artifactGateTelemetry.total_gate_latency_ms,
+        },
+        ...(failPlannerCF ? {
+          planner: {
+            plan_hash: failPlannerCF.plan_hash,
+            term_seeds_count: failPlannerCF.term_seeds_count,
+            term_seeds: failPlannerCF.term_seeds_count,
+            methodology_seeds_injected: failPlannerCF.methodology_seeds_injected,
+            methodology_seeds: failPlannerCF.methodology_seeds,
+            scopes: failPlannerCF.scopes,
+            expanded_seeds: failPlannerCF.expanded_seeds,
+          },
+        } : {}),
+      };
+      delete hardFailMeta.planner_carry_forward;
       await supabase
         .from("task_runs")
         .update({
@@ -440,11 +477,7 @@ export async function assembleAndFinalize(args: {
           error: failMsg.slice(0, 1000),
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          meta: {
-            ...((runRow?.meta as any) || {}),
-            artifact_gate: artifactGateTelemetry,
-            artifact_gate_failed: true,
-          },
+          meta: hardFailMeta,
         })
         .eq("id", runId);
 
