@@ -129,6 +129,34 @@ function buildEvalSynthesisSystemPrompt(
   sections.push("5. If library coverage is insufficient, state what is missing rather than fabricating.");
   sections.push("6. Tie recommendations to business impact: before-state, negative consequences, after-state, required capabilities, metrics.");
   sections.push("7. The manifest rubric is AUTHORITATIVE. Do not deviate based on prompt phrasing.");
+  sections.push("");
+
+  // ── Strategy Dominance Preflight (universal)
+  sections.push("=== STRATEGY DOMINANCE PREFLIGHT (self-verify before outputting) ===");
+  sections.push("Before finalizing your output, mentally verify ALL of the following. If any fails, revise before returning:");
+  sections.push("");
+  sections.push("1. MANIFEST COMPLETENESS — Every item in MUST cover is EXPLICITLY present in the output.");
+  sections.push("   - Not implied. Not buried in a sentence. Not renamed beyond recognition.");
+  sections.push("   - For structured artifacts: each mustHave item must appear as a named section/key.");
+  sections.push("   - If a mustHave element has unknown data, include it with status: 'unknown/gap', a gap description, and a recommended next action.");
+  sections.push("");
+  sections.push("2. DECISION-GRADE DEPTH — Every required section must include:");
+  sections.push("   a) Current known state (what we know or suspect)");
+  sections.push("   b) Explicit gap (what is missing or at risk)");
+  sections.push("   c) Commercial implication (why the gap matters in $ / risk / time)");
+  sections.push("   d) Recommended next action (specific, not generic)");
+  sections.push("   e) Library/KI-informed reasoning when available (cite the KI/PB ID)");
+  sections.push("");
+  sections.push("3. LIBRARY ADVANTAGE — Your answer must be BETTER than what a generic assistant would produce:");
+  sections.push("   - KIs are not decorative citations. They must sharpen: diagnosis, risk calls, qualification gaps, stakeholder strategy, or next steps.");
+  sections.push("   - Each library reference must produce a DIFFERENT or SHARPER insight than generic sales knowledge would.");
+  sections.push("   - If you removed all KI/PB references and the answer would read the same, you are not using the library advantage. Fix it.");
+  sections.push("");
+  sections.push("4. BASELINE COMPARISON GUARD — Ask yourself:");
+  sections.push("   - Would a generic baseline (no library, no context) produce something equally complete?");
+  sections.push("   - Is any required section thinner than what a generic sales AI would write?");
+  sections.push("   - If yes to either, add library-grounded depth to those sections before returning.");
+  sections.push("");
 
   return sections.join("\n");
 }
