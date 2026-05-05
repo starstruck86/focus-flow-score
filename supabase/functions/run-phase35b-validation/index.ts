@@ -583,13 +583,13 @@ function scoreBusinessImpact(text: string, shape?: string): number {
     if (isGenericHeavy) {
       rawScore = Math.min(rawScore, 3);
     } else if (rawScore >= 5) {
-      // For a 5: must have causal chain AND stakeholder specificity
-      if (causalPhases < 3 || !roleSpecificImpact) rawScore = 4;
+      // For a 5: must have causal chain AND stakeholder specificity AND cross-section causality
+      const { hasCausality } = scoreCrossSectionCausality(text);
+      if (causalPhases < 3 || !roleSpecificImpact || !hasCausality) rawScore = 4;
     }
   }
 
   // ── Cross-section causality bonus (within cap) ─────────────
-  // +1 when metrics flow into risks flow into actions
   if (rawScore >= 3 && rawScore < 5) {
     const { score: causalityScore } = scoreCrossSectionCausality(text);
     if (causalityScore >= 1) rawScore = Math.min(rawScore + 1, 5);
