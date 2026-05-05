@@ -6578,6 +6578,7 @@ export type Database = {
           fallback_used: boolean | null
           id: string
           latency_ms: number | null
+          manifest_id: string | null
           message_type: string
           model_used: string | null
           provider_used: string | null
@@ -6592,6 +6593,7 @@ export type Database = {
           fallback_used?: boolean | null
           id?: string
           latency_ms?: number | null
+          manifest_id?: string | null
           message_type?: string
           model_used?: string | null
           provider_used?: string | null
@@ -6606,6 +6608,7 @@ export type Database = {
           fallback_used?: boolean | null
           id?: string
           latency_ms?: number | null
+          manifest_id?: string | null
           message_type?: string
           model_used?: string | null
           provider_used?: string | null
@@ -6685,6 +6688,7 @@ export type Database = {
           linked_account_id: string | null
           linked_opportunity_id: string | null
           linked_territory_id: string | null
+          manifest_id: string | null
           model_used: string | null
           output_type: string
           provider_used: string | null
@@ -6705,6 +6709,7 @@ export type Database = {
           linked_account_id?: string | null
           linked_opportunity_id?: string | null
           linked_territory_id?: string | null
+          manifest_id?: string | null
           model_used?: string | null
           output_type?: string
           provider_used?: string | null
@@ -6725,6 +6730,7 @@ export type Database = {
           linked_account_id?: string | null
           linked_opportunity_id?: string | null
           linked_territory_id?: string | null
+          manifest_id?: string | null
           model_used?: string | null
           output_type?: string
           provider_used?: string | null
