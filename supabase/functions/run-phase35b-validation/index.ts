@@ -340,11 +340,13 @@ function scoreStructure(text: string, shape: string, forbid?: string[], mustHave
 }
 
 function scoreEvidence(text: string): number {
-  const kiRefs = countMatches(text, /\b(?:KI|Knowledge Item|playbook|framework|methodology|MEDDICC|SPIN|Challenger|Sandler)\b/gi);
-  const citations = countMatches(text, /\[(?:source|ref|KI|PB)[^\]]*\]/gi);
-  const attributions = countMatches(text, /\b(?:according to|based on|per the|from the|as outlined in|as defined in)\b/gi);
+  const genericMethodRefs = countMatches(text, /\b(?:MEDDICC|SPIN|Challenger|Sandler|methodology|framework)\b/gi);
+  const kiIdCitations = countMatches(text, /\[(?:KI|PB):[a-f0-9]{6,}\]/gi) + countMatches(text, /\b(?:KI|PB)-[a-f0-9]{6,}\b/gi);
+  const bracketCitations = countMatches(text, /\[(?:source|ref|KI|PB)[^\]]*\]/gi);
+  const attributions = countMatches(text, /\b(?:according to|based on|per the|from the|as outlined in|as defined in|grounded in|informed by|drawn from)\b/gi);
   const quotedEvidence = countMatches(text, /"[^"]{10,}"/g);
-  const total = kiRefs * 0.5 + citations * 2 + attributions + quotedEvidence;
+  const kiExplicit = countMatches(text, /\bKnowledge Item\b/gi);
+  const total = kiIdCitations * 3 + bracketCitations * 2 + kiExplicit * 1.5 + attributions + quotedEvidence + genericMethodRefs * 0.3;
   if (total >= 6) return 5;
   if (total >= 4) return 4;
   if (total >= 2) return 3;
