@@ -64,7 +64,7 @@ function checkNoBypassPatterns(): string[] {
 
 // ── Temp endpoints ───────────────────────────────────────────
 // Built dynamically to avoid tripping source-scan security tests
-const TEMP_ENDPOINT_SUFFIXES = ["enforcement-proof", "telemetry-proof", "telemetry-canary"];
+const TEMP_ENDPOINT_SUFFIXES = ["enforcement-proof", "telemetry-proof", "telemetry-canary", "production-evidence"];
 const TEMP_ENDPOINTS = TEMP_ENDPOINT_SUFFIXES.map(s => `run-${s}`);
 
 function checkNoTempEndpoints(): string[] {
