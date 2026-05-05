@@ -77,7 +77,7 @@ describe("Phase 3.6 — Performance", () => {
         label: "Test",
         description: "Test manifest",
         behaviorIntent: "discovery_prep" as const,
-        workspace: "artifacts",
+        workspace: "artifacts" as const,
         depth: "artifact" as const,
         sourceMode: "library_required" as const,
         retrieval: {
