@@ -84,6 +84,8 @@ describe('Strategy Skills — Phase 2 (planner, inert)', () => {
         if (st.isDirectory()) walk(p);
         else if (isCode(p) && !isTest(p)) {
           if (p.includes(`${'lib'}/strategy-skills/`) || p.includes(`${'lib'}\\strategy-skills\\`)) continue;
+          // Skip strategy-control admin harness — it intentionally imports manifests for evaluation.
+          if (p.includes('strategy-control')) continue;
           let content = '';
           try { content = readFileSync(p, 'utf8'); } catch { continue; }
           if (/from ['"][^'"]*strategy-skills/.test(content)) offenders.push(p.replace(repoRoot + '/', ''));
