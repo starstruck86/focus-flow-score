@@ -669,9 +669,8 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
               batches: rescue.batchOutcomes,
             },
           };
-          try {
-            await supabase.from("task_runs").update({ meta: { authoring_fallback: fallbackMeta } }).eq("id", runId);
-          } catch { /* swallow */ }
+          // Partial meta write removed — outer catch at stage-3:end persists
+          // full Phase 3.6 telemetry including authoring_fallback.
           throw new Error(`bounded_batch_first: 0/${rescue.draft.sections.length} sections authored`);
         }
         // Done — skip legacy monolithic fallback below.
@@ -781,13 +780,8 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
               batches: rescue.batchOutcomes,
             },
           };
-          // Best-effort persist before throwing
-          try {
-            await supabase
-              .from("task_runs")
-              .update({ meta: { authoring_fallback: fallbackMeta } })
-              .eq("id", runId);
-          } catch { /* swallow */ }
+          // Partial meta write removed — outer catch at stage-3:end persists
+          // full Phase 3.6 telemetry including authoring_fallback.
           throw new Error(`primary(claude): ${claudeMsg.slice(0, 120)} | fallback(${FALLBACK_MODEL}): ${fbMsg.slice(0, 150)} | section_batch_rescue: 0/${rescue.draft.sections.length} sections`);
         }
       }
@@ -862,25 +856,33 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     authoringFailMeta.authoring_failure = true;
     if (fallbackMeta) authoringFailMeta.authoring_fallback = fallbackMeta;
 
-    const failureWrite = supabase
-      .from("task_runs")
-      .update({
-        status: "failed",
-        progress_step: "failed",
-        error: prefixed.slice(0, 1000),
-        completed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        meta: authoringFailMeta,
-      })
-      .eq("id", runId);
+    // Phase 3.6 — single authoritative failure write with full telemetry.
+    // IMPORTANT: We create the promise via an immediately-invoked async fn
+    // so that EdgeRuntime.waitUntil and the local await share the SAME
+    // settled promise — avoids the PostgREST builder thenable being
+    // consumed twice (once by waitUntil, once by await), which previously
+    // caused the write to silently not execute.
+    const failurePromise = (async () => {
+      return await supabase
+        .from("task_runs")
+        .update({
+          status: "failed",
+          progress_step: "failed",
+          error: prefixed.slice(0, 1000),
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          meta: authoringFailMeta,
+        })
+        .eq("id", runId);
+    })();
 
     // @ts-ignore — EdgeRuntime is provided by the platform.
     if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
       // @ts-ignore
-      EdgeRuntime.waitUntil(failureWrite);
+      EdgeRuntime.waitUntil(failurePromise);
     }
     try {
-      await failureWrite;
+      await failurePromise;
     } catch (writeErr) {
       console.error(`[stage-3] failed to mark run failed:`, (writeErr as Error).message);
     }
