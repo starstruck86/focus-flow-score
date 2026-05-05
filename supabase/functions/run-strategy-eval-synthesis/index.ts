@@ -949,7 +949,32 @@ Deno.serve(async (req) => {
     const _CAUSAL = /\b(?:because|therefore|resulting|which means|leading to|this (?:means|creates|drives|shows)|consequently|as a result|the data shows|evidence suggests|according to|proves|demonstrates|confirms|validates|supporting)\b/i;
     function _checkEvidenceDiscipline(text: string) {
       const diags: string[] = [];
-      const sents = text.split(/(?<=[.!?])\s+/).filter((s: string) => s.trim().length > 0);
+      // For JSON artifacts, extract string values to check citations in prose context
+      let textToCheck = text;
+      const trimmed = text.trim();
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (typeof parsed === "object" && parsed !== null) {
+            const vals = Object.values(parsed as Record<string, unknown>)
+              .filter((v): v is string => typeof v === "string");
+            textToCheck = vals.join("\n\n");
+          }
+        } catch { /* not JSON, check raw */ }
+      }
+      // Also try extracting from code fences
+      const fenceMatch = text.match(/```(?:json|structured_artifact)\s*([\s\S]*?)```/);
+      if (fenceMatch) {
+        try {
+          const parsed = JSON.parse(fenceMatch[1]);
+          if (typeof parsed === "object" && parsed !== null) {
+            const vals = Object.values(parsed as Record<string, unknown>)
+              .filter((v): v is string => typeof v === "string");
+            textToCheck = vals.join("\n\n");
+          }
+        } catch { /* use raw */ }
+      }
+      const sents = textToCheck.split(/(?<=[.!?])\s+/).filter((s: string) => s.trim().length > 0);
       for (let i = 0; i < sents.length; i++) { const c = (sents[i].match(_CITE) || []).length; if (c > 3) diags.push(`Sentence ${i+1} has ${c} citations (max 3)`); }
       const citeSents: number[] = [];
       for (let i = 0; i < sents.length; i++) { if (_CITE.test(sents[i])) { _CITE.lastIndex = 0; citeSents.push(i); } }
