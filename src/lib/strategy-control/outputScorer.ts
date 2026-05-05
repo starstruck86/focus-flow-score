@@ -459,19 +459,17 @@ function scoreEvidence(text: string): number {
   // Actual library citations with IDs — only Strategy can produce these
   const kiIdCitations = countMatches(text, /\[KI:[a-f0-9]{6,}\]/gi) + countMatches(text, /\bKI-[a-f0-9]{6,}\b/gi);
   const pbIdCitations = countMatches(text, /\[PB:[a-f0-9]{6,}\]/gi) + countMatches(text, /\bPB-[a-f0-9]{6,}\b/gi);
-  // Formal citation brackets (broader)
+  // Formal citation brackets (not KI/PB — those are counted above)
   const bracketCitations = countMatches(text, /\[(?:source|ref)[^\]]*\]/gi);
   // Attribution language
   const attributions = countMatches(text, /\b(?:according to|based on|per the|from the|as outlined in|as defined in|grounded in|informed by|drawn from)\b/gi);
-  // Quoted evidence (substantial quotes)
-  const quotedEvidence = countMatches(text, /"[^"]{15,}"/g);
-  // Knowledge Item explicit mentions (not just "methodology" or framework name)
+  // Knowledge Item explicit mentions
   const kiExplicit = countMatches(text, /\bKnowledge Item\b/gi);
 
   // Strong signals: actual ID-based citations (unique to Strategy)
   const strongSignal = (kiIdCitations + pbIdCitations) * 3 + bracketCitations * 2;
-  // Moderate signals: attribution + quoted evidence + KI mentions
-  const moderateSignal = kiExplicit * 1.5 + attributions * 0.75 + quotedEvidence * 0.5;
+  // Moderate signals
+  const moderateSignal = kiExplicit * 1.5 + attributions * 0.75;
 
   const total = strongSignal + moderateSignal;
 
