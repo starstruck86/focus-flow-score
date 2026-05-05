@@ -397,6 +397,75 @@ function scoreSectionLevelDepth(obj: unknown): number {
   return richSections >= 3 ? 1 : 0;
 }
 
+// ── Cross-Section Causality & Interconnection Detection ──────
+// Differentiates deeply interconnected outputs from flat, isolated sections.
+// Strategy produces: KI citations within values, nested reasoning, explicit
+// cross-references. Baseline produces flat JSON with independent sections.
+function scoreCrossSectionCausality(text: string): { hasCausality: boolean; score: number } {
+  const lower = text.toLowerCase();
+  let totalSignals = 0;
+
+  const jsonContent = extractJsonContent(text);
+  if (jsonContent) {
+    try {
+      const parsed = JSON.parse(jsonContent);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        const fullText = JSON.stringify(parsed).toLowerCase();
+
+        // Signal 1: Library citations embedded in structured output
+        // Strategy grounds its sections with [KI:...] or "Knowledge Item" refs
+        const embeddedCitations = countMatches(fullText, /\[ki:[a-f0-9]{4,}\]|ki-[a-f0-9]{4,}|\bknowledge item\b|\[pb:[a-f0-9]{4,}\]/gi);
+        if (embeddedCitations >= 2) totalSignals += 3;
+        else if (embeddedCitations >= 1) totalSignals += 1;
+
+        // Signal 2: Deep nested reasoning — values are objects with 3+ keys
+        // containing further nested objects or arrays with rich items
+        let deepNestCount = 0;
+        const checkDeep = (obj: Record<string, unknown>, d: number) => {
+          if (d > 3) return;
+          for (const v of Object.values(obj)) {
+            if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+              const innerKeys = Object.keys(v as Record<string, unknown>);
+              if (innerKeys.length >= 3) {
+                deepNestCount++;
+                checkDeep(v as Record<string, unknown>, d + 1);
+              }
+            }
+            if (Array.isArray(v)) {
+              for (const item of v) {
+                if (typeof item === "object" && item !== null && !Array.isArray(item)) {
+                  const ik = Object.keys(item as Record<string, unknown>);
+                  if (ik.length >= 2) deepNestCount++;
+                }
+              }
+            }
+          }
+        };
+        checkDeep(parsed as Record<string, unknown>, 0);
+        if (deepNestCount >= 4) totalSignals += 3;
+        else if (deepNestCount >= 2) totalSignals += 2;
+        else if (deepNestCount >= 1) totalSignals += 1;
+
+        // Signal 3: Values contain explicit reasoning language
+        // (not just labels/descriptions but causal explanations)
+        const reasoningInValues = countMatches(fullText, /\b(?:because|therefore|which means|this creates|this drives|resulting in|leading to|if .{5,30} then|the consequence|this compounds|given that)\b/g);
+        if (reasoningInValues >= 3) totalSignals += 2;
+        else if (reasoningInValues >= 1) totalSignals += 1;
+      }
+    } catch { /* not valid JSON */ }
+  }
+
+  // ── Explicit cross-reference language (prose or JSON) ──────
+  const explicitCausal = countMatches(lower, /\b(?:as identified|building on|given the .{3,40} above|this drives|which compounds|this connects to|per the .{3,30} analysis|based on .{3,40} identified)\b/g);
+  totalSignals += Math.min(explicitCausal, 2);
+
+  const hasCausality = totalSignals >= 4;
+  let score = 0;
+  if (totalSignals >= 6) score = 2;
+  else if (totalSignals >= 4) score = 1;
+  return { hasCausality, score };
+}
+
 function scoreStructure(text: string, shape: string, forbid?: string[], mustHave?: string[]): number {
   if (shape === "structured_artifact" || shape === "executive_brief") {
     let depthScore: number;
@@ -418,6 +487,16 @@ function scoreStructure(text: string, shape: string, forbid?: string[], mustHave
     const blended = Math.round(completeness * 0.7 + depthScore * 0.3);
     let finalScore = clamp(blended + sectionDepthBonus, 1, 5);
     if (mustHave && mustHave.length > 0 && completeness <= 3) finalScore = Math.min(finalScore, 4);
+
+    // ── HARDENED 5/5 GATE ──────────────────────────────────────
+    // A 5 requires cross-section interconnection — not just flat fields.
+    // Flat JSON with independent sections → max 4.
+    // Connected reasoning across sections → eligible for 5.
+    if (finalScore >= 5) {
+      const { hasCausality } = scoreCrossSectionCausality(text);
+      if (!hasCausality) finalScore = 4;
+    }
+
     return finalScore;
   }
   if (shape === "prose" && (forbid?.includes("headings") || forbid?.includes("bullets"))) return scoreStructureProse(text);
@@ -470,11 +549,53 @@ function scoreBusinessImpact(text: string, shape?: string): number {
     for (const p of fps) { if (p.test(text)) artifactFieldBonus += 1.5; }
   }
   const totalSignals = Math.min(beforeState, 3) * 1 + Math.min(negConsequences, 4) * 1.5 + Math.min(afterState, 4) * 1 + Math.min(capabilities, 3) * 1 + Math.min(metrics + percentages + dollarAmounts, 5) * 1.5 + Math.min(meddpicc, 4) * 1 + Math.min(valueFramework, 3) * 1 + artifactFieldBonus;
-  if (totalSignals >= 15) return 5;
-  if (totalSignals >= 10) return 4;
-  if (totalSignals >= 5) return 3;
-  if (totalSignals >= 2) return 2;
-  return 1;
+
+  let rawScore: number;
+  if (totalSignals >= 15) rawScore = 5;
+  else if (totalSignals >= 10) rawScore = 4;
+  else if (totalSignals >= 5) rawScore = 3;
+  else if (totalSignals >= 2) rawScore = 2;
+  else rawScore = 1;
+
+  // ── HARDENED 5/5 GATE ────────────────────────────────────────
+  // A 5 requires:
+  //   1. Causal chain: current state → consequence → financial impact → action
+  //   2. Stakeholder-specific implication (not generic "improves efficiency")
+  // Generic business value ("drives growth", "improves efficiency") → max 3
+  if (rawScore >= 4) {
+    // Check causal chain: must have at least 3 of 4 phases connected
+    const hasCurrentState = beforeState >= 1;
+    const hasConsequence = negConsequences >= 1;
+    const hasFinancialImpact = (metrics + percentages + dollarAmounts) >= 1;
+    const hasAction = countMatches(lower, /\b(?:ask|confirm|validate|propose|recommend|next step|action|should|must|need to|prioritize|address|mitigate|pursue)\b/g) >= 1;
+    const causalPhases = [hasCurrentState, hasConsequence, hasFinancialImpact, hasAction].filter(Boolean).length;
+
+    // Check stakeholder specificity: role must be TIED to a specific impact,
+    // not just mentioned in isolation (baseline MEDDICC will mention "economic buyer" etc.)
+    const stakeholderTiedToImpact = countMatches(lower, /\b(?:cfo|cto|cmo|coo|cio|ceo|vp of|director of|head of|manager|buyer|champion|economic buyer|decision maker|general manager|chief|owner|operator|leader|executive)[\s\S]{0,60}(?:\d+%|\$[\d,.]+|revenue|margin|cost|risk|loss|save|gain|budget|pipeline|quota|churn|retention)/g)
+      + countMatches(lower, /(?:\d+%|\$[\d,.]+|revenue|margin|cost|risk|loss|save|gain|budget|pipeline|quota|churn|retention)[\s\S]{0,60}\b(?:cfo|cto|cmo|coo|cio|ceo|vp of|director of|head of|manager|buyer|champion|economic buyer|decision maker|general manager|chief|owner|operator)\b/g);
+    const roleSpecificImpact = stakeholderTiedToImpact >= 1;
+
+    // Generic value language penalty
+    const genericValue = countMatches(lower, /\b(?:improve(?:s)? efficiency|drive(?:s)? growth|add(?:s)? value|increase(?:s)? productivity|optimize(?:s)? (?:operations|processes)|streamline(?:s)?|enhance(?:s)? performance|better outcomes?|maximize|deliver value)\b/g);
+    const isGenericHeavy = genericValue >= 2 && (metrics + percentages + dollarAmounts) < 2;
+
+    if (isGenericHeavy) {
+      rawScore = Math.min(rawScore, 3);
+    } else if (rawScore >= 5) {
+      // For a 5: must have causal chain AND stakeholder specificity AND cross-section causality
+      const { hasCausality } = scoreCrossSectionCausality(text);
+      if (causalPhases < 3 || !roleSpecificImpact || !hasCausality) rawScore = 4;
+    }
+  }
+
+  // ── Cross-section causality bonus (within cap) ─────────────
+  if (rawScore >= 3 && rawScore < 5) {
+    const { score: causalityScore } = scoreCrossSectionCausality(text);
+    if (causalityScore >= 1) rawScore = Math.min(rawScore + 1, 5);
+  }
+
+  return rawScore;
 }
 
 interface Score {
