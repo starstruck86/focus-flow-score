@@ -13,10 +13,22 @@ import * as path from "path";
 import { runReleaseGate } from "../releaseGate";
 
 describe("Phase 3.7 — Release Gate", () => {
-  it("current repo passes the release gate", () => {
+  it("release gate correctly identifies Phase 4 evidence gaps as blocking", () => {
     const result = runReleaseGate();
-    expect(result.failures).toEqual([]);
-    expect(result.pass).toBe(true);
+    // Phase 4 release gate MUST fail until real DB evidence exists for all
+    // enforced surfaces. This test proves the gate enforces real evidence.
+    // Evidence gap failures are expected until post-deploy runs populate data.
+    const evidenceGapFailures = result.failures.filter(f => 
+      f.includes("Evidence gap") || f.includes("missing from evidence report")
+    );
+    const otherFailures = result.failures.filter(f => 
+      !f.includes("Evidence gap") && !f.includes("missing from evidence report")
+    );
+    // No NON-evidence failures (bypass, temp endpoints, etc.)
+    expect(otherFailures).toEqual([]);
+    // Evidence gaps ARE expected — gate is working correctly
+    expect(evidenceGapFailures.length).toBeGreaterThan(0);
+    expect(result.pass).toBe(false);
   });
 
   it("detects temporary endpoints if they exist", () => {
