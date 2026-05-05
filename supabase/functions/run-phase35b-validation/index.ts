@@ -331,7 +331,7 @@ function scoreStructure(text: string, shape: string, forbid?: string[], mustHave
     // 70% completeness, 30% depth
     const blended = Math.round(completeness * 0.7 + depthScore * 0.3);
     let finalScore = clamp(blended + sectionDepthBonus, 1, 5);
-    if (mustHave && mustHave.length > 0 && completeness < 5) finalScore = Math.min(finalScore, 4);
+    if (mustHave && mustHave.length > 0 && completeness <= 3) finalScore = Math.min(finalScore, 4);
     return finalScore;
   }
   if (shape === "prose" && (forbid?.includes("headings") || forbid?.includes("bullets"))) return scoreStructureProse(text);
