@@ -92,7 +92,9 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { user_id, task_type, account_name, wait_for_completion } = body;
+    const { task_type, account_name, wait_for_completion } = body;
+    // Owner session can omit user_id — defaults to their own
+    const user_id = body.user_id || ownerUserId;
 
     if (!user_id) return jsonResponse({ error: "user_id required" }, 400);
     if (!task_type || !VALID_TASK_TYPES.includes(task_type)) {
