@@ -10,7 +10,8 @@
  */
 import { describe, it, expect } from "vitest";
 import { runArtifactGate, type ArtifactManifest } from "../artifactGate";
-import { buildPlan, type ResolvedSkill } from "@/lib/strategy-skills/planner";
+import { buildPlan } from "@/lib/strategy-skills/planner";
+import type { ResolvedSkill } from "@/lib/strategy-skills/resolver";
 import * as fs from "fs";
 import * as path from "path";
 
