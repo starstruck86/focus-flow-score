@@ -174,36 +174,62 @@ function scoreStructureProse(text: string): number {
   const words = text.split(/\s+/).length;
   if (words < 10) return 1;
 
-  // ── Business Spine Detection (dominant signal) ──────────────
+  // ── Business Spine Detection with ORDERING ─────────────────
   // A well-structured prose output follows: Context → Consequence → Insight → Action
-  const spinePhases = [
-    // Phase 1: Current state / context / situation
-    /\b(?:current(?:ly)?|today|right now|existing|as of|at present|status quo|their (?:team|org|pipeline|process)|the (?:problem|challenge|situation|reality)|facing|experiencing|struggling|dealing with)\b/i,
-    // Phase 2: Consequence / risk / cost / pain
-    /\b(?:cost|risk|consequence|impact|result(?:ing)?|leading to|which (?:means|creates|causes|drives)|this (?:means|creates|causes|drives|leaves)|without|if (?:not|they don't)|losing|missed|gap|erosion|pressure|threat|exposure|vulnerability|at stake|delay)\b/i,
-    // Phase 3: Insight / POV / thesis / change vector
-    /\b(?:insight|the (?:real|core|key|critical|fundamental) (?:issue|question|shift|opportunity)|what (?:this means|matters|changes)|the shift|the opportunity|our (?:view|position|thesis|pov|perspective)|the way forward|reframe|rethink|reconsider|the unlock|differentiat)\b/i,
-    // Phase 4: Action / question / seller move / next step
-    /\b(?:ask|propose|confirm|validate|test|open with|frame|position|question|next step|action|recommend|should|must|need to|start by|begin with|prioritize|lead with|anchor on)\b/i,
+  // We check both presence AND correct sequential ordering.
+  const spinePhases: Array<{ label: string; pattern: RegExp }> = [
+    { label: "context", pattern: /\b(?:current(?:ly)?|today|right now|existing|as of|at present|status quo|their (?:team|org|pipeline|process)|the (?:problem|challenge|situation|reality)|facing|experiencing|struggling|dealing with)\b/i },
+    { label: "consequence", pattern: /\b(?:cost of|risk of|consequence|negative impact|result(?:ing) in|which (?:means|creates|causes|drives)|this (?:means|creates|causes|drives|leaves)|without this|if (?:not|they don't)|losing|missed|erosion|pressure|threat|exposure|vulnerability|at stake|delayed?)\b/i },
+    { label: "insight", pattern: /\b(?:the (?:real|core|key|critical|fundamental) (?:issue|question|shift|opportunity)|what (?:this means|matters|changes)|the shift|the opportunity|our (?:view|position|thesis|pov|perspective)|the way forward|reframe|rethink|reconsider|the unlock|differentiat|insight is|the question isn't)\b/i },
+    { label: "action", pattern: /\b(?:ask (?:them|their|the|about|whether|how|what|why)|propose|confirm whether|validate|test whether|open (?:with|by)|frame (?:the|this|around)|position|next step|start by|begin with|lead with|anchor on|the question to pose)\b/i },
   ];
+
+  // Find first occurrence position for each phase
+  const phasePositions: number[] = [];
   let spineHits = 0;
   for (const phase of spinePhases) {
-    if (phase.test(lower)) spineHits++;
+    const match = lower.search(phase.pattern);
+    phasePositions.push(match);
+    if (match >= 0) spineHits++;
   }
-  // Spine progression: reward having all 4 phases present
-  let spineScore = 0;
-  if (spineHits >= 4) spineScore = 1.0;
-  else if (spineHits >= 3) spineScore = 0.75;
-  else if (spineHits >= 2) spineScore = 0.5;
-  else if (spineHits >= 1) spineScore = 0.25;
 
-  // ── Account / Persona Specificity in Progression ───────────
-  // Generic prose that could apply to any company should be penalized
+  // Check ordering: each found phase should appear after the previous one
+  let orderedCount = 0;
+  let lastPos = -1;
+  for (const pos of phasePositions) {
+    if (pos > lastPos && pos >= 0) {
+      orderedCount++;
+      lastPos = pos;
+    }
+  }
+
+  // Spine score: presence + ordering bonus
+  let spineScore = 0;
+  if (spineHits >= 4 && orderedCount >= 3) spineScore = 1.0;       // Full spine, mostly ordered
+  else if (spineHits >= 3 && orderedCount >= 2) spineScore = 0.75;  // Strong spine
+  else if (spineHits >= 3) spineScore = 0.6;                         // Present but disordered
+  else if (spineHits >= 2) spineScore = 0.4;
+  else if (spineHits >= 1) spineScore = 0.2;
+
+  // ── Concrete Entity Density (structural differentiator) ────
+  // Prose with named entities, numbers, and specific terms has
+  // superior structure because it's grounded, not abstract.
+  const numbers = countMatches(text, /\b\d[\d,.]*%?\b/g);
+  const properNouns = countMatches(text, /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g);
+  const quotedTerms = countMatches(text, /"[^"]{2,}"/g);
+  const concreteSignals = numbers + properNouns * 0.5 + quotedTerms;
+  const concretePer100 = (concreteSignals / words) * 100;
+  let concreteBonus = 0;
+  if (concretePer100 > 3) concreteBonus = 0.5;
+  else if (concretePer100 > 1.5) concreteBonus = 0.25;
+
+  // ── Generic Prose Penalty ──────────────────────────────────
   const GENERIC_PROSE = [/\bleverage\b/gi, /\bbest practices?\b/gi, /\bsynerg/gi, /\bholistic\b/gi, /\bscalable solution/gi, /\binnovative approach/gi, /\bworld[- ]class\b/gi, /\bin today'?s (?:landscape|environment|market)\b/gi, /\bstreamline (?:operations|processes)\b/gi, /\bdrive (?:growth|value|results)\b/gi, /\bkey stakeholders?\b/gi, /\bunlock (?:potential|value|growth)\b/gi];
   const genericHits = GENERIC_PROSE.reduce((n, p) => n + countMatches(text, p), 0);
   let genericPenalty = 0;
-  if (genericHits >= 4) genericPenalty = 0.4;
-  else if (genericHits >= 2) genericPenalty = 0.2;
+  if (genericHits >= 4) genericPenalty = 0.5;
+  else if (genericHits >= 2) genericPenalty = 0.25;
+  else if (genericHits >= 1) genericPenalty = 0.1;
 
   // ── Sentence Density (light signal) ────────────────────────
   const sentences = countMatches(text, /[.!?]\s/g) + 1;
@@ -212,24 +238,25 @@ function scoreStructureProse(text: string): number {
   if (avgWordsPerSentence >= 10 && avgWordsPerSentence <= 30) density = 1;
   else if (avgWordsPerSentence >= 8 && avgWordsPerSentence <= 35) density = 0.5;
 
-  // ── Transition Flow (minor signal — cannot dominate) ───────
+  // ── Transition Flow (minor, capped) ────────────────────────
   const transitions = countMatches(text, /\b(?:however|therefore|specifically|because|given that|as a result|in contrast|for example|notably|critically|importantly|furthermore|meanwhile|this means|in other words|by contrast|which means|leading to|ensuring|ultimately|although|yet|thus|hence|accordingly|consequently)\b/gi);
   let flow = 0;
   if (transitions >= 3) flow = 1;
   else if (transitions >= 1) flow = 0.5;
 
-  // ── Weighted Sum: Spine dominates ──────────────────────────
-  // Spine: 2.0 weight (dominant)
-  // Density: 0.8 weight (readability)
-  // Flow: 0.4 weight (capped — transitions alone cannot win)
-  // Generic penalty subtracted
-  const rawSum = spineScore * 2.0 + density * 0.8 + flow * 0.4 - genericPenalty;
+  // ── Weighted Sum ───────────────────────────────────────────
+  // Spine (with ordering): 2.0 (dominant)
+  // Concrete entities:     0.6 (structural grounding)
+  // Density:               0.6 (readability)
+  // Flow:                  0.3 (minor — cannot dominate)
+  // Generic penalty:       subtracted
+  const rawSum = spineScore * 2.0 + concreteBonus * 0.6 + density * 0.6 + flow * 0.3 - genericPenalty;
 
   let score: number;
-  if (rawSum >= 2.8) score = 5;
-  else if (rawSum >= 2.2) score = 4;
-  else if (rawSum >= 1.5) score = 3;
-  else if (rawSum >= 0.8) score = 2;
+  if (rawSum >= 2.6) score = 5;
+  else if (rawSum >= 2.0) score = 4;
+  else if (rawSum >= 1.4) score = 3;
+  else if (rawSum >= 0.7) score = 2;
   else score = 1;
   return score;
 }
