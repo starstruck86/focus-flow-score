@@ -222,7 +222,7 @@ Deno.serve(async (req) => {
       envelope: skillPayload,
       ctx: { thread: body.threadId ? { threadId: body.threadId } : undefined },
       supabase,
-      userId: user.id,
+      userId,
     });
 
     // If gate refused, return refusal with envelope
