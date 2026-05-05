@@ -11,6 +11,11 @@ export const meddiccReviewManifest: SkillManifest = {
   retrieval: {
     scopes: ['knowledge_items', 'playbooks', 'standards'],
     termBindings: ['${inputs.account}', '${inputs.opportunity}', '${inputs.stage}', '${inputs.persona}'],
+    methodologySeeds: [
+      'MEDDICC', 'metrics', 'economic buyer', 'decision criteria',
+      'decision process', 'identified pain', 'champion', 'competition',
+      'qualification', 'deal review',
+    ],
     minRelevantItems: 3,
   },
   output: {

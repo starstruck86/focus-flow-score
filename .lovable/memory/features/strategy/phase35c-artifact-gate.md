@@ -44,7 +44,14 @@ Hard stop between generation and delivery. ANY dimension failure → artifact re
 | commercial-insight | ✅ | regen succeeded | Strategy |
 | discovery-prep | ✅ | no regen needed | Strategy |
 | executive-brief | ✅ | regen succeeded | Strategy |
-| meddicc-review | N/A (422 library gate) | N/A | N/A |
+| meddicc-review | Previously 422 (library gate) | N/A | Fixed: methodologySeeds added |
+
+### MEDDICC 422 Fix (Phase 3.5C cleanup)
+- Root cause: MEDDICC manifest only had user-input termBindings (account, opp, stage, persona). No methodology terms were injected into retrieval scopes, so retrieval returned 0 hits → library_required gate refused.
+- Fix: Added `methodologySeeds` to `SkillRetrievalPlan` type. MEDDICC manifest now injects static seeds: MEDDICC, metrics, economic buyer, decision criteria, decision process, identified pain, champion, competition, qualification, deal review.
+- Planner injects methodologySeeds alongside resolved bindings (deduplicated).
+- Sales lexicon expanded with MEDDICC methodology entries.
+- No gate thresholds changed. No scorer changed. No bypasses.
 
 ### Does NOT change
 - 3.5B scorer hardening (unchanged)

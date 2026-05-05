@@ -76,6 +76,14 @@ export const SALES_LEXICON: ReadonlyArray<LexiconEntry> = Object.freeze([
   { trigger: "discovery",     expansions: ["pain", "POV", "qualification"],                     rule: "discovery→pain" },
   { trigger: "qualification", expansions: ["MEDDICC", "champion", "criteria"],                  rule: "qual→MEDDICC" },
   { trigger: "negotiation",   expansions: ["commercial", "close plan"],                         rule: "negotiation→close" },
+
+  // ── MEDDICC methodology anchors ───────────────────────────────────
+  { trigger: "meddicc",       expansions: ["qualification", "champion", "decision criteria", "economic buyer"], rule: "meddicc→components" },
+  { trigger: "meddpicc",      expansions: ["qualification", "champion", "decision criteria", "economic buyer"], rule: "meddpicc→components" },
+  { trigger: "champion",      expansions: ["qualification", "stakeholder", "MEDDICC"],          rule: "champion→qual" },
+  { trigger: "economic buyer",expansions: ["decision maker", "executive sponsor", "MEDDICC"],   rule: "econ_buyer→dm" },
+  { trigger: "decision criteria", expansions: ["evaluation criteria", "qualification"],         rule: "criteria→eval" },
+  { trigger: "deal review",   expansions: ["MEDDICC", "qualification", "pipeline"],             rule: "deal_review→meddicc" },
 ]);
 
 /**
