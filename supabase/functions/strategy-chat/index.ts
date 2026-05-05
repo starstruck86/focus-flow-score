@@ -8089,11 +8089,13 @@ You MUST call the provided tool function with your structured result.`;
     latency_ms: result.latencyMs,
   }).select().single();
 
+  const wfManifestId = deriveChatManifestId(content, null, workflowType);
   const { data: resultMsg } = await supabase.from("strategy_messages").insert({
     thread_id: threadId,
     user_id: userId,
     role: "assistant",
     message_type: "workflow_result",
+    manifest_id: wfManifestId,
     provider_used: result.provider,
     model_used: result.model,
     fallback_used: result.fallbackUsed,
