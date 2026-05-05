@@ -47,7 +47,9 @@ Deno.serve(async (req) => {
     const manifest = getTaskManifest(tt);
     const artifactManifest = toArtifactManifest(manifest);
     const planResult = buildPlan(
-      { manifest, effectiveDepth: "artifact", inputs: { company_name: "Acme Corp", opportunity: "Q4 Deal" } },
+      manifest,
+      "artifact",
+      { company_name: "Acme Corp", opportunity: "Q4 Deal" },
       {},
     );
 
