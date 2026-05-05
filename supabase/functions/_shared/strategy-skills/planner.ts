@@ -273,11 +273,22 @@ export function buildPlan(
     }
   }
 
-  const { termSeeds, unresolvedBindings } = resolveBindings(
+  const { termSeeds: resolvedSeeds, unresolvedBindings } = resolveBindings(
     manifest.retrieval.termBindings,
     inputs,
     ctx,
   );
+
+  // Inject static methodology seeds (always included, deduplicated)
+  const termSeeds = [...resolvedSeeds];
+  const seenLower = new Set(termSeeds.map(s => s.toLowerCase()));
+  for (const seed of manifest.retrieval.methodologySeeds ?? []) {
+    const lower = seed.toLowerCase();
+    if (!seenLower.has(lower)) {
+      seenLower.add(lower);
+      termSeeds.push(seed);
+    }
+  }
 
   const entityRefs: Array<{
     kind: "account" | "opportunity" | "persona";
