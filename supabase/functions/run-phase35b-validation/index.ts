@@ -397,6 +397,38 @@ function scoreSectionLevelDepth(obj: unknown): number {
   return richSections >= 3 ? 1 : 0;
 }
 
+// ── Cross-Section Causality Detection ────────────────────────
+// Detects whether sections reference each other, forming a reasoning chain.
+// Baseline almost never achieves this because it generates flat, isolated sections.
+function scoreCrossSectionCausality(text: string): { hasCausality: boolean; score: number } {
+  const lower = text.toLowerCase();
+
+  // Signal 1: Metrics/data referenced inside risk/gap sections
+  // Look for patterns where quantified data appears near risk language
+  const metricsNearRisk = countMatches(lower, /(?:risk|gap|threat|exposure|vulnerability|concern|pain|problem|challenge|miss(?:ed|ing))[\s\S]{0,120}(?:\d+%|\$[\d,.]+|roi|revenue|margin|conversion|retention|pipeline|quota|close rate|win rate)/g)
+    + countMatches(lower, /(?:\d+%|\$[\d,.]+|roi|revenue|margin|conversion|retention|pipeline|quota)[\s\S]{0,120}(?:risk|gap|threat|exposure|vulnerability|concern|pain|problem|challenge|miss(?:ed|ing))/g);
+
+  // Signal 2: Risks/gaps drive specific next steps/actions
+  const risksToActions = countMatches(lower, /(?:risk|gap|threat|exposure|unknown|unclear|missing|concern|pain|weakness)[\s\S]{0,150}(?:ask|confirm|validate|test|propose|schedule|map|investigate|address|mitigate|next step|action|recommend|follow[- ]up)/g);
+
+  // Signal 3: Actions explicitly resolve identified gaps/risks
+  const actionsResolveGaps = countMatches(lower, /(?:to (?:address|mitigate|resolve|close|fill|validate|confirm|de-risk)|which (?:addresses|mitigates|resolves|closes|fills)|in order to|this will|ensuring)/g);
+
+  // Signal 4: Cross-reference language (sections pointing to each other)
+  const crossRef = countMatches(lower, /\b(?:as (?:noted|identified|described|outlined) (?:above|in|earlier)|building on|given (?:the|this|these)|based on (?:the|this|these)|this (?:connects to|drives|informs|supports)|per the|from the .{3,30} section|see .{3,30} above)\b/g);
+
+  // Signal 5: Causal connectors between substantive concepts (not just transitions)
+  const causalChains = countMatches(lower, /(?:which (?:means|creates|causes|drives|results in|leads to|exposes|compounds)|this (?:means|creates|causes|drives|results in|leads to)|because .{10,60}(?:therefore|so|thus|hence|we (?:should|must|need to|recommend))|if .{10,60}then)/g);
+
+  const totalSignals = Math.min(metricsNearRisk, 3) + Math.min(risksToActions, 3) + Math.min(actionsResolveGaps, 3) + Math.min(crossRef, 2) + Math.min(causalChains, 3);
+  const hasCausality = totalSignals >= 3;
+  // Score: 0 (no cross-section reasoning), 1 (some), 2 (strong)
+  let score = 0;
+  if (totalSignals >= 5) score = 2;
+  else if (totalSignals >= 3) score = 1;
+  return { hasCausality, score };
+}
+
 function scoreStructure(text: string, shape: string, forbid?: string[], mustHave?: string[]): number {
   if (shape === "structured_artifact" || shape === "executive_brief") {
     let depthScore: number;
@@ -418,6 +450,16 @@ function scoreStructure(text: string, shape: string, forbid?: string[], mustHave
     const blended = Math.round(completeness * 0.7 + depthScore * 0.3);
     let finalScore = clamp(blended + sectionDepthBonus, 1, 5);
     if (mustHave && mustHave.length > 0 && completeness <= 3) finalScore = Math.min(finalScore, 4);
+
+    // ── HARDENED 5/5 GATE ──────────────────────────────────────
+    // A 5 requires cross-section interconnection — not just flat fields.
+    // Flat JSON with independent sections → max 4.
+    // Connected reasoning across sections → eligible for 5.
+    if (finalScore >= 5) {
+      const { hasCausality } = scoreCrossSectionCausality(text);
+      if (!hasCausality) finalScore = 4;
+    }
+
     return finalScore;
   }
   if (shape === "prose" && (forbid?.includes("headings") || forbid?.includes("bullets"))) return scoreStructureProse(text);
