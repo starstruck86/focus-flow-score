@@ -965,20 +965,24 @@ Deno.serve(async (req) => {
     if (!artifactGateResult.pass) {
       console.log(`[artifact-gate] FAIL on first pass: ${JSON.stringify(artifactGateResult.failed_dimensions)}`);
 
-      // Build strict regen prompt with diagnostics
+      // Build strict gate-specific regen prompt with diagnostics
       const regenLines: string[] = [];
-      regenLines.push("You are performing a STRICT ARTIFACT QUALITY FIX of a Strategy output.");
-      regenLines.push("The artifact gate found quality failures. You must fix ONLY the failing dimensions.");
+      regenLines.push("You FAILED these deterministic quality gates. Fix each diagnostic EXACTLY. Do not preserve failing sections.");
       regenLines.push("");
       regenLines.push("RULES:");
-      regenLines.push("- PRESERVE all passing sections exactly as they are.");
-      regenLines.push("- FIX only the dimensions listed below.");
       regenLines.push("- Do NOT change output format/shape.");
       regenLines.push(`- Output shape: ${outputContract.shape}`);
       if (outputContract.targetWords) regenLines.push(`- Word limit: ${outputContract.targetWords.min}–${outputContract.targetWords.max}`);
       if (outputContract.forbid?.length) regenLines.push(`- Forbidden formatting: ${outputContract.forbid.join(", ")}`);
-      regenLines.push(`- Required sections: ${rubric.mustHave.join(", ")}`);
       regenLines.push("");
+
+      // Exact required section list
+      regenLines.push("=== REQUIRED SECTIONS (exact, in this order) ===");
+      for (let i = 0; i < rubric.mustHave.length; i++) {
+        regenLines.push(`  ${i + 1}. "${rubric.mustHave[i]}"`);
+      }
+      regenLines.push("");
+
       regenLines.push("=== ORIGINAL OUTPUT ===");
       regenLines.push(generatedText);
       regenLines.push("");
@@ -990,7 +994,34 @@ Deno.serve(async (req) => {
         }
       }
       regenLines.push("");
-      regenLines.push("Return the COMPLETE fixed output. No commentary.");
+
+      // Gate-specific fix instructions
+      regenLines.push("=== GATE-SPECIFIC FIX INSTRUCTIONS ===");
+      for (const g of artifactGateResult.gates) {
+        if (g.pass) continue;
+        if (g.gate === "template_fidelity") {
+          regenLines.push("TEMPLATE FIDELITY FIX:");
+          if (outputContract.shape === "structured_artifact" || outputContract.shape === "executive_brief") {
+            regenLines.push("- Rename/reorder your sections to use these EXACT keys: " + rubric.mustHave.map(m => `"${m}"`).join(", "));
+          } else {
+            regenLines.push("- Ensure each of these EXACT phrases appears literally in your prose: " + rubric.mustHave.map(m => `"${m}"`).join(", "));
+          }
+        } else if (g.gate === "evidence_discipline") {
+          regenLines.push("EVIDENCE DISCIPLINE FIX:");
+          regenLines.push("- Every citation ([KI:...], [PB:...]) must be inside a sentence containing causal language: because, therefore, resulting in, which means, this creates, this drives, demonstrates, validates, confirms.");
+          regenLines.push("- Rewrite each flagged citation sentence into a causal claim. Example: 'This drives $420K in annual savings because consolidated systems eliminate redundant licensing [KI:abc123].'");
+        } else if (g.gate === "readability") {
+          regenLines.push("READABILITY FIX:");
+          regenLines.push("- Split dense paragraphs into ≤120 words each.");
+          regenLines.push("- Add line breaks to walls of text.");
+        } else if (g.gate === "section_completeness") {
+          regenLines.push("SECTION COMPLETENESS FIX:");
+          regenLines.push("- Expand stub/filler sections with: specific metrics, named stakeholder, and causal reasoning (because X → Y).");
+          regenLines.push("- Every required section must have ≥40 words of substantive content.");
+        }
+        regenLines.push("");
+      }
+      regenLines.push("Return the COMPLETE fixed output. No commentary. No meta-text.");
 
       try {
         artifactGateRegenAttempts = 1;
