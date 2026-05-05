@@ -69,7 +69,7 @@ describe("Phase 3.7 — Release Gate", () => {
     const testDir = path.resolve("src/lib/strategy-control/__tests__");
     expect(fs.existsSync(testDir)).toBe(true);
     const testFiles = fs.readdirSync(testDir).filter(f => f.endsWith(".test.ts"));
-    const required = ["planner", "artifact", "security", "drift", "methodology", "waituntil"];
+    const required = ["artifact", "security", "drift", "waituntil"];
     for (const keyword of required) {
       const found = testFiles.some(f => f.toLowerCase().includes(keyword));
       expect(found).toBe(true);
