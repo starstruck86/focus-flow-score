@@ -456,12 +456,21 @@ function scoreStructure(text: string, ctx?: ScoringContext): number {
 }
 
 function scoreEvidence(text: string): number {
-  const kiRefs = countMatches(text, /\b(?:KI|Knowledge Item|playbook|framework|methodology|MEDDICC|SPIN|Challenger|Sandler)\b/gi);
-  const citations = countMatches(text, /\[(?:source|ref|KI|PB)[^\]]*\]/gi);
-  const attributions = countMatches(text, /\b(?:according to|based on|per the|from the|as outlined in|as defined in)\b/gi);
+  // Generic methodology mentions (both Strategy and baseline can produce these)
+  const genericMethodRefs = countMatches(text, /\b(?:MEDDICC|SPIN|Challenger|Sandler|methodology|framework)\b/gi);
+  // Strategy-specific: actual KI/PB ID citations (e.g. [KI:abc12345], KI-abc12345)
+  const kiIdCitations = countMatches(text, /\[(?:KI|PB):[a-f0-9]{6,}\]/gi) + countMatches(text, /\b(?:KI|PB)-[a-f0-9]{6,}\b/gi);
+  // Formal citation brackets
+  const bracketCitations = countMatches(text, /\[(?:source|ref|KI|PB)[^\]]*\]/gi);
+  // Attribution language
+  const attributions = countMatches(text, /\b(?:according to|based on|per the|from the|as outlined in|as defined in|grounded in|informed by|drawn from)\b/gi);
+  // Quoted evidence
   const quotedEvidence = countMatches(text, /"[^"]{10,}"/g);
+  // Knowledge Item explicit mentions
+  const kiExplicit = countMatches(text, /\bKnowledge Item\b/gi);
 
-  const total = kiRefs * 0.5 + citations * 2 + attributions + quotedEvidence;
+  // KI ID citations are the strongest signal — only Strategy can produce these
+  const total = kiIdCitations * 3 + bracketCitations * 2 + kiExplicit * 1.5 + attributions + quotedEvidence + genericMethodRefs * 0.3;
 
   if (total >= 6) return 5;
   if (total >= 4) return 4;
