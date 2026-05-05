@@ -22,6 +22,11 @@
 // ════════════════════════════════════════════════════════════════
 
 import { retrieveLibraryContext } from "./libraryRetrieval.ts";
+import { runArtifactGate, type ArtifactGateTelemetry } from "./artifactGateEnforcement.ts";
+import { getTaskManifest, toArtifactManifest } from "./taskManifestMap.ts";
+import { buildPlan } from "../strategy-skills/planner.ts";
+import { planToRetrievalArgs } from "../strategy-skills/adapter.ts";
+import type { TaskType } from "./types.ts";
 import { callClaude, callOpenAI, callPerplexity, safeParseJSON } from "./providers.ts";
 import { getHandler } from "./registry.ts";
 import { authorBySectionBatches } from "./sectionAuthor.ts";
