@@ -9,6 +9,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { runStrategyTaskInBackground } from "../_shared/strategy-orchestrator/runTask.ts";
 
+// Owner email — the only authenticated user allowed to trigger evidence runs
+const OWNER_EMAIL = "corey.hartin@gmail.com";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
