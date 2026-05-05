@@ -812,7 +812,14 @@ Deno.serve(async (req) => {
         baseline_word_count: baselineText.split(/\s+/).length,
         gate_decision: stratData.refusal ? "refuse" : "pass",
         refusal: stratData.refusal || null,
-        artifact_gate: { pass: artifactGate.pass, failed_dimensions: artifactGate.failed_dimensions },
+        artifact_gate: {
+          pass: artifactGate.pass,
+          failed_dimensions: artifactGate.failed_dimensions,
+          gates: artifactGate.gates,
+        },
+        // Include synthesis artifact gate metadata if available
+        artifact_gate_regenerated: (stratData.artifact_gate as any)?.regenerated || false,
+        artifact_gate_regen_success: (stratData.artifact_gate as any)?.regen_success || false,
       });
     } catch (e) {
       results.push({ label: c.label, error: (e as Error).message });
