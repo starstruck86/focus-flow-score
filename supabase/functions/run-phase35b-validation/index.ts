@@ -344,10 +344,9 @@ function scoreEvidence(text: string): number {
   const pbIdCitations = countMatches(text, /\[PB:[a-f0-9]{6,}\]/gi) + countMatches(text, /\bPB-[a-f0-9]{6,}\b/gi);
   const bracketCitations = countMatches(text, /\[(?:source|ref)[^\]]*\]/gi);
   const attributions = countMatches(text, /\b(?:according to|based on|per the|from the|as outlined in|as defined in|grounded in|informed by|drawn from)\b/gi);
-  const quotedEvidence = countMatches(text, /"[^"]{15,}"/g);
   const kiExplicit = countMatches(text, /\bKnowledge Item\b/gi);
   const strongSignal = (kiIdCitations + pbIdCitations) * 3 + bracketCitations * 2;
-  const moderateSignal = kiExplicit * 1.5 + attributions * 0.75 + quotedEvidence * 0.5;
+  const moderateSignal = kiExplicit * 1.5 + attributions * 0.75;
   const total = strongSignal + moderateSignal;
   if (total >= 6) return 5;
   if (total >= 4) return 4;
