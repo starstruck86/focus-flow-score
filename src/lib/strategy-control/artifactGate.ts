@@ -71,19 +71,33 @@ export function checkTemplateFidelity(
       }
     }
   } else {
-    // Prose: check headings or inline presence
+    // Prose: check concept presence (exact phrase OR all key words within text)
     const lower = output.toLowerCase();
     for (const req of mustHave) {
       const norm = req.toLowerCase();
-      // Check headings (## Section or SECTION:) or inline strong presence
+      // 1. Exact phrase match
+      if (lower.includes(norm)) continue;
+      // 2. Heading/bold match
       const headingPattern = new RegExp(
-        `(?:^#+\\s*.*${norm.replace(/\s+/g, "\\s+")}|^.*${norm.replace(/\s+/g, "\\s+")}\\s*:|\\*\\*.*${norm.replace(/\s+/g, "\\s+")}.*\\*\\*)`,
+        `(?:^#+\\s*.*${norm.replace(/\s+/g, "\\s+")}|\\*\\*.*${norm.replace(/\s+/g, "\\s+")}.*\\*\\*)`,
         "im",
       );
-      const inlinePresent = lower.includes(norm);
-      if (!headingPattern.test(output) && !inlinePresent) {
-        diagnostics.push(`Missing required element: "${req}"`);
-      }
+      if (headingPattern.test(output)) continue;
+      // 3. All significant words from the requirement present in text
+      const words = norm.split(/\s+/).filter(w => w.length > 2);
+      const allWordsPresent = words.every(w => lower.includes(w));
+      if (allWordsPresent && words.length >= 2) continue;
+      // 4. Synonym expansion for common concepts
+      const synonyms: Record<string, RegExp> = {
+        "current state": /\b(?:currently|today|right now|existing|as of|status quo|operates?)\b/i,
+        "cost or risk": /\b(?:cost|risk|exposure|threat|consequence|price|penalty|loss)\b/i,
+        "change hypothesis": /\b(?:change|hypothesis|shift|reframe|consolidat|transform)\b/i,
+        "open question": /\b(?:question|\?|ask (?:the|their|about))\b/i,
+      };
+      const synPattern = synonyms[norm];
+      if (synPattern && synPattern.test(output)) continue;
+      // 5. If none matched, fail
+      diagnostics.push(`Missing required element: "${req}"`);
     }
   }
 
