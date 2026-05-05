@@ -131,31 +131,71 @@ function buildEvalSynthesisSystemPrompt(
   sections.push("7. The manifest rubric is AUTHORITATIVE. Do not deviate based on prompt phrasing.");
   sections.push("");
 
-  // ── Strategy Dominance Preflight (universal)
+  // ── Strategy Dominance Preflight (universal — hardened v2)
   sections.push("=== STRATEGY DOMINANCE PREFLIGHT (self-verify before outputting) ===");
-  sections.push("Before finalizing your output, mentally verify ALL of the following. If any fails, revise before returning:");
+  sections.push("Before finalizing your output, mentally verify ALL of the following.");
+  sections.push("If ANY check fails, REWRITE the failing section before returning.");
   sections.push("");
-  sections.push("1. MANIFEST COMPLETENESS — Every item in MUST cover is EXPLICITLY present in the output.");
-  sections.push("   - Not implied. Not buried in a sentence. Not renamed beyond recognition.");
-  sections.push("   - For structured artifacts: each mustHave item must appear as a named section/key.");
-  sections.push("   - If a mustHave element has unknown data, include it with status: 'unknown/gap', a gap description, and a recommended next action.");
+
+  sections.push("── 1. MANIFEST COMPLETENESS ──");
+  sections.push("Every item in MUST cover is EXPLICITLY present in the output.");
+  sections.push("- Not implied. Not buried in a sentence. Not renamed beyond recognition.");
+  sections.push("- For structured artifacts: each mustHave item must appear as a named section/key.");
+  sections.push("- If a mustHave element has unknown data, include it with status: 'unknown/gap', a gap description, and a recommended next action.");
   sections.push("");
-  sections.push("2. DECISION-GRADE DEPTH — Every required section must include:");
-  sections.push("   a) Current known state (what we know or suspect)");
-  sections.push("   b) Explicit gap (what is missing or at risk)");
-  sections.push("   c) Commercial implication (why the gap matters in $ / risk / time)");
-  sections.push("   d) Recommended next action (specific, not generic)");
-  sections.push("   e) Library/KI-informed reasoning when available (cite the KI/PB ID)");
+
+  sections.push("── 2. THINKING SUPERIORITY CHECK ──");
+  sections.push("Your output must be MORE SPECIFIC than a generic best-practice answer. Verify:");
+  sections.push("a) Does it contain concrete details — numbers, timelines, dollar amounts, percentages, named KPIs, or quantified tradeoffs?");
+  sections.push("b) Does it name specific conditions, risks, or dynamics unique to THIS account/persona/stage — not generic industry truisms?");
+  sections.push("c) Scan every sentence for these BANNED phrases. If found, replace with a concrete, quantified claim:");
+  sections.push("   'improve efficiency', 'enhance experience', 'streamline operations', 'drive value',");
+  sections.push("   'optimize performance', 'best-in-class', 'industry-leading', 'holistic approach',");
+  sections.push("   'align stakeholders', 'transform the business', 'unlock potential', 'move the needle'.");
+  sections.push("d) If a generic AI with no library could have written the same sentence, that sentence is not good enough. Rewrite it with a specific claim, metric, or tradeoff.");
   sections.push("");
-  sections.push("3. LIBRARY ADVANTAGE — Your answer must be BETTER than what a generic assistant would produce:");
-  sections.push("   - KIs are not decorative citations. They must sharpen: diagnosis, risk calls, qualification gaps, stakeholder strategy, or next steps.");
-  sections.push("   - Each library reference must produce a DIFFERENT or SHARPER insight than generic sales knowledge would.");
-  sections.push("   - If you removed all KI/PB references and the answer would read the same, you are not using the library advantage. Fix it.");
+
+  sections.push("── 3. COMMERCIAL SHARPNESS CHECK ──");
+  sections.push("Every output MUST contain ALL of the following commercial elements:");
+  sections.push("a) COST OF INACTION or MISSED OPPORTUNITY — What happens if the buyer does nothing? Name the consequence in dollars, time, risk exposure, or competitive loss. Not 'they may fall behind' — instead: 'every quarter of delay extends their 14-month renewal cycle and exposes $X in at-risk revenue.'");
+  sections.push("b) BEFORE → AFTER CONTRAST — Name the current state (concrete, observable) and the target state (measurable outcome). Use numbers or named KPIs.");
+  sections.push("c) PERSONA-SPECIFIC CONSEQUENCE — Why does this matter to THIS role? A GM cares about operational margin and guest satisfaction scores. A CRO cares about pipeline velocity and win rates. Tie the consequence to what the persona's boss measures them on.");
+  sections.push("d) If you describe a problem without quantifying its impact, that is not commercial sharpness — rewrite.");
   sections.push("");
-  sections.push("4. BASELINE COMPARISON GUARD — Ask yourself:");
-  sections.push("   - Would a generic baseline (no library, no context) produce something equally complete?");
-  sections.push("   - Is any required section thinner than what a generic sales AI would write?");
-  sections.push("   - If yes to either, add library-grounded depth to those sections before returning.");
+
+  sections.push("── 4. DECISION CLARITY CHECK (CRITICAL) ──");
+  sections.push("Every output must answer: 'What should the seller DO next?'");
+  sections.push("This MUST appear as one or more of:");
+  sections.push("- Explicit next steps with named actions (e.g., 'Ask the GM: What is your current cost-per-occupied-room for guest tech support?')");
+  sections.push("- Recommended positioning moves (e.g., 'Frame consolidation as a margin play, not a tech play')");
+  sections.push("- Decision framing for the buyer (e.g., 'The choice is: continue paying $X/room/month for fragmented tools, or consolidate at $Y with measurable satisfaction uplift')");
+  sections.push("REJECT outputs that only analyze, only describe structure, or do not move the deal forward.");
+  sections.push("If a seller reads this and still doesn't know what to DO, the output has failed.");
+  sections.push("");
+
+  sections.push("── 5. DECISION-GRADE DEPTH ──");
+  sections.push("Every required section must include:");
+  sections.push("a) Current known state (what we know or suspect — with specifics, not generalities)");
+  sections.push("b) Explicit gap (what is missing or at risk — named, not implied)");
+  sections.push("c) Commercial implication (why the gap matters in $ / risk / time — quantified)");
+  sections.push("d) Recommended next action (specific and executable, not 'explore further')");
+  sections.push("e) Library/KI-informed reasoning when available (cite the KI/PB ID)");
+  sections.push("");
+
+  sections.push("── 6. EVIDENCE IS SUPPORT, NOT CRUTCH ──");
+  sections.push("Keep citing [KI:xxxxxxxx] and [PB:xxxxxxxx] — but enforce:");
+  sections.push("- Every citation must SUPPORT a specific claim or JUSTIFY a specific action.");
+  sections.push("- No decorative citations. If a citation doesn't change the meaning of the sentence it's in, remove it.");
+  sections.push("- LITMUS TEST: If you removed ALL citations and the output became vague or lost its reasoning, the reasoning is too weak. Rewrite so the logic stands on its own, THEN add citations as proof.");
+  sections.push("- Citations amplify strong reasoning. They do not substitute for it.");
+  sections.push("");
+
+  sections.push("── 7. BASELINE COMPARISON GUARD ──");
+  sections.push("Ask yourself:");
+  sections.push("- Would a generic assistant (no library, no context) produce something equally specific?");
+  sections.push("- Is any section thinner in detail, weaker in commercial consequence, or vaguer in next steps than what a generic AI would write?");
+  sections.push("- Could someone read this and mistake it for generic sales advice?");
+  sections.push("- If yes to ANY, add concrete specifics: named metrics, quantified consequences, persona-specific stakes, or executable actions.");
   sections.push("");
 
   return sections.join("\n");
