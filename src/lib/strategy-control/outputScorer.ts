@@ -367,6 +367,35 @@ function scoreCompleteness(text: string, ctx?: ScoringContext): number {
   return 1;
 }
 
+/**
+ * Section-level depth check for structured artifacts.
+ * Returns 0 or 1 bonus point based on richness signals:
+ *   - Arrays with ≥2 items
+ *   - Objects with ≥3 keys
+ *   - Quantified values (numbers, percentages, dollar amounts)
+ */
+function scoreSectionLevelDepth(obj: unknown): number {
+  if (typeof obj !== "object" || obj === null) return 0;
+
+  let richSections = 0;
+  const entries = Array.isArray(obj) ? obj : Object.values(obj as Record<string, unknown>);
+
+  for (const val of entries) {
+    if (Array.isArray(val) && val.length >= 2) richSections++;
+    else if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+      const keys = Object.keys(val as Record<string, unknown>);
+      if (keys.length >= 3) richSections++;
+      // Recurse one level
+      for (const v of Object.values(val as Record<string, unknown>)) {
+        if (Array.isArray(v) && v.length >= 2) richSections++;
+      }
+    }
+  }
+
+  // 3+ rich sections → +1 bonus
+  return richSections >= 3 ? 1 : 0;
+}
+
 function scoreStructure(text: string, ctx?: ScoringContext): number {
   const shape = ctx?.shape ?? "unknown";
   const forbid = ctx?.forbid ?? [];
