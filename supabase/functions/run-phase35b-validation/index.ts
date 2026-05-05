@@ -88,7 +88,7 @@ const CASES: Case[] = [
     baselineSystem: "You are a helpful sales strategy assistant. Answer the user's question with actionable, specific advice. Do not reference any internal library, playbook, or proprietary methodology. Use only general sales knowledge.\n\nOutput constraints:\n- Return your response as a well-structured JSON object with semantically meaningful keys.\n- Keep your response between 200 and 400 words.",
     scoringShape: "structured_artifact",
     targetWords: { min: 200, max: 400 },
-    mustHave: ["metrics", "champion", "decision criteria", "decision process", "identified pain", "risks", "next steps"],
+    mustHave: ["metrics", "economic buyer", "decision criteria", "decision process", "identified pain", "champion", "competition", "gaps named"],
     inputTerms: ["Beechwood", "Hotel", "MEDDICC", "Q3", "Platform", "Renewal", "discovery"],
   },
   {
