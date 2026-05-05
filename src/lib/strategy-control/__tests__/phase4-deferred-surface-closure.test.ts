@@ -304,6 +304,7 @@ describe("Phase 4 — Evidence Runner Enforces All Surfaces", () => {
             artifact_gate: { pass: false, failed_dimensions: ["x"], regen_attempts: 0, regen_success: false, total_gate_latency_ms: 100 },
             performance: { total_latency_ms: 5000 },
             anomaly_flags: { artifact_failure: true },
+            library_counts: { kis: 10, playbooks: 2, content_chars: 5000 },
           },
         }),
       ]);
