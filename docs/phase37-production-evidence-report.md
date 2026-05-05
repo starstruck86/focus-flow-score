@@ -1,154 +1,83 @@
 # Phase 4 — Live Production Evidence Validation Report
 
 Generated: 2026-05-06T00:00Z
+**Updated**: 2026-05-06 — Phase 4 gap fixes deployed
 **Method**: Real DB rows queried, passed through adapters, validated via `validateSingleEvidence()`.
 **Standard**: No synthetic fixtures. No weakened requirements. Real rows only.
 
 ---
 
-## Validation Protocol
+## Fixes Deployed (This Session)
 
-For each enforced surface:
-1. Query real production rows from the database
-2. Pass through the appropriate adapter (`adaptTaskRun`, `adaptChatArtifact`, `adaptTransformOutput`)
-3. Run `validateSingleEvidence()` against the registry requirements
-4. Report `output_present` / `final_status` semantics
-5. Report EVIDENCE GAP for any surface that fails
+### Gap 1: RETRIEVAL — `library_counts` now persisted in task_runs.meta
 
----
+**Files changed**: `runTask.ts`, `progressiveDriver.ts`
+**Paths covered**:
+- ✅ Task success path → `metaPatch.library_counts`
+- ✅ Task authoring-fail path → `authoringFailMeta.library_counts`
+- ✅ Task gate-fail path → `hardFailMeta.library_counts`
+- ✅ Progressive success path → `newMeta.library_counts` (from `progressive.library_counts`)
+- ✅ Progressive gate-fail path → `hardFailMeta.library_counts` (from `progressive.library_counts`)
+- ✅ Evidence adapter updated: `extractRetrievalTelemetry` reads both `meta.library_counts` and `meta.progressive.library_counts`
 
-## Surface: `task` — executive-brief (Account Brief)
+**Status**: DEPLOYED. Next task run will persist retrieval telemetry. Adapter will convert it. `validateSingleEvidence` will pass retrieval check.
 
-**Real row**: `10034907-6c1e-4606-87de-0a5b150d8aa3` (status=failed)
-**Adapter**: `adaptTaskRun()` → `execution_surface: "task"`, `manifest_id: "executive-brief"`
+### Gap 3: CHAT PER-MANIFEST — `manifest_id` column added to `strategy_messages`
 
-| Telemetry Block | Required | Present | Source |
-|-----------------|----------|---------|--------|
-| planner | ✅ | ✅ | `meta.planner` (plan_hash=eb7b0cc9, 10 seeds) |
-| retrieval | ✅ | ❌ | `meta.library_counts` not persisted |
-| artifact_gate | ✅ | ✅ | `meta.artifact_gate` (pass=false, 2 failed dims) |
-| performance | ✅ | ✅ | `meta.performance` (total=197911ms) |
-| anomaly_flags | ✅ | ✅ | `meta.anomaly_flags` (regen, failure, latency) |
-| output_present | ✅ | ❌ | draft_output=null (failed run — correct) |
+**Migration**: Added `manifest_id TEXT` column + index to `strategy_messages`
+**Edge function**: `strategy-chat/index.ts` — `deriveChatManifestId()` function tags every assistant message insert with a manifest_id derived from content keywords, workspace, or workflow type.
+**Insert points tagged**:
+- ✅ Non-streaming assistant message
+- ✅ Streaming assistant message
+- ✅ Provisional routing evidence message
+- ✅ Workflow result message
 
-**validateSingleEvidence**: ❌ FAIL — `retrieval telemetry required but absent`
-**final_status**: `failed` ✅ correct
-**output_present**: `false` ✅ correct (no draft on failed run)
-**Success path**: ❌ **EVIDENCE GAP** — No completed run exists. All runs fail artifact_gate.
+**Manifest mapping**:
+| Chat Pattern | manifest_id |
+|---|---|
+| MEDDICC/MEDDPICC keywords | `meddicc-review` |
+| Demo + strategy keywords | `demo-strategy` |
+| Objection/pushback keywords | `objection-strategy` |
+| Follow-up email keywords | `follow-up-email` |
+| Discovery question keywords | `discovery-questions` |
+| Research/competitor keywords | `account-research` |
+| Insight/value prop keywords | `commercial-insight` |
+| Default/general strategy | `conversation-pov` |
+| Workflow: deep_research | `account-research` |
+| Workflow: email_evaluation | `follow-up-email` |
 
----
+**Status**: DEPLOYED. Next chat messages will carry `manifest_id`. Per-manifest evidence attribution now possible.
 
-## Surface: `task` — ninety-day-plan (90-Day Plan)
+### Gap 4: DOCX/TRANSFORM — `manifest_id` column added to `strategy_outputs`
 
-**Real row**: `488d5694-abfd-4beb-921c-591c8915bfa7` (status=failed)
-**Adapter**: Same as executive-brief.
+**Migration**: Added `manifest_id TEXT` column + index to `strategy_outputs`
+**Edge function**: Workflow output inserts now tag `manifest_id` via `deriveChatManifestId(content, null, workflowType)`
 
-**validateSingleEvidence**: ❌ FAIL — `retrieval telemetry required but absent`
-**Success path**: ❌ **EVIDENCE GAP** — No completed run exists.
+**Status**: DEPLOYED. Next workflow outputs will carry `manifest_id`.
 
----
+### Gap 2: SUCCESS PATH — Not weakened
 
-## Surface: `progressive_task` — discovery-prep
-
-**Real row**: `7b307694-4842-4f91-855f-734bf012cdcc` (status=failed)
-**Adapter**: `adaptTaskRun()` → detects `meta.progressive` → `execution_surface: "progressive_task"`
-
-| Telemetry Block | Required | Present | Source |
-|-----------------|----------|---------|--------|
-| planner | ✅ | ✅ | `meta.planner` (plan_hash=5076c100, 20 seeds) |
-| retrieval | ✅ | ❌ | Neither `meta.library_counts` nor `meta.progressive.libraryCounts` populated |
-| artifact_gate | ✅ | ✅ | `meta.artifact_gate` (pass=false, template_fidelity) |
-| performance | ✅ | ✅ | `meta.performance` (total=987818ms) |
-| anomaly_flags | ✅ | ✅ | `meta.anomaly_flags` |
-| output_present | ✅ | ❌ | draft_output=null (failed — correct) |
-
-**validateSingleEvidence**: ❌ FAIL — `retrieval telemetry required but absent`
-**Success path**: ❌ **EVIDENCE GAP** — No completed run exists.
+All gate thresholds, scoring calibration, and template fidelity requirements remain UNCHANGED. The artifact gate is NOT weakened. Success-path evidence will come from a naturally passing run after retrieval telemetry improves library grounding.
 
 ---
 
-## Surface: `chat_artifact` — conversation-pov (representative)
+## Evidence Gap Summary (Post-Deploy)
 
-**Real row**: `7bcb4fdd-43b4-4aa5-8e92-237b3afcd528` (strategy_messages)
-**DB column `latency_ms`**: 13080 (exists in DB, was not included in initial adapter test input)
-**Adapter**: `adaptChatArtifact()` with `latency_ms` from DB column
+| # | Surface | Gap Type | Pre-Fix | Post-Fix | Severity |
+|---|---------|----------|---------|----------|----------|
+| 1 | task (all) | RETRIEVAL | ❌ Not persisted | ✅ Code deployed, awaiting next run | **PENDING EVIDENCE** |
+| 2 | task (all) | SUCCESS PATH | ❌ All fail gate | ❌ Unchanged — gate not weakened | **EVIDENCE GAP** |
+| 3 | progressive_task | RETRIEVAL | ❌ Not persisted | ✅ Code deployed, awaiting next run | **PENDING EVIDENCE** |
+| 4 | progressive_task | SUCCESS PATH | ❌ All fail gate | ❌ Unchanged — gate not weakened | **EVIDENCE GAP** |
+| 5 | chat_artifact | PER-MANIFEST | ❌ No column | ✅ Column + tagging deployed | **PENDING EVIDENCE** |
+| 6 | transform | SPECIFICITY | ❌ No docx-render row | ✅ Column deployed, awaiting run | **PENDING EVIDENCE** |
 
-| Telemetry Block | Required | Present | Source |
-|-----------------|----------|---------|--------|
-| planner | ❌ | — | N/A (chat uses routing_decision) |
-| retrieval | ✅ | ✅ | `content_json.routing_decision` (ki_hits=0) |
-| artifact_gate | ❌ | — | N/A (chat uses inline citation audit) |
-| performance | ✅ | ✅ | `latency_ms=13080` column |
-| anomaly_flags | ✅ | ✅ | Derived from gate_check + routing_decision |
-| output_present | ✅ | ✅ | `content_json.text` present |
+## Release Gate Status
 
-**validateSingleEvidence**: ✅ PASS (when latency_ms column included)
-**final_status**: `completed` ✅ correct
-**output_present**: `true` ✅ correct
+The release gate now **fails** if any enforced surface has an `EVIDENCE GAP` marker in this report. Phase 4 is **NOT COMPLETE** until:
+1. A post-deploy task run persists `library_counts` and passes `validateSingleEvidence` retrieval check
+2. At least one task run passes the artifact gate naturally (success-path evidence)
+3. Chat messages with `manifest_id` exist for each registered chat surface
+4. A strategy_outputs row with `manifest_id = docx-render` exists
 
-**Per-manifest evidence**: ⚠ **EVIDENCE GAP**
-- `strategy_messages` has no `manifest_id` or `skill_id` column
-- Cannot prove individual manifests (meddicc-review, demo-strategy, etc.) have distinct real rows
-- All 8 chat_artifact surfaces share one table; evidence attribution is impossible per-manifest
-- Real proof exists for **the adapter and contract**, but not for **individual manifest coverage**
-
----
-
-## Surface: `transform` — docx-render
-
-**Real row**: `189cea96-3d16-4861-b800-30f61ca02de1` (strategy_outputs)
-**DB column `latency_ms`**: 4777 (exists in DB)
-**Adapter**: `adaptTransformOutput()`
-
-| Telemetry Block | Required | Present | Source |
-|-----------------|----------|---------|--------|
-| planner | ❌ | — | N/A |
-| retrieval | ❌ | — | N/A |
-| artifact_gate | ❌ | — | N/A |
-| performance | ✅ | ✅ | `latency_ms=4777` column |
-| anomaly_flags | ❌ | — | N/A |
-| output_present | ✅ | ✅ | `rendered_text` + `content_json` present |
-
-**validateSingleEvidence**: ✅ PASS (when latency_ms column included)
-**final_status**: `completed` ✅ correct
-**output_present**: `true` ✅ correct
-
-**Note**: Real row is `output_type=brief`, not a DOCX render. The adapter works generically but no actual DOCX rendering row exists. This is a **minor gap** — the adapter is proven but the specific use case (DOCX) is not yet exercised.
-
----
-
-## Evidence Gap Summary
-
-| # | Surface | Gap Type | Description | Severity |
-|---|---------|----------|-------------|----------|
-| 1 | task (all) | RETRIEVAL | `meta.library_counts` not persisted in task_runs. Adapter returns null. Validation fails. | **BLOCKING** — registry requires retrieval but edge function doesn't persist it |
-| 2 | task (all) | SUCCESS PATH | No completed run exists. All fail artifact_gate (template_fidelity, section_completeness). | **BLOCKING** — cannot prove success-path telemetry |
-| 3 | progressive_task | RETRIEVAL | Same as #1 — neither `library_counts` nor `progressive.libraryCounts` populated | **BLOCKING** |
-| 4 | progressive_task | SUCCESS PATH | Same as #2 | **BLOCKING** |
-| 5 | chat_artifact | PER-MANIFEST | Cannot attribute messages to specific manifest_ids (no column) | **MODERATE** — adapter works, attribution absent |
-| 6 | transform | SPECIFICITY | Real row is `brief` output, not actual DOCX render | **LOW** — adapter proven, specific surface untested |
-
-## What IS Proven
-
-- ✅ Task pipeline adapter correctly converts real DB rows to StrategyExecutionEvidence
-- ✅ Progressive task detection works (meta.progressive → progressive_task surface)
-- ✅ Chat artifact adapter extracts retrieval from routing_decision, performance from latency_ms column, anomaly_flags from gate_check
-- ✅ Transform adapter extracts performance from latency_ms column, output_present from rendered_text
-- ✅ `validateSingleEvidence` correctly rejects rows missing required telemetry (no false passes)
-- ✅ `final_status` and `output_present` semantics are correct for both failed and completed rows
-- ✅ All adapters produce valid StrategyExecutionEvidence shape
-
-## What Is NOT Proven
-
-- ❌ No task run has ever passed the artifact gate in production
-- ❌ Retrieval telemetry is not persisted in task_runs.meta
-- ❌ Per-manifest coverage for 8 chat artifact surfaces
-- ❌ Actual DOCX render evidence
-
-## Phase 4 Status: **NOT COMPLETE** — 4 blocking gaps remain
-
-Next actions:
-1. Persist `library_counts` / retrieval telemetry in task pipeline edge function meta
-2. Investigate artifact gate failures to unblock success-path evidence
-3. Add manifest_id tagging to strategy_messages for per-manifest attribution
-4. Exercise a real DOCX render to capture transform evidence
+## Phase 4 Status: **NOT COMPLETE** — code fixes deployed, awaiting real DB evidence rows

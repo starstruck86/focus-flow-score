@@ -78,6 +78,7 @@ export interface ChatMessageRow {
   thread_id: string;
   content_json: Record<string, unknown> | null;
   message_type?: string | null;
+  manifest_id?: string | null;
   created_at: string;
   latency_ms?: number | null;
   provider_used?: string | null;
@@ -162,6 +163,7 @@ export interface TransformOutputRow {
   output_type: string;
   content_json: Record<string, unknown> | null;
   rendered_text: string | null;
+  manifest_id?: string | null;
   created_at: string;
   latency_ms?: number | null;
   provider_used?: string | null;
@@ -235,8 +237,9 @@ function extractRetrievalTelemetry(
 
   // Progressive tasks store counts in meta.progressive
   const progressive = meta.progressive as Record<string, unknown> | undefined;
-  if (progressive?.libraryCounts) {
-    const lc = progressive.libraryCounts as Record<string, number>;
+  const progCounts = progressive?.library_counts ?? progressive?.libraryCounts;
+  if (progCounts) {
+    const lc = progCounts as Record<string, number>;
     return {
       ki_count: lc.kis ?? 0,
       playbook_count: lc.playbooks ?? 0,

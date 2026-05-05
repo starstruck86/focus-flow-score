@@ -834,7 +834,9 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     // await it so the surrounding `throw` cannot race the DB call.
     // Phase 3.6 — persist telemetry even on authoring failure path
     const authoringFailTotalMs = Date.now() - pipelineStartMs;
-    const authoringFailMeta: Record<string, unknown> = {};
+    const authoringFailMeta: Record<string, unknown> = {
+      library_counts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
+    };
     if (planResult.ok) {
       authoringFailMeta.planner = {
         plan_hash: planResult.plan.planHash,
@@ -977,6 +979,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       const hardFailMeta: Record<string, unknown> = {
         artifact_gate: artifactGateTelemetry,
         artifact_gate_failed: true,
+        library_counts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
       };
       if (planResult.ok) {
         hardFailMeta.planner = {
@@ -1390,7 +1393,10 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       outputCheck: sopOutputCheck ?? null,
       finalized_at: finalizedAt,
     };
-  const metaPatch: Record<string, unknown> = { sop: sopMetaBlock };
+  const metaPatch: Record<string, unknown> = {
+    sop: sopMetaBlock,
+    library_counts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
+  };
   if (fallbackMeta) metaPatch.authoring_fallback = fallbackMeta;
   if (citationCheckMeta) metaPatch.citation_check = citationCheckMeta;
   if (gatePersistenceBlock) metaPatch.gate_check = gatePersistenceBlock;

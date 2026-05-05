@@ -94,6 +94,44 @@ import {
   type BehaviorIntentResult,
 } from "../_shared/strategy-core/behaviorIntent.ts";
 
+// ── Phase 4: Manifest derivation for evidence attribution ──────────
+// Derives a manifest_id from the chat context so every assistant message
+// in strategy_messages can be attributed to a specific evidence surface.
+function deriveChatManifestId(
+  content: string,
+  workspace: string | null,
+  workflowType?: string | null,
+): string | null {
+  // Workflow types map directly
+  if (workflowType) {
+    const wfMap: Record<string, string> = {
+      deep_research: "account-research",
+      account_plan: "account-research",
+      territory_tiering: "account-research",
+      opportunity_strategy: "conversation-pov",
+      brainstorm: "commercial-insight",
+      email_evaluation: "follow-up-email",
+    };
+    return wfMap[workflowType] ?? "conversation-pov";
+  }
+
+  // Content-based keyword matching for chat artifacts
+  const lower = (content || "").toLowerCase();
+  if (/\b(meddicc|meddpicc|meddic)\b/.test(lower)) return "meddicc-review";
+  if (/\b(demo|demonstration)\b/.test(lower) && /\b(strat|plan|prep)\b/.test(lower)) return "demo-strategy";
+  if (/\b(objection|pushback|handle|overcome)\b/.test(lower)) return "objection-strategy";
+  if (/\b(follow[\s-]?up|recap)\b/.test(lower) && /\b(email|message|note)\b/.test(lower)) return "follow-up-email";
+  if (/\b(discovery|question|probe|ask)\b/.test(lower) && /\b(question|list|prep)\b/.test(lower)) return "discovery-questions";
+  if (/\b(research|account\s+research|competitor|landscape)\b/.test(lower)) return "account-research";
+  if (/\b(insight|commercial|value\s+prop)\b/.test(lower)) return "commercial-insight";
+
+  // Workspace fallback
+  if (workspace === "deep_research" || workspace === "library") return "account-research";
+
+  // Default: conversation-pov (general strategy conversation)
+  return "conversation-pov";
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -5853,6 +5891,8 @@ async function handleChat(
   // streaming and non-streaming branches below.
   const __resolvedContract = resolveServerWorkspaceContract(workspaceKeyRaw);
   const __retrievalRules = __resolvedContract.retrievalRules;
+  // Phase 4: derive manifest_id for evidence attribution
+  const __chatManifestId = deriveChatManifestId(content, workspaceKeyRaw ?? null);
   await supabase.from("strategy_messages").insert({
     thread_id: threadId,
     user_id: userId,
@@ -6816,6 +6856,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           user_id: userId,
           role: "assistant",
           message_type: "chat",
+          manifest_id: __chatManifestId,
           provider_used: route.primaryProvider,
           model_used: route.model,
           fallback_used: false,
@@ -7234,6 +7275,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       user_id: userId,
       role: "assistant",
       message_type: "chat",
+      manifest_id: __chatManifestId,
       provider_used: result.provider,
       model_used: result.model,
       fallback_used: result.fallbackUsed,
@@ -7778,6 +7820,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           user_id: userId,
           role: "assistant",
           message_type: "chat",
+          manifest_id: __chatManifestId,
           provider_used: result.provider,
           model_used: result.model,
           fallback_used: false,
@@ -8030,6 +8073,7 @@ You MUST call the provided tool function with your structured result.`;
   }
   outputTitle += ` — ${new Date().toLocaleDateString()}`;
 
+  const outputManifestId = deriveChatManifestId(content, null, workflowType);
   const { data: output } = await supabase.from("strategy_outputs").insert({
     user_id: userId,
     thread_id: threadId,
@@ -8040,17 +8084,20 @@ You MUST call the provided tool function with your structured result.`;
     rendered_text: renderedText,
     linked_account_id: pack.account?.id || null,
     linked_opportunity_id: pack.opportunity?.id || null,
+    manifest_id: outputManifestId,
     provider_used: result.provider,
     model_used: result.model,
     fallback_used: result.fallbackUsed,
     latency_ms: result.latencyMs,
   }).select().single();
 
+  const wfManifestId = deriveChatManifestId(content, null, workflowType);
   const { data: resultMsg } = await supabase.from("strategy_messages").insert({
     thread_id: threadId,
     user_id: userId,
     role: "assistant",
     message_type: "workflow_result",
+    manifest_id: wfManifestId,
     provider_used: result.provider,
     model_used: result.model,
     fallback_used: result.fallbackUsed,
