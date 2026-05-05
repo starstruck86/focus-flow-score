@@ -85,17 +85,37 @@ function buildEvalSynthesisSystemPrompt(
 
   // ── V2: Prose density instructions for constrained prose skills
   if (isConstrainedProse(outputContract)) {
-    sections.push("=== PROSE DENSITY REQUIREMENTS (V2) ===");
+    sections.push("=== PROSE DENSITY & STRUCTURE REQUIREMENTS (V2.1) ===");
     sections.push("Because this skill demands constrained prose with no headings or bullets,");
     sections.push("every sentence must carry maximum business weight. Within the word limit:");
     sections.push("");
-    sections.push("MANDATORY ELEMENTS (weave into flowing prose, do NOT use headings/bullets):");
-    sections.push("1. BEFORE/CURRENT STATE — Name a specific, concrete current-state condition the buyer faces.");
-    sections.push("2. COST-OF-INACTION — State the negative consequence of not acting: lost revenue, pipeline leakage, extended cycles, churn risk, margin erosion, or competitive exposure.");
-    sections.push("3. AFTER-STATE / BUSINESS OUTCOME — Describe the measurable improvement: shorter cycles, higher conversion, increased pipeline velocity, reduced risk, or revenue uplift.");
-    sections.push("4. REQUIRED CAPABILITY — Name the specific capability or behavior shift needed (e.g., \"structured discovery qualification\" not \"better process\").");
-    sections.push("5. METRIC-ORIENTED PHRASE — Include at least one concrete metric reference: a percentage, a time frame, a dollar impact, or a named KPI (e.g., \"stage-2 conversion\" or \"30% faster qualification\").");
-    sections.push("6. SELLER ACTION — End with or embed one concrete talk-track move, question, or positioning statement the seller can use verbatim in the conversation.");
+    sections.push("MANDATORY SEQUENTIAL STRUCTURE — your prose MUST follow this exact progression:");
+    sections.push("The output is ONE flowing passage. No headings, no bullets, no labels.");
+    sections.push("But the INTERNAL logic must proceed in this exact order:");
+    sections.push("");
+    sections.push("  SENTENCE 1-2: CURRENT STATE — Open by naming what is concretely true right now for this account.");
+    sections.push("    Use phrases like 'Currently...', 'Today...', 'Right now...', 'The [persona] is facing...'");
+    sections.push("    Name the specific condition, not a generic industry trend.");
+    sections.push("");
+    sections.push("  SENTENCE 3-4: CONSEQUENCE — Immediately follow with the cost, risk, or negative impact of this state.");
+    sections.push("    Use phrases like 'This means...', 'The result is...', 'Which creates...', 'Without addressing this...'");
+    sections.push("    Include a specific number, dollar figure, percentage, or time metric.");
+    sections.push("");
+    sections.push("  SENTENCE 5-6: INSIGHT / SHIFT — State the core insight, reframe, or required capability shift.");
+    sections.push("    Use phrases like 'The real issue is...', 'The shift required is...', 'The opportunity is...', 'What changes the trajectory is...'");
+    sections.push("    This must be specific to THIS situation — not a generic observation.");
+    sections.push("");
+    sections.push("  SENTENCE 7+: ACTION — Close with a concrete seller action directed at a specific persona.");
+    sections.push("    Use executable verbs: Ask, Confirm, Map, Validate, Challenge, Position, Quantify.");
+    sections.push("    Name the specific person/role and the specific question or deliverable.");
+    sections.push("");
+    sections.push("CRITICAL: This ordering is NON-NEGOTIABLE. Do not interleave or reorder.");
+    sections.push("Context first. Then consequence. Then insight. Then action. Always.");
+    sections.push("");
+    sections.push("ADDITIONAL MANDATORY ELEMENTS (embed within the progression above):");
+    sections.push("- At least one concrete metric: a percentage, dollar figure, timeframe, or named KPI.");
+    sections.push("- A specific capability or behavior shift (not 'better process' — name the actual capability).");
+    sections.push("- A talk-track move the seller can use verbatim.");
     sections.push("");
     sections.push("TONE: Write as a sharp commercial POV — not a summary, not advice, not a framework description.");
     sections.push("Connect the business issue directly to money, risk, time, pipeline, conversion, retention, or operating efficiency.");
