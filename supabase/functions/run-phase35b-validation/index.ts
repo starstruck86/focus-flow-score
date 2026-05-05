@@ -400,6 +400,13 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
   // Temporary validation runner — no auth required. Will be deleted after Phase 3.5B.
+  const url = new URL(req.url);
+  const caseId = url.searchParams.get("case");
+  const casesToRun = caseId ? CASES.filter(c => c.id === caseId) : CASES;
+
+  if (casesToRun.length === 0) {
+    return new Response(JSON.stringify({ error: `Unknown case: ${caseId}`, available: CASES.map(c => c.id) }), { status: 400, headers: { ...CORS, "Content-Type": "application/json" } });
+  }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -408,7 +415,7 @@ Deno.serve(async (req) => {
 
   const results: Array<Record<string, unknown>> = [];
 
-  for (const c of CASES) {
+  for (const c of casesToRun) {
     try {
       // 1. Strategy: call run-strategy-eval-synthesis with validation bypass
       const stratRes = await fetch(`${supabaseUrl}/functions/v1/run-strategy-eval-synthesis`, {
