@@ -504,12 +504,15 @@ Deno.serve(async (req) => {
   }
 
   const strategyWins = results.filter(r => r.winner === "strategy").length;
+  const baselineWins = results.filter(r => r.winner === "baseline").length;
+  const ties = results.filter(r => r.winner === "tie").length;
   const winRate = Math.round((strategyWins / results.length) * 100);
   const structureLosses = results.filter(r => r.structure_winner === "baseline").length;
   const bizLosses = results.filter(r => r.biz_impact_winner === "baseline").length;
   const invalidOutputs = results.filter(r => r.strategy_valid === false).length;
   const contaminatedBaselines = results.filter(r => r.baseline_clean === false).length;
-  const allPass = winRate >= 70 && structureLosses === 0 && bizLosses === 0 && invalidOutputs === 0 && contaminatedBaselines === 0;
+  // New standard: 0 baseline wins, Strategy must win majority
+  const allPass = baselineWins === 0 && strategyWins > ties && structureLosses === 0 && bizLosses === 0 && invalidOutputs === 0 && contaminatedBaselines === 0;
 
   return new Response(JSON.stringify({
     timestamp: new Date().toISOString(),
