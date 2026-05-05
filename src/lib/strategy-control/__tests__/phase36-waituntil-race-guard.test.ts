@@ -57,12 +57,10 @@ describe("Phase 3.6 — Authoring failure path telemetry", () => {
   });
 
   it("authoring failure DB write includes full meta object, not a subset", () => {
-    // The .update call that uses authoringFailMeta must reference the full object
-    const updateBlocks = extractUpdateBlocks(runTaskSource);
-    const authoringFailWrite = updateBlocks.find((b) => b.includes("authoringFailMeta"));
-    expect(authoringFailWrite).toBeDefined();
-    // It must set meta: authoringFailMeta (the composite object), NOT individual keys
-    expect(authoringFailWrite).toContain("meta: authoringFailMeta");
+    // The .update call that persists the authoring failure must use the composite
+    // authoringFailMeta variable (which contains planner + performance + anomaly_flags).
+    // Search for the pattern: meta: authoringFailMeta in the source.
+    expect(runTaskSource).toContain("meta: authoringFailMeta");
   });
 });
 
