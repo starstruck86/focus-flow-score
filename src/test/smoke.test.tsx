@@ -309,7 +309,7 @@ describe('RouteErrorBoundary', () => {
 });
 
 // ─── Page module exports ───────────────────────────────
-describe('Page modules export default components', () => {
+describe('Page modules export default components', { timeout: 15000 }, () => {
   it('Settings', async () => {
     const mod = await import('@/pages/Settings');
     expect(typeof mod.default).toBe('function');

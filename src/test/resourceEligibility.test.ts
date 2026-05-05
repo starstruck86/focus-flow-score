@@ -59,8 +59,17 @@ describe('isDeepEnrichEligible', () => {
     expect(isDeepEnrichEligible(makeResource({ file_url: null, enrichment_status: 'not_enriched' } as any))).toBe(false);
   });
 
-  it('returns false when file_url is not HTTP', () => {
-    expect(isDeepEnrichEligible(makeResource({ file_url: 'file:///local', enrichment_status: 'not_enriched' } as any))).toBe(false);
+  it('accepts non-HTTP file_url (uploaded file paths are valid sources)', () => {
+    // Implementation broadened: any file_url >3 chars that doesn't start with '[' is valid
+    expect(isDeepEnrichEligible(makeResource({ file_url: 'file:///local', enrichment_status: 'not_enriched' } as any))).toBe(true);
+  });
+
+  it('returns false when file_url is bracket placeholder', () => {
+    expect(isDeepEnrichEligible(makeResource({ file_url: '[none]', enrichment_status: 'not_enriched' } as any))).toBe(false);
+  });
+
+  it('returns false when file_url is too short', () => {
+    expect(isDeepEnrichEligible(makeResource({ file_url: 'ab', enrichment_status: 'not_enriched' } as any))).toBe(false);
   });
 
   it('returns false for duplicate status', () => {
