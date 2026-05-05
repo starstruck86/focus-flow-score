@@ -131,6 +131,38 @@ function buildEvalSynthesisSystemPrompt(
   sections.push(`Max generic markers allowed: ${rubric.maxGenericMarkers}`);
   sections.push("");
 
+  // ── Phase 3.5C: Explicit section enforcement
+  sections.push("=== MANDATORY SECTION ENFORCEMENT (Phase 3.5C — NON-NEGOTIABLE) ===");
+  sections.push("Your final output MUST include these exact required concepts in this exact order:");
+  for (let i = 0; i < rubric.mustHave.length; i++) {
+    sections.push(`  ${i + 1}. "${rubric.mustHave[i]}"`);
+  }
+  sections.push("");
+  if (outputContract.shape === "structured_artifact" || outputContract.shape === "executive_brief") {
+    sections.push("FOR STRUCTURED ARTIFACTS:");
+    sections.push("- Each mustHave above MUST appear as a named top-level JSON key or section heading.");
+    sections.push("- Use the EXACT phrase from the list above as the key/heading name. Do NOT rename, merge, or use synonyms.");
+    sections.push("- Example: if mustHave says 'commercial insight', your key must be 'commercial insight' or 'commercial_insight' — NOT 'business opportunity' or 'key insight'.");
+    sections.push("");
+  } else {
+    sections.push("FOR PROSE:");
+    sections.push("- Each mustHave concept above MUST appear explicitly in the prose using the EXACT phrase at least once.");
+    sections.push("- Example: if mustHave says 'change vectors', your prose must literally contain the words 'change vectors' somewhere.");
+    sections.push("- Example: if mustHave says 'commercial insight', your prose must contain those exact words together.");
+    sections.push("- Do NOT rely on synonyms alone. The exact phrase must be present.");
+    sections.push("");
+  }
+
+  // ── Phase 3.5C: Evidence placement enforcement
+  sections.push("=== EVIDENCE PLACEMENT RULES (Phase 3.5C — DETERMINISTIC GATE) ===");
+  sections.push("Every citation ([KI:...], [PB:...], [SRC:...]) MUST sit inside or immediately next to a sentence containing causal reasoning.");
+  sections.push("Causal language = because, therefore, resulting in, which means, this creates, this drives, demonstrates, validates, confirms, consequently, as a result.");
+  sections.push("A citation sentence or its immediate neighbor (±1 sentence) MUST contain at least one of these causal words.");
+  sections.push("Max 3 citations per sentence. No citation lists at the end unless each cited source is explained with a causal reason.");
+  sections.push("FAIL EXAMPLE: 'The market is growing [KI:abc123].' — no causal language, citation is decorative.");
+  sections.push("PASS EXAMPLE: 'Fragmented guest data drives $420K in annual redundant licensing because each property maintains separate systems [KI:abc123].'");
+  sections.push("");
+
   // ── Library proof (retrieved KIs/playbooks)
   sections.push("=== LIBRARY PROOF (Retrieved Knowledge Items & Playbooks) ===");
   if (libraryHits.length === 0) {
