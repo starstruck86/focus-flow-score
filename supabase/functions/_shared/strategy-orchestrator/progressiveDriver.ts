@@ -444,10 +444,12 @@ export async function assembleAndFinalize(args: {
       for (const dim of gateResult.failed_dimensions) {
         failurePatterns[dim] = (failurePatterns[dim] ?? 0) + 1;
       }
+      const progLibCounts = failMeta?.progressive?.library_counts ?? { kis: 0, playbooks: 0 };
       const hardFailMeta: Record<string, unknown> = {
         ...failMeta,
         artifact_gate: artifactGateTelemetry,
         artifact_gate_failed: true,
+        library_counts: progLibCounts,
         anomaly_flags: failAnomalyFlags,
         failure_patterns: failurePatterns,
         performance: {
