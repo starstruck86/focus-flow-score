@@ -541,7 +541,7 @@ Deno.serve(async (req) => {
           "x-validation-key": validationKey,
           "apikey": Deno.env.get("SUPABASE_ANON_KEY")!,
         },
-        body: JSON.stringify({ skill: c.skill, threadId: `validation-35b-${c.id}` }),
+        body: JSON.stringify({ skill: c.skill, threadId: `validation-35b-${c.id}`, skipAdversarial: true }),
       });
       const stratData = await stratRes.json() as Record<string, unknown>;
       const strategyText = (stratData.generated_text as string) || "";
