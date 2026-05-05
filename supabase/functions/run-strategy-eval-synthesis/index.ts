@@ -705,7 +705,7 @@ Deno.serve(async (req) => {
       return lines.join("\n");
     };
 
-    for (let iteration = 0; iteration < MAX_ADVERSARIAL_ITERATIONS; iteration++) {
+    for (let iteration = 0; !skipAdversarial && iteration < MAX_ADVERSARIAL_ITERATIONS; iteration++) {
       adversarialIterations++;
 
       // ── Step 2: Adversarial Critic
