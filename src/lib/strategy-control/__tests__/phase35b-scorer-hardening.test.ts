@@ -133,15 +133,24 @@ enhances performance and helps maximize productivity while optimizing processes.
 Better outcomes are expected through innovative approaches and scalable solutions.
 `;
 
-/** Strategy-quality business impact — causal chain + stakeholder-tied quantification */
-const STRATEGY_BIZ_IMPACT_TEXT = `
-{
-  "current_state": "Beechwood Hotel currently loses $340K annually through fragmented guest data [KI:abc123]",
-  "consequence": "Because their 3 disconnected platforms prevent cross-sell identification, this creates a 15% NPS gap versus consolidated competitors, which means the General Manager faces board pressure on RevPAR targets",
-  "financial_impact": "Consolidation delivers $340K in recovered revenue + 15% NPS uplift, resulting in a 9-month payback period",
-  "recommended_action": "Confirm with the General Manager whether Q3 budget cycle allows $180K platform investment, then validate with IT that API integration is feasible within 90 days"
-}
-`;
+/** Strategy-quality business impact — causal chain + stakeholder-tied quantification + citations */
+const STRATEGY_BIZ_IMPACT_TEXT = JSON.stringify({
+  current_state: {
+    situation: "Beechwood Hotel loses $340K annually through fragmented guest data [KI:abc123]",
+    evidence: "3 disconnected platforms prevent cross-sell identification",
+    impact_metric: "15% NPS gap versus consolidated competitors",
+  },
+  consequence: {
+    business_effect: "Because fragmented platforms block cross-sell, this creates revenue leakage [KI:def456]",
+    stakeholder_pressure: "General Manager faces board pressure on RevPAR targets, which means Q3 budget decisions are at risk",
+    financial_exposure: "$340K annual leakage compounds if competitors consolidate first",
+  },
+  recommended_action: {
+    immediate: "Confirm with the General Manager whether Q3 budget cycle allows $180K platform investment",
+    validation: "Validate with IT that API integration is feasible within 90 days",
+    stakeholder_alignment: "Based on the identified revenue gap, position this as recovery not cost",
+  },
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // REGRESSION TESTS
