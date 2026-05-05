@@ -107,6 +107,7 @@ function makeTaskRunRow(
         generation_latency_ms: 8500,
         gate_latency_ms: 15,
       },
+      anomaly_flags: { artifact_failure: true },
       library_counts: { kis: 10, playbooks: 2, content_chars: 5000 },
       failure_patterns: { template_fidelity: 1 },
     },
