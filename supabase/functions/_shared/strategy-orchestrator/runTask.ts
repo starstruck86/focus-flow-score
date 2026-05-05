@@ -1328,6 +1328,16 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   if (escalationPersistenceBlock) metaPatch.escalation_suggestions = escalationPersistenceBlock;
   if (standardContextBlock) metaPatch.standard_context = standardContextBlock;
   if (calibrationPersistenceBlock) metaPatch.calibration = calibrationPersistenceBlock;
+  // Phase 3.5D — Artifact gate telemetry (production enforcement signal)
+  metaPatch.artifact_gate = artifactGateTelemetry;
+  if (planResult.ok) {
+    metaPatch.planner = {
+      plan_hash: planResult.plan.planHash,
+      term_seeds: planResult.plan.termSeeds.length,
+      methodology_seeds: (taskManifest.retrieval.methodologySeeds ?? []).length,
+      expanded_seeds: planResult.plan.expandedSeeds?.length ?? 0,
+    };
+  }
   // W12 — enforcement dry-run BEFORE schema_health so W10 sees it.
   if (enforcementPersistenceBlock) metaPatch.enforcement_dry_run = enforcementPersistenceBlock;
   // W10 — stamp compact schema-health summary AFTER all blocks are assembled.
