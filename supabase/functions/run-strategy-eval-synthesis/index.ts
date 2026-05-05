@@ -31,6 +31,24 @@ function isConstrainedProse(
   return !!hasForbid;
 }
 
+/**
+ * Detect if the output is a "decision artifact" — any structured output whose
+ * purpose is executive alignment, business case, deal review, or decision support.
+ * This is universal, not skill-specific.
+ */
+function isDecisionArtifact(
+  manifest: { behaviorIntent: string; workspace: string },
+  outputContract: { shape: string },
+): boolean {
+  const decisionIntents = ["account_brief", "deal_review", "business_case", "executive_summary", "decision_support"];
+  const decisionWorkspaces = ["artifacts"];
+  const decisionShapes = ["structured_artifact", "executive_brief"];
+  return (
+    decisionIntents.includes(manifest.behaviorIntent) ||
+    (decisionWorkspaces.includes(manifest.workspace) && decisionShapes.includes(outputContract.shape))
+  );
+}
+
 function buildEvalSynthesisSystemPrompt(
   inputs: Record<string, string>,
   manifest: { id: string; label: string; behaviorIntent: string; workspace: string },
@@ -248,6 +266,50 @@ function buildEvalSynthesisSystemPrompt(
   sections.push("  - specific discovery action to fill the gap");
   sections.push("Do NOT omit it. Gaps named are more valuable than gaps hidden.");
   sections.push("");
+
+  // ── T8: Decision Artifact Transformation (universal for executive-alignment outputs)
+  if (isDecisionArtifact(manifest, outputContract)) {
+    sections.push("═══ TRANSFORMATION 8: DECISION ARTIFACT TRANSFORMATION ═══");
+    sections.push("This output is a DECISION ARTIFACT — its purpose is to arm an executive or seller with enough clarity to act.");
+    sections.push("A decision artifact is NOT a summary. It is a persuasion instrument with commercial teeth.");
+    sections.push("");
+    sections.push("MANDATORY SECTIONS — each section must contain its own micro-spine:");
+    sections.push("");
+    sections.push("  1. EXECUTIVE DECISION THESIS");
+    sections.push("     What is happening → Why does it matter commercially → What decision does this create?");
+    sections.push("     Must be one crisp paragraph that an exec can read in 15 seconds and say 'I understand the ask.'");
+    sections.push("");
+    sections.push("  2. BUSINESS RISK OF DELAY");
+    sections.push("     Quantify what the account loses per quarter/month by not acting.");
+    sections.push("     Name the metric the executive is measured on (margin, RevPAR, NPS, pipeline velocity, churn).");
+    sections.push("     Frame as: 'Every [time unit] without [action] costs [specific $$ or KPI erosion].'");
+    sections.push("");
+    sections.push("  3. COMMERCIAL STAKES");
+    sections.push("     Estimated deal size, competitive exposure, or budget window.");
+    sections.push("     If unknown, state the gap and the discovery question that fills it.");
+    sections.push("     Never say 'significant opportunity' — name a number or range.");
+    sections.push("");
+    sections.push("  4. RECOMMENDED EXECUTIVE ACTION");
+    sections.push("     What should the executive sponsor/champion DO? Not 'align stakeholders' — name the meeting, the approval, the sign-off.");
+    sections.push("     Tie this to their decision process: 'Schedule a 30-min review with [role] to validate [criteria] before [date].'");
+    sections.push("");
+    sections.push("  5. SELLER NEXT MOVE");
+    sections.push("     The single most important thing the seller does after reading this artifact.");
+    sections.push("     Must be an executable action with a specific verb, target person, and deliverable.");
+    sections.push("");
+    sections.push("  6. DECISION FRICTION / LIKELY OBJECTION");
+    sections.push("     Name the #1 reason this deal stalls or the exec says no.");
+    sections.push("     Provide the counter-positioning: how the seller neutralizes it.");
+    sections.push("     If unknown, name the discovery question that surfaces it.");
+    sections.push("");
+    sections.push("  7. PROOF / SOURCE SUPPORT");
+    sections.push("     Ground claims in library KIs/PBs. Every assertion of impact must cite a source or explicitly state 'gap — needs validation.'");
+    sections.push("");
+    sections.push("REWRITE RULE: If any of the 7 sections is missing, vague, or reads like a generic summary, rewrite it.");
+    sections.push("Each section must pass the test: 'Does this give the reader something they can act on RIGHT NOW?'");
+    sections.push("If yes → keep. If no → rewrite with specifics from the account context and library proof.");
+    sections.push("");
+  }
 
   // ── Final quality gate
   sections.push("═══ FINAL QUALITY GATE ═══");
