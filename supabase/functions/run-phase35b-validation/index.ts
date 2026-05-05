@@ -170,38 +170,93 @@ function scoreActionability(text: string, shape?: string): number {
 }
 
 function scoreStructureProse(text: string): number {
-  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-  const sentences = countMatches(text, /[.!?]\s/g) + 1;
+  const lower = text.toLowerCase();
   const words = text.split(/\s+/).length;
-  let coherence = 0;
-  if (words < 250) {
-    if (sentences >= 4) coherence = 1;
-    else if (paragraphs.length >= 2 || sentences >= 3) coherence = 0.75;
-    else if (sentences >= 2) coherence = 0.5;
-  } else {
-    if (paragraphs.length >= 4) coherence = 1;
-    else if (paragraphs.length >= 2) coherence = 0.75;
-    else if (paragraphs.length >= 1 && sentences >= 4) coherence = 0.5;
+  if (words < 10) return 1;
+
+  // ── Business Spine Detection with ORDERING ─────────────────
+  // A well-structured prose output follows: Context → Consequence → Insight → Action
+  // We check both presence AND correct sequential ordering.
+  const spinePhases: Array<{ label: string; pattern: RegExp }> = [
+    { label: "context", pattern: /\b(?:current(?:ly)?|today|right now|existing|as of|at present|status quo|their (?:team|org|pipeline|process)|the (?:problem|challenge|situation|reality)|facing|experiencing|struggling|dealing with)\b/i },
+    { label: "consequence", pattern: /\b(?:cost of|risk of|consequence|negative impact|result(?:ing) in|which (?:means|creates|causes|drives)|this (?:means|creates|causes|drives|leaves)|without this|if (?:not|they don't)|losing|missed|erosion|pressure|threat|exposure|vulnerability|at stake|delayed?)\b/i },
+    { label: "insight", pattern: /\b(?:the (?:real|core|key|critical|fundamental) (?:issue|question|shift|opportunity)|what (?:this means|matters|changes)|the shift|the opportunity|our (?:view|position|thesis|pov|perspective)|the way forward|reframe|rethink|reconsider|the unlock|differentiat|insight is|the question isn't)\b/i },
+    { label: "action", pattern: /\b(?:ask (?:them|their|the|about|whether|how|what|why)|propose|confirm whether|validate|test whether|open (?:with|by)|frame (?:the|this|around)|position|next step|start by|begin with|lead with|anchor on|the question to pose)\b/i },
+  ];
+
+  // Find first occurrence position for each phase
+  const phasePositions: number[] = [];
+  let spineHits = 0;
+  for (const phase of spinePhases) {
+    const match = lower.search(phase.pattern);
+    phasePositions.push(match);
+    if (match >= 0) spineHits++;
   }
+
+  // Check ordering: each found phase should appear after the previous one
+  let orderedCount = 0;
+  let lastPos = -1;
+  for (const pos of phasePositions) {
+    if (pos > lastPos && pos >= 0) {
+      orderedCount++;
+      lastPos = pos;
+    }
+  }
+
+  // Spine score: presence + ordering bonus
+  let spineScore = 0;
+  if (spineHits >= 4 && orderedCount >= 3) spineScore = 1.0;       // Full spine, mostly ordered
+  else if (spineHits >= 3 && orderedCount >= 2) spineScore = 0.75;  // Strong spine
+  else if (spineHits >= 3) spineScore = 0.6;                         // Present but disordered
+  else if (spineHits >= 2) spineScore = 0.4;
+  else if (spineHits >= 1) spineScore = 0.2;
+
+  // ── Concrete Entity Density (structural differentiator) ────
+  // Prose with named entities, numbers, and specific terms has
+  // superior structure because it's grounded, not abstract.
+  const numbers = countMatches(text, /\b\d[\d,.]*%?\b/g);
+  const properNouns = countMatches(text, /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g);
+  const quotedTerms = countMatches(text, /"[^"]{2,}"/g);
+  const concreteSignals = numbers + properNouns * 0.5 + quotedTerms;
+  const concretePer100 = (concreteSignals / words) * 100;
+  let concreteBonus = 0;
+  if (concretePer100 > 3) concreteBonus = 0.5;
+  else if (concretePer100 > 1.5) concreteBonus = 0.25;
+
+  // ── Generic Prose Penalty ──────────────────────────────────
+  const GENERIC_PROSE = [/\bleverage\b/gi, /\bbest practices?\b/gi, /\bsynerg/gi, /\bholistic\b/gi, /\bscalable solution/gi, /\binnovative approach/gi, /\bworld[- ]class\b/gi, /\bin today'?s (?:landscape|environment|market)\b/gi, /\bstreamline (?:operations|processes)\b/gi, /\bdrive (?:growth|value|results)\b/gi, /\bkey stakeholders?\b/gi, /\bunlock (?:potential|value|growth)\b/gi];
+  const genericHits = GENERIC_PROSE.reduce((n, p) => n + countMatches(text, p), 0);
+  let genericPenalty = 0;
+  if (genericHits >= 4) genericPenalty = 0.5;
+  else if (genericHits >= 2) genericPenalty = 0.25;
+  else if (genericHits >= 1) genericPenalty = 0.1;
+
+  // ── Sentence Density (light signal) ────────────────────────
+  const sentences = countMatches(text, /[.!?]\s/g) + 1;
   const avgWordsPerSentence = words / Math.max(sentences, 1);
   let density = 0;
   if (avgWordsPerSentence >= 10 && avgWordsPerSentence <= 30) density = 1;
   else if (avgWordsPerSentence >= 8 && avgWordsPerSentence <= 35) density = 0.5;
-  const transitions = countMatches(text, /\b(?:however|therefore|specifically|because|given that|as a result|in contrast|for example|notably|critically|importantly|additionally|furthermore|meanwhile|this means|this isn't|in other words|the goal|by contrast|which means|leading to|ensuring|ultimately|while|although|yet|so|thus|hence|accordingly|consequently)\b/gi);
+
+  // ── Transition Flow (minor, capped) ────────────────────────
+  const transitions = countMatches(text, /\b(?:however|therefore|specifically|because|given that|as a result|in contrast|for example|notably|critically|importantly|furthermore|meanwhile|this means|in other words|by contrast|which means|leading to|ensuring|ultimately|although|yet|thus|hence|accordingly|consequently)\b/gi);
   let flow = 0;
-  if (transitions >= 4) flow = 1;
-  else if (transitions >= 1) flow = 0.75;
-  const bizFlow = countMatches(text, /\b(?:current state|cost|risk|requires?|outcome|question|today|before|after|result|gap|pain|opportunity|impact|goal|target|because of|in order to|which leads to|this creates|the problem|the challenge|the opportunity|moving from|enabling|preventing|addressing)\b/gi);
-  let bizScore = 0;
-  if (bizFlow >= 4) bizScore = 1;
-  else if (bizFlow >= 2) bizScore = 0.75;
-  else if (bizFlow >= 1) bizScore = 0.5;
-  const rawSum = coherence * 1.2 + density * 1.0 + flow * 0.6 + bizScore * 1.2;
+  if (transitions >= 3) flow = 1;
+  else if (transitions >= 1) flow = 0.5;
+
+  // ── Weighted Sum ───────────────────────────────────────────
+  // Spine (with ordering): 2.0 (dominant)
+  // Concrete entities:     0.6 (structural grounding)
+  // Density:               0.6 (readability)
+  // Flow:                  0.3 (minor — cannot dominate)
+  // Generic penalty:       subtracted
+  const rawSum = spineScore * 2.0 + concreteBonus * 0.6 + density * 0.6 + flow * 0.3 - genericPenalty;
+
   let score: number;
-  if (rawSum >= 3.5) score = 5;
-  else if (rawSum >= 2.75) score = 4;
-  else if (rawSum >= 2.0) score = 3;
-  else if (rawSum >= 1.0) score = 2;
+  if (rawSum >= 2.6) score = 5;
+  else if (rawSum >= 2.0) score = 4;
+  else if (rawSum >= 1.4) score = 3;
+  else if (rawSum >= 0.7) score = 2;
   else score = 1;
   return score;
 }
