@@ -1,11 +1,10 @@
 // ════════════════════════════════════════════════════════════════
 // run-telemetry-proof — TEMPORARY service-role-only canary.
 //
-// Fires one task per type via the shared orchestrator using service
-// role impersonation, waits for completion, then queries and returns
-// the meta fields as proof of Phase 3.6 telemetry persistence.
+// Queries task_runs to prove Phase 3.6 telemetry. Can also fire
+// tasks using a specified user_id for impersonation.
 //
-// Security: requires STRATEGY_VALIDATION_KEY via x-validation-key header.
+// Security: validates Authorization Bearer matches SUPABASE_SERVICE_ROLE_KEY.
 // This function MUST be deleted after validation.
 // ════════════════════════════════════════════════════════════════
 
@@ -15,7 +14,7 @@ import { runStrategyTaskInBackground } from "../_shared/strategy-orchestrator/ru
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-validation-key",
+    "authorization, x-client-info, apikey, content-type",
 };
 
 function json(body: unknown, status = 200) {
@@ -25,7 +24,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-async function pollForCompletion(supabase: any, runId: string, maxWaitMs = 180_000): Promise<any> {
+async function pollForCompletion(supabase: any, runId: string, maxWaitMs = 120_000): Promise<any> {
   const startMs = Date.now();
   while (Date.now() - startMs < maxWaitMs) {
     const { data } = await supabase
@@ -33,10 +32,8 @@ async function pollForCompletion(supabase: any, runId: string, maxWaitMs = 180_0
       .select("id, task_type, status, meta, draft_output, error, completed_at")
       .eq("id", runId)
       .single();
-    if (data && (data.status === "completed" || data.status === "failed")) {
-      return data;
-    }
-    await new Promise(r => setTimeout(r, 5000));
+    if (data && (data.status === "completed" || data.status === "failed")) return data;
+    await new Promise(r => setTimeout(r, 3000));
   }
   return null;
 }
@@ -44,21 +41,18 @@ async function pollForCompletion(supabase: any, runId: string, maxWaitMs = 180_0
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  // ── Auth: STRATEGY_VALIDATION_KEY ──────────────────────────────
-  const validationKey = Deno.env.get("STRATEGY_VALIDATION_KEY") ?? "";
-  const providedKey = req.headers.get("x-validation-key") ?? "";
-  if (!validationKey || providedKey !== validationKey) {
-    return json({ error: "Unauthorized" }, 401);
+  // ── Auth: service role key in Authorization Bearer ─────────────
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const authHeader = req.headers.get("authorization") ?? "";
+  const token = authHeader.replace(/^Bearer\s+/i, "");
+  if (!serviceKey || token !== serviceKey) {
+    return json({ error: "Unauthorized — service role required" }, 401);
   }
 
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
-
   const body = await req.json().catch(() => ({}));
   const action = body.action || "query";
-  const userId = body.user_id;
 
-  // ── Query recent runs and their telemetry ──────────────────────
   if (action === "query") {
     const results: Record<string, any> = {};
     for (const taskType of ["discovery_prep", "account_brief", "ninety_day_plan"]) {
@@ -69,14 +63,10 @@ Deno.serve(async (req) => {
         .in("status", ["completed", "failed"])
         .order("created_at", { ascending: false })
         .limit(3);
-      
       if (error) { results[taskType] = { error: error.message }; continue; }
       results[taskType] = (data || []).map((row: any) => ({
-        id: row.id,
-        status: row.status,
-        has_draft: !!row.draft_output,
-        created_at: row.created_at,
-        completed_at: row.completed_at,
+        id: row.id, status: row.status, has_draft: !!row.draft_output,
+        created_at: row.created_at, completed_at: row.completed_at,
         meta_keys: row.meta ? Object.keys(row.meta) : [],
         planner: row.meta?.planner ?? null,
         artifact_gate: row.meta?.artifact_gate ?? null,
@@ -88,8 +78,9 @@ Deno.serve(async (req) => {
     return json({ results });
   }
 
-  // ── Fire a task and wait for completion ────────────────────────
-  if (action === "fire" && userId) {
+  if (action === "fire") {
+    const userId = body.user_id;
+    if (!userId) return json({ error: "user_id required" }, 400);
     const taskType = body.task_type || "account_brief";
     const forceFailure = body.force_failure === true;
     const inputs: Record<string, any> = {
@@ -103,44 +94,26 @@ Deno.serve(async (req) => {
       inputs.__validation_origin = "run-validation-canary";
     }
 
-    // Use user-scoped client for the task run (RLS)
-    const userSupabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: `Bearer ${serviceKey}` } } },
-    );
-
     try {
       const { run_id } = await runStrategyTaskInBackground({
-        userId,
-        supabase: userSupabase,
-        inputs,
-        taskType,
+        userId, supabase, inputs, taskType,
       });
-
-      // Poll for completion
       const result = await pollForCompletion(supabase, run_id);
-      if (!result) {
-        return json({ error: "Timed out waiting for task", run_id }, 504);
-      }
-
+      if (!result) return json({ error: "Timed out", run_id }, 504);
       return json({
-        run_id: result.id,
-        task_type: result.task_type,
-        status: result.status,
-        has_draft: !!result.draft_output,
+        run_id: result.id, task_type: result.task_type, status: result.status,
+        has_draft: !!result.draft_output, error: result.error,
         meta_keys: result.meta ? Object.keys(result.meta) : [],
         planner: result.meta?.planner ?? null,
         artifact_gate: result.meta?.artifact_gate ?? null,
         performance: result.meta?.performance ?? null,
         anomaly_flags: result.meta?.anomaly_flags ?? null,
         failure_patterns: result.meta?.failure_patterns ?? null,
-        error: result.error,
       });
     } catch (e: any) {
       return json({ error: e?.message || String(e) }, 500);
     }
   }
 
-  return json({ error: "Unknown action. Use 'query' or 'fire'" }, 400);
+  return json({ error: "Unknown action" }, 400);
 });
