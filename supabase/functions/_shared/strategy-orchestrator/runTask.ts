@@ -22,6 +22,11 @@
 // ════════════════════════════════════════════════════════════════
 
 import { retrieveLibraryContext } from "./libraryRetrieval.ts";
+import { runArtifactGate, type ArtifactGateTelemetry } from "./artifactGateEnforcement.ts";
+import { getTaskManifest, toArtifactManifest } from "./taskManifestMap.ts";
+import { buildPlan } from "../strategy-skills/planner.ts";
+import { planToRetrievalArgs } from "../strategy-skills/adapter.ts";
+import type { TaskType } from "./types.ts";
 import { callClaude, callOpenAI, callPerplexity, safeParseJSON } from "./providers.ts";
 import { getHandler } from "./registry.ts";
 import { authorBySectionBatches } from "./sectionAuthor.ts";
@@ -145,14 +150,58 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   }
 
   // ── Stage 0: Library retrieval ────────────────────────────────
-  // W3 — resolve the workspace contract for this task so the universal
-  // library retrieval policy is consistent with the chat surface.
-  // The mapping is task_type → WorkspaceKey via the W3 normalizer.
-  // Library scopes still drive the actual query; the contract decides
-  // whether we *should* query and how to interpret coverage.
+  // Phase 3.5D: Planner-driven retrieval. The universal planner builds
+  // a RetrievalQueryPlan from the task manifest → planToRetrievalArgs
+  // maps it to the existing retriever shape. handler.libraryScopes()
+  // is no longer the source of truth — buildPlan owns all retrieval terms.
   const taskWorkspace = resolveTaskWorkspace(taskType);
   const resolvedContract = resolveServerWorkspaceContract(taskWorkspace.workspace);
-  const derivedScopes = handler.libraryScopes(inputs);
+
+  // Build planner context from task inputs
+  const taskManifest = getTaskManifest(taskType as TaskType);
+  const plannerInputs: Record<string, unknown> = {
+    account: inputs.company_name,
+    company_name: inputs.company_name,
+    opportunity: inputs.opportunity,
+    stage: inputs.stage,
+    persona: inputs.participants?.[0]?.title,
+    topic: inputs.desired_next_step,
+    industry: (inputs as any).industry,
+  };
+  const planResult = buildPlan(
+    taskManifest,
+    taskManifest.depth,
+    plannerInputs,
+    {}, // PlannerContext — no thread/prior in task pipeline
+  );
+
+  // Derive scopes from planner or fall back to handler (defense-in-depth)
+  let derivedScopes: string[];
+  let plannerRetrievalArgs: { scopes: string[]; maxKIs: number; maxPlaybooks: number } | null = null;
+  if (planResult.ok) {
+    plannerRetrievalArgs = planToRetrievalArgs(planResult.plan);
+    derivedScopes = plannerRetrievalArgs.scopes;
+    console.log(JSON.stringify({
+      tag: "[phase35d:planner_driven_retrieval]",
+      run_id: runId,
+      task_type: taskType,
+      plan_hash: planResult.plan.planHash,
+      term_seeds: planResult.plan.termSeeds.length,
+      methodology_seeds_injected: (taskManifest.retrieval.methodologySeeds ?? []).length > 0,
+      scopes_count: derivedScopes.length,
+    }));
+  } else {
+    // Planner refused (e.g. insufficient context). Fall back to handler
+    // scopes but log the refusal — this should be investigated.
+    derivedScopes = handler.libraryScopes(inputs);
+    console.warn(JSON.stringify({
+      tag: "[phase35d:planner_refused_fallback]",
+      run_id: runId,
+      task_type: taskType,
+      reason: planResult.reason,
+    }));
+  }
+
   const userContent = [
     inputs.company_name,
     inputs.opportunity,
@@ -173,9 +222,9 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   await setProgress(supabase, runId, "library_retrieval");
   const library = libraryDecision.shouldQuery
     ? await retrieveLibraryContext(supabase, userId, inputs, {
-        scopes: derivedScopes,
-        maxKIs: 12,
-        maxPlaybooks: 6,
+        scopes: plannerRetrievalArgs?.scopes ?? derivedScopes,
+        maxKIs: plannerRetrievalArgs?.maxKIs ?? 12,
+        maxPlaybooks: plannerRetrievalArgs?.maxPlaybooks ?? 6,
       })
     : { knowledgeItems: [], playbooks: [], contextString: "", counts: { kis: 0, playbooks: 0 } };
 
@@ -807,7 +856,104 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     throw wrapped;
   }
 
-  // ── Stage 4: Review (Lovable AI, playbook-grounded) ──────────
+  // ── Phase 3.5D: Artifact Gate Enforcement ────────────────────────
+  // Run the deterministic artifact gate AFTER generation. If it fails,
+  // attempt ONE regen. If regen also fails → HARD FAIL the run.
+  // No silent success. No degraded output. No partial credit.
+  const artifactManifest = toArtifactManifest(taskManifest);
+  const gateStartMs = Date.now();
+  let artifactGateTelemetry: ArtifactGateTelemetry = {
+    pass: false,
+    failed_dimensions: [],
+    regen_attempts: 0,
+    regen_success: false,
+    total_gate_latency_ms: 0,
+  };
+
+  const draftText = typeof draftOutput === "string" ? draftOutput : JSON.stringify(draftOutput);
+  let gateResult = runArtifactGate(draftText, artifactManifest);
+
+  if (!gateResult.pass) {
+    console.warn(JSON.stringify({
+      tag: "[phase35d:artifact_gate_failed]",
+      run_id: runId,
+      task_type: taskType,
+      failed_dimensions: gateResult.failed_dimensions,
+      diagnostics: gateResult.gates.flatMap(g => g.diagnostics).slice(0, 10),
+    }));
+
+    // ONE regen attempt — use the same authoring pipeline
+    artifactGateTelemetry.regen_attempts = 1;
+    await setProgress(supabase, runId, "artifact_gate_regen");
+    try {
+      const regenRaw = await callOpenAI([
+        { role: "system", content: `${overlayPrefix}${handler.buildDocumentSystemPrompt()}\n\nIMPORTANT: Your previous output failed quality gates. Fix these issues:\n${gateResult.gates.flatMap(g => g.diagnostics).join("\n")}` },
+        { role: "user", content: handler.buildDocumentUserPrompt(inputs, synthesis, library) },
+      ], { model: "gpt-5-mini", maxTokens: 16000 });
+      const regenParsed = safeParseJSON<any>(regenRaw);
+      if (regenParsed && typeof regenParsed === "object" && Array.isArray(regenParsed.sections)) {
+        const regenText = JSON.stringify(regenParsed);
+        const regenGate = runArtifactGate(regenText, artifactManifest);
+        if (regenGate.pass) {
+          draftOutput = regenParsed;
+          sectionCount = regenParsed.sections.length;
+          gateResult = regenGate;
+          artifactGateTelemetry.regen_success = true;
+          console.log(JSON.stringify({
+            tag: "[phase35d:artifact_gate_regen_success]",
+            run_id: runId,
+          }));
+        } else {
+          console.error(JSON.stringify({
+            tag: "[phase35d:artifact_gate_regen_also_failed]",
+            run_id: runId,
+            failed_dimensions: regenGate.failed_dimensions,
+          }));
+        }
+      }
+    } catch (regenErr) {
+      console.error(JSON.stringify({
+        tag: "[phase35d:artifact_gate_regen_error]",
+        run_id: runId,
+        error: String((regenErr as Error)?.message ?? regenErr).slice(0, 300),
+      }));
+    }
+
+    // If gate STILL fails after regen → HARD FAIL
+    if (!gateResult.pass) {
+      artifactGateTelemetry.pass = false;
+      artifactGateTelemetry.failed_dimensions = gateResult.failed_dimensions;
+      artifactGateTelemetry.total_gate_latency_ms = Date.now() - gateStartMs;
+
+      const failMsg = `[artifact_gate_failed] Dimensions: ${gateResult.failed_dimensions.join(", ")}`;
+      console.error(JSON.stringify({
+        tag: "[phase35d:artifact_gate_hard_fail]",
+        run_id: runId,
+        task_type: taskType,
+        telemetry: artifactGateTelemetry,
+      }));
+
+      await supabase
+        .from("task_runs")
+        .update({
+          status: "failed",
+          progress_step: "failed",
+          error: failMsg.slice(0, 1000),
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          meta: {
+            artifact_gate: artifactGateTelemetry,
+            artifact_gate_failed: true,
+          },
+        })
+        .eq("id", runId);
+      return;
+    }
+  }
+
+  artifactGateTelemetry.pass = gateResult.pass;
+  artifactGateTelemetry.failed_dimensions = gateResult.failed_dimensions;
+  artifactGateTelemetry.total_gate_latency_ms = Date.now() - gateStartMs;
   let reviewOutput: any = { strengths: [], redlines: [], library_coverage: { used: [], gaps: [] } };
   if (sectionCount > 0) {
     await setProgress(supabase, runId, "review");
@@ -1182,6 +1328,16 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   if (escalationPersistenceBlock) metaPatch.escalation_suggestions = escalationPersistenceBlock;
   if (standardContextBlock) metaPatch.standard_context = standardContextBlock;
   if (calibrationPersistenceBlock) metaPatch.calibration = calibrationPersistenceBlock;
+  // Phase 3.5D — Artifact gate telemetry (production enforcement signal)
+  metaPatch.artifact_gate = artifactGateTelemetry;
+  if (planResult.ok) {
+    metaPatch.planner = {
+      plan_hash: planResult.plan.planHash,
+      term_seeds: planResult.plan.termSeeds.length,
+      methodology_seeds: (taskManifest.retrieval.methodologySeeds ?? []).length,
+      expanded_seeds: planResult.plan.expandedSeeds?.length ?? 0,
+    };
+  }
   // W12 — enforcement dry-run BEFORE schema_health so W10 sees it.
   if (enforcementPersistenceBlock) metaPatch.enforcement_dry_run = enforcementPersistenceBlock;
   // W10 — stamp compact schema-health summary AFTER all blocks are assembled.
