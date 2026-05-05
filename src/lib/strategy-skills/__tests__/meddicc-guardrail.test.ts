@@ -139,4 +139,101 @@ describe('MEDDICC Guardrail', () => {
     });
     expect(confidence).toBe('insufficient');
   });
+  // ── 1. Runtime sufficiency: seeds → counts → confidence ≠ insufficient ──
+
+  it('MEDDICC seeds + real retrieval counts → confidence is NOT insufficient', () => {
+    // Simulate: seeds drove retrieval that found 3 KIs (entity-scoped)
+    const r = planMeddicc(meddiccReviewManifest);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // Seeds produced enough terms to drive retrieval
+    expect(r.plan.termSeeds.length).toBeGreaterThanOrEqual(7);
+    // Now score as if retrieval returned hits matching the seed count
+    const confidence = scoreConfidence({
+      counts: { knowledge_items: 3, playbooks: 1, standards: 0 },
+      entityScoped: true,
+      minRelevantItems: meddiccReviewManifest.retrieval.minRelevantItems ?? 3,
+    });
+    // With real hits, confidence must NOT be insufficient — seeds prevented false 422
+    expect(confidence).not.toBe('insufficient');
+    expect(['high', 'medium']).toContain(confidence);
+  });
+
+  // ── 2. Negative mirror: zero counts still fails regardless of seeds ──
+
+  it('seeds exist but zero retrieval counts still scores insufficient (no gate weakening)', () => {
+    // Seeds are present in the plan...
+    const r = planMeddicc(meddiccReviewManifest);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.plan.termSeeds.length).toBeGreaterThan(5);
+    // ...but retrieval returned nothing — confidence must stay insufficient
+    const confidence = scoreConfidence({
+      counts: {},
+      entityScoped: true,
+      minRelevantItems: meddiccReviewManifest.retrieval.minRelevantItems ?? 3,
+    });
+    expect(confidence).toBe('insufficient');
+  });
+});
+
+// ── 3. Third manifest (expansion-style) proves universality ──
+
+const expansionManifest: SkillManifest = {
+  id: 'expansion-review',
+  label: 'Expansion Readiness Review',
+  description: 'Assess expansion potential grounded in library methodology.',
+  behaviorIntent: 'account_brief',
+  workspace: 'artifacts',
+  depth: 'deep',
+  sourceMode: 'library_required',
+  retrieval: {
+    scopes: ['knowledge_items', 'playbooks', 'standards'],
+    termBindings: ['${inputs.account}', '${inputs.opportunity}'],
+    methodologySeeds: [
+      'renewal risk', 'expansion trigger', 'executive alignment',
+      'whitespace analysis', 'multi-thread engagement', 'usage adoption',
+    ],
+    minRelevantItems: 2,
+  },
+  output: { shape: 'structured_artifact' },
+  rubric: {
+    mustHave: ['expansion signals', 'risks', 'next steps'],
+    genericMarkers: ['looks good', 'healthy account'],
+    maxGenericMarkers: 0,
+  },
+  version: '1',
+};
+
+describe('Expansion Manifest — universality proof', () => {
+  it('expansion seeds appear in termSeeds (same planner path as MEDDICC)', () => {
+    const r = buildPlan(
+      { manifest: expansionManifest, effectiveDepth: expansionManifest.depth, inputs: { account: 'Acme', opportunity: 'Renewal' } } as any,
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const lower = r.plan.termSeeds.map(t => t.toLowerCase());
+    for (const seed of expansionManifest.retrieval.methodologySeeds!) {
+      expect(lower).toContain(seed.toLowerCase());
+    }
+  });
+
+  it('expansion seeds + real counts → confidence ≠ insufficient', () => {
+    const confidence = scoreConfidence({
+      counts: { knowledge_items: 2, playbooks: 1 },
+      entityScoped: true,
+      minRelevantItems: expansionManifest.retrieval.minRelevantItems ?? 2,
+    });
+    expect(confidence).not.toBe('insufficient');
+  });
+
+  it('expansion seeds + zero counts → still insufficient (no bypass)', () => {
+    const confidence = scoreConfidence({
+      counts: {},
+      entityScoped: true,
+      minRelevantItems: expansionManifest.retrieval.minRelevantItems ?? 2,
+    });
+    expect(confidence).toBe('insufficient');
+  });
 });
