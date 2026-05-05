@@ -122,7 +122,7 @@ function buildEvalSynthesisSystemPrompt(
 
   // ── Hard rules
   sections.push("=== NON-NEGOTIABLE RULES ===");
-  sections.push("1. Ground every claim in the retrieved library items above. Name the KI/PB ID when citing.");
+  sections.push("1. Ground every claim in the retrieved library items above. CITE using exact format: [KI:xxxxxxxx] or [PB:xxxxxxxx] (first 8 chars of the ID shown in LIBRARY PROOF). Include at least 3 citations across the output.");
   sections.push("2. Do NOT invent library citations. If a tactic is not in the retrieved items, say so.");
   sections.push("3. Do NOT produce generic filler. Every sentence must be specific to the inputs.");
   sections.push("4. Do NOT reference tools, templates, or artifacts not present in the library proof.");
