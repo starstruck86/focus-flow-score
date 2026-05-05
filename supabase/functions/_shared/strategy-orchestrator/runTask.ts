@@ -856,25 +856,33 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     authoringFailMeta.authoring_failure = true;
     if (fallbackMeta) authoringFailMeta.authoring_fallback = fallbackMeta;
 
-    const failureWrite = supabase
-      .from("task_runs")
-      .update({
-        status: "failed",
-        progress_step: "failed",
-        error: prefixed.slice(0, 1000),
-        completed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        meta: authoringFailMeta,
-      })
-      .eq("id", runId);
+    // Phase 3.6 — single authoritative failure write with full telemetry.
+    // IMPORTANT: We create the promise via an immediately-invoked async fn
+    // so that EdgeRuntime.waitUntil and the local await share the SAME
+    // settled promise — avoids the PostgREST builder thenable being
+    // consumed twice (once by waitUntil, once by await), which previously
+    // caused the write to silently not execute.
+    const failurePromise = (async () => {
+      return await supabase
+        .from("task_runs")
+        .update({
+          status: "failed",
+          progress_step: "failed",
+          error: prefixed.slice(0, 1000),
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          meta: authoringFailMeta,
+        })
+        .eq("id", runId);
+    })();
 
     // @ts-ignore — EdgeRuntime is provided by the platform.
     if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
       // @ts-ignore
-      EdgeRuntime.waitUntil(failureWrite);
+      EdgeRuntime.waitUntil(failurePromise);
     }
     try {
-      await failureWrite;
+      await failurePromise;
     } catch (writeErr) {
       console.error(`[stage-3] failed to mark run failed:`, (writeErr as Error).message);
     }
