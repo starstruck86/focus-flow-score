@@ -12,6 +12,7 @@ import { describe, it, expect } from "vitest";
 import { runArtifactGate, type ArtifactManifest } from "../artifactGate";
 import { buildPlan } from "@/lib/strategy-skills/planner";
 import type { ResolvedSkill } from "@/lib/strategy-skills/resolver";
+import type { SkillManifest } from "@/lib/strategy-skills/types";
 import {
   checkLatencyBudgets,
   computeRegenRate,
