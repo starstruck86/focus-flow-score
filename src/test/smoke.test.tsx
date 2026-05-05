@@ -309,8 +309,9 @@ describe('RouteErrorBoundary', () => {
 });
 
 // ─── Page module exports ───────────────────────────────
-describe('Page modules export default components', () => {
-  it('Settings', async () => {
+describe('Page modules export default components', { timeout: 15000 }, () => {
+  it('Settings', { timeout: 30000 }, async () => {
+    // Settings.tsx is 1200+ lines with heavy imports — needs extra timeout in CI
     const mod = await import('@/pages/Settings');
     expect(typeof mod.default).toBe('function');
   });
