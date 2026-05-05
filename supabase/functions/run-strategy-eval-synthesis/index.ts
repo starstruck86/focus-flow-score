@@ -31,6 +31,24 @@ function isConstrainedProse(
   return !!hasForbid;
 }
 
+/**
+ * Detect if the output is a "decision artifact" — any structured output whose
+ * purpose is executive alignment, business case, deal review, or decision support.
+ * This is universal, not skill-specific.
+ */
+function isDecisionArtifact(
+  manifest: { behaviorIntent: string; workspace: string },
+  outputContract: { shape: string },
+): boolean {
+  const decisionIntents = ["account_brief", "deal_review", "business_case", "executive_summary", "decision_support"];
+  const decisionWorkspaces = ["artifacts"];
+  const decisionShapes = ["structured_artifact", "executive_brief"];
+  return (
+    decisionIntents.includes(manifest.behaviorIntent) ||
+    (decisionWorkspaces.includes(manifest.workspace) && decisionShapes.includes(outputContract.shape))
+  );
+}
+
 function buildEvalSynthesisSystemPrompt(
   inputs: Record<string, string>,
   manifest: { id: string; label: string; behaviorIntent: string; workspace: string },
