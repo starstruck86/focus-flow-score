@@ -90,7 +90,7 @@ describe("Phase 3.6 — Performance", () => {
         output: { shape: "structured_artifact" },
         rubric: { mustHave: ["section1"], genericMarkers: [], maxGenericMarkers: 0 },
         version: "1",
-      };
+      } as SkillManifest;
       const resolved: ResolvedSkill = {
         manifest,
         effectiveDepth: "artifact",
