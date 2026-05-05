@@ -121,3 +121,6 @@ verify_jwt = false
 verify_jwt = false
 
 
+[functions.run-production-evidence]
+verify_jwt = false
+
