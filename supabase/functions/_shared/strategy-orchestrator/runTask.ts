@@ -117,6 +117,7 @@ async function setProgress(supabase: any, runId: string, step: string) {
 
 // ── Core pipeline — bound to an existing pending run row. ─────────
 async function executePipeline(ctx: OrchestrationContext, runId: string): Promise<void> {
+  const pipelineStartMs = Date.now();
   const { supabase, userId, inputs, taskType } = ctx;
   const handler = getHandler(taskType);
   console.log(`[orchestrator] task=${taskType} run=${runId} company=${inputs.company_name || "(none)"} user=${userId.slice(0, 8)}`);
@@ -1333,11 +1334,47 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   if (planResult.ok) {
     metaPatch.planner = {
       plan_hash: planResult.plan.planHash,
-      term_seeds: planResult.plan.termSeeds.length,
+      term_seeds_count: planResult.plan.termSeeds.length,
+      term_seeds: planResult.plan.termSeeds.length, // back-compat alias
+      methodology_seeds_injected: (taskManifest.retrieval.methodologySeeds ?? []).length > 0,
       methodology_seeds: (taskManifest.retrieval.methodologySeeds ?? []).length,
+      scopes: plannerRetrievalArgs?.scopes ?? derivedScopes,
       expanded_seeds: planResult.plan.expandedSeeds?.length ?? 0,
     };
   }
+
+  // ── Phase 3.6: Performance telemetry + anomaly flags ──────────────
+  const totalLatencyMs = Date.now() - pipelineStartMs;
+  const generationLatencyMs = Date.now() - authoringStartedAt;
+  const gateLatencyMs = artifactGateTelemetry.total_gate_latency_ms;
+  metaPatch.performance = {
+    total_latency_ms: totalLatencyMs,
+    generation_latency_ms: generationLatencyMs,
+    gate_latency_ms: gateLatencyMs,
+    ...(artifactGateTelemetry.regen_attempts > 0
+      ? { regen_latency_ms: gateLatencyMs }
+      : {}),
+  };
+
+  // Anomaly flags — deterministic, additive
+  const anomalyFlags: Record<string, boolean> = {};
+  if (artifactGateTelemetry.regen_attempts > 0) anomalyFlags.regen_triggered = true;
+  if (!artifactGateTelemetry.pass) anomalyFlags.artifact_failure = true;
+  if (planResult.ok && planResult.plan.termSeeds.length < 3) anomalyFlags.weak_retrieval = true;
+  if (totalLatencyMs > 12_000) anomalyFlags.latency_violation = true;
+  if (Object.keys(anomalyFlags).length > 0) {
+    metaPatch.anomaly_flags = anomalyFlags;
+  }
+
+  // Failure patterns (learning loop) — count failed dimensions
+  if (!artifactGateTelemetry.pass && artifactGateTelemetry.failed_dimensions.length > 0) {
+    const failurePatterns: Record<string, number> = {};
+    for (const dim of artifactGateTelemetry.failed_dimensions) {
+      failurePatterns[dim] = (failurePatterns[dim] ?? 0) + 1;
+    }
+    metaPatch.failure_patterns = failurePatterns;
+  }
+
   // W12 — enforcement dry-run BEFORE schema_health so W10 sees it.
   if (enforcementPersistenceBlock) metaPatch.enforcement_dry_run = enforcementPersistenceBlock;
   // W10 — stamp compact schema-health summary AFTER all blocks are assembled.
@@ -1350,13 +1387,26 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     );
   }
   finalizePatch.meta = metaPatch;
-  const { error: updateErr } = await supabase
-    .from("task_runs")
-    .update(finalizePatch)
-    .eq("id", runId);
-  if (updateErr) {
-    console.error("[orchestrator] finalize update error:", updateErr);
-    throw updateErr;
+
+  // ── Phase 3.6: Resilient DB persist with retry-once ───────────────
+  let persistError: any = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { error: updateErr } = await supabase
+      .from("task_runs")
+      .update(finalizePatch)
+      .eq("id", runId);
+    if (!updateErr) {
+      persistError = null;
+      break;
+    }
+    persistError = updateErr;
+    if (attempt === 0) {
+      console.warn(`[orchestrator] finalize persist attempt 1 failed, retrying: ${updateErr.message}`);
+    }
+  }
+  if (persistError) {
+    console.error("[orchestrator] finalize update error after retry:", persistError);
+    throw persistError;
   }
 
   const meta = {
