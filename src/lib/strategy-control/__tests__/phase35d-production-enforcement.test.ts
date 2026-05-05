@@ -250,10 +250,8 @@ describe("Phase 3.5D — No Bypass Guarantee", () => {
     // Must NOT have a bypass that skips the gate
     const lines = source.split("\n");
     for (const line of lines) {
-      // No "skip artifact gate" or "bypass gate" comments
       const lower = line.toLowerCase();
       if (lower.includes("skip") && lower.includes("artifact") && lower.includes("gate")) {
-        // Allow comments explaining why we DON'T skip
         if (!lower.includes("do not skip") && !lower.includes("never skip")) {
           expect(line).toBe("UNEXPECTED: found artifact gate bypass");
         }
@@ -265,12 +263,9 @@ describe("Phase 3.5D — No Bypass Guarantee", () => {
     const runTaskPath = path.resolve(__dirname, "../../../../supabase/functions/_shared/strategy-orchestrator/runTask.ts");
     const source = fs.readFileSync(runTaskPath, "utf-8");
 
-    // Must import planner
     expect(source).toContain("buildPlan");
     expect(source).toContain("planToRetrievalArgs");
     expect(source).toContain("getTaskManifest");
-
-    // Must contain planner-driven retrieval log
     expect(source).toContain("phase35d:planner_driven_retrieval");
   });
 
@@ -278,7 +273,6 @@ describe("Phase 3.5D — No Bypass Guarantee", () => {
     const runTaskPath = path.resolve(__dirname, "../../../../supabase/functions/_shared/strategy-orchestrator/runTask.ts");
     const source = fs.readFileSync(runTaskPath, "utf-8");
 
-    // metaPatch must include artifact_gate
     expect(source).toContain("metaPatch.artifact_gate");
     expect(source).toContain("metaPatch.planner");
   });
@@ -287,7 +281,6 @@ describe("Phase 3.5D — No Bypass Guarantee", () => {
     const runTaskPath = path.resolve(__dirname, "../../../../supabase/functions/_shared/strategy-orchestrator/runTask.ts");
     const source = fs.readFileSync(runTaskPath, "utf-8");
 
-    // After Stage 3 completes, the artifact gate MUST run before Stage 5 finalize
     const stage3EndIdx = source.indexOf("stage-3:end");
     const gateIdx = source.indexOf("phase35d:artifact_gate");
     const finalizeIdx = source.indexOf("Stage 5: Finalize");
@@ -296,8 +289,60 @@ describe("Phase 3.5D — No Bypass Guarantee", () => {
     expect(gateIdx).toBeGreaterThan(0);
     expect(finalizeIdx).toBeGreaterThan(0);
 
-    // Gate must be between Stage 3 end and Stage 5
     expect(gateIdx).toBeGreaterThan(stage3EndIdx);
     expect(gateIdx).toBeLessThan(finalizeIdx);
+  });
+
+  it("progressiveDriver.ts contains artifact gate enforcement for discovery_prep", () => {
+    const driverPath = path.resolve(__dirname, "../../../../supabase/functions/_shared/strategy-orchestrator/progressiveDriver.ts");
+    const source = fs.readFileSync(driverPath, "utf-8");
+
+    // Must import artifact gate
+    expect(source).toContain("runArtifactGate");
+    expect(source).toContain("artifactGateEnforcement");
+
+    // Must contain hard fail on gate failure
+    expect(source).toContain("progressive_artifact_gate_hard_fail");
+    expect(source).toContain("artifact_gate_failed");
+
+    // Must contain regen path
+    expect(source).toContain("progressive_artifact_gate_regen_success");
+    expect(source).toContain("progressive_artifact_gate_regen_also_failed");
+  });
+
+  it("progressiveDriver assembleAndFinalize blocks persistence on gate failure", () => {
+    const driverPath = path.resolve(__dirname, "../../../../supabase/functions/_shared/strategy-orchestrator/progressiveDriver.ts");
+    const source = fs.readFileSync(driverPath, "utf-8");
+
+    // The gate must run BEFORE the final persist
+    const gateIdx = source.indexOf("progressive_artifact_gate_failed");
+    const persistIdx = source.indexOf("draft_output: finalDraftOutput");
+
+    expect(gateIdx).toBeGreaterThan(0);
+    expect(persistIdx).toBeGreaterThan(0);
+    expect(gateIdx).toBeLessThan(persistIdx);
+
+    // On gate failure, status is set to "failed" and `assembled: false`
+    const hardFailIdx = source.indexOf("progressive_artifact_gate_hard_fail");
+    const assembledFalseIdx = source.indexOf("assembled: false");
+    expect(hardFailIdx).toBeGreaterThan(0);
+    expect(assembledFalseIdx).toBeGreaterThan(0);
+  });
+
+  it("all three task types are artifact-gated (complete coverage)", () => {
+    const runTaskPath = path.resolve(__dirname, "../../../../supabase/functions/_shared/strategy-orchestrator/runTask.ts");
+    const driverPath = path.resolve(__dirname, "../../../../supabase/functions/_shared/strategy-orchestrator/progressiveDriver.ts");
+    const runTaskSource = fs.readFileSync(runTaskPath, "utf-8");
+    const driverSource = fs.readFileSync(driverPath, "utf-8");
+
+    // runTask.ts handles account_brief + ninety_day_plan via the monolithic path
+    expect(runTaskSource).toContain("phase35d:artifact_gate_hard_fail");
+
+    // progressiveDriver.ts handles discovery_prep via the progressive path
+    expect(driverSource).toContain("phase35d:progressive_artifact_gate_hard_fail");
+
+    // Both paths use the same gate function
+    expect(runTaskSource).toContain("runArtifactGate(draftText, artifactManifest)");
+    expect(driverSource).toContain("runArtifactGate(draftText, artifactManifest)");
   });
 });
