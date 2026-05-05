@@ -793,11 +793,14 @@ Deno.serve(async (req) => {
       const isValid = strategyText.length > 20;
       const isClean = !baselineText.includes("KI-") && !baselineText.includes("Knowledge Item");
 
+      // Phase 3.5C — Artifact Gate
+      const artifactGate = runArtifactGate(strategyText, c.mustHave || [], c.scoringShape);
+
       results.push({
         label: c.label,
         strategy_total: stratScore.total,
         baseline_total: baseScore.total,
-        winner,
+        winner: artifactGate.pass ? winner : "baseline",
         structure_winner: structWinner,
         biz_impact_winner: bizWinner,
         library_hits: libraryHits,
@@ -809,6 +812,7 @@ Deno.serve(async (req) => {
         baseline_word_count: baselineText.split(/\s+/).length,
         gate_decision: stratData.refusal ? "refuse" : "pass",
         refusal: stratData.refusal || null,
+        artifact_gate: { pass: artifactGate.pass, failed_dimensions: artifactGate.failed_dimensions },
       });
     } catch (e) {
       results.push({ label: c.label, error: (e as Error).message });
