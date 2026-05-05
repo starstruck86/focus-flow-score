@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
   const resp = await fetch(`${supabaseUrl}/functions/v1/run-strategy-eval-synthesis`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-validation-key": validationKey || "" },
-    body: JSON.stringify({ skill: c }),
+    body: JSON.stringify({ skill: c, skipAdversarial: true }),
   });
 
   const data = await resp.json();
