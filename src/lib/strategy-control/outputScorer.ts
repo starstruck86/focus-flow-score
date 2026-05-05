@@ -456,21 +456,24 @@ function scoreStructure(text: string, ctx?: ScoringContext): number {
 }
 
 function scoreEvidence(text: string): number {
-  // Generic methodology mentions (both Strategy and baseline can produce these)
-  const genericMethodRefs = countMatches(text, /\b(?:MEDDICC|SPIN|Challenger|Sandler|methodology|framework)\b/gi);
-  // Strategy-specific: actual KI/PB ID citations (e.g. [KI:abc12345], KI-abc12345)
-  const kiIdCitations = countMatches(text, /\[(?:KI|PB):[a-f0-9]{6,}\]/gi) + countMatches(text, /\b(?:KI|PB)-[a-f0-9]{6,}\b/gi);
-  // Formal citation brackets
-  const bracketCitations = countMatches(text, /\[(?:source|ref|KI|PB)[^\]]*\]/gi);
+  // Actual library citations with IDs — only Strategy can produce these
+  const kiIdCitations = countMatches(text, /\[KI:[a-f0-9]{6,}\]/gi) + countMatches(text, /\bKI-[a-f0-9]{6,}\b/gi);
+  const pbIdCitations = countMatches(text, /\[PB:[a-f0-9]{6,}\]/gi) + countMatches(text, /\bPB-[a-f0-9]{6,}\b/gi);
+  // Formal citation brackets (broader)
+  const bracketCitations = countMatches(text, /\[(?:source|ref)[^\]]*\]/gi);
   // Attribution language
   const attributions = countMatches(text, /\b(?:according to|based on|per the|from the|as outlined in|as defined in|grounded in|informed by|drawn from)\b/gi);
-  // Quoted evidence
-  const quotedEvidence = countMatches(text, /"[^"]{10,}"/g);
-  // Knowledge Item explicit mentions
+  // Quoted evidence (substantial quotes)
+  const quotedEvidence = countMatches(text, /"[^"]{15,}"/g);
+  // Knowledge Item explicit mentions (not just "methodology" or framework name)
   const kiExplicit = countMatches(text, /\bKnowledge Item\b/gi);
 
-  // KI ID citations are the strongest signal — only Strategy can produce these
-  const total = kiIdCitations * 3 + bracketCitations * 2 + kiExplicit * 1.5 + attributions + quotedEvidence + genericMethodRefs * 0.3;
+  // Strong signals: actual ID-based citations (unique to Strategy)
+  const strongSignal = (kiIdCitations + pbIdCitations) * 3 + bracketCitations * 2;
+  // Moderate signals: attribution + quoted evidence + KI mentions
+  const moderateSignal = kiExplicit * 1.5 + attributions * 0.75 + quotedEvidence * 0.5;
+
+  const total = strongSignal + moderateSignal;
 
   if (total >= 6) return 5;
   if (total >= 4) return 4;
