@@ -606,8 +606,10 @@ Deno.serve(async (req) => {
     // ═══════════════════════════════════════════════════════════
     // ADVERSARIAL VALIDATION LAYER
     // Step 2: Critic  →  Step 3: Surgical Rewrite  →  repeat
+    // Skippable via body.skipAdversarial for validation runners
     // ═══════════════════════════════════════════════════════════
 
+    const skipAdversarial = body.skipAdversarial === true;
     const criticModel = "google/gemini-2.5-flash";
     let adversarialIterations = 0;
     let criticFindings: string[] = [];
