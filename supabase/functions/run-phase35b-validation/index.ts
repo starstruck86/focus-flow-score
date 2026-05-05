@@ -732,9 +732,27 @@ Deno.serve(async (req) => {
   // New standard: 0 baseline wins, Strategy must win majority
   const allPass = baselineWins === 0 && strategyWins > ties && structureLosses === 0 && bizLosses === 0 && invalidOutputs === 0 && contaminatedBaselines === 0;
 
+  const attemptId = crypto.randomUUID();
+  const errors = results.filter(r => r.error).length;
+
   return new Response(JSON.stringify({
+    attempt_id: attemptId,
     timestamp: new Date().toISOString(),
+    cases_requested: casesToRun.map(c => c.id),
+    cases_completed: results.filter(r => !r.error).length,
+    cases_errored: errors,
     results,
-    acceptance: { winRate, strategyWins, baselineWins, ties, total: results.length, structureLosses, bizLosses, invalidOutputs, contaminatedBaselines, verdict: allPass ? "PASS" : "FAIL" },
+    acceptance: {
+      winRate, strategyWins, baselineWins, ties,
+      total: results.length, structureLosses, bizLosses,
+      invalidOutputs, contaminatedBaselines,
+      all_cases_ran: errors === 0 && results.length === casesToRun.length,
+      verdict: allPass && errors === 0 ? "PASS" : "FAIL",
+    },
+    rollback: {
+      commit: "f1cc7e55",
+      command: "git revert f1cc7e55",
+      scope: "Reverts cross-section causality gate, business impact causal chain gate, and causality bonus. Does not revert synthesis prompt or adversarial loop.",
+    },
   }, null, 2), { headers: { ...CORS, "Content-Type": "application/json" } });
 });
