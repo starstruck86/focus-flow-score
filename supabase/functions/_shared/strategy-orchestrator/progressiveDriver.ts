@@ -32,6 +32,17 @@ import type { TaskType } from "./types.ts";
 /** Persist the synthesis artifact + prompt material into task_runs.meta
  *  so each subsequent step can reconstruct the authoring inputs without
  *  re-running research/synthesis. Single source of truth. */
+/** Planner telemetry carried from executePipeline → progressive driver. */
+export interface PlannerCarryForward {
+  plan_hash: string;
+  term_seeds_count: number;
+  methodology_seeds_injected: boolean;
+  methodology_seeds: number;
+  scopes: string[];
+  expanded_seeds: number;
+  pipeline_start_ms: number;
+}
+
 export async function persistSynthesisArtifact(args: {
   supabase: any;
   runId: string;
@@ -42,8 +53,9 @@ export async function persistSynthesisArtifact(args: {
   researchChars: number;
   sop?: SopContractLike | null;
   sopInputCheck?: any;
+  plannerCarryForward?: PlannerCarryForward | null;
 }): Promise<void> {
-  const { supabase, runId, synthesis, systemPrompt, baseUserPrompt, libraryCounts, researchChars, sop, sopInputCheck } = args;
+  const { supabase, runId, synthesis, systemPrompt, baseUserPrompt, libraryCounts, researchChars, sop, sopInputCheck, plannerCarryForward } = args;
   const { error } = await supabase
     .from("task_runs")
     .update({
@@ -67,6 +79,10 @@ export async function persistSynthesisArtifact(args: {
           inputCheck: sopInputCheck ?? null,
           outputCheck: null,
         },
+        // Phase 3.6 — carry planner telemetry so the progressive driver
+        // can include it in the final meta write alongside performance
+        // and anomaly_flags.
+        ...(plannerCarryForward ? { planner_carry_forward: plannerCarryForward } : {}),
       },
       updated_at: new Date().toISOString(),
     })
@@ -416,6 +432,43 @@ export async function assembleAndFinalize(args: {
         telemetry: artifactGateTelemetry,
       }));
 
+      // Phase 3.6: Include planner + performance + anomaly + failure_patterns on hard fail
+      const failMeta = (runRow?.meta as any) || {};
+      const failPlannerCF: PlannerCarryForward | null = failMeta.planner_carry_forward ?? null;
+      const failTotalLatencyMs = failPlannerCF?.pipeline_start_ms ? Date.now() - failPlannerCF.pipeline_start_ms : 0;
+      const failAnomalyFlags: Record<string, boolean> = { artifact_failure: true };
+      if (artifactGateTelemetry.regen_attempts > 0) failAnomalyFlags.regen_triggered = true;
+      if (failPlannerCF && failPlannerCF.term_seeds_count < 3) failAnomalyFlags.weak_retrieval = true;
+      if (failTotalLatencyMs > 12_000) failAnomalyFlags.latency_violation = true;
+      const failurePatterns: Record<string, number> = {};
+      for (const dim of gateResult.failed_dimensions) {
+        failurePatterns[dim] = (failurePatterns[dim] ?? 0) + 1;
+      }
+      const hardFailMeta: Record<string, unknown> = {
+        ...failMeta,
+        artifact_gate: artifactGateTelemetry,
+        artifact_gate_failed: true,
+        anomaly_flags: failAnomalyFlags,
+        failure_patterns: failurePatterns,
+        performance: {
+          total_latency_ms: failTotalLatencyMs,
+          generation_latency_ms: failTotalLatencyMs,
+          gate_latency_ms: artifactGateTelemetry.total_gate_latency_ms,
+          regen_latency_ms: artifactGateTelemetry.total_gate_latency_ms,
+        },
+        ...(failPlannerCF ? {
+          planner: {
+            plan_hash: failPlannerCF.plan_hash,
+            term_seeds_count: failPlannerCF.term_seeds_count,
+            term_seeds: failPlannerCF.term_seeds_count,
+            methodology_seeds_injected: failPlannerCF.methodology_seeds_injected,
+            methodology_seeds: failPlannerCF.methodology_seeds,
+            scopes: failPlannerCF.scopes,
+            expanded_seeds: failPlannerCF.expanded_seeds,
+          },
+        } : {}),
+      };
+      delete hardFailMeta.planner_carry_forward;
       await supabase
         .from("task_runs")
         .update({
@@ -424,11 +477,7 @@ export async function assembleAndFinalize(args: {
           error: failMsg.slice(0, 1000),
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          meta: {
-            ...((runRow?.meta as any) || {}),
-            artifact_gate: artifactGateTelemetry,
-            artifact_gate_failed: true,
-          },
+          meta: hardFailMeta,
         })
         .eq("id", runId);
 
@@ -475,7 +524,25 @@ export async function assembleAndFinalize(args: {
       threshold: 0.30,
     }));
   }
-  const newMeta = {
+  // ── Phase 3.6: Recover planner carry-forward and compute performance/anomaly ─
+  const plannerCF: PlannerCarryForward | null = meta.planner_carry_forward ?? null;
+  const pipelineStartMs = plannerCF?.pipeline_start_ms ?? 0;
+  const totalLatencyMs = pipelineStartMs > 0 ? Date.now() - pipelineStartMs : 0;
+  const performanceTelemetry = {
+    total_latency_ms: totalLatencyMs,
+    generation_latency_ms: totalLatencyMs, // progressive = mostly authoring
+    gate_latency_ms: artifactGateTelemetry.total_gate_latency_ms,
+    ...(artifactGateTelemetry.regen_attempts > 0
+      ? { regen_latency_ms: artifactGateTelemetry.total_gate_latency_ms }
+      : {}),
+  };
+  const anomalyFlags: Record<string, boolean> = {};
+  if (artifactGateTelemetry.regen_attempts > 0) anomalyFlags.regen_triggered = true;
+  if (!artifactGateTelemetry.pass) anomalyFlags.artifact_failure = true;
+  if (plannerCF && plannerCF.term_seeds_count < 3) anomalyFlags.weak_retrieval = true;
+  if (totalLatencyMs > 12_000) anomalyFlags.latency_violation = true;
+
+  const newMeta: Record<string, unknown> = {
     ...meta,
     authoring_progressive: {
       sections_total: DISCOVERY_PREP_SECTIONS.length,
@@ -498,7 +565,23 @@ export async function assembleAndFinalize(args: {
     },
     // Phase 3.5D — artifact gate telemetry
     artifact_gate: artifactGateTelemetry,
+    // Phase 3.6 — planner, performance, anomaly telemetry
+    ...(plannerCF ? {
+      planner: {
+        plan_hash: plannerCF.plan_hash,
+        term_seeds_count: plannerCF.term_seeds_count,
+        term_seeds: plannerCF.term_seeds_count,
+        methodology_seeds_injected: plannerCF.methodology_seeds_injected,
+        methodology_seeds: plannerCF.methodology_seeds,
+        scopes: plannerCF.scopes,
+        expanded_seeds: plannerCF.expanded_seeds,
+      },
+    } : {}),
+    performance: performanceTelemetry,
+    ...(Object.keys(anomalyFlags).length > 0 ? { anomaly_flags: anomalyFlags } : {}),
   };
+  // Clean up carry-forward key — it's internal-only
+  delete newMeta.planner_carry_forward;
 
   await supabase
     .from("task_runs")
