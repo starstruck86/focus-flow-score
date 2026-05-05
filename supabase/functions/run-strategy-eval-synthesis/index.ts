@@ -824,6 +824,179 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // PHASE 3.5C — ARTIFACT GATE (after adversarial, before return)
+    // Hard stop: deterministic quality gates on final output.
+    // If fail → ONE strict regen → re-gate → mark if still failing.
+    // ═══════════════════════════════════════════════════════════
+
+    const artGateManifest = {
+      rubric: { mustHave: rubric.mustHave as readonly string[] },
+      output: { shape: outputContract.shape, forbid: outputContract.forbid as readonly string[] | undefined },
+    };
+
+    // --- Inline artifact gate (edge functions can't import from src/) ---
+    function _normalizeKey(s: string): string {
+      return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    }
+    function _checkTemplateFidelity(output: string, mf: typeof artGateManifest) {
+      const diags: string[] = [];
+      if (mf.output.shape === "structured_artifact" || mf.output.shape === "executive_brief") {
+        let keys: string[] = [];
+        try {
+          const fm = output.match(/```(?:json|structured_artifact)\s*([\s\S]*?)```/);
+          const raw = fm ? fm[1] : output.trim();
+          if (raw.startsWith("{") || raw.startsWith("[")) {
+            const parsed = JSON.parse(raw);
+            if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) keys = Object.keys(parsed);
+          }
+        } catch { const km = output.match(/"([^"]+)"\s*:/g); if (km) keys = km.map(m => m.replace(/"/g, "").replace(":", "").trim()); }
+        const nk = keys.map(_normalizeKey);
+        for (const req of mf.rubric.mustHave) { const n = _normalizeKey(req); if (!nk.some(k => k.includes(n) || n.includes(k))) diags.push(`Missing required section: "${req}"`); }
+      } else {
+        const lower = output.toLowerCase();
+        for (const req of mf.rubric.mustHave) {
+          const norm = req.toLowerCase();
+          if (lower.includes(norm)) continue;
+          const words = norm.split(/\s+/).filter((w: string) => w.length > 2);
+          if (words.every((w: string) => lower.includes(w)) && words.length >= 2) continue;
+          diags.push(`Missing required element: "${req}"`);
+        }
+      }
+      return { gate: "template_fidelity", pass: diags.length === 0, diagnostics: diags };
+    }
+    function _checkReadability(text: string) {
+      const diags: string[] = [];
+      let tc = text;
+      const tr = text.trim();
+      if (tr.startsWith("{") || tr.startsWith("[")) { try { const p = JSON.parse(tr); if (typeof p === "object" && p !== null) { tc = Object.values(p as Record<string, unknown>).filter((v): v is string => typeof v === "string").join("\n\n"); } } catch {} }
+      const paras = tc.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0);
+      let total = 0, dense = 0;
+      for (let i = 0; i < paras.length; i++) {
+        const p = paras[i].trim();
+        if (p.startsWith("```") || p.startsWith("{") || p.startsWith("[") || /^#+\s/.test(p)) continue;
+        const w = p.split(/\s+/).length; total += w;
+        if (w > 120) diags.push(`Paragraph ${i+1} has ${w} words (max 120)`);
+        if (w >= 200 && (p.match(/\n/g) || []).length === 0) diags.push(`Paragraph ${i+1} is a wall of text`);
+        if (w > 80) dense += w;
+      }
+      if (total > 0 && dense / total > 0.7) diags.push(`${Math.round((dense/total)*100)}% dense prose`);
+      return { gate: "readability", pass: diags.length === 0, diagnostics: diags };
+    }
+    const _FILLER = [/^this section (?:covers|describes|explains|outlines)/i, /^in this section/i, /^(?:the following|below) (?:is|are|describes)/i];
+    const _SUBSTANCE = [/\b\d[\d,.]*%?\b/, /\b(?:VP|CEO|CFO|CRO|CTO|CMO|COO|GM|Director|Manager|Head of)\b/i, /\b(?:because|therefore|resulting in|which means|leading to|causing|driving|this creates|consequently)\b/i];
+    function _checkSectionCompleteness(output: string, mustHave: readonly string[]) {
+      const diags: string[] = [];
+      const lower = output.toLowerCase();
+      for (const req of mustHave) {
+        const norm = req.toLowerCase();
+        const words = norm.split(/\s+/).filter((w: string) => w.length > 2);
+        const paras = output.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0);
+        let sec = "";
+        for (const p of paras) { const pl = p.toLowerCase(); if (pl.includes(norm) || words.every((w: string) => pl.includes(w))) { sec = p; break; } }
+        if (!sec && !lower.includes(norm)) { if (!words.some((w: string) => lower.includes(w))) { diags.push(`Section "${req}" not found`); } continue; }
+        if (sec) {
+          const wc = sec.trim().split(/\s+/).length;
+          if (wc < 40) { diags.push(`Section "${req}" is a stub (${wc} words)`); continue; }
+          if (_FILLER.some(p => p.test(sec.trim()))) { diags.push(`Section "${req}" is filler`); continue; }
+          if (!_SUBSTANCE.some(p => p.test(sec))) diags.push(`Section "${req}" lacks substance`);
+        }
+      }
+      return { gate: "section_completeness", pass: diags.length === 0, diagnostics: diags };
+    }
+    const _CITE = /\[(?:KI|PB|SRC):[^\]]+\]/g;
+    const _CAUSAL = /\b(?:because|therefore|resulting|which means|leading to|this (?:means|creates|drives|shows)|consequently|as a result|the data shows|evidence suggests|according to|proves|demonstrates|confirms|validates|supporting)\b/i;
+    function _checkEvidenceDiscipline(text: string) {
+      const diags: string[] = [];
+      const sents = text.split(/(?<=[.!?])\s+/).filter((s: string) => s.trim().length > 0);
+      for (let i = 0; i < sents.length; i++) { const c = (sents[i].match(_CITE) || []).length; if (c > 3) diags.push(`Sentence ${i+1} has ${c} citations (max 3)`); }
+      const citeSents: number[] = [];
+      for (let i = 0; i < sents.length; i++) { if (_CITE.test(sents[i])) { _CITE.lastIndex = 0; citeSents.push(i); } }
+      for (const idx of citeSents) { let ok = false; for (let j = Math.max(0,idx-2); j <= Math.min(sents.length-1,idx+2); j++) { if (_CAUSAL.test(sents[j])) { ok=true; break; } } if (!ok) diags.push(`Citation at sentence ${idx+1} has no causal reasoning nearby`); }
+      return { gate: "evidence_discipline", pass: diags.length === 0, diagnostics: diags };
+    }
+    function _runArtifactGate(output: string, mf: typeof artGateManifest) {
+      const gates = [_checkTemplateFidelity(output, mf), _checkReadability(output), _checkSectionCompleteness(output, mf.rubric.mustHave), _checkEvidenceDiscipline(output)];
+      const failed = gates.filter(g => !g.pass).map(g => g.gate);
+      return { pass: failed.length === 0, gates, failed_dimensions: failed };
+    }
+    // --- End inline artifact gate ---
+
+    let artifactGateResult = _runArtifactGate(generatedText, artGateManifest);
+    let artifactGateRegenerated = false;
+    let artifactGateFailed = false;
+
+    if (!artifactGateResult.pass) {
+      console.log(`[artifact-gate] FAIL on first pass: ${JSON.stringify(artifactGateResult.failed_dimensions)}`);
+
+      // Build strict regen prompt with diagnostics
+      const regenLines: string[] = [];
+      regenLines.push("You are performing a STRICT ARTIFACT QUALITY FIX of a Strategy output.");
+      regenLines.push("The artifact gate found quality failures. You must fix ONLY the failing dimensions.");
+      regenLines.push("");
+      regenLines.push("RULES:");
+      regenLines.push("- PRESERVE all passing sections exactly as they are.");
+      regenLines.push("- FIX only the dimensions listed below.");
+      regenLines.push("- Do NOT change output format/shape.");
+      regenLines.push(`- Output shape: ${outputContract.shape}`);
+      if (outputContract.targetWords) regenLines.push(`- Word limit: ${outputContract.targetWords.min}–${outputContract.targetWords.max}`);
+      if (outputContract.forbid?.length) regenLines.push(`- Forbidden formatting: ${outputContract.forbid.join(", ")}`);
+      regenLines.push(`- Required sections: ${rubric.mustHave.join(", ")}`);
+      regenLines.push("");
+      regenLines.push("=== ORIGINAL OUTPUT ===");
+      regenLines.push(generatedText);
+      regenLines.push("");
+      regenLines.push("=== ARTIFACT GATE FAILURES ===");
+      for (const g of artifactGateResult.gates) {
+        if (!g.pass) {
+          regenLines.push(`[${g.gate}] FAILED:`);
+          for (const d of g.diagnostics) regenLines.push(`  - ${d}`);
+        }
+      }
+      regenLines.push("");
+      regenLines.push("Return the COMPLETE fixed output. No commentary.");
+
+      try {
+        const regenResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: synthesisModel,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: regenLines.join("\n") },
+            ],
+            temperature: 0.5,
+            max_completion_tokens: 4096,
+          }),
+        });
+
+        if (regenResp.ok) {
+          const regenData = await regenResp.json();
+          const regenText = regenData?.choices?.[0]?.message?.content ?? "";
+          if (regenText.length > generatedText.length * 0.3) {
+            generatedText = regenText;
+            artifactGateRegenerated = true;
+            // Re-run gate on regenerated output
+            artifactGateResult = _runArtifactGate(generatedText, artGateManifest);
+            if (!artifactGateResult.pass) {
+              console.log(`[artifact-gate] FAIL on regen: ${JSON.stringify(artifactGateResult.failed_dimensions)}`);
+              artifactGateFailed = true;
+            }
+          } else {
+            console.error("[artifact-gate] regen too short, marking failed");
+            artifactGateFailed = true;
+          }
+        } else {
+          console.error(`[artifact-gate] regen LLM error: ${regenResp.status}`);
+          artifactGateFailed = true;
+        }
+      } catch (regenErr) {
+        console.error("[artifact-gate] regen error:", String(regenErr).slice(0, 200));
+        artifactGateFailed = true;
+      }
+    }
+
     const totalLatencyMs = Date.now() - started;
 
     // ── Return full result
@@ -842,6 +1015,13 @@ Deno.serve(async (req) => {
           findings_last_pass: criticFindings,
           critic_model: criticModel,
         },
+        artifact_gate: {
+          pass: artifactGateResult.pass,
+          failed_dimensions: artifactGateResult.failed_dimensions,
+          gates: artifactGateResult.gates,
+          regenerated: artifactGateRegenerated,
+        },
+        artifact_gate_failed: artifactGateFailed,
         envelope: skillResult.envelope,
         synthesis_addendum: skillResult.synthesisAddendum,
         library_hits: libraryHits.map((h: any) => ({ id: h.id, title: h.title, kind: h.kind })),
