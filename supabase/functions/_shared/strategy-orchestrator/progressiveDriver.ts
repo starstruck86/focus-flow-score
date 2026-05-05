@@ -491,7 +491,25 @@ export async function assembleAndFinalize(args: {
       threshold: 0.30,
     }));
   }
-  const newMeta = {
+  // ── Phase 3.6: Recover planner carry-forward and compute performance/anomaly ─
+  const plannerCF: PlannerCarryForward | null = meta.planner_carry_forward ?? null;
+  const pipelineStartMs = plannerCF?.pipeline_start_ms ?? 0;
+  const totalLatencyMs = pipelineStartMs > 0 ? Date.now() - pipelineStartMs : 0;
+  const performanceTelemetry = {
+    total_latency_ms: totalLatencyMs,
+    generation_latency_ms: totalLatencyMs, // progressive = mostly authoring
+    gate_latency_ms: artifactGateTelemetry.total_gate_latency_ms,
+    ...(artifactGateTelemetry.regen_attempts > 0
+      ? { regen_latency_ms: artifactGateTelemetry.total_gate_latency_ms }
+      : {}),
+  };
+  const anomalyFlags: Record<string, boolean> = {};
+  if (artifactGateTelemetry.regen_attempts > 0) anomalyFlags.regen_triggered = true;
+  if (!artifactGateTelemetry.pass) anomalyFlags.artifact_failure = true;
+  if (plannerCF && plannerCF.term_seeds_count < 3) anomalyFlags.weak_retrieval = true;
+  if (totalLatencyMs > 12_000) anomalyFlags.latency_violation = true;
+
+  const newMeta: Record<string, unknown> = {
     ...meta,
     authoring_progressive: {
       sections_total: DISCOVERY_PREP_SECTIONS.length,
@@ -514,7 +532,23 @@ export async function assembleAndFinalize(args: {
     },
     // Phase 3.5D — artifact gate telemetry
     artifact_gate: artifactGateTelemetry,
+    // Phase 3.6 — planner, performance, anomaly telemetry
+    ...(plannerCF ? {
+      planner: {
+        plan_hash: plannerCF.plan_hash,
+        term_seeds_count: plannerCF.term_seeds_count,
+        term_seeds: plannerCF.term_seeds_count,
+        methodology_seeds_injected: plannerCF.methodology_seeds_injected,
+        methodology_seeds: plannerCF.methodology_seeds,
+        scopes: plannerCF.scopes,
+        expanded_seeds: plannerCF.expanded_seeds,
+      },
+    } : {}),
+    performance: performanceTelemetry,
+    ...(Object.keys(anomalyFlags).length > 0 ? { anomaly_flags: anomalyFlags } : {}),
   };
+  // Clean up carry-forward key — it's internal-only
+  delete newMeta.planner_carry_forward;
 
   await supabase
     .from("task_runs")
