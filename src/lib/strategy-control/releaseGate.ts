@@ -167,6 +167,20 @@ function walkTs(dir: string): string[] {
   return results;
 }
 
+/**
+ * Extract the evidence report section relevant to a given surface.
+ * Returns the text between this surface's header and the next surface header,
+ * or null if not found.
+ */
+function extractSurfaceSection(report: string, manifestId: string, label: string): string | null {
+  // Look for the surface by manifest_id or label in the report
+  const escapedId = manifestId.replace(/[-/]/g, "[-/]?");
+  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(${escapedId}|${escapedLabel})[\\s\\S]*?(?=\\n---\\n|\\n## |$)`, "i");
+  const match = report.match(pattern);
+  return match ? match[0] : null;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // Main gate
 // ═══════════════════════════════════════════════════════════════════
