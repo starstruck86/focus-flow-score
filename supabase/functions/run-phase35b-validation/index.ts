@@ -416,7 +416,7 @@ Deno.serve(async (req) => {
         headers: {
           "Content-Type": "application/json",
           "x-skill-debug": "true",
-          "x-validation-key": expectedKey,
+          "x-validation-key": validationKey,
           "apikey": Deno.env.get("SUPABASE_ANON_KEY")!,
         },
         body: JSON.stringify({ skill: c.skill, threadId: `validation-35b-${c.id}` }),
