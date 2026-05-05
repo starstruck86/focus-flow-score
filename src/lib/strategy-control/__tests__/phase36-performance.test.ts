@@ -90,9 +90,14 @@ describe("Phase 3.6 — Performance", () => {
         rubric: { mustHave: ["section1"], genericMarkers: [], maxGenericMarkers: 0 },
         version: "1",
       };
+      const resolved: ResolvedSkill = {
+        manifest,
+        effectiveDepth: "artifact",
+        inputs: { company_name: "Acme" },
+      };
 
       const start = performance.now();
-      buildPlan(manifest, "artifact", { company_name: "Acme" }, {});
+      buildPlan(resolved);
       const elapsed = performance.now() - start;
       expect(elapsed).toBeLessThan(50);
     });
