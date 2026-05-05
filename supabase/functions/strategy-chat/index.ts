@@ -94,6 +94,44 @@ import {
   type BehaviorIntentResult,
 } from "../_shared/strategy-core/behaviorIntent.ts";
 
+// ── Phase 4: Manifest derivation for evidence attribution ──────────
+// Derives a manifest_id from the chat context so every assistant message
+// in strategy_messages can be attributed to a specific evidence surface.
+function deriveChatManifestId(
+  content: string,
+  workspace: string | null,
+  workflowType?: string | null,
+): string | null {
+  // Workflow types map directly
+  if (workflowType) {
+    const wfMap: Record<string, string> = {
+      deep_research: "account-research",
+      account_plan: "account-research",
+      territory_tiering: "account-research",
+      opportunity_strategy: "conversation-pov",
+      brainstorm: "commercial-insight",
+      email_evaluation: "follow-up-email",
+    };
+    return wfMap[workflowType] ?? "conversation-pov";
+  }
+
+  // Content-based keyword matching for chat artifacts
+  const lower = (content || "").toLowerCase();
+  if (/\b(meddicc|meddpicc|meddic)\b/.test(lower)) return "meddicc-review";
+  if (/\b(demo|demonstration)\b/.test(lower) && /\b(strat|plan|prep)\b/.test(lower)) return "demo-strategy";
+  if (/\b(objection|pushback|handle|overcome)\b/.test(lower)) return "objection-strategy";
+  if (/\b(follow[\s-]?up|recap)\b/.test(lower) && /\b(email|message|note)\b/.test(lower)) return "follow-up-email";
+  if (/\b(discovery|question|probe|ask)\b/.test(lower) && /\b(question|list|prep)\b/.test(lower)) return "discovery-questions";
+  if (/\b(research|account\s+research|competitor|landscape)\b/.test(lower)) return "account-research";
+  if (/\b(insight|commercial|value\s+prop)\b/.test(lower)) return "commercial-insight";
+
+  // Workspace fallback
+  if (workspace === "deep_research" || workspace === "library") return "account-research";
+
+  // Default: conversation-pov (general strategy conversation)
+  return "conversation-pov";
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
