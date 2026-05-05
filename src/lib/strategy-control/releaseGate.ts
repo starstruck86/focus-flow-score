@@ -200,15 +200,50 @@ export function runReleaseGate(): ReleaseGateResult {
     }
   }
 
-  // 6. Success-path production evidence must exist
+  // 6. Universal surface registry validation
+  const enforced = getEnforcedSurfaces();
+  const deferred = getDeferredSurfaces();
+
+  // Every enforced surface must have evidence in the report file
   const evidencePath = path.resolve("docs/phase37-production-evidence-report.md");
   if (!fs.existsSync(evidencePath)) {
-    failures.push("Phase 3.7 production evidence report missing: docs/phase37-production-evidence-report.md");
+    failures.push("Phase 3.7B production evidence report missing: docs/phase37-production-evidence-report.md");
   } else {
     const evidenceContent = fs.readFileSync(evidencePath, "utf-8");
-    // Must contain at least one "completed" row with telemetry
-    if (!evidenceContent.includes("completed") || !evidenceContent.includes("✅")) {
-      failures.push("Phase 3.7 production evidence report lacks success-path evidence (no completed run with telemetry)");
+    // Check each enforced surface has a mention in the evidence report
+    for (const surface of enforced) {
+      const hasEntry = evidenceContent.includes(surface.manifest_id) ||
+                       evidenceContent.includes(surface.label);
+      if (!hasEntry) {
+        failures.push(
+          `Enforced surface missing from evidence report: ${surface.label} (${surface.manifest_id})`
+        );
+      }
+    }
+  }
+
+  // Every deferred surface must have a reason
+  for (const surface of deferred) {
+    if (!surface.deferral_reason) {
+      failures.push(
+        `Deferred surface lacks reason: ${surface.label} (${surface.manifest_id})`
+      );
+    }
+  }
+
+  // 7. Surface registry must cover all known task manifests
+  const manifestMap = path.resolve("supabase/functions/_shared/strategy-orchestrator/taskManifestMap.ts");
+  if (fs.existsSync(manifestMap)) {
+    const content = fs.readFileSync(manifestMap, "utf-8");
+    // Extract manifest IDs from the map
+    const manifestIds = [...content.matchAll(/id:\s*["']([^"']+)["']/g)].map(m => m[1]);
+    const registeredIds = new Set([...enforced, ...deferred].map(s => s.manifest_id));
+    for (const id of manifestIds) {
+      if (!registeredIds.has(id)) {
+        warnings.push(
+          `Task manifest "${id}" exists in taskManifestMap but is not registered in surfaceRegistry`
+        );
+      }
     }
   }
 
