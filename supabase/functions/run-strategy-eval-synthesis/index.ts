@@ -311,6 +311,37 @@ function buildEvalSynthesisSystemPrompt(
     sections.push("");
   }
 
+  // ── T9: Structural Differentiation (universal — makes output impossible for generic AI to replicate)
+  sections.push("═══ TRANSFORMATION 9: STRUCTURAL DIFFERENTIATION (MANDATORY) ═══");
+  sections.push("Before returning, verify ALL FOUR of the following are present in your output.");
+  sections.push("If ANY are missing, REWRITE until they appear. This is non-negotiable.");
+  sections.push("");
+  sections.push("  1. QUANTIFIED CONSEQUENCE");
+  sections.push("     At least one number, percentage, dollar figure, or time metric tied to business impact.");
+  sections.push("     Must describe cost-of-inaction OR missed opportunity with specifics.");
+  sections.push("     ✗ 'significant revenue impact' → ✓ '$2.3M in pipeline at risk across 4 open opps this quarter'");
+  sections.push("     ✗ 'potential cost savings' → ✓ '~18% reduction in evaluation cycle time, saving 6 weeks per vendor review'");
+  sections.push("");
+  sections.push("  2. NAMED ENTITY + METRIC");
+  sections.push("     A specific role, team, department, or stakeholder tied to a measurable outcome they own.");
+  sections.push("     ✗ 'leadership alignment' → ✓ 'VP Sales owns pipeline conversion, currently at 22% vs 31% benchmark'");
+  sections.push("     ✗ 'the team should focus' → ✓ 'SDR team's meeting-to-opp rate dropped from 38% to 24% after Q2 territory changes'");
+  sections.push("");
+  sections.push("  3. CAUSAL CHAIN");
+  sections.push("     At least one explicit X → Y → Z reasoning chain showing cause and downstream effect.");
+  sections.push("     ✗ 'fragmented data leads to problems' → ✓ 'Fragmented guest profiles → duplicate outreach across properties → 12% opt-out rate on loyalty comms → $1.8M annual retention leakage'");
+  sections.push("     The chain must be specific to THIS account/situation, not a generic industry pattern.");
+  sections.push("");
+  sections.push("  4. STAKEHOLDER-TIED ACTION");
+  sections.push("     At least one action using an executable verb (Ask / Confirm / Map / Validate / Challenge / Quantify / Draft / Position)");
+  sections.push("     directed at a SPECIFIC persona or role.");
+  sections.push("     ✗ 'Discuss priorities with the team' → ✓ 'Ask the VP Revenue: What is the cost per month of running 3 separate guest databases?'");
+  sections.push("     ✗ 'Validate alignment' → ✓ 'Confirm with IT Director whether the PMS integration timeline blocks Q1 renewal decision'");
+  sections.push("");
+  sections.push("SELF-CHECK: Read your output. For each of the 4 elements, find the EXACT sentence that satisfies it.");
+  sections.push("If you cannot point to a specific sentence for any element, your output FAILS. Rewrite.");
+  sections.push("");
+
   // ── Final quality gate
   sections.push("═══ FINAL QUALITY GATE ═══");
   sections.push("Before returning, read your ENTIRE output one more time and answer:");
