@@ -559,9 +559,11 @@ function scoreBusinessImpact(text: string, shape?: string): number {
     const hasAction = countMatches(lower, /\b(?:ask|confirm|validate|propose|recommend|next step|action|should|must|need to|prioritize|address|mitigate|pursue)\b/g) >= 1;
     const causalPhases = [hasCurrentState, hasConsequence, hasFinancialImpact, hasAction].filter(Boolean).length;
 
-    // Check stakeholder specificity: must tie impact to a role/persona/team
-    const stakeholderSpecific = countMatches(lower, /\b(?:cfo|cto|cmo|coo|cio|ceo|vp of|director of|head of|manager|buyer|champion|economic buyer|decision maker|general manager|chief|owner|operator|leader|executive|board|c-suite|stakeholder)\b/g);
-    const roleSpecificImpact = stakeholderSpecific >= 1;
+    // Check stakeholder specificity: role must be TIED to a specific impact,
+    // not just mentioned in isolation (baseline MEDDICC will mention "economic buyer" etc.)
+    const stakeholderTiedToImpact = countMatches(lower, /\b(?:cfo|cto|cmo|coo|cio|ceo|vp of|director of|head of|manager|buyer|champion|economic buyer|decision maker|general manager|chief|owner|operator|leader|executive)[\s\S]{0,60}(?:\d+%|\$[\d,.]+|revenue|margin|cost|risk|loss|save|gain|budget|pipeline|quota|churn|retention)/g)
+      + countMatches(lower, /(?:\d+%|\$[\d,.]+|revenue|margin|cost|risk|loss|save|gain|budget|pipeline|quota|churn|retention)[\s\S]{0,60}\b(?:cfo|cto|cmo|coo|cio|ceo|vp of|director of|head of|manager|buyer|champion|economic buyer|decision maker|general manager|chief|owner|operator)\b/g);
+    const roleSpecificImpact = stakeholderTiedToImpact >= 1;
 
     // Generic value language penalty
     const genericValue = countMatches(lower, /\b(?:improve(?:s)? efficiency|drive(?:s)? growth|add(?:s)? value|increase(?:s)? productivity|optimize(?:s)? (?:operations|processes)|streamline(?:s)?|enhance(?:s)? performance|better outcomes?|maximize|deliver value)\b/g);
