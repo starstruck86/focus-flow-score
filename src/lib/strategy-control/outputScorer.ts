@@ -431,8 +431,9 @@ function scoreStructure(text: string, ctx?: ScoringContext): number {
     // Apply section depth bonus: +1 if sections are rich, capped at 5
     let finalScore = clamp(blended + sectionDepthBonus, 1, 5);
 
-    // Hard signal: if mustHave exists and sections are missing, cap at 4
-    if (ctx?.mustHave && ctx.mustHave.length > 0 && completeness < 5) {
+    // Hard cap only for significant incompleteness (3+ missing sections)
+    // Single missing section is handled naturally by the 70/30 blend
+    if (ctx?.mustHave && ctx.mustHave.length > 0 && completeness <= 3) {
       finalScore = Math.min(finalScore, 4);
     }
 
