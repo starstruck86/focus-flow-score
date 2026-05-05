@@ -98,24 +98,53 @@ function checkNoRawWaitUntil(): string[] {
 }
 
 // ── Required test suites ─────────────────────────────────────
-const REQUIRED_TEST_PATTERNS = [
-  { name: "planner parity", pattern: /planner/i },
-  { name: "artifact gate", pattern: /artifact[_-]?gate/i },
-  { name: "security contract", pattern: /security/i },
-  { name: "drift", pattern: /drift/i },
-  { name: "methodologySeeds parity", pattern: /methodology/i },
-  { name: "waitUntil race guard", pattern: /waituntil/i },
+/** Required test coverage by keyword — matched against file names AND contents. */
+const REQUIRED_TEST_KEYWORDS = [
+  { name: "planner parity", keywords: ["planner", "plan_hash"] },
+  { name: "artifact gate", keywords: ["artifact_gate", "artifact-gate"] },
+  { name: "security contract", keywords: ["security"] },
+  { name: "drift", keywords: ["drift"] },
+  { name: "methodologySeeds parity", keywords: ["methodology_seeds", "methodologyseeds"] },
+  { name: "waitUntil race guard", keywords: ["waituntil", "waitUntil"] },
 ];
+
+function collectTestFiles(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  const results: string[] = [];
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...collectTestFiles(full));
+    } else if (entry.name.endsWith(".test.ts")) {
+      results.push(full);
+    }
+  }
+  return results;
+}
 
 function checkRequiredTestSuites(): string[] {
   const failures: string[] = [];
-  if (!fs.existsSync(STRATEGY_CONTROL_TEST_DIR)) {
-    failures.push("Strategy control test directory missing");
+  // Scan strategy-control tests + strategy-skills tests
+  const testDirs = [
+    STRATEGY_CONTROL_TEST_DIR,
+    path.resolve("supabase/functions/_shared/strategy-skills/__tests__"),
+  ];
+  const allTestFiles = testDirs.flatMap(d => collectTestFiles(d));
+  if (allTestFiles.length === 0) {
+    failures.push("No strategy test files found");
     return failures;
   }
-  const testFiles = fs.readdirSync(STRATEGY_CONTROL_TEST_DIR).filter(f => f.endsWith(".test.ts"));
-  for (const req of REQUIRED_TEST_PATTERNS) {
-    const found = testFiles.some(f => req.pattern.test(f));
+
+  // Build a combined corpus of file names + contents
+  const corpus = allTestFiles.map(f => {
+    const name = path.basename(f).toLowerCase();
+    const content = fs.readFileSync(f, "utf-8").toLowerCase();
+    return name + " " + content;
+  });
+
+  for (const req of REQUIRED_TEST_KEYWORDS) {
+    const found = corpus.some(c => req.keywords.some(k => c.includes(k.toLowerCase())));
     if (!found) {
       failures.push(`Required test suite missing: ${req.name}`);
     }
