@@ -150,14 +150,58 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   }
 
   // ── Stage 0: Library retrieval ────────────────────────────────
-  // W3 — resolve the workspace contract for this task so the universal
-  // library retrieval policy is consistent with the chat surface.
-  // The mapping is task_type → WorkspaceKey via the W3 normalizer.
-  // Library scopes still drive the actual query; the contract decides
-  // whether we *should* query and how to interpret coverage.
+  // Phase 3.5D: Planner-driven retrieval. The universal planner builds
+  // a RetrievalQueryPlan from the task manifest → planToRetrievalArgs
+  // maps it to the existing retriever shape. handler.libraryScopes()
+  // is no longer the source of truth — buildPlan owns all retrieval terms.
   const taskWorkspace = resolveTaskWorkspace(taskType);
   const resolvedContract = resolveServerWorkspaceContract(taskWorkspace.workspace);
-  const derivedScopes = handler.libraryScopes(inputs);
+
+  // Build planner context from task inputs
+  const taskManifest = getTaskManifest(taskType as TaskType);
+  const plannerInputs: Record<string, unknown> = {
+    account: inputs.company_name,
+    company_name: inputs.company_name,
+    opportunity: inputs.opportunity,
+    stage: inputs.stage,
+    persona: inputs.participants?.[0]?.title,
+    topic: inputs.desired_next_step,
+    industry: (inputs as any).industry,
+  };
+  const planResult = buildPlan(
+    taskManifest,
+    taskManifest.depth,
+    plannerInputs,
+    {}, // PlannerContext — no thread/prior in task pipeline
+  );
+
+  // Derive scopes from planner or fall back to handler (defense-in-depth)
+  let derivedScopes: string[];
+  let plannerRetrievalArgs: { scopes: string[]; maxKIs: number; maxPlaybooks: number } | null = null;
+  if (planResult.ok) {
+    plannerRetrievalArgs = planToRetrievalArgs(planResult.plan);
+    derivedScopes = plannerRetrievalArgs.scopes;
+    console.log(JSON.stringify({
+      tag: "[phase35d:planner_driven_retrieval]",
+      run_id: runId,
+      task_type: taskType,
+      plan_hash: planResult.plan.planHash,
+      term_seeds: planResult.plan.termSeeds.length,
+      methodology_seeds_injected: (taskManifest.retrieval.methodologySeeds ?? []).length > 0,
+      scopes_count: derivedScopes.length,
+    }));
+  } else {
+    // Planner refused (e.g. insufficient context). Fall back to handler
+    // scopes but log the refusal — this should be investigated.
+    derivedScopes = handler.libraryScopes(inputs);
+    console.warn(JSON.stringify({
+      tag: "[phase35d:planner_refused_fallback]",
+      run_id: runId,
+      task_type: taskType,
+      reason: planResult.reason,
+    }));
+  }
+
   const userContent = [
     inputs.company_name,
     inputs.opportunity,
@@ -178,9 +222,9 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   await setProgress(supabase, runId, "library_retrieval");
   const library = libraryDecision.shouldQuery
     ? await retrieveLibraryContext(supabase, userId, inputs, {
-        scopes: derivedScopes,
-        maxKIs: 12,
-        maxPlaybooks: 6,
+        scopes: plannerRetrievalArgs?.scopes ?? derivedScopes,
+        maxKIs: plannerRetrievalArgs?.maxKIs ?? 12,
+        maxPlaybooks: plannerRetrievalArgs?.maxPlaybooks ?? 6,
       })
     : { knowledgeItems: [], playbooks: [], contextString: "", counts: { kis: 0, playbooks: 0 } };
 
