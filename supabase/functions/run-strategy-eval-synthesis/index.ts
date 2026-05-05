@@ -90,8 +90,9 @@ function buildEvalSynthesisSystemPrompt(
     sections.push("every sentence must carry maximum business weight. Within the word limit:");
     sections.push("");
     sections.push("MANDATORY SEQUENTIAL STRUCTURE — your prose MUST follow this exact progression:");
-    sections.push("The output is ONE flowing passage. No headings, no bullets, no labels.");
-    sections.push("But the INTERNAL logic must proceed in this exact order:");
+    sections.push("The output is flowing prose with NO headings, NO bullets, NO labels.");
+    sections.push("PARAGRAPH RULE: Break into 2-4 SHORT paragraphs (max 100 words each) separated by blank lines.");
+    sections.push("Each paragraph maps to one phase of the progression below:");
     sections.push("");
     sections.push("  SENTENCE 1-2: CURRENT STATE — Open by naming what is concretely true right now for this account.");
     sections.push("    Use phrases like 'Currently...', 'Today...', 'Right now...', 'The [persona] is facing...'");
@@ -129,6 +130,46 @@ function buildEvalSynthesisSystemPrompt(
   sections.push(`MUST cover: ${rubric.mustHave.join(", ")}`);
   sections.push(`AVOID generic phrases: ${rubric.genericMarkers.map(g => `"${g}"`).join(", ")}`);
   sections.push(`Max generic markers allowed: ${rubric.maxGenericMarkers}`);
+  sections.push("");
+
+  // ── Phase 3.5C: Explicit section enforcement
+  sections.push("=== MANDATORY SECTION ENFORCEMENT (Phase 3.5C — NON-NEGOTIABLE) ===");
+  sections.push("Your final output MUST include these exact required concepts in this exact order:");
+  for (let i = 0; i < rubric.mustHave.length; i++) {
+    sections.push(`  ${i + 1}. "${rubric.mustHave[i]}"`);
+  }
+  sections.push("");
+  if (outputContract.shape === "structured_artifact" || outputContract.shape === "executive_brief") {
+    sections.push("FOR STRUCTURED ARTIFACTS:");
+    sections.push("- Each mustHave above MUST appear as a named top-level JSON key or section heading.");
+    sections.push("- Use the EXACT phrase from the list above as the key/heading name. Do NOT rename, merge, or use synonyms.");
+    sections.push("- Example: if mustHave says 'commercial insight', your key must be 'commercial insight' or 'commercial_insight' — NOT 'business opportunity' or 'key insight'.");
+    sections.push("");
+  } else {
+    sections.push("FOR PROSE:");
+    sections.push("- Each mustHave concept above MUST appear explicitly in the prose using the EXACT phrase at least once.");
+    sections.push("- Example: if mustHave says 'change vectors', your prose must literally contain the words 'change vectors' somewhere.");
+    sections.push("- Example: if mustHave says 'commercial insight', your prose must contain those exact words together.");
+    sections.push("- Do NOT rely on synonyms alone. The exact phrase must be present.");
+    sections.push("");
+  }
+
+  // ── Phase 3.5C: Evidence placement enforcement
+  sections.push("=== EVIDENCE PLACEMENT RULES (Phase 3.5C — DETERMINISTIC GATE) ===");
+  sections.push("A DETERMINISTIC GATE will check these rules. Violations = automatic rejection:");
+  sections.push("");
+  sections.push("RULE 1: Max 3 citations per sentence. NEVER put 4+ citations in one sentence. Spread them across sentences.");
+  sections.push("RULE 2: Every citation MUST have causal language in the SAME sentence or the sentence immediately before/after.");
+  sections.push("  Causal words: because, therefore, resulting in, which means, this creates, this drives, demonstrates, validates, confirms, consequently, as a result, leading to, supporting.");
+  sections.push("RULE 3: No citation lists or reference sections at the end. Each citation must be inline with reasoning.");
+  sections.push("");
+  sections.push("PATTERN TO FOLLOW for EVERY citation:");
+  sections.push("  '[Causal claim] because [evidence reasoning] [KI:xxxxxxxx].'");
+  sections.push("  OR: '[KI:xxxxxxxx] demonstrates that [specific claim], resulting in [consequence].'");
+  sections.push("");
+  sections.push("PATTERN TO AVOID:");
+  sections.push("  'The team should focus on improvement [KI:abc123].' — NO causal word = GATE FAIL");
+  sections.push("  'Sources: [KI:abc] [KI:def] [KI:ghi] [KI:jkl]' — 4 citations in one sentence = GATE FAIL");
   sections.push("");
 
   // ── Library proof (retrieved KIs/playbooks)
@@ -908,7 +949,32 @@ Deno.serve(async (req) => {
     const _CAUSAL = /\b(?:because|therefore|resulting|which means|leading to|this (?:means|creates|drives|shows)|consequently|as a result|the data shows|evidence suggests|according to|proves|demonstrates|confirms|validates|supporting)\b/i;
     function _checkEvidenceDiscipline(text: string) {
       const diags: string[] = [];
-      const sents = text.split(/(?<=[.!?])\s+/).filter((s: string) => s.trim().length > 0);
+      // For JSON artifacts, extract string values to check citations in prose context
+      let textToCheck = text;
+      const trimmed = text.trim();
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (typeof parsed === "object" && parsed !== null) {
+            const vals = Object.values(parsed as Record<string, unknown>)
+              .filter((v): v is string => typeof v === "string");
+            textToCheck = vals.join("\n\n");
+          }
+        } catch { /* not JSON, check raw */ }
+      }
+      // Also try extracting from code fences
+      const fenceMatch = text.match(/```(?:json|structured_artifact)\s*([\s\S]*?)```/);
+      if (fenceMatch) {
+        try {
+          const parsed = JSON.parse(fenceMatch[1]);
+          if (typeof parsed === "object" && parsed !== null) {
+            const vals = Object.values(parsed as Record<string, unknown>)
+              .filter((v): v is string => typeof v === "string");
+            textToCheck = vals.join("\n\n");
+          }
+        } catch { /* use raw */ }
+      }
+      const sents = textToCheck.split(/(?<=[.!?])\s+/).filter((s: string) => s.trim().length > 0);
       for (let i = 0; i < sents.length; i++) { const c = (sents[i].match(_CITE) || []).length; if (c > 3) diags.push(`Sentence ${i+1} has ${c} citations (max 3)`); }
       const citeSents: number[] = [];
       for (let i = 0; i < sents.length; i++) { if (_CITE.test(sents[i])) { _CITE.lastIndex = 0; citeSents.push(i); } }
@@ -933,20 +999,24 @@ Deno.serve(async (req) => {
     if (!artifactGateResult.pass) {
       console.log(`[artifact-gate] FAIL on first pass: ${JSON.stringify(artifactGateResult.failed_dimensions)}`);
 
-      // Build strict regen prompt with diagnostics
+      // Build strict gate-specific regen prompt with diagnostics
       const regenLines: string[] = [];
-      regenLines.push("You are performing a STRICT ARTIFACT QUALITY FIX of a Strategy output.");
-      regenLines.push("The artifact gate found quality failures. You must fix ONLY the failing dimensions.");
+      regenLines.push("You FAILED these deterministic quality gates. Fix each diagnostic EXACTLY. Do not preserve failing sections.");
       regenLines.push("");
       regenLines.push("RULES:");
-      regenLines.push("- PRESERVE all passing sections exactly as they are.");
-      regenLines.push("- FIX only the dimensions listed below.");
       regenLines.push("- Do NOT change output format/shape.");
       regenLines.push(`- Output shape: ${outputContract.shape}`);
       if (outputContract.targetWords) regenLines.push(`- Word limit: ${outputContract.targetWords.min}–${outputContract.targetWords.max}`);
       if (outputContract.forbid?.length) regenLines.push(`- Forbidden formatting: ${outputContract.forbid.join(", ")}`);
-      regenLines.push(`- Required sections: ${rubric.mustHave.join(", ")}`);
       regenLines.push("");
+
+      // Exact required section list
+      regenLines.push("=== REQUIRED SECTIONS (exact, in this order) ===");
+      for (let i = 0; i < rubric.mustHave.length; i++) {
+        regenLines.push(`  ${i + 1}. "${rubric.mustHave[i]}"`);
+      }
+      regenLines.push("");
+
       regenLines.push("=== ORIGINAL OUTPUT ===");
       regenLines.push(generatedText);
       regenLines.push("");
@@ -958,7 +1028,34 @@ Deno.serve(async (req) => {
         }
       }
       regenLines.push("");
-      regenLines.push("Return the COMPLETE fixed output. No commentary.");
+
+      // Gate-specific fix instructions
+      regenLines.push("=== GATE-SPECIFIC FIX INSTRUCTIONS ===");
+      for (const g of artifactGateResult.gates) {
+        if (g.pass) continue;
+        if (g.gate === "template_fidelity") {
+          regenLines.push("TEMPLATE FIDELITY FIX:");
+          if (outputContract.shape === "structured_artifact" || outputContract.shape === "executive_brief") {
+            regenLines.push("- Rename/reorder your sections to use these EXACT keys: " + rubric.mustHave.map(m => `"${m}"`).join(", "));
+          } else {
+            regenLines.push("- Ensure each of these EXACT phrases appears literally in your prose: " + rubric.mustHave.map(m => `"${m}"`).join(", "));
+          }
+        } else if (g.gate === "evidence_discipline") {
+          regenLines.push("EVIDENCE DISCIPLINE FIX:");
+          regenLines.push("- Every citation ([KI:...], [PB:...]) must be inside a sentence containing causal language: because, therefore, resulting in, which means, this creates, this drives, demonstrates, validates, confirms.");
+          regenLines.push("- Rewrite each flagged citation sentence into a causal claim. Example: 'This drives $420K in annual savings because consolidated systems eliminate redundant licensing [KI:abc123].'");
+        } else if (g.gate === "readability") {
+          regenLines.push("READABILITY FIX:");
+          regenLines.push("- Split dense paragraphs into ≤120 words each.");
+          regenLines.push("- Add line breaks to walls of text.");
+        } else if (g.gate === "section_completeness") {
+          regenLines.push("SECTION COMPLETENESS FIX:");
+          regenLines.push("- Expand stub/filler sections with: specific metrics, named stakeholder, and causal reasoning (because X → Y).");
+          regenLines.push("- Every required section must have ≥40 words of substantive content.");
+        }
+        regenLines.push("");
+      }
+      regenLines.push("Return the COMPLETE fixed output. No commentary. No meta-text.");
 
       try {
         artifactGateRegenAttempts = 1;
