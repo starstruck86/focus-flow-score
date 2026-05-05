@@ -362,6 +362,6 @@ describe("Phase 4 — validateSingleEvidence for all surface types", () => {
     const evidence = adaptTransformOutput(makeTransformRow(), "unknown-surface");
     const result = validateSingleEvidence(evidence);
     expect(result.valid).toBe(false);
-    expect(result.unmet_requirements).toContain(expect.stringContaining("not registered"));
+    expect(result.unmet_requirements.some(r => r.includes("not registered"))).toBe(true);
   });
 });
