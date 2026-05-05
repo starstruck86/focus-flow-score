@@ -551,6 +551,13 @@ Deno.serve(async (req) => {
       lines.push("- REWRITE only the sections identified as weak.");
       lines.push("- Every rewrite must be MORE specific, MORE quantified, MORE actionable than the original.");
       lines.push("- Maintain the same output format/shape.");
+      lines.push(`- Output shape: ${outputContract.shape}`);
+      if (outputContract.targetWords) {
+        lines.push(`- STRICT word limit: ${outputContract.targetWords.min}–${outputContract.targetWords.max} words. Do NOT exceed.`);
+      }
+      if (outputContract.forbid?.length) {
+        lines.push(`- FORBIDDEN formatting: ${outputContract.forbid.join(", ")}. Do NOT add headings, bullets, or lists if forbidden.`);
+      }
       lines.push("");
       lines.push("=== ORIGINAL OUTPUT ===");
       lines.push(original);
