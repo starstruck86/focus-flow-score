@@ -398,34 +398,60 @@ function scoreSectionLevelDepth(obj: unknown): number {
 }
 
 // ── Cross-Section Causality Detection ────────────────────────
-// Detects whether sections reference each other, forming a reasoning chain.
-// Baseline almost never achieves this because it generates flat, isolated sections.
+// For structured artifacts: checks whether JSON sections reference each other's
+// concepts (not just proximity in raw text). Baseline produces flat, isolated
+// sections that almost never cross-reference.
 function scoreCrossSectionCausality(text: string): { hasCausality: boolean; score: number } {
   const lower = text.toLowerCase();
+  let totalSignals = 0;
 
-  // Signal 1: Metrics/data referenced inside risk/gap sections
-  // Look for patterns where quantified data appears near risk language
-  const metricsNearRisk = countMatches(lower, /(?:risk|gap|threat|exposure|vulnerability|concern|pain|problem|challenge|miss(?:ed|ing))[\s\S]{0,120}(?:\d+%|\$[\d,.]+|roi|revenue|margin|conversion|retention|pipeline|quota|close rate|win rate)/g)
-    + countMatches(lower, /(?:\d+%|\$[\d,.]+|roi|revenue|margin|conversion|retention|pipeline|quota)[\s\S]{0,120}(?:risk|gap|threat|exposure|vulnerability|concern|pain|problem|challenge|miss(?:ed|ing))/g);
+  // ── JSON cross-section analysis ────────────────────────────
+  // For each section's value text, check if it references concepts from OTHER sections.
+  const jsonContent = extractJsonContent(text);
+  if (jsonContent) {
+    try {
+      const parsed = JSON.parse(jsonContent);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        const sections = Object.entries(parsed as Record<string, unknown>);
+        const sectionTexts: Array<{ key: string; text: string }> = [];
+        for (const [key, val] of sections) {
+          const valText = typeof val === "string" ? val : JSON.stringify(val);
+          sectionTexts.push({ key: key.toLowerCase(), text: valText.toLowerCase() });
+        }
+        // Check if section values reference OTHER section key concepts
+        let crossRefs = 0;
+        for (let i = 0; i < sectionTexts.length; i++) {
+          for (let j = 0; j < sectionTexts.length; j++) {
+            if (i === j) continue;
+            const otherKey = sectionTexts[j].key.replace(/_/g, " ");
+            const otherKeyWords = otherKey.split(/\s+/).filter(w => w.length > 3);
+            // Check if section i's text references section j's key concepts
+            if (otherKeyWords.length > 0 && otherKeyWords.every(w => sectionTexts[i].text.includes(w))) {
+              crossRefs++;
+            }
+          }
+        }
+        // Require at least 3 cross-section references for structured artifacts
+        totalSignals += Math.min(crossRefs, 4);
+      }
+    } catch { /* not valid JSON */ }
+  }
 
-  // Signal 2: Risks/gaps drive specific next steps/actions
-  const risksToActions = countMatches(lower, /(?:risk|gap|threat|exposure|unknown|unclear|missing|concern|pain|weakness)[\s\S]{0,150}(?:ask|confirm|validate|test|propose|schedule|map|investigate|address|mitigate|next step|action|recommend|follow[- ]up)/g);
+  // ── Explicit causal language (tight patterns only) ─────────
+  // These patterns indicate deliberate reasoning chains, not incidental proximity.
+  const explicitCausal = countMatches(lower, /\b(?:as identified in|building on the|given the .{3,40} above|this drives|which compounds|this connects to|per the .{3,30} analysis|based on the .{3,40} identified|the .{3,30} gap .{3,60} (?:requires|demands|means)|from the .{3,30} section)\b/g);
+  totalSignals += Math.min(explicitCausal, 3) * 2;
 
-  // Signal 3: Actions explicitly resolve identified gaps/risks
-  const actionsResolveGaps = countMatches(lower, /(?:to (?:address|mitigate|resolve|close|fill|validate|confirm|de-risk)|which (?:addresses|mitigates|resolves|closes|fills)|in order to|this will|ensuring)/g);
+  // ── Metric-to-action threading ─────────────────────────────
+  // Only counts when a specific number/$ is within 60 chars of an imperative verb
+  const tightMetricAction = countMatches(lower, /(?:\d+%|\$[\d,.]+[kmb]?)[\s\S]{0,60}(?:therefore|so we must|which requires|meaning we should|this demands|action:|next step:)/g)
+    + countMatches(lower, /(?:because of the|due to the|given the)[\s\S]{0,40}(?:\d+%|\$[\d,.]+)/g);
+  totalSignals += Math.min(tightMetricAction, 2);
 
-  // Signal 4: Cross-reference language (sections pointing to each other)
-  const crossRef = countMatches(lower, /\b(?:as (?:noted|identified|described|outlined) (?:above|in|earlier)|building on|given (?:the|this|these)|based on (?:the|this|these)|this (?:connects to|drives|informs|supports)|per the|from the .{3,30} section|see .{3,30} above)\b/g);
-
-  // Signal 5: Causal connectors between substantive concepts (not just transitions)
-  const causalChains = countMatches(lower, /(?:which (?:means|creates|causes|drives|results in|leads to|exposes|compounds)|this (?:means|creates|causes|drives|results in|leads to)|because .{10,60}(?:therefore|so|thus|hence|we (?:should|must|need to|recommend))|if .{10,60}then)/g);
-
-  const totalSignals = Math.min(metricsNearRisk, 3) + Math.min(risksToActions, 3) + Math.min(actionsResolveGaps, 3) + Math.min(crossRef, 2) + Math.min(causalChains, 3);
-  const hasCausality = totalSignals >= 3;
-  // Score: 0 (no cross-section reasoning), 1 (some), 2 (strong)
+  const hasCausality = totalSignals >= 4;
   let score = 0;
-  if (totalSignals >= 5) score = 2;
-  else if (totalSignals >= 3) score = 1;
+  if (totalSignals >= 6) score = 2;
+  else if (totalSignals >= 4) score = 1;
   return { hasCausality, score };
 }
 
