@@ -32,6 +32,17 @@ import type { TaskType } from "./types.ts";
 /** Persist the synthesis artifact + prompt material into task_runs.meta
  *  so each subsequent step can reconstruct the authoring inputs without
  *  re-running research/synthesis. Single source of truth. */
+/** Planner telemetry carried from executePipeline → progressive driver. */
+export interface PlannerCarryForward {
+  plan_hash: string;
+  term_seeds_count: number;
+  methodology_seeds_injected: boolean;
+  methodology_seeds: number;
+  scopes: string[];
+  expanded_seeds: number;
+  pipeline_start_ms: number;
+}
+
 export async function persistSynthesisArtifact(args: {
   supabase: any;
   runId: string;
@@ -42,8 +53,9 @@ export async function persistSynthesisArtifact(args: {
   researchChars: number;
   sop?: SopContractLike | null;
   sopInputCheck?: any;
+  plannerCarryForward?: PlannerCarryForward | null;
 }): Promise<void> {
-  const { supabase, runId, synthesis, systemPrompt, baseUserPrompt, libraryCounts, researchChars, sop, sopInputCheck } = args;
+  const { supabase, runId, synthesis, systemPrompt, baseUserPrompt, libraryCounts, researchChars, sop, sopInputCheck, plannerCarryForward } = args;
   const { error } = await supabase
     .from("task_runs")
     .update({
@@ -67,6 +79,10 @@ export async function persistSynthesisArtifact(args: {
           inputCheck: sopInputCheck ?? null,
           outputCheck: null,
         },
+        // Phase 3.6 — carry planner telemetry so the progressive driver
+        // can include it in the final meta write alongside performance
+        // and anomaly_flags.
+        ...(plannerCarryForward ? { planner_carry_forward: plannerCarryForward } : {}),
       },
       updated_at: new Date().toISOString(),
     })
