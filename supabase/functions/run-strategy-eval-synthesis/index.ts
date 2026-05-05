@@ -158,9 +158,13 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // ── Auth
+    // ── Auth (with validation-key bypass for automated testing)
+    const validationKey = req.headers.get("x-validation-key");
+    const expectedKey = Deno.env.get("STRATEGY_VALIDATION_KEY");
+    const isValidationBypass = validationKey && expectedKey && validationKey === expectedKey;
+
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader && !isValidationBypass) {
       return new Response(
         JSON.stringify({ error: "Authorization required" }),
         { status: 401, headers: { ...CORS, "Content-Type": "application/json" } },
@@ -169,16 +173,34 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...CORS, "Content-Type": "application/json" } },
-      );
+    let supabase: ReturnType<typeof createClient>;
+    let userId: string;
+
+    if (isValidationBypass) {
+      // Use service role for validation bypass
+      supabase = createClient(supabaseUrl, serviceRoleKey);
+      // Look up the owner user
+      const { data: ownerData } = await supabase
+        .from("approved_users")
+        .select("user_id")
+        .eq("is_active", true)
+        .limit(1)
+        .single();
+      userId = ownerData?.user_id ?? "validation-user";
+    } else {
+      supabase = createClient(supabaseUrl, supabaseKey, {
+        global: { headers: { Authorization: authHeader! } },
+      });
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized" }),
+          { status: 401, headers: { ...CORS, "Content-Type": "application/json" } },
+        );
+      }
+      userId = user.id;
     }
 
     // ── Parse body
