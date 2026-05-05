@@ -512,11 +512,51 @@ function scoreBusinessImpact(text: string, shape?: string): number {
     for (const p of fps) { if (p.test(text)) artifactFieldBonus += 1.5; }
   }
   const totalSignals = Math.min(beforeState, 3) * 1 + Math.min(negConsequences, 4) * 1.5 + Math.min(afterState, 4) * 1 + Math.min(capabilities, 3) * 1 + Math.min(metrics + percentages + dollarAmounts, 5) * 1.5 + Math.min(meddpicc, 4) * 1 + Math.min(valueFramework, 3) * 1 + artifactFieldBonus;
-  if (totalSignals >= 15) return 5;
-  if (totalSignals >= 10) return 4;
-  if (totalSignals >= 5) return 3;
-  if (totalSignals >= 2) return 2;
-  return 1;
+
+  let rawScore: number;
+  if (totalSignals >= 15) rawScore = 5;
+  else if (totalSignals >= 10) rawScore = 4;
+  else if (totalSignals >= 5) rawScore = 3;
+  else if (totalSignals >= 2) rawScore = 2;
+  else rawScore = 1;
+
+  // ── HARDENED 5/5 GATE ────────────────────────────────────────
+  // A 5 requires:
+  //   1. Causal chain: current state → consequence → financial impact → action
+  //   2. Stakeholder-specific implication (not generic "improves efficiency")
+  // Generic business value ("drives growth", "improves efficiency") → max 3
+  if (rawScore >= 4) {
+    // Check causal chain: must have at least 3 of 4 phases connected
+    const hasCurrentState = beforeState >= 1;
+    const hasConsequence = negConsequences >= 1;
+    const hasFinancialImpact = (metrics + percentages + dollarAmounts) >= 1;
+    const hasAction = countMatches(lower, /\b(?:ask|confirm|validate|propose|recommend|next step|action|should|must|need to|prioritize|address|mitigate|pursue)\b/g) >= 1;
+    const causalPhases = [hasCurrentState, hasConsequence, hasFinancialImpact, hasAction].filter(Boolean).length;
+
+    // Check stakeholder specificity: must tie impact to a role/persona/team
+    const stakeholderSpecific = countMatches(lower, /\b(?:cfo|cto|cmo|coo|cio|ceo|vp of|director of|head of|manager|buyer|champion|economic buyer|decision maker|general manager|chief|owner|operator|leader|executive|board|c-suite|stakeholder)\b/g);
+    const roleSpecificImpact = stakeholderSpecific >= 1;
+
+    // Generic value language penalty
+    const genericValue = countMatches(lower, /\b(?:improve(?:s)? efficiency|drive(?:s)? growth|add(?:s)? value|increase(?:s)? productivity|optimize(?:s)? (?:operations|processes)|streamline(?:s)?|enhance(?:s)? performance|better outcomes?|maximize|deliver value)\b/g);
+    const isGenericHeavy = genericValue >= 2 && (metrics + percentages + dollarAmounts) < 2;
+
+    if (isGenericHeavy) {
+      rawScore = Math.min(rawScore, 3);
+    } else if (rawScore >= 5) {
+      // For a 5: must have causal chain AND stakeholder specificity
+      if (causalPhases < 3 || !roleSpecificImpact) rawScore = 4;
+    }
+  }
+
+  // ── Cross-section causality bonus (within cap) ─────────────
+  // +1 when metrics flow into risks flow into actions
+  if (rawScore >= 3 && rawScore < 5) {
+    const { score: causalityScore } = scoreCrossSectionCausality(text);
+    if (causalityScore >= 1) rawScore = Math.min(rawScore + 1, 5);
+  }
+
+  return rawScore;
 }
 
 interface Score {
