@@ -336,13 +336,121 @@ export async function assembleAndFinalize(args: {
     enforcement: false,
   }));
 
+  // ── Phase 3.5D: Artifact Gate Enforcement (discovery_prep) ────────
+  // Same enforcement as account_brief / ninety_day_plan in runTask.ts.
+  // Runs AFTER assembly, BEFORE persistence. fail → 1 regen → hard fail.
+  const taskManifest = getTaskManifest(taskType as TaskType);
+  const artifactManifest = toArtifactManifest(taskManifest);
+  const gateStartMs = Date.now();
+  let artifactGateTelemetry: ArtifactGateTelemetry = {
+    pass: false,
+    failed_dimensions: [],
+    regen_attempts: 0,
+    regen_success: false,
+    total_gate_latency_ms: 0,
+  };
+
+  const draftText = JSON.stringify(draftOutput);
+  let gateResult = runArtifactGate(draftText, artifactManifest);
+  let finalDraftOutput: any = draftOutput;
+
+  if (!gateResult.pass) {
+    console.warn(JSON.stringify({
+      tag: "[phase35d:progressive_artifact_gate_failed]",
+      run_id: runId,
+      task_type: taskType,
+      failed_dimensions: gateResult.failed_dimensions,
+      diagnostics: gateResult.gates.flatMap(g => g.diagnostics).slice(0, 10),
+    }));
+
+    // ONE regen attempt using OpenAI with gate diagnostics
+    artifactGateTelemetry.regen_attempts = 1;
+    try {
+      const regenRaw = await callOpenAI([
+        { role: "system", content: `${handler.buildDocumentSystemPrompt()}\n\nIMPORTANT: Your previous output failed quality gates. Fix these issues:\n${gateResult.gates.flatMap(g => g.diagnostics).join("\n")}` },
+        { role: "user", content: handler.buildDocumentUserPrompt(
+          {} as any,
+          prog?.synthesis ?? {},
+          { knowledgeItems: [], playbooks: [], contextString: "", counts: { kis: 0, playbooks: 0 } },
+        ) },
+      ], { model: "gpt-5-mini", maxTokens: 16000 });
+      const regenParsed = safeParseJSON<any>(regenRaw);
+      if (regenParsed && typeof regenParsed === "object" && Array.isArray(regenParsed.sections)) {
+        const regenText = JSON.stringify(regenParsed);
+        const regenGate = runArtifactGate(regenText, artifactManifest);
+        if (regenGate.pass) {
+          finalDraftOutput = regenParsed;
+          gateResult = regenGate;
+          artifactGateTelemetry.regen_success = true;
+          console.log(JSON.stringify({
+            tag: "[phase35d:progressive_artifact_gate_regen_success]",
+            run_id: runId,
+          }));
+        } else {
+          console.error(JSON.stringify({
+            tag: "[phase35d:progressive_artifact_gate_regen_also_failed]",
+            run_id: runId,
+            failed_dimensions: regenGate.failed_dimensions,
+          }));
+        }
+      }
+    } catch (regenErr) {
+      console.error(JSON.stringify({
+        tag: "[phase35d:progressive_artifact_gate_regen_error]",
+        run_id: runId,
+        error: String((regenErr as Error)?.message ?? regenErr).slice(0, 300),
+      }));
+    }
+
+    // HARD FAIL — gate still fails after regen
+    if (!gateResult.pass) {
+      artifactGateTelemetry.pass = false;
+      artifactGateTelemetry.failed_dimensions = gateResult.failed_dimensions;
+      artifactGateTelemetry.total_gate_latency_ms = Date.now() - gateStartMs;
+
+      const failMsg = `[artifact_gate_failed] Dimensions: ${gateResult.failed_dimensions.join(", ")}`;
+      console.error(JSON.stringify({
+        tag: "[phase35d:progressive_artifact_gate_hard_fail]",
+        run_id: runId,
+        task_type: taskType,
+        telemetry: artifactGateTelemetry,
+      }));
+
+      await supabase
+        .from("task_runs")
+        .update({
+          status: "failed",
+          progress_step: "failed",
+          error: failMsg.slice(0, 1000),
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          meta: {
+            ...((runRow?.meta as any) || {}),
+            artifact_gate: artifactGateTelemetry,
+            artifact_gate_failed: true,
+          },
+        })
+        .eq("id", runId);
+
+      return {
+        sections_completed: collected.size,
+        sections_total: DISCOVERY_PREP_SECTIONS.length,
+        assembled: false,
+      };
+    }
+  }
+
+  artifactGateTelemetry.pass = gateResult.pass;
+  artifactGateTelemetry.failed_dimensions = gateResult.failed_dimensions;
+  artifactGateTelemetry.total_gate_latency_ms = Date.now() - gateStartMs;
+
   // ── Review (best-effort, non-fatal) ──
   let reviewOutput: any = { strengths: [], redlines: [], library_coverage: { used: [], gaps: [] } };
   try {
     if (collected.size > 0) {
       const reviewRaw = await callOpenAI([
         { role: "system", content: "You are a senior sales leader reviewing a prep document. Be specific, actionable, and grounded in the provided internal playbooks/KIs." },
-        { role: "user", content: handler.buildReviewPrompt({} as any, draftOutput, { knowledgeItems: [], playbooks: [], contextString: "", counts: { kis: 0, playbooks: 0 } }) },
+        { role: "user", content: handler.buildReviewPrompt({} as any, finalDraftOutput, { knowledgeItems: [], playbooks: [], contextString: "", counts: { kis: 0, playbooks: 0 } }) },
       ], { model: "gpt-5-mini", temperature: 0.4, maxTokens: 4000 });
       const parsed = safeParseJSON<any>(reviewRaw);
       if (parsed) reviewOutput = { ...reviewOutput, ...parsed };
@@ -388,12 +496,14 @@ export async function assembleAndFinalize(args: {
       outputCheck: sopOutputCheck,
       finalized_at: new Date().toISOString(),
     },
+    // Phase 3.5D — artifact gate telemetry
+    artifact_gate: artifactGateTelemetry,
   };
 
   await supabase
     .from("task_runs")
     .update({
-      draft_output: draftOutput,
+      draft_output: finalDraftOutput,
       review_output: reviewOutput,
       status: "completed",
       progress_step: "completed",
