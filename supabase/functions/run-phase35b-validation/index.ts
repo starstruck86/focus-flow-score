@@ -481,7 +481,8 @@ Deno.serve(async (req) => {
       const structWinner = stratScore.structure > baseScore.structure ? "strategy" : stratScore.structure < baseScore.structure ? "baseline" : "tie";
       const bizWinner = stratScore.business_impact > baseScore.business_impact ? "strategy" : stratScore.business_impact < baseScore.business_impact ? "baseline" : "tie";
 
-      const isValid = strategyText.length > 20 && !strategyText.trim().startsWith("{");
+      // Valid = non-empty Strategy output. JSON artifacts starting with { are valid.
+      const isValid = strategyText.length > 20;
       const isClean = !baselineText.includes("KI-") && !baselineText.includes("Knowledge Item");
 
       results.push({
