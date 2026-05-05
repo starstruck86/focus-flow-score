@@ -294,6 +294,23 @@ function scoreCompleteness(text: string, mustHave?: string[]): number {
   return 1;
 }
 
+function scoreSectionLevelDepth(obj: unknown): number {
+  if (typeof obj !== "object" || obj === null) return 0;
+  let richSections = 0;
+  const entries = Array.isArray(obj) ? obj : Object.values(obj as Record<string, unknown>);
+  for (const val of entries) {
+    if (Array.isArray(val) && val.length >= 2) richSections++;
+    else if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+      const keys = Object.keys(val as Record<string, unknown>);
+      if (keys.length >= 3) richSections++;
+      for (const v of Object.values(val as Record<string, unknown>)) {
+        if (Array.isArray(v) && v.length >= 2) richSections++;
+      }
+    }
+  }
+  return richSections >= 3 ? 1 : 0;
+}
+
 function scoreStructure(text: string, shape: string, forbid?: string[], mustHave?: string[]): number {
   if (shape === "structured_artifact" || shape === "executive_brief") {
     let depthScore: number;
@@ -303,8 +320,17 @@ function scoreStructure(text: string, shape: string, forbid?: string[], mustHave
       else depthScore = scoreStructureMarkdown(text);
     } else depthScore = scoreStructureMarkdown(text);
     const completeness = scoreCompleteness(text, mustHave);
-    const blended = Math.round(completeness * 0.6 + depthScore * 0.4);
-    let finalScore = clamp(blended, 1, 5);
+
+    // Section-level depth bonus
+    let sectionDepthBonus = 0;
+    const jsonContent = extractJsonContent(text);
+    if (jsonContent) {
+      try { const parsed = JSON.parse(jsonContent); if (typeof parsed === "object" && parsed !== null) sectionDepthBonus = scoreSectionLevelDepth(parsed); } catch { /* */ }
+    }
+
+    // 70% completeness, 30% depth
+    const blended = Math.round(completeness * 0.7 + depthScore * 0.3);
+    let finalScore = clamp(blended + sectionDepthBonus, 1, 5);
     if (mustHave && mustHave.length > 0 && completeness < 5) finalScore = Math.min(finalScore, 4);
     return finalScore;
   }
@@ -377,9 +403,9 @@ function scoreOutput(text: string, inputTerms: string[], shape: string, forbid?:
   const relevance = scoreRelevance(text, inputTerms);
   const business_impact = scoreBusinessImpact(text, shape);
 
-  // Density penalty
+  // Density penalty — BYPASSED for structured artifacts (length is a feature)
   let s = { specificity, actionability, structure, evidence, relevance, business_impact, total: 0 };
-  if (targetWords?.max) {
+  if (targetWords?.max && shape !== "structured_artifact" && shape !== "executive_brief") {
     const wc = text.split(/\s+/).length;
     if (wc > targetWords.max * 1.5) {
       const penalty = clamp(Math.floor((wc / targetWords.max) / 2), 0, 2);
