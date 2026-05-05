@@ -339,6 +339,7 @@ describe("Phase 4 — validateSingleEvidence for all surface types", () => {
         artifact_gate: { pass: false, failed_dimensions: [], regen_attempts: 0, regen_success: false, total_gate_latency_ms: 50 },
         performance: { total_latency_ms: 3000 },
         anomaly_flags: {},
+        library_counts: { kis: 10, playbooks: 2, content_chars: 5000 },
       },
     });
     const result = validateSingleEvidence(evidence);
