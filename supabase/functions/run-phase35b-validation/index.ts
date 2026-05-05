@@ -104,7 +104,7 @@ const CASES: Case[] = [
     baselineSystem: "You are a helpful sales strategy assistant. Answer the user's question with actionable, specific advice. Do not reference any internal library, playbook, or proprietary methodology. Use only general sales knowledge.\n\nOutput constraints:\n- Return your response as a well-structured JSON object with semantically meaningful keys.\n- Keep your response between 200 and 500 words.",
     scoringShape: "executive_brief",
     targetWords: { min: 200, max: 500 },
-    mustHave: ["executive summary", "strategic context", "recommendations", "financial impact", "risk assessment"],
+    mustHave: ["decision thesis", "risk of delay", "commercial stakes", "recommended action", "seller next move", "objection", "proof"],
     inputTerms: ["Beechwood", "Hotel", "guest", "experience", "platform", "consolidation", "General", "Manager", "discovery"],
   },
 ];
