@@ -737,6 +737,17 @@ Deno.serve(async (req) => {
       if (criticResult.structural_gaps?.length > 0) {
         issues.push(...criticResult.structural_gaps.map((s: string) => `Structural gap: ${s}`));
       }
+      // T9: Structural differentiation failures
+      const sd = criticResult.structural_differentiation;
+      if (sd) {
+        if (sd.quantified_consequence === false) issues.push("STRUCTURAL DIFFERENTIATION FAILURE: Missing quantified consequence — add a specific number/$/% tied to business impact");
+        if (sd.named_entity_metric === false) issues.push("STRUCTURAL DIFFERENTIATION FAILURE: Missing named entity + metric — tie a specific role/team to a measurable outcome");
+        if (sd.causal_chain === false) issues.push("STRUCTURAL DIFFERENTIATION FAILURE: Missing causal chain — add explicit X → Y → Z reasoning specific to this account");
+        if (sd.stakeholder_action === false) issues.push("STRUCTURAL DIFFERENTIATION FAILURE: Missing stakeholder-tied action — add Ask/Confirm/Map/Validate directed at a specific persona");
+        if (sd.failures?.length > 0) {
+          issues.push(...sd.failures.map((f: string) => `Structural differentiation detail: ${f}`));
+        }
+      }
 
       // Use rewrite_instructions if provided, otherwise use collected issues
       const rewriteInstructions = criticResult.rewrite_instructions?.length > 0
