@@ -370,7 +370,7 @@ export async function assembleAndFinalize(args: {
         { role: "system", content: `${handler.buildDocumentSystemPrompt()}\n\nIMPORTANT: Your previous output failed quality gates. Fix these issues:\n${gateResult.gates.flatMap(g => g.diagnostics).join("\n")}` },
         { role: "user", content: handler.buildDocumentUserPrompt(
           {} as any,
-          prog?.synthesis ?? {},
+          synthesis ?? {},
           { knowledgeItems: [], playbooks: [], contextString: "", counts: { kis: 0, playbooks: 0 } },
         ) },
       ], { model: "gpt-5-mini", maxTokens: 16000 });
