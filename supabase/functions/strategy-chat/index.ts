@@ -5891,6 +5891,8 @@ async function handleChat(
   // streaming and non-streaming branches below.
   const __resolvedContract = resolveServerWorkspaceContract(workspaceKeyRaw);
   const __retrievalRules = __resolvedContract.retrievalRules;
+  // Phase 4: derive manifest_id for evidence attribution
+  const __chatManifestId = deriveChatManifestId(content, workspaceKeyRaw ?? null);
   await supabase.from("strategy_messages").insert({
     thread_id: threadId,
     user_id: userId,
