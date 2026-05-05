@@ -834,7 +834,9 @@ Deno.serve(async (req) => {
   const bizLosses = results.filter(r => r.biz_impact_winner === "baseline").length;
   const invalidOutputs = results.filter(r => r.strategy_valid === false).length;
   const contaminatedBaselines = results.filter(r => r.baseline_clean === false).length;
-  const artifactGateFailures = results.filter(r => r.artifact_gate && !r.artifact_gate.pass).length;
+  const artifactGateFailures = results.filter(r => r.artifact_gate && !(r.artifact_gate as any).pass).length;
+  const artifactGateRegens = results.filter(r => r.artifact_gate_regenerated === true).length;
+  const artifactGateRegenSuccesses = results.filter(r => r.artifact_gate_regen_success === true).length;
   const allPass = baselineWins === 0 && strategyWins > ties && structureLosses === 0 && bizLosses === 0 && invalidOutputs === 0 && contaminatedBaselines === 0 && artifactGateFailures === 0;
 
   const attemptId = crypto.randomUUID();
