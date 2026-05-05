@@ -204,19 +204,28 @@ export function runReleaseGate(): ReleaseGateResult {
   const enforced = getEnforcedSurfaces();
   const deferred = getDeferredSurfaces();
 
-  // Every enforced surface must have evidence in the report file
+  // Every enforced surface must have VALIDATED evidence in the report
+  // The report must contain both the manifest_id AND a "PASS" validation
+  // marker. "EVIDENCE GAP" entries are treated as failures.
   const evidencePath = path.resolve("docs/phase37-production-evidence-report.md");
   if (!fs.existsSync(evidencePath)) {
     failures.push("Phase 3.7B production evidence report missing: docs/phase37-production-evidence-report.md");
   } else {
     const evidenceContent = fs.readFileSync(evidencePath, "utf-8");
-    // Check each enforced surface has a mention in the evidence report
     for (const surface of enforced) {
       const hasEntry = evidenceContent.includes(surface.manifest_id) ||
                        evidenceContent.includes(surface.label);
       if (!hasEntry) {
         failures.push(
           `Enforced surface missing from evidence report: ${surface.label} (${surface.manifest_id})`
+        );
+      }
+      // Phase 4: check for EVIDENCE GAP markers against this surface
+      // If the report explicitly calls out an evidence gap for this surface, fail
+      const surfaceSection = extractSurfaceSection(evidenceContent, surface.manifest_id, surface.label);
+      if (surfaceSection && /EVIDENCE[\s_]GAP/i.test(surfaceSection)) {
+        failures.push(
+          `Evidence gap reported for enforced surface: ${surface.label} (${surface.manifest_id}) — real DB proof required`
         );
       }
     }
