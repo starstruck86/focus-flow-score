@@ -20,8 +20,8 @@ import {
   getEnforcedSurfaces,
   getDeferredSurfaces,
   findSurface,
-  type RegisteredSurface,
 } from "./surfaceRegistry";
+import type { RegisteredSurface } from "./evidenceContract";
 
 // ═══════════════════════════════════════════════════════════════════
 // Surface Coverage Report
