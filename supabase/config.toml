@@ -120,5 +120,5 @@ verify_jwt = false
 [functions.batch-extract-kis]
 verify_jwt = false
 
-[functions.temp-35c-validation]
+[functions.temp-validation-runner]
 verify_jwt = false
