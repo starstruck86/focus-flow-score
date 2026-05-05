@@ -367,6 +367,35 @@ function scoreCompleteness(text: string, ctx?: ScoringContext): number {
   return 1;
 }
 
+/**
+ * Section-level depth check for structured artifacts.
+ * Returns 0 or 1 bonus point based on richness signals:
+ *   - Arrays with ≥2 items
+ *   - Objects with ≥3 keys
+ *   - Quantified values (numbers, percentages, dollar amounts)
+ */
+function scoreSectionLevelDepth(obj: unknown): number {
+  if (typeof obj !== "object" || obj === null) return 0;
+
+  let richSections = 0;
+  const entries = Array.isArray(obj) ? obj : Object.values(obj as Record<string, unknown>);
+
+  for (const val of entries) {
+    if (Array.isArray(val) && val.length >= 2) richSections++;
+    else if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+      const keys = Object.keys(val as Record<string, unknown>);
+      if (keys.length >= 3) richSections++;
+      // Recurse one level
+      for (const v of Object.values(val as Record<string, unknown>)) {
+        if (Array.isArray(v) && v.length >= 2) richSections++;
+      }
+    }
+  }
+
+  // 3+ rich sections → +1 bonus
+  return richSections >= 3 ? 1 : 0;
+}
+
 function scoreStructure(text: string, ctx?: ScoringContext): number {
   const shape = ctx?.shape ?? "unknown";
   const forbid = ctx?.forbid ?? [];
@@ -380,13 +409,31 @@ function scoreStructure(text: string, ctx?: ScoringContext): number {
       depthScore = scoreStructureMarkdown(text);
     }
 
-    // Blend: 60% completeness, 40% depth
+    // Blend: 70% completeness, 30% depth — completeness is the primary signal
+    // for structured artifacts; a complete MEDDICC or Discovery Prep matters
+    // more than how deeply nested the JSON is.
     const completeness = scoreCompleteness(text, ctx);
-    const blended = Math.round(completeness * 0.6 + depthScore * 0.4);
-    let finalScore = clamp(blended, 1, 5);
 
-    // Hard signal: if mustHave exists and sections are missing, cap at 4
-    if (ctx?.mustHave && ctx.mustHave.length > 0 && completeness < 5) {
+    // Section-level depth bonus: reward rich sections (arrays ≥2 items,
+    // objects with multiple keys, quantified values) without relying on length.
+    let sectionDepthBonus = 0;
+    const jsonContent = extractJsonContent(text);
+    if (jsonContent) {
+      try {
+        const parsed = JSON.parse(jsonContent);
+        if (typeof parsed === "object" && parsed !== null) {
+          sectionDepthBonus = scoreSectionLevelDepth(parsed);
+        }
+      } catch { /* not valid JSON */ }
+    }
+
+    const blended = Math.round(completeness * 0.7 + depthScore * 0.3);
+    // Apply section depth bonus: +1 if sections are rich, capped at 5
+    let finalScore = clamp(blended + sectionDepthBonus, 1, 5);
+
+    // Hard cap only for significant incompleteness (3+ missing sections)
+    // Single missing section is handled naturally by the 70/30 blend
+    if (ctx?.mustHave && ctx.mustHave.length > 0 && completeness <= 3) {
       finalScore = Math.min(finalScore, 4);
     }
 
@@ -571,6 +618,10 @@ export function scoreOutput(text: string, inputTerms: string[], ctx?: ScoringCon
  * that a 120-word constrained output can never match.
  */
 function applyDensityPenalty(score: OutputScore, text: string, ctx?: ScoringContext): OutputScore {
+  // Structured artifacts are EXPECTED to be detailed and multi-section.
+  // Length is a feature, not a flaw — never penalize them for verbosity.
+  if (ctx?.shape === "structured_artifact" || ctx?.shape === "executive_brief") return score;
+
   if (!ctx?.targetWords?.max) return score;
   const wordCount = text.split(/\s+/).length;
   const maxWords = ctx.targetWords.max;
