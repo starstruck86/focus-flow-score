@@ -109,6 +109,100 @@ const CASES: Case[] = [
   },
 ];
 
+// ── Phase 3.5C Artifact Gate (inlined for Deno compat) ──────────
+
+interface ArtifactGateDiag { gate: string; pass: boolean; diagnostics: string[] }
+interface ArtifactGateResult { pass: boolean; gates: ArtifactGateDiag[]; failed_dimensions: string[] }
+
+function agNormalizeKey(s: string): string { return s.toLowerCase().replace(/[^a-z0-9]/g, ""); }
+
+function agCheckTemplateFidelity(output: string, mustHave: string[], shape: string): ArtifactGateDiag {
+  const diagnostics: string[] = [];
+  if (shape === "structured_artifact" || shape === "executive_brief") {
+    let keys: string[] = [];
+    try {
+      const fm = output.match(/```(?:json|structured_artifact)\s*([\s\S]*?)```/);
+      const raw = fm ? fm[1] : output.trim();
+      if (raw.startsWith("{")) { keys = Object.keys(JSON.parse(raw)); }
+    } catch { const km = output.match(/"([^"]+)"\s*:/g); if (km) keys = km.map(m => m.replace(/"/g, "").replace(":", "").trim()); }
+    const nk = keys.map(agNormalizeKey);
+    for (const req of mustHave) { const nr = agNormalizeKey(req); if (!nk.some(k => k.includes(nr) || nr.includes(k))) diagnostics.push(`Missing: "${req}"`); }
+  } else {
+    const lower = output.toLowerCase();
+    for (const req of mustHave) {
+      const norm = req.toLowerCase();
+      if (lower.includes(norm)) continue;
+      const words = norm.split(/\s+/).filter(w => w.length > 2);
+      if (words.length >= 2 && words.every(w => lower.includes(w))) continue;
+      diagnostics.push(`Missing: "${req}"`);
+    }
+  }
+  return { gate: "template_fidelity", pass: diagnostics.length === 0, diagnostics };
+}
+
+function agCheckReadability(text: string): ArtifactGateDiag {
+  const diagnostics: string[] = [];
+  let textToCheck = text;
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{")) { try { const p = JSON.parse(trimmed); if (typeof p === "object" && p) textToCheck = Object.values(p).filter((v): v is string => typeof v === "string").join("\n\n"); } catch {} }
+  const paragraphs = textToCheck.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+  let totalWords = 0, denseWords = 0;
+  for (let i = 0; i < paragraphs.length; i++) {
+    const para = paragraphs[i].trim();
+    if (para.startsWith("```") || para.startsWith("{") || para.startsWith("[") || /^#+\s/.test(para)) continue;
+    const words = para.split(/\s+/).length;
+    totalWords += words;
+    if (words > 120) diagnostics.push(`Paragraph ${i + 1}: ${words} words (max 120)`);
+    if (words >= 200 && !(para.match(/\n/g) || []).length) diagnostics.push(`Wall of text: paragraph ${i + 1}`);
+    if (words > 80) denseWords += words;
+  }
+  if (totalWords > 0 && denseWords / totalWords > 0.7) diagnostics.push(`${Math.round((denseWords / totalWords) * 100)}% dense prose`);
+  return { gate: "readability", pass: diagnostics.length === 0, diagnostics };
+}
+
+function agCheckCompleteness(output: string, mustHave: string[]): ArtifactGateDiag {
+  const diagnostics: string[] = [];
+  let parsed: Record<string, unknown> | null = null;
+  try { const fm = output.match(/```(?:json|structured_artifact)\s*([\s\S]*?)```/); const raw = fm ? fm[1] : output.trim(); if (raw.startsWith("{")) parsed = JSON.parse(raw); } catch {}
+  const SUBSTANCE = [/\b\d[\d,.]*%?\b/, /\b(?:VP|CEO|CFO|CRO|CTO|CMO|GM|Director|Manager)\b/i, /\b(?:because|therefore|resulting in|which means|leading to|this creates|consequently)\b/i];
+  const FILLER = [/^this section (?:covers|describes|explains)/i, /^in this section/i, /^(?:the following|below) (?:is|are)/i];
+  for (const req of mustHave) {
+    let content = "";
+    if (parsed) {
+      const mk = Object.keys(parsed).find(k => { const nk = agNormalizeKey(k), nr = agNormalizeKey(req); return nk.includes(nr) || nr.includes(nk); });
+      if (mk) { const v = parsed[mk]; content = typeof v === "string" ? v : JSON.stringify(v); }
+    }
+    if (!content) { const paras = output.split(/\n\s*\n/); const ws = req.toLowerCase().split(/\s+/).filter(w => w.length > 2); for (const p of paras) { if (ws.every(w => p.toLowerCase().includes(w))) { content = p; break; } } }
+    if (!content) { if (!output.toLowerCase().includes(req.toLowerCase().split(/\s+/).filter(w => w.length > 2)[0] || req.toLowerCase())) { diagnostics.push(`"${req}" not found`); } continue; }
+    const wc = content.trim().split(/\s+/).length;
+    if (wc < 40) { diagnostics.push(`"${req}" is stub (${wc} words)`); continue; }
+    if (FILLER.some(p => p.test(content.trim()))) { diagnostics.push(`"${req}" is filler`); continue; }
+    if (!SUBSTANCE.some(p => p.test(content))) diagnostics.push(`"${req}" lacks substance`);
+  }
+  return { gate: "section_completeness", pass: diagnostics.length === 0, diagnostics };
+}
+
+function agCheckEvidence(text: string): ArtifactGateDiag {
+  const diagnostics: string[] = [];
+  const CIT = /\[(?:KI|PB|SRC):[^\]]+\]/g;
+  const sentences = text.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 0);
+  const CAUSAL = /\b(?:because|therefore|resulting|which means|leading to|this (?:means|creates|drives|shows)|consequently|as a result|demonstrates|confirms|supporting)\b/i;
+  for (let i = 0; i < sentences.length; i++) { const c = (sentences[i].match(CIT) || []).length; if (c > 3) diagnostics.push(`Sentence ${i + 1}: ${c} citations (max 3)`); }
+  for (let i = 0; i < sentences.length; i++) { CIT.lastIndex = 0; if (CIT.test(sentences[i])) { CIT.lastIndex = 0; let ok = false; for (let j = Math.max(0, i - 2); j <= Math.min(sentences.length - 1, i + 2); j++) { if (CAUSAL.test(sentences[j])) { ok = true; break; } } if (!ok) diagnostics.push(`Citation at sentence ${i + 1}: no causal reasoning nearby`); } }
+  return { gate: "evidence_discipline", pass: diagnostics.length === 0, diagnostics };
+}
+
+function runArtifactGate(output: string, mustHave: string[], shape: string): ArtifactGateResult {
+  const gates = [
+    agCheckTemplateFidelity(output, mustHave, shape),
+    agCheckReadability(output),
+    agCheckCompleteness(output, mustHave),
+    agCheckEvidence(output),
+  ];
+  const failed = gates.filter(g => !g.pass).map(g => g.gate);
+  return { pass: failed.length === 0, gates, failed_dimensions: failed };
+}
+
 // ── Scorer (inline from outputScorer.ts for Deno compat) ──
 
 function countMatches(text: string, pattern: RegExp): number {
@@ -699,11 +793,14 @@ Deno.serve(async (req) => {
       const isValid = strategyText.length > 20;
       const isClean = !baselineText.includes("KI-") && !baselineText.includes("Knowledge Item");
 
+      // Phase 3.5C — Artifact Gate
+      const artifactGate = runArtifactGate(strategyText, c.mustHave || [], c.scoringShape);
+
       results.push({
         label: c.label,
         strategy_total: stratScore.total,
         baseline_total: baseScore.total,
-        winner,
+        winner: artifactGate.pass ? winner : "baseline",
         structure_winner: structWinner,
         biz_impact_winner: bizWinner,
         library_hits: libraryHits,
@@ -715,6 +812,7 @@ Deno.serve(async (req) => {
         baseline_word_count: baselineText.split(/\s+/).length,
         gate_decision: stratData.refusal ? "refuse" : "pass",
         refusal: stratData.refusal || null,
+        artifact_gate: { pass: artifactGate.pass, failed_dimensions: artifactGate.failed_dimensions },
       });
     } catch (e) {
       results.push({ label: c.label, error: (e as Error).message });
@@ -729,8 +827,8 @@ Deno.serve(async (req) => {
   const bizLosses = results.filter(r => r.biz_impact_winner === "baseline").length;
   const invalidOutputs = results.filter(r => r.strategy_valid === false).length;
   const contaminatedBaselines = results.filter(r => r.baseline_clean === false).length;
-  // New standard: 0 baseline wins, Strategy must win majority
-  const allPass = baselineWins === 0 && strategyWins > ties && structureLosses === 0 && bizLosses === 0 && invalidOutputs === 0 && contaminatedBaselines === 0;
+  const artifactGateFailures = results.filter(r => r.artifact_gate && !r.artifact_gate.pass).length;
+  const allPass = baselineWins === 0 && strategyWins > ties && structureLosses === 0 && bizLosses === 0 && invalidOutputs === 0 && contaminatedBaselines === 0 && artifactGateFailures === 0;
 
   const attemptId = crypto.randomUUID();
   const errors = results.filter(r => r.error).length;
@@ -745,7 +843,7 @@ Deno.serve(async (req) => {
     acceptance: {
       winRate, strategyWins, baselineWins, ties,
       total: results.length, structureLosses, bizLosses,
-      invalidOutputs, contaminatedBaselines,
+      invalidOutputs, contaminatedBaselines, artifactGateFailures,
       all_cases_ran: errors === 0 && results.length === casesToRun.length,
       verdict: allPass && errors === 0 ? "PASS" : "FAIL",
     },
