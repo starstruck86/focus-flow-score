@@ -17,7 +17,7 @@ const CORS = {
 };
 
 // ── Versioned synthesis prompt ──────────────────────────────────────
-export const STRATEGY_EVAL_SYNTHESIS_PROMPT_VERSION = "3.0.0-adversarial";
+export const STRATEGY_EVAL_SYNTHESIS_PROMPT_VERSION = "3.1.0-structural-diff";
 const MAX_ADVERSARIAL_ITERATIONS = 2;
 /**
  * Detect if the output contract demands constrained prose:
