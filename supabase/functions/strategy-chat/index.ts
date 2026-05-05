@@ -8073,6 +8073,7 @@ You MUST call the provided tool function with your structured result.`;
   }
   outputTitle += ` — ${new Date().toLocaleDateString()}`;
 
+  const outputManifestId = deriveChatManifestId(content, null, workflowType);
   const { data: output } = await supabase.from("strategy_outputs").insert({
     user_id: userId,
     thread_id: threadId,
@@ -8083,6 +8084,7 @@ You MUST call the provided tool function with your structured result.`;
     rendered_text: renderedText,
     linked_account_id: pack.account?.id || null,
     linked_opportunity_id: pack.opportunity?.id || null,
+    manifest_id: outputManifestId,
     provider_used: result.provider,
     model_used: result.model,
     fallback_used: result.fallbackUsed,
