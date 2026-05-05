@@ -544,8 +544,10 @@ export async function assembleAndFinalize(args: {
   if (plannerCF && plannerCF.term_seeds_count < 3) anomalyFlags.weak_retrieval = true;
   if (totalLatencyMs > 12_000) anomalyFlags.latency_violation = true;
 
+  const successLibCounts = meta?.progressive?.library_counts ?? { kis: 0, playbooks: 0 };
   const newMeta: Record<string, unknown> = {
     ...meta,
+    library_counts: successLibCounts,
     authoring_progressive: {
       sections_total: DISCOVERY_PREP_SECTIONS.length,
       sections_completed: collected.size,
