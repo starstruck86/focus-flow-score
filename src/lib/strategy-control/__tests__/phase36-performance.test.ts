@@ -81,7 +81,7 @@ describe("Phase 3.6 — Performance", () => {
         depth: "artifact" as const,
         sourceMode: "library_required" as const,
         retrieval: {
-          scopes: ["knowledge_items"],
+          scopes: ["knowledge_items"] as const,
           termBindings: ["${inputs.company_name}"],
           methodologySeeds: ["discovery", "qualification"],
           minRelevantItems: 1,
