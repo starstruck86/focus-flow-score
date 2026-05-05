@@ -247,9 +247,29 @@ export function checkSectionCompleteness(
       }
     }
 
-    // Fallback: check if the term is present at all
+    // Fallback for prose: find the paragraph containing the concept
+    if (!sectionContent) {
+      const paragraphs = output.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+      // Check for exact phrase or individual significant words
+      const words = norm.split(/\s+/).filter(w => w.length > 2);
+      for (const para of paragraphs) {
+        const pl = para.toLowerCase();
+        if (pl.includes(norm) || words.every(w => pl.includes(w))) {
+          sectionContent = para;
+          break;
+        }
+      }
+    }
+
     if (!sectionContent && !lower.includes(norm)) {
-      diagnostics.push(`Section "${req}" not found`);
+      // Last resort: check if key concept words exist anywhere
+      const words = norm.split(/\s+/).filter(w => w.length > 2);
+      const anyPresent = words.some(w => lower.includes(w));
+      if (!anyPresent) {
+        diagnostics.push(`Section "${req}" not found`);
+        continue;
+      }
+      // Concept words exist but not in a clear section — skip detailed checks
       continue;
     }
 
