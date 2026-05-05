@@ -616,6 +616,12 @@ Deno.serve(async (req) => {
       lines.push("4. HEDGING: List any hedged statements ('might', 'could potentially', 'it may be worth'). Quote them.");
       lines.push("5. BASELINE MATCH: Could a generic AI without any library produce an equally specific and actionable output for these same inputs? Answer YES or NO with reasoning.");
       lines.push("6. STRUCTURAL GAPS: Are any required sections (from the manifest) missing, thin, or lacking the micro-spine (state → gap → implication → action)?");
+      lines.push("7. STRUCTURAL DIFFERENTIATION FAILURE: Check ALL four:");
+      lines.push("   a) QUANTIFIED CONSEQUENCE: Is there at least one number/$/% tied to business impact or cost-of-inaction? If missing, say what is missing.");
+      lines.push("   b) NAMED ENTITY + METRIC: Is there a specific role/team/stakeholder tied to a measurable outcome they own? If missing, say what is missing.");
+      lines.push("   c) CAUSAL CHAIN: Is there at least one explicit X → Y → Z reasoning chain specific to this account? If missing, say what is missing.");
+      lines.push("   d) STAKEHOLDER-TIED ACTION: Is there at least one executable action (Ask/Confirm/Map/Validate/Challenge) directed at a specific persona? If missing, say what is missing.");
+      lines.push("   If ANY of a-d are missing, this is a STRUCTURAL DIFFERENTIATION FAILURE.");
       lines.push("");
       lines.push("=== RESPONSE FORMAT (strict JSON) ===");
       lines.push("Return ONLY valid JSON with this schema:");
@@ -628,6 +634,13 @@ Deno.serve(async (req) => {
         baseline_could_match: false,
         baseline_reasoning: "why or why not",
         structural_gaps: ["gap description"],
+        structural_differentiation: {
+          quantified_consequence: true,
+          named_entity_metric: true,
+          causal_chain: true,
+          stakeholder_action: true,
+          failures: ["description of each missing element"]
+        },
         rewrite_instructions: ["specific instruction for each weakness"]
       }, null, 2));
       return lines.join("\n");
