@@ -399,9 +399,11 @@ function scoreOutput(text: string, inputTerms: string[], shape: string, forbid?:
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
-  const valKey = req.headers.get("x-validation-key");
-  const expectedKey = Deno.env.get("STRATEGY_VALIDATION_KEY");
-  if (!valKey || !expectedKey || valKey !== expectedKey) {
+  // Auth: accept service role key in Authorization header
+  const authHeader = req.headers.get("Authorization") || "";
+  const token = authHeader.replace("Bearer ", "");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  if (!token || token !== serviceKey) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...CORS, "Content-Type": "application/json" } });
   }
 
