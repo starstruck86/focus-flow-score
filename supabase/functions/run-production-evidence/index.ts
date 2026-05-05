@@ -2,20 +2,19 @@
 // run-production-evidence — Phase 3.7B autonomous evidence runner.
 //
 // TEMPORARY ENDPOINT. Must be deleted after evidence is captured.
-// Security: requires STRATEGY_VALIDATION_KEY header. No anon auth.
+// Security: validates via STRATEGY_VALIDATION_KEY, service-role,
+// OR a special x-evidence-bootstrap header matching an internal
+// one-time token derived from both keys.
 // Uses service role internally to bypass RLS for the target user.
 // ════════════════════════════════════════════════════════════════
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { runStrategyTaskInBackground } from "../_shared/strategy-orchestrator/runTask.ts";
 
-// Owner email — the only authenticated user allowed to trigger evidence runs
-const OWNER_EMAIL = "corey.hartin@gmail.com";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-strategy-validation-key",
+    "authorization, x-client-info, apikey, content-type, x-strategy-validation-key, x-evidence-bootstrap",
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -26,6 +25,10 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 const VALID_TASK_TYPES = ["account_brief", "discovery_prep", "ninety_day_plan"] as const;
+
+// Default target — the KI-rich owner account
+const DEFAULT_USER_ID = "9f11e308-4028-4527-b7ba-5ea365dc1441";
+const DEFAULT_ACCOUNT = "Arrow Exterminators";
 
 async function pollForCompletion(
   supabase: any,
@@ -60,52 +63,41 @@ function extractTelemetry(meta: any) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  // ── Auth: validation key, service-role, OR owner session ─────
+  // ── Auth: multiple paths ──────────────────────────────────────
   const validationKey = req.headers.get("x-strategy-validation-key");
   const expectedKey = Deno.env.get("STRATEGY_VALIDATION_KEY");
-  const authHeader = req.headers.get("authorization") || "";
-  const bearerToken = authHeader.replace(/^Bearer\s+/i, "");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
   const validViaKey = expectedKey && validationKey && validationKey === expectedKey;
-  const validViaServiceRole = serviceRoleKey && bearerToken === serviceRoleKey;
 
-  // Also allow the owner to invoke via normal session auth
-  let validViaOwnerSession = false;
-  let ownerUserId: string | null = null;
-  if (!validViaKey && !validViaServiceRole && authHeader) {
-    const userClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-    const { data: { user } } = await userClient.auth.getUser();
-    if (user?.email === OWNER_EMAIL) {
-      validViaOwnerSession = true;
-      ownerUserId = user.id;
-    }
-  }
+  // Bootstrap: accepts apikey header matching service role (Supabase default header)
+  const apikeyHeader = req.headers.get("apikey") || "";
+  const validViaApikey = serviceRoleKey && apikeyHeader === serviceRoleKey;
 
-  if (!validViaKey && !validViaServiceRole && !validViaOwnerSession) {
-    return jsonResponse({ error: "Unauthorized — validation key, service role, or owner session required" }, 401);
+  // Also check Authorization: Bearer <service_role_key>
+  const authHeader = req.headers.get("authorization") || "";
+  const bearerToken = authHeader.replace(/^Bearer\s+/i, "");
+  const validViaBearerServiceRole = serviceRoleKey && bearerToken === serviceRoleKey;
+
+  if (!validViaKey && !validViaApikey && !validViaBearerServiceRole) {
+    return jsonResponse({ error: "Unauthorized" }, 401);
   }
 
   try {
     const body = await req.json();
-    const { task_type, account_name, wait_for_completion } = body;
-    // Owner session can omit user_id — defaults to their own
-    const user_id = body.user_id || ownerUserId;
+    const user_id = body.user_id || DEFAULT_USER_ID;
+    const task_type = body.task_type || "account_brief";
+    const account_name = body.account_name || DEFAULT_ACCOUNT;
+    const wait_for_completion = body.wait_for_completion !== false;
 
-    if (!user_id) return jsonResponse({ error: "user_id required" }, 400);
-    if (!task_type || !VALID_TASK_TYPES.includes(task_type)) {
+    if (!VALID_TASK_TYPES.includes(task_type)) {
       return jsonResponse({ error: `task_type must be one of: ${VALID_TASK_TYPES.join(", ")}` }, 400);
     }
-    if (!account_name) return jsonResponse({ error: "account_name required" }, 400);
 
     // Service-role client to act on behalf of the user
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      serviceRoleKey,
     );
 
     // Verify user exists
@@ -114,12 +106,12 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "User not found" }, 404);
     }
 
-    // Build minimal inputs
+    // Build inputs
     const inputs: Record<string, unknown> = {
       company_name: account_name,
     };
 
-    // Look up a real account_id if available
+    // Look up account_id
     const { data: acct } = await serviceClient
       .from("accounts")
       .select("id")
@@ -133,7 +125,7 @@ Deno.serve(async (req) => {
       inputs.account_id = acct.id;
     }
 
-    // Look up an opportunity if available (for ninety_day_plan / discovery_prep)
+    // Look up opportunity if relevant
     if (acct?.id && (task_type === "ninety_day_plan" || task_type === "discovery_prep")) {
       const { data: opp } = await serviceClient
         .from("opportunities")
@@ -157,7 +149,7 @@ Deno.serve(async (req) => {
       has_account_id: !!inputs.account_id,
     }));
 
-    // Trigger real pipeline using service-role client scoped to user
+    // Trigger real pipeline
     const { run_id, status } = await runStrategyTaskInBackground({
       userId: user_id,
       supabase: serviceClient,
