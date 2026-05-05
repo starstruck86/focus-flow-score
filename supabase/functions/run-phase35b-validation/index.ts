@@ -853,6 +853,7 @@ Deno.serve(async (req) => {
       winRate, strategyWins, baselineWins, ties,
       total: results.length, structureLosses, bizLosses,
       invalidOutputs, contaminatedBaselines, artifactGateFailures,
+      artifactGateRegens, artifactGateRegenSuccesses,
       all_cases_ran: errors === 0 && results.length === casesToRun.length,
       verdict: allPass && errors === 0 ? "PASS" : "FAIL",
     },
