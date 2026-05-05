@@ -222,12 +222,18 @@ export function runReleaseGate(): ReleaseGateResult {
     }
   }
 
-  // Every deferred surface must have a reason
-  for (const surface of deferred) {
-    if (!surface.deferral_reason) {
-      failures.push(
-        `Deferred surface lacks reason: ${surface.label} (${surface.manifest_id})`
-      );
+  // Phase 4: zero deferrals expected. Any deferred surface is a warning,
+  // and missing deferral_reason is a failure.
+  if (deferred.length > 0) {
+    warnings.push(
+      `${deferred.length} deferred surface(s) remain — Phase 4 target is zero`
+    );
+    for (const surface of deferred) {
+      if (!surface.deferral_reason) {
+        failures.push(
+          `Deferred surface lacks reason: ${surface.label} (${surface.manifest_id})`
+        );
+      }
     }
   }
 

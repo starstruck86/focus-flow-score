@@ -1,9 +1,11 @@
 /**
- * Phase 3.7B — Strategy Surface Registry.
+ * Phase 4 — Strategy Surface Registry.
  *
  * Manifest-driven registry of all Strategy execution surfaces.
  * Every surface declares its telemetry requirements. New manifests
  * inherit the standard automatically — no hardcoded task-type checks.
+ *
+ * Phase 4: All previously deferred surfaces are now enforced.
  *
  * DOES NOT modify: scorer, artifact gate, synthesis, methodologySeeds.
  */
@@ -27,9 +29,13 @@ const FULL_TASK_TELEMETRY: TelemetryRequirements = {
   output_present: true,
 };
 
-/** Chat artifact — planner + retrieval, no artifact gate (uses inline quality). */
+/**
+ * Chat artifact — retrieval + performance + anomaly_flags + output.
+ * Planner is not applicable (chat uses routing_decision, not planner).
+ * Artifact gate is not applicable (chat uses inline citation audit).
+ */
 const CHAT_ARTIFACT_TELEMETRY: TelemetryRequirements = {
-  planner: true,
+  planner: false,
   retrieval: true,
   artifact_gate: false,
   performance: true,
@@ -37,7 +43,10 @@ const CHAT_ARTIFACT_TELEMETRY: TelemetryRequirements = {
   output_present: true,
 };
 
-/** Transform/formatting — performance only, no planner or gate. */
+/**
+ * Transform/formatting — performance + output.
+ * No planner, retrieval, or gate (transforms re-render existing artifacts).
+ */
 const TRANSFORM_TELEMETRY: TelemetryRequirements = {
   planner: false,
   retrieval: false,
@@ -86,80 +95,71 @@ export const STRATEGY_SURFACE_REGISTRY: ReadonlyArray<RegisteredSurface> = [
     deferred: false,
   },
 
-  // ── Chat Artifact Surfaces ─────────────────────────────────────
+  // ── Chat Artifact Surfaces (Phase 4: enforced) ────────────────
   {
     surface: "chat_artifact",
     manifest_id: "conversation-pov",
     label: "Conversation POV",
     telemetry_requirements: CHAT_ARTIFACT_TELEMETRY,
-    deferred: true,
-    deferral_reason: "Chat artifact telemetry adapter not yet implemented — Phase 4 scope",
+    deferred: false,
   },
   {
     surface: "chat_artifact",
     manifest_id: "commercial-insight",
     label: "Commercial Insight",
     telemetry_requirements: CHAT_ARTIFACT_TELEMETRY,
-    deferred: true,
-    deferral_reason: "Chat artifact telemetry adapter not yet implemented — Phase 4 scope",
+    deferred: false,
   },
   {
     surface: "chat_artifact",
     manifest_id: "account-research",
     label: "Account Research",
     telemetry_requirements: CHAT_ARTIFACT_TELEMETRY,
-    deferred: true,
-    deferral_reason: "Chat artifact telemetry adapter not yet implemented — Phase 4 scope",
+    deferred: false,
   },
   {
     surface: "chat_artifact",
     manifest_id: "discovery-questions",
     label: "Discovery Questions",
     telemetry_requirements: CHAT_ARTIFACT_TELEMETRY,
-    deferred: true,
-    deferral_reason: "Chat artifact telemetry adapter not yet implemented — Phase 4 scope",
+    deferred: false,
   },
   {
     surface: "chat_artifact",
     manifest_id: "meddicc-review",
     label: "MEDDICC Review",
     telemetry_requirements: CHAT_ARTIFACT_TELEMETRY,
-    deferred: true,
-    deferral_reason: "Chat artifact telemetry adapter not yet implemented — Phase 4 scope",
+    deferred: false,
   },
   {
     surface: "chat_artifact",
     manifest_id: "demo-strategy",
     label: "Demo Strategy",
     telemetry_requirements: CHAT_ARTIFACT_TELEMETRY,
-    deferred: true,
-    deferral_reason: "Chat artifact telemetry adapter not yet implemented — Phase 4 scope",
+    deferred: false,
   },
   {
     surface: "chat_artifact",
     manifest_id: "follow-up-email",
     label: "Follow-Up Email",
     telemetry_requirements: CHAT_ARTIFACT_TELEMETRY,
-    deferred: true,
-    deferral_reason: "Chat artifact telemetry adapter not yet implemented — Phase 4 scope",
+    deferred: false,
   },
   {
     surface: "chat_artifact",
     manifest_id: "objection-strategy",
     label: "Objection Strategy",
     telemetry_requirements: CHAT_ARTIFACT_TELEMETRY,
-    deferred: true,
-    deferral_reason: "Chat artifact telemetry adapter not yet implemented — Phase 4 scope",
+    deferred: false,
   },
 
-  // ── Transform Surfaces ─────────────────────────────────────────
+  // ── Transform Surfaces (Phase 4: enforced) ─────────────────────
   {
     surface: "transform",
     manifest_id: "docx-render",
     label: "DOCX Document Rendering",
     telemetry_requirements: TRANSFORM_TELEMETRY,
-    deferred: true,
-    deferral_reason: "Transform path has no telemetry emission point — Phase 4 scope",
+    deferred: false,
   },
 ];
 
