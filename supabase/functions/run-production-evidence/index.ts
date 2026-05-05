@@ -57,11 +57,18 @@ function extractTelemetry(meta: any) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  // ── Auth: STRATEGY_VALIDATION_KEY only ──────────────────────
+  // ── Auth: STRATEGY_VALIDATION_KEY or service-role key ─────────
   const validationKey = req.headers.get("x-strategy-validation-key");
   const expectedKey = Deno.env.get("STRATEGY_VALIDATION_KEY");
-  if (!expectedKey || !validationKey || validationKey !== expectedKey) {
-    return jsonResponse({ error: "Unauthorized — validation key required" }, 401);
+  const authHeader = req.headers.get("authorization") || "";
+  const bearerToken = authHeader.replace(/^Bearer\s+/i, "");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+  const validViaKey = expectedKey && validationKey && validationKey === expectedKey;
+  const validViaServiceRole = serviceRoleKey && bearerToken === serviceRoleKey;
+
+  if (!validViaKey && !validViaServiceRole) {
+    return jsonResponse({ error: "Unauthorized — validation key or service role required" }, 401);
   }
 
   try {
