@@ -163,6 +163,7 @@ export interface TransformOutputRow {
   output_type: string;
   content_json: Record<string, unknown> | null;
   rendered_text: string | null;
+  manifest_id?: string | null;
   created_at: string;
   latency_ms?: number | null;
   provider_used?: string | null;
