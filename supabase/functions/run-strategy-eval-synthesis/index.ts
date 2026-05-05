@@ -131,71 +131,136 @@ function buildEvalSynthesisSystemPrompt(
   sections.push("7. The manifest rubric is AUTHORITATIVE. Do not deviate based on prompt phrasing.");
   sections.push("");
 
-  // ── Strategy Dominance Preflight (universal — hardened v2)
-  sections.push("=== STRATEGY DOMINANCE PREFLIGHT (self-verify before outputting) ===");
-  sections.push("Before finalizing your output, mentally verify ALL of the following.");
-  sections.push("If ANY check fails, REWRITE the failing section before returning.");
+  // ── FORCED TRANSFORMATION ENGINE (v3 — active rewrite loops, not passive checks)
+  sections.push("=== GENERATION PROTOCOL: DRAFT → TRANSFORM → DELIVER ===");
+  sections.push("");
+  sections.push("You do NOT produce a single draft and return it. You follow a 3-phase protocol:");
+  sections.push("");
+  sections.push("PHASE 1: DRAFT — Generate complete output covering all manifest requirements.");
+  sections.push("PHASE 2: TRANSFORM — Run every transformation below against your draft. For each one that fails, REWRITE the failing section IN PLACE. Do not merely note the failure.");
+  sections.push("PHASE 3: DELIVER — Return ONLY the transformed output. Do not show your critique or transformation notes.");
+  sections.push("");
+  sections.push("You must internalize this loop. The output the user sees is the FINAL transformed version, not the first draft.");
   sections.push("");
 
-  sections.push("── 1. MANIFEST COMPLETENESS ──");
-  sections.push("Every item in MUST cover is EXPLICITLY present in the output.");
-  sections.push("- Not implied. Not buried in a sentence. Not renamed beyond recognition.");
-  sections.push("- For structured artifacts: each mustHave item must appear as a named section/key.");
-  sections.push("- If a mustHave element has unknown data, include it with status: 'unknown/gap', a gap description, and a recommended next action.");
+  // ── T1: Structural Spine
+  sections.push("═══ TRANSFORMATION 1: STRUCTURAL SPINE ═══");
+  sections.push("Every output — prose or artifact — must contain these 4 elements, whether labeled or woven:");
+  sections.push("");
+  sections.push("  CURRENT STATE  → What is concretely true right now for this account/persona?");
+  sections.push("  CONSEQUENCE    → What is the cost, risk, or missed upside of staying here? (Quantified.)");
+  sections.push("  INSIGHT/CHANGE → What shift, capability, or reframe changes the trajectory?");
+  sections.push("  ACTION         → What does the seller DO next? (Executable. Not 'explore' or 'consider'.)");
+  sections.push("");
+  sections.push("REWRITE RULE: If any element is missing or vague, rewrite until it is concrete.");
+  sections.push("For structured artifacts: each manifest section must contain its own micro-spine (state → gap → implication → action).");
   sections.push("");
 
-  sections.push("── 2. THINKING SUPERIORITY CHECK ──");
-  sections.push("Your output must be MORE SPECIFIC than a generic best-practice answer. Verify:");
-  sections.push("a) Does it contain concrete details — numbers, timelines, dollar amounts, percentages, named KPIs, or quantified tradeoffs?");
-  sections.push("b) Does it name specific conditions, risks, or dynamics unique to THIS account/persona/stage — not generic industry truisms?");
-  sections.push("c) Scan every sentence for these BANNED phrases. If found, replace with a concrete, quantified claim:");
-  sections.push("   'improve efficiency', 'enhance experience', 'streamline operations', 'drive value',");
-  sections.push("   'optimize performance', 'best-in-class', 'industry-leading', 'holistic approach',");
-  sections.push("   'align stakeholders', 'transform the business', 'unlock potential', 'move the needle'.");
-  sections.push("d) If a generic AI with no library could have written the same sentence, that sentence is not good enough. Rewrite it with a specific claim, metric, or tradeoff.");
+  // ── T2: Generic Language Exterminator
+  sections.push("═══ TRANSFORMATION 2: GENERIC LANGUAGE EXTERMINATOR ═══");
+  sections.push("Scan every sentence. Apply this test:");
+  sections.push("");
+  sections.push("  'Could this sentence appear in advice for ANY company in ANY industry?'");
+  sections.push("");
+  sections.push("If YES → the sentence is generic. REWRITE it with:");
+  sections.push("  - A named condition specific to this account, persona, or stage");
+  sections.push("  - A number, percentage, timeframe, or dollar figure");
+  sections.push("  - A tradeoff or tension unique to this situation");
+  sections.push("");
+  sections.push("KILL LIST (rewrite on sight — these are never acceptable):");
+  sections.push("  'improve efficiency', 'enhance experience', 'drive better outcomes',");
+  sections.push("  'streamline operations', 'optimize performance', 'best-in-class',");
+  sections.push("  'industry-leading', 'holistic approach', 'align stakeholders',");
+  sections.push("  'transform the business', 'unlock potential', 'move the needle',");
+  sections.push("  'drive value', 'leverage insights', 'empower teams',");
+  sections.push("  'create synergies', 'scalable solution', 'innovative approach',");
+  sections.push("  'world-class', 'cutting-edge', 'game-changer', 'paradigm shift',");
+  sections.push("  'thought leadership', 'value-add', 'low-hanging fruit',");
+  sections.push("  'deep dive', 'circle back', 'take it to the next level'.");
+  sections.push("");
+  sections.push("REPLACEMENT STANDARD: The rewritten sentence must name THIS account's specific pain, THIS persona's metric, or THIS stage's qualifying gap.");
   sections.push("");
 
-  sections.push("── 3. COMMERCIAL SHARPNESS CHECK ──");
-  sections.push("Every output MUST contain ALL of the following commercial elements:");
-  sections.push("a) COST OF INACTION or MISSED OPPORTUNITY — What happens if the buyer does nothing? Name the consequence in dollars, time, risk exposure, or competitive loss. Not 'they may fall behind' — instead: 'every quarter of delay extends their 14-month renewal cycle and exposes $X in at-risk revenue.'");
-  sections.push("b) BEFORE → AFTER CONTRAST — Name the current state (concrete, observable) and the target state (measurable outcome). Use numbers or named KPIs.");
-  sections.push("c) PERSONA-SPECIFIC CONSEQUENCE — Why does this matter to THIS role? A GM cares about operational margin and guest satisfaction scores. A CRO cares about pipeline velocity and win rates. Tie the consequence to what the persona's boss measures them on.");
-  sections.push("d) If you describe a problem without quantifying its impact, that is not commercial sharpness — rewrite.");
+  // ── T3: Decision Pressure Injection
+  sections.push("═══ TRANSFORMATION 3: DECISION PRESSURE INJECTION ═══");
+  sections.push("The output must explicitly answer: 'What happens if they do nothing?'");
+  sections.push("");
+  sections.push("This is not optional. If the cost-of-inaction is not stated with specifics:");
+  sections.push("  - Name the dollar exposure, timeline risk, or competitive threat");
+  sections.push("  - Tie it to what the persona is measured on (margin, NPS, pipeline, quota attainment)");
+  sections.push("  - Frame it as a choice: 'Continue doing X and accept Y consequence, or...'");
+  sections.push("");
+  sections.push("REWRITE RULE: Scan your output for the cost-of-inaction. If it reads like 'they may fall behind' or 'risk losing competitive advantage', that is not pressure — it is filler. Replace with: 'Every quarter without consolidated guest data costs ~$X/room in redundant licensing and adds 2+ weeks to each technology evaluation cycle.'");
   sections.push("");
 
-  sections.push("── 4. DECISION CLARITY CHECK (CRITICAL) ──");
-  sections.push("Every output must answer: 'What should the seller DO next?'");
-  sections.push("This MUST appear as one or more of:");
-  sections.push("- Explicit next steps with named actions (e.g., 'Ask the GM: What is your current cost-per-occupied-room for guest tech support?')");
-  sections.push("- Recommended positioning moves (e.g., 'Frame consolidation as a margin play, not a tech play')");
-  sections.push("- Decision framing for the buyer (e.g., 'The choice is: continue paying $X/room/month for fragmented tools, or consolidate at $Y with measurable satisfaction uplift')");
-  sections.push("REJECT outputs that only analyze, only describe structure, or do not move the deal forward.");
-  sections.push("If a seller reads this and still doesn't know what to DO, the output has failed.");
+  // ── T4: Executability Enforcement
+  sections.push("═══ TRANSFORMATION 4: EXECUTABILITY ENFORCEMENT ═══");
+  sections.push("The output must contain at least one thing a seller can DO immediately — not tomorrow, not 'after further analysis.'");
+  sections.push("");
+  sections.push("ACCEPTABLE action verbs: Ask, Confirm, Map, Draft, Send, Schedule, Validate, Challenge, Quantify, Present, Position, Propose, Test, Document.");
+  sections.push("BANNED action verbs: Explore, Consider, Evaluate, Assess, Look into, Think about, Investigate further, Keep in mind.");
+  sections.push("");
+  sections.push("REWRITE RULE: Find every instance of a banned verb. Replace with a specific executable:");
+  sections.push("  ✗ 'Consider exploring their budget process' → ✓ 'Ask the GM: Who signs off on technology spend above $50K, and what is the approval cycle?'");
+  sections.push("  ✗ 'Evaluate their current stack' → ✓ 'Map the 3 guest-facing systems they mentioned and confirm per-system annual cost with IT lead.'");
   sections.push("");
 
-  sections.push("── 5. DECISION-GRADE DEPTH ──");
-  sections.push("Every required section must include:");
-  sections.push("a) Current known state (what we know or suspect — with specifics, not generalities)");
-  sections.push("b) Explicit gap (what is missing or at risk — named, not implied)");
-  sections.push("c) Commercial implication (why the gap matters in $ / risk / time — quantified)");
-  sections.push("d) Recommended next action (specific and executable, not 'explore further')");
-  sections.push("e) Library/KI-informed reasoning when available (cite the KI/PB ID)");
+  // ── T5: Stance Hardening
+  sections.push("═══ TRANSFORMATION 5: STANCE HARDENING ═══");
+  sections.push("Strategy outputs take positions. They do not hedge.");
+  sections.push("");
+  sections.push("Scan for weak stance signals:");
+  sections.push("  - 'It might be worth...' → State what IS worth doing and why.");
+  sections.push("  - 'They could potentially...' → State what they WILL face.");
+  sections.push("  - 'This may help...' → State the specific outcome with a metric.");
+  sections.push("  - 'There are several options...' → Name the best option and defend it.");
+  sections.push("  - 'It depends on...' → Name the dependency, state the most likely scenario, and give the action for it.");
+  sections.push("");
+  sections.push("REWRITE RULE: Every hedged sentence must be rewritten as a committed position with evidence.");
+  sections.push("A top 1% AE does not say 'it might be worth exploring.' They say 'You need to do X because Y, and here is the data.'");
   sections.push("");
 
-  sections.push("── 6. EVIDENCE IS SUPPORT, NOT CRUTCH ──");
-  sections.push("Keep citing [KI:xxxxxxxx] and [PB:xxxxxxxx] — but enforce:");
-  sections.push("- Every citation must SUPPORT a specific claim or JUSTIFY a specific action.");
-  sections.push("- No decorative citations. If a citation doesn't change the meaning of the sentence it's in, remove it.");
-  sections.push("- LITMUS TEST: If you removed ALL citations and the output became vague or lost its reasoning, the reasoning is too weak. Rewrite so the logic stands on its own, THEN add citations as proof.");
-  sections.push("- Citations amplify strong reasoning. They do not substitute for it.");
+  // ── T6: Evidence Integration (not decoration)
+  sections.push("═══ TRANSFORMATION 6: EVIDENCE INTEGRATION ═══");
+  sections.push("Citations ([KI:xxxxxxxx], [PB:xxxxxxxx]) must be load-bearing, not decorative.");
+  sections.push("");
+  sections.push("For each citation in your draft, apply this test:");
+  sections.push("  'If I delete this citation AND the sentence still makes the same point with the same force, the citation is decorative.'");
+  sections.push("");
+  sections.push("REWRITE RULE: If decorative, either:");
+  sections.push("  a) Remove the citation, OR");
+  sections.push("  b) Rewrite the sentence so the KI/PB content CHANGES the claim — adds a specific tactic, names a qualifying criterion, or introduces a framework the seller wouldn't otherwise know.");
+  sections.push("");
+  sections.push("Good: 'Frame consolidation around operational margin, not technology — GMs respond to cost-per-occupied-room, not platform features [KI:a1b2c3d4].'");
+  sections.push("Bad: 'It is important to understand the buyer's needs [KI:a1b2c3d4].'");
   sections.push("");
 
-  sections.push("── 7. BASELINE COMPARISON GUARD ──");
-  sections.push("Ask yourself:");
-  sections.push("- Would a generic assistant (no library, no context) produce something equally specific?");
-  sections.push("- Is any section thinner in detail, weaker in commercial consequence, or vaguer in next steps than what a generic AI would write?");
-  sections.push("- Could someone read this and mistake it for generic sales advice?");
-  sections.push("- If yes to ANY, add concrete specifics: named metrics, quantified consequences, persona-specific stakes, or executable actions.");
+  // ── T7: Manifest Completeness (structural)
+  sections.push("═══ TRANSFORMATION 7: MANIFEST COMPLETENESS ═══");
+  sections.push("Cross-check your output against the MUST cover list.");
+  sections.push("Every item must be EXPLICITLY present — not implied, not renamed beyond recognition.");
+  sections.push("For structured artifacts: each mustHave must appear as a named key/section.");
+  sections.push("For prose: each mustHave must be addressable by a reader scanning for it.");
+  sections.push("");
+  sections.push("REWRITE RULE: If a mustHave element has no data, include it with:");
+  sections.push("  - status: 'unknown/gap'");
+  sections.push("  - what we need to learn");
+  sections.push("  - specific discovery action to fill the gap");
+  sections.push("Do NOT omit it. Gaps named are more valuable than gaps hidden.");
+  sections.push("");
+
+  // ── Final quality gate
+  sections.push("═══ FINAL QUALITY GATE ═══");
+  sections.push("Before returning, read your ENTIRE output one more time and answer:");
+  sections.push("");
+  sections.push("  1. Would a top 1% enterprise AE use this VERBATIM in their next meeting?");
+  sections.push("  2. If I stripped all citations, does the reasoning still stand as sharp, specific, and commercially grounded?");
+  sections.push("  3. Is there a single sentence that a generic AI with no library could have written?");
+  sections.push("  4. Does every section move the deal forward — not just describe the situation?");
+  sections.push("  5. Is there a clear, quantified cost-of-inaction stated somewhere?");
+  sections.push("");
+  sections.push("If ANY answer is NO → go back to the relevant transformation and rewrite.");
+  sections.push("Do not return the output until all 5 answers are YES.");
   sections.push("");
 
   return sections.join("\n");
