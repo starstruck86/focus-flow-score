@@ -318,8 +318,34 @@ const CITATION_PATTERN = /\[(?:KI|PB|SRC):[^\]]+\]/g;
 export function checkEvidenceDiscipline(text: string): GateDiagnostic {
   const diagnostics: string[] = [];
 
+  // For JSON artifacts, extract string values to check citations in prose context
+  let textToCheck = text;
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === "object" && parsed !== null) {
+        const vals = Object.values(parsed as Record<string, unknown>)
+          .filter((v): v is string => typeof v === "string");
+        textToCheck = vals.join("\n\n");
+      }
+    } catch { /* not JSON, check raw */ }
+  }
+  // Also try code fences
+  const fenceMatch = text.match(/```(?:json|structured_artifact)\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    try {
+      const parsed = JSON.parse(fenceMatch[1]);
+      if (typeof parsed === "object" && parsed !== null) {
+        const vals = Object.values(parsed as Record<string, unknown>)
+          .filter((v): v is string => typeof v === "string");
+        textToCheck = vals.join("\n\n");
+      }
+    } catch { /* use raw */ }
+  }
+
   // Split into sentences
-  const sentences = text.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 0);
+  const sentences = textToCheck.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 0);
 
   // A. Citation stuffing per sentence
   for (let i = 0; i < sentences.length; i++) {
