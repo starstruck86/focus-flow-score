@@ -342,19 +342,19 @@ describe("Phase 3.7B — Universal Evidence Runner", () => {
     expect(report.uncovered_enforced).toBe(getEnforcedSurfaces().length);
   });
 
-  it("deferred surfaces do not cause failures", () => {
+  it("all surfaces enforced — full evidence yields pass", () => {
     const evidenceMap = new Map<string, StrategyExecutionEvidence[]>();
 
-    // Only provide evidence for enforced surfaces
+    // Provide evidence for all enforced surfaces
     for (const surface of getEnforcedSurfaces()) {
       evidenceMap.set(surface.manifest_id, [
         makeEvidence({ manifest_id: surface.manifest_id }),
       ]);
     }
-    // Deferred surfaces have no evidence — should still pass
     const report = runUniversalEvidenceCheck(evidenceMap);
     expect(report.pass).toBe(true);
-    expect(report.deferred_surfaces).toBeGreaterThan(0);
+    // Phase 4: zero deferred surfaces
+    expect(report.deferred_surfaces).toBe(0);
   });
 
   it("reports coverage for all surfaces including deferred", () => {
