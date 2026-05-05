@@ -34,7 +34,7 @@ describe("Phase 3.5D — Security Surface", () => {
     expect(fs.existsSync(fnDir)).toBe(false);
   });
 
-  it("no source file references run-enforcement-proof", () => {
+  it("no non-test source file references run-enforcement-proof", () => {
     const dirs = [
       path.join(PROJECT_ROOT, "src"),
       path.join(PROJECT_ROOT, "supabase/functions"),
@@ -42,6 +42,8 @@ describe("Phase 3.5D — Security Surface", () => {
     const files = dirs.flatMap((d) => walkFiles(d, [".ts", ".tsx", ".js"]));
     const hits: string[] = [];
     for (const f of files) {
+      // Skip test files — they may reference the name for assertion purposes
+      if (f.includes("__tests__") || f.includes(".test.")) continue;
       const content = fs.readFileSync(f, "utf-8");
       if (content.includes("run-enforcement-proof")) {
         hits.push(f.replace(PROJECT_ROOT + "/", ""));
