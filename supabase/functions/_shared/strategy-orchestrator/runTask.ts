@@ -669,9 +669,8 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
               batches: rescue.batchOutcomes,
             },
           };
-          try {
-            await supabase.from("task_runs").update({ meta: { authoring_fallback: fallbackMeta } }).eq("id", runId);
-          } catch { /* swallow */ }
+          // Partial meta write removed — outer catch at stage-3:end persists
+          // full Phase 3.6 telemetry including authoring_fallback.
           throw new Error(`bounded_batch_first: 0/${rescue.draft.sections.length} sections authored`);
         }
         // Done — skip legacy monolithic fallback below.
@@ -781,13 +780,8 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
               batches: rescue.batchOutcomes,
             },
           };
-          // Best-effort persist before throwing
-          try {
-            await supabase
-              .from("task_runs")
-              .update({ meta: { authoring_fallback: fallbackMeta } })
-              .eq("id", runId);
-          } catch { /* swallow */ }
+          // Partial meta write removed — outer catch at stage-3:end persists
+          // full Phase 3.6 telemetry including authoring_fallback.
           throw new Error(`primary(claude): ${claudeMsg.slice(0, 120)} | fallback(${FALLBACK_MODEL}): ${fbMsg.slice(0, 150)} | section_batch_rescue: 0/${rescue.draft.sections.length} sections`);
         }
       }
