@@ -208,7 +208,7 @@ describe('Universal Domain/Methodology Seeds', () => {
     const result = buildFromManifest(manifest, {}, {});
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.reason).toBe('insufficient_context');
+    expect((result as any).reason).toBe('insufficient_context');
   });
 
   it('domain seeds are included in planHash (plan changes when seeds change)', () => {
