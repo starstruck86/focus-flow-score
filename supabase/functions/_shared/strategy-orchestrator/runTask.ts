@@ -117,6 +117,7 @@ async function setProgress(supabase: any, runId: string, step: string) {
 
 // ── Core pipeline — bound to an existing pending run row. ─────────
 async function executePipeline(ctx: OrchestrationContext, runId: string): Promise<void> {
+  const pipelineStartMs = Date.now();
   const { supabase, userId, inputs, taskType } = ctx;
   const handler = getHandler(taskType);
   console.log(`[orchestrator] task=${taskType} run=${runId} company=${inputs.company_name || "(none)"} user=${userId.slice(0, 8)}`);
