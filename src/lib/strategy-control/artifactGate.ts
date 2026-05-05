@@ -107,8 +107,23 @@ export function checkTemplateFidelity(
 export function checkReadability(text: string): GateDiagnostic {
   const diagnostics: string[] = [];
 
+  // For structured JSON artifacts, extract string values and check those instead
+  const trimmed = text.trim();
+  let textToCheck = text;
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === "object" && parsed !== null) {
+        // Extract all string values for readability checking
+        const values = Object.values(parsed as Record<string, unknown>)
+          .filter((v): v is string => typeof v === "string");
+        textToCheck = values.join("\n\n");
+      }
+    } catch { /* not valid JSON, check as-is */ }
+  }
+
   // Split into paragraphs (double newline or section breaks)
-  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+  const paragraphs = textToCheck.split(/\n\s*\n/).filter(p => p.trim().length > 0);
 
   let totalWords = 0;
   let denseWords = 0;
