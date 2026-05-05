@@ -420,6 +420,16 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         // through to assembleAndFinalize. Never read by prompt builders.
         sop,
         sopInputCheck,
+        // Phase 3.6 — carry planner telemetry to progressive driver
+        plannerCarryForward: planResult.ok ? {
+          plan_hash: planResult.plan.planHash,
+          term_seeds_count: planResult.plan.termSeeds.length,
+          methodology_seeds_injected: (taskManifest.retrieval.methodologySeeds ?? []).length > 0,
+          methodology_seeds: (taskManifest.retrieval.methodologySeeds ?? []).length,
+          scopes: plannerRetrievalArgs?.scopes ?? derivedScopes,
+          expanded_seeds: planResult.plan.expandedSeeds?.length ?? 0,
+          pipeline_start_ms: pipelineStartMs,
+        } : null,
       });
       await ensureSectionRows({ supabase, runId, userId });
       console.log(JSON.stringify({
