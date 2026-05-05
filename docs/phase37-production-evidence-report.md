@@ -1,83 +1,119 @@
 # Phase 4 — Live Production Evidence Validation Report
 
 Generated: 2026-05-06T00:00Z
-**Updated**: 2026-05-06 — Phase 4 gap fixes deployed
-**Method**: Real DB rows queried, passed through adapters, validated via `validateSingleEvidence()`.
+**Updated**: 2026-05-06 — Real post-deploy executions run and validated
+**Method**: Real DB rows queried from production, manifest_id tagging validated, telemetry fields checked.
 **Standard**: No synthetic fixtures. No weakened requirements. Real rows only.
 
 ---
 
-## Fixes Deployed (This Session)
+## TASK PIPELINE EVIDENCE (Post-Deploy)
 
-### Gap 1: RETRIEVAL — `library_counts` now persisted in task_runs.meta
+### account_brief — `486e43d3-3102-45b2-b6d7-932627ab5f9b`
+- **Status**: `failed` (artifact_gate: template_fidelity, section_completeness)
+- **library_counts**: ✅ `{"kis": 20, "playbooks": 0}` — retrieval telemetry persisted
+- **artifact_gate**: ✅ `{"pass": false, "regen_attempts": 1, "failed_dimensions": ["template_fidelity", "section_completeness"], "total_gate_latency_ms": 83625}`
+- **performance**: ✅ `{"gate_latency_ms": 83625, "total_latency_ms": 230514, "generation_latency_ms": 163068}`
+- **draft_output**: ✅ Correctly NULL (failed run must not leak draft)
+- **Adapter**: `adaptTaskRun` converts successfully. `validateSingleEvidence` passes for failure-path semantics.
 
-**Files changed**: `runTask.ts`, `progressiveDriver.ts`
-**Paths covered**:
-- ✅ Task success path → `metaPatch.library_counts`
-- ✅ Task authoring-fail path → `authoringFailMeta.library_counts`
-- ✅ Task gate-fail path → `hardFailMeta.library_counts`
-- ✅ Progressive success path → `newMeta.library_counts` (from `progressive.library_counts`)
-- ✅ Progressive gate-fail path → `hardFailMeta.library_counts` (from `progressive.library_counts`)
-- ✅ Evidence adapter updated: `extractRetrievalTelemetry` reads both `meta.library_counts` and `meta.progressive.library_counts`
+### ninety_day_plan — `e2d94d5f-97c8-41c2-92f5-01a185745900`
+- **Status**: `failed` (artifact_gate: template_fidelity, section_completeness)
+- **library_counts**: ✅ `{"kis": 20, "playbooks": 0}`
+- **artifact_gate**: ✅ `{"pass": false, "regen_attempts": 1, "failed_dimensions": ["template_fidelity", "section_completeness"], "total_gate_latency_ms": 85954}`
+- **performance**: ✅ `{"gate_latency_ms": 85954, "total_latency_ms": 245931, "generation_latency_ms": 168566}`
+- **draft_output**: ✅ Correctly NULL
+- **Adapter**: Passes.
 
-**Status**: DEPLOYED. Next task run will persist retrieval telemetry. Adapter will convert it. `validateSingleEvidence` will pass retrieval check.
+### discovery_prep — `5f3676e1-5d05-4a4f-8e62-e3664d58db72`
+- **Status**: `pending` — run appears stalled (no progress beyond synthesis after 7+ minutes)
+- **library_counts**: ❌ Not persisted (run never completed pipeline)
+- **artifact_gate**: ❌ Not reached
+- **performance**: ❌ Not reached
+- **Adapter**: Cannot validate — no telemetry emitted.
+- **EVIDENCE GAP**: discovery_prep run stalled. Stale run watchdog should eventually fail it, but no completed or properly-failed evidence exists yet.
 
-### Gap 3: CHAT PER-MANIFEST — `manifest_id` column added to `strategy_messages`
-
-**Migration**: Added `manifest_id TEXT` column + index to `strategy_messages`
-**Edge function**: `strategy-chat/index.ts` — `deriveChatManifestId()` function tags every assistant message insert with a manifest_id derived from content keywords, workspace, or workflow type.
-**Insert points tagged**:
-- ✅ Non-streaming assistant message
-- ✅ Streaming assistant message
-- ✅ Provisional routing evidence message
-- ✅ Workflow result message
-
-**Manifest mapping**:
-| Chat Pattern | manifest_id |
-|---|---|
-| MEDDICC/MEDDPICC keywords | `meddicc-review` |
-| Demo + strategy keywords | `demo-strategy` |
-| Objection/pushback keywords | `objection-strategy` |
-| Follow-up email keywords | `follow-up-email` |
-| Discovery question keywords | `discovery-questions` |
-| Research/competitor keywords | `account-research` |
-| Insight/value prop keywords | `commercial-insight` |
-| Default/general strategy | `conversation-pov` |
-| Workflow: deep_research | `account-research` |
-| Workflow: email_evaluation | `follow-up-email` |
-
-**Status**: DEPLOYED. Next chat messages will carry `manifest_id`. Per-manifest evidence attribution now possible.
-
-### Gap 4: DOCX/TRANSFORM — `manifest_id` column added to `strategy_outputs`
-
-**Migration**: Added `manifest_id TEXT` column + index to `strategy_outputs`
-**Edge function**: Workflow output inserts now tag `manifest_id` via `deriveChatManifestId(content, null, workflowType)`
-
-**Status**: DEPLOYED. Next workflow outputs will carry `manifest_id`.
-
-### Gap 2: SUCCESS PATH — Not weakened
-
-All gate thresholds, scoring calibration, and template fidelity requirements remain UNCHANGED. The artifact gate is NOT weakened. Success-path evidence will come from a naturally passing run after retrieval telemetry improves library grounding.
+### SUCCESS-PATH — All Task Types
+- **EVIDENCE GAP**: Every post-deploy task run fails `artifact_gate` on `template_fidelity` and `section_completeness`. No task has ever passed the gate post-deploy. Gates are NOT weakened. Success-path evidence requires a naturally passing run.
 
 ---
 
-## Evidence Gap Summary (Post-Deploy)
+## CHAT ARTIFACT EVIDENCE (Post-Deploy)
 
-| # | Surface | Gap Type | Pre-Fix | Post-Fix | Severity |
-|---|---------|----------|---------|----------|----------|
-| 1 | task (all) | RETRIEVAL | ❌ Not persisted | ✅ Code deployed, awaiting next run | **PENDING EVIDENCE** |
-| 2 | task (all) | SUCCESS PATH | ❌ All fail gate | ❌ Unchanged — gate not weakened | **EVIDENCE GAP** |
-| 3 | progressive_task | RETRIEVAL | ❌ Not persisted | ✅ Code deployed, awaiting next run | **PENDING EVIDENCE** |
-| 4 | progressive_task | SUCCESS PATH | ❌ All fail gate | ❌ Unchanged — gate not weakened | **EVIDENCE GAP** |
-| 5 | chat_artifact | PER-MANIFEST | ❌ No column | ✅ Column + tagging deployed | **PENDING EVIDENCE** |
-| 6 | transform | SPECIFICITY | ❌ No docx-render row | ✅ Column deployed, awaiting run | **PENDING EVIDENCE** |
+All messages created after `2026-05-05T23:00:00Z` with `manifest_id` tagging active.
 
-## Release Gate Status
+| manifest_id | message_id | latency_ms | has_routing | has_retrieval | has_gate | Status |
+|---|---|---|---|---|---|---|
+| `meddicc-review` | `c8df2ae9-3a06-4d90-a1d3-868640b12f1e` | 4602 | ✅ | ✅ | ✅ | ✅ PASS |
+| `commercial-insight` | `6521aacc-ef6a-4946-996d-38a3377678b1` | 2684 | ✅ | ✅ | ✅ | ✅ PASS |
+| `account-research` | `5bf97397-6a2a-430e-a4e0-07b4e864fb06` | 4332 | ✅ | ✅ | ✅ | ✅ PASS |
+| `conversation-pov` | `2058a847-fedf-4d50-be1f-5f52656f746a` | 1672 | ✅ | ✅ | ✅ | ✅ PASS |
+| `follow-up-email` | `b7708284-d2a2-4bbd-9262-c1e568308548` | 3303 | ✅ | ✅ | ✅ | ✅ PASS |
+| `objection-strategy` | `98e0226e-e735-4e89-bd90-319627c0fffa` | 4737 | ✅ | ✅ | ✅ | ✅ PASS |
+| `demo-strategy` | — | — | — | — | — | ❌ EVIDENCE GAP |
+| `discovery-questions` | — | — | — | — | — | ❌ EVIDENCE GAP |
 
-The release gate now **fails** if any enforced surface has an `EVIDENCE GAP` marker in this report. Phase 4 is **NOT COMPLETE** until:
-1. A post-deploy task run persists `library_counts` and passes `validateSingleEvidence` retrieval check
-2. At least one task run passes the artifact gate naturally (success-path evidence)
-3. Chat messages with `manifest_id` exist for each registered chat surface
-4. A strategy_outputs row with `manifest_id = docx-render` exists
+### Chat Manifest Attribution Gaps
 
-## Phase 4 Status: **NOT COMPLETE** — code fixes deployed, awaiting real DB evidence rows
+- **demo-strategy**: Message about "demo strategy for Snowflake" was tagged `conversation-pov` instead of `demo-strategy`. The `deriveChatManifestId()` keyword matcher does not detect "demo" + "strategy" as separate words — only fires when both appear together in a specific regex pattern. Fix: update regex to match `\b(demo)\b.*\b(strategy)\b`.
+- **discovery-questions**: Message about "discovery questions" was tagged `conversation-pov`. Same root cause — the keyword matcher's `discovery` regex also matches `discovery_prep` task type context and defaults to `conversation-pov` for brainstorm workspace. Fix: add explicit `\b(discovery).*(question|probe)\b` pattern.
+
+---
+
+## TRANSFORM / DOCX-RENDER EVIDENCE
+
+- **strategy_outputs rows with manifest_id**: 0
+- **EVIDENCE GAP**: No post-deploy strategy_outputs rows exist with `manifest_id`. The `deriveChatManifestId` tagging was deployed for `strategy-chat` inserts, but no workflow that writes to `strategy_outputs` has been triggered post-deploy.
+- **Existing rows** (pre-deploy, no manifest_id): `189cea96` (brief), `15860e3c` (memo)
+
+---
+
+## EVIDENCE GAP SUMMARY
+
+| # | Surface | Gap | Severity | Blocker? |
+|---|---------|-----|----------|----------|
+| 1 | task (all types) | SUCCESS PATH — no run passes artifact_gate | **CRITICAL** | YES |
+| 2 | discovery_prep | Stalled pending run — no telemetry emitted | **HIGH** | YES |
+| 3 | demo-strategy | Keyword matcher misattribution | **MEDIUM** | YES — no evidence row |
+| 4 | discovery-questions | Keyword matcher misattribution | **MEDIUM** | YES — no evidence row |
+| 5 | docx-render | No strategy_outputs row with manifest_id | **HIGH** | YES |
+
+## VALIDATED EVIDENCE (Adapter + validateSingleEvidence)
+
+| Surface | Evidence Type | Row ID | Adapter | Validation |
+|---------|--------------|--------|---------|------------|
+| account_brief (fail) | task_run | `486e43d3` | `adaptTaskRun` ✅ | `validateSingleEvidence` ✅ |
+| ninety_day_plan (fail) | task_run | `e2d94d5f` | `adaptTaskRun` ✅ | `validateSingleEvidence` ✅ |
+| meddicc-review | chat_artifact | `c8df2ae9` | `adaptChatArtifact` ✅ | `validateSingleEvidence` ✅ |
+| commercial-insight | chat_artifact | `6521aacc` | `adaptChatArtifact` ✅ | `validateSingleEvidence` ✅ |
+| account-research | chat_artifact | `5bf97397` | `adaptChatArtifact` ✅ | `validateSingleEvidence` ✅ |
+| conversation-pov | chat_artifact | `2058a847` | `adaptChatArtifact` ✅ | `validateSingleEvidence` ✅ |
+| follow-up-email | chat_artifact | `b7708284` | `adaptChatArtifact` ✅ | `validateSingleEvidence` ✅ |
+| objection-strategy | chat_artifact | `98e0226e` | `adaptChatArtifact` ✅ | `validateSingleEvidence` ✅ |
+
+## TELEMETRY DEPLOYMENT PROOF
+
+Post-deploy task runs now persist `library_counts` in `meta` — confirmed by real rows:
+- `486e43d3`: `meta.library_counts = {"kis": 20, "playbooks": 0}`
+- `e2d94d5f`: `meta.library_counts = {"kis": 20, "playbooks": 0}`
+
+Post-deploy chat messages now persist `manifest_id` — confirmed by 8 real rows above.
+
+---
+
+## Phase 4 Status: **NOT COMPLETE**
+
+### Remaining work to close:
+1. **Fix `deriveChatManifestId` regex** for demo-strategy and discovery-questions patterns
+2. **Trigger workflow** that writes to `strategy_outputs` with `manifest_id` for docx-render evidence
+3. **Investigate artifact_gate failures** — template_fidelity and section_completeness consistently fail. Root cause may be synthesis prompt contract mismatch rather than content quality.
+4. **Clear stalled discovery_prep run** and trigger a new one
+
+### What IS proven:
+- Retrieval telemetry (`library_counts`) persists on task failure paths ✅
+- Artifact gate telemetry persists on task failure paths ✅
+- Performance telemetry persists on task failure paths ✅
+- Failed runs do NOT leak `draft_output` ✅
+- Chat manifest_id tagging works for 6/8 registered manifests ✅
+- Chat messages persist routing_decision, retrieval_meta, gate_check, latency_ms ✅
+- Release gate correctly fails when EVIDENCE GAP markers exist ✅
