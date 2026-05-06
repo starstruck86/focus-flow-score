@@ -52,7 +52,7 @@ const SEMANTIC_SYNONYMS: Record<string, RegExp> = {
   "open question": /\b(?:question|\?|ask (?:the|their|about))\b/i,
   "strategic why": /\b(?:strategic|why now|urgency|compelling|imperative|catalyst)\b/i,
   "friction": /\b(?:friction|obstacle|barrier|blocker|resistance|challenge|headwind)\b/i,
-  "cited sources": /\b(?:source|citation|\[S\d|\[KI|\[PB|according to|per )\b/i,
+  "cited sources": /\b(?:source|citation|cited|grounded in|RESEARCH\[|\[S\d|\[KI|\[PB|according to|per )\b/i,
   "verified signals": /\b(?:signal|indicator|evidence|data point|confirmed|validated|trend)\b/i,
   "commercial insight": /\b(?:commercial|insight|value|ROI|cost|savings|revenue|margin|impact)\b/i,
   "situation": /\b(?:situation|overview|snapshot|context|background|landscape)\b/i,
