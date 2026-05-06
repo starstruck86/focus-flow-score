@@ -3,6 +3,7 @@
  *
  * Read-only operator surface for Strategy telemetry, gates, latency, costs, anomalies.
  * Phase 4C: Added cost analytics, latency analytics, batch analysis, release confidence.
+ * Phase 4D: Added failure cohort analysis, root-cause drilldown, remediation opportunities.
  * Owner-gated via existing ProtectedRoute + allowlist.
  */
 import { useEffect, useState, useMemo, useCallback } from 'react';
@@ -16,7 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Clock, Search, DollarSign, Activity, Shield } from 'lucide-react';
+import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Clock, Search, DollarSign, Activity, Shield, Flame } from 'lucide-react';
 import {
   fetchEvidenceByType, fetchGateAggregates, fetchLatencyData, fetchCostData,
   fetchAnomalyRuns, fetchRunDetail, fetchRecentRuns,
@@ -35,6 +36,12 @@ import {
   type LatencySummary, type StageLatency, type SlowestRun, type LatencyTrendPoint, type BatchAnalytics,
 } from '@/lib/strategy-ops/latencyAnalytics';
 import { computeReleaseConfidence, type ReleaseConfidence } from '@/lib/strategy-ops/releaseConfidence';
+import {
+  getCohortSummaries, getFailureBreakdown, getWasteSummary, classifyFailures,
+  type CohortSummary, type FailureBreakdown, type WasteSummary, type ClassifiedFailure,
+  REASON_LABELS, ERA_LABELS,
+} from '@/lib/strategy-ops/failureAnalysis';
+import { aggregateRemediationOpportunities, isRemediationEnabled, type RemediationOpportunity } from '@/lib/strategy-ops/targetedRemediation';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
