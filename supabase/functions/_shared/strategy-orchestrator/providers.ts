@@ -6,20 +6,39 @@
 // `callLovableAI` adapter has been removed to prevent any code in
 // this workflow from accidentally routing through Gemini.
 // Same adapter pattern shared across all Strategy tasks.
+//
+// Phase 4A: All provider calls now return a ProviderCallResult with
+// token usage metadata. Original string-return signatures preserved
+// via the existing exports; instrumented versions available via
+// *WithUsage variants.
 // ════════════════════════════════════════════════════════════════
 
-export async function callPerplexity(
+import type { ProviderUsage } from "./telemetryWriter.ts";
+
+/** Enriched provider call result with usage metadata. */
+export interface ProviderCallResult {
+  text: string;
+  citations?: string[];
+  usage: ProviderUsage;
+  provider: "perplexity" | "openai" | "anthropic" | "lovable-ai";
+  model: string;
+  duration_ms: number;
+}
+
+export async function callPerplexityWithUsage(
   messages: { role: string; content: string }[],
   opts: { model?: string; maxTokens?: number } = {},
-): Promise<{ text: string; citations: string[] }> {
+): Promise<ProviderCallResult> {
   const key = Deno.env.get("PERPLEXITY_API_KEY");
   if (!key) throw new Error("PERPLEXITY_API_KEY not configured");
+  const model = opts.model || "sonar-pro";
+  const startMs = Date.now();
 
   const resp = await fetch("https://api.perplexity.ai/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: opts.model || "sonar-pro",
+      model,
       messages,
       temperature: 0.3,
       max_tokens: opts.maxTokens || 8192,
@@ -31,30 +50,42 @@ export async function callPerplexity(
     throw new Error(`Perplexity error: ${resp.status}`);
   }
   const data = await resp.json();
+  const usage = data.usage ?? {};
   return {
     text: data.choices?.[0]?.message?.content || "",
     citations: data.citations || [],
+    usage: {
+      input_tokens: usage.prompt_tokens ?? undefined,
+      output_tokens: usage.completion_tokens ?? undefined,
+      total_tokens: usage.total_tokens ?? undefined,
+    },
+    provider: "perplexity",
+    model,
+    duration_ms: Date.now() - startMs,
   };
 }
 
-export async function callOpenAI(
+export async function callPerplexity(
+  messages: { role: string; content: string }[],
+  opts: { model?: string; maxTokens?: number } = {},
+): Promise<{ text: string; citations: string[] }> {
+  const result = await callPerplexityWithUsage(messages, opts);
+  return { text: result.text, citations: result.citations || [] };
+}
+
+export async function callOpenAIWithUsage(
   messages: { role: string; content: string }[],
   opts: { model?: string; temperature?: number; maxTokens?: number; reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh" | "none" } = {},
-): Promise<string> {
+): Promise<ProviderCallResult> {
   const key = Deno.env.get("OPENAI_API_KEY");
   if (!key) throw new Error("OPENAI_API_KEY not configured");
 
   const model = opts.model || "gpt-4o";
-  // gpt-5 family (and newer reasoning models) reject `max_tokens` and
-  // custom `temperature`. They require `max_completion_tokens` and use
-  // a fixed default temperature. Switch the body shape per model.
+  const startMs = Date.now();
   const isNewSchema = /^(gpt-5|o\d)/i.test(model);
   const body: Record<string, unknown> = { model, messages };
   if (isNewSchema) {
     body.max_completion_tokens = opts.maxTokens || 8192;
-    // Chat Completions API uses top-level `reasoning_effort` (string),
-    // NOT the Responses-API `reasoning: { effort }` shape. Sending the
-    // object form returns 400 "Unknown parameter: 'reasoning'".
     if (opts.reasoningEffort && opts.reasoningEffort !== "none") {
       body.reasoning_effort = opts.reasoningEffort;
     }
@@ -73,26 +104,43 @@ export async function callOpenAI(
     throw new Error(`OpenAI error: ${resp.status}`);
   }
   const data = await resp.json();
-  return data.choices?.[0]?.message?.content || "";
+  const usage = data.usage ?? {};
+  return {
+    text: data.choices?.[0]?.message?.content || "",
+    usage: {
+      input_tokens: usage.prompt_tokens ?? undefined,
+      output_tokens: usage.completion_tokens ?? undefined,
+      total_tokens: usage.total_tokens ?? undefined,
+    },
+    provider: "openai",
+    model,
+    duration_ms: Date.now() - startMs,
+  };
 }
 
-export async function callClaude(
+export async function callOpenAI(
+  messages: { role: string; content: string }[],
+  opts: { model?: string; temperature?: number; maxTokens?: number; reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh" | "none" } = {},
+): Promise<string> {
+  const result = await callOpenAIWithUsage(messages, opts);
+  return result.text;
+}
+
+export async function callClaudeWithUsage(
   messages: { role: string; content: string }[],
   opts: {
     model?: string;
     maxTokens?: number;
     temperature?: number;
-    /** Per-attempt wall-clock cap. Default 75s — must stay below the
-     *  caller's outer stage budget (e.g. AUTHORING_TIMEOUT_MS=100s). */
     timeoutMs?: number;
-    /** Max attempts including the first. Default 3. Authoring callers
-     *  pass 1 because the outer stage has its own race that would fire
-     *  before retries can complete. */
     maxAttempts?: number;
   } = {},
-): Promise<string> {
+): Promise<ProviderCallResult> {
   const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) throw new Error("ANTHROPIC_API_KEY not configured");
+
+  const model = opts.model || "claude-sonnet-4-5-20250929";
+  const startMs = Date.now();
 
   let systemPrompt = "";
   const anthropicMessages: { role: string; content: string }[] = [];
@@ -109,16 +157,13 @@ export async function callClaude(
   }
 
   const body: any = {
-    model: opts.model || "claude-sonnet-4-5-20250929",
+    model,
     max_tokens: opts.maxTokens || 12000,
     messages: anthropicMessages,
     temperature: opts.temperature ?? 0.3,
   };
   if (systemPrompt) body.system = systemPrompt;
 
-  // Fix 2 — bounded inner timeout. Defaults stay safe for non-authoring
-  // callers; authoring passes timeoutMs=75_000, maxAttempts=1 so the inner
-  // call cannot outlive the outer 100s race in runTask.ts.
   const TIMEOUT_MS = opts.timeoutMs ?? 75_000;
   const MAX_ATTEMPTS = Math.max(1, opts.maxAttempts ?? 3);
   let lastErr: unknown = null;
@@ -145,14 +190,24 @@ export async function callClaude(
         for (const block of (data.content || [])) {
           if (block.type === "text") text += block.text;
         }
-        return text;
+        const usage = data.usage ?? {};
+        return {
+          text,
+          usage: {
+            input_tokens: usage.input_tokens ?? undefined,
+            output_tokens: usage.output_tokens ?? undefined,
+            total_tokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0) || undefined,
+          },
+          provider: "anthropic",
+          model,
+          duration_ms: Date.now() - startMs,
+        };
       }
 
       const status = resp.status;
       const errText = await resp.text().catch(() => "");
       console.error(`[claude] error ${status} attempt=${attempt}/${MAX_ATTEMPTS}: ${errText.slice(0, 300)}`);
 
-      // 4xx (other than 429) — fail immediately, no retry.
       const isTransient = status === 429 || (status >= 500 && status < 600);
       if (!isTransient || attempt === MAX_ATTEMPTS) {
         throw new Error(`Claude error: ${status}${isTransient ? " (after retries)" : ""}`);
@@ -165,12 +220,25 @@ export async function callClaude(
       if (attempt === MAX_ATTEMPTS) throw isAbort ? new Error(`Claude timeout after ${TIMEOUT_MS}ms (3 attempts)`) : e;
       lastErr = e;
     }
-    // Backoff: 3s, 9s
     const delayMs = 3000 * Math.pow(3, attempt - 1);
     console.log(`[claude] retrying in ${delayMs}ms…`);
     await new Promise((r) => setTimeout(r, delayMs));
   }
   throw lastErr ?? new Error("Claude: exhausted retries");
+}
+
+export async function callClaude(
+  messages: { role: string; content: string }[],
+  opts: {
+    model?: string;
+    maxTokens?: number;
+    temperature?: number;
+    timeoutMs?: number;
+    maxAttempts?: number;
+  } = {},
+): Promise<string> {
+  const result = await callClaudeWithUsage(messages, opts);
+  return result.text;
 }
 
 // ⚠️  MODEL POLICY: callLovableAI must NOT be imported anywhere in the
