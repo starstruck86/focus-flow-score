@@ -226,19 +226,64 @@ const SUBSTANCE_PATTERNS = [
 export function checkSectionCompleteness(
   output: string,
   mustHave: readonly string[],
+  sectionMap?: ArtifactManifest["rubric"]["sectionMap"],
 ): GateDiagnostic {
   const diagnostics: string[] = [];
 
   const semanticText = extractSemanticText(output);
-  const lower = semanticText.toLowerCase();
 
   // Split into paragraphs for section-finding
   const paragraphs = semanticText.split(/\n\s*\n/).filter(p => p.trim().length > 0);
 
+  // Build a lookup from concept → mapping if sectionMap is provided
+  const mapLookup = new Map<string, { location: string; parentSection?: string; minWords: number }>();
+  if (sectionMap) {
+    for (const m of sectionMap) {
+      mapLookup.set(m.concept.toLowerCase(), {
+        location: m.location,
+        parentSection: m.parentSection,
+        minWords: m.minWords ?? 40,
+      });
+    }
+  }
+
   for (const req of mustHave) {
     const norm = req.toLowerCase();
+    const mapping = mapLookup.get(norm);
     let sectionContent = "";
 
+    if (mapping?.location === "embedded" && mapping.parentSection) {
+      // Look for concept substance inside the declared parent section
+      const parentNorm = mapping.parentSection.toLowerCase().replace(/_/g, " ");
+      const parentHeadingPattern = new RegExp(
+        `(?:^#+\\s*[^\\n]*${parentNorm.replace(/\s+/g, "\\s+")}[^\\n]*|"id"\\s*:\\s*"${mapping.parentSection}")\\s*\\n([\\s\\S]*?)(?=\\n#+\\s|\\n"id"\\s*:|$)`,
+        "im",
+      );
+      const parentMatch = semanticText.match(parentHeadingPattern);
+      const parentText = parentMatch?.[1] || "";
+
+      // Check concept presence in parent section
+      if (parentText && conceptPresent(req, parentText, parentText)) {
+        const wordCount = parentText.trim().split(/\s+/).length;
+        if (wordCount >= mapping.minWords) {
+          // Concept is present with sufficient substance in parent — pass
+          continue;
+        } else {
+          diagnostics.push(`Section "${req}" embedded in "${mapping.parentSection}" is a stub (${wordCount} words, min ${mapping.minWords})`);
+          continue;
+        }
+      }
+
+      // Fallback: check concept presence in full document
+      if (conceptPresent(req, semanticText, output)) {
+        // Concept words exist somewhere — acceptable for embedded mapping
+        continue;
+      }
+      diagnostics.push(`Section "${req}" not found (expected embedded in "${mapping.parentSection}")`);
+      continue;
+    }
+
+    // Standard section finding (dedicated section or no mapping)
     // 1. Find by heading
     const headingPattern = new RegExp(
       `(?:^#+\\s*[^\\n]*${norm.replace(/\s+/g, "\\s+")}[^\\n]*|^[^\\n]*${norm.replace(/\s+/g, "\\s+")}[^\\n]*:)\\s*\\n([\\s\\S]*?)(?=\\n#+\\s|\\n[A-Z][A-Z\\s]+:|$)`,
@@ -288,9 +333,10 @@ export function checkSectionCompleteness(
     }
 
     // Validate found section content
+    const minWords = mapping?.minWords ?? 40;
     const wordCount = sectionContent.trim().split(/\s+/).length;
-    if (wordCount < 40) {
-      diagnostics.push(`Section "${req}" is a stub (${wordCount} words, min 40)`);
+    if (wordCount < minWords) {
+      diagnostics.push(`Section "${req}" is a stub (${wordCount} words, min ${minWords})`);
       continue;
     }
     const isFiller = FILLER_PATTERNS.some(p => p.test(sectionContent.trim()));
