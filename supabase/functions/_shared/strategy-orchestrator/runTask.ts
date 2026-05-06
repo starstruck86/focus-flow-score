@@ -1084,18 +1084,34 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   if (gateResult.sections_passed) artifactGateTelemetry.sections_passed = gateResult.sections_passed;
   if (gateResult.sections_failed) artifactGateTelemetry.sections_failed = gateResult.sections_failed;
   if (gateResult.diagnostics) artifactGateTelemetry.diagnostics = gateResult.diagnostics;
+  // Phase 4A: record gate telemetry
+  telemetry.record("gate", {
+    started_at: new Date(gateStartMs).toISOString(),
+    completed_at: new Date().toISOString(),
+    duration_ms: artifactGateTelemetry.total_gate_latency_ms,
+    success: gateResult.pass,
+    metadata: {
+      regen_attempts: artifactGateTelemetry.regen_attempts,
+      regen_success: artifactGateTelemetry.regen_success,
+      failed_dimensions: artifactGateTelemetry.failed_dimensions,
+    },
+  });
+
   let reviewOutput: any = { strengths: [], redlines: [], library_coverage: { used: [], gaps: [] } };
   if (sectionCount > 0) {
     await setProgress(supabase, runId, "review");
+    const reviewStage = telemetry.startStage("review", { provider: "openai", model: "gpt-5-mini" });
     console.log("[stage-4] generating playbook-grounded review...");
     try {
-      const reviewRaw = await callOpenAI([
+      const reviewResult = await callOpenAIWithUsage([
         { role: "system", content: `${overlayPrefix}You are a senior sales leader reviewing a prep document. Be specific, actionable, and grounded in the provided internal playbooks/KIs.` },
         { role: "user", content: handler.buildReviewPrompt(inputs, draftOutput, library) },
       ], { model: "gpt-5-mini", temperature: 0.4, maxTokens: 4000 });
-      const parsed = safeParseJSON<any>(reviewRaw);
+      reviewStage.finish({ success: true, usage: reviewResult.usage });
+      const parsed = safeParseJSON<any>(reviewResult.text);
       if (parsed) reviewOutput = { ...reviewOutput, ...parsed };
     } catch (e: any) {
+      reviewStage.finish({ success: false, error: e?.message || String(e) });
       console.error("[stage-4] review failed:", e?.message || e);
       // Don't fail the whole run for review issues; surface in row.
     }
