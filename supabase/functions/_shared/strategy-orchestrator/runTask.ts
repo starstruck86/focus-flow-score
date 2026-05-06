@@ -916,6 +916,13 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // Deterministically split oversized paragraphs at sentence boundaries.
   // Preserves all content. No summarization. No gate threshold changes.
   const { text: draftText, telemetry: normTelemetry } = normalizeParagraphs(rawDraftText);
+  // Always record normalization telemetry so we can distinguish "didn't run" from "ran, no split needed"
+  const readabilityNormalization = {
+    paragraphs_split: normTelemetry.paragraphs_split,
+    original_length: normTelemetry.original_length,
+    normalized_length: normTelemetry.normalized_length,
+    ran: true,
+  };
   if (normTelemetry.paragraphs_split > 0) {
     // Re-parse the normalized text back into draftOutput if it was JSON
     try {
@@ -1009,6 +1016,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       const hardFailMeta: Record<string, unknown> = {
         artifact_gate: artifactGateTelemetry,
         artifact_gate_failed: true,
+        readability_normalization: readabilityNormalization,
         library_counts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
       };
       if (planResult.ok) {
@@ -1440,9 +1448,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   if (calibrationPersistenceBlock) metaPatch.calibration = calibrationPersistenceBlock;
   // Phase 3.5D — Artifact gate telemetry (production enforcement signal)
   metaPatch.artifact_gate = artifactGateTelemetry;
-  if (normTelemetry.paragraphs_split > 0) {
-    metaPatch.readability_normalization = normTelemetry;
-  }
+  metaPatch.readability_normalization = readabilityNormalization;
   if (planResult.ok) {
     metaPatch.planner = {
       plan_hash: planResult.plan.planHash,

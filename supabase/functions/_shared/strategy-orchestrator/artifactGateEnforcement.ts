@@ -32,7 +32,15 @@ export interface ArtifactGateResult {
 }
 
 export interface ArtifactManifest {
-  rubric: { mustHave: readonly string[] };
+  rubric: {
+    mustHave: readonly string[];
+    sectionMap?: ReadonlyArray<{
+      concept: string;
+      location: "section" | "embedded";
+      parentSection?: string;
+      minWords?: number;
+    }>;
+  };
   output: { shape: string; forbid?: readonly string[] };
 }
 
@@ -218,19 +226,89 @@ const SUBSTANCE_PATTERNS = [
 export function checkSectionCompleteness(
   output: string,
   mustHave: readonly string[],
+  sectionMap?: ArtifactManifest["rubric"]["sectionMap"],
 ): GateDiagnostic {
   const diagnostics: string[] = [];
 
   const semanticText = extractSemanticText(output);
-  const lower = semanticText.toLowerCase();
 
   // Split into paragraphs for section-finding
   const paragraphs = semanticText.split(/\n\s*\n/).filter(p => p.trim().length > 0);
 
+  // Build a lookup from concept → mapping if sectionMap is provided
+  const mapLookup = new Map<string, { location: string; parentSection?: string; minWords: number }>();
+  if (sectionMap) {
+    for (const m of sectionMap) {
+      mapLookup.set(m.concept.toLowerCase(), {
+        location: m.location,
+        parentSection: m.parentSection,
+        minWords: m.minWords ?? 40,
+      });
+    }
+  }
+
   for (const req of mustHave) {
     const norm = req.toLowerCase();
+    const mapping = mapLookup.get(norm);
     let sectionContent = "";
 
+    if (mapping && mapping.parentSection) {
+      // Mapped concept — find content in the declared parent section
+      const parentNorm = mapping.parentSection.toLowerCase().replace(/_/g, " ");
+      const parentHeadingPattern = new RegExp(
+        `(?:^#+\\s*[^\\n]*${parentNorm.replace(/\s+/g, "\\s+")}[^\\n]*|"id"\\s*:\\s*"${mapping.parentSection}")\\s*\\n([\\s\\S]*?)(?=\\n#+\\s|\\n"id"\\s*:|$)`,
+        "im",
+      );
+      const parentMatch = semanticText.match(parentHeadingPattern);
+      const parentText = parentMatch?.[1] || "";
+      const minWords = mapping.minWords ?? 40;
+
+      if (mapping.location === "section") {
+        // Dedicated section: the parent heading IS the section for this concept
+        if (parentText) {
+          const wordCount = parentText.trim().split(/\s+/).length;
+          if (wordCount < minWords) {
+            diagnostics.push(`Section "${req}" (via "${mapping.parentSection}") is a stub (${wordCount} words, min ${minWords})`);
+          } else {
+            const isFiller = FILLER_PATTERNS.some(p => p.test(parentText.trim()));
+            if (isFiller) {
+              diagnostics.push(`Section "${req}" is filler`);
+            } else {
+              const hasSubstance = SUBSTANCE_PATTERNS.some(p => p.test(parentText));
+              if (!hasSubstance) {
+                diagnostics.push(`Section "${req}" lacks substance (no metrics, stakeholders, or causal reasoning)`);
+              }
+            }
+          }
+          continue;
+        }
+        // Fall through to standard finding if parent heading not found
+      } else {
+        // Embedded: concept is inside a parent section
+        if (parentText && conceptPresent(req, parentText, parentText)) {
+          const wordCount = parentText.trim().split(/\s+/).length;
+          if (wordCount >= minWords) {
+            continue;
+          } else {
+            diagnostics.push(`Section "${req}" embedded in "${mapping.parentSection}" is a stub (${wordCount} words, min ${minWords})`);
+            continue;
+          }
+        }
+        if (conceptPresent(req, semanticText, output)) {
+          continue;
+        }
+        diagnostics.push(`Section "${req}" not found (expected embedded in "${mapping.parentSection}")`);
+        continue;
+      }
+    } else if (mapping?.location === "embedded" && !mapping.parentSection) {
+      if (conceptPresent(req, semanticText, output)) {
+        continue;
+      }
+      diagnostics.push(`Section "${req}" not found`);
+      continue;
+    }
+
+    // Standard section finding (dedicated section or no mapping)
     // 1. Find by heading
     const headingPattern = new RegExp(
       `(?:^#+\\s*[^\\n]*${norm.replace(/\s+/g, "\\s+")}[^\\n]*|^[^\\n]*${norm.replace(/\s+/g, "\\s+")}[^\\n]*:)\\s*\\n([\\s\\S]*?)(?=\\n#+\\s|\\n[A-Z][A-Z\\s]+:|$)`,
@@ -280,9 +358,10 @@ export function checkSectionCompleteness(
     }
 
     // Validate found section content
+    const minWords = mapping?.minWords ?? 40;
     const wordCount = sectionContent.trim().split(/\s+/).length;
-    if (wordCount < 40) {
-      diagnostics.push(`Section "${req}" is a stub (${wordCount} words, min 40)`);
+    if (wordCount < minWords) {
+      diagnostics.push(`Section "${req}" is a stub (${wordCount} words, min ${minWords})`);
       continue;
     }
     const isFiller = FILLER_PATTERNS.some(p => p.test(sectionContent.trim()));
@@ -351,7 +430,7 @@ export function runArtifactGate(
 ): ArtifactGateResult {
   const fidelity = checkTemplateFidelity(output, manifest);
   const readability = checkReadability(output);
-  const completeness = checkSectionCompleteness(output, manifest.rubric.mustHave);
+  const completeness = checkSectionCompleteness(output, manifest.rubric.mustHave, manifest.rubric.sectionMap);
   const evidence = checkEvidenceDiscipline(output);
 
   const gates = [fidelity, readability, completeness, evidence];

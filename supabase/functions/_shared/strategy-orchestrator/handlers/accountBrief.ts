@@ -128,15 +128,16 @@ Return ONLY JSON. No markdown fences.`;
 OUTPUT MUST be a JSON object of shape:
 {
   "sections": [
-    { "id": "company_snapshot",   "name": "Company Snapshot",      "content": "..." },
-    { "id": "stakeholders",        "name": "Stakeholders On File", "content": "..." },
-    { "id": "operator_read",       "name": "Operator Read",        "content": "..." },
-    { "id": "next_moves",          "name": "Next Moves",           "content": "..." }
+    { "id": "company_snapshot",   "name": "Company Snapshot",        "content": "..." },
+    { "id": "stakeholders",       "name": "Stakeholders On File",    "content": "..." },
+    { "id": "risks_mitigation",   "name": "Risks & Mitigation",      "content": "..." },
+    { "id": "operator_read",      "name": "Operator Read",            "content": "..." },
+    { "id": "next_moves",         "name": "Next Moves",               "content": "..." }
   ],
-  "markdown": "## Company Snapshot\\n...\\n\\n## Stakeholders On File\\n...\\n\\n## Operator Read\\n...\\n\\n## Next Moves\\n..."
+  "markdown": "## Company Snapshot\\n...\\n\\n## Stakeholders On File\\n...\\n\\n## Risks & Mitigation\\n...\\n\\n## Operator Read\\n...\\n\\n## Next Moves\\n..."
 }
 
-The "markdown" field MUST contain the four required ## headers in the order listed below,
+The "markdown" field MUST contain the five required ## headers in the order listed below,
 verbatim, with no renaming, merging, or reordering.
 
 ${renderRequiredHeadersBlock("account_brief")}
@@ -146,7 +147,10 @@ RULES:
 - No generic SaaS platitudes. Be specific to THIS account.
 - Stakeholders section: name + role + influence + known position. If no stakeholders surfaced,
   state that explicitly and propose how to obtain them.
-- Operator Read: 3-6 sentences. The strategic thesis with named risk + named opportunity.
+- Risks & Mitigation: 3-5 named risks with level (Low/Med/High) and specific mitigation action.
+  Each risk must be account-specific, not generic. Include deal risks, competitive risks,
+  organizational risks, and timing risks as applicable.
+- Operator Read: 3-6 sentences. The strategic thesis with named commercial insight and strategic why.
 - Next Moves: numbered list of 3-5 concrete actions, each with WHO / WHAT / WHY.
 - Do NOT begin the answer with any forbidden opening listed above.
 
@@ -203,7 +207,7 @@ Return JSON:
 {
   "strengths": ["..."],
   "redlines": [
-    { "id":"r1", "section_id":"company_snapshot|stakeholders|operator_read|next_moves",
+    { "id":"r1", "section_id":"company_snapshot|stakeholders|risks_mitigation|operator_read|next_moves",
       "section_name":"...", "current_text":"...", "proposed_text":"...",
       "rationale":"...", "grounded_by_id":"CARD[id]|null" }
   ],
