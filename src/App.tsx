@@ -64,6 +64,7 @@ const ObservabilityDashboard = lazy(() => import("./pages/ObservabilityDashboard
 const SmokeTest = lazy(() => import("./pages/SmokeTest"));
 const LifecycleReconciliation = lazy(() => import("./pages/LifecycleReconciliation"));
 const PhaseEvidenceRunner = lazy(() => import("./pages/PhaseEvidenceRunner"));
+const StrategyOpsPanel = lazy(() => import("./pages/StrategyOpsPanel"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -282,6 +283,13 @@ const App = () => (
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback text="Loading evidence runner…" />}>
                         <PhaseEvidenceRunner />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/admin/ops" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<LazyFallback text="Loading operations…" />}>
+                        <StrategyOpsPanel />
                       </Suspense>
                     </ProtectedRoute>
                   } />
