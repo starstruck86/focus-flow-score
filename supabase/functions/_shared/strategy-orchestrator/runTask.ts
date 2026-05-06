@@ -1026,6 +1026,11 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   artifactGateTelemetry.pass = gateResult.pass;
   artifactGateTelemetry.failed_dimensions = gateResult.failed_dimensions;
   artifactGateTelemetry.total_gate_latency_ms = Date.now() - gateStartMs;
+  // Section-level diagnostics for evidence visibility and drift analysis
+  if (gateResult.sections_checked) artifactGateTelemetry.sections_checked = gateResult.sections_checked;
+  if (gateResult.sections_passed) artifactGateTelemetry.sections_passed = gateResult.sections_passed;
+  if (gateResult.sections_failed) artifactGateTelemetry.sections_failed = gateResult.sections_failed;
+  if (gateResult.diagnostics) artifactGateTelemetry.diagnostics = gateResult.diagnostics;
   let reviewOutput: any = { strengths: [], redlines: [], library_coverage: { used: [], gaps: [] } };
   if (sectionCount > 0) {
     await setProgress(supabase, runId, "review");
