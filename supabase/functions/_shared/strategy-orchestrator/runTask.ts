@@ -394,10 +394,13 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   await setProgress(supabase, runId, "synthesis");
   const synthesisModel = "gpt-5-mini";
   console.log(JSON.stringify({ tag: "stage-2:start", run_id: runId, model: synthesisModel, reasoning_effort: "medium" }));
-  const synthesisRaw = await callOpenAI([
+  const synthesisStage = telemetry.startStage("synthesis", { provider: "openai", model: synthesisModel });
+  const synthesisResult = await callOpenAIWithUsage([
     { role: "system", content: `${overlayPrefix}You are a senior sales strategist. Synthesize research + internal IP into actionable intelligence. Return structured JSON only. No markdown fences, no preamble.` },
     { role: "user", content: handler.buildSynthesisPrompt(inputs, research, library) },
   ], { model: synthesisModel, maxTokens: 16000, reasoningEffort: "medium" });
+  const synthesisRaw = synthesisResult.text;
+  synthesisStage.finish({ success: true, usage: synthesisResult.usage });
   const synthesis = safeParseJSON<any>(synthesisRaw) ?? { raw: synthesisRaw };
   console.log(JSON.stringify({ tag: "stage-2:end", run_id: runId, model: synthesisModel, synthesis_fields: Object.keys(synthesis).length }));
 
