@@ -75,13 +75,20 @@ function safeMeta(meta: unknown): Record<string, unknown> {
 export function parseArtifactGate(meta: unknown) {
   const m = safeMeta(meta);
   const gate = safeMeta(m.artifact_gate);
+  // sections_passed can be a number OR an array of section names
+  const sp = gate.sections_passed;
+  const sf = gate.sections_failed;
+  const sectionsPassedCount = typeof sp === 'number' ? sp : Array.isArray(sp) ? sp.length : undefined;
+  const sectionsFailedCount = typeof sf === 'number' ? sf : Array.isArray(sf) ? sf.length : undefined;
+  // gate_latency_ms may also be stored as total_gate_latency_ms
+  const latency = (gate.gate_latency_ms ?? gate.total_gate_latency_ms) as number | undefined;
   return {
     pass: gate.pass as boolean | undefined,
-    failed_dimensions: (gate.failed_dimensions as string[]) ?? [],
-    sections_passed: gate.sections_passed as number | undefined,
-    sections_failed: gate.sections_failed as number | undefined,
+    failed_dimensions: Array.isArray(gate.failed_dimensions) ? (gate.failed_dimensions as string[]) : [],
+    sections_passed: sectionsPassedCount,
+    sections_failed: sectionsFailedCount,
     regen_attempts: gate.regen_attempts as number | undefined,
-    gate_latency_ms: gate.gate_latency_ms as number | undefined,
+    gate_latency_ms: latency,
   };
 }
 
@@ -94,6 +101,12 @@ export function parseAnomalyFlags(meta: unknown): string[] {
   const m = safeMeta(meta);
   const flags = m.anomaly_flags;
   if (Array.isArray(flags)) return flags as string[];
+  // Handle object shape: {latency_violation: true, regen_triggered: true} → ['latency_violation', 'regen_triggered']
+  if (flags && typeof flags === 'object' && !Array.isArray(flags)) {
+    return Object.entries(flags as Record<string, unknown>)
+      .filter(([, v]) => v === true)
+      .map(([k]) => k);
+  }
   return [];
 }
 
@@ -116,8 +129,8 @@ export function parseTokenUsage(meta: unknown) {
   const m = safeMeta(meta);
   const t = safeMeta(m.token_usage);
   return {
-    input: (t.input_tokens as number) ?? null,
-    output: (t.output_tokens as number) ?? null,
+    input: (t.total_input as number) ?? (t.input_tokens as number) ?? null,
+    output: (t.total_output as number) ?? (t.output_tokens as number) ?? null,
     total: (t.total_tokens as number) ?? null,
   };
 }
