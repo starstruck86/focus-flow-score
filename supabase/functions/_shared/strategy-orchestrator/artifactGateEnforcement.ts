@@ -235,16 +235,22 @@ export function checkSectionCompleteness(
     const headingMatch = semanticText.match(headingPattern);
     if (headingMatch) sectionContent = headingMatch[1] || "";
 
-    // 2. Find by concept words in paragraph
+    // 2. Find by concept words in paragraph (prefer substantive paragraphs ≥20 words)
     if (!sectionContent) {
       const words = norm.split(/\s+/).filter(w => w.length > 2);
+      let shortFallback = "";
       for (const para of paragraphs) {
         const pl = para.toLowerCase();
         if (pl.includes(norm) || (words.length >= 2 && words.every(w => pl.includes(w)))) {
-          sectionContent = para;
-          break;
+          if (para.split(/\s+/).length >= 20) {
+            sectionContent = para;
+            break;
+          } else if (!shortFallback) {
+            shortFallback = para;
+          }
         }
       }
+      if (!sectionContent && shortFallback) sectionContent = shortFallback;
     }
 
     // 3. Synonym-based paragraph finding
