@@ -354,6 +354,7 @@ export function checkEvidenceDiscipline(text: string): GateDiagnostic {
 
 /**
  * Runs all 4 dimension gates. ANY failure → overall FAIL.
+ * Returns structured diagnostics for every section checked.
  */
 export function runArtifactGate(
   output: string,
@@ -367,7 +368,52 @@ export function runArtifactGate(
   const gates = [fidelity, readability, completeness, evidence];
   const failed = gates.filter(g => !g.pass).map(g => g.gate);
 
-  return { pass: failed.length === 0, gates, failed_dimensions: failed };
+  // Build section-level diagnostics
+  const mustHave = manifest.rubric.mustHave;
+  const sectionsFailed = new Set<string>();
+  const sectionsPassed = new Set<string>(mustHave);
+  const diagnostics: Array<{
+    dimension: string;
+    requirement: string;
+    reason: string;
+    matched_excerpt: string;
+    remediation: string;
+  }> = [];
+
+  for (const gate of gates) {
+    for (const diag of gate.diagnostics) {
+      const reqMatch = diag.match(/(?:Missing required (?:element|section)|Section) "([^"]+)"/);
+      const requirement = reqMatch?.[1] ?? diag.slice(0, 60);
+      const reason = diag.includes("not found") ? "heading_absent"
+        : diag.includes("stub") ? "stub_content"
+        : diag.includes("filler") ? "filler_detected"
+        : diag.includes("lacks substance") ? "lacks_substance"
+        : diag.includes("wall of text") ? "wall_of_text"
+        : diag.includes("dense prose") ? "dense_prose"
+        : diag.includes("no causal") ? "citation_without_causality"
+        : "content_gap";
+
+      diagnostics.push({
+        dimension: gate.gate,
+        requirement,
+        reason,
+        matched_excerpt: "",
+        remediation: `Address ${gate.gate} issue for "${requirement}"`,
+      });
+      sectionsFailed.add(requirement);
+      sectionsPassed.delete(requirement);
+    }
+  }
+
+  return {
+    pass: failed.length === 0,
+    gates,
+    failed_dimensions: failed,
+    sections_checked: [...mustHave],
+    sections_passed: [...sectionsPassed],
+    sections_failed: [...sectionsFailed],
+    diagnostics,
+  };
 }
 
 /** Telemetry shape for artifact gate results. */
