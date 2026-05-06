@@ -1448,9 +1448,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   if (calibrationPersistenceBlock) metaPatch.calibration = calibrationPersistenceBlock;
   // Phase 3.5D — Artifact gate telemetry (production enforcement signal)
   metaPatch.artifact_gate = artifactGateTelemetry;
-  if (normTelemetry.paragraphs_split > 0) {
-    metaPatch.readability_normalization = normTelemetry;
-  }
+  metaPatch.readability_normalization = readabilityNormalization;
   if (planResult.ok) {
     metaPatch.planner = {
       plan_hash: planResult.plan.planHash,
