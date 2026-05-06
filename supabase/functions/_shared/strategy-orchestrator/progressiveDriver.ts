@@ -26,6 +26,7 @@ import { callOpenAI, safeParseJSON } from "./providers.ts";
 import { getHandler } from "./registry.ts";
 import { validateDraftAgainstSop, type SopContractLike } from "./sopValidator.ts";
 import { runArtifactGate, type ArtifactGateTelemetry } from "./artifactGateEnforcement.ts";
+import { normalizeParagraphs } from "./normalizeParagraphs.ts";
 import { getTaskManifest, toArtifactManifest } from "./taskManifestMap.ts";
 import type { TaskType } from "./types.ts";
 
@@ -366,9 +367,27 @@ export async function assembleAndFinalize(args: {
     total_gate_latency_ms: 0,
   };
 
-  const draftText = JSON.stringify(draftOutput);
-  let gateResult = runArtifactGate(draftText, artifactManifest);
+  const rawDraftText = JSON.stringify(draftOutput);
+
+  // ── Paragraph normalization — BEFORE gate evaluation ──────────────
+  const { text: draftText, telemetry: normTelemetry } = normalizeParagraphs(rawDraftText);
   let finalDraftOutput: any = draftOutput;
+  if (normTelemetry.paragraphs_split > 0) {
+    try {
+      const reParsed = JSON.parse(draftText);
+      if (reParsed && typeof reParsed === "object" && Array.isArray(reParsed.sections)) {
+        finalDraftOutput = reParsed;
+      }
+    } catch { /* keep original */ }
+    console.log(JSON.stringify({
+      tag: "[readability_normalization]",
+      run_id: runId,
+      task_type: taskType,
+      ...normTelemetry,
+    }));
+  }
+
+  let gateResult = runArtifactGate(draftText, artifactManifest);
 
   if (!gateResult.pass) {
     console.warn(JSON.stringify({
@@ -392,7 +411,7 @@ export async function assembleAndFinalize(args: {
       ], { model: "gpt-5-mini", maxTokens: 16000 });
       const regenParsed = safeParseJSON<any>(regenRaw);
       if (regenParsed && typeof regenParsed === "object" && Array.isArray(regenParsed.sections)) {
-        const regenText = JSON.stringify(regenParsed);
+        const { text: regenText } = normalizeParagraphs(JSON.stringify(regenParsed));
         const regenGate = runArtifactGate(regenText, artifactManifest);
         if (regenGate.pass) {
           finalDraftOutput = regenParsed;
@@ -569,6 +588,7 @@ export async function assembleAndFinalize(args: {
     },
     // Phase 3.5D — artifact gate telemetry
     artifact_gate: artifactGateTelemetry,
+    ...(normTelemetry.paragraphs_split > 0 ? { readability_normalization: normTelemetry } : {}),
     // Phase 3.6 — planner, performance, anomaly telemetry
     ...(plannerCF ? {
       planner: {
