@@ -242,6 +242,20 @@ export function runReleaseGate(): ReleaseGateResult {
           `Evidence gap reported for enforced surface: ${surface.label} (${surface.manifest_id}) — real DB proof required`
         );
       }
+
+      // Phase 3 completion: task and progressive_task surfaces MUST have
+      // success-path evidence (a COMPLETED run with full telemetry).
+      // Chat and transform surfaces can be satisfied by any validated artifact.
+      if (surface.surface === "task" || surface.surface === "progressive_task") {
+        const hasSuccessEvidence = surfaceSection &&
+          /status.*completed/i.test(surfaceSection) &&
+          /artifact_gate.*pass.*true/i.test(surfaceSection);
+        if (!hasSuccessEvidence) {
+          failures.push(
+            `Success-path evidence missing for ${surface.label} (${surface.manifest_id}) — requires a COMPLETED run with artifact_gate pass`
+          );
+        }
+      }
     }
   }
 
