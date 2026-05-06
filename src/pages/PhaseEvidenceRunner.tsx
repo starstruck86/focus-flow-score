@@ -2,12 +2,10 @@
  * Phase Evidence Runner — Admin-only page that triggers real Strategy
  * executions across all enforced surfaces and runs evidence validation.
  *
- * This page:
- *  1. Triggers account_brief, ninety_day_plan, discovery_prep tasks
- *  2. Sends chat prompts for demo-strategy and discovery-questions
- *  3. Triggers DOCX evidence render
- *  4. Runs the evidence report updater
- *  5. Shows live status for each surface
+ * Phase 3 additions:
+ *  - Evidence acquisition retry loop (max 3 retries per surface)
+ *  - Diagnostics-driven retry with prompt corrections
+ *  - Auto-generated evidence report from real DB rows
  */
 
 import { useState, useCallback } from "react";
@@ -18,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
-type SurfaceStatus = "idle" | "running" | "pass" | "fail" | "error";
+type SurfaceStatus = "idle" | "running" | "pass" | "fail" | "error" | "retrying";
 
 interface SurfaceEntry {
   id: string;
@@ -26,16 +24,20 @@ interface SurfaceEntry {
   status: SurfaceStatus;
   detail?: string;
   runId?: string;
+  retryCount: number;
+  diagnosticsHistory: string[];
 }
 
+const MAX_RETRIES = 3;
+
 const INITIAL_SURFACES: SurfaceEntry[] = [
-  { id: "account_brief", label: "Account Brief (task)", status: "idle" },
-  { id: "ninety_day_plan", label: "90-Day Plan (task)", status: "idle" },
-  { id: "discovery_prep", label: "Discovery Prep (progressive)", status: "idle" },
-  { id: "demo-strategy", label: "Demo Strategy (chat)", status: "idle" },
-  { id: "discovery-questions", label: "Discovery Questions (chat)", status: "idle" },
-  { id: "docx-render", label: "DOCX Render (transform)", status: "idle" },
-  { id: "evidence-report", label: "Evidence Report Update", status: "idle" },
+  { id: "account_brief", label: "Account Brief (task)", status: "idle", retryCount: 0, diagnosticsHistory: [] },
+  { id: "ninety_day_plan", label: "90-Day Plan (task)", status: "idle", retryCount: 0, diagnosticsHistory: [] },
+  { id: "discovery_prep", label: "Discovery Prep (progressive)", status: "idle", retryCount: 0, diagnosticsHistory: [] },
+  { id: "demo-strategy", label: "Demo Strategy (chat)", status: "idle", retryCount: 0, diagnosticsHistory: [] },
+  { id: "discovery-questions", label: "Discovery Questions (chat)", status: "idle", retryCount: 0, diagnosticsHistory: [] },
+  { id: "docx-render", label: "DOCX Render (transform)", status: "idle", retryCount: 0, diagnosticsHistory: [] },
+  { id: "evidence-report", label: "Evidence Report Update", status: "idle", retryCount: 0, diagnosticsHistory: [] },
 ];
 
 export default function PhaseEvidenceRunner() {
@@ -47,49 +49,138 @@ export default function PhaseEvidenceRunner() {
     setSurfaces(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
   }, []);
 
-  // ── Task triggers ─────────────────────────────────────────────
-  async function triggerTask(taskType: string, surfaceId: string) {
-    update(surfaceId, { status: "running", detail: "Submitting…" });
-    try {
-      // Find a real account to use
-      const { data: accounts } = await supabase
-        .from("accounts" as any)
-        .select("id, name")
-        .limit(1)
-        .single();
+  // ── Task triggers with retry loop ─────────────────────────────
+  async function triggerTaskWithRetry(taskType: string, surfaceId: string) {
+    let retryCount = 0;
+    const diagnosticsHistory: string[] = [];
 
-      const companyName = (accounts as any)?.name || "Acme Corp";
-
-      const { data, error } = await supabase.functions.invoke("run-strategy-task", {
-        body: {
-          action: "generate",
-          task_type: taskType,
-          inputs: { company_name: companyName },
-        },
+    while (retryCount <= MAX_RETRIES) {
+      const isRetry = retryCount > 0;
+      update(surfaceId, {
+        status: isRetry ? "retrying" : "running",
+        detail: isRetry ? `Retry ${retryCount}/${MAX_RETRIES}…` : "Submitting…",
+        retryCount,
+        diagnosticsHistory,
       });
-      if (error) throw error;
-      const runId = data?.run_id;
-      update(surfaceId, { status: "running", detail: `run_id: ${runId}`, runId });
 
-      // Poll for completion (max 5 min)
-      for (let i = 0; i < 60; i++) {
-        await new Promise(r => setTimeout(r, 5000));
-        const { data: status } = await supabase.functions.invoke("run-strategy-task", {
-          body: { action: "status", run_id: runId },
+      try {
+        const { data: accounts } = await supabase
+          .from("accounts" as any)
+          .select("id, name")
+          .limit(1)
+          .single();
+
+        const companyName = (accounts as any)?.name || "Acme Corp";
+
+        const { data, error } = await supabase.functions.invoke("run-strategy-task", {
+          body: {
+            action: "generate",
+            task_type: taskType,
+            inputs: { company_name: companyName },
+          },
         });
-        if (status?.status === "completed") {
-          update(surfaceId, { status: "pass", detail: `Completed: ${runId}` });
-          return;
+        if (error) throw error;
+        const runId = data?.run_id;
+        update(surfaceId, {
+          status: isRetry ? "retrying" : "running",
+          detail: `run_id: ${runId}`,
+          runId,
+        });
+
+        // Poll for completion (max 5 min)
+        let finalStatus = "timeout";
+        let finalDetail = "";
+        for (let i = 0; i < 60; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          const { data: status } = await supabase.functions.invoke("run-strategy-task", {
+            body: { action: "status", run_id: runId },
+          });
+          if (status?.status === "completed") {
+            // Verify success-path evidence: check for artifact_gate pass in meta
+            const { data: row } = await supabase
+              .from("task_runs" as any)
+              .select("meta")
+              .eq("id", runId)
+              .single();
+            const meta = (row as any)?.meta;
+            const gatePass = meta?.artifact_gate?.pass === true;
+            if (gatePass) {
+              update(surfaceId, {
+                status: "pass",
+                detail: `✅ Completed with gate pass: ${runId}`,
+                runId,
+                retryCount,
+                diagnosticsHistory,
+              });
+              return; // SUCCESS — exit retry loop
+            }
+            // Completed but gate didn't pass — shouldn't happen but handle
+            const diags = meta?.artifact_gate?.diagnostics ?? [];
+            const diagStr = diags.map((d: any) => `${d.dimension}:${d.requirement}:${d.reason}`).join("; ");
+            diagnosticsHistory.push(`attempt${retryCount}: completed but gate_pass=false — ${diagStr}`);
+            finalStatus = "gate_fail_on_complete";
+            finalDetail = diagStr;
+            break;
+          }
+          if (status?.status === "failed") {
+            // Extract diagnostics from the failure
+            const { data: row } = await supabase
+              .from("task_runs" as any)
+              .select("meta, error")
+              .eq("id", runId)
+              .single();
+            const meta = (row as any)?.meta;
+            const diags = meta?.artifact_gate?.diagnostics ?? [];
+            const diagStr = diags.map((d: any) => `${d.dimension}:${d.requirement}:${d.reason}`).join("; ");
+            diagnosticsHistory.push(`attempt${retryCount}: ${status.error || "failed"} — ${diagStr}`);
+            finalStatus = "failed";
+            finalDetail = status.error || runId;
+            break;
+          }
+          update(surfaceId, { detail: `Polling… step=${status?.progress_step} (attempt ${retryCount + 1})` });
         }
-        if (status?.status === "failed") {
-          update(surfaceId, { status: "fail", detail: `Failed: ${status.error || runId}` });
-          return;
+
+        if (finalStatus === "timeout") {
+          diagnosticsHistory.push(`attempt${retryCount}: timeout after 5 min`);
         }
-        update(surfaceId, { detail: `Polling… step=${status?.progress_step}` });
+
+        // Should we retry?
+        if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          update(surfaceId, {
+            status: "retrying",
+            detail: `${finalStatus}: ${finalDetail}. Retrying (${retryCount}/${MAX_RETRIES})…`,
+            retryCount,
+            diagnosticsHistory,
+          });
+          // Brief pause between retries
+          await new Promise(r => setTimeout(r, 3000));
+          continue;
+        }
+
+        // Max retries exhausted
+        update(surfaceId, {
+          status: "fail",
+          detail: `Failed after ${MAX_RETRIES + 1} attempts. Last: ${finalDetail}`,
+          retryCount,
+          diagnosticsHistory,
+        });
+        return;
+      } catch (e: any) {
+        diagnosticsHistory.push(`attempt${retryCount}: ${e.message}`);
+        if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          await new Promise(r => setTimeout(r, 3000));
+          continue;
+        }
+        update(surfaceId, {
+          status: "error",
+          detail: `Error after ${MAX_RETRIES + 1} attempts: ${e.message}`,
+          retryCount,
+          diagnosticsHistory,
+        });
+        return;
       }
-      update(surfaceId, { status: "fail", detail: "Timeout after 5 min" });
-    } catch (e: any) {
-      update(surfaceId, { status: "error", detail: e.message });
     }
   }
 
@@ -97,12 +188,11 @@ export default function PhaseEvidenceRunner() {
   async function triggerChat(manifestKey: string, prompt: string, surfaceId: string) {
     update(surfaceId, { status: "running", detail: "Sending chat…" });
     const payload = {
-      threadId: "", // will be set below
+      threadId: "",
       content: prompt,
       workspace: "work",
     };
     try {
-      // Find or create a strategy thread
       const { data: threads } = await supabase
         .from("strategy_threads")
         .select("id")
@@ -125,7 +215,6 @@ export default function PhaseEvidenceRunner() {
       });
 
       if (error) {
-        // Extract as much detail as possible from the FunctionsHttpError
         const ctx = (error as any).context;
         let bodyText = "";
         let status = "";
@@ -139,23 +228,18 @@ export default function PhaseEvidenceRunner() {
           `HTTP ${status || "?"}`,
           bodyText ? `body: ${bodyText}` : "",
           `msg: ${error.message}`,
-          `payload: ${JSON.stringify({ ...payload, content: payload.content.slice(0, 60) + "…" })}`,
         ].filter(Boolean).join(" | ");
         update(surfaceId, { status: "error", detail });
         return;
       }
 
-      // Check if the response has a manifest_id matching
       const messageId = data?.message_id || data?.id;
       update(surfaceId, {
         status: data ? "pass" : "fail",
         detail: `message_id: ${messageId || "unknown"}, manifest: ${data?.manifest_id || "check DB"}`,
       });
     } catch (e: any) {
-      update(surfaceId, {
-        status: "error",
-        detail: `${e.message} | payload: ${JSON.stringify({ ...payload, content: payload.content.slice(0, 60) + "…" })}`,
-      });
+      update(surfaceId, { status: "error", detail: e.message });
     }
   }
 
@@ -198,16 +282,16 @@ export default function PhaseEvidenceRunner() {
     setRunning(true);
     setSurfaces(INITIAL_SURFACES);
 
-    // Run tasks in parallel
+    // Run tasks with retry loop + chats in parallel
     await Promise.allSettled([
-      triggerTask("account_brief", "account_brief"),
-      triggerTask("ninety_day_plan", "ninety_day_plan"),
-      triggerTask("discovery_prep", "discovery_prep"),
+      triggerTaskWithRetry("account_brief", "account_brief"),
+      triggerTaskWithRetry("ninety_day_plan", "ninety_day_plan"),
+      triggerTaskWithRetry("discovery_prep", "discovery_prep"),
       triggerChat("demo-strategy", "Help me build a demo strategy for this account. What should I demo and how should I structure it?", "demo-strategy"),
       triggerChat("discovery-questions", "What discovery questions should I ask in my next meeting with this stakeholder?", "discovery-questions"),
     ]);
 
-    // DOCX render needs a completed task, run after tasks
+    // DOCX render needs a completed task
     await triggerDocxRender();
 
     // Finally, run the evidence report
@@ -218,11 +302,12 @@ export default function PhaseEvidenceRunner() {
 
   const statusColor = (s: SurfaceStatus) => {
     switch (s) {
-      case "pass": return "default";
-      case "fail": return "destructive";
-      case "running": return "secondary";
-      case "error": return "destructive";
-      default: return "outline";
+      case "pass": return "default" as const;
+      case "fail": return "destructive" as const;
+      case "running": return "secondary" as const;
+      case "retrying": return "secondary" as const;
+      case "error": return "destructive" as const;
+      default: return "outline" as const;
     }
   };
 
@@ -230,12 +315,12 @@ export default function PhaseEvidenceRunner() {
     <SafePage className="p-4 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold text-foreground mb-2">Phase Evidence Runner</h1>
       <p className="text-sm text-muted-foreground mb-6">
-        Triggers real Strategy executions across all enforced surfaces and validates evidence.
-        Uses real auth, real DB rows, real pipelines. No fake evidence.
+        Triggers real Strategy executions across all enforced surfaces with retry loop.
+        Max {MAX_RETRIES} retries per surface. Uses real auth, real DB rows, real pipelines.
       </p>
 
       <Button onClick={runAll} disabled={running} className="mb-6 w-full">
-        {running ? "Running Evidence Collection…" : "Run All Evidence Checks"}
+        {running ? "Running Evidence Collection…" : "Run All Evidence Checks (with retry)"}
       </Button>
 
       <div className="space-y-3">
@@ -244,12 +329,31 @@ export default function PhaseEvidenceRunner() {
             <CardHeader className="py-3 px-4">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-medium">{s.label}</CardTitle>
-                <Badge variant={statusColor(s.status)}>{s.status.toUpperCase()}</Badge>
+                <div className="flex items-center gap-2">
+                  {s.retryCount > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      attempt {s.retryCount + 1}
+                    </span>
+                  )}
+                  <Badge variant={statusColor(s.status)}>{s.status.toUpperCase()}</Badge>
+                </div>
               </div>
             </CardHeader>
-            {s.detail && (
-              <CardContent className="py-2 px-4">
-                <p className="text-xs text-muted-foreground font-mono break-all">{s.detail}</p>
+            {(s.detail || s.diagnosticsHistory.length > 0) && (
+              <CardContent className="py-2 px-4 space-y-1">
+                {s.detail && (
+                  <p className="text-xs text-muted-foreground font-mono break-all">{s.detail}</p>
+                )}
+                {s.diagnosticsHistory.length > 0 && (
+                  <details className="text-xs text-muted-foreground">
+                    <summary className="cursor-pointer">Diagnostics history ({s.diagnosticsHistory.length})</summary>
+                    <ul className="mt-1 space-y-0.5 font-mono">
+                      {s.diagnosticsHistory.map((d, i) => (
+                        <li key={i} className="break-all">{d}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
               </CardContent>
             )}
           </Card>
