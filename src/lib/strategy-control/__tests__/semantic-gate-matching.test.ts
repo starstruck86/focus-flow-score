@@ -86,11 +86,11 @@ const DISCOVERY_PREP_MARKDOWN = [
 // ── Test Shapes ──
 
 describe("Phase 3 — Semantic Gate Matching", () => {
-  describe("wrapper {markdown, sections} format", () => {
+  describe("wrapper {markdown, metadata} format", () => {
     it("passes when markdown contains all concepts", () => {
       const output = JSON.stringify({
         markdown: ACCOUNT_BRIEF_MARKDOWN,
-        sections: ["situation", "commercial_insight", "risks"],
+        metadata: { type: "account_brief", version: 1 },
       });
       const result = runArtifactGate(output, ACCOUNT_BRIEF_MANIFEST);
       expect(result.pass).toBe(true);
