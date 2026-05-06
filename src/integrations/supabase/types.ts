@@ -7157,6 +7157,45 @@ export type Database = {
           },
         ]
       }
+      strategy_synthesis_cache: {
+        Row: {
+          cache_key: string
+          created_at: string
+          expires_at: string
+          hit_count: number
+          id: string
+          input_hash: string
+          result: Json
+          task_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cache_key: string
+          created_at?: string
+          expires_at?: string
+          hit_count?: number
+          id?: string
+          input_hash: string
+          result?: Json
+          task_type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cache_key?: string
+          created_at?: string
+          expires_at?: string
+          hit_count?: number
+          id?: string
+          input_hash?: string
+          result?: Json
+          task_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       strategy_thread_conflicts: {
         Row: {
           conflict_kind: string
