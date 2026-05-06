@@ -80,6 +80,18 @@ const enrichedDiscoveryPrepManifest: SkillManifest = {
       "ROI", "business case", "next step", "exit criteria",
     ],
   },
+  rubric: {
+    ...discoveryPrepManifest.rubric,
+    sectionMap: [
+      { concept: "verified signals",       location: "section", parentSection: "executive_snapshot" },
+      { concept: "current state reasoning", location: "section", parentSection: "value_selling" },
+      { concept: "change vectors",         location: "embedded", parentSection: "cockpit",           minWords: 20 },
+      { concept: "commercial insight",     location: "section", parentSection: "revenue_pathway" },
+      { concept: "strategic why",          location: "embedded", parentSection: "cockpit",           minWords: 20 },
+      { concept: "friction",              location: "section", parentSection: "hypotheses_risks" },
+      { concept: "cited sources",          location: "embedded" },
+    ],
+  },
 };
 
 const enrichedAccountBriefManifest: SkillManifest = {
