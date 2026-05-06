@@ -163,10 +163,10 @@ describe("partial section recovery", () => {
     );
 
     expect(assembled).toHaveLength(4);
-    expect(assembled[0].content).toBe("real content");
-    expect(assembled[1].content._authoring_failed).toBe(true);
-    expect(assembled[2].content).toBe("real content");
-    expect(assembled[3].content._authoring_failed).toBe(true);
+    expect(assembled[0]!.content).toBe("real content");
+    expect((assembled[1]!.content as any)._authoring_failed).toBe(true);
+    expect(assembled[2]!.content).toBe("real content");
+    expect((assembled[3]!.content as any)._authoring_failed).toBe(true);
   });
 });
 
