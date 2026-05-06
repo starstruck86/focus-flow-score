@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runArtifactGate } from "../src/lib/strategy-control/artifactGate";
+import { runArtifactGate } from "../artifactGate";
 
 describe("debug", () => {
   it("shows failures", () => {
@@ -16,7 +16,9 @@ describe("debug", () => {
       output: { shape: "structured_artifact" },
     };
     const r = runArtifactGate(output, manifest);
-    console.log(JSON.stringify({ pass: r.pass, failed_dimensions: r.failed_dimensions, gates: r.gates.map(g => ({ gate: g.gate, pass: g.pass, diagnostics: g.diagnostics })) }, null, 2));
+    for (const g of r.gates) {
+      if (!g.pass) console.log("FAILED:", g.gate, g.diagnostics);
+    }
     expect(r.pass).toBe(true);
   });
 });
