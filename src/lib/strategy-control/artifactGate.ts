@@ -64,8 +64,12 @@ function deepExtractText(value: unknown): string {
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   if (Array.isArray(value)) return value.map(deepExtractText).join("\n\n");
   if (typeof value === "object") {
-    return Object.values(value as Record<string, unknown>)
-      .map(deepExtractText)
+    // Include keys as pseudo-headers so concept matching can find them
+    return Object.entries(value as Record<string, unknown>)
+      .map(([k, v]) => {
+        const keyLabel = k.replace(/_/g, " ");
+        return `## ${keyLabel}\n\n${deepExtractText(v)}`;
+      })
       .join("\n\n");
   }
   return "";
