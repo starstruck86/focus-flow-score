@@ -13,9 +13,13 @@ export interface NormalizationTelemetry {
   paragraphs_split: number;
   longest_paragraph_before: number;
   longest_paragraph_after: number;
+  forced_splits: number;
+  longest_chunk_before_forced_split: number;
+  longest_chunk_after_forced_split: number;
 }
 
 const MAX_PARAGRAPH_WORDS = 120;
+const FORCED_SPLIT_TARGET = 100; // aim for ~100 words per chunk
 
 /**
  * Check if a line is a protected structure that should never be split.
@@ -37,20 +41,46 @@ function isProtectedLine(line: string): boolean {
 }
 
 /**
- * Split a single paragraph at sentence boundaries so no resulting
- * paragraph exceeds MAX_PARAGRAPH_WORDS. Returns the paragraph
- * unchanged if already within limits.
+ * Force-split a single chunk at word boundaries into pieces of ~FORCED_SPLIT_TARGET words.
+ * Only called when sentence-boundary splitting left a chunk > MAX_PARAGRAPH_WORDS.
  */
-function splitParagraph(para: string): string[] {
+function forceSplitChunk(chunk: string, telemetry: NormalizationTelemetry): string[] {
+  const words = chunk.split(/\s+/);
+  if (words.length <= MAX_PARAGRAPH_WORDS) return [chunk];
+
+  const chunkWc = words.length;
+  if (chunkWc > telemetry.longest_chunk_before_forced_split) {
+    telemetry.longest_chunk_before_forced_split = chunkWc;
+  }
+
+  const pieces: string[] = [];
+  for (let i = 0; i < words.length; i += FORCED_SPLIT_TARGET) {
+    const slice = words.slice(i, i + FORCED_SPLIT_TARGET);
+    pieces.push(slice.join(" "));
+  }
+
+  telemetry.forced_splits += pieces.length - 1;
+  for (const p of pieces) {
+    const wc = p.split(/\s+/).length;
+    if (wc > telemetry.longest_chunk_after_forced_split) {
+      telemetry.longest_chunk_after_forced_split = wc;
+    }
+  }
+
+  return pieces;
+}
+
+/**
+ * Split a single paragraph at sentence boundaries so no resulting
+ * paragraph exceeds MAX_PARAGRAPH_WORDS. If any chunk still exceeds
+ * the limit after sentence splitting, force-split at word boundaries.
+ */
+function splitParagraph(para: string, telemetry: NormalizationTelemetry): string[] {
   const wordCount = para.split(/\s+/).length;
   if (wordCount <= MAX_PARAGRAPH_WORDS) return [para];
 
-  // Split into sentences, preserving the delimiter with the preceding text.
-  // Uses lookbehind for sentence-ending punctuation followed by a space.
-  // Avoid splitting inside citations like [KI:...] or [SRC:...]
   const sentences: string[] = [];
-  // Regex: split after `. `, `? `, `! ` but NOT inside brackets
-  let remaining = para;
+  const remaining = para;
   const sentenceEndPattern = /([.!?])\s+(?=[A-Z\["\u201C(])/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -59,39 +89,48 @@ function splitParagraph(para: string): string[] {
     const end = match.index + match[1].length;
     sentences.push(remaining.slice(lastIndex, end).trim());
     lastIndex = end;
-    // Skip whitespace
     while (lastIndex < remaining.length && /\s/.test(remaining[lastIndex])) lastIndex++;
   }
   if (lastIndex < remaining.length) {
     sentences.push(remaining.slice(lastIndex).trim());
   }
 
-  // If we couldn't split into sentences, return as-is
-  if (sentences.length <= 1) return [para];
-
   // Group sentences into chunks ≤ MAX_PARAGRAPH_WORDS
-  const chunks: string[] = [];
-  let currentChunk: string[] = [];
-  let currentWords = 0;
-
-  for (const sentence of sentences) {
-    const sentenceWords = sentence.split(/\s+/).length;
-
-    if (currentWords > 0 && currentWords + sentenceWords > MAX_PARAGRAPH_WORDS) {
-      chunks.push(currentChunk.join(" "));
-      currentChunk = [sentence];
-      currentWords = sentenceWords;
-    } else {
-      currentChunk.push(sentence);
-      currentWords += sentenceWords;
+  const sentenceChunks: string[] = [];
+  if (sentences.length <= 1) {
+    // Single sentence or no split points — entire para is one chunk
+    sentenceChunks.push(para);
+  } else {
+    let currentChunk: string[] = [];
+    let currentWords = 0;
+    for (const sentence of sentences) {
+      const sentenceWords = sentence.split(/\s+/).length;
+      if (currentWords > 0 && currentWords + sentenceWords > MAX_PARAGRAPH_WORDS) {
+        sentenceChunks.push(currentChunk.join(" "));
+        currentChunk = [sentence];
+        currentWords = sentenceWords;
+      } else {
+        currentChunk.push(sentence);
+        currentWords += sentenceWords;
+      }
+    }
+    if (currentChunk.length > 0) {
+      sentenceChunks.push(currentChunk.join(" "));
     }
   }
 
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk.join(" "));
+  // Forced-split fallback: any chunk still over limit gets word-boundary split
+  const finalChunks: string[] = [];
+  for (const chunk of sentenceChunks) {
+    const wc = chunk.split(/\s+/).length;
+    if (wc > MAX_PARAGRAPH_WORDS) {
+      finalChunks.push(...forceSplitChunk(chunk, telemetry));
+    } else {
+      finalChunks.push(chunk);
+    }
   }
 
-  return chunks;
+  return finalChunks;
 }
 
 /**
@@ -106,6 +145,9 @@ export function normalizeParagraphs(text: string): { text: string; telemetry: No
     paragraphs_split: 0,
     longest_paragraph_before: 0,
     longest_paragraph_after: 0,
+    forced_splits: 0,
+    longest_chunk_before_forced_split: 0,
+    longest_chunk_after_forced_split: 0,
   };
 
   // Try JSON path first
@@ -202,7 +244,7 @@ function normalizeMarkdownText(text: string, telemetry: NormalizationTelemetry):
     }
 
     // Split this oversized paragraph
-    const chunks = splitParagraph(block.trim());
+    const chunks = splitParagraph(block.trim(), telemetry);
     if (chunks.length > 1) {
       telemetry.paragraphs_split++;
     }
