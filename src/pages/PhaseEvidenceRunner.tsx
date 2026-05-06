@@ -96,6 +96,11 @@ export default function PhaseEvidenceRunner() {
   // ── Chat triggers ─────────────────────────────────────────────
   async function triggerChat(manifestKey: string, prompt: string, surfaceId: string) {
     update(surfaceId, { status: "running", detail: "Sending chat…" });
+    const payload = {
+      threadId: "", // will be set below
+      content: prompt,
+      workspace: "work",
+    };
     try {
       // Find or create a strategy thread
       const { data: threads } = await supabase
@@ -113,15 +118,32 @@ export default function PhaseEvidenceRunner() {
           .single();
         threadId = newThread?.id;
       }
+      payload.threadId = threadId;
 
       const { data, error } = await supabase.functions.invoke("strategy-chat", {
-        body: {
-          thread_id: threadId,
-          content: prompt,
-          workspace: "general",
-        },
+        body: payload,
       });
-      if (error) throw error;
+
+      if (error) {
+        // Extract as much detail as possible from the FunctionsHttpError
+        const ctx = (error as any).context;
+        let bodyText = "";
+        let status = "";
+        if (ctx && typeof ctx.json === "function") {
+          try { bodyText = JSON.stringify(await ctx.json()); } catch { /* ignore */ }
+        } else if (ctx && typeof ctx.text === "function") {
+          try { bodyText = await ctx.text(); } catch { /* ignore */ }
+        }
+        if (ctx?.status) status = String(ctx.status);
+        const detail = [
+          `HTTP ${status || "?"}`,
+          bodyText ? `body: ${bodyText}` : "",
+          `msg: ${error.message}`,
+          `payload: ${JSON.stringify({ ...payload, content: payload.content.slice(0, 60) + "…" })}`,
+        ].filter(Boolean).join(" | ");
+        update(surfaceId, { status: "error", detail });
+        return;
+      }
 
       // Check if the response has a manifest_id matching
       const messageId = data?.message_id || data?.id;
@@ -130,7 +152,10 @@ export default function PhaseEvidenceRunner() {
         detail: `message_id: ${messageId || "unknown"}, manifest: ${data?.manifest_id || "check DB"}`,
       });
     } catch (e: any) {
-      update(surfaceId, { status: "error", detail: e.message });
+      update(surfaceId, {
+        status: "error",
+        detail: `${e.message} | payload: ${JSON.stringify({ ...payload, content: payload.content.slice(0, 60) + "…" })}`,
+      });
     }
   }
 
