@@ -48,6 +48,7 @@ import {
   enforceTaskSopOnce,
   type EnforceTaskSopOnceResult,
 } from "./enforceTaskSopOnce.ts";
+import { attemptRemediation } from "./remediationExecutor.ts";
 
 // ─────────────────────────────────────────────────────────────────
 // Phase 5 — Discovery Prep protection flag.
