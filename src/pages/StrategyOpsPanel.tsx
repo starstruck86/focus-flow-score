@@ -826,7 +826,58 @@ function RunDrilldownTab({ userId, initialRunId }: { userId: string; initialRunI
             </CardContent>
           </Card>
 
-          {sections.length > 0 && (
+          {/* Remediation info (Phase 4E-V) */}
+          {(() => {
+            const rem = parseRemediation(run.meta);
+            if (!rem) return null;
+            return (
+              <Card>
+                <CardHeader><CardTitle className="text-base"><Wrench className="h-4 w-4 inline mr-1" />Remediation</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div><span className="text-muted-foreground">Attempted</span><p>{rem.attempted ? 'Yes' : 'No'}</p></div>
+                    <div><span className="text-muted-foreground">Type</span><p className="font-mono">{rem.type ?? '—'}</p></div>
+                    <div><span className="text-muted-foreground">Success</span><p><StatusBadge pass={rem.success} /></p></div>
+                    <div><span className="text-muted-foreground">Latency</span><p>{fmtMs(rem.latency_ms)}</p></div>
+                    <div><span className="text-muted-foreground">Cost</span><p>{fmtCost(rem.cost_usd)}</p></div>
+                    <div><span className="text-muted-foreground">Avoided Full Regen</span><p>{fmtCost(rem.avoided_usd)}</p></div>
+                    <div><span className="text-muted-foreground">Fallback to Hard Fail</span><p>{rem.fallback ? 'Yes' : 'No'}</p></div>
+                    {rem.error && <div className="col-span-2"><span className="text-muted-foreground">Error</span><p className="text-red-400 text-xs">{rem.error}</p></div>}
+                    {rem.sections.length > 0 && (
+                      <div className="col-span-2">
+                        <span className="text-muted-foreground">Sections Targeted</span>
+                        <div className="flex gap-1 mt-1 flex-wrap">{rem.sections.map(s => <Badge key={s} variant="outline" className="text-xs">{s}</Badge>)}</div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* Remediation telemetry rows */}
+          {telemetry.filter(t => t.stage === 'remediation').length > 0 && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Remediation Telemetry</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader><TableRow><TableHead>Stage</TableHead><TableHead>Duration</TableHead><TableHead>Success</TableHead><TableHead>Error</TableHead><TableHead>Metadata</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {telemetry.filter(t => t.stage === 'remediation').map(t => (
+                      <TableRow key={t.id}>
+                        <TableCell className="font-mono text-xs">{t.stage}</TableCell>
+                        <TableCell>{fmtMs(t.duration_ms)}</TableCell>
+                        <TableCell>{t.success ? <CheckCircle className="h-4 w-4 text-emerald-400" /> : <XCircle className="h-4 w-4 text-red-400" />}</TableCell>
+                        <TableCell className="text-xs text-red-400 max-w-[200px] truncate">{t.error ?? '—'}</TableCell>
+                        <TableCell><pre className="text-xs max-w-[300px] overflow-auto">{JSON.stringify(t.metadata, null, 1)}</pre></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
             <Card>
               <CardHeader><CardTitle className="text-base">Batch Details</CardTitle></CardHeader>
               <CardContent>
