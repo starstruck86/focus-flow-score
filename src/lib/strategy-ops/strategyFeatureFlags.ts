@@ -14,6 +14,7 @@ export interface StrategyOptFlags {
   partial_regen_enabled: boolean;
   synthesis_cache_enabled: boolean;
   library_cache_enabled: boolean;
+  targeted_remediation_enabled: boolean;
 }
 
 const DEFAULTS: StrategyOptFlags = {
@@ -21,6 +22,7 @@ const DEFAULTS: StrategyOptFlags = {
   partial_regen_enabled: false,
   synthesis_cache_enabled: false,
   library_cache_enabled: false,
+  targeted_remediation_enabled: false,
 };
 
 // Runtime overrides (in-memory only, set via setStrategyFlag)
@@ -48,6 +50,7 @@ export function loadStrategyFlags(): StrategyOptFlags {
       VITE_STRATEGY_PARTIAL_REGEN: 'partial_regen_enabled',
       VITE_STRATEGY_SYNTHESIS_CACHE: 'synthesis_cache_enabled',
       VITE_STRATEGY_LIBRARY_CACHE: 'library_cache_enabled',
+      VITE_STRATEGY_TARGETED_REMEDIATION: 'targeted_remediation_enabled',
     };
     for (const [envKey, flagKey] of Object.entries(envMap)) {
       const val = (import.meta as any).env?.[envKey];
