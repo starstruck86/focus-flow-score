@@ -63,6 +63,7 @@ const ReliabilityQA = lazy(() => import("./pages/ReliabilityQA"));
 const ObservabilityDashboard = lazy(() => import("./pages/ObservabilityDashboard"));
 const SmokeTest = lazy(() => import("./pages/SmokeTest"));
 const LifecycleReconciliation = lazy(() => import("./pages/LifecycleReconciliation"));
+const PhaseEvidenceRunner = lazy(() => import("./pages/PhaseEvidenceRunner"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -274,6 +275,13 @@ const App = () => (
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback text="Loading reconciliation…" />}>
                         <LifecycleReconciliation />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/admin/phase-evidence" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<LazyFallback text="Loading evidence runner…" />}>
+                        <PhaseEvidenceRunner />
                       </Suspense>
                     </ProtectedRoute>
                   } />
