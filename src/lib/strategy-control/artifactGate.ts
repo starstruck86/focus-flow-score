@@ -7,6 +7,8 @@
  *
  * Phase 3 fix: structured artifacts now extract ALL text from any JSON shape
  * and match mustHave concepts semantically — not by brittle key matching.
+ *
+ * Phase 3.5D-2: Universal findSectionContent for JSON + markdown extraction.
  */
 
 export interface GateDiagnostic {
@@ -72,7 +74,6 @@ function deepExtractText(value: unknown): string {
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   if (Array.isArray(value)) return value.map(deepExtractText).join("\n\n");
   if (typeof value === "object") {
-    // Include keys as pseudo-headers so concept matching can find them
     return Object.entries(value as Record<string, unknown>)
       .map(([k, v]) => {
         const keyLabel = k.replace(/_/g, " ");
@@ -104,6 +105,146 @@ function extractSemanticText(output: string): string {
   }
 
   return output;
+}
+
+/**
+ * Try to parse the raw output string into a JSON object.
+ * Returns null if not JSON.
+ */
+function tryParseJson(output: string): unknown | null {
+  const trimmed = output.trim();
+  const fenceMatch = output.match(/```(?:json|structured_artifact)\s*([\s\S]*?)```/);
+  const raw = fenceMatch ? fenceMatch[1].trim() : trimmed;
+
+  if (raw.startsWith("{") || raw.startsWith("[")) {
+    try { return JSON.parse(raw); } catch { /* fall through */ }
+  }
+  if (!fenceMatch && (trimmed.startsWith("{") || trimmed.startsWith("["))) {
+    try { return JSON.parse(trimmed); } catch { /* fall through */ }
+  }
+  return null;
+}
+
+/**
+ * findSectionContent — universal section content extractor.
+ *
+ * Given a raw output string and a parentSectionId, recursively searches:
+ * 1. Parsed JSON: sections[], objects with id/name/title/heading/content/body/markdown
+ * 2. Markdown headings
+ * 3. Flattened semantic text fallback
+ *
+ * Returns the best text block for that parent section, or "" if not found.
+ */
+export function findSectionContent(rawOutput: string, parentSectionId: string): string {
+  const normTarget = normalizeKey(parentSectionId);
+
+  // 1. Try JSON structural search
+  const parsed = tryParseJson(rawOutput);
+  if (parsed !== null) {
+    const found = findInJsonStructure(parsed, normTarget);
+    if (found) return found;
+  }
+
+  // 2. Try markdown heading search
+  const mdContent = findInMarkdown(rawOutput, parentSectionId);
+  if (mdContent) return mdContent;
+
+  // 3. Fallback: search in flattened semantic text
+  const semanticText = extractSemanticText(rawOutput);
+  const mdContentSemantic = findInMarkdown(semanticText, parentSectionId);
+  if (mdContentSemantic) return mdContentSemantic;
+
+  return "";
+}
+
+/**
+ * Recursively search a parsed JSON value for a section matching normTarget.
+ * Looks for: sections[], and objects with id/name/title/heading keys.
+ */
+function findInJsonStructure(value: unknown, normTarget: string): string | null {
+  if (value === null || value === undefined || typeof value !== "object") return null;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findInJsonStructure(item, normTarget);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const obj = value as Record<string, unknown>;
+  const ID_KEYS = ["id", "name", "title", "heading", "section_id", "key"];
+  const CONTENT_KEYS = ["content", "body", "markdown", "text", "description", "summary"];
+
+  // Check if this object's identity matches the target
+  for (const idKey of ID_KEYS) {
+    if (typeof obj[idKey] === "string") {
+      const normVal = normalizeKey(obj[idKey] as string);
+      if (normVal === normTarget) {
+        // Found matching section — extract its content
+        // Try content keys first
+        for (const ck of CONTENT_KEYS) {
+          if (typeof obj[ck] === "string" && (obj[ck] as string).trim().length > 0) {
+            return obj[ck] as string;
+          }
+        }
+        // If no content key, extract all text from this object (excluding the id key itself)
+        const parts: string[] = [];
+        for (const [k, v] of Object.entries(obj)) {
+          if (ID_KEYS.includes(k)) continue;
+          const text = deepExtractText(v);
+          if (text.trim()) parts.push(text);
+        }
+        if (parts.length > 0) return parts.join("\n\n");
+        return ""; // matched but empty
+      }
+    }
+  }
+
+  // Also check if a top-level key name matches (e.g. { "risks_mitigation": { ... } })
+  for (const [k, v] of Object.entries(obj)) {
+    if (normalizeKey(k) === normTarget && v !== null && v !== undefined) {
+      return deepExtractText(v);
+    }
+  }
+
+  // Recurse into sub-arrays named "sections", "items", "parts", or any array
+  for (const [k, v] of Object.entries(obj)) {
+    if (Array.isArray(v)) {
+      const found = findInJsonStructure(v, normTarget);
+      if (found !== null) return found;
+    } else if (typeof v === "object" && v !== null) {
+      const found = findInJsonStructure(v, normTarget);
+      if (found !== null) return found;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Find content under a markdown heading matching parentSectionId.
+ */
+function findInMarkdown(text: string, parentSectionId: string): string {
+  // Split id into words, join with flexible separator that matches spaces, _, -, &, etc.
+  const words = parentSectionId.toLowerCase().split(/[_\s-]+/).filter(Boolean);
+  const parentNorm = words.join("[\\s_&\\-–—]*(?:and\\s+|&\\s+)?");
+  const headingPattern = new RegExp(
+    `(?:^|\\n)(#+)\\s+[^\\n]*${parentNorm}[^\\n]*\\n([\\s\\S]*?)(?=\\n#+\\s|$(?![\\s\\S]))`,
+    "i",
+  );
+  const match = text.match(headingPattern);
+  if (match?.[2]?.trim()) return match[2].trim();
+
+  // Also try colon-terminated labels
+  const colonPattern = new RegExp(
+    `(?:^|\\n)[^\\n]*${parentNorm}[^\\n]*:\\s*\\n([\\s\\S]*?)(?=\\n#+\\s|\\n[A-Z][A-Z\\s]+:|$(?![\\s\\S]))`,
+    "i",
+  );
+  const colonMatch = text.match(colonPattern);
+  if (colonMatch?.[1]?.trim()) return colonMatch[1].trim();
+
+  return "";
 }
 
 /**
@@ -195,6 +336,32 @@ const SUBSTANCE_PATTERNS = [
   /\b(?:because|therefore|resulting in|which means|leading to|causing|driving|this creates|consequently)\b/i,
 ];
 
+/**
+ * Validate substance of a section's text content.
+ * Returns a diagnostic string if validation fails, or null if it passes.
+ */
+function validateSectionSubstance(
+  sectionContent: string,
+  conceptName: string,
+  minWords: number,
+  parentLabel?: string,
+): string | null {
+  const wordCount = sectionContent.trim().split(/\s+/).length;
+  const label = parentLabel ? `"${conceptName}" (via "${parentLabel}")` : `"${conceptName}"`;
+  if (wordCount < minWords) {
+    return `Section ${label} is a stub (${wordCount} words, min ${minWords})`;
+  }
+  const isFiller = FILLER_PATTERNS.some(p => p.test(sectionContent.trim()));
+  if (isFiller) {
+    return `Section "${conceptName}" is filler`;
+  }
+  const hasSubstance = SUBSTANCE_PATTERNS.some(p => p.test(sectionContent));
+  if (!hasSubstance) {
+    return `Section "${conceptName}" lacks substance (no metrics, stakeholders, or causal reasoning)`;
+  }
+  return null;
+}
+
 export function checkSectionCompleteness(
   output: string,
   mustHave: readonly string[],
@@ -219,44 +386,25 @@ export function checkSectionCompleteness(
   for (const req of mustHave) {
     const norm = req.toLowerCase();
     const mapping = mapLookup.get(norm);
-    let sectionContent = "";
 
+    // ── Mapped concept with parentSection ──
     if (mapping && mapping.parentSection) {
-      // Mapped concept — find content in the declared parent section
-      const parentNorm = mapping.parentSection.toLowerCase().replace(/_/g, " ");
-      const parentHeadingPattern = new RegExp(
-        `(?:^#+\\s*[^\\n]*${parentNorm.replace(/\s+/g, "\\s+")}[^\\n]*|"id"\\s*:\\s*"${mapping.parentSection}")\\s*\\n([\\s\\S]*?)(?=\\n#+\\s|\\n"id"\\s*:|$)`,
-        "im",
-      );
-      const parentMatch = semanticText.match(parentHeadingPattern);
-      const parentText = parentMatch?.[1] || "";
+      // Use findSectionContent for robust JSON + markdown extraction
+      const parentContent = findSectionContent(output, mapping.parentSection);
       const minWords = mapping.minWords ?? 40;
 
       if (mapping.location === "section") {
         // Dedicated section: the parent heading IS the section for this concept
-        // Validate substance of the entire parent section
-        if (parentText) {
-          const wordCount = parentText.trim().split(/\s+/).length;
-          if (wordCount < minWords) {
-            diagnostics.push(`Section "${req}" (via "${mapping.parentSection}") is a stub (${wordCount} words, min ${minWords})`);
-          } else {
-            const isFiller = FILLER_PATTERNS.some(p => p.test(parentText.trim()));
-            if (isFiller) {
-              diagnostics.push(`Section "${req}" is filler`);
-            } else {
-              const hasSubstance = SUBSTANCE_PATTERNS.some(p => p.test(parentText));
-              if (!hasSubstance) {
-                diagnostics.push(`Section "${req}" lacks substance (no metrics, stakeholders, or causal reasoning)`);
-              }
-            }
-          }
+        if (parentContent) {
+          const diag = validateSectionSubstance(parentContent, req, minWords, mapping.parentSection);
+          if (diag) diagnostics.push(diag);
           continue;
         }
-        // Fall through to standard finding if parent heading not found
+        // Parent not found — fall through to standard finding
       } else {
-        // Embedded: concept is inside a parent section, validate concept presence there
-        if (parentText && conceptPresent(req, parentText, parentText)) {
-          const wordCount = parentText.trim().split(/\s+/).length;
+        // Embedded: concept is inside a parent section
+        if (parentContent && conceptPresent(req, parentContent, parentContent)) {
+          const wordCount = parentContent.trim().split(/\s+/).length;
           if (wordCount >= minWords) {
             continue;
           } else {
@@ -280,7 +428,9 @@ export function checkSectionCompleteness(
       continue;
     }
 
-    // Standard section finding (dedicated section or no mapping)
+    // ── Standard section finding (no mapping or parent not found) ──
+    let sectionContent = "";
+
     // 1. Find by heading
     const headingPattern = new RegExp(
       `(?:^#+\\s*[^\\n]*${norm.replace(/\s+/g, "\\s+")}[^\\n]*|^[^\\n]*${norm.replace(/\s+/g, "\\s+")}[^\\n]*:)\\s*\\n([\\s\\S]*?)(?=\\n#+\\s|\\n[A-Z][A-Z\\s]+:|$)`,
@@ -330,20 +480,8 @@ export function checkSectionCompleteness(
 
     // Validate found section content
     const minWords = mapping?.minWords ?? 40;
-    const wordCount = sectionContent.trim().split(/\s+/).length;
-    if (wordCount < minWords) {
-      diagnostics.push(`Section "${req}" is a stub (${wordCount} words, min ${minWords})`);
-      continue;
-    }
-    const isFiller = FILLER_PATTERNS.some(p => p.test(sectionContent.trim()));
-    if (isFiller) {
-      diagnostics.push(`Section "${req}" is filler`);
-      continue;
-    }
-    const hasSubstance = SUBSTANCE_PATTERNS.some(p => p.test(sectionContent));
-    if (!hasSubstance) {
-      diagnostics.push(`Section "${req}" lacks substance (no metrics, stakeholders, or causal reasoning)`);
-    }
+    const diag = validateSectionSubstance(sectionContent, req, minWords);
+    if (diag) diagnostics.push(diag);
   }
 
   return { gate: "section_completeness", pass: diagnostics.length === 0, diagnostics };
