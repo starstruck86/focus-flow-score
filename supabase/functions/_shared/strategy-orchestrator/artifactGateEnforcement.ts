@@ -40,6 +40,7 @@ export function checkTemplateFidelity(
 
   if (manifest.output.shape === "structured_artifact" || manifest.output.shape === "executive_brief") {
     let keys: string[] = [];
+    let contentForFallback: string | null = null;
     try {
       const fenceMatch = output.match(/```(?:json|structured_artifact)\s*([\s\S]*?)```/);
       const raw = fenceMatch ? fenceMatch[1] : output.trim();
@@ -47,6 +48,11 @@ export function checkTemplateFidelity(
         const parsed = JSON.parse(raw);
         if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
           keys = Object.keys(parsed);
+          // Wrapper format: {markdown: "...", sections: [...]}
+          // The real content is inside "markdown" — fall through to content matching.
+          if (keys.includes("markdown") && typeof parsed.markdown === "string") {
+            contentForFallback = parsed.markdown;
+          }
         }
       }
     } catch {
@@ -56,12 +62,53 @@ export function checkTemplateFidelity(
       }
     }
 
-    const normalizedKeys = keys.map(normalizeKey);
-    for (const req of mustHave) {
-      const norm = normalizeKey(req);
-      const found = normalizedKeys.some(k => k.includes(norm) || norm.includes(k));
-      if (!found) {
-        diagnostics.push(`Missing required section: "${req}"`);
+    if (contentForFallback) {
+      // Use content-based matching on the markdown body
+      const lower = contentForFallback.toLowerCase();
+      for (const req of mustHave) {
+        const norm = req.toLowerCase();
+        if (lower.includes(norm)) continue;
+        const headingPattern = new RegExp(
+          `(?:^#+\\s*.*${norm.replace(/\s+/g, "\\s+")}|\\*\\*.*${norm.replace(/\s+/g, "\\s+")}.*\\*\\*)`,
+          "im",
+        );
+        if (headingPattern.test(contentForFallback)) continue;
+        const words = norm.split(/\s+/).filter(w => w.length > 2);
+        const allWordsPresent = words.every(w => lower.includes(w));
+        if (allWordsPresent && words.length >= 2) continue;
+        const synonyms: Record<string, RegExp> = {
+          "current state reasoning": /\b(?:currently|today|right now|existing|as of|status quo|operates?)\b/i,
+          "current state": /\b(?:currently|today|right now|existing|as of|status quo|operates?)\b/i,
+          "cost or risk": /\b(?:cost|risk|exposure|threat|consequence|price|penalty|loss)\b/i,
+          "change hypothesis": /\b(?:change|hypothesis|shift|reframe|consolidat|transform)\b/i,
+          "change vectors": /\b(?:change|shift|transform|pivot|evolv|transition|disrupt|reframe)\b/i,
+          "open question": /\b(?:question|\?|ask (?:the|their|about))\b/i,
+          "strategic why": /\b(?:strategic|why now|urgency|compelling|imperative|catalyst)\b/i,
+          "friction": /\b(?:friction|obstacle|barrier|blocker|resistance|challenge|headwind)\b/i,
+          "cited sources": /\b(?:source|citation|\[S\d|\[KI|\[PB|according to|per )\b/i,
+          "verified signals": /\b(?:signal|indicator|evidence|data point|confirmed|validated|trend)\b/i,
+          "commercial insight": /\b(?:commercial|insight|value|ROI|cost|savings|revenue|margin|impact)\b/i,
+          "situation": /\b(?:situation|overview|snapshot|context|background|landscape)\b/i,
+          "specific asks": /\b(?:ask|request|action|next step|recommend|call to action)\b/i,
+          "risks": /\b(?:risk|threat|concern|exposure|vulnerability|downside)\b/i,
+          "milestones": /\b(?:milestone|target|goal|deliverable|checkpoint|objective)\b/i,
+          "stakeholder strategy": /\b(?:stakeholder|champion|sponsor|executive|buyer|influencer)\b/i,
+          "metrics": /\b(?:metric|KPI|measure|indicator|benchmark|target)\b/i,
+          "executive alignment": /\b(?:executive|alignment|sponsor|C-suite|leadership|board)\b/i,
+          "expansion triggers": /\b(?:expand|upsell|cross-sell|grow|trigger|land.and.expand|adoption)\b/i,
+        };
+        const synPattern = synonyms[norm];
+        if (synPattern && synPattern.test(contentForFallback)) continue;
+        diagnostics.push(`Missing required element: "${req}"`);
+      }
+    } else {
+      const normalizedKeys = keys.map(normalizeKey);
+      for (const req of mustHave) {
+        const norm = normalizeKey(req);
+        const found = normalizedKeys.some(k => k.includes(norm) || norm.includes(k));
+        if (!found) {
+          diagnostics.push(`Missing required section: "${req}"`);
+        }
       }
     }
   } else {
@@ -151,12 +198,26 @@ export function checkSectionCompleteness(
   mustHave: readonly string[],
 ): GateDiagnostic {
   const diagnostics: string[] = [];
-  const lower = output.toLowerCase();
 
-  let parsedJson: Record<string, unknown> | null = null;
+  // Unwrap wrapper format: {markdown: "...", sections: [...]}
+  let effectiveOutput = output;
   try {
     const fenceMatch = output.match(/```(?:json|structured_artifact)\s*([\s\S]*?)```/);
     const raw = fenceMatch ? fenceMatch[1] : output.trim();
+    if (raw.startsWith("{")) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && typeof parsed.markdown === "string") {
+        effectiveOutput = parsed.markdown;
+      }
+    }
+  } catch { /* not JSON */ }
+
+  const lower = effectiveOutput.toLowerCase();
+
+  let parsedJson: Record<string, unknown> | null = null;
+  try {
+    const fenceMatch = effectiveOutput.match(/```(?:json|structured_artifact)\s*([\s\S]*?)```/);
+    const raw = fenceMatch ? fenceMatch[1] : effectiveOutput.trim();
     if (raw.startsWith("{")) parsedJson = JSON.parse(raw);
   } catch { /* not JSON */ }
 
@@ -181,12 +242,12 @@ export function checkSectionCompleteness(
         `(?:^#+\\s*[^\\n]*${norm.replace(/\s+/g, "\\s+")}[^\\n]*|^[^\\n]*${norm.replace(/\s+/g, "\\s+")}[^\\n]*:)\\s*\\n([\\s\\S]*?)(?=\\n#+\\s|\\n[A-Z][A-Z\\s]+:|$)`,
         "im",
       );
-      const headingMatch = output.match(headingPattern);
+      const headingMatch = effectiveOutput.match(headingPattern);
       if (headingMatch) sectionContent = headingMatch[1] || "";
     }
 
     if (!sectionContent) {
-      const paragraphs = output.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+      const paragraphs = effectiveOutput.split(/\n\s*\n/).filter(p => p.trim().length > 0);
       const words = norm.split(/\s+/).filter(w => w.length > 2);
       for (const para of paragraphs) {
         const pl = para.toLowerCase();
