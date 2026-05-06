@@ -1008,72 +1008,112 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       }));
     }
 
-    // If gate STILL fails after regen → HARD FAIL
+    // If gate STILL fails after regen → try targeted remediation, then HARD FAIL
     if (!gateResult.pass) {
-      artifactGateTelemetry.pass = false;
-      artifactGateTelemetry.failed_dimensions = gateResult.failed_dimensions;
-      artifactGateTelemetry.total_gate_latency_ms = Date.now() - gateStartMs;
-      if (gateResult.sections_checked) artifactGateTelemetry.sections_checked = gateResult.sections_checked;
-      if (gateResult.sections_passed) artifactGateTelemetry.sections_passed = gateResult.sections_passed;
-      if (gateResult.sections_failed) artifactGateTelemetry.sections_failed = gateResult.sections_failed;
-      if (gateResult.diagnostics) artifactGateTelemetry.diagnostics = gateResult.diagnostics;
+      // ── Phase 4E: Targeted Remediation (feature-flagged) ──────────
+      const remediationResult = await attemptRemediation({
+        runId,
+        taskType,
+        draftOutput,
+        gateResult,
+        manifest: artifactManifest,
+        systemPrompt: `${overlayPrefix}${handler.buildDocumentSystemPrompt()}`,
+        userPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
+        telemetryCollector: telemetry,
+        supabase,
+      });
 
-      const failMsg = `[artifact_gate_failed] Dimensions: ${gateResult.failed_dimensions.join(", ")}`;
-      console.error(JSON.stringify({
-        tag: "[phase35d:artifact_gate_hard_fail]",
-        run_id: runId,
-        task_type: taskType,
-        telemetry: artifactGateTelemetry,
-      }));
+      if (remediationResult?.success) {
+        // Remediation fixed the gate failure — adopt the repaired draft
+        draftOutput = remediationResult.draftOutput;
+        gateResult = remediationResult.gateResult;
+        sectionCount = draftOutput?.sections?.length ?? sectionCount;
+        artifactGateTelemetry.pass = true;
+        artifactGateTelemetry.failed_dimensions = [];
+        artifactGateTelemetry.total_gate_latency_ms = Date.now() - gateStartMs;
+        if (gateResult.sections_checked) artifactGateTelemetry.sections_checked = gateResult.sections_checked;
+        if (gateResult.sections_passed) artifactGateTelemetry.sections_passed = gateResult.sections_passed;
+        if (gateResult.sections_failed) artifactGateTelemetry.sections_failed = gateResult.sections_failed;
+        console.log(JSON.stringify({
+          tag: "[phase4e:remediation_recovered_run]",
+          run_id: runId,
+          remediation_type: remediationResult.telemetry.remediation_type,
+        }));
+        // Fall through to normal success path below
+      } else {
+        // Remediation was not applicable, disabled, or failed → HARD FAIL
+        artifactGateTelemetry.pass = false;
+        artifactGateTelemetry.failed_dimensions = gateResult.failed_dimensions;
+        artifactGateTelemetry.total_gate_latency_ms = Date.now() - gateStartMs;
+        if (gateResult.sections_checked) artifactGateTelemetry.sections_checked = gateResult.sections_checked;
+        if (gateResult.sections_passed) artifactGateTelemetry.sections_passed = gateResult.sections_passed;
+        if (gateResult.sections_failed) artifactGateTelemetry.sections_failed = gateResult.sections_failed;
+        if (gateResult.diagnostics) artifactGateTelemetry.diagnostics = gateResult.diagnostics;
 
-      // Phase 3.6 — persist full telemetry even on hard-fail path
-      const hardFailTotalLatencyMs = Date.now() - pipelineStartMs;
-      const hardFailGenLatencyMs = Date.now() - authoringStartedAt;
-      const hardFailMeta: Record<string, unknown> = {
-        artifact_gate: artifactGateTelemetry,
-        artifact_gate_failed: true,
-        readability_normalization: readabilityNormalization,
-        library_counts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
-      };
-      if (planResult.ok) {
-        hardFailMeta.planner = {
-          plan_hash: planResult.plan.planHash,
-          term_seeds_count: planResult.plan.termSeeds.length,
-          methodology_seeds_injected: (taskManifest.retrieval.methodologySeeds ?? []).length > 0,
-          scopes: plannerRetrievalArgs?.scopes ?? derivedScopes,
+        const failMsg = `[artifact_gate_failed] Dimensions: ${gateResult.failed_dimensions.join(", ")}`;
+        console.error(JSON.stringify({
+          tag: "[phase35d:artifact_gate_hard_fail]",
+          run_id: runId,
+          task_type: taskType,
+          telemetry: artifactGateTelemetry,
+          remediation_attempted: remediationResult?.telemetry?.remediation_attempted ?? false,
+        }));
+
+        // Phase 3.6 — persist full telemetry even on hard-fail path
+        const hardFailTotalLatencyMs = Date.now() - pipelineStartMs;
+        const hardFailGenLatencyMs = Date.now() - authoringStartedAt;
+        const hardFailMeta: Record<string, unknown> = {
+          artifact_gate: artifactGateTelemetry,
+          artifact_gate_failed: true,
+          readability_normalization: readabilityNormalization,
+          library_counts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
         };
-      }
-      hardFailMeta.performance = {
-        total_latency_ms: hardFailTotalLatencyMs,
-        generation_latency_ms: hardFailGenLatencyMs,
-        gate_latency_ms: artifactGateTelemetry.total_gate_latency_ms,
-      };
-      const hardFailAnomalyFlags: Record<string, boolean> = {
-        artifact_failure: true,
-        regen_triggered: true,
-      };
-      if (planResult.ok && planResult.plan.termSeeds.length < 3) hardFailAnomalyFlags.weak_retrieval = true;
-      if (hardFailTotalLatencyMs > 12_000) hardFailAnomalyFlags.latency_violation = true;
-      hardFailMeta.anomaly_flags = hardFailAnomalyFlags;
-      // Failure patterns
-      const hardFailPatterns: Record<string, number> = {};
-      for (const dim of gateResult.failed_dimensions) {
-        hardFailPatterns[dim] = (hardFailPatterns[dim] ?? 0) + 1;
-      }
-      hardFailMeta.failure_patterns = hardFailPatterns;
+        if (remediationResult?.telemetry) {
+          hardFailMeta.remediation = remediationResult.telemetry;
+        }
+        if (planResult.ok) {
+          hardFailMeta.planner = {
+            plan_hash: planResult.plan.planHash,
+            term_seeds_count: planResult.plan.termSeeds.length,
+            methodology_seeds_injected: (taskManifest.retrieval.methodologySeeds ?? []).length > 0,
+            scopes: plannerRetrievalArgs?.scopes ?? derivedScopes,
+          };
+        }
+        hardFailMeta.performance = {
+          total_latency_ms: hardFailTotalLatencyMs,
+          generation_latency_ms: hardFailGenLatencyMs,
+          gate_latency_ms: artifactGateTelemetry.total_gate_latency_ms,
+        };
+        const hardFailAnomalyFlags: Record<string, boolean> = {
+          artifact_failure: true,
+          regen_triggered: true,
+        };
+        if (remediationResult?.telemetry?.remediation_attempted) {
+          hardFailAnomalyFlags.remediation_attempted = true;
+        }
+        if (planResult.ok && planResult.plan.termSeeds.length < 3) hardFailAnomalyFlags.weak_retrieval = true;
+        if (hardFailTotalLatencyMs > 12_000) hardFailAnomalyFlags.latency_violation = true;
+        hardFailMeta.anomaly_flags = hardFailAnomalyFlags;
+        // Failure patterns
+        const hardFailPatterns: Record<string, number> = {};
+        for (const dim of gateResult.failed_dimensions) {
+          hardFailPatterns[dim] = (hardFailPatterns[dim] ?? 0) + 1;
+        }
+        hardFailMeta.failure_patterns = hardFailPatterns;
 
-      await supabase
-        .from("task_runs")
-        .update({
-          status: "failed",
-          progress_step: "failed",
-          error: failMsg.slice(0, 1000),
-          completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          meta: hardFailMeta,
-        })
-        .eq("id", runId);
-      return;
+        await supabase
+          .from("task_runs")
+          .update({
+            status: "failed",
+            progress_step: "failed",
+            error: failMsg.slice(0, 1000),
+            completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            meta: hardFailMeta,
+          })
+          .eq("id", runId);
+        return;
+      }
     }
   }
 
