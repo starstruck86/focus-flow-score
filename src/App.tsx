@@ -286,6 +286,13 @@ const App = () => (
                       </Suspense>
                     </ProtectedRoute>
                   } />
+                  <Route path="/admin/ops" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<LazyFallback text="Loading operations…" />}>
+                        <StrategyOpsPanel />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
                 <SessionResumePrompt />
