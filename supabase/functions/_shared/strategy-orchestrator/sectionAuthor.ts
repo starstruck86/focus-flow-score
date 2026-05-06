@@ -23,6 +23,38 @@
 import { callClaude, callOpenAI, safeParseJSON } from "./providers.ts";
 import { DISCOVERY_PREP_SECTIONS } from "./handlers/discoveryPrepTemplate.ts";
 
+// ── Account Brief section schema ─────────────────────────────────
+export const ACCOUNT_BRIEF_SECTIONS = [
+  { id: "company_snapshot", name: "Company Snapshot" },
+  { id: "stakeholders", name: "Stakeholders On File" },
+  { id: "operator_read", name: "Operator Read" },
+  { id: "next_moves", name: "Next Moves" },
+] as const;
+
+export const ACCOUNT_BRIEF_BATCHES: ReadonlyArray<{ ids: readonly string[] }> = Object.freeze([
+  Object.freeze({ ids: Object.freeze(["company_snapshot"]) }),
+  Object.freeze({ ids: Object.freeze(["stakeholders"]) }),
+  Object.freeze({ ids: Object.freeze(["operator_read"]) }),
+  Object.freeze({ ids: Object.freeze(["next_moves"]) }),
+]);
+
+// ── Ninety Day Plan section schema ───────────────────────────────
+export const NINETY_DAY_PLAN_SECTIONS = [
+  { id: "account_context", name: "Account Context" },
+  { id: "days_1_30", name: "Days 1–30 — Learn" },
+  { id: "days_31_60", name: "Days 31–60 — Engage" },
+  { id: "days_61_90", name: "Days 61–90 — Advance" },
+  { id: "operator_read", name: "Operator Read" },
+] as const;
+
+export const NINETY_DAY_PLAN_BATCHES: ReadonlyArray<{ ids: readonly string[] }> = Object.freeze([
+  Object.freeze({ ids: Object.freeze(["account_context"]) }),
+  Object.freeze({ ids: Object.freeze(["days_1_30"]) }),
+  Object.freeze({ ids: Object.freeze(["days_31_60"]) }),
+  Object.freeze({ ids: Object.freeze(["days_61_90"]) }),
+  Object.freeze({ ids: Object.freeze(["operator_read"]) }),
+]);
+
 /** A small, fixed grouping of section ids. Tightened to ≤2 sections per
  *  batch so each Claude-first authoring call lands inside its inner
  *  timeout on the first attempt — fallback (ChatGPT) stays exception-only
@@ -236,31 +268,58 @@ export async function authorOneBatch(
   }
 }
 
+/** Resolve the section definitions and batch plan for a given task type. */
+function resolveSectionsAndBatches(taskType: string): {
+  sections: ReadonlyArray<{ id: string; name: string }>;
+  batches: ReadonlyArray<{ ids: readonly string[] }>;
+} | null {
+  switch (taskType) {
+    case "discovery_prep":
+      return { sections: DISCOVERY_PREP_SECTIONS, batches: DISCOVERY_PREP_BATCHES };
+    case "account_brief":
+      return { sections: ACCOUNT_BRIEF_SECTIONS, batches: ACCOUNT_BRIEF_BATCHES };
+    case "ninety_day_plan":
+      return { sections: NINETY_DAY_PLAN_SECTIONS, batches: NINETY_DAY_PLAN_BATCHES };
+    default:
+      return null;
+  }
+}
+
 /** Build a per-batch user prompt by extracting the relevant section schema
- *  fragments from the full discovery_prep schema. Keeps the contract — the
- *  model still returns `{ sections: [...] }` — but only for the requested
- *  section ids, so each call is small and fast. */
+ *  fragments from the task template. Keeps the contract — the model still
+ *  returns `{ sections: [...] }` — but only for the requested section ids,
+ *  so each call is small and fast. */
 export function buildBatchUserPrompt(
   baseUserPrompt: string,
   sectionIds: string[],
+  taskType: string = "discovery_prep",
 ): string {
+  const resolved = resolveSectionsAndBatches(taskType);
+  const sections = resolved?.sections ?? DISCOVERY_PREP_SECTIONS;
   const allowedNames = sectionIds
-    .map((id) => DISCOVERY_PREP_SECTIONS.find((s) => s.id === id)?.name || id)
+    .map((id) => sections.find((s) => s.id === id)?.name || id)
     .join(", ");
+
+  // For non-discovery_prep tasks, use a simpler content schema since they
+  // don't have pov_blocks or complex content objects.
+  const contentShape = taskType === "discovery_prep"
+    ? '{ ... }'
+    : '"<markdown content>"';
+
   return `${baseUserPrompt}
 
 ═══ BATCH AUTHORING — RELIABILITY MODE ═══
 Author ONLY the following sections in this response (skip all others):
-  ${sectionIds.map((id, i) => `${i + 1}. id="${id}" (${DISCOVERY_PREP_SECTIONS.find((s) => s.id === id)?.name || id})`).join("\n  ")}
+  ${sectionIds.map((id, i) => `${i + 1}. id="${id}" (${sections.find((s) => s.id === id)?.name || id})`).join("\n  ")}
 
 Return JSON in this exact shape (no other sections, no markdown fences):
 {
   "sections": [
-    ${sectionIds.map((id) => `{ "id": "${id}", "name": "<name>", "grounded_by": ["<ids>"], "content": { ... } }`).join(",\n    ")}
+    ${sectionIds.map((id) => `{ "id": "${id}", "name": "<name>", "grounded_by": ["<ids>"], "content": ${contentShape} }`).join(",\n    ")}
   ]
 }
 
-Use the SAME schema, depth, citation discipline, and pov_block requirements that the full template requires for these specific sections (${allowedNames}). Do not abbreviate. Do not omit pov_blocks. Do not invent facts — use only the provided synthesis + library + sources registry.`;
+Use the SAME schema, depth, and citation discipline that the full template requires for these specific sections (${allowedNames}). Do not abbreviate. Do not invent facts — use only the provided synthesis + library + sources registry.`;
 }
 
 /** Public entry point. Authors all batches sequentially (parallelism would
@@ -276,12 +335,12 @@ export async function authorBySectionBatches(args: {
    *  between batches so the stage watchdog doesn't reap a healthy run
    *  mid-ladder. Best-effort; failures are swallowed. */
   supabase?: any;
+  /** Optional reduced token budget for low_token retry mode */
+  maxTokensOverride?: number;
 }): Promise<SectionBatchResult> {
-  // Only discovery_prep has a defined batch plan today. Other task types
-  // can plug in by exporting their own batch list later — for now we just
-  // refuse to batch them (caller treats this as "not eligible" and lets
-  // the original failure stand).
-  if (args.taskType !== "discovery_prep") {
+  const resolved = resolveSectionsAndBatches(args.taskType);
+  if (!resolved) {
+    // No batch plan for this task type — refuse gracefully.
     return {
       draft: { sections: [] },
       batchOutcomes: [],
@@ -290,7 +349,8 @@ export async function authorBySectionBatches(args: {
     };
   }
 
-  const userPromptBuilder = (ids: string[]) => buildBatchUserPrompt(args.baseUserPrompt, ids);
+  const { sections: TASK_SECTIONS, batches: TASK_BATCHES } = resolved;
+  const userPromptBuilder = (ids: string[]) => buildBatchUserPrompt(args.baseUserPrompt, ids, args.taskType);
 
   const collected: Map<string, any> = new Map();
   const outcomes: SectionBatchResult["batchOutcomes"] = [];
@@ -299,26 +359,23 @@ export async function authorBySectionBatches(args: {
   console.log(JSON.stringify({
     tag: "[section-author:start]",
     run_id: args.runId,
-    batches: DISCOVERY_PREP_BATCHES.length,
-    sections_total: DISCOVERY_PREP_SECTIONS.length,
+    task_type: args.taskType,
+    batches: TASK_BATCHES.length,
+    sections_total: TASK_SECTIONS.length,
     primary_model: PRIMARY_MODEL,
     fallback_model: FALLBACK_MODEL,
+    max_tokens_override: args.maxTokensOverride ?? null,
   }));
 
   let batchIndex = 0;
-  for (const batch of DISCOVERY_PREP_BATCHES) {
+  for (const batch of TASK_BATCHES) {
     batchIndex++;
-    // ── Heartbeat: refresh updated_at + progress_step between batches so
-    // the document_authoring stale-run watchdog (which only sees elapsed
-    // time on updated_at) doesn't reap a healthy long-running batch
-    // sequence as stalled. Best-effort; failures are swallowed so the
-    // ladder always continues.
     if (args.supabase) {
       try {
         await args.supabase
           .from("task_runs")
           .update({
-            progress_step: `document_authoring:batch_${batchIndex}_of_${DISCOVERY_PREP_BATCHES.length}`,
+            progress_step: `document_authoring:batch_${batchIndex}_of_${TASK_BATCHES.length}`,
             updated_at: new Date().toISOString(),
           })
           .eq("id", args.runId);
@@ -345,7 +402,10 @@ export async function authorBySectionBatches(args: {
     console.log(JSON.stringify({
       tag: "[section-author:batch_done]",
       run_id: args.runId,
+      task_type: args.taskType,
       batch: batch.ids,
+      batch_index: batchIndex,
+      total_batches: TASK_BATCHES.length,
       duration_ms: durationMs,
       primary_status: result.primary_status,
       fallback_status: result.fallback_status ?? null,
@@ -366,10 +426,9 @@ export async function authorBySectionBatches(args: {
   }
 
   // Assemble in template order; insert structured placeholders for any
-  // sections that failed both primary and fallback so the document still
-  // renders and the operator can see exactly what was lost.
+  // sections that failed both primary and fallback.
   const assembled: any[] = [];
-  for (const tpl of DISCOVERY_PREP_SECTIONS) {
+  for (const tpl of TASK_SECTIONS) {
     if (collected.has(tpl.id)) {
       assembled.push(collected.get(tpl.id));
     } else {
@@ -385,14 +444,14 @@ export async function authorBySectionBatches(args: {
     }
   }
 
-  // Carry the synthesis sources registry through so citations resolve.
   const sources = Array.isArray(args.synthesis?.sources) ? args.synthesis.sources : undefined;
 
   console.log(JSON.stringify({
     tag: "[section-author:end]",
     run_id: args.runId,
+    task_type: args.taskType,
     sections_authored: collected.size,
-    sections_total: DISCOVERY_PREP_SECTIONS.length,
+    sections_total: TASK_SECTIONS.length,
     any_fallback_success: anyFallbackSuccess,
     primary_model: PRIMARY_MODEL,
     fallback_model: FALLBACK_MODEL,
