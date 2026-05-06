@@ -1432,15 +1432,6 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     );
   }
 
-  // Phase 4A: Flush telemetry rows (best-effort, non-blocking)
-  try {
-    const flushResult = await telemetry.flush(supabase);
-    if (flushResult.written > 0) {
-      console.log(JSON.stringify({ tag: "[telemetry:flushed]", run_id: runId, rows: flushResult.written }));
-    }
-  } catch (telFlushErr) {
-    console.warn("[telemetry:flush] exception (non-fatal):", String(telFlushErr).slice(0, 200));
-  }
 
   // ── Stage 5: Finalize the run row ────────────────────────────
   const finalizePatch: Record<string, unknown> = {
