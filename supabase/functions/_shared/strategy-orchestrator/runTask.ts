@@ -541,18 +541,17 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // for queryability after logs roll off.
   let fallbackMeta: Record<string, unknown> | null = null;
 
-  // ── Bounded-batch-first policy for discovery_prep ────────────────
-  // The 19-section monolithic Claude pass is fragile and historically
-  // exhausts the stage budget on retries, starving the per-batch ladder.
-  // For discovery_prep we now skip the monolith entirely and execute the
-  // per-batch ladder as the PRIMARY authoring path. Claude remains first
-  // per batch; ChatGPT (gpt-5) fallback is per-batch and exception-only.
-  // Other task types still use the monolithic-first path below.
+  // ── Bounded-batch-first policy ───────────────────────────────────
+  // The monolithic Claude pass is fragile for large documents and
+  // historically exhausts the stage budget on retries, starving the
+  // per-batch ladder. For task types with a defined batch plan, we
+  // skip the monolith entirely and execute the per-batch ladder as
+  // the PRIMARY authoring path. Claude remains first per batch;
+  // ChatGPT (gpt-5) fallback is per-batch and exception-only.
   // NOTE: discovery_prep returns above (line ~351) via the progressive
   // handoff branch, so this code path is reached only by other task types.
-  // Cast widens the narrowed union so the (intentionally false) comparison
-  // remains valid TS without changing runtime behavior.
-  const BOUNDED_BATCH_FIRST = (taskType as string) === "discovery_prep";
+  const BOUNDED_BATCH_FIRST = (taskType as string) === "discovery_prep"
+    || (taskType as string) === "account_brief";
 
   try {
     let documentRaw: string;
