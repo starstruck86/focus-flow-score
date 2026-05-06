@@ -23,6 +23,7 @@
 
 import { retrieveLibraryContext } from "./libraryRetrieval.ts";
 import { runArtifactGate, type ArtifactGateTelemetry } from "./artifactGateEnforcement.ts";
+import { normalizeParagraphs } from "./normalizeParagraphs.ts";
 import { getTaskManifest, toArtifactManifest } from "./taskManifestMap.ts";
 import { buildPlan } from "../strategy-skills/planner.ts";
 import { planToRetrievalArgs } from "../strategy-skills/adapter.ts";
@@ -909,7 +910,28 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     total_gate_latency_ms: 0,
   };
 
-  const draftText = typeof draftOutput === "string" ? draftOutput : JSON.stringify(draftOutput);
+  const rawDraftText = typeof draftOutput === "string" ? draftOutput : JSON.stringify(draftOutput);
+
+  // ── Paragraph normalization — BEFORE gate evaluation ──────────────
+  // Deterministically split oversized paragraphs at sentence boundaries.
+  // Preserves all content. No summarization. No gate threshold changes.
+  const { text: draftText, telemetry: normTelemetry } = normalizeParagraphs(rawDraftText);
+  if (normTelemetry.paragraphs_split > 0) {
+    // Re-parse the normalized text back into draftOutput if it was JSON
+    try {
+      const reParsed = JSON.parse(draftText);
+      if (reParsed && typeof reParsed === "object" && Array.isArray(reParsed.sections)) {
+        draftOutput = reParsed;
+      }
+    } catch { /* non-JSON draft, keep original object */ }
+    console.log(JSON.stringify({
+      tag: "[readability_normalization]",
+      run_id: runId,
+      task_type: taskType,
+      ...normTelemetry,
+    }));
+  }
+
   let gateResult = runArtifactGate(draftText, artifactManifest);
 
   if (!gateResult.pass) {
@@ -936,7 +958,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       ], { model: "gpt-5-mini", maxTokens: 16000 });
       const regenParsed = safeParseJSON<any>(regenRaw);
       if (regenParsed && typeof regenParsed === "object" && Array.isArray(regenParsed.sections)) {
-        const regenText = JSON.stringify(regenParsed);
+        const { text: regenText } = normalizeParagraphs(JSON.stringify(regenParsed));
         const regenGate = runArtifactGate(regenText, artifactManifest);
         if (regenGate.pass) {
           draftOutput = regenParsed;
@@ -1418,6 +1440,9 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   if (calibrationPersistenceBlock) metaPatch.calibration = calibrationPersistenceBlock;
   // Phase 3.5D — Artifact gate telemetry (production enforcement signal)
   metaPatch.artifact_gate = artifactGateTelemetry;
+  if (normTelemetry.paragraphs_split > 0) {
+    metaPatch.readability_normalization = normTelemetry;
+  }
   if (planResult.ok) {
     metaPatch.planner = {
       plan_hash: planResult.plan.planHash,
