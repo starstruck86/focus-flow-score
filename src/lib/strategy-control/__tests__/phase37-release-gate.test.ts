@@ -17,12 +17,13 @@ describe("Phase 3.7 — Release Gate", () => {
     const result = runReleaseGate();
     // Phase 4 release gate MUST fail until real DB evidence exists for all
     // enforced surfaces. This test proves the gate enforces real evidence.
-    // Evidence gap failures are expected until post-deploy runs populate data.
+    // Evidence gap failures and success-path failures are expected until
+    // post-deploy runs populate data.
     const evidenceGapFailures = result.failures.filter(f => 
-      f.includes("Evidence gap") || f.includes("missing from evidence report")
+      f.includes("Evidence gap") || f.includes("missing from evidence report") || f.includes("Success-path evidence missing")
     );
     const otherFailures = result.failures.filter(f => 
-      !f.includes("Evidence gap") && !f.includes("missing from evidence report")
+      !f.includes("Evidence gap") && !f.includes("missing from evidence report") && !f.includes("Success-path evidence missing")
     );
     // No NON-evidence failures (bypass, temp endpoints, etc.)
     expect(otherFailures).toEqual([]);

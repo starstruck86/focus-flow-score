@@ -926,8 +926,13 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     artifactGateTelemetry.regen_attempts = 1;
     await setProgress(supabase, runId, "artifact_gate_regen");
     try {
+      // Build structured corrections from diagnostics for smarter regen
+      const structuredCorrections = (gateResult.diagnostics ?? [])
+        .map(d => `- [${d.dimension}] "${d.requirement}": ${d.reason} → ${d.remediation}`)
+        .join("\n");
+      const rawDiagnostics = gateResult.gates.flatMap(g => g.diagnostics).join("\n");
       const regenRaw = await callOpenAI([
-        { role: "system", content: `${overlayPrefix}${handler.buildDocumentSystemPrompt()}\n\nIMPORTANT: Your previous output failed quality gates. Fix these issues:\n${gateResult.gates.flatMap(g => g.diagnostics).join("\n")}` },
+        { role: "system", content: `${overlayPrefix}${handler.buildDocumentSystemPrompt()}\n\nIMPORTANT: Your previous output failed quality gates. Fix these issues:\n${rawDiagnostics}\n\nStructured corrections:\n${structuredCorrections}` },
         { role: "user", content: handler.buildDocumentUserPrompt(inputs, synthesis, library) },
       ], { model: "gpt-5-mini", maxTokens: 16000 });
       const regenParsed = safeParseJSON<any>(regenRaw);
@@ -964,6 +969,10 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       artifactGateTelemetry.pass = false;
       artifactGateTelemetry.failed_dimensions = gateResult.failed_dimensions;
       artifactGateTelemetry.total_gate_latency_ms = Date.now() - gateStartMs;
+      if (gateResult.sections_checked) artifactGateTelemetry.sections_checked = gateResult.sections_checked;
+      if (gateResult.sections_passed) artifactGateTelemetry.sections_passed = gateResult.sections_passed;
+      if (gateResult.sections_failed) artifactGateTelemetry.sections_failed = gateResult.sections_failed;
+      if (gateResult.diagnostics) artifactGateTelemetry.diagnostics = gateResult.diagnostics;
 
       const failMsg = `[artifact_gate_failed] Dimensions: ${gateResult.failed_dimensions.join(", ")}`;
       console.error(JSON.stringify({
@@ -1026,6 +1035,11 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   artifactGateTelemetry.pass = gateResult.pass;
   artifactGateTelemetry.failed_dimensions = gateResult.failed_dimensions;
   artifactGateTelemetry.total_gate_latency_ms = Date.now() - gateStartMs;
+  // Section-level diagnostics for evidence visibility and drift analysis
+  if (gateResult.sections_checked) artifactGateTelemetry.sections_checked = gateResult.sections_checked;
+  if (gateResult.sections_passed) artifactGateTelemetry.sections_passed = gateResult.sections_passed;
+  if (gateResult.sections_failed) artifactGateTelemetry.sections_failed = gateResult.sections_failed;
+  if (gateResult.diagnostics) artifactGateTelemetry.diagnostics = gateResult.diagnostics;
   let reviewOutput: any = { strengths: [], redlines: [], library_coverage: { used: [], gaps: [] } };
   if (sectionCount > 0) {
     await setProgress(supabase, runId, "review");
