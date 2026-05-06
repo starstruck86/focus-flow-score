@@ -1574,6 +1574,16 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     redlines: reviewOutput.redlines?.length || 0,
   };
   console.log(`[orchestrator] complete run=${runId} ${JSON.stringify(meta)}`);
+
+  // Phase 4A: Flush telemetry rows (best-effort, after pipeline completes)
+  try {
+    const flushResult = await telemetry.flush(supabase);
+    if (flushResult.written > 0) {
+      console.log(JSON.stringify({ tag: "[telemetry:flushed]", run_id: runId, rows: flushResult.written }));
+    }
+  } catch (telFlushErr) {
+    console.warn("[telemetry:flush] exception (non-fatal):", String(telFlushErr).slice(0, 200));
+  }
 }
 
 /**
