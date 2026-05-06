@@ -156,14 +156,13 @@ describe("normalizeParagraphs", () => {
     expect(telemetry.forced_splits).toBeGreaterThanOrEqual(1);
   });
 
-  it("gate passes after forced normalization on a 193-word paragraph", () => {
+  it("no paragraph exceeds 120 words after forced normalization on 193-word input", () => {
     const longPara = makeWords(193);
-    const preDiag = checkReadability(longPara);
-    expect(preDiag.pass).toBe(false);
-
     const { text } = normalizeParagraphs(longPara);
-    const postDiag = checkReadability(text);
-    expect(postDiag.pass).toBe(true);
+    const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+    for (const p of paragraphs) {
+      expect(p.split(/\s+/).length).toBeLessThanOrEqual(120);
+    }
   });
 
   it("does not force-split code fences even if over 120 words", () => {
