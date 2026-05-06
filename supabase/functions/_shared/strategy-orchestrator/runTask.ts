@@ -124,6 +124,9 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   const handler = getHandler(taskType);
   console.log(`[orchestrator] task=${taskType} run=${runId} company=${inputs.company_name || "(none)"} user=${userId.slice(0, 8)}`);
 
+  // ── Phase 4A: Telemetry collector ────────────────────────────────
+  const telemetry = new TelemetryCollector(runId, userId, taskType);
+
   // ── Phase 3A SOP "SAFE BRIDGE" — observe only, never block. ────
   // The client may attach a structured SOP contract via inputs.__sop.
   // We pull it off the wire here so it never reaches downstream
