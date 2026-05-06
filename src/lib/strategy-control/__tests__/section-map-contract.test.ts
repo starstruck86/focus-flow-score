@@ -9,31 +9,33 @@ import { checkSectionCompleteness } from '../artifactGate';
 
 describe('sectionMap contract', () => {
   it('account_brief: sectionMap routes concepts to correct parent sections', () => {
-    // Simulates structured artifact JSON output (what the LLM actually produces)
     const output = JSON.stringify({
       sections: [
         { id: "company_snapshot", name: "Company Snapshot", content: "This company operates in the ecommerce space with $50M ARR and 200 employees driving growth across three product lines. The company was founded in 2015 and has grown 40% YoY because of strong retention metrics. Current CEO Jane Smith has been leading a digital transformation initiative since Q1 2024 resulting in significant platform investments." },
-        { id: "stakeholders", name: "Stakeholders On File", content: "VP Sales John Smith — high influence, supportive position. Director of Marketing Jane Doe — medium influence, unknown position. Because the buying committee includes both technical and business stakeholders from 3 departments, multi-threading is critical for deal advancement." },
-        { id: "risks_mitigation", name: "Risks & Mitigation", content: "1. Budget Freeze Risk (High) — The CFO has signaled cost reduction initiatives because Q3 revenue missed by 12%. Mitigation: Position ROI within 90-day payback to bypass annual budget cycle. 2. Champion Departure Risk (Med) — VP Sales tenure is 14 months, below median. Mitigation: Build multi-threaded relationships with Director-level sponsors. 3. Competitive Displacement (Med) — Incumbent vendor renewal is in 60 days resulting in urgent timeline pressure." },
-        { id: "operator_read", name: "Operator Read", content: "The strategic thesis centers on customer lifecycle value leakage. The commercial insight is that this account loses approximately $2M annually in preventable churn because their current stack lacks lifecycle automation. The strategic why is the new CRO mandate to reduce churn by 15% within 6 months, creating urgency. The risk exposure includes a budget freeze and competitive displacement." },
-        { id: "next_moves", name: "Next Moves", content: "1. AE — Schedule executive alignment call with VP Sales to validate churn hypothesis because the CRO has a 6-month mandate. 2. SE — Build ROI model showing 90-day payback. [KI:methodology-abc] grounds the approach. 3. Manager — Engage partner channel for co-selling motion because expansion opportunity is confirmed per [PB:partner-playbook]." },
+        { id: "stakeholders", name: "Stakeholders On File", content: "VP Sales John Smith — high influence, supportive position. Director of Marketing Jane Doe — medium influence. Because the buying committee includes both technical and business stakeholders from 3 departments, multi-threading is critical." },
+        { id: "risks_mitigation", name: "Risks & Mitigation", content: "1. Budget Freeze Risk (High) — The CFO has signaled cost reduction initiatives because Q3 revenue missed by 12%. Mitigation: Position ROI within 90-day payback. 2. Champion Departure Risk (Med) — VP Sales tenure is 14 months, below median resulting in urgency. 3. Competitive Displacement (Med) — Incumbent vendor renewal is in 60 days." },
+        { id: "operator_read", name: "Operator Read", content: "The strategic thesis centers on customer lifecycle value leakage. The commercial insight is that this account loses approximately $2M annually in preventable churn because their current stack lacks lifecycle automation. The strategic why is the new CRO mandate to reduce churn by 15% within 6 months, creating urgency." },
+        { id: "next_moves", name: "Next Moves", content: "1. AE — Schedule executive alignment call with VP Sales to validate churn hypothesis because the CRO has a 6-month mandate. 2. SE — Build ROI model showing 90-day payback per [KI:methodology-abc]. 3. Manager — Engage partner channel according to [PB:partner-playbook]." },
       ],
     });
 
-    const result = checkSectionCompleteness(output, 
+    const sectionMap = [
+      { concept: 'situation', location: 'section' as const, parentSection: 'company_snapshot' },
+      { concept: 'commercial insight', location: 'embedded' as const, parentSection: 'operator_read', minWords: 20 },
+      { concept: 'risks', location: 'section' as const, parentSection: 'risks_mitigation' },
+      { concept: 'strategic why', location: 'embedded' as const, parentSection: 'operator_read', minWords: 20 },
+      { concept: 'specific asks', location: 'section' as const, parentSection: 'next_moves' },
+      { concept: 'cited sources', location: 'embedded' as const },
+    ];
+
+    const result = checkSectionCompleteness(output,
       ['situation', 'commercial insight', 'risks', 'strategic why', 'specific asks', 'cited sources'],
-      [
-        { concept: 'situation', location: 'section', parentSection: 'company_snapshot' },
-        { concept: 'commercial insight', location: 'embedded', parentSection: 'operator_read', minWords: 20 },
-        { concept: 'risks', location: 'section', parentSection: 'risks_mitigation' },
-        { concept: 'strategic why', location: 'embedded', parentSection: 'operator_read', minWords: 20 },
-        { concept: 'specific asks', location: 'section', parentSection: 'next_moves' },
-        { concept: 'cited sources', location: 'embedded' },
-      ]
+      sectionMap
     );
 
+    // All concepts should be found via their mapped parent sections
+    expect(result.diagnostics).toEqual([]);
     expect(result.pass).toBe(true);
-    expect(result.diagnostics).toHaveLength(0);
   });
 
   it('fails when embedded concept is absent from parent section', () => {
