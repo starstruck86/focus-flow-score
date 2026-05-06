@@ -8,27 +8,17 @@ import { checkSectionCompleteness } from '../artifactGate';
 // ── Contract: sectionMap completeness ──────────────────────────────
 
 describe('sectionMap contract', () => {
-  it('account_brief: risks embedded in operator_read passes when concept present', () => {
-    const output = `## Company Snapshot
-This is a company overview with situation details and landscape context spanning multiple sentences.
-The company operates in the ecommerce space with $50M ARR and 200 employees driving growth.
-
-## Stakeholders On File
-VP Sales John Smith — high influence, supportive position. Director of Marketing Jane Doe — medium influence.
-Because the buying committee includes both technical and business stakeholders, alignment is critical.
-
-## Risks & Mitigation
-1. **Budget Freeze Risk (High)** — The CFO has signaled cost reduction initiatives because Q3 revenue missed by 12%. Mitigation: Position ROI within 90-day payback to bypass annual budget cycle.
-2. **Champion Departure Risk (Med)** — VP Sales tenure is 14 months, below median. Mitigation: Build multi-threaded relationships with Director-level sponsors.
-3. **Competitive Displacement (Med)** — Incumbent vendor renewal is in 60 days. Because switching costs are low, we must demonstrate differentiated value before renewal. Mitigation: Deliver POC results within 30 days.
-
-## Operator Read
-The strategic thesis centers on customer lifecycle value leakage. The commercial insight is that this account loses approximately $2M annually in preventable churn because their current stack lacks lifecycle automation. The strategic why is the new CRO mandate to reduce churn by 15% within 6 months, creating urgency. The risk exposure includes a budget freeze and competitive displacement from the incumbent vendor.
-
-## Next Moves
-1. **AE** — Schedule executive alignment call with VP Sales to validate churn hypothesis. Because the CRO has a 6-month mandate, timing is critical.
-2. **SE** — Build ROI model showing 90-day payback. CARD[abc12345] grounds the methodology.
-3. **Manager** — Engage partner channel for co-selling motion. RESEARCH[company_overview] confirms expansion opportunity.`;
+  it('account_brief: sectionMap routes concepts to correct parent sections', () => {
+    // Simulates structured artifact JSON output (what the LLM actually produces)
+    const output = JSON.stringify({
+      sections: [
+        { id: "company_snapshot", name: "Company Snapshot", content: "This company operates in the ecommerce space with $50M ARR and 200 employees driving growth across three product lines. The company was founded in 2015 and has grown 40% YoY because of strong retention metrics. Current CEO Jane Smith has been leading a digital transformation initiative since Q1 2024 resulting in significant platform investments." },
+        { id: "stakeholders", name: "Stakeholders On File", content: "VP Sales John Smith — high influence, supportive position. Director of Marketing Jane Doe — medium influence, unknown position. Because the buying committee includes both technical and business stakeholders from 3 departments, multi-threading is critical for deal advancement." },
+        { id: "risks_mitigation", name: "Risks & Mitigation", content: "1. Budget Freeze Risk (High) — The CFO has signaled cost reduction initiatives because Q3 revenue missed by 12%. Mitigation: Position ROI within 90-day payback to bypass annual budget cycle. 2. Champion Departure Risk (Med) — VP Sales tenure is 14 months, below median. Mitigation: Build multi-threaded relationships with Director-level sponsors. 3. Competitive Displacement (Med) — Incumbent vendor renewal is in 60 days resulting in urgent timeline pressure." },
+        { id: "operator_read", name: "Operator Read", content: "The strategic thesis centers on customer lifecycle value leakage. The commercial insight is that this account loses approximately $2M annually in preventable churn because their current stack lacks lifecycle automation. The strategic why is the new CRO mandate to reduce churn by 15% within 6 months, creating urgency. The risk exposure includes a budget freeze and competitive displacement." },
+        { id: "next_moves", name: "Next Moves", content: "1. AE — Schedule executive alignment call with VP Sales to validate churn hypothesis because the CRO has a 6-month mandate. 2. SE — Build ROI model showing 90-day payback. CARD[abc12345] grounds the methodology. 3. Manager — Engage partner channel for co-selling motion because expansion opportunity is confirmed." },
+      ],
+    });
 
     const result = checkSectionCompleteness(output, 
       ['situation', 'commercial insight', 'risks', 'strategic why', 'specific asks', 'cited sources'],
