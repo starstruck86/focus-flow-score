@@ -916,6 +916,13 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // Deterministically split oversized paragraphs at sentence boundaries.
   // Preserves all content. No summarization. No gate threshold changes.
   const { text: draftText, telemetry: normTelemetry } = normalizeParagraphs(rawDraftText);
+  // Always record normalization telemetry so we can distinguish "didn't run" from "ran, no split needed"
+  const readabilityNormalization = {
+    paragraphs_split: normTelemetry.paragraphs_split,
+    original_length: normTelemetry.original_length,
+    normalized_length: normTelemetry.normalized_length,
+    ran: true,
+  };
   if (normTelemetry.paragraphs_split > 0) {
     // Re-parse the normalized text back into draftOutput if it was JSON
     try {
