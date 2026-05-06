@@ -118,10 +118,14 @@ function deriveChatManifestId(
   // Content-based keyword matching for chat artifacts
   const lower = (content || "").toLowerCase();
   if (/\b(meddicc|meddpicc|meddic)\b/.test(lower)) return "meddicc-review";
-  if (/\b(demo|demonstration)\b/.test(lower) && /\b(strat|plan|prep)\b/.test(lower)) return "demo-strategy";
+  if (/\b(demo)\b/.test(lower) && /\b(strat|plan|prep|approach|design|build|tailor)\b/.test(lower)) return "demo-strategy";
+  if (/\bdemonstration\b/.test(lower)) return "demo-strategy";
+  if (/\bdemo\s+(strategy|plan|prep)\b/.test(lower)) return "demo-strategy";
   if (/\b(objection|pushback|handle|overcome)\b/.test(lower)) return "objection-strategy";
   if (/\b(follow[\s-]?up|recap)\b/.test(lower) && /\b(email|message|note)\b/.test(lower)) return "follow-up-email";
-  if (/\b(discovery|question|probe|ask)\b/.test(lower) && /\b(question|list|prep)\b/.test(lower)) return "discovery-questions";
+  if (/\bdiscovery\s+(?:question|prep\s+question)/.test(lower)) return "discovery-questions";
+  if (/\bquestion(?:s)?\s+to\s+ask\b/.test(lower)) return "discovery-questions";
+  if (/\b(discovery|question|probe)\b/.test(lower) && /\b(question|list|prep|ask)\b/.test(lower)) return "discovery-questions";
   if (/\b(research|account\s+research|competitor|landscape)\b/.test(lower)) return "account-research";
   if (/\b(insight|commercial|value\s+prop)\b/.test(lower)) return "commercial-insight";
 
