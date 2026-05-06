@@ -405,7 +405,7 @@ export function runArtifactGate(
 ): ArtifactGateResult {
   const fidelity = checkTemplateFidelity(output, manifest);
   const readability = checkReadability(output);
-  const completeness = checkSectionCompleteness(output, manifest.rubric.mustHave);
+  const completeness = checkSectionCompleteness(output, manifest.rubric.mustHave, manifest.rubric.sectionMap);
   const evidence = checkEvidenceDiscipline(output);
 
   const gates = [fidelity, readability, completeness, evidence];
