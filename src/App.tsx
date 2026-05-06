@@ -278,6 +278,13 @@ const App = () => (
                       </Suspense>
                     </ProtectedRoute>
                   } />
+                  <Route path="/admin/phase-evidence" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<LazyFallback text="Loading evidence runner…" />}>
+                        <PhaseEvidenceRunner />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
                 <SessionResumePrompt />
