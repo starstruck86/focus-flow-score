@@ -110,6 +110,9 @@ export function normalizeParagraphs(text: string): { text: string; telemetry: No
     paragraphs_split: 0,
     longest_paragraph_before: 0,
     longest_paragraph_after: 0,
+    forced_splits: 0,
+    longest_chunk_before_forced_split: 0,
+    longest_chunk_after_forced_split: 0,
   };
 
   // Try JSON path first
