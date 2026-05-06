@@ -99,5 +99,55 @@ describe('parseStageLats', () => {
   it('returns latencies object', () => {
     const meta = { stage_latencies: { research: 14000, synthesis: 60000 } };
     expect(parseStageLats(meta)).toEqual({ research: 14000, synthesis: 60000 });
+});
+
+describe('parseRemediation', () => {
+  it('returns null for meta without remediation', () => {
+    expect(parseRemediation(null)).toBeNull();
+    expect(parseRemediation({})).toBeNull();
+    expect(parseRemediation({ artifact_gate: { pass: true } })).toBeNull();
   });
+
+  it('parses full remediation block', () => {
+    const meta = {
+      remediation: {
+        remediation_attempted: true,
+        remediation_type: 'normalize_only',
+        remediation_success: true,
+        remediation_latency_ms: 42,
+        remediation_cost_estimate_usd: 0,
+        avoided_full_regen_estimate_usd: 0.16,
+        fallback_to_hard_fail: false,
+        sections_targeted: ['readability'],
+      },
+    };
+    const r = parseRemediation(meta);
+    expect(r).not.toBeNull();
+    expect(r!.attempted).toBe(true);
+    expect(r!.type).toBe('normalize_only');
+    expect(r!.success).toBe(true);
+    expect(r!.latency_ms).toBe(42);
+    expect(r!.cost_usd).toBe(0);
+    expect(r!.avoided_usd).toBe(0.16);
+    expect(r!.fallback).toBe(false);
+    expect(r!.sections).toEqual(['readability']);
+  });
+
+  it('handles failed remediation with error', () => {
+    const meta = {
+      remediation: {
+        remediation_attempted: true,
+        remediation_type: 'section_reauthor',
+        remediation_success: false,
+        fallback_to_hard_fail: true,
+        error: 'Gate still failed',
+        sections_targeted: [],
+      },
+    };
+    const r = parseRemediation(meta);
+    expect(r!.success).toBe(false);
+    expect(r!.fallback).toBe(true);
+    expect(r!.error).toBe('Gate still failed');
+  });
+});
 });
