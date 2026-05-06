@@ -16,9 +16,7 @@ describe("debug", () => {
       output: { shape: "structured_artifact" },
     };
     const r = runArtifactGate(output, manifest);
-    for (const g of r.gates) {
-      if (!g.pass) console.log("FAILED:", g.gate, g.diagnostics);
-    }
-    expect(r.pass).toBe(true);
+    const failures = r.gates.filter(g => !g.pass).map(g => ({ gate: g.gate, diag: g.diagnostics }));
+    expect(failures).toEqual([]);
   });
 });
