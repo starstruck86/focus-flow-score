@@ -95,7 +95,7 @@ The primary risk is champion departure — VP Sales tenure is only 14 months. Be
 
   it('without sectionMap, falls back to standard section finding', () => {
     const output = `## Risks
-Budget freeze risk is high because Q3 revenue missed by 12%. The CFO has signaled cost reduction initiatives resulting in delayed procurement cycles. Champion departure risk is medium due to VP Sales tenure of only 14 months.`;
+Budget freeze risk is high because Q3 revenue missed by 12%. The CFO has signaled cost reduction initiatives resulting in delayed procurement cycles across all departments. Champion departure risk is medium due to VP Sales tenure of only 14 months, which is below the industry median of 24 months for this role.`;
 
     const result = checkSectionCompleteness(output, ['risks']);
     expect(result.pass).toBe(true);
