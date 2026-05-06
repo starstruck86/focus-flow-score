@@ -964,6 +964,10 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       artifactGateTelemetry.pass = false;
       artifactGateTelemetry.failed_dimensions = gateResult.failed_dimensions;
       artifactGateTelemetry.total_gate_latency_ms = Date.now() - gateStartMs;
+      if (gateResult.sections_checked) artifactGateTelemetry.sections_checked = gateResult.sections_checked;
+      if (gateResult.sections_passed) artifactGateTelemetry.sections_passed = gateResult.sections_passed;
+      if (gateResult.sections_failed) artifactGateTelemetry.sections_failed = gateResult.sections_failed;
+      if (gateResult.diagnostics) artifactGateTelemetry.diagnostics = gateResult.diagnostics;
 
       const failMsg = `[artifact_gate_failed] Dimensions: ${gateResult.failed_dimensions.join(", ")}`;
       console.error(JSON.stringify({
