@@ -114,7 +114,7 @@ describe("Phase 3 — Semantic Gate Matching", () => {
     it("passes discovery_prep concepts via wrapper format", () => {
       const output = JSON.stringify({
         markdown: DISCOVERY_PREP_MARKDOWN,
-        sections: ["signals", "current_state"],
+        metadata: { type: "discovery_prep", version: 1 },
       });
       const result = runArtifactGate(output, DISCOVERY_PREP_MANIFEST);
       expect(result.pass).toBe(true);
