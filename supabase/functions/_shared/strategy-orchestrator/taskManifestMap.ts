@@ -54,6 +54,14 @@ const ninetyDayPlanManifest: SkillManifest = {
     ],
     genericMarkers: ["build relationships", "drive value"],
     maxGenericMarkers: 1,
+    sectionMap: [
+      { concept: "milestones",          location: "embedded", parentSection: "days_1_30",       minWords: 20 },
+      { concept: "stakeholder strategy", location: "embedded", parentSection: "account_context", minWords: 20 },
+      { concept: "risks",               location: "embedded", parentSection: "operator_read",   minWords: 20 },
+      { concept: "metrics",             location: "embedded", parentSection: "days_1_30",       minWords: 15 },
+      { concept: "executive alignment", location: "embedded", parentSection: "account_context", minWords: 15 },
+      { concept: "expansion triggers",  location: "embedded", parentSection: "days_61_90",      minWords: 15 },
+    ],
   },
   version: "1",
 };
@@ -84,6 +92,17 @@ const enrichedAccountBriefManifest: SkillManifest = {
       "deal strategy", "expansion", "competitive positioning",
     ],
   },
+  rubric: {
+    ...executiveBriefManifest.rubric,
+    sectionMap: [
+      { concept: "situation",         location: "section", parentSection: "company_snapshot" },
+      { concept: "commercial insight", location: "embedded", parentSection: "operator_read",   minWords: 20 },
+      { concept: "risks",             location: "section", parentSection: "risks_mitigation" },
+      { concept: "strategic why",     location: "embedded", parentSection: "operator_read",   minWords: 20 },
+      { concept: "specific asks",     location: "section", parentSection: "next_moves" },
+      { concept: "cited sources",     location: "embedded" },
+    ],
+  },
 };
 
 const TASK_MANIFEST_MAP: Readonly<Record<TaskType, SkillManifest>> = {
@@ -108,7 +127,10 @@ export function getTaskManifest(taskType: TaskType): SkillManifest {
  */
 export function toArtifactManifest(manifest: SkillManifest): ArtifactManifest {
   return {
-    rubric: { mustHave: manifest.rubric.mustHave },
+    rubric: {
+      mustHave: manifest.rubric.mustHave,
+      sectionMap: manifest.rubric.sectionMap,
+    },
     output: {
       shape: manifest.output.shape,
       forbid: manifest.output.forbid,
