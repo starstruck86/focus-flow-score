@@ -4,6 +4,7 @@
  * Read-only operator surface for Strategy telemetry, gates, latency, costs, anomalies.
  * Phase 4C: Added cost analytics, latency analytics, batch analysis, release confidence.
  * Phase 4D: Added failure cohort analysis, root-cause drilldown, remediation opportunities.
+ * Phase 4E-V: Added remediation flag toggle, test harness, remediation drilldown visibility.
  * Owner-gated via existing ProtectedRoute + allowlist.
  */
 import { useEffect, useState, useMemo, useCallback } from 'react';
@@ -16,12 +17,13 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Clock, Search, DollarSign, Activity, Shield, Flame } from 'lucide-react';
+import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Clock, Search, DollarSign, Activity, Shield, Flame, Wrench, FlaskConical } from 'lucide-react';
 import {
   fetchEvidenceByType, fetchGateAggregates, fetchLatencyData, fetchCostData,
   fetchAnomalyRuns, fetchRunDetail, fetchRecentRuns,
-  parseArtifactGate, parseCost, parseAnomalyFlags, parseStageLats, parseTokenUsage,
+  parseArtifactGate, parseCost, parseAnomalyFlags, parseStageLats, parseTokenUsage, parseRemediation,
   type EvidenceRow, type GateAggRow, type TelemetryRow, type CostRow,
   type AnomalyRow, type RunListRow, type TaskRunSectionRow,
 } from '@/lib/strategy-ops/queries';
@@ -42,6 +44,7 @@ import {
   REASON_LABELS, ERA_LABELS,
 } from '@/lib/strategy-ops/failureAnalysis';
 import { aggregateRemediationOpportunities, isRemediationEnabled, type RemediationOpportunity } from '@/lib/strategy-ops/targetedRemediation';
+import { loadStrategyFlags, setStrategyFlag, type StrategyOptFlags } from '@/lib/strategy-ops/strategyFeatureFlags';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
