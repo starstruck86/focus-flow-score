@@ -13,9 +13,13 @@ export interface NormalizationTelemetry {
   paragraphs_split: number;
   longest_paragraph_before: number;
   longest_paragraph_after: number;
+  forced_splits: number;
+  longest_chunk_before_forced_split: number;
+  longest_chunk_after_forced_split: number;
 }
 
 const MAX_PARAGRAPH_WORDS = 120;
+const FORCED_SPLIT_TARGET = 100; // aim for ~100 words per chunk
 
 /**
  * Check if a line is a protected structure that should never be split.
