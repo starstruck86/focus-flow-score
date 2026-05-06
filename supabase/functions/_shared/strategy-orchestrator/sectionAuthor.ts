@@ -268,31 +268,58 @@ export async function authorOneBatch(
   }
 }
 
+/** Resolve the section definitions and batch plan for a given task type. */
+function resolveSectionsAndBatches(taskType: string): {
+  sections: ReadonlyArray<{ id: string; name: string }>;
+  batches: ReadonlyArray<{ ids: readonly string[] }>;
+} | null {
+  switch (taskType) {
+    case "discovery_prep":
+      return { sections: DISCOVERY_PREP_SECTIONS, batches: DISCOVERY_PREP_BATCHES };
+    case "account_brief":
+      return { sections: ACCOUNT_BRIEF_SECTIONS, batches: ACCOUNT_BRIEF_BATCHES };
+    case "ninety_day_plan":
+      return { sections: NINETY_DAY_PLAN_SECTIONS, batches: NINETY_DAY_PLAN_BATCHES };
+    default:
+      return null;
+  }
+}
+
 /** Build a per-batch user prompt by extracting the relevant section schema
- *  fragments from the full discovery_prep schema. Keeps the contract — the
- *  model still returns `{ sections: [...] }` — but only for the requested
- *  section ids, so each call is small and fast. */
+ *  fragments from the task template. Keeps the contract — the model still
+ *  returns `{ sections: [...] }` — but only for the requested section ids,
+ *  so each call is small and fast. */
 export function buildBatchUserPrompt(
   baseUserPrompt: string,
   sectionIds: string[],
+  taskType: string = "discovery_prep",
 ): string {
+  const resolved = resolveSectionsAndBatches(taskType);
+  const sections = resolved?.sections ?? DISCOVERY_PREP_SECTIONS;
   const allowedNames = sectionIds
-    .map((id) => DISCOVERY_PREP_SECTIONS.find((s) => s.id === id)?.name || id)
+    .map((id) => sections.find((s) => s.id === id)?.name || id)
     .join(", ");
+
+  // For non-discovery_prep tasks, use a simpler content schema since they
+  // don't have pov_blocks or complex content objects.
+  const contentShape = taskType === "discovery_prep"
+    ? '{ ... }'
+    : '"<markdown content>"';
+
   return `${baseUserPrompt}
 
 ═══ BATCH AUTHORING — RELIABILITY MODE ═══
 Author ONLY the following sections in this response (skip all others):
-  ${sectionIds.map((id, i) => `${i + 1}. id="${id}" (${DISCOVERY_PREP_SECTIONS.find((s) => s.id === id)?.name || id})`).join("\n  ")}
+  ${sectionIds.map((id, i) => `${i + 1}. id="${id}" (${sections.find((s) => s.id === id)?.name || id})`).join("\n  ")}
 
 Return JSON in this exact shape (no other sections, no markdown fences):
 {
   "sections": [
-    ${sectionIds.map((id) => `{ "id": "${id}", "name": "<name>", "grounded_by": ["<ids>"], "content": { ... } }`).join(",\n    ")}
+    ${sectionIds.map((id) => `{ "id": "${id}", "name": "<name>", "grounded_by": ["<ids>"], "content": ${contentShape} }`).join(",\n    ")}
   ]
 }
 
-Use the SAME schema, depth, citation discipline, and pov_block requirements that the full template requires for these specific sections (${allowedNames}). Do not abbreviate. Do not omit pov_blocks. Do not invent facts — use only the provided synthesis + library + sources registry.`;
+Use the SAME schema, depth, and citation discipline that the full template requires for these specific sections (${allowedNames}). Do not abbreviate. Do not invent facts — use only the provided synthesis + library + sources registry.`;
 }
 
 /** Public entry point. Authors all batches sequentially (parallelism would
