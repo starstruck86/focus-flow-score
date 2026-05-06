@@ -5,6 +5,7 @@ import {
   parseTokenUsage,
   parseCost,
   parseStageLats,
+  parseRemediation,
 } from '../queries';
 
 describe('parseArtifactGate', () => {
