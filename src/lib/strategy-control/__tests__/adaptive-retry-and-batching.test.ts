@@ -1,8 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { deriveRetryMode, tokenBudgetForMode, shouldUseChunkedAuthoring } from "../retryMode";
-
-// Re-implement locally for test (the module is Deno, test is vitest)
-type RetryMode = "normal" | "chunked" | "low_token" | "rescue_only";
 
 function localDeriveRetryMode(diag: { attempt_number: number; previous_mode?: RetryMode }): RetryMode {
   const { attempt_number, previous_mode } = diag;
