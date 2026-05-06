@@ -57,10 +57,32 @@ export interface SkillRetrievalPlan {
   minRelevantItems?: number;
 }
 
+/**
+ * Maps a mustHave concept to its declared output location.
+ * `section`: dedicated heading (e.g. "## Risks & Mitigation").
+ * `embedded`: concept lives inside a parent section; gate validates
+ *   substance within that parent instead of demanding a standalone heading.
+ */
+export interface SectionMapping {
+  concept: string;
+  location: "section" | "embedded";
+  /** Parent section id/name when location = "embedded". */
+  parentSection?: string;
+  /** Minimum word count for substance validation (default 40). */
+  minWords?: number;
+}
+
 export interface SkillQualityRubric {
   mustHave: ReadonlyArray<string>;
   genericMarkers: ReadonlyArray<string>;
   maxGenericMarkers: number;
+  /**
+   * Explicit mapping of mustHave concepts to output sections.
+   * When present, the artifact gate uses this to find concept content
+   * in the correct location instead of scanning the entire document.
+   * Every mustHave MUST appear in sectionMap if the map is provided.
+   */
+  sectionMap?: ReadonlyArray<SectionMapping>;
 }
 
 export interface SkillOutputContract {
