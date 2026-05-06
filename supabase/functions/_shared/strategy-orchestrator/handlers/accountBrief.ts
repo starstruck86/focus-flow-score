@@ -207,7 +207,7 @@ Return JSON:
 {
   "strengths": ["..."],
   "redlines": [
-    { "id":"r1", "section_id":"company_snapshot|stakeholders|operator_read|next_moves",
+    { "id":"r1", "section_id":"company_snapshot|stakeholders|risks_mitigation|operator_read|next_moves",
       "section_name":"...", "current_text":"...", "proposed_text":"...",
       "rationale":"...", "grounded_by_id":"CARD[id]|null" }
   ],
