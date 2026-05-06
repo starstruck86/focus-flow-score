@@ -2,6 +2,7 @@
  * Strategy Operations Dashboard — /admin/ops
  *
  * Read-only operator surface for Strategy telemetry, gates, latency, costs, anomalies.
+ * Phase 4C: Added cost analytics, latency analytics, batch analysis, release confidence.
  * Owner-gated via existing ProtectedRoute + allowlist.
  */
 import { useEffect, useState, useMemo, useCallback } from 'react';
@@ -15,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Clock, Search } from 'lucide-react';
+import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Clock, Search, DollarSign, Activity, Shield } from 'lucide-react';
 import {
   fetchEvidenceByType, fetchGateAggregates, fetchLatencyData, fetchCostData,
   fetchAnomalyRuns, fetchRunDetail, fetchRecentRuns,
@@ -23,6 +24,17 @@ import {
   type EvidenceRow, type GateAggRow, type TelemetryRow, type CostRow,
   type AnomalyRow, type RunListRow, type TaskRunSectionRow,
 } from '@/lib/strategy-ops/queries';
+import {
+  getCostSummary, getCostByTaskType, getCostByProvider, getCostByStage,
+  getMostExpensiveRuns, getFailedRunCostWaste,
+  type CostSummary, type CostByDimension, type ExpensiveRun, type FailedRunWaste,
+} from '@/lib/strategy-ops/costAnalytics';
+import {
+  getLatencySummary, getLatencyByStage, getLatencyByTaskType,
+  getSlowestRuns, getLatencyTrend, getBatchExecutionAnalytics,
+  type LatencySummary, type StageLatency, type SlowestRun, type LatencyTrendPoint, type BatchAnalytics,
+} from '@/lib/strategy-ops/latencyAnalytics';
+import { computeReleaseConfidence, type ReleaseConfidence } from '@/lib/strategy-ops/releaseConfidence';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -44,7 +56,7 @@ function isStale(dateStr: string | null | undefined, days = 7): boolean {
 
 function fmtMs(ms: number | null | undefined): string {
   if (ms == null) return '—';
-  if (ms < 1000) return `${ms}ms`;
+  if (ms < 1000) return `${Math.round(ms)}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
@@ -59,6 +71,11 @@ function fmtTokens(n: number | null | undefined): string {
   return String(n);
 }
 
+function fmtPct(n: number | null | undefined): string {
+  if (n == null) return '—';
+  return `${n.toFixed(1)}%`;
+}
+
 function StatusBadge({ pass }: { pass: boolean | undefined }) {
   if (pass === true) return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">PASS</Badge>;
   if (pass === false) return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">FAIL</Badge>;
@@ -67,6 +84,18 @@ function StatusBadge({ pass }: { pass: boolean | undefined }) {
 
 function LoadingSkeleton() {
   return <div className="space-y-3 p-4">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>;
+}
+
+function MetricCard({ label, value, sub, warn }: { label: string; value: string; sub?: string; warn?: boolean }) {
+  return (
+    <Card>
+      <CardContent className="pt-4">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className={`text-lg font-semibold ${warn ? 'text-yellow-400' : ''}`}>{value}</p>
+        {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+      </CardContent>
+    </Card>
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -228,49 +257,20 @@ function GatesTab({ userId }: { userId: string }) {
 }
 
 /* ================================================================== */
-/*  TAB: Latency                                                       */
+/*  TAB: Cost Deep Dive (Phase 4C)                                     */
 /* ================================================================== */
 
-function LatencyTab({ userId }: { userId: string }) {
+function CostDeepTab({ userId }: { userId: string }) {
   const [days, setDays] = useState(7);
-  const { data, loading, error, refetch } = useAsyncData(() => fetchLatencyData(userId, days), [userId, days]);
+  const { data: summary, loading: l1 } = useAsyncData(() => getCostSummary(userId, days), [userId, days]);
+  const { data: byType, loading: l2 } = useAsyncData(() => getCostByTaskType(userId, days), [userId, days]);
+  const { data: byProvider, loading: l3 } = useAsyncData(() => getCostByProvider(userId, days), [userId, days]);
+  const { data: byStage, loading: l4 } = useAsyncData(() => getCostByStage(userId, days), [userId, days]);
+  const { data: expensive, loading: l5 } = useAsyncData(() => getMostExpensiveRuns(userId, 10), [userId]);
+  const { data: waste, loading: l6 } = useAsyncData(() => getFailedRunCostWaste(userId, days), [userId, days]);
 
-  const aggregated = useMemo(() => {
-    if (!data?.length) return [];
-    const byStage = new Map<string, number[]>();
-    for (const r of data) {
-      if (r.duration_ms == null) continue;
-      const key = r.stage;
-      const arr = byStage.get(key) ?? [];
-      arr.push(r.duration_ms);
-      byStage.set(key, arr);
-    }
-    return Array.from(byStage.entries()).map(([stage, vals]) => {
-      vals.sort((a, b) => a - b);
-      const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
-      const p95 = vals[Math.floor(vals.length * 0.95)] ?? vals[vals.length - 1];
-      return { stage, count: vals.length, avg, p95, max: vals[vals.length - 1] };
-    }).sort((a, b) => b.avg - a.avg);
-  }, [data]);
-
-  const byProvider = useMemo(() => {
-    if (!data?.length) return [];
-    const map = new Map<string, number[]>();
-    for (const r of data) {
-      if (r.duration_ms == null || !r.provider) continue;
-      const key = `${r.provider}/${r.model ?? '?'}`;
-      const arr = map.get(key) ?? [];
-      arr.push(r.duration_ms);
-      map.set(key, arr);
-    }
-    return Array.from(map.entries()).map(([key, vals]) => {
-      vals.sort((a, b) => a - b);
-      return { key, count: vals.length, avg: vals.reduce((s, v) => s + v, 0) / vals.length, p95: vals[Math.floor(vals.length * 0.95)] ?? vals[vals.length - 1] };
-    }).sort((a, b) => b.avg - a.avg);
-  }, [data]);
-
+  const loading = l1 || l2 || l3;
   if (loading) return <LoadingSkeleton />;
-  if (error) return <p className="text-destructive p-4">{error}</p>;
 
   return (
     <div className="space-y-6">
@@ -283,144 +283,347 @@ function LatencyTab({ userId }: { userId: string }) {
             <SelectItem value="30">Last 30d</SelectItem>
           </SelectContent>
         </Select>
-        <span className="text-sm text-muted-foreground">{data?.length ?? 0} telemetry rows</span>
       </div>
 
-      <Card>
-        <CardHeader><CardTitle className="text-base">Latency by Stage</CardTitle></CardHeader>
-        <CardContent>
-          {aggregated.length === 0 ? <p className="text-muted-foreground text-sm">No data</p> : (
+      {summary && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <MetricCard label="Total Spend" value={fmtCost(summary.total_usd)} />
+          <MetricCard label="Runs" value={`${summary.successful_runs}✓ ${summary.failed_runs}✗`} />
+          <MetricCard label="Avg/Run" value={fmtCost(summary.avg_per_run)} />
+          <MetricCard label="Avg/Successful Run" value={fmtCost(summary.avg_per_successful_run)} />
+          <MetricCard label="Failed Run Waste" value={fmtCost(summary.failed_run_waste_usd)} warn={summary.failed_run_waste_usd > 0} />
+          <MetricCard label="Regen Waste" value={fmtCost(summary.regen_waste_usd)} warn={summary.regen_waste_usd > 0} />
+        </div>
+      )}
+
+      {byType && byType.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Cost by Task Type</CardTitle></CardHeader>
+          <CardContent>
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Stage</TableHead>
-                  <TableHead>Count</TableHead>
-                  <TableHead>Avg</TableHead>
-                  <TableHead>P95</TableHead>
-                  <TableHead>Max</TableHead>
-                </TableRow>
-              </TableHeader>
+              <TableHeader><TableRow><TableHead>Task Type</TableHead><TableHead>Total</TableHead><TableHead>Runs</TableHead><TableHead>Avg</TableHead></TableRow></TableHeader>
               <TableBody>
-                {aggregated.map(r => (
-                  <TableRow key={r.stage}>
-                    <TableCell className="font-mono text-xs">{r.stage}</TableCell>
-                    <TableCell>{r.count}</TableCell>
-                    <TableCell>{fmtMs(r.avg)}</TableCell>
-                    <TableCell>{fmtMs(r.p95)}</TableCell>
-                    <TableCell>{fmtMs(r.max)}</TableCell>
-                  </TableRow>
+                {byType.map(r => (
+                  <TableRow key={r.key}><TableCell className="font-mono text-xs">{r.key}</TableCell><TableCell>{fmtCost(r.total_usd)}</TableCell><TableCell>{r.count}</TableCell><TableCell>{fmtCost(r.avg_usd)}</TableCell></TableRow>
                 ))}
               </TableBody>
             </Table>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      <Card>
-        <CardHeader><CardTitle className="text-base">Latency by Provider/Model</CardTitle></CardHeader>
-        <CardContent>
-          {byProvider.length === 0 ? <p className="text-muted-foreground text-sm">No provider data</p> : (
+      {byProvider && byProvider.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Cost by Provider/Model</CardTitle></CardHeader>
+          <CardContent>
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Provider/Model</TableHead>
-                  <TableHead>Count</TableHead>
-                  <TableHead>Avg</TableHead>
-                  <TableHead>P95</TableHead>
-                </TableRow>
-              </TableHeader>
+              <TableHeader><TableRow><TableHead>Provider/Model</TableHead><TableHead>Total</TableHead><TableHead>Calls</TableHead><TableHead>Avg</TableHead></TableRow></TableHeader>
               <TableBody>
                 {byProvider.map(r => (
-                  <TableRow key={r.key}>
-                    <TableCell className="font-mono text-xs">{r.key}</TableCell>
-                    <TableCell>{r.count}</TableCell>
-                    <TableCell>{fmtMs(r.avg)}</TableCell>
-                    <TableCell>{fmtMs(r.p95)}</TableCell>
+                  <TableRow key={r.key}><TableCell className="font-mono text-xs">{r.key}</TableCell><TableCell>{fmtCost(r.total_usd)}</TableCell><TableCell>{r.count}</TableCell><TableCell>{fmtCost(r.avg_usd)}</TableCell></TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {byStage && byStage.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Cost by Stage</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader><TableRow><TableHead>Stage</TableHead><TableHead>Total</TableHead><TableHead>Calls</TableHead><TableHead>Avg</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {byStage.map(r => (
+                  <TableRow key={r.key}><TableCell className="font-mono text-xs">{r.key}</TableCell><TableCell>{fmtCost(r.total_usd)}</TableCell><TableCell>{r.count}</TableCell><TableCell>{fmtCost(r.avg_usd)}</TableCell></TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {waste && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Failed Run Waste Analysis</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <MetricCard label="Total Waste" value={fmtCost(waste.total_waste_usd)} warn />
+              <MetricCard label="Regen Waste" value={fmtCost(waste.regen_waste_usd)} warn={waste.regen_waste_usd > 0} />
+              <MetricCard label="Regen Waste %" value={fmtPct(waste.regen_waste_pct)} warn={waste.regen_waste_pct > 20} />
+            </div>
+            {waste.by_failed_dimension.length > 0 && (
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Waste by Failed Dimension</p>
+                <div className="flex gap-2 flex-wrap">
+                  {waste.by_failed_dimension.map(d => (
+                    <Badge key={d.key} variant="outline" className="text-red-400 border-red-500/30">{d.key}: {fmtCost(d.total_usd)} ({d.count}×)</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {expensive && expensive.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Most Expensive Runs</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader><TableRow><TableHead>Run</TableHead><TableHead>Type</TableHead><TableHead>Cost</TableHead><TableHead>Gate</TableHead><TableHead>Regen</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {expensive.map(r => (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-mono text-xs">{r.id.slice(0, 8)}</TableCell>
+                    <TableCell className="font-mono text-xs">{r.task_type}</TableCell>
+                    <TableCell>{fmtCost(r.cost_usd)}</TableCell>
+                    <TableCell><StatusBadge pass={r.gate_pass} /></TableCell>
+                    <TableCell>{r.regen_attempts}</TableCell>
+                    <TableCell><Badge variant="secondary">{r.status}</Badge></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
 
 /* ================================================================== */
-/*  TAB: Costs                                                         */
+/*  TAB: Latency Deep Dive (Phase 4C)                                  */
 /* ================================================================== */
 
-function CostsTab({ userId }: { userId: string }) {
-  const { data, loading, error } = useAsyncData(() => fetchCostData(userId), [userId]);
+function LatencyDeepTab({ userId }: { userId: string }) {
+  const [days, setDays] = useState(7);
+  const { data: summary, loading: l1 } = useAsyncData(() => getLatencySummary(userId, days), [userId, days]);
+  const { data: byStage, loading: l2 } = useAsyncData(() => getLatencyByStage(userId, days), [userId, days]);
+  const { data: byType, loading: l3 } = useAsyncData(() => getLatencyByTaskType(userId, days), [userId, days]);
+  const { data: slowest, loading: l4 } = useAsyncData(() => getSlowestRuns(userId, 10), [userId]);
+  const { data: trend, loading: l5 } = useAsyncData(() => getLatencyTrend(userId, days), [userId, days]);
+  const { data: batches, loading: l6 } = useAsyncData(() => getBatchExecutionAnalytics(userId, days), [userId, days]);
 
-  const aggregated = useMemo(() => {
-    if (!data?.length) return { byType: [] as { type: string; total: number; count: number; avgTokensIn: number; avgTokensOut: number }[], totalCost: 0, highest: null as CostRow | null };
-    const byType = new Map<string, { total: number; count: number; tokensIn: number; tokensOut: number }>();
-    let totalCost = 0;
-    let highest: CostRow | null = null;
-    for (const r of data) {
-      const c = r.cost_estimate_usd ?? 0;
-      totalCost += c;
-      if (!highest || c > (highest.cost_estimate_usd ?? 0)) highest = r;
-      const agg = byType.get(r.task_type) ?? { total: 0, count: 0, tokensIn: 0, tokensOut: 0 };
-      agg.total += c;
-      agg.count++;
-      agg.tokensIn += r.token_input ?? 0;
-      agg.tokensOut += r.token_output ?? 0;
-      byType.set(r.task_type, agg);
-    }
-    return {
-      byType: Array.from(byType.entries()).map(([type, v]) => ({
-        type, total: v.total, count: v.count,
-        avgTokensIn: v.count > 0 ? v.tokensIn / v.count : 0,
-        avgTokensOut: v.count > 0 ? v.tokensOut / v.count : 0,
-      })).sort((a, b) => b.total - a.total),
-      totalCost,
-      highest,
-    };
-  }, [data]);
-
-  if (loading) return <LoadingSkeleton />;
-  if (error) return <p className="text-destructive p-4">{error}</p>;
-  if (!data?.length) return <p className="text-muted-foreground p-4">No cost data found.</p>;
+  if (l1 || l2) return <LoadingSkeleton />;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Total Spend (est.)</p><p className="text-lg font-semibold">{fmtCost(aggregated.totalCost)}</p></CardContent></Card>
-        <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Runs Tracked</p><p className="text-lg font-semibold">{data.length}</p></CardContent></Card>
-        <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Avg/Run</p><p className="text-lg font-semibold">{fmtCost(data.length > 0 ? aggregated.totalCost / data.length : null)}</p></CardContent></Card>
-        <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Est. Monthly (×30)</p><p className="text-lg font-semibold text-yellow-400">{fmtCost(aggregated.totalCost * 30 / Math.max(data.length, 1))}</p><p className="text-xs text-muted-foreground">⚠ rough estimate</p></CardContent></Card>
+      <div className="flex items-center gap-3">
+        <Select value={String(days)} onValueChange={v => setDays(Number(v))}>
+          <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="1">Last 24h</SelectItem>
+            <SelectItem value="7">Last 7d</SelectItem>
+            <SelectItem value="30">Last 30d</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {summary && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <MetricCard label="Runs Measured" value={String(summary.total_runs)} />
+          <MetricCard label="Avg Total" value={fmtMs(summary.avg_total_ms)} />
+          <MetricCard label="P50" value={fmtMs(summary.p50_ms)} />
+          <MetricCard label="P95" value={fmtMs(summary.p95_ms)} warn={summary.p95_ms > 120_000} />
+          <MetricCard label="P99" value={fmtMs(summary.p99_ms)} />
+          <MetricCard label="Max" value={fmtMs(summary.max_ms)} />
+          <MetricCard label="Slowest Stage" value={summary.slowest_stage ?? '—'} sub={fmtMs(summary.slowest_stage_avg_ms)} />
+        </div>
+      )}
+
+      {byStage && byStage.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Latency by Stage (telemetry)</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader><TableRow><TableHead>Stage</TableHead><TableHead>Count</TableHead><TableHead>Avg</TableHead><TableHead>P50</TableHead><TableHead>P95</TableHead><TableHead>Max</TableHead><TableHead>Contribution</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {byStage.map(r => (
+                  <TableRow key={r.stage}>
+                    <TableCell className="font-mono text-xs">{r.stage}</TableCell>
+                    <TableCell>{r.count}</TableCell>
+                    <TableCell>{fmtMs(r.avg_ms)}</TableCell>
+                    <TableCell>{fmtMs(r.p50_ms)}</TableCell>
+                    <TableCell>{fmtMs(r.p95_ms)}</TableCell>
+                    <TableCell>{fmtMs(r.max_ms)}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="w-16 bg-muted rounded-full h-2">
+                          <div className="bg-primary h-2 rounded-full" style={{ width: `${Math.min(r.contribution_pct, 100)}%` }} />
+                        </div>
+                        <span className="text-xs">{fmtPct(r.contribution_pct)}</span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {byType && byType.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Latency by Task Type</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader><TableRow><TableHead>Task Type</TableHead><TableHead>Count</TableHead><TableHead>Avg</TableHead><TableHead>P95</TableHead><TableHead>Max</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {byType.map(r => (
+                  <TableRow key={r.stage}><TableCell className="font-mono text-xs">{r.stage}</TableCell><TableCell>{r.count}</TableCell><TableCell>{fmtMs(r.avg_ms)}</TableCell><TableCell>{fmtMs(r.p95_ms)}</TableCell><TableCell>{fmtMs(r.max_ms)}</TableCell></TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {trend && trend.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Latency Trend</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Runs</TableHead><TableHead>Avg</TableHead><TableHead>P95</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {trend.map(t => (
+                  <TableRow key={t.date}><TableCell>{t.date}</TableCell><TableCell>{t.run_count}</TableCell><TableCell>{fmtMs(t.avg_ms)}</TableCell><TableCell>{fmtMs(t.p95_ms)}</TableCell></TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {batches && batches.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Batch Execution Analysis (discovery_prep)</CardTitle><CardDescription>Identifies parallelization candidates</CardDescription></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader><TableRow><TableHead>Batch</TableHead><TableHead>Count</TableHead><TableHead>Avg Duration</TableHead><TableHead>Max Duration</TableHead><TableHead>Avg Attempts</TableHead><TableHead>Fallback Rate</TableHead><TableHead>Failure Rate</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {batches.map(b => (
+                  <TableRow key={b.batch_index}>
+                    <TableCell>#{b.batch_index}</TableCell>
+                    <TableCell>{b.count}</TableCell>
+                    <TableCell>{fmtMs(b.avg_duration_ms)}</TableCell>
+                    <TableCell>{fmtMs(b.max_duration_ms)}</TableCell>
+                    <TableCell>{b.avg_attempts.toFixed(1)}</TableCell>
+                    <TableCell className={b.fallback_rate > 0.2 ? 'text-yellow-400' : ''}>{fmtPct(b.fallback_rate * 100)}</TableCell>
+                    <TableCell className={b.failure_rate > 0.1 ? 'text-red-400' : ''}>{fmtPct(b.failure_rate * 100)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {slowest && slowest.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Slowest Runs</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader><TableRow><TableHead>Run</TableHead><TableHead>Type</TableHead><TableHead>Total</TableHead><TableHead>Cost</TableHead><TableHead>Regen</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {slowest.map(r => (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-mono text-xs">{r.id.slice(0, 8)}</TableCell>
+                    <TableCell className="font-mono text-xs">{r.task_type}</TableCell>
+                    <TableCell>{fmtMs(r.total_ms)}</TableCell>
+                    <TableCell>{fmtCost(r.cost_usd)}</TableCell>
+                    <TableCell>{r.regen_attempts}</TableCell>
+                    <TableCell><Badge variant="secondary">{r.status}</Badge></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/* ================================================================== */
+/*  TAB: Release Confidence (Phase 4C)                                 */
+/* ================================================================== */
+
+function ReleaseConfidenceTab({ userId }: { userId: string }) {
+  const [days, setDays] = useState(7);
+  const { data, loading, error, refetch } = useAsyncData(() => computeReleaseConfidence(userId, days), [userId, days]);
+
+  if (loading) return <LoadingSkeleton />;
+  if (error) return <p className="text-destructive p-4">{error}</p>;
+  if (!data) return <p className="text-muted-foreground p-4">No data</p>;
+
+  const scoreColor = data.score >= 80 ? 'text-emerald-400' : data.score >= 60 ? 'text-yellow-400' : 'text-red-400';
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Select value={String(days)} onValueChange={v => setDays(Number(v))}>
+          <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="1">Last 24h</SelectItem>
+            <SelectItem value="7">Last 7d</SelectItem>
+            <SelectItem value="30">Last 30d</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="ghost" size="sm" onClick={refetch}><RefreshCw className="h-3.5 w-3.5" /></Button>
       </div>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Cost by Task Type</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Task Type</TableHead>
-                <TableHead>Runs</TableHead>
-                <TableHead>Total Cost</TableHead>
-                <TableHead>Avg In Tokens</TableHead>
-                <TableHead>Avg Out Tokens</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {aggregated.byType.map(r => (
-                <TableRow key={r.type}>
-                  <TableCell className="font-mono text-xs">{r.type}</TableCell>
-                  <TableCell>{r.count}</TableCell>
-                  <TableCell>{fmtCost(r.total)}</TableCell>
-                  <TableCell>{fmtTokens(r.avgTokensIn)}</TableCell>
-                  <TableCell>{fmtTokens(r.avgTokensOut)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <CardContent className="pt-6 text-center">
+          <p className="text-sm text-muted-foreground mb-2">Release Confidence Score</p>
+          <p className={`text-5xl font-bold ${scoreColor}`}>{data.score}</p>
+          <Badge className={`mt-2 ${data.healthy ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+            {data.healthy ? 'HEALTHY' : 'NOT READY'}
+          </Badge>
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <MetricCard label="Success Rate" value={fmtPct(data.metrics.success_rate * 100)} warn={data.metrics.success_rate < 0.8} />
+        <MetricCard label="Regen Rate" value={fmtPct(data.metrics.regen_rate * 100)} warn={data.metrics.regen_rate > 0.3} />
+        <MetricCard label="Anomaly Rate" value={fmtPct(data.metrics.anomaly_rate * 100)} warn={data.metrics.anomaly_rate > 0.1} />
+        <MetricCard label="Avg Latency" value={fmtMs(data.metrics.avg_latency_ms)} warn={data.metrics.avg_latency_ms > 120_000} />
+        <MetricCard label="Avg Cost" value={fmtCost(data.metrics.avg_cost_usd)} />
+        <MetricCard label="Freshness" value={data.metrics.evidence_freshness_hours != null ? `${data.metrics.evidence_freshness_hours.toFixed(0)}h ago` : '—'} />
+        <MetricCard label="Sample Size" value={String(data.metrics.sample_size)} warn={data.metrics.sample_size < 5} />
+      </div>
+
+      {data.blockers.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base text-red-400">Blockers</CardTitle></CardHeader>
+          <CardContent>
+            <ul className="space-y-1 text-sm">{data.blockers.map((b, i) => <li key={i} className="flex items-center gap-2"><XCircle className="h-4 w-4 text-red-400 shrink-0" />{b}</li>)}</ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {data.warnings.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base text-yellow-400">Warnings</CardTitle></CardHeader>
+          <CardContent>
+            <ul className="space-y-1 text-sm">{data.warnings.map((w, i) => <li key={i} className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-yellow-400 shrink-0" />{w}</li>)}</ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {Object.keys(data.metrics.failed_dimension_trends).length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Failed Dimension Trends</CardTitle></CardHeader>
+          <CardContent>
+            <div className="flex gap-2 flex-wrap">
+              {Object.entries(data.metrics.failed_dimension_trends).map(([dim, count]) => (
+                <Badge key={dim} variant="outline" className="text-red-400 border-red-500/30">{dim}: {count}</Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -503,7 +706,6 @@ function RunDrilldownTab({ userId, initialRunId }: { userId: string; initialRunI
   const [inputVal, setInputVal] = useState(initialRunId ?? '');
   const { data: runs } = useAsyncData(() => fetchRecentRuns(userId), [userId]);
 
-  // Auto-load when initialRunId changes
   useEffect(() => {
     if (initialRunId) { setRunId(initialRunId); setInputVal(initialRunId); }
   }, [initialRunId]);
@@ -519,14 +721,8 @@ function RunDrilldownTab({ userId, initialRunId }: { userId: string; initialRunI
 
   return (
     <div className="space-y-6">
-      {/* Selector */}
       <div className="flex items-center gap-2">
-        <Input
-          placeholder="Paste run ID…"
-          value={inputVal}
-          onChange={e => setInputVal(e.target.value)}
-          className="font-mono text-xs max-w-[320px]"
-        />
+        <Input placeholder="Paste run ID…" value={inputVal} onChange={e => setInputVal(e.target.value)} className="font-mono text-xs max-w-[320px]" />
         <Button size="sm" onClick={() => setRunId(inputVal.trim())}>Load</Button>
       </div>
 
@@ -534,12 +730,7 @@ function RunDrilldownTab({ userId, initialRunId }: { userId: string; initialRunI
         <div className="flex gap-1 flex-wrap">
           <span className="text-xs text-muted-foreground mr-1">Recent:</span>
           {runs.slice(0, 10).map(r => (
-            <Badge
-              key={r.id}
-              variant={r.id === runId ? 'default' : 'outline'}
-              className="cursor-pointer text-xs font-mono"
-              onClick={() => { setRunId(r.id); setInputVal(r.id); }}
-            >
+            <Badge key={r.id} variant={r.id === runId ? 'default' : 'outline'} className="cursor-pointer text-xs font-mono" onClick={() => { setRunId(r.id); setInputVal(r.id); }}>
               {r.id.slice(0, 8)} ({r.task_type})
             </Badge>
           ))}
@@ -551,7 +742,6 @@ function RunDrilldownTab({ userId, initialRunId }: { userId: string; initialRunI
 
       {run && !loading && (
         <>
-          {/* A. Overview */}
           <Card>
             <CardHeader><CardTitle className="text-base">Overview</CardTitle></CardHeader>
             <CardContent>
@@ -568,23 +758,12 @@ function RunDrilldownTab({ userId, initialRunId }: { userId: string; initialRunI
             </CardContent>
           </Card>
 
-          {/* B. Stage Timeline */}
           <Card>
             <CardHeader><CardTitle className="text-base">Stage Timeline</CardTitle></CardHeader>
             <CardContent>
               {telemetry.length === 0 ? <p className="text-muted-foreground text-sm">No telemetry rows for this run.</p> : (
                 <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Stage</TableHead>
-                      <TableHead>Provider</TableHead>
-                      <TableHead>Model</TableHead>
-                      <TableHead>Duration</TableHead>
-                      <TableHead>In Tokens</TableHead>
-                      <TableHead>Out Tokens</TableHead>
-                      <TableHead>Success</TableHead>
-                    </TableRow>
-                  </TableHeader>
+                  <TableHeader><TableRow><TableHead>Stage</TableHead><TableHead>Provider</TableHead><TableHead>Model</TableHead><TableHead>Duration</TableHead><TableHead>In Tokens</TableHead><TableHead>Out Tokens</TableHead><TableHead>Success</TableHead></TableRow></TableHeader>
                   <TableBody>
                     {telemetry.map(t => (
                       <TableRow key={t.id}>
@@ -603,7 +782,6 @@ function RunDrilldownTab({ userId, initialRunId }: { userId: string; initialRunI
             </CardContent>
           </Card>
 
-          {/* C. Gate Diagnostics */}
           <Card>
             <CardHeader><CardTitle className="text-base">Gate Diagnostics</CardTitle></CardHeader>
             <CardContent className="space-y-3">
@@ -638,23 +816,12 @@ function RunDrilldownTab({ userId, initialRunId }: { userId: string; initialRunI
             </CardContent>
           </Card>
 
-          {/* D. Batch Details */}
           {sections.length > 0 && (
             <Card>
               <CardHeader><CardTitle className="text-base">Batch Details</CardTitle></CardHeader>
               <CardContent>
                 <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Batch</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Primary</TableHead>
-                      <TableHead>Fallback</TableHead>
-                      <TableHead>Model</TableHead>
-                      <TableHead>Attempts</TableHead>
-                      <TableHead>Error</TableHead>
-                    </TableRow>
-                  </TableHeader>
+                  <TableHeader><TableRow><TableHead>Batch</TableHead><TableHead>Status</TableHead><TableHead>Primary</TableHead><TableHead>Fallback</TableHead><TableHead>Model</TableHead><TableHead>Attempts</TableHead><TableHead>Error</TableHead></TableRow></TableHeader>
                   <TableBody>
                     {sections.map(s => (
                       <TableRow key={s.id}>
@@ -708,16 +875,18 @@ export default function StrategyOpsPanel() {
         <TabsList className="mb-4 flex-wrap h-auto gap-1">
           <TabsTrigger value="evidence">Evidence</TabsTrigger>
           <TabsTrigger value="gates">Gates</TabsTrigger>
-          <TabsTrigger value="latency">Latency</TabsTrigger>
-          <TabsTrigger value="costs">Costs</TabsTrigger>
+          <TabsTrigger value="costs"><DollarSign className="h-3 w-3 mr-1" />Costs</TabsTrigger>
+          <TabsTrigger value="latency"><Clock className="h-3 w-3 mr-1" />Latency</TabsTrigger>
+          <TabsTrigger value="confidence"><Shield className="h-3 w-3 mr-1" />Confidence</TabsTrigger>
           <TabsTrigger value="anomalies">Anomalies</TabsTrigger>
           <TabsTrigger value="drilldown">Run Drilldown</TabsTrigger>
         </TabsList>
 
         <TabsContent value="evidence"><EvidenceTab userId={user.id} /></TabsContent>
         <TabsContent value="gates"><GatesTab userId={user.id} /></TabsContent>
-        <TabsContent value="latency"><LatencyTab userId={user.id} /></TabsContent>
-        <TabsContent value="costs"><CostsTab userId={user.id} /></TabsContent>
+        <TabsContent value="costs"><CostDeepTab userId={user.id} /></TabsContent>
+        <TabsContent value="latency"><LatencyDeepTab userId={user.id} /></TabsContent>
+        <TabsContent value="confidence"><ReleaseConfidenceTab userId={user.id} /></TabsContent>
         <TabsContent value="anomalies"><AnomaliesTab userId={user.id} onDrilldown={handleDrilldown} /></TabsContent>
         <TabsContent value="drilldown"><RunDrilldownTab userId={user.id} initialRunId={drilldownRunId} /></TabsContent>
       </Tabs>
