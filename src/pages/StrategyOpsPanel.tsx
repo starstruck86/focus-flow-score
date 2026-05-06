@@ -855,6 +855,216 @@ function RunDrilldownTab({ userId, initialRunId }: { userId: string; initialRunI
 }
 
 /* ================================================================== */
+/*  TAB: Failures (Phase 4D)                                           */
+/* ================================================================== */
+
+function FailuresTab({ userId, onDrilldown }: { userId: string; onDrilldown: (id: string) => void }) {
+  const { data: waste, loading: l1 } = useAsyncData(() => getWasteSummary(userId), [userId]);
+  const { data: cohorts, loading: l2 } = useAsyncData(() => getCohortSummaries(userId), [userId]);
+  const { data: breakdown, loading: l3 } = useAsyncData(() => getFailureBreakdown(userId), [userId]);
+  const { data: failures, loading: l4 } = useAsyncData(() => classifyFailures(userId), [userId]);
+
+  const opportunities = useMemo(() => {
+    if (!failures) return [];
+    return aggregateRemediationOpportunities(failures);
+  }, [failures]);
+
+  const [eraFilter, setEraFilter] = useState<string>('all');
+  const filteredFailures = useMemo(() => {
+    if (!failures) return [];
+    if (eraFilter === 'all') return failures.slice(0, 50);
+    return failures.filter(f => f.era === eraFilter).slice(0, 50);
+  }, [failures, eraFilter]);
+
+  if (l1 || l2) return <LoadingSkeleton />;
+
+  return (
+    <div className="space-y-6">
+      {/* Headline metrics */}
+      {waste && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <MetricCard label="Total Failures" value={String(waste.total_failures)} />
+          <MetricCard label="Total Waste" value={fmtCost(waste.total_waste_usd)} warn={waste.total_waste_usd > 0} />
+          <MetricCard label="Historical (pre-Phase 3)" value={`${waste.historical_failures} runs`} sub={fmtCost(waste.historical_waste_usd)} />
+          <MetricCard label="Current (post-Phase 3)" value={`${waste.current_failures} runs`} sub={fmtCost(waste.current_waste_usd)} warn={waste.current_failures > 0} />
+          <MetricCard label="Top Root Cause" value={waste.top_reason ? REASON_LABELS[waste.top_reason] : '—'} sub={`${waste.top_reason_count} occurrences`} />
+          <MetricCard label="Recoverable" value={`${waste.recoverable_failures} runs`} sub={`${fmtCost(waste.recoverable_waste_usd)} saveable`} />
+        </div>
+      )}
+
+      {/* Cohort analysis */}
+      {cohorts && cohorts.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Failure by Era</CardTitle><CardDescription>Separates historical from current failures</CardDescription></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Era</TableHead>
+                  <TableHead>Total</TableHead>
+                  <TableHead>Failed</TableHead>
+                  <TableHead>Success</TableHead>
+                  <TableHead>Failure Rate</TableHead>
+                  <TableHead>Waste</TableHead>
+                  <TableHead>Top Reason</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {cohorts.map(c => (
+                  <TableRow key={c.era}>
+                    <TableCell className="text-xs">{c.label}</TableCell>
+                    <TableCell>{c.total}</TableCell>
+                    <TableCell className="text-red-400">{c.failed}</TableCell>
+                    <TableCell className="text-emerald-400">{c.completed}</TableCell>
+                    <TableCell className={c.failure_rate > 50 ? 'text-red-400 font-semibold' : ''}>
+                      {fmtPct(c.failure_rate)}
+                    </TableCell>
+                    <TableCell>{fmtCost(c.total_waste_usd)}</TableCell>
+                    <TableCell className="text-xs">
+                      {c.top_reasons[0] ? `${REASON_LABELS[c.top_reasons[0].reason]} (${c.top_reasons[0].count})` : '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Root cause breakdown */}
+      {breakdown && breakdown.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Root Cause Breakdown</CardTitle><CardDescription>All failures classified by reason</CardDescription></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Root Cause</TableHead>
+                  <TableHead>Count</TableHead>
+                  <TableHead>% of Failures</TableHead>
+                  <TableHead>Total Waste</TableHead>
+                  <TableHead>Avg Waste</TableHead>
+                  <TableHead>Remediation</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {breakdown.map(b => (
+                  <TableRow key={b.reason}>
+                    <TableCell className="text-xs font-medium">{b.label}</TableCell>
+                    <TableCell>{b.count}</TableCell>
+                    <TableCell>{fmtPct(b.pct)}</TableCell>
+                    <TableCell>{fmtCost(b.total_waste_usd)}</TableCell>
+                    <TableCell>{fmtCost(b.avg_waste_usd)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={b.remediation_type === 'none' ? 'text-muted-foreground' : 'text-blue-400 border-blue-500/30'}>
+                        {b.remediation_type.replace(/_/g, ' ')}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Remediation opportunities */}
+      {opportunities.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Remediation Opportunities</CardTitle>
+            <CardDescription>
+              Targeted fixes that could recover failures without full regen
+              {!isRemediationEnabled() && <Badge variant="outline" className="ml-2 text-yellow-400 border-yellow-500/30">FLAG OFF</Badge>}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Strategy</TableHead>
+                  <TableHead>Candidate Runs</TableHead>
+                  <TableHead>Est. Savings</TableHead>
+                  <TableHead>Needs LLM</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {opportunities.map(o => (
+                  <TableRow key={o.type}>
+                    <TableCell className="text-xs font-medium">{o.label}</TableCell>
+                    <TableCell>{o.count}</TableCell>
+                    <TableCell className="text-emerald-400">{fmtCost(o.estimated_savings_usd)}</TableCell>
+                    <TableCell>{o.requires_llm ? 'Yes' : 'No'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Individual failure list */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Recent Failures</CardTitle>
+          <div className="flex gap-2 mt-2">
+            <Badge variant={eraFilter === 'all' ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setEraFilter('all')}>All</Badge>
+            <Badge variant={eraFilter === 'pre_phase3' ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setEraFilter('pre_phase3')}>Pre-Phase 3</Badge>
+            <Badge variant={eraFilter === 'post_phase3' ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setEraFilter('post_phase3')}>Post-Phase 3</Badge>
+            <Badge variant={eraFilter === 'post_phase4a' ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setEraFilter('post_phase4a')}>Post-4A</Badge>
+            <Badge variant={eraFilter === 'post_phase4c' ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setEraFilter('post_phase4c')}>Post-4C</Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filteredFailures.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No failures in this cohort.</p>
+          ) : (
+            <div className="overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Run</TableHead>
+                    <TableHead>Era</TableHead>
+                    <TableHead>Root Cause</TableHead>
+                    <TableHead>Detail</TableHead>
+                    <TableHead>Failed Stage</TableHead>
+                    <TableHead>Regen?</TableHead>
+                    <TableHead>Waste</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredFailures.map(f => (
+                    <TableRow key={f.id}>
+                      <TableCell className="font-mono text-xs">{f.id.slice(0, 8)}</TableCell>
+                      <TableCell className="text-xs">{f.era.replace(/_/g, ' ')}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs text-red-400 border-red-500/30">
+                          {REASON_LABELS[f.reason].replace('Gate: ', '')}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate">{f.reason_detail}</TableCell>
+                      <TableCell className="font-mono text-xs">{f.stage_failed ?? '—'}</TableCell>
+                      <TableCell>{f.regen_attempted ? (f.regen_succeeded ? '✓' : '✗') : '—'}</TableCell>
+                      <TableCell>{fmtCost(f.cost_wasted)}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="sm" onClick={() => onDrilldown(f.id)}>
+                          <Search className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ================================================================== */
 /*  MAIN PAGE                                                          */
 /* ================================================================== */
 
@@ -882,6 +1092,7 @@ export default function StrategyOpsPanel() {
         <TabsList className="mb-4 flex-wrap h-auto gap-1">
           <TabsTrigger value="evidence">Evidence</TabsTrigger>
           <TabsTrigger value="gates">Gates</TabsTrigger>
+          <TabsTrigger value="failures"><Flame className="h-3 w-3 mr-1" />Failures</TabsTrigger>
           <TabsTrigger value="costs"><DollarSign className="h-3 w-3 mr-1" />Costs</TabsTrigger>
           <TabsTrigger value="latency"><Clock className="h-3 w-3 mr-1" />Latency</TabsTrigger>
           <TabsTrigger value="confidence"><Shield className="h-3 w-3 mr-1" />Confidence</TabsTrigger>
@@ -891,6 +1102,7 @@ export default function StrategyOpsPanel() {
 
         <TabsContent value="evidence"><EvidenceTab userId={user.id} /></TabsContent>
         <TabsContent value="gates"><GatesTab userId={user.id} /></TabsContent>
+        <TabsContent value="failures"><FailuresTab userId={user.id} onDrilldown={handleDrilldown} /></TabsContent>
         <TabsContent value="costs"><CostDeepTab userId={user.id} /></TabsContent>
         <TabsContent value="latency"><LatencyDeepTab userId={user.id} /></TabsContent>
         <TabsContent value="confidence"><ReleaseConfidenceTab userId={user.id} /></TabsContent>
