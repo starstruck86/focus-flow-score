@@ -878,6 +878,7 @@ function RunDrilldownTab({ userId, initialRunId }: { userId: string; initialRunI
             </Card>
           )}
 
+          {sections.length > 0 && (
             <Card>
               <CardHeader><CardTitle className="text-base">Batch Details</CardTitle></CardHeader>
               <CardContent>
