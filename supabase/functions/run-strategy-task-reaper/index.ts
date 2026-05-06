@@ -8,7 +8,7 @@
 // reach rows across users without auth.
 // ════════════════════════════════════════════════════════════════
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { sweepStalePendingRuns } from "../_shared/strategy-orchestrator/staleRunWatchdog.ts";
 
 const corsHeaders = {

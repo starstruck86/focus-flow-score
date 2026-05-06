@@ -10,7 +10,7 @@
 // returns instantly and we never hit the synchronous wall clock.
 // ════════════════════════════════════════════════════════════════
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { applyRedline, runStrategyTaskInBackground } from "../_shared/strategy-orchestrator/runTask.ts";
 import { findRecentActiveRun } from "../_shared/strategy-orchestrator/idempotency.ts";
 import { failStalePendingRun } from "../_shared/strategy-orchestrator/staleRunWatchdog.ts";

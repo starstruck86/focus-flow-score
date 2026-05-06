@@ -6,7 +6,7 @@
  * POST /run-catchup
  * Body: { run_id, phase: 'enrich' | 'extract' | 'activate' | 'surface_to_qa', limit?: number }
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

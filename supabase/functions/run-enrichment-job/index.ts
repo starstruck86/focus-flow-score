@@ -14,7 +14,7 @@
  * Phase 3: Supports mode="protected" for enforced auth + scope checks.
  * Legacy path (no mode) is unchanged.
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { logServiceRoleUsage, logMissingUserScope, logCrossUserAccess, logValidationWarnings, logAuthMethod } from '../_shared/securityLog.ts';
 import { logEnforcementEvent } from '../_shared/enforcementLog.ts';
 
