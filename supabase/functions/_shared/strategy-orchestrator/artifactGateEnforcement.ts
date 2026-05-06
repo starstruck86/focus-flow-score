@@ -252,8 +252,8 @@ export function checkSectionCompleteness(
     const mapping = mapLookup.get(norm);
     let sectionContent = "";
 
-    if (mapping?.location === "embedded" && mapping.parentSection) {
-      // Look for concept substance inside the declared parent section
+    if (mapping && mapping.parentSection) {
+      // Mapped concept — find content in the declared parent section
       const parentNorm = mapping.parentSection.toLowerCase().replace(/_/g, " ");
       const parentHeadingPattern = new RegExp(
         `(?:^#+\\s*[^\\n]*${parentNorm.replace(/\s+/g, "\\s+")}[^\\n]*|"id"\\s*:\\s*"${mapping.parentSection}")\\s*\\n([\\s\\S]*?)(?=\\n#+\\s|\\n"id"\\s*:|$)`,
@@ -261,25 +261,50 @@ export function checkSectionCompleteness(
       );
       const parentMatch = semanticText.match(parentHeadingPattern);
       const parentText = parentMatch?.[1] || "";
+      const minWords = mapping.minWords ?? 40;
 
-      // Check concept presence in parent section
-      if (parentText && conceptPresent(req, parentText, parentText)) {
-        const wordCount = parentText.trim().split(/\s+/).length;
-        if (wordCount >= mapping.minWords) {
-          // Concept is present with sufficient substance in parent — pass
-          continue;
-        } else {
-          diagnostics.push(`Section "${req}" embedded in "${mapping.parentSection}" is a stub (${wordCount} words, min ${mapping.minWords})`);
+      if (mapping.location === "section") {
+        // Dedicated section: the parent heading IS the section for this concept
+        if (parentText) {
+          const wordCount = parentText.trim().split(/\s+/).length;
+          if (wordCount < minWords) {
+            diagnostics.push(`Section "${req}" (via "${mapping.parentSection}") is a stub (${wordCount} words, min ${minWords})`);
+          } else {
+            const isFiller = FILLER_PATTERNS.some(p => p.test(parentText.trim()));
+            if (isFiller) {
+              diagnostics.push(`Section "${req}" is filler`);
+            } else {
+              const hasSubstance = SUBSTANCE_PATTERNS.some(p => p.test(parentText));
+              if (!hasSubstance) {
+                diagnostics.push(`Section "${req}" lacks substance (no metrics, stakeholders, or causal reasoning)`);
+              }
+            }
+          }
           continue;
         }
-      }
-
-      // Fallback: check concept presence in full document
-      if (conceptPresent(req, semanticText, output)) {
-        // Concept words exist somewhere — acceptable for embedded mapping
+        // Fall through to standard finding if parent heading not found
+      } else {
+        // Embedded: concept is inside a parent section
+        if (parentText && conceptPresent(req, parentText, parentText)) {
+          const wordCount = parentText.trim().split(/\s+/).length;
+          if (wordCount >= minWords) {
+            continue;
+          } else {
+            diagnostics.push(`Section "${req}" embedded in "${mapping.parentSection}" is a stub (${wordCount} words, min ${minWords})`);
+            continue;
+          }
+        }
+        if (conceptPresent(req, semanticText, output)) {
+          continue;
+        }
+        diagnostics.push(`Section "${req}" not found (expected embedded in "${mapping.parentSection}")`);
         continue;
       }
-      diagnostics.push(`Section "${req}" not found (expected embedded in "${mapping.parentSection}")`);
+    } else if (mapping?.location === "embedded" && !mapping.parentSection) {
+      if (conceptPresent(req, semanticText, output)) {
+        continue;
+      }
+      diagnostics.push(`Section "${req}" not found`);
       continue;
     }
 
