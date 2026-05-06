@@ -242,12 +242,12 @@ export function checkSectionCompleteness(
         `(?:^#+\\s*[^\\n]*${norm.replace(/\s+/g, "\\s+")}[^\\n]*|^[^\\n]*${norm.replace(/\s+/g, "\\s+")}[^\\n]*:)\\s*\\n([\\s\\S]*?)(?=\\n#+\\s|\\n[A-Z][A-Z\\s]+:|$)`,
         "im",
       );
-      const headingMatch = output.match(headingPattern);
+      const headingMatch = effectiveOutput.match(headingPattern);
       if (headingMatch) sectionContent = headingMatch[1] || "";
     }
 
     if (!sectionContent) {
-      const paragraphs = output.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+      const paragraphs = effectiveOutput.split(/\n\s*\n/).filter(p => p.trim().length > 0);
       const words = norm.split(/\s+/).filter(w => w.length > 2);
       for (const para of paragraphs) {
         const pl = para.toLowerCase();
