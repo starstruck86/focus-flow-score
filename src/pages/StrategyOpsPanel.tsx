@@ -557,7 +557,7 @@ function RunDrilldownTab({ userId, initialRunId }: { userId: string; initialRunI
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div><span className="text-muted-foreground">Task Type</span><p className="font-mono">{run.task_type}</p></div>
-                <div><span className="text-muted-foreground">Status</span><p><Badge variant="secondary">{run.status}</Badge></p></div>
+                <div><span className="text-muted-foreground">Status</span><div><Badge variant="secondary">{run.status}</Badge></div></div>
                 <div><span className="text-muted-foreground">Created</span><p>{relTime(run.created_at)}</p></div>
                 <div><span className="text-muted-foreground">Completed</span><p>{relTime(run.completed_at)}</p></div>
                 <div><span className="text-muted-foreground">Cost</span><p>{fmtCost(parseCost(run.meta))}</p></div>
