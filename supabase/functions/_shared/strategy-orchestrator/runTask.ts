@@ -226,6 +226,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   });
 
   await setProgress(supabase, runId, "library_retrieval");
+  const libraryStage = telemetry.startStage("library_retrieval");
   const library = libraryDecision.shouldQuery
     ? await retrieveLibraryContext(supabase, userId, inputs, {
         scopes: plannerRetrievalArgs?.scopes ?? derivedScopes,
@@ -233,6 +234,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         maxPlaybooks: plannerRetrievalArgs?.maxPlaybooks ?? 6,
       })
     : { knowledgeItems: [], playbooks: [], contextString: "", counts: { kis: 0, playbooks: 0 } };
+  libraryStage.finish({ success: true, metadata: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 } });
 
   const libraryHitCount = (library.counts?.kis ?? 0) + (library.counts?.playbooks ?? 0);
   const libraryCoverageState = evaluateLibraryCoverage({
