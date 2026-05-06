@@ -377,4 +377,14 @@ export interface ArtifactGateTelemetry {
   regen_attempts: number;
   regen_success: boolean;
   total_gate_latency_ms: number;
+  sections_checked?: string[];
+  sections_passed?: string[];
+  sections_failed?: string[];
+  diagnostics?: Array<{
+    dimension: string;
+    requirement: string;
+    reason: string;
+    matched_excerpt: string;
+    remediation: string;
+  }>;
 }
