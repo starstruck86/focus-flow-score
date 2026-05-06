@@ -361,15 +361,20 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
 
   if (queries.length) {
     await setProgress(supabase, runId, "research");
+    const researchStage = telemetry.startStage("research", { provider: "perplexity", model: "sonar-pro" });
     console.log(`[stage-1] ${queries.length} parallel research queries...`);
+    let researchUsage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
     const settled = await Promise.allSettled(
       queries.map(async (q) => {
         try {
-          const result = await callPerplexity([
+          const pResult = await callPerplexityWithUsage([
             { role: "system", content: "You are a sales research analyst. Provide specific, sourced facts. Include dates and numbers when available. If information is not found, say so explicitly." },
             { role: "user", content: q.prompt },
           ]);
-          return { key: q.key, result };
+          researchUsage.input_tokens += pResult.usage.input_tokens ?? 0;
+          researchUsage.output_tokens += pResult.usage.output_tokens ?? 0;
+          researchUsage.total_tokens += pResult.usage.total_tokens ?? 0;
+          return { key: q.key, result: { text: pResult.text, citations: pResult.citations || [] } };
         } catch (e) {
           console.error(`[stage-1] ${q.key} failed:`, (e as Error).message);
           return { key: q.key, result: { text: "", citations: [] } };
@@ -380,6 +385,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       if (s.status === "fulfilled") research.results[s.value.key] = s.value.result;
     }
     research.totalChars = Object.values(research.results).reduce((sum, r) => sum + r.text.length, 0);
+    researchStage.finish({ success: true, usage: researchUsage, metadata: { queries: queries.length, total_chars: research.totalChars } });
     console.log(`[stage-1] research complete: ${research.totalChars} chars`);
   }
 
