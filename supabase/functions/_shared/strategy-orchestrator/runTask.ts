@@ -1016,6 +1016,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       const hardFailMeta: Record<string, unknown> = {
         artifact_gate: artifactGateTelemetry,
         artifact_gate_failed: true,
+        readability_normalization: readabilityNormalization,
         library_counts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
       };
       if (planResult.ok) {
