@@ -926,8 +926,13 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     artifactGateTelemetry.regen_attempts = 1;
     await setProgress(supabase, runId, "artifact_gate_regen");
     try {
+      // Build structured corrections from diagnostics for smarter regen
+      const structuredCorrections = (gateResult.diagnostics ?? [])
+        .map(d => `- [${d.dimension}] "${d.requirement}": ${d.reason} → ${d.remediation}`)
+        .join("\n");
+      const rawDiagnostics = gateResult.gates.flatMap(g => g.diagnostics).join("\n");
       const regenRaw = await callOpenAI([
-        { role: "system", content: `${overlayPrefix}${handler.buildDocumentSystemPrompt()}\n\nIMPORTANT: Your previous output failed quality gates. Fix these issues:\n${gateResult.gates.flatMap(g => g.diagnostics).join("\n")}` },
+        { role: "system", content: `${overlayPrefix}${handler.buildDocumentSystemPrompt()}\n\nIMPORTANT: Your previous output failed quality gates. Fix these issues:\n${rawDiagnostics}\n\nStructured corrections:\n${structuredCorrections}` },
         { role: "user", content: handler.buildDocumentUserPrompt(inputs, synthesis, library) },
       ], { model: "gpt-5-mini", maxTokens: 16000 });
       const regenParsed = safeParseJSON<any>(regenRaw);
