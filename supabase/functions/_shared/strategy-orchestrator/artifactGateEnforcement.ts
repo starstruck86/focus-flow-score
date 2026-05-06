@@ -18,6 +18,16 @@ export interface ArtifactGateResult {
   pass: boolean;
   gates: GateDiagnostic[];
   failed_dimensions: string[];
+  sections_checked?: string[];
+  sections_passed?: string[];
+  sections_failed?: string[];
+  diagnostics?: Array<{
+    dimension: string;
+    requirement: string;
+    reason: string;
+    matched_excerpt: string;
+    remediation: string;
+  }>;
 }
 
 export interface ArtifactManifest {
