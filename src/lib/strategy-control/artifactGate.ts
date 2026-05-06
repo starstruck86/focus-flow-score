@@ -74,7 +74,25 @@ function deepExtractText(value: unknown): string {
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   if (Array.isArray(value)) return value.map(deepExtractText).join("\n\n");
   if (typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>)
+    const obj = value as Record<string, unknown>;
+    if (typeof obj.markdown === "string" && obj.markdown.trim().length > 100) {
+      return obj.markdown;
+    }
+    if (Array.isArray(obj.sections)) {
+      const sectionTexts = (obj.sections as unknown[])
+        .map((s) => {
+          if (typeof s === "object" && s !== null) {
+            const sec = s as Record<string, unknown>;
+            const heading = sec.name || sec.title || sec.heading || sec.id || "";
+            const body = sec.content || sec.body || sec.markdown || "";
+            return `## ${heading}\n\n${deepExtractText(body)}`;
+          }
+          return deepExtractText(s);
+        })
+        .filter(Boolean);
+      if (sectionTexts.length > 0) return sectionTexts.join("\n\n");
+    }
+    return Object.entries(obj)
       .map(([k, v]) => {
         const keyLabel = k.replace(/_/g, " ");
         return `## ${keyLabel}\n\n${deepExtractText(v)}`;
