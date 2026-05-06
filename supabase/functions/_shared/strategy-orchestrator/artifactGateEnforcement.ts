@@ -198,12 +198,26 @@ export function checkSectionCompleteness(
   mustHave: readonly string[],
 ): GateDiagnostic {
   const diagnostics: string[] = [];
-  const lower = output.toLowerCase();
 
-  let parsedJson: Record<string, unknown> | null = null;
+  // Unwrap wrapper format: {markdown: "...", sections: [...]}
+  let effectiveOutput = output;
   try {
     const fenceMatch = output.match(/```(?:json|structured_artifact)\s*([\s\S]*?)```/);
     const raw = fenceMatch ? fenceMatch[1] : output.trim();
+    if (raw.startsWith("{")) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && typeof parsed.markdown === "string") {
+        effectiveOutput = parsed.markdown;
+      }
+    }
+  } catch { /* not JSON */ }
+
+  const lower = effectiveOutput.toLowerCase();
+
+  let parsedJson: Record<string, unknown> | null = null;
+  try {
+    const fenceMatch = effectiveOutput.match(/```(?:json|structured_artifact)\s*([\s\S]*?)```/);
+    const raw = fenceMatch ? fenceMatch[1] : effectiveOutput.trim();
     if (raw.startsWith("{")) parsedJson = JSON.parse(raw);
   } catch { /* not JSON */ }
 
