@@ -335,12 +335,12 @@ export async function authorBySectionBatches(args: {
    *  between batches so the stage watchdog doesn't reap a healthy run
    *  mid-ladder. Best-effort; failures are swallowed. */
   supabase?: any;
+  /** Optional reduced token budget for low_token retry mode */
+  maxTokensOverride?: number;
 }): Promise<SectionBatchResult> {
-  // Only discovery_prep has a defined batch plan today. Other task types
-  // can plug in by exporting their own batch list later — for now we just
-  // refuse to batch them (caller treats this as "not eligible" and lets
-  // the original failure stand).
-  if (args.taskType !== "discovery_prep") {
+  const resolved = resolveSectionsAndBatches(args.taskType);
+  if (!resolved) {
+    // No batch plan for this task type — refuse gracefully.
     return {
       draft: { sections: [] },
       batchOutcomes: [],
@@ -349,7 +349,8 @@ export async function authorBySectionBatches(args: {
     };
   }
 
-  const userPromptBuilder = (ids: string[]) => buildBatchUserPrompt(args.baseUserPrompt, ids);
+  const { sections: TASK_SECTIONS, batches: TASK_BATCHES } = resolved;
+  const userPromptBuilder = (ids: string[]) => buildBatchUserPrompt(args.baseUserPrompt, ids, args.taskType);
 
   const collected: Map<string, any> = new Map();
   const outcomes: SectionBatchResult["batchOutcomes"] = [];
@@ -358,26 +359,23 @@ export async function authorBySectionBatches(args: {
   console.log(JSON.stringify({
     tag: "[section-author:start]",
     run_id: args.runId,
-    batches: DISCOVERY_PREP_BATCHES.length,
-    sections_total: DISCOVERY_PREP_SECTIONS.length,
+    task_type: args.taskType,
+    batches: TASK_BATCHES.length,
+    sections_total: TASK_SECTIONS.length,
     primary_model: PRIMARY_MODEL,
     fallback_model: FALLBACK_MODEL,
+    max_tokens_override: args.maxTokensOverride ?? null,
   }));
 
   let batchIndex = 0;
-  for (const batch of DISCOVERY_PREP_BATCHES) {
+  for (const batch of TASK_BATCHES) {
     batchIndex++;
-    // ── Heartbeat: refresh updated_at + progress_step between batches so
-    // the document_authoring stale-run watchdog (which only sees elapsed
-    // time on updated_at) doesn't reap a healthy long-running batch
-    // sequence as stalled. Best-effort; failures are swallowed so the
-    // ladder always continues.
     if (args.supabase) {
       try {
         await args.supabase
           .from("task_runs")
           .update({
-            progress_step: `document_authoring:batch_${batchIndex}_of_${DISCOVERY_PREP_BATCHES.length}`,
+            progress_step: `document_authoring:batch_${batchIndex}_of_${TASK_BATCHES.length}`,
             updated_at: new Date().toISOString(),
           })
           .eq("id", args.runId);
@@ -404,7 +402,10 @@ export async function authorBySectionBatches(args: {
     console.log(JSON.stringify({
       tag: "[section-author:batch_done]",
       run_id: args.runId,
+      task_type: args.taskType,
       batch: batch.ids,
+      batch_index: batchIndex,
+      total_batches: TASK_BATCHES.length,
       duration_ms: durationMs,
       primary_status: result.primary_status,
       fallback_status: result.fallback_status ?? null,
@@ -425,10 +426,9 @@ export async function authorBySectionBatches(args: {
   }
 
   // Assemble in template order; insert structured placeholders for any
-  // sections that failed both primary and fallback so the document still
-  // renders and the operator can see exactly what was lost.
+  // sections that failed both primary and fallback.
   const assembled: any[] = [];
-  for (const tpl of DISCOVERY_PREP_SECTIONS) {
+  for (const tpl of TASK_SECTIONS) {
     if (collected.has(tpl.id)) {
       assembled.push(collected.get(tpl.id));
     } else {
@@ -444,14 +444,14 @@ export async function authorBySectionBatches(args: {
     }
   }
 
-  // Carry the synthesis sources registry through so citations resolve.
   const sources = Array.isArray(args.synthesis?.sources) ? args.synthesis.sources : undefined;
 
   console.log(JSON.stringify({
     tag: "[section-author:end]",
     run_id: args.runId,
+    task_type: args.taskType,
     sections_authored: collected.size,
-    sections_total: DISCOVERY_PREP_SECTIONS.length,
+    sections_total: TASK_SECTIONS.length,
     any_fallback_success: anyFallbackSuccess,
     primary_model: PRIMARY_MODEL,
     fallback_model: FALLBACK_MODEL,
