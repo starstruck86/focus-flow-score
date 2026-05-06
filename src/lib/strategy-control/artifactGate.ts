@@ -22,7 +22,15 @@ export interface ArtifactGateResult {
 }
 
 export interface ArtifactManifest {
-  rubric: { mustHave: readonly string[] };
+  rubric: {
+    mustHave: readonly string[];
+    sectionMap?: ReadonlyArray<{
+      concept: string;
+      location: 'section' | 'embedded';
+      parentSection?: string;
+      minWords?: number;
+    }>;
+  };
   output: { shape: string; forbid?: readonly string[] };
 }
 
