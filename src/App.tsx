@@ -63,6 +63,7 @@ const ReliabilityQA = lazy(() => import("./pages/ReliabilityQA"));
 const ObservabilityDashboard = lazy(() => import("./pages/ObservabilityDashboard"));
 const SmokeTest = lazy(() => import("./pages/SmokeTest"));
 const LifecycleReconciliation = lazy(() => import("./pages/LifecycleReconciliation"));
+const PhaseEvidenceRunner = lazy(() => import("./pages/PhaseEvidenceRunner"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
