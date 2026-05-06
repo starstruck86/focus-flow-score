@@ -23,6 +23,38 @@
 import { callClaude, callOpenAI, safeParseJSON } from "./providers.ts";
 import { DISCOVERY_PREP_SECTIONS } from "./handlers/discoveryPrepTemplate.ts";
 
+// ── Account Brief section schema ─────────────────────────────────
+export const ACCOUNT_BRIEF_SECTIONS = [
+  { id: "company_snapshot", name: "Company Snapshot" },
+  { id: "stakeholders", name: "Stakeholders On File" },
+  { id: "operator_read", name: "Operator Read" },
+  { id: "next_moves", name: "Next Moves" },
+] as const;
+
+export const ACCOUNT_BRIEF_BATCHES: ReadonlyArray<{ ids: readonly string[] }> = Object.freeze([
+  Object.freeze({ ids: Object.freeze(["company_snapshot"]) }),
+  Object.freeze({ ids: Object.freeze(["stakeholders"]) }),
+  Object.freeze({ ids: Object.freeze(["operator_read"]) }),
+  Object.freeze({ ids: Object.freeze(["next_moves"]) }),
+]);
+
+// ── Ninety Day Plan section schema ───────────────────────────────
+export const NINETY_DAY_PLAN_SECTIONS = [
+  { id: "account_context", name: "Account Context" },
+  { id: "days_1_30", name: "Days 1–30 — Learn" },
+  { id: "days_31_60", name: "Days 31–60 — Engage" },
+  { id: "days_61_90", name: "Days 61–90 — Advance" },
+  { id: "operator_read", name: "Operator Read" },
+] as const;
+
+export const NINETY_DAY_PLAN_BATCHES: ReadonlyArray<{ ids: readonly string[] }> = Object.freeze([
+  Object.freeze({ ids: Object.freeze(["account_context"]) }),
+  Object.freeze({ ids: Object.freeze(["days_1_30"]) }),
+  Object.freeze({ ids: Object.freeze(["days_31_60"]) }),
+  Object.freeze({ ids: Object.freeze(["days_61_90"]) }),
+  Object.freeze({ ids: Object.freeze(["operator_read"]) }),
+]);
+
 /** A small, fixed grouping of section ids. Tightened to ≤2 sections per
  *  batch so each Claude-first authoring call lands inside its inner
  *  timeout on the first attempt — fallback (ChatGPT) stays exception-only
