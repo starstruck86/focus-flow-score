@@ -8,7 +8,7 @@
  * Does NOT touch Discovery Prep templates, artifacts, or task pipelines.
  * Does NOT modify any production paths.
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

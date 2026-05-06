@@ -15,7 +15,7 @@
 // All writes carry source='strategy', source_strategy_thread_id,
 // source_proposal_id, promoted_by, promoted_at, promotion scope and class.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

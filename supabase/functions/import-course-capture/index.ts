@@ -15,7 +15,7 @@
  *   { mode?: 'capture' }  — default; full payload from bookmarklet
  *   { mode: 'manual' }    — user-pasted lesson(s); same shape, looser limits
  */
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'https://deno.land/x/zod@v3.23.8/mod.ts';
 
 const corsHeaders = {

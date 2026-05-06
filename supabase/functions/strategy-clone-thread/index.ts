@@ -23,7 +23,7 @@
 //          target_opportunity_id?: string|null, new_title?: string }
 // Returns: { thread_id, title, message_count, cloned_from_thread_id, trust_state }
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

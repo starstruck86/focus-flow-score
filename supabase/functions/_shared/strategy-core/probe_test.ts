@@ -8,7 +8,7 @@
 //   the same suite. We now defer all env access into the test body and
 //   `ignore` the test when prerequisites are missing so the broader
 //   strategy-core suite can run cleanly without live Supabase access.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { retrieveResourceContext, inferTopicScopes } from "./resourceRetrieval.ts";
 
 const PROMPTS = [
