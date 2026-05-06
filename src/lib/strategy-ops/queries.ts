@@ -135,6 +135,24 @@ export function parseTokenUsage(meta: unknown) {
   };
 }
 
+export function parseRemediation(meta: unknown) {
+  const m = safeMeta(meta);
+  const r = m.remediation;
+  if (!r || typeof r !== 'object') return null;
+  const rem = r as Record<string, unknown>;
+  return {
+    attempted: rem.remediation_attempted as boolean ?? false,
+    type: (rem.remediation_type as string) ?? null,
+    success: rem.remediation_success as boolean ?? false,
+    latency_ms: (rem.remediation_latency_ms as number) ?? null,
+    cost_usd: (rem.remediation_cost_estimate_usd as number) ?? null,
+    avoided_usd: (rem.avoided_full_regen_estimate_usd as number) ?? null,
+    fallback: rem.fallback_to_hard_fail as boolean ?? false,
+    error: (rem.error as string) ?? null,
+    sections: Array.isArray(rem.sections_targeted) ? rem.sections_targeted as string[] : [],
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /*  1. Evidence — latest successful run per task_type                  */
 /* ------------------------------------------------------------------ */
