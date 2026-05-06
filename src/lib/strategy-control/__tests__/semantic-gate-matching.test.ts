@@ -93,8 +93,10 @@ const DISCOVERY_PREP_MARKDOWN = [
   "convincing 3 division GMs to standardize on a single platform.",
   "",
   "## Sources and Citations",
-  "All analysis grounded in verified library sources. Per the enterprise sales playbook,",
-  "multi-division deals require executive alignment before technical evaluation [PB:src002].",
+  "All analysis grounded in verified library sources. This demonstrates that",
+  "multi-division deals require executive alignment before technical evaluation,",
+  "because procurement bottlenecks arise when technical teams evaluate without",
+  "executive sponsorship according to the enterprise sales playbook [PB:src002].",
 ].join("\n");
 
 // ── Test Shapes ──
