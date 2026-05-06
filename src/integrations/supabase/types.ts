@@ -6935,6 +6935,74 @@ export type Database = {
         }
         Relationships: []
       }
+      strategy_run_telemetry: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          duration_ms: number | null
+          error: string | null
+          id: string
+          input_tokens: number | null
+          metadata: Json | null
+          model: string | null
+          output_tokens: number | null
+          provider: string | null
+          run_id: string
+          stage: string
+          started_at: string
+          success: boolean
+          task_type: string
+          total_tokens: number | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          input_tokens?: number | null
+          metadata?: Json | null
+          model?: string | null
+          output_tokens?: number | null
+          provider?: string | null
+          run_id: string
+          stage: string
+          started_at: string
+          success?: boolean
+          task_type: string
+          total_tokens?: number | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          input_tokens?: number | null
+          metadata?: Json | null
+          model?: string | null
+          output_tokens?: number | null
+          provider?: string | null
+          run_id?: string
+          stage?: string
+          started_at?: string
+          success?: boolean
+          task_type?: string
+          total_tokens?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_run_telemetry_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "task_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       strategy_stress_runs: {
         Row: {
           created_at: string
