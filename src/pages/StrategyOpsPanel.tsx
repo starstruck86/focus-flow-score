@@ -4,6 +4,7 @@
  * Read-only operator surface for Strategy telemetry, gates, latency, costs, anomalies.
  * Phase 4C: Added cost analytics, latency analytics, batch analysis, release confidence.
  * Phase 4D: Added failure cohort analysis, root-cause drilldown, remediation opportunities.
+ * Phase 4E-V: Added remediation flag toggle, test harness, remediation drilldown visibility.
  * Owner-gated via existing ProtectedRoute + allowlist.
  */
 import { useEffect, useState, useMemo, useCallback } from 'react';
@@ -16,12 +17,13 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Clock, Search, DollarSign, Activity, Shield, Flame } from 'lucide-react';
+import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Clock, Search, DollarSign, Activity, Shield, Flame, Wrench, FlaskConical } from 'lucide-react';
 import {
   fetchEvidenceByType, fetchGateAggregates, fetchLatencyData, fetchCostData,
   fetchAnomalyRuns, fetchRunDetail, fetchRecentRuns,
-  parseArtifactGate, parseCost, parseAnomalyFlags, parseStageLats, parseTokenUsage,
+  parseArtifactGate, parseCost, parseAnomalyFlags, parseStageLats, parseTokenUsage, parseRemediation,
   type EvidenceRow, type GateAggRow, type TelemetryRow, type CostRow,
   type AnomalyRow, type RunListRow, type TaskRunSectionRow,
 } from '@/lib/strategy-ops/queries';
@@ -42,6 +44,7 @@ import {
   REASON_LABELS, ERA_LABELS,
 } from '@/lib/strategy-ops/failureAnalysis';
 import { aggregateRemediationOpportunities, isRemediationEnabled, type RemediationOpportunity } from '@/lib/strategy-ops/targetedRemediation';
+import { loadStrategyFlags, setStrategyFlag, type StrategyOptFlags } from '@/lib/strategy-ops/strategyFeatureFlags';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -823,6 +826,58 @@ function RunDrilldownTab({ userId, initialRunId }: { userId: string; initialRunI
             </CardContent>
           </Card>
 
+          {/* Remediation info (Phase 4E-V) */}
+          {(() => {
+            const rem = parseRemediation(run.meta);
+            if (!rem) return null;
+            return (
+              <Card>
+                <CardHeader><CardTitle className="text-base"><Wrench className="h-4 w-4 inline mr-1" />Remediation</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div><span className="text-muted-foreground">Attempted</span><p>{rem.attempted ? 'Yes' : 'No'}</p></div>
+                    <div><span className="text-muted-foreground">Type</span><p className="font-mono">{rem.type ?? '—'}</p></div>
+                    <div><span className="text-muted-foreground">Success</span><p><StatusBadge pass={rem.success} /></p></div>
+                    <div><span className="text-muted-foreground">Latency</span><p>{fmtMs(rem.latency_ms)}</p></div>
+                    <div><span className="text-muted-foreground">Cost</span><p>{fmtCost(rem.cost_usd)}</p></div>
+                    <div><span className="text-muted-foreground">Avoided Full Regen</span><p>{fmtCost(rem.avoided_usd)}</p></div>
+                    <div><span className="text-muted-foreground">Fallback to Hard Fail</span><p>{rem.fallback ? 'Yes' : 'No'}</p></div>
+                    {rem.error && <div className="col-span-2"><span className="text-muted-foreground">Error</span><p className="text-red-400 text-xs">{rem.error}</p></div>}
+                    {rem.sections.length > 0 && (
+                      <div className="col-span-2">
+                        <span className="text-muted-foreground">Sections Targeted</span>
+                        <div className="flex gap-1 mt-1 flex-wrap">{rem.sections.map(s => <Badge key={s} variant="outline" className="text-xs">{s}</Badge>)}</div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* Remediation telemetry rows */}
+          {telemetry.filter(t => t.stage === 'remediation').length > 0 && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Remediation Telemetry</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader><TableRow><TableHead>Stage</TableHead><TableHead>Duration</TableHead><TableHead>Success</TableHead><TableHead>Error</TableHead><TableHead>Metadata</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {telemetry.filter(t => t.stage === 'remediation').map(t => (
+                      <TableRow key={t.id}>
+                        <TableCell className="font-mono text-xs">{t.stage}</TableCell>
+                        <TableCell>{fmtMs(t.duration_ms)}</TableCell>
+                        <TableCell>{t.success ? <CheckCircle className="h-4 w-4 text-emerald-400" /> : <XCircle className="h-4 w-4 text-red-400" />}</TableCell>
+                        <TableCell className="text-xs text-red-400 max-w-[200px] truncate">{t.error ?? '—'}</TableCell>
+                        <TableCell><pre className="text-xs max-w-[300px] overflow-auto">{JSON.stringify(t.metadata, null, 1)}</pre></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
           {sections.length > 0 && (
             <Card>
               <CardHeader><CardTitle className="text-base">Batch Details</CardTitle></CardHeader>
@@ -1065,6 +1120,119 @@ function FailuresTab({ userId, onDrilldown }: { userId: string; onDrilldown: (id
 }
 
 /* ================================================================== */
+/*  TAB: Remediation Test Harness (Phase 4E-V)                         */
+/* ================================================================== */
+
+function RemediationTestHarnessTab() {
+  // Deterministic, client-side-only test harness that exercises the
+  // classifyRemediation logic without calling external providers.
+  const scenarios = useMemo(() => {
+    type RT = 'normalize_only' | 'section_reauthor' | 'evidence_rewrite' | 'skip_too_many_dimensions';
+    function classify(dims: string[]): RT {
+      if (dims.length >= 3 || dims.length === 0) return 'skip_too_many_dimensions';
+      if (dims.length === 1) {
+        if (dims[0] === 'readability') return 'normalize_only';
+        if (dims[0] === 'template_fidelity' || dims[0] === 'section_completeness') return 'section_reauthor';
+        if (dims[0] === 'evidence_discipline') return 'evidence_rewrite';
+      }
+      if (dims.length === 2) {
+        const hr = dims.includes('readability'), hf = dims.includes('template_fidelity'),
+              hc = dims.includes('section_completeness'), he = dims.includes('evidence_discipline');
+        if (hr && (hf || hc)) return 'section_reauthor';
+        if (hr && he) return 'evidence_rewrite';
+        if (hf || hc) return 'section_reauthor';
+        if (he) return 'evidence_rewrite';
+      }
+      return 'skip_too_many_dimensions';
+    }
+
+    const cases: { label: string; dims: string[]; expected: RT }[] = [
+      { label: 'Readability only', dims: ['readability'], expected: 'normalize_only' },
+      { label: 'Section completeness only', dims: ['section_completeness'], expected: 'section_reauthor' },
+      { label: 'Template fidelity only', dims: ['template_fidelity'], expected: 'section_reauthor' },
+      { label: 'Evidence discipline only', dims: ['evidence_discipline'], expected: 'evidence_rewrite' },
+      { label: 'Readability + fidelity', dims: ['readability', 'template_fidelity'], expected: 'section_reauthor' },
+      { label: 'Readability + evidence', dims: ['readability', 'evidence_discipline'], expected: 'evidence_rewrite' },
+      { label: '3+ dimensions (skip)', dims: ['readability', 'template_fidelity', 'evidence_discipline'], expected: 'skip_too_many_dimensions' },
+      { label: 'Empty dimensions (skip)', dims: [], expected: 'skip_too_many_dimensions' },
+    ];
+
+    return cases.map(c => ({ ...c, actual: classify(c.dims), pass: classify(c.dims) === c.expected }));
+  }, []);
+
+  const allPass = scenarios.every(s => s.pass);
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base"><FlaskConical className="h-4 w-4 inline mr-1" />Remediation Classification Test Harness</CardTitle>
+          <CardDescription>
+            Deterministic, client-side test of classifyRemediation logic. No external providers called.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="mb-3">
+            <Badge className={allPass ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}>
+              {allPass ? `ALL ${scenarios.length} PASS` : 'FAILURES DETECTED'}
+            </Badge>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Scenario</TableHead>
+                <TableHead>Failed Dimensions</TableHead>
+                <TableHead>Expected</TableHead>
+                <TableHead>Actual</TableHead>
+                <TableHead>Result</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {scenarios.map((s, i) => (
+                <TableRow key={i} className={s.pass ? '' : 'bg-red-500/10'}>
+                  <TableCell className="text-xs">{s.label}</TableCell>
+                  <TableCell className="font-mono text-xs">{s.dims.join(', ') || '(none)'}</TableCell>
+                  <TableCell className="font-mono text-xs">{s.expected}</TableCell>
+                  <TableCell className="font-mono text-xs">{s.actual}</TableCell>
+                  <TableCell>{s.pass ? <CheckCircle className="h-4 w-4 text-emerald-400" /> : <XCircle className="h-4 w-4 text-red-400" />}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Server-Side Testing Instructions</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <p className="text-muted-foreground">To test server-side remediation execution end-to-end:</p>
+          <ol className="list-decimal pl-5 space-y-2 text-muted-foreground">
+            <li>Confirm flag is <strong>OFF</strong> — run an <code>account_brief</code> and verify <code>meta.remediation</code> is NULL.</li>
+            <li>Set <code>STRATEGY_TARGETED_REMEDIATION=true</code> as an edge function secret.</li>
+            <li>Trigger a run that you expect will fail a gate dimension (e.g. a known template_fidelity failure).</li>
+            <li>Check the run in Run Drilldown — the Remediation card should appear.</li>
+            <li>Verify telemetry has a row with <code>stage='remediation'</code>.</li>
+            <li>Turn flag back <strong>OFF</strong> after testing.</li>
+          </ol>
+          <pre className="bg-muted/50 rounded p-3 text-xs overflow-auto">
+{`-- Verify remediation telemetry for a run:
+SELECT status, meta->'remediation' AS remediation,
+       meta->'artifact_gate' AS artifact_gate
+FROM task_runs WHERE id = '<run_id>';
+
+-- Check for remediation telemetry rows:
+SELECT * FROM strategy_run_telemetry
+WHERE run_id = '<run_id>' AND stage = 'remediation';`}
+          </pre>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ================================================================== */
 /*  MAIN PAGE                                                          */
 /* ================================================================== */
 
@@ -1072,10 +1240,16 @@ export default function StrategyOpsPanel() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('evidence');
   const [drilldownRunId, setDrilldownRunId] = useState<string | undefined>();
+  const [remFlag, setRemFlag] = useState(() => loadStrategyFlags().targeted_remediation_enabled);
 
   const handleDrilldown = useCallback((id: string) => {
     setDrilldownRunId(id);
     setActiveTab('drilldown');
+  }, []);
+
+  const handleRemToggle = useCallback((checked: boolean) => {
+    setStrategyFlag('targeted_remediation_enabled', checked);
+    setRemFlag(checked);
   }, []);
 
   if (!user) return null;
@@ -1086,6 +1260,16 @@ export default function StrategyOpsPanel() {
         <AlertTriangle className="h-5 w-5 text-primary" />
         <h1 className="text-xl font-semibold text-foreground">Strategy Operations</h1>
         <Badge variant="outline" className="text-xs">read-only</Badge>
+        <div className="flex-1" />
+        {/* Remediation flag indicator + toggle */}
+        <div className="flex items-center gap-2 border border-border/50 rounded-md px-3 py-1.5">
+          <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">Remediation</span>
+          <Switch checked={remFlag} onCheckedChange={handleRemToggle} className="h-4 w-7" />
+          <Badge variant="outline" className={`text-[10px] ${remFlag ? 'text-emerald-400 border-emerald-500/30' : 'text-muted-foreground'}`}>
+            {remFlag ? 'ON (client)' : 'OFF'}
+          </Badge>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -1098,6 +1282,7 @@ export default function StrategyOpsPanel() {
           <TabsTrigger value="confidence"><Shield className="h-3 w-3 mr-1" />Confidence</TabsTrigger>
           <TabsTrigger value="anomalies">Anomalies</TabsTrigger>
           <TabsTrigger value="drilldown">Run Drilldown</TabsTrigger>
+          <TabsTrigger value="test-harness"><FlaskConical className="h-3 w-3 mr-1" />Test Harness</TabsTrigger>
         </TabsList>
 
         <TabsContent value="evidence"><EvidenceTab userId={user.id} /></TabsContent>
@@ -1108,6 +1293,7 @@ export default function StrategyOpsPanel() {
         <TabsContent value="confidence"><ReleaseConfidenceTab userId={user.id} /></TabsContent>
         <TabsContent value="anomalies"><AnomaliesTab userId={user.id} onDrilldown={handleDrilldown} /></TabsContent>
         <TabsContent value="drilldown"><RunDrilldownTab userId={user.id} initialRunId={drilldownRunId} /></TabsContent>
+        <TabsContent value="test-harness"><RemediationTestHarnessTab /></TabsContent>
       </Tabs>
     </SafePage>
   );
