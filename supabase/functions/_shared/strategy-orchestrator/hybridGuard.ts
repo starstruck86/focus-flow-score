@@ -21,12 +21,14 @@ export const HYBRID_GUARD_REGISTRY: Record<HybridIntent, HybridSchema> = {
     required_headers: [
       "## Company Snapshot",
       "## Stakeholders On File",
+      "## Risks & Mitigation",
       "## Operator Read",
       "## Next Moves",
     ],
     required_header_regexes: [
       /##\s*Company Snapshot/i,
       /##\s*Stakeholders/i,
+      /##\s*Risks\s*[&]\s*Mitigation/i,
       /##\s*Operator Read/i,
       /##\s*Next Moves/i,
     ],
