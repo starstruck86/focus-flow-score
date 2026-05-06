@@ -1535,6 +1535,14 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       String(shErr).slice(0, 200),
     );
   }
+  // Phase 4A: Merge telemetry enrichment into meta
+  try {
+    const telemetryEnrichment = telemetry.buildMetaEnrichment();
+    Object.assign(metaPatch, telemetryEnrichment);
+  } catch (telErr) {
+    console.warn("[telemetry:meta_enrichment] failed (non-fatal):", String(telErr).slice(0, 200));
+  }
+
   finalizePatch.meta = metaPatch;
 
   // ── Phase 3.6: Resilient DB persist with retry-once ───────────────
