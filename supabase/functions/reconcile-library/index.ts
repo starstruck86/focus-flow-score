@@ -5,7 +5,7 @@
  * POST /reconcile-library
  * Body: { mode: 'dry_run' | 'safe_auto_fix' | 'force_reprocess', backfill_content_length?: boolean }
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

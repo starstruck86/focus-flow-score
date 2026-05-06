@@ -20,7 +20,7 @@
  *   Attempt 4: Fallback — generate summary first, extract KIs from summary
  *   After max attempts: marked 'extraction_requires_review', not terminal 'failed'
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 // ═══════════════════════════════════════════
 // Constants

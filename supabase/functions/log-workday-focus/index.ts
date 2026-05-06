@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 import { logServiceRoleUsage, logAuthMethod, logValidationWarnings } from '../_shared/securityLog.ts';
 
 const corsHeaders = {

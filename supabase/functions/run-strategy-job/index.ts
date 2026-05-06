@@ -14,7 +14,7 @@
 //   { action: "apply_redline", run_id, section_id, proposed_text }
 // ════════════════════════════════════════════════════════════════
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { applyRedline, runStrategyTaskInBackground } from "../_shared/strategy-orchestrator/runTask.ts";
 import { getHandler } from "../_shared/strategy-orchestrator/registry.ts";
 import { getCards } from "../_shared/strategy-orchestrator/libraryCards.ts";

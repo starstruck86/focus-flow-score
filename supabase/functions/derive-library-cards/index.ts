@@ -14,7 +14,7 @@
 //   - Returns counts of processed/upserted/skipped/failed.
 // ════════════════════════════════════════════════════════════════
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { callLovableAI, safeParseJSON } from "../_shared/strategy-orchestrator/providers.ts";
 
 const corsHeaders = {

@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 // ── Deploy-group: dave (dave-conversation-token) ──
 // See supabase/FUNCTION_GROUPS.md for details.

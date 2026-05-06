@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { PDFDocument } from "https://esm.sh/pdf-lib@1.17.1";
 import { Buffer } from "node:buffer";
 import pdfParse from "npm:pdf-parse@1.1.1/lib/pdf-parse.js";

@@ -5,7 +5,7 @@
  * with topical section headings, cleaned paragraphs, and speaker turns.
  * This makes transcripts suitable for KI extraction by extract-tactics.
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

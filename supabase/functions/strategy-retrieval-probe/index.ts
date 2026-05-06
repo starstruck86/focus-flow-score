@@ -1,7 +1,7 @@
 // Admin probe: runs retrieveResourceContext for a given userId+message and
 // returns the raw retrieval object. Gated by STRATEGY_VALIDATION_KEY.
 // Purpose: prove whether retrieval is empty at the source vs lost in persistence.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { retrieveResourceContext, inferTopicScopes } from "../_shared/strategy-core/resourceRetrieval.ts";
 
 const corsHeaders = {
