@@ -28,7 +28,8 @@ import { getTaskManifest, toArtifactManifest } from "./taskManifestMap.ts";
 import { buildPlan } from "../strategy-skills/planner.ts";
 import { planToRetrievalArgs } from "../strategy-skills/adapter.ts";
 import type { TaskType } from "./types.ts";
-import { callClaude, callOpenAI, callPerplexity, safeParseJSON } from "./providers.ts";
+import { callClaude, callOpenAI, callPerplexity, callOpenAIWithUsage, callPerplexityWithUsage, callClaudeWithUsage, safeParseJSON } from "./providers.ts";
+import { TelemetryCollector } from "./telemetryWriter.ts";
 import { getHandler } from "./registry.ts";
 import { authorBySectionBatches } from "./sectionAuthor.ts";
 import {
@@ -122,6 +123,9 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   const { supabase, userId, inputs, taskType } = ctx;
   const handler = getHandler(taskType);
   console.log(`[orchestrator] task=${taskType} run=${runId} company=${inputs.company_name || "(none)"} user=${userId.slice(0, 8)}`);
+
+  // ── Phase 4A: Telemetry collector ────────────────────────────────
+  const telemetry = new TelemetryCollector(runId, userId, taskType);
 
   // ── Phase 3A SOP "SAFE BRIDGE" — observe only, never block. ────
   // The client may attach a structured SOP contract via inputs.__sop.
@@ -222,6 +226,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   });
 
   await setProgress(supabase, runId, "library_retrieval");
+  const libraryStage = telemetry.startStage("library_retrieval");
   const library = libraryDecision.shouldQuery
     ? await retrieveLibraryContext(supabase, userId, inputs, {
         scopes: plannerRetrievalArgs?.scopes ?? derivedScopes,
@@ -229,6 +234,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         maxPlaybooks: plannerRetrievalArgs?.maxPlaybooks ?? 6,
       })
     : { knowledgeItems: [], playbooks: [], contextString: "", counts: { kis: 0, playbooks: 0 } };
+  libraryStage.finish({ success: true, metadata: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 } });
 
   const libraryHitCount = (library.counts?.kis ?? 0) + (library.counts?.playbooks ?? 0);
   const libraryCoverageState = evaluateLibraryCoverage({
@@ -355,15 +361,20 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
 
   if (queries.length) {
     await setProgress(supabase, runId, "research");
+    const researchStage = telemetry.startStage("research", { provider: "perplexity", model: "sonar-pro" });
     console.log(`[stage-1] ${queries.length} parallel research queries...`);
+    let researchUsage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
     const settled = await Promise.allSettled(
       queries.map(async (q) => {
         try {
-          const result = await callPerplexity([
+          const pResult = await callPerplexityWithUsage([
             { role: "system", content: "You are a sales research analyst. Provide specific, sourced facts. Include dates and numbers when available. If information is not found, say so explicitly." },
             { role: "user", content: q.prompt },
           ]);
-          return { key: q.key, result };
+          researchUsage.input_tokens += pResult.usage.input_tokens ?? 0;
+          researchUsage.output_tokens += pResult.usage.output_tokens ?? 0;
+          researchUsage.total_tokens += pResult.usage.total_tokens ?? 0;
+          return { key: q.key, result: { text: pResult.text, citations: pResult.citations || [] } };
         } catch (e) {
           console.error(`[stage-1] ${q.key} failed:`, (e as Error).message);
           return { key: q.key, result: { text: "", citations: [] } };
@@ -374,6 +385,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       if (s.status === "fulfilled") research.results[s.value.key] = s.value.result;
     }
     research.totalChars = Object.values(research.results).reduce((sum, r) => sum + r.text.length, 0);
+    researchStage.finish({ success: true, usage: researchUsage, metadata: { queries: queries.length, total_chars: research.totalChars } });
     console.log(`[stage-1] research complete: ${research.totalChars} chars`);
   }
 
@@ -382,10 +394,13 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   await setProgress(supabase, runId, "synthesis");
   const synthesisModel = "gpt-5-mini";
   console.log(JSON.stringify({ tag: "stage-2:start", run_id: runId, model: synthesisModel, reasoning_effort: "medium" }));
-  const synthesisRaw = await callOpenAI([
+  const synthesisStage = telemetry.startStage("synthesis", { provider: "openai", model: synthesisModel });
+  const synthesisResult = await callOpenAIWithUsage([
     { role: "system", content: `${overlayPrefix}You are a senior sales strategist. Synthesize research + internal IP into actionable intelligence. Return structured JSON only. No markdown fences, no preamble.` },
     { role: "user", content: handler.buildSynthesisPrompt(inputs, research, library) },
   ], { model: synthesisModel, maxTokens: 16000, reasoningEffort: "medium" });
+  const synthesisRaw = synthesisResult.text;
+  synthesisStage.finish({ success: true, usage: synthesisResult.usage });
   const synthesis = safeParseJSON<any>(synthesisRaw) ?? { raw: synthesisRaw };
   console.log(JSON.stringify({ tag: "stage-2:end", run_id: runId, model: synthesisModel, synthesis_fields: Object.keys(synthesis).length }));
 
@@ -1069,18 +1084,34 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   if (gateResult.sections_passed) artifactGateTelemetry.sections_passed = gateResult.sections_passed;
   if (gateResult.sections_failed) artifactGateTelemetry.sections_failed = gateResult.sections_failed;
   if (gateResult.diagnostics) artifactGateTelemetry.diagnostics = gateResult.diagnostics;
+  // Phase 4A: record gate telemetry
+  telemetry.record("gate", {
+    started_at: new Date(gateStartMs).toISOString(),
+    completed_at: new Date().toISOString(),
+    duration_ms: artifactGateTelemetry.total_gate_latency_ms,
+    success: gateResult.pass,
+    metadata: {
+      regen_attempts: artifactGateTelemetry.regen_attempts,
+      regen_success: artifactGateTelemetry.regen_success,
+      failed_dimensions: artifactGateTelemetry.failed_dimensions,
+    },
+  });
+
   let reviewOutput: any = { strengths: [], redlines: [], library_coverage: { used: [], gaps: [] } };
   if (sectionCount > 0) {
     await setProgress(supabase, runId, "review");
+    const reviewStage = telemetry.startStage("review", { provider: "openai", model: "gpt-5-mini" });
     console.log("[stage-4] generating playbook-grounded review...");
     try {
-      const reviewRaw = await callOpenAI([
+      const reviewResult = await callOpenAIWithUsage([
         { role: "system", content: `${overlayPrefix}You are a senior sales leader reviewing a prep document. Be specific, actionable, and grounded in the provided internal playbooks/KIs.` },
         { role: "user", content: handler.buildReviewPrompt(inputs, draftOutput, library) },
       ], { model: "gpt-5-mini", temperature: 0.4, maxTokens: 4000 });
-      const parsed = safeParseJSON<any>(reviewRaw);
+      reviewStage.finish({ success: true, usage: reviewResult.usage });
+      const parsed = safeParseJSON<any>(reviewResult.text);
       if (parsed) reviewOutput = { ...reviewOutput, ...parsed };
     } catch (e: any) {
+      reviewStage.finish({ success: false, error: e?.message || String(e) });
       console.error("[stage-4] review failed:", e?.message || e);
       // Don't fail the whole run for review issues; surface in row.
     }
@@ -1504,6 +1535,14 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
       String(shErr).slice(0, 200),
     );
   }
+  // Phase 4A: Merge telemetry enrichment into meta
+  try {
+    const telemetryEnrichment = telemetry.buildMetaEnrichment();
+    Object.assign(metaPatch, telemetryEnrichment);
+  } catch (telErr) {
+    console.warn("[telemetry:meta_enrichment] failed (non-fatal):", String(telErr).slice(0, 200));
+  }
+
   finalizePatch.meta = metaPatch;
 
   // ── Phase 3.6: Resilient DB persist with retry-once ───────────────
@@ -1535,6 +1574,16 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     redlines: reviewOutput.redlines?.length || 0,
   };
   console.log(`[orchestrator] complete run=${runId} ${JSON.stringify(meta)}`);
+
+  // Phase 4A: Flush telemetry rows (best-effort, after pipeline completes)
+  try {
+    const flushResult = await telemetry.flush(supabase);
+    if (flushResult.written > 0) {
+      console.log(JSON.stringify({ tag: "[telemetry:flushed]", run_id: runId, rows: flushResult.written }));
+    }
+  } catch (telFlushErr) {
+    console.warn("[telemetry:flush] exception (non-fatal):", String(telFlushErr).slice(0, 200));
+  }
 }
 
 /**
