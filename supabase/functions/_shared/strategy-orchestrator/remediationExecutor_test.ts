@@ -17,9 +17,9 @@ Deno.test("remediationExecutor source allows ninety_day_plan", async () => {
     new URL("./remediationExecutor.ts", import.meta.url).pathname
   );
   
-  // Verify ninety_day_plan is in REMEDIATION_ALLOWED_TASKS
-  const match = source.match(/REMEDIATION_ALLOWED_TASKS[^;]+;/s);
-  if (!match) throw new Error("REMEDIATION_ALLOWED_TASKS not found in source");
+  // Verify ninety_day_plan is in REMEDIATION_ALLOWED_TASKS (the const declaration, not the comment)
+  const match = source.match(/const REMEDIATION_ALLOWED_TASKS[^;]+;/s);
+  if (!match) throw new Error("REMEDIATION_ALLOWED_TASKS const not found in source");
   
   const taskList = match[0];
   assertEquals(taskList.includes('"ninety_day_plan"'), true, "ninety_day_plan must be in REMEDIATION_ALLOWED_TASKS");
