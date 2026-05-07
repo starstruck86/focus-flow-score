@@ -252,13 +252,20 @@ export async function callClaudeWithUsage(
 
       const status = resp.status;
       const errText = await resp.text().catch(() => "");
-      console.error(`[claude] error ${status} attempt=${attempt}/${MAX_ATTEMPTS}: ${errText.slice(0, 300)}`);
+      const callMeta = buildCallMetadata({
+        provider: "anthropic", model, messages,
+        maxTokens: opts.maxTokens, stage: _providerCallContext.stage,
+        batchIndex: _providerCallContext.batchIndex, taskType: _providerCallContext.taskType,
+        runId: _providerCallContext.runId,
+      });
+      const failure = buildFailureRecord({ httpStatus: status, errorBody: errText, errorMessage: `Claude error: ${status}`, callMetadata: callMeta });
+      logProviderFailure(failure);
 
       const isTransient = status === 429 || (status >= 500 && status < 600);
       if (!isTransient || attempt === MAX_ATTEMPTS) {
-        throw new Error(`Claude error: ${status}${isTransient ? " (after retries)" : ""}`);
+        throw new ProviderError(`Claude error: ${status}${isTransient ? " (after retries)" : ""}`, failure);
       }
-      lastErr = new Error(`Claude ${status}`);
+      lastErr = new ProviderError(`Claude ${status}`, failure);
     } catch (e: any) {
       clearTimeout(timer);
       const isAbort = e?.name === "AbortError";
