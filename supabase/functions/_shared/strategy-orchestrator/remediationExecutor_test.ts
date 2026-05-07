@@ -31,8 +31,8 @@ Deno.test("remediationExecutor does NOT allow discovery_prep", async () => {
     new URL("./remediationExecutor.ts", import.meta.url).pathname
   );
   
-  const match = source.match(/REMEDIATION_ALLOWED_TASKS[^;]+;/s);
-  if (!match) throw new Error("REMEDIATION_ALLOWED_TASKS not found");
+  const match = source.match(/const REMEDIATION_ALLOWED_TASKS[^;]+;/s);
+  if (!match) throw new Error("REMEDIATION_ALLOWED_TASKS const not found");
   
   assertEquals(match[0].includes('"discovery_prep"'), false, "discovery_prep must NOT be in REMEDIATION_ALLOWED_TASKS");
 });
