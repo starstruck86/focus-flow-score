@@ -46,6 +46,12 @@ import {
 } from '@/lib/strategy-ops/failureAnalysis';
 import { aggregateRemediationOpportunities, isRemediationEnabled, type RemediationOpportunity } from '@/lib/strategy-ops/targetedRemediation';
 import { loadStrategyFlags, setStrategyFlag, type StrategyOptFlags } from '@/lib/strategy-ops/strategyFeatureFlags';
+import {
+  getMostMissingSections, getBatchFailureHeatmap, getProviderFailureSummary,
+  getProviderSuccessByBatch, getFallbackFrequency,
+  type MissingSectionEntry, type BatchFailureHeatmapEntry, type ProviderFailureSummary,
+  type ProviderBatchSuccess,
+} from '@/lib/strategy-ops/templateFidelity';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
