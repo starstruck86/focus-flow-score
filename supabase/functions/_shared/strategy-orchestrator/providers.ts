@@ -78,8 +78,15 @@ export async function callPerplexityWithUsage(
   });
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "");
-    console.error(`[perplexity] error ${resp.status}: ${errText.slice(0, 200)}`);
-    throw new Error(`Perplexity error: ${resp.status}`);
+    const callMeta = buildCallMetadata({
+      provider: "perplexity", model, messages,
+      maxTokens: opts.maxTokens, stage: _providerCallContext.stage,
+      batchIndex: _providerCallContext.batchIndex, taskType: _providerCallContext.taskType,
+      runId: _providerCallContext.runId,
+    });
+    const failure = buildFailureRecord({ httpStatus: resp.status, errorBody: errText, errorMessage: `Perplexity error: ${resp.status}`, callMetadata: callMeta });
+    logProviderFailure(failure);
+    throw new ProviderError(`Perplexity error: ${resp.status}`, failure);
   }
   const data = await resp.json();
   const usage = data.usage ?? {};
