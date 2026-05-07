@@ -1010,7 +1010,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
 
     // If gate STILL fails after regen → try targeted remediation, then HARD FAIL
     if (!gateResult.pass) {
-      // ── Phase 4E: Targeted Remediation (feature-flagged) ──────────
+      // ── Phase 4F: Targeted Remediation with rollout guardrails ────
       const remediationResult = await attemptRemediation({
         runId,
         taskType,
@@ -1021,6 +1021,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         userPrompt: handler.buildDocumentUserPrompt(inputs, synthesis, library),
         telemetryCollector: telemetry,
         supabase,
+        pipelineStartMs,
       });
 
       if (remediationResult?.success) {
