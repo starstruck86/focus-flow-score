@@ -918,11 +918,47 @@ function FailuresTab({ userId, onDrilldown }: { userId: string; onDrilldown: (id
   const { data: cohorts, loading: l2 } = useAsyncData(() => getCohortSummaries(userId), [userId]);
   const { data: breakdown, loading: l3 } = useAsyncData(() => getFailureBreakdown(userId), [userId]);
   const { data: failures, loading: l4 } = useAsyncData(() => classifyFailures(userId), [userId]);
+  const { data: rolloutData, loading: l5 } = useAsyncData(() => fetchRemediationRolloutData(userId), [userId]);
 
   const opportunities = useMemo(() => {
     if (!failures) return [];
     return aggregateRemediationOpportunities(failures);
   }, [failures]);
+
+  // Phase 4F: Rollout metrics
+  const rolloutMetrics = useMemo(() => {
+    if (!rolloutData || rolloutData.length === 0) return null;
+    let attempted = 0, skipped = 0, succeeded = 0, failed = 0;
+    let avoidedUsd = 0;
+    const byType: Record<string, { attempted: number; succeeded: number }> = {};
+    const skipReasons: Record<string, number> = {};
+    for (const r of rolloutData) {
+      const rem = r.remediation;
+      if (!rem) continue;
+      if (rem.attempted) {
+        attempted++;
+        if (rem.success) { succeeded++; avoidedUsd += rem.avoided_usd ?? 0; }
+        else failed++;
+        const t = rem.type ?? 'unknown';
+        if (!byType[t]) byType[t] = { attempted: 0, succeeded: 0 };
+        byType[t].attempted++;
+        if (rem.success) byType[t].succeeded++;
+      } else if (rem.skip_reason) {
+        skipped++;
+        skipReasons[rem.skip_reason] = (skipReasons[rem.skip_reason] ?? 0) + 1;
+      }
+    }
+    const total = attempted + skipped;
+    return {
+      total, attempted, skipped, succeeded, failed, avoidedUsd,
+      successRate: attempted > 0 ? (succeeded / attempted) * 100 : 0,
+      skipRate: total > 0 ? (skipped / total) * 100 : 0,
+      roi: avoidedUsd > 0 ? avoidedUsd : 0,
+      wouldHaveHardFailed: succeeded,
+      byType: Object.entries(byType).map(([type, v]) => ({ type, ...v })),
+      skipReasons: Object.entries(skipReasons).map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count),
+    };
+  }, [rolloutData]);
 
   const [eraFilter, setEraFilter] = useState<string>('all');
   const filteredFailures = useMemo(() => {
