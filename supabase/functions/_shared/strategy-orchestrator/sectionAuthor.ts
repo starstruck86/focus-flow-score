@@ -332,6 +332,13 @@ export function buildBatchUserPrompt(
 Author ONLY the following sections in this response (skip all others):
   ${sectionIds.map((id, i) => `${i + 1}. id="${id}" (${sections.find((s) => s.id === id)?.name || id})`).join("\n  ")}
 
+STRICT SECTION CONTRACT — NON-NEGOTIABLE:
+- You MUST return EXACTLY ${sectionIds.length} section(s) with these EXACT ids: ${sectionIds.map(id => `"${id}"`).join(", ")}
+- Do NOT rename section ids. Use the EXACT id strings above.
+- Do NOT omit any section. Every id listed above MUST appear in your response.
+- Do NOT add extra sections beyond those listed.
+- Every section MUST have non-empty "content".
+
 Return JSON in this exact shape (no other sections, no markdown fences):
 {
   "sections": [
