@@ -1580,7 +1580,50 @@ export default function StrategyOpsPanel() {
           </Card>
         )}
 
-        {(!providerFailures?.length && !batchHeatmap?.length && !missingSections?.length) && (
+        {/* Section Loss Tree (Phase 4G-2) */}
+        {sectionLoss && sectionLoss.length > 0 && (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Section Loss Tree</CardTitle><CardDescription>Sections lost to integrity failures + gate failures combined</CardDescription></CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader><TableRow><TableHead>Section</TableHead><TableHead>Loss Count</TableHead><TableHead>Source</TableHead><TableHead>Task Types</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {sectionLoss.slice(0, 15).map((s) => (
+                    <TableRow key={s.section_id} className={s.loss_count > 3 ? 'bg-red-500/5' : ''}>
+                      <TableCell className="font-mono text-xs">{s.section_id}</TableCell>
+                      <TableCell className={s.loss_count > 3 ? 'text-red-400 font-semibold' : ''}>{s.loss_count}</TableCell>
+                      <TableCell><Badge variant="outline" className="text-xs">{s.source}</Badge></TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{s.task_types.join(', ')}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Merge Corruption (Phase 4G-2) */}
+        {corruptedBatches && corruptedBatches.length > 0 && (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Merge Corruption</CardTitle><CardDescription>Batches causing merge collisions or missing sections</CardDescription></CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader><TableRow><TableHead>Batch</TableHead><TableHead>Collisions</TableHead><TableHead>Missing</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {corruptedBatches.map((b) => (
+                    <TableRow key={b.batch_index}>
+                      <TableCell>#{b.batch_index}</TableCell>
+                      <TableCell className={b.collision_count > 0 ? 'text-yellow-400' : ''}>{b.collision_count}</TableCell>
+                      <TableCell className={b.missing_count > 0 ? 'text-red-400' : ''}>{b.missing_count}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {(!providerFailures?.length && !batchHeatmap?.length && !missingSections?.length && !sectionLoss?.length) && (
           <p className="text-muted-foreground p-4">No reliability data available yet. Run some tasks to populate.</p>
         )}
       </div>
