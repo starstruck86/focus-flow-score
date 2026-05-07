@@ -1060,6 +1060,89 @@ function FailuresTab({ userId, onDrilldown }: { userId: string; onDrilldown: (id
         </Card>
       )}
 
+      {/* Rollout protection warning */}
+      {rolloutHealth && rolloutHealth.belowThreshold && rolloutHealth.sampleSize >= 5 && (
+        <Card className="border-red-500/50 bg-red-500/5">
+          <CardHeader>
+            <CardTitle className="text-base text-red-400"><AlertTriangle className="h-4 w-4 inline mr-1" />Rollout Health Warning</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-red-300">
+              Remediation success rate is <strong>{fmtPct(rolloutHealth.successRate)}</strong> over the last{' '}
+              <strong>{rolloutHealth.sampleSize}</strong> attempts (below 80% threshold).
+              Consider disabling remediation rollout immediately.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* One-click rollback section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base"><Shield className="h-4 w-4 inline mr-1" />Remediation Rollback</CardTitle>
+          <CardDescription>Current flag state and rollback command</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">Server flag:</span>
+            <Badge variant="outline" className="text-xs text-yellow-400 border-yellow-500/30">
+              STRATEGY_TARGETED_REMEDIATION (check edge secrets)
+            </Badge>
+          </div>
+          <pre className="bg-muted/50 rounded p-3 text-xs overflow-auto">
+{`# Immediate rollback — disables all server-side remediation:
+supabase secrets set STRATEGY_TARGETED_REMEDIATION=false
+
+# Also disable debug harness:
+supabase secrets set STRATEGY_DEBUG_HARNESS=false`}
+          </pre>
+        </CardContent>
+      </Card>
+
+      {/* Gate changers — runs where remediation changed outcome */}
+      {gateChangers.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base"><Activity className="h-4 w-4 inline mr-1" />Remediation Gate Changers</CardTitle>
+            <CardDescription>Runs where remediation flipped gate outcome (before: failed → after: passed)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Run</TableHead>
+                  <TableHead>Task</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Before Dims</TableHead>
+                  <TableHead>After Dims</TableHead>
+                  <TableHead>Latency</TableHead>
+                  <TableHead>Saved</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {gateChangers.map(gc => (
+                  <TableRow key={gc.id}>
+                    <TableCell className="font-mono text-xs">{gc.id.slice(0, 8)}</TableCell>
+                    <TableCell className="text-xs">{gc.task_type}</TableCell>
+                    <TableCell className="font-mono text-xs text-blue-400">{gc.remediation?.type ?? '—'}</TableCell>
+                    <TableCell className="text-xs text-red-400">{gc.remediation?.before_failed_dimensions.join(', ') ?? '—'}</TableCell>
+                    <TableCell className="text-xs text-emerald-400">{gc.remediation?.after_failed_dimensions.length === 0 ? '✓ none' : gc.remediation?.after_failed_dimensions.join(', ')}</TableCell>
+                    <TableCell className="text-xs">{gc.remediation?.latency_ms != null ? fmtMs(gc.remediation.latency_ms) : '—'}</TableCell>
+                    <TableCell className="text-xs text-emerald-400">{fmtCost(gc.remediation?.avoided_usd ?? 0)}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="sm" onClick={() => onDrilldown(gc.id)}>
+                        <Search className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
 
       {cohorts && cohorts.length > 0 && (
         <Card>
