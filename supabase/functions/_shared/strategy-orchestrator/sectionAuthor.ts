@@ -398,6 +398,8 @@ export async function authorBySectionBatches(args: {
       }
     }
     const startedAt = Date.now();
+    // Set batch index for provider failure attribution
+    setProviderCallContext({ batchIndex: batchIndex - 1 });
     const result = await authorOneBatch(
       {
         systemPrompt: args.systemPrompt,
