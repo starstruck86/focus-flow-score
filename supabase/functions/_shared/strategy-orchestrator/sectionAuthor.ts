@@ -191,6 +191,14 @@ export async function authorOneBatch(
     }));
   }
 
+  // Set provider context for failure attribution
+  setProviderCallContext({
+    stage: "document_authoring",
+    batchIndex: null, // Will be set by the caller in authorBySectionBatches
+    taskType: args.taskType,
+    runId: args.runId,
+  });
+
   // Primary: Claude
   try {
     const raw = await withTimeout(
