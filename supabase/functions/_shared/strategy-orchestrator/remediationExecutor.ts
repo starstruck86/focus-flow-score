@@ -63,7 +63,7 @@ export interface RemediationResult {
 
 const MAX_REMEDIATION_ATTEMPTS = 1;
 const MAX_REMEDIATION_COST_USD = 0.05;
-const REMEDIATION_ALLOWED_TASKS: readonly string[] = ["account_brief"];
+const REMEDIATION_ALLOWED_TASKS: readonly string[] = ["account_brief", "ninety_day_plan"];
 
 /** Phase 4F rollout: only normalize_only is enabled (zero-cost, no LLM). */
 const ROLLOUT_ALLOWED_TYPES: readonly RemediationType[] = ["normalize_only"];
