@@ -936,8 +936,9 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // Always record normalization telemetry so we can distinguish "didn't run" from "ran, no split needed"
   const readabilityNormalization = {
     paragraphs_split: normTelemetry.paragraphs_split,
-    original_length: normTelemetry.original_length,
-    normalized_length: normTelemetry.normalized_length,
+    longest_paragraph_before: normTelemetry.longest_paragraph_before,
+    longest_paragraph_after: normTelemetry.longest_paragraph_after,
+    forced_splits: normTelemetry.forced_splits,
     ran: true,
   };
   if (normTelemetry.paragraphs_split > 0) {
