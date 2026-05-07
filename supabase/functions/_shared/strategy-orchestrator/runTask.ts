@@ -48,7 +48,7 @@ import {
   enforceTaskSopOnce,
   type EnforceTaskSopOnceResult,
 } from "./enforceTaskSopOnce.ts";
-import { attemptRemediation } from "./remediationExecutor.ts";
+import { attemptRemediation, isRemediationEnabled } from "./remediationExecutor.ts";
 
 // ─────────────────────────────────────────────────────────────────
 // Phase 5 — Discovery Prep protection flag.
@@ -931,7 +931,8 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // ── Paragraph normalization — BEFORE gate evaluation ──────────────
   // Deterministically split oversized paragraphs at sentence boundaries.
   // Preserves all content. No summarization. No gate threshold changes.
-  const { text: draftText, telemetry: normTelemetry } = normalizeParagraphs(rawDraftText);
+  const { text: normalizedDraftText, telemetry: normTelemetry } = normalizeParagraphs(rawDraftText);
+  let draftText = normalizedDraftText;
   // Always record normalization telemetry so we can distinguish "didn't run" from "ran, no split needed"
   const readabilityNormalization = {
     paragraphs_split: normTelemetry.paragraphs_split,
@@ -955,6 +956,66 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     }));
   }
 
+  // ── DEBUG HARNESS: Forced readability failure for Phase 4F live proof ──
+  // Injects a 200-word paragraph into the first section AFTER normalization,
+  // bypassing the normalizer so the artifact gate sees an oversized paragraph.
+  // This forces a readability-only failure that remediation (normalize_only)
+  // should recover from.
+  //
+  // Guardrails (ALL must be true):
+  //   1. inputs.__debug_force_readability_failure === true
+  //   2. taskType === "account_brief"
+  //   3. STRATEGY_TARGETED_REMEDIATION === "true"
+  //   4. User is the owner (checked via approved_users)
+  //   5. Never exposed in normal UI
+  //
+  // Tagged in meta as debug_forced_readability_failure=true for audit.
+  const debugForceReadability =
+    (inputs as any)?.__debug_force_readability_failure === true &&
+    taskType === "account_brief" &&
+    isRemediationEnabled();
+
+  let debugReadabilityInjected = false;
+  if (debugForceReadability) {
+    // Verify owner — only Corey.hartin@gmail.com can trigger this
+    try {
+      const { data: ownerCheck } = await supabase
+        .from("approved_users")
+        .select("email")
+        .eq("user_id", userId)
+        .eq("is_active", true)
+        .maybeSingle();
+      const isOwner = ownerCheck?.email?.toLowerCase() === "corey.hartin@gmail.com";
+      if (isOwner && Array.isArray(draftOutput?.sections) && draftOutput.sections.length > 0) {
+        // Generate a 200-word wall-of-text paragraph with no sentence boundaries
+        const filler = Array(200).fill("word").join(" ");
+        const injectedParagraph = `This is a debug-injected readability failure paragraph that contains exactly two hundred words of filler content to force the artifact gate readability dimension to fail because it exceeds the maximum allowed paragraph length of one hundred and twenty words ${filler}`;
+        // Inject into first section's content
+        const firstSection = draftOutput.sections[0];
+        if (typeof firstSection.content === "string") {
+          firstSection.content = `${injectedParagraph}\n\n${firstSection.content}`;
+        } else if (typeof firstSection.body === "string") {
+          firstSection.body = `${injectedParagraph}\n\n${firstSection.body}`;
+        } else {
+          // Add as a new field
+          firstSection.content = injectedParagraph;
+        }
+        // Re-serialize WITHOUT normalization so the gate sees the oversized paragraph
+        draftText = JSON.stringify(draftOutput);
+        debugReadabilityInjected = true;
+        console.log(JSON.stringify({
+          tag: "[debug:forced_readability_failure_injected]",
+          run_id: runId,
+          task_type: taskType,
+          user_id: userId,
+          injected_words: injectedParagraph.split(/\s+/).length,
+        }));
+      }
+    } catch (ownerErr) {
+      console.warn("[debug:readability_owner_check_failed]", String(ownerErr).slice(0, 200));
+    }
+  }
+
   let gateResult = runArtifactGate(draftText, artifactManifest);
 
   if (!gateResult.pass) {
@@ -967,6 +1028,16 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     }));
 
     // ONE regen attempt — use the same authoring pipeline
+    // Skip regen when debug-forced readability failure is active — regen would
+    // generate a clean doc and mask the remediation proof. We still mark
+    // regen_attempts=1 so the pipeline correctly falls through to remediation.
+    if (debugReadabilityInjected) {
+      artifactGateTelemetry.regen_attempts = 1;
+      console.log(JSON.stringify({
+        tag: "[debug:skipping_regen_for_forced_readability]",
+        run_id: runId,
+      }));
+    } else {
     artifactGateTelemetry.regen_attempts = 1;
     await setProgress(supabase, runId, "artifact_gate_regen");
     try {
@@ -1007,8 +1078,9 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         error: String((regenErr as Error)?.message ?? regenErr).slice(0, 300),
       }));
     }
+    } // end else (non-debug regen path)
 
-    // If gate STILL fails after regen → try targeted remediation, then HARD FAIL
+
     if (!gateResult.pass) {
       // ── Phase 4F: Targeted Remediation with rollout guardrails ────
       const remediationResult = await attemptRemediation({
@@ -1069,6 +1141,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
           readability_normalization: readabilityNormalization,
           library_counts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
         };
+        if (debugReadabilityInjected) hardFailMeta.debug_forced_readability_failure = true;
         if (remediationResult?.telemetry) {
           hardFailMeta.remediation = remediationResult.telemetry;
         }
@@ -1522,6 +1595,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // Phase 3.5D — Artifact gate telemetry (production enforcement signal)
   metaPatch.artifact_gate = artifactGateTelemetry;
   metaPatch.readability_normalization = readabilityNormalization;
+  if (debugReadabilityInjected) metaPatch.debug_forced_readability_failure = true;
   if (planResult.ok) {
     metaPatch.planner = {
       plan_hash: planResult.plan.planHash,
