@@ -283,16 +283,34 @@ export async function assembleAndFinalize(args: {
   if (!rows || rows.length === 0) throw new Error("assembleAndFinalize: no section rows");
 
   // Collect by section id; insert structured placeholders for missing ones.
+  // Phase 4G-2: Deterministic merge — keyed by canonical_id, stable ordering,
+  // duplicates rejected, merge collisions logged.
   const collected = new Map<string, any>();
   let claudeAuthored = 0;
   let fallbackAuthored = 0;
   let failedBatches = 0;
+  let mergeCollisionCount = 0;
+  let duplicateSectionCount = 0;
   for (const r of rows as any[]) {
     if (r.status === "completed" && Array.isArray(r.sections)) {
-      for (const s of r.sections) {
-        if (s?.id && (r.section_ids as string[]).includes(s.id) && !collected.has(s.id)) {
-          collected.set(s.id, s);
+      // Phase 4G-2: Canonicalize each batch's sections before merging
+      const canon = canonicalizeDraftSections(r.sections, taskType);
+      for (const s of canon.sections) {
+        if (!s?.id) continue;
+        if (collected.has(s.id)) {
+          // Merge collision — first writer wins, log it
+          mergeCollisionCount++;
+          duplicateSectionCount++;
+          console.warn(JSON.stringify({
+            tag: "[merge:collision]",
+            run_id: runId,
+            section_id: s.id,
+            batch_index: r.batch_index,
+            action: "kept_first",
+          }));
+          continue;
         }
+        collected.set(s.id, s);
       }
       if (r.primary_status === "success") claudeAuthored += (r.section_ids as string[]).length;
       else if (r.fallback_status === "success") fallbackAuthored += (r.section_ids as string[]).length;
@@ -301,6 +319,7 @@ export async function assembleAndFinalize(args: {
     }
   }
 
+  // Assemble in template order (stable ordering from manifest)
   const assembled: any[] = [];
   for (const tpl of DISCOVERY_PREP_SECTIONS) {
     if (collected.has(tpl.id)) {
@@ -323,6 +342,17 @@ export async function assembleAndFinalize(args: {
   const synthesis = (runRow?.meta as any)?.progressive?.synthesis;
   const sources = Array.isArray(synthesis?.sources) ? synthesis.sources : undefined;
   const draftOutput = { sections: assembled, ...(sources ? { sources } : {}) };
+
+  // ── Phase 4G-2: Section Integrity Analysis (pre-gate) ──────────
+  const integrityResult = analyzeSectionIntegrity(draftOutput, taskType);
+  console.log(JSON.stringify({
+    tag: "[section_integrity]",
+    run_id: runId,
+    task_type: taskType,
+    ...integrityResult,
+    merge_collision_count: mergeCollisionCount,
+    duplicate_section_count: duplicateSectionCount,
+  }));
 
   // ── Phase 3A/3B SOP "SAFE BRIDGE" — output validation (shadow only). ──
   // Read the SOP that was carried through persistSynthesisArtifact.
