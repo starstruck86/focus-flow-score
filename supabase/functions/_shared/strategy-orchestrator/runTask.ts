@@ -1028,6 +1028,16 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     }));
 
     // ONE regen attempt — use the same authoring pipeline
+    // Skip regen when debug-forced readability failure is active — regen would
+    // generate a clean doc and mask the remediation proof. We still mark
+    // regen_attempts=1 so the pipeline correctly falls through to remediation.
+    if (debugReadabilityInjected) {
+      artifactGateTelemetry.regen_attempts = 1;
+      console.log(JSON.stringify({
+        tag: "[debug:skipping_regen_for_forced_readability]",
+        run_id: runId,
+      }));
+    } else {
     artifactGateTelemetry.regen_attempts = 1;
     await setProgress(supabase, runId, "artifact_gate_regen");
     try {
