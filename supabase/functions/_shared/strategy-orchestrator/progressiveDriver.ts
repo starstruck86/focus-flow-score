@@ -618,6 +618,13 @@ export async function assembleAndFinalize(args: {
       drift_warning: driftWarning,
       assembled_at: new Date().toISOString(),
     },
+    // Phase 4G-2 — section integrity + merge telemetry
+    section_integrity: integrityResult,
+    merge_integrity: {
+      merge_collision_count: mergeCollisionCount,
+      duplicate_section_count: duplicateSectionCount,
+      missing_after_merge: integrityResult.missing_sections,
+    },
     // Phase 3B — persist SOP shadow results (input + output) for queryability.
     sop: {
       ...(meta.sop ?? {}),
