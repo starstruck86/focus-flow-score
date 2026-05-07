@@ -130,6 +130,10 @@ export async function computeReleaseConfidence(userId: string, days: number = 7)
       evidence_freshness_hours: freshness != null ? Math.round(freshness * 10) / 10 : null,
       failed_dimension_trends: failedDims,
       sample_size: runs.length,
+      provider_failure_rate: 0,
+      timeout_rate: 0,
+      batch_failure_rate: 0,
+      template_fidelity_rate: 0,
     },
   };
 }
