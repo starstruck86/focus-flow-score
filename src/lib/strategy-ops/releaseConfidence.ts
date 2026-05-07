@@ -21,6 +21,11 @@ export interface ReleaseConfidence {
     evidence_freshness_hours: number | null;
     failed_dimension_trends: Record<string, number>;
     sample_size: number;
+    // Phase 4G-1 additions
+    provider_failure_rate: number;
+    timeout_rate: number;
+    batch_failure_rate: number;
+    template_fidelity_rate: number;
   };
 }
 
