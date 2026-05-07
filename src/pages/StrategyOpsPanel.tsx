@@ -1483,7 +1483,7 @@ export default function StrategyOpsPanel() {
 
         <TabsContent value="evidence"><EvidenceTab userId={user.id} /></TabsContent>
         <TabsContent value="gates"><GatesTab userId={user.id} /></TabsContent>
-        <TabsContent value="failures"><FailuresTab userId={user.id} onDrilldown={handleDrilldown} /></TabsContent>
+        <TabsContent value="failures"><FailuresTab userId={user.id} onDrilldown={handleDrilldown} remFlag={remFlag} /></TabsContent>
         <TabsContent value="costs"><CostDeepTab userId={user.id} /></TabsContent>
         <TabsContent value="latency"><LatencyDeepTab userId={user.id} /></TabsContent>
         <TabsContent value="confidence"><ReleaseConfidenceTab userId={user.id} /></TabsContent>
