@@ -136,6 +136,22 @@ export async function computeReleaseConfidence(userId: string, days: number = 7)
   // Sample size
   if (runs.length < 5) { score -= 10; warnings.push(`Small sample size: ${runs.length} runs`); }
 
+  // Phase 4G-2: Section integrity blockers
+  const integrityPassRate = integrityTotalCount > 0 ? integrityPassCount / integrityTotalCount : 1;
+  const duplicateRate = integrityTotalCount > 0 ? duplicateSectionTotal / integrityTotalCount : 0;
+  if (integrityPassRate < 0.95 && integrityTotalCount >= 3) {
+    score -= 15;
+    blockers.push(`Section integrity pass rate low: ${(integrityPassRate * 100).toFixed(0)}%`);
+  }
+  if (duplicateRate > 0.02 && integrityTotalCount >= 3) {
+    score -= 5;
+    warnings.push(`Duplicate section rate elevated: ${duplicateRate.toFixed(2)}`);
+  }
+  if (mergeCollisionTotal > 0) {
+    score -= 5;
+    warnings.push(`Merge collisions detected: ${mergeCollisionTotal}`);
+  }
+
   score = Math.max(0, Math.min(100, score));
 
   return {
