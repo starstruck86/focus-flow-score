@@ -1078,8 +1078,9 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         error: String((regenErr as Error)?.message ?? regenErr).slice(0, 300),
       }));
     }
+    } // end else (non-debug regen path)
 
-    // If gate STILL fails after regen → try targeted remediation, then HARD FAIL
+
     if (!gateResult.pass) {
       // ── Phase 4F: Targeted Remediation with rollout guardrails ────
       const remediationResult = await attemptRemediation({
