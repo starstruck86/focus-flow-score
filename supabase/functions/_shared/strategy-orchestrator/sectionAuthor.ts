@@ -20,8 +20,9 @@
 // after the existing authoring ladder has exhausted itself.
 // ════════════════════════════════════════════════════════════════
 
-import { callClaude, callOpenAI, safeParseJSON } from "./providers.ts";
+import { callClaude, callOpenAI, safeParseJSON, setProviderCallContext } from "./providers.ts";
 import { DISCOVERY_PREP_SECTIONS } from "./handlers/discoveryPrepTemplate.ts";
+import type { ProviderFailureRecord } from "./providerFailureClassifier.ts";
 
 // ── Account Brief section schema ─────────────────────────────────
 export const ACCOUNT_BRIEF_SECTIONS = [
