@@ -479,3 +479,15 @@ export async function authorBySectionBatches(args: {
     sections_authored: collected.size,
   };
 }
+
+/** Extract failure category from error string (best-effort heuristic). */
+function extractFailureCategory(error: string): string {
+  const e = error.toLowerCase();
+  if (e.includes("timeout") || e.includes("timed out")) return "timeout";
+  if (e.includes("429") || e.includes("rate")) return "rate_limited";
+  if (e.includes("402") || e.includes("credit")) return "credit_exhaustion";
+  if (e.includes("400")) return "bad_request";
+  if (e.includes("5") && /\b5\d{2}\b/.test(e)) return "server_error";
+  if (e.includes("no sections")) return "malformed_output";
+  return "unknown";
+}
