@@ -52,7 +52,7 @@ export async function computeReleaseConfidence(userId: string, days: number = 7)
       blockers: ['No runs in evaluation window'],
       warnings: [],
       healthy: false,
-      metrics: { success_rate: 0, regen_rate: 0, anomaly_rate: 0, avg_latency_ms: 0, avg_cost_usd: 0, evidence_freshness_hours: null, failed_dimension_trends: {}, sample_size: 0 },
+      metrics: { success_rate: 0, regen_rate: 0, anomaly_rate: 0, avg_latency_ms: 0, avg_cost_usd: 0, evidence_freshness_hours: null, failed_dimension_trends: {}, sample_size: 0, provider_failure_rate: 0, timeout_rate: 0, batch_failure_rate: 0, template_fidelity_rate: 0 },
     };
   }
 
