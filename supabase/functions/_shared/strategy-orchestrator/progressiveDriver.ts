@@ -29,6 +29,8 @@ import { runArtifactGate, type ArtifactGateTelemetry } from "./artifactGateEnfor
 import { normalizeParagraphs } from "./normalizeParagraphs.ts";
 import { getTaskManifest, toArtifactManifest } from "./taskManifestMap.ts";
 import type { TaskType } from "./types.ts";
+import { canonicalizeDraftSections } from "./sectionCanonicalizer.ts";
+import { analyzeSectionIntegrity } from "./sectionIntegrityAnalyzer.ts";
 
 /** Persist the synthesis artifact + prompt material into task_runs.meta
  *  so each subsequent step can reconstruct the authoring inputs without
