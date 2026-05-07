@@ -1141,6 +1141,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
           readability_normalization: readabilityNormalization,
           library_counts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
         };
+        if (debugReadabilityInjected) hardFailMeta.debug_forced_readability_failure = true;
         if (remediationResult?.telemetry) {
           hardFailMeta.remediation = remediationResult.telemetry;
         }
