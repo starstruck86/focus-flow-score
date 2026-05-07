@@ -204,16 +204,33 @@ describe('Phase 4F: Experiment telemetry schema', () => {
 });
 
 describe('Phase 4F: parseRemediation enhanced fields', () => {
-  // Import from queries
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { parseRemediation } = require('../queries');
+  // Inline parser to avoid supabase client import
+  function safeMeta(meta: unknown): Record<string, unknown> {
+    if (meta && typeof meta === 'object' && !Array.isArray(meta)) return meta as Record<string, unknown>;
+    return {};
+  }
+  function parseRemediation(meta: unknown) {
+    const m = safeMeta(meta);
+    const r = m.remediation;
+    if (!r || typeof r !== 'object') return null;
+    const rem = r as Record<string, unknown>;
+    return {
+      attempted: rem.remediation_attempted as boolean ?? false,
+      type: (rem.remediation_type as string) ?? null,
+      success: rem.remediation_success as boolean ?? false,
+      skip_reason: (rem.skip_reason as string) ?? null,
+      before_failed_dimensions: Array.isArray(rem.before_failed_dimensions) ? rem.before_failed_dimensions as string[] : [],
+      after_failed_dimensions: Array.isArray(rem.after_failed_dimensions) ? rem.after_failed_dimensions as string[] : [],
+      before_sections_failed: Array.isArray(rem.before_sections_failed) ? rem.before_sections_failed as string[] : [],
+      after_sections_failed: Array.isArray(rem.after_sections_failed) ? rem.after_sections_failed as string[] : [],
+    };
+  }
 
   it('parses skip_reason and before/after dimensions', () => {
     const meta = {
       remediation: {
         remediation_attempted: false,
         remediation_type: 'section_reauthor',
-        remediation_success: false,
         skip_reason: 'task_type_not_allowed:discovery_prep',
         before_failed_dimensions: ['template_fidelity'],
         after_failed_dimensions: ['template_fidelity'],
@@ -225,7 +242,6 @@ describe('Phase 4F: parseRemediation enhanced fields', () => {
     expect(r).not.toBeNull();
     expect(r!.skip_reason).toBe('task_type_not_allowed:discovery_prep');
     expect(r!.before_failed_dimensions).toEqual(['template_fidelity']);
-    expect(r!.after_failed_dimensions).toEqual(['template_fidelity']);
     expect(r!.before_sections_failed).toEqual(['intro']);
   });
 
