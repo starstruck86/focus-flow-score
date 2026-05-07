@@ -24,7 +24,7 @@ import {
   fetchEvidenceByType, fetchGateAggregates, fetchLatencyData, fetchCostData,
   fetchAnomalyRuns, fetchRunDetail, fetchRecentRuns,
   parseArtifactGate, parseCost, parseAnomalyFlags, parseStageLats, parseTokenUsage, parseRemediation,
-  fetchRemediationRolloutData,
+  fetchRemediationRolloutData, filterRemediationGateChangers, computeRolloutHealth,
   type EvidenceRow, type GateAggRow, type TelemetryRow, type CostRow,
   type AnomalyRow, type RunListRow, type TaskRunSectionRow, type RemediationRolloutRow,
 } from '@/lib/strategy-ops/queries';
