@@ -22,7 +22,7 @@
 
 import { DISCOVERY_PREP_BATCHES, authorOneBatch, buildBatchUserPrompt } from "./sectionAuthor.ts";
 import { DISCOVERY_PREP_SECTIONS } from "./handlers/discoveryPrepTemplate.ts";
-import { callOpenAI, safeParseJSON } from "./providers.ts";
+import { callOpenAI, safeParseJSON, setProviderCallContext } from "./providers.ts";
 import { getHandler } from "./registry.ts";
 import { validateDraftAgainstSop, type SopContractLike } from "./sopValidator.ts";
 import { runArtifactGate, type ArtifactGateTelemetry } from "./artifactGateEnforcement.ts";
@@ -195,6 +195,14 @@ export async function processOneBatch(args: {
       .eq("batch_index", batchIndex);
     throw new Error(msg);
   }
+
+  // Phase 4G-1: Set provider context for failure attribution
+  setProviderCallContext({
+    stage: "document_authoring",
+    batchIndex,
+    taskType,
+    runId,
+  });
 
   // ── Author the batch (Claude first; OpenAI fallback per batch) ──
   const result = await authorOneBatch(
