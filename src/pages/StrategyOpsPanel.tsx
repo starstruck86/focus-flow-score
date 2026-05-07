@@ -1464,6 +1464,8 @@ export default function StrategyOpsPanel() {
     const { data: providerFailures, loading: l3 } = useAsyncData(() => getProviderFailureSummary(userId), [userId]);
     const { data: providerByBatch, loading: l4 } = useAsyncData(() => getProviderSuccessByBatch(userId), [userId]);
     const { data: fallback, loading: l5 } = useAsyncData(() => getFallbackFrequency(userId), [userId]);
+    const { data: sectionLoss, loading: l6 } = useAsyncData(() => getSectionLossTree(userId), [userId]);
+    const { data: corruptedBatches, loading: l7 } = useAsyncData(() => getMostCorruptedBatches(userId), [userId]);
 
     if (l1 || l2 || l3) return <LoadingSkeleton />;
 
