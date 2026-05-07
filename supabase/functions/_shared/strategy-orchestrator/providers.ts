@@ -139,8 +139,15 @@ export async function callOpenAIWithUsage(
   });
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "");
-    console.error(`[openai] error ${resp.status}: ${errText.slice(0, 200)}`);
-    throw new Error(`OpenAI error: ${resp.status}`);
+    const callMeta = buildCallMetadata({
+      provider: "openai", model, messages,
+      maxTokens: opts.maxTokens, reasoningEffort: opts.reasoningEffort,
+      stage: _providerCallContext.stage, batchIndex: _providerCallContext.batchIndex,
+      taskType: _providerCallContext.taskType, runId: _providerCallContext.runId,
+    });
+    const failure = buildFailureRecord({ httpStatus: resp.status, errorBody: errText, errorMessage: `OpenAI error: ${resp.status}`, callMetadata: callMeta });
+    logProviderFailure(failure);
+    throw new ProviderError(`OpenAI error: ${resp.status}`, failure);
   }
   const data = await resp.json();
   const usage = data.usage ?? {};
