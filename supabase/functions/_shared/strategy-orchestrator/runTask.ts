@@ -1594,6 +1594,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // Phase 3.5D — Artifact gate telemetry (production enforcement signal)
   metaPatch.artifact_gate = artifactGateTelemetry;
   metaPatch.readability_normalization = readabilityNormalization;
+  if (debugReadabilityInjected) metaPatch.debug_forced_readability_failure = true;
   if (planResult.ok) {
     metaPatch.planner = {
       plan_hash: planResult.plan.planHash,
