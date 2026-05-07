@@ -1478,6 +1478,7 @@ export default function StrategyOpsPanel() {
         <TabsList className="mb-4 flex-wrap h-auto gap-1">
           <TabsTrigger value="evidence">Evidence</TabsTrigger>
           <TabsTrigger value="gates">Gates</TabsTrigger>
+          <TabsTrigger value="reliability"><Zap className="h-3 w-3 mr-1" />Reliability</TabsTrigger>
           <TabsTrigger value="failures"><Flame className="h-3 w-3 mr-1" />Failures</TabsTrigger>
           <TabsTrigger value="costs"><DollarSign className="h-3 w-3 mr-1" />Costs</TabsTrigger>
           <TabsTrigger value="latency"><Clock className="h-3 w-3 mr-1" />Latency</TabsTrigger>
@@ -1489,6 +1490,7 @@ export default function StrategyOpsPanel() {
 
         <TabsContent value="evidence"><EvidenceTab userId={user.id} /></TabsContent>
         <TabsContent value="gates"><GatesTab userId={user.id} /></TabsContent>
+        <TabsContent value="reliability"><ReliabilityTab userId={user.id} /></TabsContent>
         <TabsContent value="failures"><FailuresTab userId={user.id} onDrilldown={handleDrilldown} remFlag={remFlag} /></TabsContent>
         <TabsContent value="costs"><CostDeepTab userId={user.id} /></TabsContent>
         <TabsContent value="latency"><LatencyDeepTab userId={user.id} /></TabsContent>
