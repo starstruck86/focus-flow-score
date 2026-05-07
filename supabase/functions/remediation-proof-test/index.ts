@@ -1,6 +1,8 @@
 // ════════════════════════════════════════════════════════════════
 // remediation-proof-test — Phase 4F live remediation proof harness.
-// Owner-only, ephemeral. DELETE after proof.
+// Ephemeral function. DELETE immediately after proof.
+// Auth: requires STRATEGY_VALIDATION_KEY in body (same pattern as
+// strategy-stress-runner).
 // ════════════════════════════════════════════════════════════════
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -14,25 +16,29 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   try {
+    const VALIDATION_KEY = Deno.env.get("STRATEGY_VALIDATION_KEY") ?? "";
+    if (!VALIDATION_KEY) return json({ error: "STRATEGY_VALIDATION_KEY not configured" }, 503);
+
+    const body = await req.json();
+    if (body.key !== VALIDATION_KEY) return json({ error: "Unauthorized" }, 401);
+
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Auth: require x-batch-key header (internal service auth pattern)
-    const batchKey = req.headers.get("x-batch-key");
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    if (!batchKey || batchKey !== serviceKey) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const OWNER_ID = "9f11e308-4028-4527-b7ba-5ea365dc1441";
 
-    const { runStrategyTaskInBackground } = await import("../_shared/strategy-orchestrator/runTask.ts");
+    const { runStrategyTaskInBackground } = await import(
+      "../_shared/strategy-orchestrator/runTask.ts"
+    );
 
     const result = await runStrategyTaskInBackground({
       userId: OWNER_ID,
@@ -44,19 +50,13 @@ Deno.serve(async (req) => {
       taskType: "account_brief",
     });
 
-    return new Response(JSON.stringify({
+    return json({
       success: true,
       run_id: result.run_id,
       status: result.status,
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {
     console.error("[remediation-proof-test] error:", e);
-    return new Response(JSON.stringify({ error: e?.message || "Internal error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ error: e?.message || "Internal error" }, 500);
   }
 });
