@@ -984,7 +984,71 @@ function FailuresTab({ userId, onDrilldown }: { userId: string; onDrilldown: (id
         </div>
       )}
 
-      {/* Cohort analysis */}
+      {/* Phase 4F: Remediation rollout metrics */}
+      {rolloutMetrics && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base"><Wrench className="h-4 w-4 inline mr-1" />Remediation Rollout Metrics</CardTitle>
+            <CardDescription>Live experiment tracking — normalize_only for account_brief only</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <MetricCard label="Remediations Attempted" value={String(rolloutMetrics.attempted)} />
+              <MetricCard label="Success Rate" value={fmtPct(rolloutMetrics.successRate)} warn={rolloutMetrics.successRate < 50} />
+              <MetricCard label="Skipped (guardrails)" value={String(rolloutMetrics.skipped)} sub={fmtPct(rolloutMetrics.skipRate)} />
+              <MetricCard label="Avoided Regen $" value={fmtCost(rolloutMetrics.avoidedUsd)} />
+              <MetricCard label="Would-Have-Hard-Failed" value={String(rolloutMetrics.wouldHaveHardFailed)} sub="Recovered by remediation" />
+              <MetricCard label="Remediation ROI" value={fmtCost(rolloutMetrics.roi)} sub="Total avoided cost" />
+            </div>
+            {rolloutMetrics.byType.length > 0 && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Remediation Type</TableHead>
+                    <TableHead>Attempted</TableHead>
+                    <TableHead>Succeeded</TableHead>
+                    <TableHead>Success %</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rolloutMetrics.byType.map(t => (
+                    <TableRow key={t.type}>
+                      <TableCell className="font-mono text-xs">{t.type}</TableCell>
+                      <TableCell>{t.attempted}</TableCell>
+                      <TableCell className="text-emerald-400">{t.succeeded}</TableCell>
+                      <TableCell>{t.attempted > 0 ? fmtPct((t.succeeded / t.attempted) * 100) : '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            {rolloutMetrics.skipReasons.length > 0 && (
+              <div className="mt-4">
+                <p className="text-xs text-muted-foreground mb-2 font-medium">Skip Reasons</p>
+                <div className="flex flex-wrap gap-2">
+                  {rolloutMetrics.skipReasons.map(s => (
+                    <Badge key={s.reason} variant="outline" className="text-xs text-yellow-400 border-yellow-500/30">
+                      {s.reason.replace(/_/g, ' ')} ({s.count})
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+      {!rolloutMetrics && !l5 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base"><Wrench className="h-4 w-4 inline mr-1" />Remediation Rollout</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">No remediation data yet. Enable <code>STRATEGY_TARGETED_REMEDIATION=true</code> and run an account_brief with a readability-only failure to begin experiment tracking.</p>
+          </CardContent>
+        </Card>
+      )}
+
+
       {cohorts && cohorts.length > 0 && (
         <Card>
           <CardHeader><CardTitle className="text-base">Failure by Era</CardTitle><CardDescription>Separates historical from current failures</CardDescription></CardHeader>
