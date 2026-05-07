@@ -268,10 +268,24 @@ export async function callClaudeWithUsage(
       lastErr = new ProviderError(`Claude ${status}`, failure);
     } catch (e: any) {
       clearTimeout(timer);
-      const isAbort = e?.name === "AbortError";
-      console.error(`[claude] ${isAbort ? "timeout" : "fetch error"} attempt=${attempt}/${MAX_ATTEMPTS}: ${e?.message || e}`);
-      if (attempt === MAX_ATTEMPTS) throw isAbort ? new Error(`Claude timeout after ${TIMEOUT_MS}ms (3 attempts)`) : e;
-      lastErr = e;
+      // Don't re-wrap ProviderErrors from the HTTP error path above
+      if (e instanceof ProviderError) {
+        if (attempt === MAX_ATTEMPTS) throw e;
+        lastErr = e;
+      } else {
+        const isAbort = e?.name === "AbortError";
+        const callMeta = buildCallMetadata({
+          provider: "anthropic", model, messages,
+          maxTokens: opts.maxTokens, stage: _providerCallContext.stage,
+          batchIndex: _providerCallContext.batchIndex, taskType: _providerCallContext.taskType,
+          runId: _providerCallContext.runId,
+        });
+        const errMsg = isAbort ? `Claude timeout after ${TIMEOUT_MS}ms` : (e?.message || String(e));
+        const failure = buildFailureRecord({ httpStatus: null, errorBody: "", errorMessage: errMsg, callMetadata: callMeta });
+        logProviderFailure(failure);
+        if (attempt === MAX_ATTEMPTS) throw new ProviderError(errMsg, failure);
+        lastErr = new ProviderError(errMsg, failure);
+      }
     }
     const delayMs = 3000 * Math.pow(3, attempt - 1);
     console.log(`[claude] retrying in ${delayMs}ms…`);
