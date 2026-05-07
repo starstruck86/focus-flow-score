@@ -127,6 +127,8 @@ export interface SectionBatchResult {
     primary_status: "success" | "failed";
     fallback_status?: "success" | "failed";
     error?: string;
+    failure_category?: string;
+    duration_ms?: number;
   }[];
   /** True if at least one batch's fallback path produced sections. Used by
    *  the validation canary's "fallback_success" assertion. */
