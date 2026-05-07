@@ -191,6 +191,35 @@ export async function fetchRemediationRolloutData(userId: string): Promise<Remed
     .filter(r => r.remediation !== null);
 }
 
+/**
+ * Runs where remediation actually changed the gate outcome:
+ * before_failed_dimensions non-empty → after_failed_dimensions empty.
+ */
+export function filterRemediationGateChangers(rows: RemediationRolloutRow[]): RemediationRolloutRow[] {
+  return rows.filter(r => {
+    const rem = r.remediation;
+    if (!rem || !rem.attempted || !rem.success) return false;
+    return rem.before_failed_dimensions.length > 0 && rem.after_failed_dimensions.length === 0;
+  });
+}
+
+/**
+ * Compute rollout health: if success rate over last N attempts < threshold, flag warning.
+ */
+export function computeRolloutHealth(rows: RemediationRolloutRow[], window = 20, threshold = 0.8) {
+  const attempted = rows.filter(r => r.remediation?.attempted);
+  const recent = attempted.slice(0, window);
+  if (recent.length === 0) return { healthy: true, sampleSize: 0, successRate: 0, belowThreshold: false };
+  const succeeded = recent.filter(r => r.remediation?.success).length;
+  const rate = succeeded / recent.length;
+  return {
+    healthy: rate >= threshold,
+    sampleSize: recent.length,
+    successRate: rate * 100,
+    belowThreshold: rate < threshold,
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /*  1. Evidence — latest successful run per task_type                  */
 /* ------------------------------------------------------------------ */

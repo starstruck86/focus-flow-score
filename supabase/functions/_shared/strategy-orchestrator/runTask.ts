@@ -956,57 +956,67 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
     }));
   }
 
-  // ── DEBUG HARNESS: Forced readability failure for Phase 4F live proof ──
-  // Flow: gate the CLEAN draft first. Only if it passes, inject a 200-word
-  // paragraph and re-gate so failed_dimensions is exactly ['readability'].
-  // Then skip regen and let remediation (normalize_only) fix it.
-  //
-  // Guardrails (ALL must be true):
-  //   1. inputs.__debug_force_readability_failure === true
+  // ── DEBUG HARNESS v2: Forced readability failure for remediation testing ──
+  // Locked down to require ALL 5 conditions:
+  //   1. inputs.debug_force_readability_failure === true
   //   2. taskType === "account_brief"
   //   3. STRATEGY_TARGETED_REMEDIATION === "true"
-  //   4. User is the owner (checked via approved_users)
+  //   4. STRATEGY_DEBUG_HARNESS === "true"
+  //   5. User is the owner (corey.hartin@gmail.com via approved_users)
   //
-  // If base gate fails → abort debug proof, tag debug_proof_aborted_base_gate_failed.
+  // Telemetry tags persisted: debug_harness_used, debug_harness_version,
+  // base_gate_passed_before_injection, injected_failed_dimensions.
+  const DEBUG_HARNESS_VERSION = "2.0";
+  const debugHarnessEnvEnabled =
+    (Deno.env.get("STRATEGY_DEBUG_HARNESS") ?? "false").toLowerCase() === "true";
   const debugForceReadability =
-    (inputs as any)?.__debug_force_readability_failure === true &&
+    (inputs as any)?.debug_force_readability_failure === true &&
     taskType === "account_brief" &&
-    isRemediationEnabled();
+    isRemediationEnabled() &&
+    debugHarnessEnvEnabled;
 
   let debugReadabilityInjected = false;
+  let debugHarnessMetadata: Record<string, unknown> | null = null;
   let gateResult: ReturnType<typeof runArtifactGate>;
 
   if (debugForceReadability) {
-    // Step 1: Gate the clean draft first
-    const cleanGateResult = runArtifactGate(draftText, artifactManifest);
+    // Owner check — MUST pass or harness is silently skipped
+    let isOwner = false;
+    try {
+      const { data: ownerCheck } = await supabase
+        .from("approved_users")
+        .select("email")
+        .eq("user_id", userId)
+        .eq("is_active", true)
+        .maybeSingle();
+      isOwner = ownerCheck?.email?.toLowerCase() === "corey.hartin@gmail.com";
+    } catch (ownerErr) {
+      console.warn("[debug:readability_owner_check_failed]", String(ownerErr).slice(0, 200));
+    }
 
-    if (!cleanGateResult.pass) {
-      // Base draft failed on its own — abort debug proof, run normal pipeline
-      console.warn(JSON.stringify({
-        tag: "[debug:proof_aborted_base_gate_failed]",
-        run_id: runId,
-        base_failed_dimensions: cleanGateResult.failed_dimensions,
-      }));
-      // Tag in meta and fall through to normal pipeline
-      (inputs as any).__debug_proof_aborted = true;
-      gateResult = cleanGateResult;
+    if (!isOwner) {
+      // Silently skip — no injection, no debug tags
+      gateResult = runArtifactGate(draftText, artifactManifest);
     } else {
-      // Step 2: Clean gate passed. Verify owner before injecting.
-      let isOwner = false;
-      try {
-        const { data: ownerCheck } = await supabase
-          .from("approved_users")
-          .select("email")
-          .eq("user_id", userId)
-          .eq("is_active", true)
-          .maybeSingle();
-        isOwner = ownerCheck?.email?.toLowerCase() === "corey.hartin@gmail.com";
-      } catch (ownerErr) {
-        console.warn("[debug:readability_owner_check_failed]", String(ownerErr).slice(0, 200));
-      }
+      // Step 1: Gate the clean draft first
+      const cleanGateResult = runArtifactGate(draftText, artifactManifest);
 
-      if (isOwner && Array.isArray(draftOutput?.sections) && draftOutput.sections.length > 0) {
-        // Step 3: Inject oversized paragraph into first section
+      if (!cleanGateResult.pass) {
+        console.warn(JSON.stringify({
+          tag: "[debug:proof_aborted_base_gate_failed]",
+          run_id: runId,
+          base_failed_dimensions: cleanGateResult.failed_dimensions,
+        }));
+        (inputs as any).__debug_proof_aborted = true;
+        debugHarnessMetadata = {
+          debug_harness_used: true,
+          debug_harness_version: DEBUG_HARNESS_VERSION,
+          base_gate_passed_before_injection: false,
+          injected_failed_dimensions: [],
+        };
+        gateResult = cleanGateResult;
+      } else if (Array.isArray(draftOutput?.sections) && draftOutput.sections.length > 0) {
+        // Step 2: Clean gate passed — inject oversized paragraph
         const filler = Array(200).fill("word").join(" ");
         const injectedParagraph = `This is a debug-injected readability failure paragraph that contains exactly two hundred words of filler content to force the artifact gate readability dimension to fail because it exceeds the maximum allowed paragraph length of one hundred and twenty words ${filler}`;
         const firstSection = draftOutput.sections[0];
@@ -1017,34 +1027,50 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
         } else {
           firstSection.content = injectedParagraph;
         }
-        // Re-serialize WITHOUT normalization so gate sees the oversized paragraph
         draftText = JSON.stringify(draftOutput);
 
-        // Step 4: Re-gate with injected paragraph
         const injectedGateResult = runArtifactGate(draftText, artifactManifest);
         if (injectedGateResult.failed_dimensions.length === 1 &&
             injectedGateResult.failed_dimensions[0] === "readability") {
           debugReadabilityInjected = true;
           gateResult = injectedGateResult;
+          debugHarnessMetadata = {
+            debug_harness_used: true,
+            debug_harness_version: DEBUG_HARNESS_VERSION,
+            base_gate_passed_before_injection: true,
+            injected_failed_dimensions: ["readability"],
+          };
           console.log(JSON.stringify({
             tag: "[debug:forced_readability_failure_injected]",
             run_id: runId,
             task_type: taskType,
-            user_id: userId,
-            injected_words: injectedParagraph.split(/\s+/).length,
+            debug_harness_version: DEBUG_HARNESS_VERSION,
             failed_dimensions: injectedGateResult.failed_dimensions,
           }));
         } else {
-          // Injection caused unexpected additional failures — abort
           console.warn(JSON.stringify({
             tag: "[debug:injection_caused_unexpected_failures]",
             run_id: runId,
             failed_dimensions: injectedGateResult.failed_dimensions,
           }));
-          gateResult = cleanGateResult; // use clean result, skip debug
+          gateResult = cleanGateResult;
+          debugHarnessMetadata = {
+            debug_harness_used: true,
+            debug_harness_version: DEBUG_HARNESS_VERSION,
+            base_gate_passed_before_injection: true,
+            injected_failed_dimensions: injectedGateResult.failed_dimensions,
+            aborted_unexpected_failures: true,
+          };
         }
       } else {
-        gateResult = cleanGateResult;
+        gateResult = runArtifactGate(draftText, artifactManifest);
+        debugHarnessMetadata = {
+          debug_harness_used: true,
+          debug_harness_version: DEBUG_HARNESS_VERSION,
+          base_gate_passed_before_injection: true,
+          injected_failed_dimensions: [],
+          aborted_no_sections: true,
+        };
       }
     }
   } else {
@@ -1174,6 +1200,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
           readability_normalization: readabilityNormalization,
           library_counts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
         };
+        if (debugHarnessMetadata) hardFailMeta.debug_harness = debugHarnessMetadata;
         if (debugReadabilityInjected) hardFailMeta.debug_forced_readability_failure = true;
         if ((inputs as any)?.__debug_proof_aborted) hardFailMeta.debug_proof_aborted_base_gate_failed = true;
         if (remediationResult?.telemetry) {
@@ -1629,6 +1656,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   // Phase 3.5D — Artifact gate telemetry (production enforcement signal)
   metaPatch.artifact_gate = artifactGateTelemetry;
   metaPatch.readability_normalization = readabilityNormalization;
+  if (debugHarnessMetadata) metaPatch.debug_harness = debugHarnessMetadata;
   if (debugReadabilityInjected) metaPatch.debug_forced_readability_failure = true;
   if ((inputs as any)?.__debug_proof_aborted) metaPatch.debug_proof_aborted_base_gate_failed = true;
   if (planResult.ok) {

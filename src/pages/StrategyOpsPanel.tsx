@@ -24,7 +24,7 @@ import {
   fetchEvidenceByType, fetchGateAggregates, fetchLatencyData, fetchCostData,
   fetchAnomalyRuns, fetchRunDetail, fetchRecentRuns,
   parseArtifactGate, parseCost, parseAnomalyFlags, parseStageLats, parseTokenUsage, parseRemediation,
-  fetchRemediationRolloutData,
+  fetchRemediationRolloutData, filterRemediationGateChangers, computeRolloutHealth,
   type EvidenceRow, type GateAggRow, type TelemetryRow, type CostRow,
   type AnomalyRow, type RunListRow, type TaskRunSectionRow, type RemediationRolloutRow,
 } from '@/lib/strategy-ops/queries';
@@ -914,7 +914,7 @@ function RunDrilldownTab({ userId, initialRunId }: { userId: string; initialRunI
 /*  TAB: Failures (Phase 4D)                                           */
 /* ================================================================== */
 
-function FailuresTab({ userId, onDrilldown }: { userId: string; onDrilldown: (id: string) => void }) {
+function FailuresTab({ userId, onDrilldown, remFlag }: { userId: string; onDrilldown: (id: string) => void; remFlag: boolean }) {
   const { data: waste, loading: l1 } = useAsyncData(() => getWasteSummary(userId), [userId]);
   const { data: cohorts, loading: l2 } = useAsyncData(() => getCohortSummaries(userId), [userId]);
   const { data: breakdown, loading: l3 } = useAsyncData(() => getFailureBreakdown(userId), [userId]);
@@ -959,6 +959,18 @@ function FailuresTab({ userId, onDrilldown }: { userId: string; onDrilldown: (id
       byType: Object.entries(byType).map(([type, v]) => ({ type, ...v })),
       skipReasons: Object.entries(skipReasons).map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count),
     };
+  }, [rolloutData]);
+
+  // Rollout health check
+  const rolloutHealth = useMemo(() => {
+    if (!rolloutData) return null;
+    return computeRolloutHealth(rolloutData);
+  }, [rolloutData]);
+
+  // Gate changers — runs where remediation flipped outcome
+  const gateChangers = useMemo(() => {
+    if (!rolloutData) return [];
+    return filterRemediationGateChangers(rolloutData);
   }, [rolloutData]);
 
   const [eraFilter, setEraFilter] = useState<string>('all');
@@ -1044,6 +1056,89 @@ function FailuresTab({ userId, onDrilldown }: { userId: string; onDrilldown: (id
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">No remediation data yet. Enable <code>STRATEGY_TARGETED_REMEDIATION=true</code> and run an account_brief with a readability-only failure to begin experiment tracking.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Rollout protection warning */}
+      {rolloutHealth && rolloutHealth.belowThreshold && rolloutHealth.sampleSize >= 5 && (
+        <Card className="border-red-500/50 bg-red-500/5">
+          <CardHeader>
+            <CardTitle className="text-base text-red-400"><AlertTriangle className="h-4 w-4 inline mr-1" />Rollout Health Warning</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-red-300">
+              Remediation success rate is <strong>{fmtPct(rolloutHealth.successRate)}</strong> over the last{' '}
+              <strong>{rolloutHealth.sampleSize}</strong> attempts (below 80% threshold).
+              Consider disabling remediation rollout immediately.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* One-click rollback section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base"><Shield className="h-4 w-4 inline mr-1" />Remediation Rollback</CardTitle>
+          <CardDescription>Current flag state and rollback command</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">Server flag:</span>
+            <Badge variant="outline" className="text-xs text-yellow-400 border-yellow-500/30">
+              STRATEGY_TARGETED_REMEDIATION (check edge secrets)
+            </Badge>
+          </div>
+          <pre className="bg-muted/50 rounded p-3 text-xs overflow-auto">
+{`# Immediate rollback — disables all server-side remediation:
+supabase secrets set STRATEGY_TARGETED_REMEDIATION=false
+
+# Also disable debug harness:
+supabase secrets set STRATEGY_DEBUG_HARNESS=false`}
+          </pre>
+        </CardContent>
+      </Card>
+
+      {/* Gate changers — runs where remediation changed outcome */}
+      {gateChangers.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base"><Activity className="h-4 w-4 inline mr-1" />Remediation Gate Changers</CardTitle>
+            <CardDescription>Runs where remediation flipped gate outcome (before: failed → after: passed)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Run</TableHead>
+                  <TableHead>Task</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Before Dims</TableHead>
+                  <TableHead>After Dims</TableHead>
+                  <TableHead>Latency</TableHead>
+                  <TableHead>Saved</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {gateChangers.map(gc => (
+                  <TableRow key={gc.id}>
+                    <TableCell className="font-mono text-xs">{gc.id.slice(0, 8)}</TableCell>
+                    <TableCell className="text-xs">{gc.task_type}</TableCell>
+                    <TableCell className="font-mono text-xs text-blue-400">{gc.remediation?.type ?? '—'}</TableCell>
+                    <TableCell className="text-xs text-red-400">{gc.remediation?.before_failed_dimensions.join(', ') ?? '—'}</TableCell>
+                    <TableCell className="text-xs text-emerald-400">{gc.remediation?.after_failed_dimensions.length === 0 ? '✓ none' : gc.remediation?.after_failed_dimensions.join(', ')}</TableCell>
+                    <TableCell className="text-xs">{gc.remediation?.latency_ms != null ? fmtMs(gc.remediation.latency_ms) : '—'}</TableCell>
+                    <TableCell className="text-xs text-emerald-400">{fmtCost(gc.remediation?.avoided_usd ?? 0)}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="sm" onClick={() => onDrilldown(gc.id)}>
+                        <Search className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       )}
@@ -1388,7 +1483,7 @@ export default function StrategyOpsPanel() {
 
         <TabsContent value="evidence"><EvidenceTab userId={user.id} /></TabsContent>
         <TabsContent value="gates"><GatesTab userId={user.id} /></TabsContent>
-        <TabsContent value="failures"><FailuresTab userId={user.id} onDrilldown={handleDrilldown} /></TabsContent>
+        <TabsContent value="failures"><FailuresTab userId={user.id} onDrilldown={handleDrilldown} remFlag={remFlag} /></TabsContent>
         <TabsContent value="costs"><CostDeepTab userId={user.id} /></TabsContent>
         <TabsContent value="latency"><LatencyDeepTab userId={user.id} /></TabsContent>
         <TabsContent value="confidence"><ReleaseConfidenceTab userId={user.id} /></TabsContent>
