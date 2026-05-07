@@ -64,6 +64,13 @@ export async function computeReleaseConfidence(userId: string, days: number = 7)
   let totalCost = 0;
   let latencyCount = 0;
   const failedDims: Record<string, number> = {};
+  // Phase 4G-2: integrity + merge metrics
+  let integrityPassCount = 0;
+  let integrityTotalCount = 0;
+  let duplicateSectionTotal = 0;
+  let mergeCollisionTotal = 0;
+  let malformedSectionTotal = 0;
+  let missingRequiredTotal = 0;
 
   for (const r of runs) {
     const gate = parseArtifactGate(r.meta);
@@ -76,6 +83,21 @@ export async function computeReleaseConfidence(userId: string, days: number = 7)
     totalCost += parseCost(r.meta) ?? 0;
     for (const d of gate.failed_dimensions) {
       failedDims[d] = (failedDims[d] ?? 0) + 1;
+    }
+
+    // Phase 4G-2: Parse section integrity from meta
+    const meta = (r.meta && typeof r.meta === 'object' ? r.meta : {}) as Record<string, unknown>;
+    const integrity = meta.section_integrity as Record<string, unknown> | undefined;
+    if (integrity) {
+      integrityTotalCount++;
+      if (integrity.integrity_pass) integrityPassCount++;
+      malformedSectionTotal += Array.isArray(integrity.malformed_sections) ? integrity.malformed_sections.length : 0;
+      missingRequiredTotal += Array.isArray(integrity.missing_sections) ? integrity.missing_sections.length : 0;
+    }
+    const mergeIntegrity = meta.merge_integrity as Record<string, unknown> | undefined;
+    if (mergeIntegrity) {
+      duplicateSectionTotal += (mergeIntegrity.duplicate_section_count as number) ?? 0;
+      mergeCollisionTotal += (mergeIntegrity.merge_collision_count as number) ?? 0;
     }
   }
 
