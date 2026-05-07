@@ -957,66 +957,99 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
   }
 
   // ── DEBUG HARNESS: Forced readability failure for Phase 4F live proof ──
-  // Injects a 200-word paragraph into the first section AFTER normalization,
-  // bypassing the normalizer so the artifact gate sees an oversized paragraph.
-  // This forces a readability-only failure that remediation (normalize_only)
-  // should recover from.
+  // Flow: gate the CLEAN draft first. Only if it passes, inject a 200-word
+  // paragraph and re-gate so failed_dimensions is exactly ['readability'].
+  // Then skip regen and let remediation (normalize_only) fix it.
   //
   // Guardrails (ALL must be true):
   //   1. inputs.__debug_force_readability_failure === true
   //   2. taskType === "account_brief"
   //   3. STRATEGY_TARGETED_REMEDIATION === "true"
   //   4. User is the owner (checked via approved_users)
-  //   5. Never exposed in normal UI
   //
-  // Tagged in meta as debug_forced_readability_failure=true for audit.
+  // If base gate fails → abort debug proof, tag debug_proof_aborted_base_gate_failed.
   const debugForceReadability =
     (inputs as any)?.__debug_force_readability_failure === true &&
     taskType === "account_brief" &&
     isRemediationEnabled();
 
   let debugReadabilityInjected = false;
+  let gateResult: ReturnType<typeof runArtifactGate>;
+
   if (debugForceReadability) {
-    // Verify owner — only Corey.hartin@gmail.com can trigger this
-    try {
-      const { data: ownerCheck } = await supabase
-        .from("approved_users")
-        .select("email")
-        .eq("user_id", userId)
-        .eq("is_active", true)
-        .maybeSingle();
-      const isOwner = ownerCheck?.email?.toLowerCase() === "corey.hartin@gmail.com";
+    // Step 1: Gate the clean draft first
+    const cleanGateResult = runArtifactGate(draftText, artifactManifest);
+
+    if (!cleanGateResult.pass) {
+      // Base draft failed on its own — abort debug proof, run normal pipeline
+      console.warn(JSON.stringify({
+        tag: "[debug:proof_aborted_base_gate_failed]",
+        run_id: runId,
+        base_failed_dimensions: cleanGateResult.failed_dimensions,
+      }));
+      // Tag in meta and fall through to normal pipeline
+      (inputs as any).__debug_proof_aborted = true;
+      gateResult = cleanGateResult;
+    } else {
+      // Step 2: Clean gate passed. Verify owner before injecting.
+      let isOwner = false;
+      try {
+        const { data: ownerCheck } = await supabase
+          .from("approved_users")
+          .select("email")
+          .eq("user_id", userId)
+          .eq("is_active", true)
+          .maybeSingle();
+        isOwner = ownerCheck?.email?.toLowerCase() === "corey.hartin@gmail.com";
+      } catch (ownerErr) {
+        console.warn("[debug:readability_owner_check_failed]", String(ownerErr).slice(0, 200));
+      }
+
       if (isOwner && Array.isArray(draftOutput?.sections) && draftOutput.sections.length > 0) {
-        // Generate a 200-word wall-of-text paragraph with no sentence boundaries
+        // Step 3: Inject oversized paragraph into first section
         const filler = Array(200).fill("word").join(" ");
         const injectedParagraph = `This is a debug-injected readability failure paragraph that contains exactly two hundred words of filler content to force the artifact gate readability dimension to fail because it exceeds the maximum allowed paragraph length of one hundred and twenty words ${filler}`;
-        // Inject into first section's content
         const firstSection = draftOutput.sections[0];
         if (typeof firstSection.content === "string") {
           firstSection.content = `${injectedParagraph}\n\n${firstSection.content}`;
         } else if (typeof firstSection.body === "string") {
           firstSection.body = `${injectedParagraph}\n\n${firstSection.body}`;
         } else {
-          // Add as a new field
           firstSection.content = injectedParagraph;
         }
-        // Re-serialize WITHOUT normalization so the gate sees the oversized paragraph
+        // Re-serialize WITHOUT normalization so gate sees the oversized paragraph
         draftText = JSON.stringify(draftOutput);
-        debugReadabilityInjected = true;
-        console.log(JSON.stringify({
-          tag: "[debug:forced_readability_failure_injected]",
-          run_id: runId,
-          task_type: taskType,
-          user_id: userId,
-          injected_words: injectedParagraph.split(/\s+/).length,
-        }));
-      }
-    } catch (ownerErr) {
-      console.warn("[debug:readability_owner_check_failed]", String(ownerErr).slice(0, 200));
-    }
-  }
 
-  let gateResult = runArtifactGate(draftText, artifactManifest);
+        // Step 4: Re-gate with injected paragraph
+        const injectedGateResult = runArtifactGate(draftText, artifactManifest);
+        if (injectedGateResult.failed_dimensions.length === 1 &&
+            injectedGateResult.failed_dimensions[0] === "readability") {
+          debugReadabilityInjected = true;
+          gateResult = injectedGateResult;
+          console.log(JSON.stringify({
+            tag: "[debug:forced_readability_failure_injected]",
+            run_id: runId,
+            task_type: taskType,
+            user_id: userId,
+            injected_words: injectedParagraph.split(/\s+/).length,
+            failed_dimensions: injectedGateResult.failed_dimensions,
+          }));
+        } else {
+          // Injection caused unexpected additional failures — abort
+          console.warn(JSON.stringify({
+            tag: "[debug:injection_caused_unexpected_failures]",
+            run_id: runId,
+            failed_dimensions: injectedGateResult.failed_dimensions,
+          }));
+          gateResult = cleanGateResult; // use clean result, skip debug
+        }
+      } else {
+        gateResult = cleanGateResult;
+      }
+    }
+  } else {
+    gateResult = runArtifactGate(draftText, artifactManifest);
+  }
 
   if (!gateResult.pass) {
     console.warn(JSON.stringify({
