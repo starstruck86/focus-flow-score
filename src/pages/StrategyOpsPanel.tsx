@@ -914,7 +914,7 @@ function RunDrilldownTab({ userId, initialRunId }: { userId: string; initialRunI
 /*  TAB: Failures (Phase 4D)                                           */
 /* ================================================================== */
 
-function FailuresTab({ userId, onDrilldown }: { userId: string; onDrilldown: (id: string) => void }) {
+function FailuresTab({ userId, onDrilldown, remFlag }: { userId: string; onDrilldown: (id: string) => void; remFlag: boolean }) {
   const { data: waste, loading: l1 } = useAsyncData(() => getWasteSummary(userId), [userId]);
   const { data: cohorts, loading: l2 } = useAsyncData(() => getCohortSummaries(userId), [userId]);
   const { data: breakdown, loading: l3 } = useAsyncData(() => getFailureBreakdown(userId), [userId]);
