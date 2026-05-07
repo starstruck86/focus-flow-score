@@ -94,8 +94,15 @@ export const DISCOVERY_PREP_BATCHES: ReadonlyArray<{ ids: readonly string[] }> =
   Object.freeze({ ids: Object.freeze(["appendix"]) }),                                // heavy singleton
 ]) as ReadonlyArray<{ ids: readonly string[] }>;
 
-const SECTION_INNER_TIMEOUT_MS = 60_000;
-const SECTION_OUTER_TIMEOUT_MS = 70_000;
+// Phase 4G-1: Configurable timeouts via env. Defaults are the existing values.
+const ENV_BATCH_TIMEOUT_MS = (() => {
+  try {
+    const v = Deno.env.get("AUTHORING_BATCH_TIMEOUT_MS");
+    return v ? parseInt(v, 10) : null;
+  } catch { return null; }
+})();
+const SECTION_INNER_TIMEOUT_MS = ENV_BATCH_TIMEOUT_MS ?? 60_000;
+const SECTION_OUTER_TIMEOUT_MS = (ENV_BATCH_TIMEOUT_MS ? ENV_BATCH_TIMEOUT_MS + 10_000 : null) ?? 70_000;
 // Heavy-singleton override: these three sections consistently exceed the
 // default 60s/70s budget on Claude (telemetry: cockpit ~112s, appendix
 // ~120s, competitive_war_game ~111s). They remain singletons in the batch
@@ -103,8 +110,8 @@ const SECTION_OUTER_TIMEOUT_MS = 70_000;
 // of these. All other batches keep the default budget. Fallback gets the
 // same extended budget for these singletons so it can actually finish.
 const HEAVY_SINGLETON_SECTIONS = new Set(["cockpit", "competitive_war_game", "appendix"]);
-const HEAVY_SINGLETON_INNER_TIMEOUT_MS = 140_000;
-const HEAVY_SINGLETON_OUTER_TIMEOUT_MS = 150_000;
+const HEAVY_SINGLETON_INNER_TIMEOUT_MS = ENV_BATCH_TIMEOUT_MS ? Math.max(ENV_BATCH_TIMEOUT_MS, 140_000) : 140_000;
+const HEAVY_SINGLETON_OUTER_TIMEOUT_MS = HEAVY_SINGLETON_INNER_TIMEOUT_MS + 10_000;
 function timeoutsForBatch(sectionIds: string[]): { inner: number; outer: number; heavy: boolean } {
   if (sectionIds.length === 1 && HEAVY_SINGLETON_SECTIONS.has(sectionIds[0])) {
     return { inner: HEAVY_SINGLETON_INNER_TIMEOUT_MS, outer: HEAVY_SINGLETON_OUTER_TIMEOUT_MS, heavy: true };
