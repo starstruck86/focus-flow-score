@@ -23,6 +23,8 @@
 import { callClaude, callOpenAI, safeParseJSON, setProviderCallContext } from "./providers.ts";
 import { DISCOVERY_PREP_SECTIONS } from "./handlers/discoveryPrepTemplate.ts";
 import type { ProviderFailureRecord } from "./providerFailureClassifier.ts";
+import { validateBatchOutput } from "./batchOutputValidator.ts";
+import { canonicalizeDraftSections } from "./sectionCanonicalizer.ts";
 
 // ── Account Brief section schema ─────────────────────────────────
 export const ACCOUNT_BRIEF_SECTIONS = [
