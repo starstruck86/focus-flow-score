@@ -1200,6 +1200,7 @@ async function executePipeline(ctx: OrchestrationContext, runId: string): Promis
           readability_normalization: readabilityNormalization,
           library_counts: { kis: library.counts?.kis ?? 0, playbooks: library.counts?.playbooks ?? 0 },
         };
+        if (debugHarnessMetadata) hardFailMeta.debug_harness = debugHarnessMetadata;
         if (debugReadabilityInjected) hardFailMeta.debug_forced_readability_failure = true;
         if ((inputs as any)?.__debug_proof_aborted) hardFailMeta.debug_proof_aborted_base_gate_failed = true;
         if (remediationResult?.telemetry) {
