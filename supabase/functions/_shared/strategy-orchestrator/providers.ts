@@ -11,9 +11,41 @@
 // token usage metadata. Original string-return signatures preserved
 // via the existing exports; instrumented versions available via
 // *WithUsage variants.
+//
+// Phase 4G-1: All error paths now capture structured failure metadata
+// via providerFailureClassifier. Failures are classified, logged with
+// full payload metadata, and wrapped in ProviderError for upstream
+// telemetry persistence.
 // ════════════════════════════════════════════════════════════════
 
 import type { ProviderUsage } from "./telemetryWriter.ts";
+import {
+  buildCallMetadata,
+  buildFailureRecord,
+  logProviderFailure,
+  ProviderError,
+} from "./providerFailureClassifier.ts";
+
+/** Thread-local context for failure attribution. Set by sectionAuthor
+ *  before each batch call so provider errors carry stage/batch/run. */
+export const _providerCallContext: {
+  stage: string;
+  batchIndex: number | null;
+  taskType: string;
+  runId: string;
+} = { stage: "unknown", batchIndex: null, taskType: "unknown", runId: "unknown" };
+
+export function setProviderCallContext(ctx: {
+  stage?: string;
+  batchIndex?: number | null;
+  taskType?: string;
+  runId?: string;
+}): void {
+  if (ctx.stage !== undefined) _providerCallContext.stage = ctx.stage;
+  if (ctx.batchIndex !== undefined) _providerCallContext.batchIndex = ctx.batchIndex;
+  if (ctx.taskType !== undefined) _providerCallContext.taskType = ctx.taskType;
+  if (ctx.runId !== undefined) _providerCallContext.runId = ctx.runId;
+}
 
 /** Enriched provider call result with usage metadata. */
 export interface ProviderCallResult {
