@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Clock, Search, DollarSign, Activity, Shield, Flame, Wrench, FlaskConical } from 'lucide-react';
+import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Clock, Search, DollarSign, Activity, Shield, Flame, Wrench, FlaskConical, Zap } from 'lucide-react';
 import {
   fetchEvidenceByType, fetchGateAggregates, fetchLatencyData, fetchCostData,
   fetchAnomalyRuns, fetchRunDetail, fetchRecentRuns,
