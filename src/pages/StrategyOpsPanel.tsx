@@ -49,6 +49,7 @@ import { loadStrategyFlags, setStrategyFlag, type StrategyOptFlags } from '@/lib
 import {
   getMostMissingSections, getBatchFailureHeatmap, getProviderFailureSummary,
   getProviderSuccessByBatch, getFallbackFrequency,
+  getSectionLossTree, getMostCorruptedBatches,
   type MissingSectionEntry, type BatchFailureHeatmapEntry, type ProviderFailureSummary,
   type ProviderBatchSuccess,
 } from '@/lib/strategy-ops/templateFidelity';
