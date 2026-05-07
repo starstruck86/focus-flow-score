@@ -196,6 +196,14 @@ export async function processOneBatch(args: {
     throw new Error(msg);
   }
 
+  // Phase 4G-1: Set provider context for failure attribution
+  setProviderCallContext({
+    stage: "document_authoring",
+    batchIndex,
+    taskType,
+    runId,
+  });
+
   // ── Author the batch (Claude first; OpenAI fallback per batch) ──
   const result = await authorOneBatch(
     {
