@@ -184,7 +184,7 @@ async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise
 export async function authorOneBatch(
   args: AuthorBatchArgs,
   sectionIds: string[],
-): Promise<{ sections: any[]; primary_status: "success" | "failed"; fallback_status?: "success" | "failed"; error?: string }> {
+): Promise<{ sections: any[]; primary_status: "success" | "failed"; fallback_status?: "success" | "failed"; error?: string; batch_validation?: any; canonicalization?: any }> {
   const userPrompt = args.userPromptBuilder(sectionIds);
   const messages = [
     { role: "system", content: args.systemPrompt },
@@ -205,86 +205,132 @@ export async function authorOneBatch(
   // Set provider context for failure attribution
   setProviderCallContext({
     stage: "document_authoring",
-    batchIndex: null, // Will be set by the caller in authorBySectionBatches
+    batchIndex: null,
     taskType: args.taskType,
     runId: args.runId,
   });
 
-  // Primary: Claude
-  try {
-    const raw = await withTimeout(
-      callClaude(messages, {
-        model: PRIMARY_MODEL,
-        maxTokens: 8000,
-        temperature: 0.3,
-        timeoutMs: innerMs,
-        maxAttempts: 1,
-      }),
-      outerMs,
-      `[section-author:claude] batch=${sectionIds.join(",")}`,
-    );
-    const parsed = safeParseJSON<any>(raw);
-    if (parsed && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
-      return { sections: parsed.sections, primary_status: "success" };
-    }
-    throw new Error("Claude returned no sections array");
-  } catch (claudeErr: any) {
-    const claudeMsg = String(claudeErr?.message || claudeErr).slice(0, 300);
-    if (!isFallbackEligible(claudeErr)) {
-      return { sections: [], primary_status: "failed", error: `claude: ${claudeMsg}` };
-    }
-    console.warn(JSON.stringify({
-      tag: "[section-author:fallback_triggered]",
-      run_id: args.runId,
-      batch: sectionIds,
-      primary_error: claudeMsg,
-      fallback_provider: "openai",
-      fallback_model: FALLBACK_MODEL,
-    }));
+  /** Validate + canonicalize a parsed result. Returns sections if valid, null if retry needed. */
+  const validateAndCanonicalize = (parsed: any): { sections: any[]; validation: any; canonicalization: any } | null => {
+    if (!parsed || !Array.isArray(parsed.sections) || parsed.sections.length === 0) return null;
 
-    // Fallback: OpenAI ChatGPT (gpt-5). Gemini is explicitly NOT used.
+    // Canonicalize section ids/names
+    const canon = canonicalizeDraftSections(parsed.sections, args.taskType);
+    // Validate against expected
+    const validation = validateBatchOutput({ sections: canon.sections }, sectionIds);
+
+    if (validation.pass || !validation.retryable) {
+      return { sections: canon.sections, validation, canonicalization: { remapped: canon.remapped_count, unrecognized: canon.unrecognized } };
+    }
+    return null;
+  };
+
+  // Primary: Claude (with 1 structural retry)
+  let claudeErr: any = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const raw = await withTimeout(
-        callOpenAI(messages, {
-          model: FALLBACK_MODEL,
-          temperature: 0.3,
+        callClaude(messages, {
+          model: PRIMARY_MODEL,
           maxTokens: 8000,
+          temperature: 0.3,
+          timeoutMs: innerMs,
+          maxAttempts: 1,
         }),
         outerMs,
-        `[section-author:openai] batch=${sectionIds.join(",")}`,
+        `[section-author:claude] batch=${sectionIds.join(",")}`,
       );
       const parsed = safeParseJSON<any>(raw);
-      if (parsed && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
-        console.log(JSON.stringify({
-          tag: "[section-author:fallback_success]",
+      const result = validateAndCanonicalize(parsed);
+      if (result) {
+        return { sections: result.sections, primary_status: "success", batch_validation: result.validation, canonicalization: result.canonicalization };
+      }
+      // Structural failure — retry once with explicit correction
+      if (attempt === 0) {
+        console.warn(JSON.stringify({
+          tag: "[section-author:structural_retry]",
           run_id: args.runId,
           batch: sectionIds,
-          fallback_model: FALLBACK_MODEL,
+          attempt: attempt + 1,
+          reason: "batch validation failed on primary",
         }));
-        return { sections: parsed.sections, primary_status: "failed", fallback_status: "success", error: claudeMsg };
+        // Add correction to messages for retry
+        messages.push({ role: "assistant", content: raw || "" });
+        messages.push({ role: "user", content: `Your response was missing or had malformed sections. You MUST return EXACTLY these section ids: ${sectionIds.map(id => `"${id}"`).join(", ")}. Return the complete JSON again with all required sections.` });
+        continue;
       }
-      return {
-        sections: [],
-        primary_status: "failed",
-        fallback_status: "failed",
-        error: `claude: ${claudeMsg} | fallback(${FALLBACK_MODEL}): no sections array`,
-      };
-    } catch (fbErr: any) {
-      const fbMsg = String(fbErr?.message || fbErr).slice(0, 300);
-      console.error(JSON.stringify({
-        tag: "[section-author:fallback_failed]",
+      throw new Error("Claude returned structurally invalid sections after retry");
+    } catch (err: any) {
+      claudeErr = err;
+      if (attempt === 0 && !isFallbackEligible(err)) {
+        // Non-retryable error on first attempt, still try once more
+        continue;
+      }
+      break;
+    }
+  }
+
+  const claudeMsg = String(claudeErr?.message || claudeErr || "structural failure").slice(0, 300);
+  if (claudeErr && !isFallbackEligible(claudeErr)) {
+    return { sections: [], primary_status: "failed", error: `claude: ${claudeMsg}` };
+  }
+
+  console.warn(JSON.stringify({
+    tag: "[section-author:fallback_triggered]",
+    run_id: args.runId,
+    batch: sectionIds,
+    primary_error: claudeMsg,
+    fallback_provider: "openai",
+    fallback_model: FALLBACK_MODEL,
+  }));
+
+  // Fallback: OpenAI ChatGPT (gpt-5). Gemini is explicitly NOT used.
+  try {
+    const fallbackMessages = [
+      { role: "system", content: args.systemPrompt },
+      { role: "user", content: args.userPromptBuilder(sectionIds) },
+    ];
+    const raw = await withTimeout(
+      callOpenAI(fallbackMessages, {
+        model: FALLBACK_MODEL,
+        temperature: 0.3,
+        maxTokens: 8000,
+      }),
+      outerMs,
+      `[section-author:openai] batch=${sectionIds.join(",")}`,
+    );
+    const parsed = safeParseJSON<any>(raw);
+    const result = validateAndCanonicalize(parsed);
+    if (result) {
+      console.log(JSON.stringify({
+        tag: "[section-author:fallback_success]",
         run_id: args.runId,
         batch: sectionIds,
         fallback_model: FALLBACK_MODEL,
-        fallback_error: fbMsg,
       }));
-      return {
-        sections: [],
-        primary_status: "failed",
-        fallback_status: "failed",
-        error: `claude: ${claudeMsg} | fallback(${FALLBACK_MODEL}): ${fbMsg}`,
-      };
+      return { sections: result.sections, primary_status: "failed", fallback_status: "success", error: claudeMsg, batch_validation: result.validation, canonicalization: result.canonicalization };
     }
+    return {
+      sections: [],
+      primary_status: "failed",
+      fallback_status: "failed",
+      error: `claude: ${claudeMsg} | fallback(${FALLBACK_MODEL}): structural validation failed`,
+    };
+  } catch (fbErr: any) {
+    const fbMsg = String(fbErr?.message || fbErr).slice(0, 300);
+    console.error(JSON.stringify({
+      tag: "[section-author:fallback_failed]",
+      run_id: args.runId,
+      batch: sectionIds,
+      fallback_model: FALLBACK_MODEL,
+      fallback_error: fbMsg,
+    }));
+    return {
+      sections: [],
+      primary_status: "failed",
+      fallback_status: "failed",
+      error: `claude: ${claudeMsg} | fallback(${FALLBACK_MODEL}): ${fbMsg}`,
+    };
   }
 }
 
