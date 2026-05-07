@@ -150,7 +150,45 @@ export function parseRemediation(meta: unknown) {
     fallback: rem.fallback_to_hard_fail as boolean ?? false,
     error: (rem.error as string) ?? null,
     sections: Array.isArray(rem.sections_targeted) ? rem.sections_targeted as string[] : [],
+    skip_reason: (rem.skip_reason as string) ?? null,
+    before_failed_dimensions: Array.isArray(rem.before_failed_dimensions) ? rem.before_failed_dimensions as string[] : [],
+    after_failed_dimensions: Array.isArray(rem.after_failed_dimensions) ? rem.after_failed_dimensions as string[] : [],
+    before_sections_failed: Array.isArray(rem.before_sections_failed) ? rem.before_sections_failed as string[] : [],
+    after_sections_failed: Array.isArray(rem.after_sections_failed) ? rem.after_sections_failed as string[] : [],
   };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Rollout metrics — remediation experiment data                      */
+/* ------------------------------------------------------------------ */
+
+export interface RemediationRolloutRow {
+  id: string;
+  task_type: string;
+  status: string;
+  completed_at: string | null;
+  remediation: ReturnType<typeof parseRemediation>;
+}
+
+export async function fetchRemediationRolloutData(userId: string): Promise<RemediationRolloutRow[]> {
+  const { data, error } = await supabase
+    .from('task_runs')
+    .select('id, task_type, status, completed_at, meta')
+    .eq('user_id', userId)
+    .in('status', ['completed', 'failed'])
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  if (error) throw error;
+  return (data ?? [])
+    .map((r: any) => ({
+      id: r.id,
+      task_type: r.task_type,
+      status: r.status,
+      completed_at: r.completed_at,
+      remediation: parseRemediation(r.meta),
+    }))
+    .filter(r => r.remediation !== null);
 }
 
 /* ------------------------------------------------------------------ */
