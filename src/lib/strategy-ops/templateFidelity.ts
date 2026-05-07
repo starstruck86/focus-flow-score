@@ -333,3 +333,129 @@ function classifyTelemetryError(error: string | null, metadata: any): string {
   if (e.includes('no sections') || e.includes('invalid json')) return 'malformed_output';
   return 'other';
 }
+
+/* ------------------------------------------------------------------ */
+/*  Phase 4G-2 — Section Loss Tree & Alias Drift                      */
+/* ------------------------------------------------------------------ */
+
+export interface SectionLossEntry {
+  section_id: string;
+  loss_count: number;
+  task_types: string[];
+  source: 'integrity' | 'gate' | 'both';
+}
+
+export interface AliasDriftEntry {
+  source_name: string;
+  canonical_id: string;
+  remapped_count: number;
+}
+
+export interface CorruptedBatchEntry {
+  batch_index: number;
+  section_ids: string[];
+  collision_count: number;
+  missing_count: number;
+}
+
+/**
+ * Get the section loss tree — which sections disappear most, from both
+ * integrity analysis and gate failures.
+ */
+export async function getSectionLossTree(userId: string): Promise<SectionLossEntry[]> {
+  const { data, error } = await supabase
+    .from('task_runs')
+    .select('task_type, meta')
+    .eq('user_id', userId)
+    .in('status', ['completed', 'failed'])
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  if (error) throw error;
+
+  const lossCounts = new Map<string, { count: number; task_types: Set<string>; sources: Set<string> }>();
+
+  for (const row of (data ?? []) as { task_type: string; meta: unknown }[]) {
+    const meta = (row.meta && typeof row.meta === 'object' ? row.meta : {}) as Record<string, unknown>;
+    
+    // From section_integrity
+    const integrity = meta.section_integrity as Record<string, unknown> | undefined;
+    if (integrity) {
+      for (const sid of (integrity.missing_sections as string[] ?? [])) {
+        const e = lossCounts.get(sid) || { count: 0, task_types: new Set(), sources: new Set() };
+        e.count++;
+        e.task_types.add(row.task_type);
+        e.sources.add('integrity');
+        lossCounts.set(sid, e);
+      }
+    }
+
+    // From artifact gate
+    const gate = parseArtifactGate(row.meta);
+    if (gate.failed_dimensions.includes('template_fidelity')) {
+      const gateObj = (meta.artifact_gate as Record<string, unknown>) ?? {};
+      for (const sid of (gateObj.sections_failed as string[] ?? [])) {
+        const e = lossCounts.get(sid) || { count: 0, task_types: new Set(), sources: new Set() };
+        e.count++;
+        e.task_types.add(row.task_type);
+        e.sources.add('gate');
+        lossCounts.set(sid, e);
+      }
+    }
+  }
+
+  return Array.from(lossCounts.entries())
+    .map(([id, e]) => ({
+      section_id: id,
+      loss_count: e.count,
+      task_types: [...e.task_types],
+      source: e.sources.size > 1 ? 'both' as const : ([...e.sources][0] as 'integrity' | 'gate'),
+    }))
+    .sort((a, b) => b.loss_count - a.loss_count);
+}
+
+/**
+ * Get merge corruption data — which batches cause merge collisions.
+ */
+export async function getMostCorruptedBatches(userId: string): Promise<CorruptedBatchEntry[]> {
+  const { data, error } = await supabase
+    .from('task_runs')
+    .select('meta')
+    .eq('user_id', userId)
+    .in('status', ['completed', 'failed'])
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  if (error) throw error;
+
+  const batchData = new Map<number, { section_ids: string[]; collisions: number; missing: number }>();
+
+  for (const row of (data ?? []) as { meta: unknown }[]) {
+    const meta = (row.meta && typeof row.meta === 'object' ? row.meta : {}) as Record<string, unknown>;
+    const merge = meta.merge_integrity as Record<string, unknown> | undefined;
+    if (!merge) continue;
+
+    const collisions = (merge.merge_collision_count as number) ?? 0;
+    const missingAfter = Array.isArray(merge.missing_after_merge) ? (merge.missing_after_merge as string[]).length : 0;
+    
+    // Aggregate at batch level from authoring_progressive
+    const prog = meta.authoring_progressive as Record<string, unknown> | undefined;
+    const totalBatches = (prog?.batches_total as number) ?? 16;
+    for (let i = 0; i < totalBatches; i++) {
+      const e = batchData.get(i) || { section_ids: [], collisions: 0, missing: 0 };
+      if (collisions > 0) e.collisions += collisions;
+      if (missingAfter > 0) e.missing += missingAfter;
+      batchData.set(i, e);
+    }
+  }
+
+  return Array.from(batchData.entries())
+    .filter(([_, e]) => e.collisions > 0 || e.missing > 0)
+    .map(([idx, e]) => ({
+      batch_index: idx,
+      section_ids: e.section_ids,
+      collision_count: e.collisions,
+      missing_count: e.missing,
+    }))
+    .sort((a, b) => (b.collision_count + b.missing_count) - (a.collision_count + a.missing_count));
+}
