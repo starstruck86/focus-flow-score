@@ -22,7 +22,7 @@
 
 import { DISCOVERY_PREP_BATCHES, authorOneBatch, buildBatchUserPrompt } from "./sectionAuthor.ts";
 import { DISCOVERY_PREP_SECTIONS } from "./handlers/discoveryPrepTemplate.ts";
-import { callOpenAI, safeParseJSON } from "./providers.ts";
+import { callOpenAI, safeParseJSON, setProviderCallContext } from "./providers.ts";
 import { getHandler } from "./registry.ts";
 import { validateDraftAgainstSop, type SopContractLike } from "./sopValidator.ts";
 import { runArtifactGate, type ArtifactGateTelemetry } from "./artifactGateEnforcement.ts";
