@@ -961,6 +961,18 @@ function FailuresTab({ userId, onDrilldown }: { userId: string; onDrilldown: (id
     };
   }, [rolloutData]);
 
+  // Rollout health check
+  const rolloutHealth = useMemo(() => {
+    if (!rolloutData) return null;
+    return computeRolloutHealth(rolloutData);
+  }, [rolloutData]);
+
+  // Gate changers — runs where remediation flipped outcome
+  const gateChangers = useMemo(() => {
+    if (!rolloutData) return [];
+    return filterRemediationGateChangers(rolloutData);
+  }, [rolloutData]);
+
   const [eraFilter, setEraFilter] = useState<string>('all');
   const filteredFailures = useMemo(() => {
     if (!failures) return [];
