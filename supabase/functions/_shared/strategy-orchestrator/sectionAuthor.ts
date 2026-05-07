@@ -429,6 +429,8 @@ export async function authorBySectionBatches(args: {
       primary_status: result.primary_status,
       fallback_status: result.fallback_status,
       error: result.error,
+      failure_category: result.error ? extractFailureCategory(result.error) : undefined,
+      duration_ms: durationMs,
     });
     if (result.fallback_status === "success") anyFallbackSuccess = true;
     for (const s of result.sections) {
