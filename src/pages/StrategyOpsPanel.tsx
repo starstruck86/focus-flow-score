@@ -1456,6 +1456,135 @@ export default function StrategyOpsPanel() {
 
   if (!user) return null;
 
+  // Inline ReliabilityTab to avoid a separate file
+  function ReliabilityTab({ userId }: { userId: string }) {
+    const { data: missingSections, loading: l1 } = useAsyncData(() => getMostMissingSections(userId), [userId]);
+    const { data: batchHeatmap, loading: l2 } = useAsyncData(() => getBatchFailureHeatmap(userId), [userId]);
+    const { data: providerFailures, loading: l3 } = useAsyncData(() => getProviderFailureSummary(userId), [userId]);
+    const { data: providerByBatch, loading: l4 } = useAsyncData(() => getProviderSuccessByBatch(userId), [userId]);
+    const { data: fallback, loading: l5 } = useAsyncData(() => getFallbackFrequency(userId), [userId]);
+
+    if (l1 || l2 || l3) return <LoadingSkeleton />;
+
+    return (
+      <div className="space-y-6">
+        {/* Provider Failures */}
+        {providerFailures && providerFailures.length > 0 && (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Provider Failures (Ranked)</CardTitle><CardDescription>From telemetry — last 7 days</CardDescription></CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader><TableRow><TableHead>Provider</TableHead><TableHead>Model</TableHead><TableHead>Error Type</TableHead><TableHead>Count</TableHead><TableHead>Avg Duration</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {providerFailures.map((r, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="font-mono text-xs">{r.provider}</TableCell>
+                      <TableCell className="font-mono text-xs">{r.model}</TableCell>
+                      <TableCell><Badge variant="outline" className="text-red-400 border-red-500/30">{r.error_type}</Badge></TableCell>
+                      <TableCell>{r.count}</TableCell>
+                      <TableCell>{fmtMs(r.avg_duration_ms)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Batch Failure Heatmap */}
+        {batchHeatmap && batchHeatmap.length > 0 && (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Batch Failure Heatmap</CardTitle><CardDescription>Which batches fail most</CardDescription></CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader><TableRow><TableHead>Batch</TableHead><TableHead>Sections</TableHead><TableHead>Total</TableHead><TableHead>Failed</TableHead><TableHead>Failure %</TableHead><TableHead>Fallback %</TableHead><TableHead>Avg Duration</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {batchHeatmap.map((r) => (
+                    <TableRow key={r.batch_index} className={r.failure_rate > 0.3 ? 'bg-red-500/5' : ''}>
+                      <TableCell>#{r.batch_index}</TableCell>
+                      <TableCell className="font-mono text-xs">{(r.section_ids || []).join(', ')}</TableCell>
+                      <TableCell>{r.total}</TableCell>
+                      <TableCell className={r.failed > 0 ? 'text-red-400' : ''}>{r.failed}</TableCell>
+                      <TableCell className={r.failure_rate > 0.3 ? 'text-red-400 font-semibold' : ''}>{fmtPct(r.failure_rate * 100)}</TableCell>
+                      <TableCell>{fmtPct(r.fallback_rate * 100)}</TableCell>
+                      <TableCell>{fmtMs(r.avg_duration_ms)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Most Missing Sections */}
+        {missingSections && missingSections.length > 0 && (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Most Missing Sections</CardTitle><CardDescription>Sections most frequently failing template_fidelity</CardDescription></CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {missingSections.map((s) => (
+                  <Badge key={s.section_id} variant="outline" className="text-red-400 border-red-500/30">
+                    {s.section_id}: {s.count}×
+                  </Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Provider Success by Batch */}
+        {providerByBatch && providerByBatch.length > 0 && (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Provider Success by Batch</CardTitle></CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader><TableRow><TableHead>Batch</TableHead><TableHead>Sections</TableHead><TableHead>Claude ✓</TableHead><TableHead>OpenAI ✓</TableHead><TableHead>Total</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {providerByBatch.map((r) => (
+                    <TableRow key={r.batch_index}>
+                      <TableCell>#{r.batch_index}</TableCell>
+                      <TableCell className="font-mono text-xs">{(r.section_ids || []).join(', ')}</TableCell>
+                      <TableCell className="text-emerald-400">{r.claude_success}</TableCell>
+                      <TableCell className="text-yellow-400">{r.openai_success}</TableCell>
+                      <TableCell>{r.total}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Fallback Frequency */}
+        {fallback && fallback.length > 0 && (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Fallback Frequency</CardTitle></CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader><TableRow><TableHead>Task Type</TableHead><TableHead>Batches</TableHead><TableHead>Fallback Used</TableHead><TableHead>Fallback %</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {fallback.map((r) => (
+                    <TableRow key={r.task_type}>
+                      <TableCell className="font-mono text-xs">{r.task_type}</TableCell>
+                      <TableCell>{r.total_batches}</TableCell>
+                      <TableCell>{r.fallback_used}</TableCell>
+                      <TableCell className={r.fallback_rate > 0.3 ? 'text-yellow-400' : ''}>{fmtPct(r.fallback_rate * 100)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {(!providerFailures?.length && !batchHeatmap?.length && !missingSections?.length) && (
+          <p className="text-muted-foreground p-4">No reliability data available yet. Run some tasks to populate.</p>
+        )}
+      </div>
+    );
+  }
+
+
   return (
     <SafePage className="px-4 py-6 max-w-7xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
