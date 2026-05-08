@@ -65,6 +65,8 @@ const SmokeTest = lazy(() => import("./pages/SmokeTest"));
 const LifecycleReconciliation = lazy(() => import("./pages/LifecycleReconciliation"));
 const PhaseEvidenceRunner = lazy(() => import("./pages/PhaseEvidenceRunner"));
 const StrategyOpsPanel = lazy(() => import("./pages/StrategyOpsPanel"));
+const WarRooms = lazy(() => import("./pages/WarRooms"));
+const WarRoomDetail = lazy(() => import("./pages/WarRoomDetail"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
