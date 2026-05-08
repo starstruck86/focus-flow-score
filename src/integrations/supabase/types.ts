@@ -1262,9 +1262,13 @@ export type Database = {
           discovery_source: string | null
           email: string | null
           id: string
+          impression: string | null
           influence_level: string | null
+          interview_role: string | null
+          key_concerns: string | null
           last_touch_date: string | null
           linkedin_url: string | null
+          met_on: string | null
           name: string
           notes: string | null
           preferred_channel: string | null
@@ -1291,9 +1295,13 @@ export type Database = {
           discovery_source?: string | null
           email?: string | null
           id?: string
+          impression?: string | null
           influence_level?: string | null
+          interview_role?: string | null
+          key_concerns?: string | null
           last_touch_date?: string | null
           linkedin_url?: string | null
+          met_on?: string | null
           name: string
           notes?: string | null
           preferred_channel?: string | null
@@ -1320,9 +1328,13 @@ export type Database = {
           discovery_source?: string | null
           email?: string | null
           id?: string
+          impression?: string | null
           influence_level?: string | null
+          interview_role?: string | null
+          key_concerns?: string | null
           last_touch_date?: string | null
           linkedin_url?: string | null
+          met_on?: string | null
           name?: string
           notes?: string | null
           preferred_channel?: string | null
@@ -3862,20 +3874,33 @@ export type Database = {
           arr: number | null
           churn_risk: string | null
           close_date: string | null
+          comp_json: Json | null
+          company_url: string | null
           created_at: string
           deal_type: string | null
+          hiring_manager_name: string | null
           id: string
+          intelligence_notes: string | null
           is_new_logo: boolean | null
+          jd_url: string | null
           last_touch_date: string | null
           linked_renewal_id: string | null
+          logistics_notes: string | null
           name: string
+          next_interview_json: Json | null
           next_step: string | null
           next_step_date: string | null
           notes: string | null
+          office_location: string | null
           one_time_amount: number | null
+          open_questions: string[] | null
           payment_terms: string | null
+          primary_strategy_thread_id: string | null
           prior_contract_arr: number | null
+          process_stage: string | null
+          recruiter_name: string | null
           renewal_arr: number | null
+          role_title: string | null
           salesforce_id: string | null
           salesforce_link: string | null
           stage: string | null
@@ -3883,6 +3908,8 @@ export type Database = {
           term_months: number | null
           updated_at: string
           user_id: string
+          verdict: string | null
+          work_model: string | null
         }
         Insert: {
           account_id?: string | null
@@ -3890,20 +3917,33 @@ export type Database = {
           arr?: number | null
           churn_risk?: string | null
           close_date?: string | null
+          comp_json?: Json | null
+          company_url?: string | null
           created_at?: string
           deal_type?: string | null
+          hiring_manager_name?: string | null
           id?: string
+          intelligence_notes?: string | null
           is_new_logo?: boolean | null
+          jd_url?: string | null
           last_touch_date?: string | null
           linked_renewal_id?: string | null
+          logistics_notes?: string | null
           name: string
+          next_interview_json?: Json | null
           next_step?: string | null
           next_step_date?: string | null
           notes?: string | null
+          office_location?: string | null
           one_time_amount?: number | null
+          open_questions?: string[] | null
           payment_terms?: string | null
+          primary_strategy_thread_id?: string | null
           prior_contract_arr?: number | null
+          process_stage?: string | null
+          recruiter_name?: string | null
           renewal_arr?: number | null
+          role_title?: string | null
           salesforce_id?: string | null
           salesforce_link?: string | null
           stage?: string | null
@@ -3911,6 +3951,8 @@ export type Database = {
           term_months?: number | null
           updated_at?: string
           user_id: string
+          verdict?: string | null
+          work_model?: string | null
         }
         Update: {
           account_id?: string | null
@@ -3918,20 +3960,33 @@ export type Database = {
           arr?: number | null
           churn_risk?: string | null
           close_date?: string | null
+          comp_json?: Json | null
+          company_url?: string | null
           created_at?: string
           deal_type?: string | null
+          hiring_manager_name?: string | null
           id?: string
+          intelligence_notes?: string | null
           is_new_logo?: boolean | null
+          jd_url?: string | null
           last_touch_date?: string | null
           linked_renewal_id?: string | null
+          logistics_notes?: string | null
           name?: string
+          next_interview_json?: Json | null
           next_step?: string | null
           next_step_date?: string | null
           notes?: string | null
+          office_location?: string | null
           one_time_amount?: number | null
+          open_questions?: string[] | null
           payment_terms?: string | null
+          primary_strategy_thread_id?: string | null
           prior_contract_arr?: number | null
+          process_stage?: string | null
+          recruiter_name?: string | null
           renewal_arr?: number | null
+          role_title?: string | null
           salesforce_id?: string | null
           salesforce_link?: string | null
           stage?: string | null
@@ -3939,6 +3994,8 @@ export type Database = {
           term_months?: number | null
           updated_at?: string
           user_id?: string
+          verdict?: string | null
+          work_model?: string | null
         }
         Relationships: [
           {
@@ -3953,6 +4010,13 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opportunities_primary_strategy_thread_id_fkey"
+            columns: ["primary_strategy_thread_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_threads"
             referencedColumns: ["id"]
           },
         ]

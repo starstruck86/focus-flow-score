@@ -28,3 +28,17 @@ export function useDebouncedUpdate<T extends Record<string, any>>(
 
   return { debouncedUpdate, flush };
 }
+
+/**
+ * Simple debounced callback — calls `fn` after `delayMs` of inactivity.
+ */
+export function useDebouncedCallback<A extends any[]>(fn: (...args: A) => void, delayMs = 400) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fnRef = useRef(fn);
+  fnRef.current = fn;
+
+  return useCallback((...args: A) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => fnRef.current(...args), delayMs);
+  }, [delayMs]);
+}
