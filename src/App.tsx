@@ -65,8 +65,6 @@ const SmokeTest = lazy(() => import("./pages/SmokeTest"));
 const LifecycleReconciliation = lazy(() => import("./pages/LifecycleReconciliation"));
 const PhaseEvidenceRunner = lazy(() => import("./pages/PhaseEvidenceRunner"));
 const StrategyOpsPanel = lazy(() => import("./pages/StrategyOpsPanel"));
-const WarRooms = lazy(() => import("./pages/WarRooms"));
-const WarRoomDetail = lazy(() => import("./pages/WarRoomDetail"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -118,8 +116,6 @@ const App = () => (
                   <Route path="/outreach" element={<ProtectedPage routeName="Outreach"><WeeklyOutreach /></ProtectedPage>} />
                   <Route path="/accounts/:id" element={<ProtectedPage routeName="Account Detail"><AccountDetail /></ProtectedPage>} />
                   <Route path="/opportunities/:id" element={<ProtectedPage routeName="Opportunity Detail"><OpportunityDetail /></ProtectedPage>} />
-                  <Route path="/warrooms" element={<ProtectedPage routeName="War Rooms"><Suspense fallback={<LazyFallback />}><WarRooms /></Suspense></ProtectedPage>} />
-                  <Route path="/warrooms/:id" element={<ProtectedPage routeName="War Room Detail"><Suspense fallback={<LazyFallback />}><WarRoomDetail /></Suspense></ProtectedPage>} />
                   <Route path="/renewals" element={<ProtectedPage routeName="Renewals"><Renewals /></ProtectedPage>} />
                   <Route path="/tasks" element={<ProtectedPage routeName="Tasks"><Tasks /></ProtectedPage>} />
                   <Route path="/recurring" element={<ProtectedPage routeName="Recurring Tasks"><RecurringTasks /></ProtectedPage>} />
