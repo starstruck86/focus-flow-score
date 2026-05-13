@@ -40,12 +40,14 @@ const BodySchema = z.object({
 // be self-contained — no closures, no outer references — and return JSON.
 // `context` is whatever we pass under `{ context: {...} }`.
 const PLAYWRIGHT_SCRIPT = `
-export default async function ({ page, context }) {
+export default async function ({ page, browser, context }) {
   const { courseUrl, sessionCookie, cookieName } = context;
 
   // 1. Set the session cookie for *.circle.so so we appear logged in.
+  // Browserless wraps page; use browser.contexts()[0] to access the BrowserContext.
   const u = new URL(courseUrl);
-  await page.context().addCookies([{
+  const ctx = (browser && browser.contexts && browser.contexts()[0]) || (page.context && page.context());
+  await ctx.addCookies([{
     name: cookieName || '_circle_session',
     value: sessionCookie,
     domain: u.hostname,
