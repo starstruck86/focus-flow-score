@@ -35,35 +35,142 @@ const BodySchema = z.object({
   dry_run: z.boolean().optional(),
 });
 
+function extractCookieValue(raw: string | undefined, preferredName = '_circle_session'): string | undefined {
+  const input = (raw || '').trim();
+  if (!input) return undefined;
+  const cleaned = input.replace(/^cookie:\s*/i, '').trim();
+  const parts = cleaned.split(';').map((p) => p.trim()).filter(Boolean);
+  for (const part of parts) {
+    const idx = part.indexOf('=');
+    if (idx <= 0) continue;
+    const name = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    if (name === preferredName || name === '_circle_session') return value;
+  }
+  return cleaned;
+}
+
 // ── Playwright script that runs inside Browserless ─────────────────────────────
 // IMPORTANT: This runs inside Browserless's Node + Playwright sandbox. It must
 // be self-contained — no closures, no outer references — and return JSON.
 // `context` is whatever we pass under `{ context: {...} }`.
 const PLAYWRIGHT_SCRIPT = `
 export default async function ({ page, context }) {
-  const { courseUrl, sessionCookie, cookieName } = context;
+  const { courseUrl, sessionCookie, cookieName, platformEmail, platformPassword } = context;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // 1. Set the session cookie for *.circle.so so we appear logged in.
   // Browserless /function runs Puppeteer — use page.setCookie.
   const u = new URL(courseUrl);
-  await page.setCookie({
-    name: cookieName || '_circle_session',
-    value: sessionCookie,
-    domain: u.hostname,
-    path: '/',
-    httpOnly: true,
-    secure: true,
-    sameSite: 'Lax',
-  });
-
   const debug = [];
   const log = (m) => { debug.push(m); };
+
+  if (sessionCookie) {
+    const cookieDomains = Array.from(new Set([u.hostname, '.' + u.hostname, '.circle.so']));
+    for (const domain of cookieDomains) {
+      try {
+        await page.setCookie({
+          name: cookieName || '_circle_session',
+          value: sessionCookie,
+          domain,
+          path: '/',
+          httpOnly: true,
+          secure: true,
+          sameSite: 'Lax',
+        });
+        log('set session cookie for domain ' + domain);
+      } catch (e) {
+        log('cookie set skipped for ' + domain + ': ' + (e && e.message));
+      }
+    }
+  }
+
+  const isLoginPage = async () => page.evaluate(() => {
+    const text = (document.body?.innerText || '').toLowerCase();
+    return /login\.circle\.so|\/sign_in/.test(location.href) ||
+      text.includes('log in to your account') || text.includes('sign in with an email');
+  });
+
+  const tryPasswordLogin = async () => {
+    if (!platformEmail || !platformPassword) {
+      log('password login fallback unavailable (missing credentials)');
+      return false;
+    }
+    try {
+      log('attempting Circle password login fallback');
+      await page.goto('https://login.circle.so/sign_in?request_host=' + encodeURIComponent(u.hostname) + '#email', { waitUntil: 'networkidle2', timeout: 60000 });
+      await sleep(1200);
+      await page.evaluate(() => {
+        const clickByText = (patterns) => {
+          const els = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
+          for (const el of els) {
+            const text = (el.textContent || '').trim().toLowerCase();
+            if (patterns.some((p) => text.includes(p))) { try { el.click(); return true; } catch {} }
+          }
+          return false;
+        };
+        clickByText(['sign in with an email', 'continue with email', 'email']);
+      });
+      await sleep(800);
+
+      const emailFilled = await page.evaluate((email) => {
+        const input = document.querySelector('input[type="email"], input[name*="email" i], input[id*="email" i]');
+        if (!input) return false;
+        input.focus();
+        input.value = email;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      }, platformEmail);
+      log('email field found: ' + emailFilled);
+      if (!emailFilled) return false;
+      await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+        const btn = btns.find((b) => /continue|next|sign in|log in/i.test(b.textContent || b.value || '')) || btns[0];
+        try { btn && btn.click(); } catch {}
+      });
+      await sleep(1800);
+
+      const passwordFilled = await page.evaluate((password) => {
+        const input = document.querySelector('input[type="password"], input[name*="password" i], input[id*="password" i]');
+        if (!input) return false;
+        input.focus();
+        input.value = password;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      }, platformPassword);
+      log('password field found: ' + passwordFilled);
+      if (!passwordFilled) return false;
+      await Promise.allSettled([
+        page.evaluate(() => {
+          const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+          const btn = btns.find((b) => /sign in|log in|continue|submit/i.test(b.textContent || b.value || '')) || btns[0];
+          try { btn && btn.click(); } catch {}
+        }),
+        page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }),
+      ]);
+      await sleep(1500);
+      await page.goto(courseUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+      await sleep(2000);
+      const stillLogin = await isLoginPage();
+      log('password login fallback result: ' + (stillLogin ? 'still_login' : 'authenticated'));
+      return !stillLogin;
+    } catch (e) {
+      log('password login fallback failed: ' + (e && e.message));
+      return false;
+    }
+  };
 
   // 2. Load the curriculum page.
   log('navigating to ' + courseUrl);
   await page.goto(courseUrl, { waitUntil: 'networkidle2', timeout: 60000 });
   await sleep(2500);
+
+  if (await isLoginPage()) {
+    log('login page detected after cookie navigation');
+    await tryPasswordLogin();
+  }
 
   const pageInfo = await page.evaluate(() => ({
     finalUrl: location.href,
