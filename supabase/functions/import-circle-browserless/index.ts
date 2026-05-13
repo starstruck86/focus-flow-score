@@ -368,10 +368,15 @@ Deno.serve(async (req) => {
   const courseTitle: string = harvest?.courseTitle || 'Circle Course';
 
   if (lessons.length === 0) {
+    const debugArr: string[] = harvest?.debug || [];
+    const redirectedToLogin = debugArr.some((d) => /login\.circle\.so|\/sign_in/i.test(d));
     return json({
       success: false,
-      error: 'No lessons captured. Check that the cookie is valid and the URL is the course or curriculum page.',
-      debug: harvest?.debug || [],
+      error: redirectedToLogin
+        ? 'Circle session cookie is expired or invalid — Browserless was redirected to the login page. Open Circle in a logged-in tab, copy a fresh `_circle_session` cookie value, and re-save it under Settings → Sales Brain → Circle.'
+        : 'No lessons captured. Check that the URL is the course or curriculum page.',
+      code: redirectedToLogin ? 'cookie_expired' : 'no_lessons',
+      debug: debugArr,
     }, 422);
   }
 
