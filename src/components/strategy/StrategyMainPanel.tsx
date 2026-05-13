@@ -470,7 +470,7 @@ export function StrategyMainPanel({
       </div>
 
       {/* ── COMPOSER — docked ── */}
-      <div className="shrink-0 border-t border-border/15 bg-background/65 backdrop-blur-md px-3 pb-[calc(0.25rem+var(--shell-nav-height,0)*1px+env(safe-area-inset-bottom))] pt-1">
+      <div className="shrink-0 border-t border-border/15 bg-background/65 backdrop-blur-md px-3 pb-1 pt-1">
           <Textarea
             value={input}
             onChange={e => setInput(e.target.value)}
