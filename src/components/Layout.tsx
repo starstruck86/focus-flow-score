@@ -300,8 +300,11 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
         'bg-background flex flex-col w-full',
         SHELL.top.safeArea,
         // /strategy locks to viewport height so the canvas/artifact scrolls,
-        // not the outer page. Other routes keep min-h-screen.
-        location.pathname === '/strategy' ? 'h-[100dvh] overflow-hidden' : 'min-h-screen',
+        // not the outer page. Reserve nav clearance via padding-bottom so the
+        // inner flex chain can use plain flex-1 (no fragile h-[calc]).
+        location.pathname === '/strategy'
+          ? 'h-[100dvh] overflow-hidden pb-[calc(var(--shell-nav-height,101)*1px)]'
+          : 'min-h-screen',
       )}
     >
       {location.pathname !== '/strategy' && (
