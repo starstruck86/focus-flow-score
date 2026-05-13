@@ -481,12 +481,15 @@ Deno.serve(async (req) => {
   if (lessons.length === 0) {
     const debugArr: string[] = harvest?.debug || [];
     const redirectedToLogin = debugArr.some((d) => /login\.circle\.so|\/sign_in/i.test(d));
+    const blockedByChallenge = debugArr.some((d) => /just a moment|verifying you are a human|review the security of your connection|cloudflare/i.test(d));
     return json({
       success: false,
-      error: redirectedToLogin
+      error: blockedByChallenge
+        ? 'Circle blocked the headless browser with a human verification challenge. Use the Bookmarklet tab instead — it runs inside your already-verified Circle tab.'
+        : redirectedToLogin
         ? 'Circle authentication failed. The saved cookie did not open the course, and the password fallback could not complete login. Re-save a fresh `_circle_session` value from a logged-in Circle tab, or use the bookmarklet/manual capture path.'
         : 'No lessons captured. Check that the URL is the course or curriculum page.',
-      code: redirectedToLogin ? 'cookie_expired' : 'no_lessons',
+      code: blockedByChallenge ? 'cloudflare_challenge' : redirectedToLogin ? 'cookie_expired' : 'no_lessons',
       debug: debugArr,
     }, 422);
   }
