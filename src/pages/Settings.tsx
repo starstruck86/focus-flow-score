@@ -23,7 +23,9 @@ import {
   Link2,
   ArrowRight,
   RefreshCw,
+  Brain,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { ImportWizard } from '@/components/import';
 import { DuplicateDetector } from '@/components/DuplicateDetector';
 import { Button } from '@/components/ui/button';
@@ -1114,6 +1116,23 @@ export default function Settings() {
           <section className="space-y-4">
             <h2 className="text-base font-semibold text-foreground/90 border-b border-border/40 pb-2">Coaching</h2>
             <ConversionBenchmarksSettings />
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-base font-semibold text-foreground/90 border-b border-border/40 pb-2">Sales Brain</h2>
+            <Link
+              to="/prep"
+              className="metric-card flex items-center gap-3 hover:border-primary/40 transition-colors"
+            >
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Brain className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold">Open Sales Brain OS</h3>
+                <p className="text-sm text-muted-foreground">Control Plane · Prep · Knowledge · Ingest</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            </Link>
           </section>
 
           <section className="space-y-4">
