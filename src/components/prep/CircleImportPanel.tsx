@@ -558,20 +558,69 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
         </div>
       </div>
 
-      <Tabs defaultValue="capture" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="capture">Browser-assisted</TabsTrigger>
+      <Tabs defaultValue="auto" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="auto">Auto Import</TabsTrigger>
+          <TabsTrigger value="capture">Bookmarklet</TabsTrigger>
           <TabsTrigger value="manual">Manual paste</TabsTrigger>
         </TabsList>
 
-        {/* ── Tab A: Browser-assisted capture ───────────────────────── */}
+        {/* ── Tab: Auto Import (Browserless) ────────────────────────── */}
+        <TabsContent value="auto" className="space-y-3 pt-3">
+          {hasCookie === null ? (
+            <div className="text-xs text-muted-foreground">Checking saved Circle session…</div>
+          ) : !hasCookie ? (
+            <div className="space-y-2 p-3 rounded-md border border-border bg-muted/30">
+              <div className="text-sm font-medium text-foreground">One-time setup: paste your Circle session cookie</div>
+              <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
+                <li>Open Circle in a tab where you're already signed in.</li>
+                <li>Open DevTools → <span className="font-medium text-foreground">Application</span> → Cookies → your Circle domain.</li>
+                <li>Find <code className="px-1 py-0.5 bg-background rounded">_circle_session</code> and copy its <span className="font-medium text-foreground">Value</span>.</li>
+                <li>Paste below. Stored encrypted, only used to render Circle pages on your behalf.</li>
+              </ol>
+              <Textarea
+                value={cookieInput}
+                onChange={e => setCookieInput(e.target.value)}
+                placeholder="Paste _circle_session value (long string)…"
+                className="font-mono text-[11px] min-h-[80px]"
+              />
+              <Button size="sm" onClick={saveCookie} disabled={savingCookie}>
+                {savingCookie ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Saving</> : 'Save cookie'}
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-2.5 rounded-md border border-border bg-muted/30 text-xs">
+                <span className="text-muted-foreground">✓ Circle session cookie on file.</span>
+                <Button size="sm" variant="ghost" onClick={clearCookie}>Remove</Button>
+              </div>
+              <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
+                <li>Click <span className="font-medium text-foreground">Import this course</span>. We'll render the course in a headless browser using your saved session.</li>
+                <li>Every lesson is walked: title, body, transcript, video, and resource links are captured automatically.</li>
+                <li>Cookie expires every ~2 weeks; if import returns 0 lessons, paste a fresh cookie.</li>
+              </ol>
+              <Button onClick={runAutoImport} disabled={autoRunning} className="w-full">
+                {autoRunning ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importing… (may take 1–3 min)</> : 'Import this course'}
+              </Button>
+              {autoLog.length > 0 && (
+                <details className="text-[11px] text-muted-foreground">
+                  <summary className="cursor-pointer">Capture log ({autoLog.length})</summary>
+                  <pre className="mt-1 p-2 bg-muted rounded max-h-48 overflow-auto whitespace-pre-wrap">{autoLog.join('\n')}</pre>
+                </details>
+              )}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── Tab: Browser-assisted capture ─────────────────────────── */}
         <TabsContent value="capture" className="space-y-3 pt-3">
           <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
-            <li>Open Circle in a tab where you’re already signed in.</li>
-            <li>Navigate to <span className="font-medium text-foreground">any lesson page</span> (you should see <em>“Lesson X of Y”</em>).</li>
+            <li>Open Circle in a tab where you're already signed in.</li>
+            <li>Navigate to <span className="font-medium text-foreground">any lesson page</span> (you should see <em>"Lesson X of Y"</em>).</li>
             <li>Click one of the bookmarklets below. <span className="font-medium text-foreground">Capture entire course</span> is recommended.</li>
-            <li>When the banner reads <em>“N lessons captured”</em>, return here and paste the JSON below.</li>
+            <li>When the banner reads <em>"N lessons captured"</em>, return here and paste the JSON below.</li>
           </ol>
+
 
           <div className="space-y-2">
             <div className="text-[10px] font-medium text-foreground uppercase tracking-wide">Capture entire course <Badge variant="outline" className="text-[9px] h-4 ml-1">recommended</Badge></div>
