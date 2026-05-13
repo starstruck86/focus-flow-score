@@ -373,11 +373,10 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
         className={cn(
           'flex-1 overflow-x-hidden',
           location.pathname === '/strategy'
-            // Lock /strategy main to a fixed available-height box so the inner
-            // flex chain (StrategyShell → center column → canvas) is what
-            // scrolls — never the outer page. The BottomNav is fixed-position,
-            // so we subtract its height + safe-area instead of using padding.
-            ? 'flex flex-col min-h-0 overflow-hidden h-[calc(100dvh-var(--shell-nav-height)*1px-env(safe-area-inset-bottom))]'
+            // Outer wrapper already reserves bottom-nav clearance via padding,
+            // so main just needs to flex into the remaining space and let its
+            // inner shell own scrolling.
+            ? 'flex flex-col min-h-0 overflow-hidden'
             : `overflow-y-auto ${SHELL.main.bottomPad}`,
         )}
       >
