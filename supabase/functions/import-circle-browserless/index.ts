@@ -203,7 +203,7 @@ export default async function ({ page, context }) {
       if (!href) continue;
       let abs;
       try { abs = new URL(href, location.href).toString(); } catch { continue; }
-      if (!/\\/lessons\\//.test(abs)) continue;
+      if (!abs.includes('/lessons/')) continue;
       if (seen.has(abs)) continue;
       seen.add(abs);
       out.push({ url: abs, title: (a.textContent || '').trim().slice(0, 300) });
@@ -332,9 +332,9 @@ export default async function ({ page, context }) {
           else if (/\\.(docx?|rtf)(\\?|$)/.test(lower)) type = 'doc';
           else if (/\\.(xlsx?|csv)(\\?|$)/.test(lower)) type = 'sheet';
           else if (/\\.(pptx?|key)(\\?|$)/.test(lower)) type = 'slide';
-          else if (/docs\\.google\\.com\\/document/.test(lower)) type = 'doc';
-          else if (/docs\\.google\\.com\\/spreadsheets/.test(lower)) type = 'sheet';
-          else if (/docs\\.google\\.com\\/presentation/.test(lower)) type = 'slide';
+          else if (lower.includes('docs.google.com/document')) type = 'doc';
+          else if (lower.includes('docs.google.com/spreadsheets')) type = 'sheet';
+          else if (lower.includes('docs.google.com/presentation')) type = 'slide';
           else if (/drive\\.google\\.com|dropbox\\.com|notion\\.so|loom\\.com/.test(lower)) type = 'link';
           if (!type) continue;
           seen.add(abs);
