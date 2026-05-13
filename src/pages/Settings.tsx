@@ -33,7 +33,7 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+// Tabs removed — settings now render as one stacked page
 import { WhoopIntegration } from '@/components/WhoopIntegration';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -692,18 +692,9 @@ export default function Settings() {
           <p className="text-sm text-muted-foreground">Customize your experience</p>
         </div>
 
-        <Tabs defaultValue="schedule" className="space-y-6">
-          <TabsList className="flex w-full overflow-x-auto gap-1 p-1 scrollbar-none">
-            <TabsTrigger value="schedule" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Work Schedule</TabsTrigger>
-            <TabsTrigger value="coaching" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Coaching</TabsTrigger>
-            <TabsTrigger value="integrations" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Integrations</TabsTrigger>
-            <TabsTrigger value="appearance" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Appearance</TabsTrigger>
-            <TabsTrigger value="notifications" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Notifications</TabsTrigger>
-            <TabsTrigger value="data" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Data</TabsTrigger>
-          </TabsList>
-          
-          {/* Work Schedule Tab */}
-          <TabsContent value="schedule" className="space-y-6">
+        <div className="space-y-10">
+          <section className="space-y-6">
+            <h2 className="text-base font-semibold text-foreground/90 border-b border-border/40 pb-2">Work Schedule</h2>
             {/* Working Days */}
             <div className="metric-card">
               <div className="flex items-center gap-3 mb-4">
@@ -1118,15 +1109,15 @@ export default function Settings() {
                 </div>
               )}
             </div>
-          </TabsContent>
-          
-          {/* Coaching Tab */}
-          <TabsContent value="coaching" className="space-y-4">
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-base font-semibold text-foreground/90 border-b border-border/40 pb-2">Coaching</h2>
             <ConversionBenchmarksSettings />
-          </TabsContent>
-          
-           {/* Integrations Tab */}
-           <TabsContent value="integrations" className="space-y-4">
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-base font-semibold text-foreground/90 border-b border-border/40 pb-2">Integrations</h2>
              <WhoopIntegration />
              <DaveHealthSection />
              {/* Wake Word Toggle */}
@@ -1169,10 +1160,10 @@ export default function Settings() {
                  </div>
                </div>
              )}
-           </TabsContent>
-          
-          {/* Appearance Tab */}
-          <TabsContent value="appearance" className="space-y-4">
+           </section>
+
+          <section className="space-y-4">
+            <h2 className="text-base font-semibold text-foreground/90 border-b border-border/40 pb-2">Appearance</h2>
             <AppearanceSettings />
 
             {/* Build Info */}
@@ -1191,28 +1182,21 @@ export default function Settings() {
                 <span className="text-sm font-mono">{new Date(__BUILD_TIMESTAMP__).toLocaleString()}</span>
               </div>
             </div>
-          </TabsContent>
-          
-          {/* Notifications Tab */}
-          <TabsContent value="notifications" className="space-y-4">
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-base font-semibold text-foreground/90 border-b border-border/40 pb-2">Notifications</h2>
             <NotificationSettings />
-          </TabsContent>
-          
-          {/* Data Tab */}
-          <TabsContent value="data" className="space-y-4">
-            {/* Duplicate Detection */}
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-base font-semibold text-foreground/90 border-b border-border/40 pb-2">Data</h2>
             <DuplicateDetector />
-            
-            {/* Import Section */}
             <DataImportSection />
-            
-            {/* Import Mappings Section */}
             <ImportMappingsSection />
-            
-            {/* Export Section */}
             <DataExportSection />
-          </TabsContent>
-        </Tabs>
+          </section>
+        </div>
       </div>
     </Layout>
   );
