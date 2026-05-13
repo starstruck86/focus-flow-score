@@ -42,7 +42,6 @@ export const COLOR_VAR: Record<NavColor, string> = {
 
 export const navRow1: NavItemDef[] = [
   { to: '/strategy', label: 'Strategy', icon: Crosshair, color: 'strategy' },
-  { to: '/', label: 'Today', icon: LayoutDashboard, color: 'today' },
   { to: '/tasks', label: 'Tasks', icon: CheckSquare, color: 'tasks' },
   { to: '/outreach', label: 'New Logo', icon: Users, color: 'outreach' },
   { to: '/renewals', label: 'Renewals', icon: RefreshCw, color: 'renewals' },
