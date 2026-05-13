@@ -1160,10 +1160,10 @@ export default function Settings() {
                  </div>
                </div>
              )}
-           </TabsContent>
-          
-          {/* Appearance Tab */}
-          <TabsContent value="appearance" className="space-y-4">
+           </section>
+
+          <section className="space-y-4">
+            <h2 className="text-base font-semibold text-foreground/90 border-b border-border/40 pb-2">Appearance</h2>
             <AppearanceSettings />
 
             {/* Build Info */}
@@ -1182,28 +1182,21 @@ export default function Settings() {
                 <span className="text-sm font-mono">{new Date(__BUILD_TIMESTAMP__).toLocaleString()}</span>
               </div>
             </div>
-          </TabsContent>
-          
-          {/* Notifications Tab */}
-          <TabsContent value="notifications" className="space-y-4">
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-base font-semibold text-foreground/90 border-b border-border/40 pb-2">Notifications</h2>
             <NotificationSettings />
-          </TabsContent>
-          
-          {/* Data Tab */}
-          <TabsContent value="data" className="space-y-4">
-            {/* Duplicate Detection */}
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-base font-semibold text-foreground/90 border-b border-border/40 pb-2">Data</h2>
             <DuplicateDetector />
-            
-            {/* Import Section */}
             <DataImportSection />
-            
-            {/* Import Mappings Section */}
             <ImportMappingsSection />
-            
-            {/* Export Section */}
             <DataExportSection />
-          </TabsContent>
-        </Tabs>
+          </section>
+        </div>
       </div>
     </Layout>
   );
