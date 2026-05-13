@@ -24,7 +24,6 @@ import {
   ArrowRight,
   RefreshCw,
   Brain,
-  Mic,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ImportWizard } from '@/components/import';
