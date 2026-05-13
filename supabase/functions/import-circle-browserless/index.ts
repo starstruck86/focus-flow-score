@@ -63,12 +63,27 @@ export default async function ({ page, context }) {
   // 2. Load the curriculum page.
   log('navigating to ' + courseUrl);
   await page.goto(courseUrl, { waitUntil: 'networkidle2', timeout: 60000 });
-  await sleep(1500);
+  await sleep(2500);
 
-  const courseTitle = await page.evaluate(() => {
-    const h1 = document.querySelector('h1');
-    return (h1 && h1.textContent && h1.textContent.trim()) || document.title || 'Circle Course';
-  });
+  const pageInfo = await page.evaluate(() => ({
+    finalUrl: location.href,
+    title: document.title,
+    h1: (document.querySelector('h1')?.textContent || '').trim(),
+    bodyLen: (document.body?.innerText || '').length,
+    htmlSample: (document.body?.innerText || '').slice(0, 400),
+    anchorCount: document.querySelectorAll('a').length,
+    hrefSamples: Array.from(document.querySelectorAll('a')).slice(0, 25).map(a => a.getAttribute('href') || ''),
+    hasLoginForm: !!document.querySelector('form[action*="sign_in"], input[name="user[password]"], input[name="member[password]"]'),
+  }));
+  log('final url: ' + pageInfo.finalUrl);
+  log('page title: ' + pageInfo.title);
+  log('h1: ' + pageInfo.h1);
+  log('anchor count: ' + pageInfo.anchorCount);
+  log('login form present: ' + pageInfo.hasLoginForm);
+  log('href samples: ' + JSON.stringify(pageInfo.hrefSamples));
+  log('body sample: ' + pageInfo.htmlSample.replace(/\\s+/g, ' '));
+
+  const courseTitle = pageInfo.h1 || pageInfo.title || 'Circle Course';
 
   // 3. Collect every lesson link.
   const lessonLinks = await page.evaluate(() => {
