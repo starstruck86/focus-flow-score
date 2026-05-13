@@ -87,10 +87,10 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
   const isMobile = useIsMobile();
   const isStrategy = location.pathname === '/strategy';
   // /strategy desktop replaces the bottom nav with a top global rail.
-  // /strategy mobile keeps a single-row condensed bottom nav so users
-  // can still reach Today/Tasks/New Logo/Renewals from the workspace.
+  // /strategy mobile keeps the full bottom nav; the shell reserves its
+  // measured height so the docked composer never covers or clips it.
   const bottomNavVariant: 'default' | 'condensed' | 'hidden' = isStrategy
-    ? (isMobile ? 'condensed' : 'hidden')
+    ? (isMobile ? 'default' : 'hidden')
     : 'default';
   
   // Dave state

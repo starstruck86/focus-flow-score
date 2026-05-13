@@ -163,15 +163,22 @@ export function BottomNav({ variant = 'default' }: { variant?: 'default' | 'cond
     }
     const el = navRef.current;
     if (!el) return;
+    let rafId = 0;
     const apply = (h: number) => {
-      if (h > 0) root.style.setProperty('--shell-nav-height', String(Math.round(h)));
+      const rounded = Math.round(h);
+      if (rounded > 0 && root.style.getPropertyValue('--shell-nav-height') !== String(rounded)) {
+        root.style.setProperty('--shell-nav-height', String(rounded));
+      }
     };
     apply(el.getBoundingClientRect().height);
     const ro = new ResizeObserver(entries => {
-      for (const entry of entries) apply(entry.contentRect.height);
+      const h = entries[0]?.target.getBoundingClientRect().height ?? 0;
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => apply(h));
     });
     ro.observe(el);
     return () => {
+      cancelAnimationFrame(rafId);
       ro.disconnect();
       // Restore design-system default so other mounts start from a known baseline.
       root.style.setProperty('--shell-nav-height', '101');
