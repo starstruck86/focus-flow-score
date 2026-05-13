@@ -40,14 +40,14 @@ const BodySchema = z.object({
 // be self-contained — no closures, no outer references — and return JSON.
 // `context` is whatever we pass under `{ context: {...} }`.
 const PLAYWRIGHT_SCRIPT = `
-export default async function ({ page, browser, context }) {
+export default async function ({ page, context }) {
   const { courseUrl, sessionCookie, cookieName } = context;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // 1. Set the session cookie for *.circle.so so we appear logged in.
-  // Browserless wraps page; use browser.contexts()[0] to access the BrowserContext.
+  // Browserless /function runs Puppeteer — use page.setCookie.
   const u = new URL(courseUrl);
-  const ctx = (browser && browser.contexts && browser.contexts()[0]) || (page.context && page.context());
-  await ctx.addCookies([{
+  await page.setCookie({
     name: cookieName || '_circle_session',
     value: sessionCookie,
     domain: u.hostname,
@@ -55,23 +55,22 @@ export default async function ({ page, browser, context }) {
     httpOnly: true,
     secure: true,
     sameSite: 'Lax',
-  }]);
+  });
 
   const debug = [];
   const log = (m) => { debug.push(m); };
 
   // 2. Load the curriculum page.
   log('navigating to ' + courseUrl);
-  await page.goto(courseUrl, { waitUntil: 'networkidle', timeout: 60000 });
-  await page.waitForTimeout(1500);
+  await page.goto(courseUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+  await sleep(1500);
 
   const courseTitle = await page.evaluate(() => {
     const h1 = document.querySelector('h1');
     return (h1 && h1.textContent && h1.textContent.trim()) || document.title || 'Circle Course';
   });
 
-  // 3. Collect every lesson link on the curriculum/section pages.
-  // Circle URL shape: /c/<community>/.../lessons/<id>
+  // 3. Collect every lesson link.
   const lessonLinks = await page.evaluate(() => {
     const out = [];
     const seen = new Set();
@@ -79,7 +78,8 @@ export default async function ({ page, browser, context }) {
     for (const a of anchors) {
       const href = a.getAttribute('href');
       if (!href) continue;
-      const abs = new URL(href, location.href).toString();
+      let abs;
+      try { abs = new URL(href, location.href).toString(); } catch { continue; }
       if (!/\\/lessons\\//.test(abs)) continue;
       if (seen.has(abs)) continue;
       seen.add(abs);
@@ -89,8 +89,6 @@ export default async function ({ page, browser, context }) {
   });
   log('found ' + lessonLinks.length + ' lesson links');
 
-  // Also walk any visible "Section" sublinks; sections often expand into more
-  // lesson links once visited.
   const sectionLinks = await page.evaluate(() => {
     const out = [];
     const seen = new Set();
@@ -98,7 +96,8 @@ export default async function ({ page, browser, context }) {
     for (const a of anchors) {
       const href = a.getAttribute('href');
       if (!href) continue;
-      const abs = new URL(href, location.href).toString();
+      let abs;
+      try { abs = new URL(href, location.href).toString(); } catch { continue; }
       if (seen.has(abs)) continue;
       seen.add(abs);
       out.push(abs);
@@ -106,20 +105,20 @@ export default async function ({ page, browser, context }) {
     return out;
   });
 
-  // Visit each section to gather lessons that aren't on the root page.
   const lessonMap = new Map();
   for (const l of lessonLinks) lessonMap.set(l.url, l);
   for (const sUrl of sectionLinks.slice(0, 30)) {
     try {
-      await page.goto(sUrl, { waitUntil: 'networkidle', timeout: 45000 });
-      await page.waitForTimeout(800);
+      await page.goto(sUrl, { waitUntil: 'networkidle2', timeout: 45000 });
+      await sleep(800);
       const more = await page.evaluate(() => {
         const out = [];
         const anchors = Array.from(document.querySelectorAll('a[href*="/lessons/"]'));
         for (const a of anchors) {
           const href = a.getAttribute('href');
           if (!href) continue;
-          const abs = new URL(href, location.href).toString();
+          let abs;
+          try { abs = new URL(href, location.href).toString(); } catch { continue; }
           out.push({ url: abs, title: (a.textContent || '').trim().slice(0, 300) });
         }
         return out;
@@ -133,41 +132,37 @@ export default async function ({ page, browser, context }) {
   const allLessons = Array.from(lessonMap.values());
   log('total unique lessons: ' + allLessons.length);
 
-  // 4. Visit each lesson; harvest title, body, transcript, video, resources.
+  // 4. Visit each lesson.
   const harvested = [];
   let idx = 0;
   for (const L of allLessons) {
     idx++;
     try {
-      await page.goto(L.url, { waitUntil: 'networkidle', timeout: 60000 });
-      await page.waitForTimeout(1200);
+      await page.goto(L.url, { waitUntil: 'networkidle2', timeout: 60000 });
+      await sleep(1200);
 
-      // Click any "Show transcript" / "Transcript" toggles so the text is in DOM.
+      // Click "Show transcript" / "Show more" toggles by scanning text.
       try {
-        const toggles = await page.$$('button, a');
-        for (const t of toggles) {
-          const txt = ((await t.textContent()) || '').trim().toLowerCase();
-          if (/^(show |view |open )?transcript$/.test(txt) || txt === 'show transcript') {
-            await t.click({ timeout: 2000 }).catch(() => {});
-            await page.waitForTimeout(400);
+        await page.evaluate(() => {
+          const all = Array.from(document.querySelectorAll('button, a'));
+          for (const t of all) {
+            const txt = ((t.textContent) || '').trim().toLowerCase();
+            if (txt === 'show transcript' || txt === 'transcript' || txt === 'view transcript' ||
+                txt === 'show more' || txt === 'read more') {
+              try { t.click(); } catch {}
+            }
           }
-        }
+        });
+        await sleep(600);
       } catch (e) { /* noop */ }
-      // Expand any collapsed "Resources" / "Show more" toggles too.
-      try {
-        const more = await page.$$('button:has-text("Show more"), button:has-text("Read more")');
-        for (const m of more) await m.click({ timeout: 1500 }).catch(() => {});
-      } catch (e) {}
 
       const data = await page.evaluate(() => {
         const titleEl = document.querySelector('h1, [class*="lesson-title"], [class*="LessonTitle"]');
         const title = (titleEl && titleEl.textContent && titleEl.textContent.trim()) || document.title;
 
-        // Module / section breadcrumb
         const crumb = document.querySelector('[class*="breadcrumb"], nav[aria-label*="breadcrumb" i]');
         const moduleText = crumb ? (crumb.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 200) : '';
 
-        // Body text — try the main lesson container, fallback to <article> / <main>.
         const candidates = [
           document.querySelector('[class*="lesson-content"]'),
           document.querySelector('[class*="LessonContent"]'),
@@ -176,15 +171,12 @@ export default async function ({ page, browser, context }) {
         ].filter(Boolean);
         let bodyText = '';
         if (candidates.length) {
-          // Use innerText (renders linebreaks); strip nav/ui buttons.
           const node = candidates[0];
           const clone = node.cloneNode(true);
           clone.querySelectorAll('button, nav, header, footer, [class*="comments" i]').forEach((n) => n.remove());
           bodyText = (clone.innerText || clone.textContent || '').trim();
         }
 
-        // Transcript — Circle renders into a region after the toggle; look for
-        // headings / divs labeled "Transcript".
         let transcript = '';
         const all = Array.from(document.querySelectorAll('div, section, article'));
         for (const el of all) {
@@ -196,14 +188,12 @@ export default async function ({ page, browser, context }) {
           }
         }
 
-        // Video iframe
         const iframe = document.querySelector('iframe[src*="vimeo"], iframe[src*="youtube"], iframe[src*="wistia"], iframe[src*="loom"], video source, video');
         let mediaUrl = '';
         if (iframe) {
           mediaUrl = iframe.getAttribute('src') || iframe.getAttribute('data-src') || '';
         }
 
-        // Resource links — PDFs, docs, sheets, slides, generic downloads.
         const resources = [];
         const seen = new Set();
         const anchors = Array.from(document.querySelectorAll('a[href]'));
