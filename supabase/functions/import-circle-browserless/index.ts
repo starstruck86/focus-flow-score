@@ -87,7 +87,7 @@ export default async function ({ page, context }) {
 
   const isLoginPage = async () => page.evaluate(() => {
     const text = (document.body?.innerText || '').toLowerCase();
-    return /login\.circle\.so|\/sign_in/.test(location.href) ||
+    return /login\\.circle\\.so|\\/sign_in/.test(location.href) ||
       text.includes('log in to your account') || text.includes('sign in with an email');
   });
 
