@@ -417,7 +417,7 @@ Deno.serve(async (req) => {
   const { course_url, session_cookie, dry_run } = parsed.data;
 
   // ── Look up cookie if not supplied ──
-  let cookieValue = session_cookie;
+  let cookieValue = extractCookieValue(session_cookie);
   let cookieName = '_circle_session';
   if (!cookieValue) {
     const { data: cred, error: credErr } = await supabase
@@ -435,9 +435,12 @@ Deno.serve(async (req) => {
         code: 'no_credentials',
       }, 400);
     }
-    cookieValue = cred.session_cookie;
+    cookieName = cred.cookie_name || '_circle_session';
+    cookieValue = extractCookieValue(cred.session_cookie, cookieName);
     cookieName = cred.cookie_name || '_circle_session';
   }
+  const platformEmail = Deno.env.get('COURSE_PLATFORM_EMAIL') || '';
+  const platformPassword = Deno.env.get('COURSE_PLATFORM_PASSWORD') || '';
 
   // ── Call Browserless ──
   const blUrl = `https://production-sfo.browserless.io/function?token=${encodeURIComponent(browserlessKey)}`;
@@ -448,7 +451,7 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         code: PLAYWRIGHT_SCRIPT,
-        context: { courseUrl: course_url, sessionCookie: cookieValue, cookieName },
+        context: { courseUrl: course_url, sessionCookie: cookieValue, cookieName, platformEmail, platformPassword },
       }),
     });
   } catch (e) {
@@ -480,7 +483,7 @@ Deno.serve(async (req) => {
     return json({
       success: false,
       error: redirectedToLogin
-        ? 'Circle session cookie is expired or invalid — Browserless was redirected to the login page. Open Circle in a logged-in tab, copy a fresh `_circle_session` cookie value, and re-save it under Settings → Sales Brain → Circle.'
+        ? 'Circle authentication failed. The saved cookie did not open the course, and the password fallback could not complete login. Re-save a fresh `_circle_session` value from a logged-in Circle tab, or use the bookmarklet/manual capture path.'
         : 'No lessons captured. Check that the URL is the course or curriculum page.',
       code: redirectedToLogin ? 'cookie_expired' : 'no_lessons',
       debug: debugArr,
