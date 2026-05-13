@@ -1033,6 +1033,39 @@ export type Database = {
         }
         Relationships: []
       }
+      circle_credentials: {
+        Row: {
+          community_host: string | null
+          cookie_name: string
+          created_at: string
+          id: string
+          last_used_at: string | null
+          session_cookie: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          community_host?: string | null
+          cookie_name?: string
+          created_at?: string
+          id?: string
+          last_used_at?: string | null
+          session_cookie: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          community_host?: string | null
+          cookie_name?: string
+          created_at?: string
+          id?: string
+          last_used_at?: string | null
+          session_cookie?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       closed_loop_sessions: {
         Row: {
           attempts: Json

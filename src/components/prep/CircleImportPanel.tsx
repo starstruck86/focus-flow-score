@@ -21,7 +21,7 @@
  * Both tabs hand a normalized lesson list back to the parent modal via
  * `onLessons`, which feeds the existing import flow.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -180,6 +180,106 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   const [manualLessons, setManualLessons] = useState<ManualLesson[]>([
     { title: '', url: '', body_text: '', transcript: '', media_url: '' },
   ]);
+
+  // ── Auto Import (Browserless) state ────────────────────────────────
+  const [hasCookie, setHasCookie] = useState<boolean | null>(null);
+  const [cookieInput, setCookieInput] = useState('');
+  const [savingCookie, setSavingCookie] = useState(false);
+  const [autoRunning, setAutoRunning] = useState(false);
+  const [autoLog, setAutoLog] = useState<string[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data } = await (supabase as any)
+        .from('circle_credentials')
+        .select('id, last_used_at')
+        .maybeSingle();
+      if (alive) setHasCookie(!!data?.id);
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const saveCookie = async () => {
+    const v = cookieInput.trim();
+    if (v.length < 10) { toast.error('Paste your full _circle_session cookie value.'); return; }
+    setSavingCookie(true);
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      const userId = u?.user?.id;
+      if (!userId) throw new Error('Not signed in.');
+      let host: string | undefined;
+      try { host = new URL(sourceUrl).host; } catch { /* noop */ }
+      const { error } = await (supabase as any)
+        .from('circle_credentials')
+        .upsert({
+          user_id: userId,
+          session_cookie: v,
+          cookie_name: '_circle_session',
+          community_host: host,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+      if (error) throw error;
+      setHasCookie(true);
+      setCookieInput('');
+      toast.success('Circle cookie saved.');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to save cookie');
+    } finally {
+      setSavingCookie(false);
+    }
+  };
+
+  const clearCookie = async () => {
+    const { error } = await (supabase as any).from('circle_credentials').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (error) { toast.error(error.message); return; }
+    setHasCookie(false);
+    toast.success('Cookie removed.');
+  };
+
+  const runAutoImport = async () => {
+    setAutoRunning(true);
+    setAutoLog([]);
+    setStats(null);
+    setWarning(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('import-circle-browserless', {
+        body: { course_url: sourceUrl },
+      });
+      if (error) throw error;
+      if (!data?.success) {
+        setAutoLog(data?.debug || []);
+        throw new Error(data?.error || 'Auto import failed');
+      }
+      setAutoLog(data.debug || []);
+      const cap = data.capture || {};
+      const lessons = (cap.lessons || []) as Array<CircleNormalizedLesson & { capture_issue?: string }>;
+      const importable = lessons.filter(l => l.imported);
+      setStats({
+        imported: importable.length,
+        rejected: lessons.length - importable.length,
+        metadata_only: lessons.filter(l => l.quality?.metadata_only).length,
+        full_content: (cap.meta?.lessons_full_content as number | undefined)
+          ?? lessons.filter(l => l.imported && !l.quality?.metadata_only && (l.content?.trim().length ?? 0) > 0).length,
+        fetch_failed: (cap.meta?.lessons_fetch_failed as number | undefined) ?? 0,
+        render_failed: (cap.meta?.lessons_render_failed as number | undefined) ?? 0,
+        transcripts: (cap.meta?.lessons_with_transcript as number | undefined) ?? 0,
+        resources: (cap.meta?.resources_captured as number | undefined) ?? 0,
+      });
+      setPhase('done');
+      if (importable.length === 0) {
+        toast.error('No usable lessons captured. Cookie may be expired — re-save it.');
+      } else {
+        toast.success(`Captured ${importable.length} lesson${importable.length === 1 ? '' : 's'}.`);
+      }
+      onLessons({ title: cap.title || data.courseTitle || 'Circle Course', lessons, meta: cap.meta });
+    } catch (e: any) {
+      toast.error(e?.message || 'Auto import failed');
+    } finally {
+      setAutoRunning(false);
+    }
+  };
+
 
   const absoluteEndpoint = useMemo(() => {
     try {
@@ -458,20 +558,69 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
         </div>
       </div>
 
-      <Tabs defaultValue="capture" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="capture">Browser-assisted</TabsTrigger>
+      <Tabs defaultValue="auto" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="auto">Auto Import</TabsTrigger>
+          <TabsTrigger value="capture">Bookmarklet</TabsTrigger>
           <TabsTrigger value="manual">Manual paste</TabsTrigger>
         </TabsList>
 
-        {/* ── Tab A: Browser-assisted capture ───────────────────────── */}
+        {/* ── Tab: Auto Import (Browserless) ────────────────────────── */}
+        <TabsContent value="auto" className="space-y-3 pt-3">
+          {hasCookie === null ? (
+            <div className="text-xs text-muted-foreground">Checking saved Circle session…</div>
+          ) : !hasCookie ? (
+            <div className="space-y-2 p-3 rounded-md border border-border bg-muted/30">
+              <div className="text-sm font-medium text-foreground">One-time setup: paste your Circle session cookie</div>
+              <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
+                <li>Open Circle in a tab where you're already signed in.</li>
+                <li>Open DevTools → <span className="font-medium text-foreground">Application</span> → Cookies → your Circle domain.</li>
+                <li>Find <code className="px-1 py-0.5 bg-background rounded">_circle_session</code> and copy its <span className="font-medium text-foreground">Value</span>.</li>
+                <li>Paste below. Stored encrypted, only used to render Circle pages on your behalf.</li>
+              </ol>
+              <Textarea
+                value={cookieInput}
+                onChange={e => setCookieInput(e.target.value)}
+                placeholder="Paste _circle_session value (long string)…"
+                className="font-mono text-[11px] min-h-[80px]"
+              />
+              <Button size="sm" onClick={saveCookie} disabled={savingCookie}>
+                {savingCookie ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Saving</> : 'Save cookie'}
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-2.5 rounded-md border border-border bg-muted/30 text-xs">
+                <span className="text-muted-foreground">✓ Circle session cookie on file.</span>
+                <Button size="sm" variant="ghost" onClick={clearCookie}>Remove</Button>
+              </div>
+              <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
+                <li>Click <span className="font-medium text-foreground">Import this course</span>. We'll render the course in a headless browser using your saved session.</li>
+                <li>Every lesson is walked: title, body, transcript, video, and resource links are captured automatically.</li>
+                <li>Cookie expires every ~2 weeks; if import returns 0 lessons, paste a fresh cookie.</li>
+              </ol>
+              <Button onClick={runAutoImport} disabled={autoRunning} className="w-full">
+                {autoRunning ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importing… (may take 1–3 min)</> : 'Import this course'}
+              </Button>
+              {autoLog.length > 0 && (
+                <details className="text-[11px] text-muted-foreground">
+                  <summary className="cursor-pointer">Capture log ({autoLog.length})</summary>
+                  <pre className="mt-1 p-2 bg-muted rounded max-h-48 overflow-auto whitespace-pre-wrap">{autoLog.join('\n')}</pre>
+                </details>
+              )}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── Tab: Browser-assisted capture ─────────────────────────── */}
         <TabsContent value="capture" className="space-y-3 pt-3">
           <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
-            <li>Open Circle in a tab where you’re already signed in.</li>
-            <li>Navigate to <span className="font-medium text-foreground">any lesson page</span> (you should see <em>“Lesson X of Y”</em>).</li>
+            <li>Open Circle in a tab where you're already signed in.</li>
+            <li>Navigate to <span className="font-medium text-foreground">any lesson page</span> (you should see <em>"Lesson X of Y"</em>).</li>
             <li>Click one of the bookmarklets below. <span className="font-medium text-foreground">Capture entire course</span> is recommended.</li>
-            <li>When the banner reads <em>“N lessons captured”</em>, return here and paste the JSON below.</li>
+            <li>When the banner reads <em>"N lessons captured"</em>, return here and paste the JSON below.</li>
           </ol>
+
 
           <div className="space-y-2">
             <div className="text-[10px] font-medium text-foreground uppercase tracking-wide">Capture entire course <Badge variant="outline" className="text-[9px] h-4 ml-1">recommended</Badge></div>
