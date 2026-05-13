@@ -21,7 +21,7 @@
  * Both tabs hand a normalized lesson list back to the parent modal via
  * `onLessons`, which feeds the existing import flow.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
