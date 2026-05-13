@@ -21,7 +21,7 @@
  * Both tabs hand a normalized lesson list back to the parent modal via
  * `onLessons`, which feeds the existing import flow.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -180,106 +180,6 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
   const [manualLessons, setManualLessons] = useState<ManualLesson[]>([
     { title: '', url: '', body_text: '', transcript: '', media_url: '' },
   ]);
-
-  // ── Auto Import (Browserless) state ────────────────────────────────
-  const [hasCookie, setHasCookie] = useState<boolean | null>(null);
-  const [cookieInput, setCookieInput] = useState('');
-  const [savingCookie, setSavingCookie] = useState(false);
-  const [autoRunning, setAutoRunning] = useState(false);
-  const [autoLog, setAutoLog] = useState<string[]>([]);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const { data } = await (supabase as any)
-        .from('circle_credentials')
-        .select('id, last_used_at')
-        .maybeSingle();
-      if (alive) setHasCookie(!!data?.id);
-    })();
-    return () => { alive = false; };
-  }, []);
-
-  const saveCookie = async () => {
-    const v = cookieInput.trim();
-    if (v.length < 10) { toast.error('Paste your full _circle_session cookie value.'); return; }
-    setSavingCookie(true);
-    try {
-      const { data: u } = await supabase.auth.getUser();
-      const userId = u?.user?.id;
-      if (!userId) throw new Error('Not signed in.');
-      let host: string | undefined;
-      try { host = new URL(sourceUrl).host; } catch { /* noop */ }
-      const { error } = await (supabase as any)
-        .from('circle_credentials')
-        .upsert({
-          user_id: userId,
-          session_cookie: v,
-          cookie_name: '_circle_session',
-          community_host: host,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' });
-      if (error) throw error;
-      setHasCookie(true);
-      setCookieInput('');
-      toast.success('Circle cookie saved.');
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed to save cookie');
-    } finally {
-      setSavingCookie(false);
-    }
-  };
-
-  const clearCookie = async () => {
-    const { error } = await (supabase as any).from('circle_credentials').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    if (error) { toast.error(error.message); return; }
-    setHasCookie(false);
-    toast.success('Cookie removed.');
-  };
-
-  const runAutoImport = async () => {
-    setAutoRunning(true);
-    setAutoLog([]);
-    setStats(null);
-    setWarning(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('import-circle-browserless', {
-        body: { course_url: sourceUrl },
-      });
-      if (error) throw error;
-      if (!data?.success) {
-        setAutoLog(data?.debug || []);
-        throw new Error(data?.error || 'Auto import failed');
-      }
-      setAutoLog(data.debug || []);
-      const cap = data.capture || {};
-      const lessons = (cap.lessons || []) as Array<CircleNormalizedLesson & { capture_issue?: string }>;
-      const importable = lessons.filter(l => l.imported);
-      setStats({
-        imported: importable.length,
-        rejected: lessons.length - importable.length,
-        metadata_only: lessons.filter(l => l.quality?.metadata_only).length,
-        full_content: (cap.meta?.lessons_full_content as number | undefined)
-          ?? lessons.filter(l => l.imported && !l.quality?.metadata_only && (l.content?.trim().length ?? 0) > 0).length,
-        fetch_failed: (cap.meta?.lessons_fetch_failed as number | undefined) ?? 0,
-        render_failed: (cap.meta?.lessons_render_failed as number | undefined) ?? 0,
-        transcripts: (cap.meta?.lessons_with_transcript as number | undefined) ?? 0,
-        resources: (cap.meta?.resources_captured as number | undefined) ?? 0,
-      });
-      setPhase('done');
-      if (importable.length === 0) {
-        toast.error('No usable lessons captured. Cookie may be expired — re-save it.');
-      } else {
-        toast.success(`Captured ${importable.length} lesson${importable.length === 1 ? '' : 's'}.`);
-      }
-      onLessons({ title: cap.title || data.courseTitle || 'Circle Course', lessons, meta: cap.meta });
-    } catch (e: any) {
-      toast.error(e?.message || 'Auto import failed');
-    } finally {
-      setAutoRunning(false);
-    }
-  };
-
 
   const absoluteEndpoint = useMemo(() => {
     try {
