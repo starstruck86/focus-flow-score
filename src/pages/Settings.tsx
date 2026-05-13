@@ -692,18 +692,9 @@ export default function Settings() {
           <p className="text-sm text-muted-foreground">Customize your experience</p>
         </div>
 
-        <Tabs defaultValue="schedule" className="space-y-6">
-          <TabsList className="flex w-full overflow-x-auto gap-1 p-1 scrollbar-none">
-            <TabsTrigger value="schedule" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Work Schedule</TabsTrigger>
-            <TabsTrigger value="coaching" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Coaching</TabsTrigger>
-            <TabsTrigger value="integrations" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Integrations</TabsTrigger>
-            <TabsTrigger value="appearance" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Appearance</TabsTrigger>
-            <TabsTrigger value="notifications" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Notifications</TabsTrigger>
-            <TabsTrigger value="data" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Data</TabsTrigger>
-          </TabsList>
-          
-          {/* Work Schedule Tab */}
-          <TabsContent value="schedule" className="space-y-6">
+        <div className="space-y-10">
+          <section className="space-y-6">
+            <h2 className="text-base font-semibold text-foreground/90 border-b border-border/40 pb-2">Work Schedule</h2>
             {/* Working Days */}
             <div className="metric-card">
               <div className="flex items-center gap-3 mb-4">
