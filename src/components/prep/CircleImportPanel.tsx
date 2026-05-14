@@ -88,7 +88,7 @@ function buildBookmarkletHref(loaderUrl: string, captureEndpoint: string, mode: 
       u.searchParams.set('endpoint', new URL(captureEndpoint, window.location.origin).toString());
       u.searchParams.set('mode', mode);
       if (projectRef) u.searchParams.set('project', projectRef);
-      u.searchParams.set('v', 'strict-visual-right-arrow-20260514');
+      u.searchParams.set('v', 'lesson-link-sequence-20260514');
       return u.toString();
     } catch {
       return loaderUrl;
@@ -475,7 +475,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
           <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
             <li>Open Circle in a tab where you're already signed in.</li>
             <li>Navigate to <span className="font-medium text-foreground">Lesson 1</span> (you should see <em>"Lesson 1 of N"</em>).</li>
-            <li>Click one of the bookmarklets below. <span className="font-medium text-foreground">Capture entire course</span> advances only by clicking Circle’s visible right-arrow lesson button.</li>
+            <li>Click one of the bookmarklets below. <span className="font-medium text-foreground">Capture entire course</span> advances directly through lesson URLs, not the table of contents.</li>
             <li>When the banner reads <em>"N lessons captured"</em>, return here and paste the JSON below.</li>
           </ol>
 

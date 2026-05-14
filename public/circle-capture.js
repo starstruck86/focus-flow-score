@@ -621,6 +621,76 @@
     } catch (_) { return false; }
   }
 
+  function isLessonPageUrl(url) {
+    try {
+      const u = new URL(url, location.href);
+      return u.host === location.host && /\/(lessons?|posts?)\/[^/?#]+/i.test(u.pathname || '');
+    } catch (_) { return false; }
+  }
+
+  function lessonUrlKey(url) {
+    try {
+      const u = new URL(url, location.href);
+      return `${u.origin}${u.pathname.replace(/\/+$/, '')}`.toLowerCase();
+    } catch (_) { return String(url || '').split('#')[0].replace(/\/+$/, '').toLowerCase(); }
+  }
+
+  function stripLessonLinkInfo(info) {
+    if (!info) return null;
+    const { el, ...rest } = info;
+    return rest;
+  }
+
+  function discoverLessonLinkSequence(currentUrl) {
+    const currentKey = lessonUrlKey(currentUrl || location.href);
+    const collectFrom = (root) => {
+      const seen = new Set();
+      const links = [];
+      for (const a of Array.from(root.querySelectorAll('a[href]'))) {
+      const href = abs(a.getAttribute('href'));
+      if (!href || !isLessonPageUrl(href) || isCourseRootUrl(href)) continue;
+      if (!isVisible(a) || isDisabled(a)) continue;
+      const key = lessonUrlKey(href);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      links.push({
+        el: a,
+        href,
+        key,
+        text: safeText(a).slice(0, 160),
+        rect: rectInfo(a),
+        inSidebar: !!a.closest('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [aria-label*="sidebar" i]'),
+        inNav: !!a.closest('nav, [role="navigation"], [role="banner"]'),
+      });
+    }
+      return links;
+    };
+    const roots = Array.from(document.querySelectorAll('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [aria-label*="sidebar" i], [data-testid*="course" i], [class*="course" i], main'));
+    const pools = roots.concat(document.body).map(root => {
+      const links = collectFrom(root);
+      const hasCurrent = links.some(l => l.key === currentKey);
+      const sidebarWeight = root.matches?.('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [aria-label*="sidebar" i]') ? 100 : 0;
+      return { root, links, score: sidebarWeight + (hasCurrent ? 80 : 0) + links.length };
+    }).filter(p => p.links.length >= 2);
+    pools.sort((a, b) => b.score - a.score);
+    const links = pools[0]?.links || [];
+    log('lessonLinkSequence', links.map(stripLessonLinkInfo));
+    return links;
+  }
+
+  function chooseAdjacentLessonLink(direction, before, sequence) {
+    if (!sequence || sequence.length < 2) return { candidate: null, reason: 'not_enough_visible_lesson_links' };
+    const currentKey = lessonUrlKey(before?.url || location.href);
+    let currentIndex = sequence.findIndex(l => l.key === currentKey);
+    if (currentIndex < 0 && before?.lesson_number && sequence[before.lesson_number - 1]) currentIndex = before.lesson_number - 1;
+    if (currentIndex < 0) return { candidate: null, reason: 'current_lesson_not_found_in_visible_lesson_links' };
+    const targetIndex = direction === 'prev' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= sequence.length) return { candidate: null, reason: 'no_adjacent_lesson_link' };
+    const candidate = sequence[targetIndex];
+    if (!candidate || candidate.key === currentKey || !isLessonPageUrl(candidate.href) || isCourseRootUrl(candidate.href)) return { candidate: null, reason: 'adjacent_link_was_not_a_lesson_url' };
+    return { candidate, reason: null, currentIndex, targetIndex };
+  }
+
   /**
    * Check if a candidate button/link should be excluded from navigation.
    * Excludes: back buttons, course title links, overview links, sidebar toggles,
@@ -1140,12 +1210,17 @@
     const state = getLessonState();
     const scan = scanVisibleButtonsNearHeader();
     const candidate = choosePageArrowCandidate(direction || 'next', scan);
+    const lessonLinks = discoverLessonLinkSequence(state.url);
+    const adjacentLink = chooseAdjacentLessonLink(direction || 'next', state, lessonLinks);
     return {
       lessonLabel: scan.header.lessonLabel,
       title: state.title,
       h1Title: state.title,
       urlBefore: state.url,
       titleBefore: state.title,
+      visibleLessonLinks: lessonLinks.map(stripLessonLinkInfo),
+      candidateAdjacentLessonLink: stripLessonLinkInfo(adjacentLink.candidate),
+      adjacentLessonLinkReason: adjacentLink.reason,
       visibleButtonsNearHeader: scan.buttons.map(stripButtonInfo),
       candidateButtonsAfterFilter: scan.buttons.filter(b => !b.rejectedReason).map(stripButtonInfo),
       candidateNextButton: direction === 'prev' ? null : stripButtonInfo(candidate),
@@ -1157,13 +1232,43 @@
 
   async function navigateAdjacentLesson(direction, preferredMethod) {
     const before = getLessonState();
-    const methods = ['geometry'];
+    const methods = ['lesson-link'];
     const attempts = [];
     let lastDiagnostics = null;
 
     for (const method of methods) {
       const attempt = { method, success: false };
-      if (method === 'geometry') {
+      if (method === 'lesson-link') {
+        const sequence = discoverLessonLinkSequence(before.url);
+        const adjacent = chooseAdjacentLessonLink(direction, before, sequence);
+        attempt.visibleLessonLinks = sequence.map(stripLessonLinkInfo);
+        attempt.candidateLessonLink = stripLessonLinkInfo(adjacent.candidate);
+        if (!adjacent.candidate?.el) {
+          attempt.reason = adjacent.reason || 'no_adjacent_lesson_link';
+          attempts.push(attempt);
+          continue;
+        }
+        log('nav candidate', {
+          strategy: 'lesson-link',
+          href: adjacent.candidate.href,
+          text: adjacent.candidate.text,
+          currentIndex: adjacent.currentIndex,
+          targetIndex: adjacent.targetIndex,
+          urlBefore: before.url,
+          titleBefore: before.title,
+          lessonBefore: before.lesson_number,
+        });
+        try {
+          adjacent.candidate.el.scrollIntoView({ block: 'center', inline: 'center' });
+          await sleep(100);
+          activateClick(adjacent.candidate.el);
+        } catch (e) {
+          attempt.reason = 'click_error';
+          attempt.error = String(e?.message || e);
+          attempts.push(attempt);
+          continue;
+        }
+      } else if (method === 'geometry') {
         const diagnostics = buildNavigationDiagnostics(direction);
         lastDiagnostics = diagnostics;
         const scan = scanVisibleButtonsNearHeader();
@@ -1691,7 +1796,7 @@
       };
     }
 
-    showBanner(`Capturing from lesson 1 of ${total}. Advancing with the visible right arrow only…`, 'info', true);
+    showBanner(`Capturing from lesson 1 of ${total}. Advancing through lesson links only…`, 'info', true);
 
     let consecutiveNavigationFailures = 0;
     const seenLessonNumbers = new Set();
@@ -1843,8 +1948,8 @@
 
     let walkResult;
     try {
-      // Course capture must mirror the user's page navigation: start on
-      // Lesson 1 and click only the visible right-arrow next control.
+      // Course capture starts on Lesson 1 and advances only to adjacent
+      // lesson-page URLs. It never clicks course root / table-of-contents UI.
       walkResult = await autoWalk(indicator);
     } catch (err) {
       log('auto-walk failed', err);
