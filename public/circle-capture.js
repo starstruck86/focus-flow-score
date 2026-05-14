@@ -1532,7 +1532,6 @@
 
       const nav = await navigateAdjacentLesson('next', navigationMethod);
       log('navigation proof', nav);
-      if (nav.method === 'keyboard') navigationMethod = 'keyboard';
       if (!nav.success) {
         consecutiveNavigationFailures += 1;
         const failedFrom = (latest.lesson_number || lessonNum) + 1;
