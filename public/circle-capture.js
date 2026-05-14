@@ -1386,6 +1386,7 @@
     for (const item of allClickable) {
       if (item.disabled) continue;
       if (item.inNav) continue; // skip global nav
+      if (!hasDirectionSignal(item, 'next')) continue;
       let score = 0;
       const reasons = [];
 
@@ -1524,7 +1525,7 @@
       try {
         el.scrollIntoView({ block: 'center', inline: 'center' });
         await sleep(100);
-        el.click();
+        activateClick(el);
       } catch (err) {
         probeResults.push({ index: i, text: c.text, ariaLabel: c.ariaLabel, score: c.score, result: 'click_error', error: String(err) });
         continue;
