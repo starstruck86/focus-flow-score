@@ -644,7 +644,7 @@
     // Exclude section header links
     if (/\b(section|module|chapter)\b/.test(combined) && !/lesson/i.test(combined)) return 'section_header';
     // Exclude top-nav header icons (bookmarks, table of contents, courses, etc.)
-    if (/\b(bookmark|table\s+of\s+content|courses|notification|search|profile|settings|account)\b/.test(combined)) return 'header_icon';
+      if (/\b(bookmark|toc|contents?|curriculum|syllabus|table\s+of\s+contents?|course\s+content|courses|notification|search|profile|settings|account)\b/.test(combined)) return 'header_icon';
     // Exclude links to /courses
     if (href === '/courses' || href.startsWith('/courses?')) return 'courses_link';
 
@@ -748,7 +748,7 @@
       const href = el.getAttribute('href') || '';
       const combined = `${text} ${ariaLabel} ${title}`.toLowerCase();
       if (text.length > 80) continue;
-      if (/\b(course|courses|overview|home|profile|settings|search|notification|bookmark|menu|sidebar|toc|table\s+of\s+contents|continue|complete|mark\s+as)\b/.test(combined)) continue;
+      if (/\b(course|courses|overview|home|profile|settings|search|notification|bookmark|menu|sidebar|toc|contents?|curriculum|syllabus|table\s+of\s+contents?|course\s+content|continue|complete|mark\s+as)\b/.test(combined)) continue;
       if (href) {
         try { if (isCourseRootUrl(new URL(href, location.href).href)) continue; } catch (_) {}
       }
@@ -774,7 +774,8 @@
         if (/right|next|forward/i.test(svgDirection + ' ' + combined)) { score -= 90; reasons.push('right_penalty'); }
       }
 
-      if (style.position === 'fixed' || style.position === 'sticky') { score += 25; reasons.push(style.position); }
+      if (style.position === 'fixed' || style.position === 'sticky') { score += 5; reasons.push(style.position); }
+      if (!/right|next|forward/i.test(svgDirection + ' ' + combined)) { score -= 45; reasons.push('edge_requires_explicit_right_signal'); }
       if (r.height > r.width * 1.25) { score += 18; reasons.push('vertical_pill'); }
       if (!text || text.length <= 4) { score += 8; reasons.push('icon_only'); }
       if (centerY > vh * 0.18 && centerY < vh * 0.86) { score += 12; reasons.push('middle_band'); }
@@ -1051,11 +1052,11 @@
   }
 
   function choosePageArrowCandidate(direction, scan) {
-    const edge = chooseViewportEdgeArrowCandidate(direction);
-    if (edge) return { ...edge, strategy: 'viewport-edge' };
-
     const headerCandidate = chooseHeaderArrowCandidate(direction, scan);
     if (headerCandidate) return { ...headerCandidate, strategy: 'header-geometry' };
+
+    const edge = chooseViewportEdgeArrowCandidate(direction);
+    if (edge) return { ...edge, strategy: 'viewport-edge' };
 
     const bodyCandidate = scanBodyArrowCandidates(direction)[0];
     if (bodyCandidate && bodyCandidate.score >= 70) return { ...bodyCandidate, strategy: 'body-arrow' };
@@ -1325,7 +1326,7 @@
       if (/\bnext\b/.test(combined)) { score += 30; reasons.push('text_next'); }
       if (/\bprev(ious)?\b|\bback\b/.test(combined)) { score -= 40; reasons.push('text_prev_penalty'); }
       if (/\blesson\b/.test(combined)) { score += 10; reasons.push('text_lesson'); }
-      if (/\b(bookmark|search|profile|settings|notification|menu|sidebar|complete|overview|home)\b/.test(combined)) { score -= 60; reasons.push('excluded_keyword'); }
+      if (/\b(bookmark|search|profile|settings|notification|menu|sidebar|toc|contents?|curriculum|syllabus|table\s+of\s+contents?|course\s+content|complete|overview|home)\b/.test(combined)) { score -= 60; reasons.push('excluded_keyword'); }
 
       // Proximity to indicator
       if (indicatorRect && item.rect) {
