@@ -1904,6 +1904,12 @@
 
     showBanner(`Capturing from lesson 1 of ${total}. Advancing through lesson links only…`, 'info', true);
 
+    // Open the Lessons drawer so the canonical lesson sequence is in the DOM.
+    try {
+      const opened = await openLessonsDrawer();
+      log('lessons drawer open attempt', { opened });
+    } catch (err) { log('openLessonsDrawer error', err); }
+
     let consecutiveNavigationFailures = 0;
     const seenLessonNumbers = new Set();
 
