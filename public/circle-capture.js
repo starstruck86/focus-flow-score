@@ -1464,14 +1464,14 @@
 
       const transcriptCount = lessons.filter(l => l.transcript).length;
       const resourceCount = lessons.reduce((s, l) => s + (l.resources?.length || 0), 0);
-      const withContentCount = lessons.filter(l => l.body_text || l.transcript || l.resources?.length).length;
+      const withContentCount = lessons.filter(l => l.body_text || l.transcript || l.resources?.length || l.media_url).length;
       showBanner(
         `${total} discovered · ${withContentCount} captured with content · ${lessons.filter(l => l.capture_issue === 'navigation_failed').length} navigation failed\n` +
           `Current: ${lessonData.lesson_number || lessonNum} of ${total}: ${lessonData.title || state.title || `Lesson ${lessonNum}`}\n` +
           `Transcripts: ${transcriptCount} · Resources: ${resourceCount}`,
         'info', true
       );
-      log('capture result', { index: lessonNum, total, success: !!(lessonData.body_text || lessonData.transcript || lessonData.resources?.length), title: lessonData.title, debug: lessonData._debug || null });
+      log('capture result', { index: lessonNum, total, success: !!(lessonData.body_text || lessonData.transcript || lessonData.resources?.length || lessonData.media_url), title: lessonData.title, debug: lessonData._debug || null });
 
       const latest = getLessonState();
       if ((latest.lesson_number || lessonNum) >= total) break;
