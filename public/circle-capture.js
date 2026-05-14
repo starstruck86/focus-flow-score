@@ -1210,7 +1210,7 @@
     const state = getLessonState();
     const scan = scanVisibleButtonsNearHeader();
     const candidate = choosePageArrowCandidate(direction || 'next', scan);
-    const lessonLinks = discoverLessonLinkSequence();
+    const lessonLinks = discoverLessonLinkSequence(state.url);
     const adjacentLink = chooseAdjacentLessonLink(direction || 'next', state, lessonLinks);
     return {
       lessonLabel: scan.header.lessonLabel,
@@ -1232,14 +1232,14 @@
 
   async function navigateAdjacentLesson(direction, preferredMethod) {
     const before = getLessonState();
-    const methods = ['lesson-link', 'geometry'];
+    const methods = ['lesson-link'];
     const attempts = [];
     let lastDiagnostics = null;
 
     for (const method of methods) {
       const attempt = { method, success: false };
       if (method === 'lesson-link') {
-        const sequence = discoverLessonLinkSequence();
+        const sequence = discoverLessonLinkSequence(before.url);
         const adjacent = chooseAdjacentLessonLink(direction, before, sequence);
         attempt.visibleLessonLinks = sequence.map(stripLessonLinkInfo);
         attempt.candidateLessonLink = stripLessonLinkInfo(adjacent.candidate);
