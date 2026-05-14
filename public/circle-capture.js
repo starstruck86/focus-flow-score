@@ -63,7 +63,7 @@
   function isCircleLessonUrl(url) {
     try {
       const u = new URL(url, location.origin);
-      return u.host === location.host && /\/c\/[^/]+\/(lessons|posts)\/[^/?#]+/.test(u.pathname);
+      return u.host === location.host && /\/c\/[^/]+\/(?:sections?\/[^/]+\/)?(?:lessons|posts)\/[^/?#]+/.test(u.pathname);
     } catch (_) { return false; }
   }
   function canonicalLessonKey(url) {
