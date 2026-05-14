@@ -1658,6 +1658,15 @@
     }
     const lessons = walkResult.lessons || [];
 
+    if (walkResult.fatalNavigationFailure && lessons.length === 0) {
+      const reason = walkResult.debugReport?.clickResult?.reason;
+      const message = reason === 'start_on_lesson_1_required_for_right_arrow_only_capture'
+        ? 'Open Lesson 1, then run Capture entire course again. Course capture now uses only Circle’s visible right-arrow button.'
+        : 'Course capture could not start using the visible right-arrow button. Run Inspect navigation and paste the diagnostics.';
+      showBanner(message, 'error', true);
+      return;
+    }
+
     const payload = {
       source_url: location.href,
       platform: 'circle',
@@ -1668,15 +1677,6 @@
         ? lessons.filter(l => l && l.capture_issue !== 'navigation_failed')
         : lessons,
     };
-
-    if (walkResult.fatalNavigationFailure && payload.lessons.length === 0) {
-      try {
-        const currentLesson = await extractCurrentLesson();
-        payload.lessons = [currentLesson];
-      } catch (err) {
-        log('navigation failed and current lesson salvage failed', err);
-      }
-    }
 
     const importLessons = payload.lessons || [];
     const discovered = indicator.total || lessons.length || importLessons.length;
