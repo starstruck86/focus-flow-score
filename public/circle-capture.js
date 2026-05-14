@@ -1326,7 +1326,7 @@
       if (/\bnext\b/.test(combined)) { score += 30; reasons.push('text_next'); }
       if (/\bprev(ious)?\b|\bback\b/.test(combined)) { score -= 40; reasons.push('text_prev_penalty'); }
       if (/\blesson\b/.test(combined)) { score += 10; reasons.push('text_lesson'); }
-      if (/\b(bookmark|search|profile|settings|notification|menu|sidebar|complete|overview|home)\b/.test(combined)) { score -= 60; reasons.push('excluded_keyword'); }
+      if (/\b(bookmark|search|profile|settings|notification|menu|sidebar|toc|contents?|curriculum|syllabus|table\s+of\s+contents?|course\s+content|complete|overview|home)\b/.test(combined)) { score -= 60; reasons.push('excluded_keyword'); }
 
       // Proximity to indicator
       if (indicatorRect && item.rect) {
