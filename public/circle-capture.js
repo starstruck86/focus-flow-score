@@ -802,8 +802,8 @@
 
   function chooseViewportEdgeArrowCandidate(direction) {
     const candidates = scanViewportEdgeArrows(direction || 'next');
-    const best = candidates[0];
-    return best && best.score >= 90 ? best : null;
+    const best = candidates.find(c => hasDirectionSignal(c, direction || 'next'));
+    return best && best.score >= 70 ? best : null;
   }
 
   function lessonLabelText(indicator) {
@@ -863,7 +863,82 @@
       .toLowerCase();
     if (/chevron[-_\s]?left|arrow[-_\s]?left|caret[-_\s]?left|lucide-chevron-left|icon-chevron-left/.test(svgText)) return 'left';
     if (/chevron[-_\s]?right|arrow[-_\s]?right|caret[-_\s]?right|lucide-chevron-right|icon-chevron-right/.test(svgText)) return 'right';
+    const visualDirection = detectSvgVisualDirection(el);
+    if (visualDirection) return visualDirection;
     return '';
+  }
+
+  function pathPointsFromD(d) {
+    const tokens = String(d || '').match(/[a-zA-Z]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) || [];
+    const points = [];
+    let i = 0, cmd = '', x = 0, y = 0;
+    const isCmd = v => /^[a-zA-Z]$/.test(v || '');
+    const num = v => Number(v);
+    while (i < tokens.length) {
+      if (isCmd(tokens[i])) cmd = tokens[i++];
+      if (!cmd) break;
+      const lower = cmd.toLowerCase();
+      const rel = cmd === lower;
+      if (lower === 'm' || lower === 'l' || lower === 't') {
+        while (i + 1 < tokens.length && !isCmd(tokens[i]) && !isCmd(tokens[i + 1])) {
+          const nx = num(tokens[i++]);
+          const ny = num(tokens[i++]);
+          x = rel ? x + nx : nx;
+          y = rel ? y + ny : ny;
+          points.push({ x, y });
+          if (lower === 'm') cmd = rel ? 'l' : 'L';
+        }
+      } else if (lower === 'h') {
+        while (i < tokens.length && !isCmd(tokens[i])) { x = rel ? x + num(tokens[i++]) : num(tokens[i++]); points.push({ x, y }); }
+      } else if (lower === 'v') {
+        while (i < tokens.length && !isCmd(tokens[i])) { y = rel ? y + num(tokens[i++]) : num(tokens[i++]); points.push({ x, y }); }
+      } else {
+        // Curves/arcs are not needed for Circle's chevron icons; skip their numbers safely.
+        while (i < tokens.length && !isCmd(tokens[i])) i++;
+      }
+    }
+    return points;
+  }
+
+  function inferChevronDirection(points) {
+    if (!points || points.length < 3) return '';
+    const xs = points.map(p => p.x).filter(Number.isFinite);
+    const ys = points.map(p => p.y).filter(Number.isFinite);
+    if (xs.length < 3 || ys.length < 3) return '';
+    const spanX = Math.max(...xs) - Math.min(...xs);
+    const spanY = Math.max(...ys) - Math.min(...ys);
+    if (spanX < 2 || spanY < 2) return '';
+    for (let i = 1; i < points.length - 1; i++) {
+      const prev = points[i - 1], mid = points[i], next = points[i + 1];
+      const yMovement = Math.abs(mid.y - prev.y) + Math.abs(next.y - mid.y);
+      if (yMovement < spanY * 0.45) continue;
+      if (mid.x >= Math.max(prev.x, next.x) + spanX * 0.25) return 'right';
+      if (mid.x <= Math.min(prev.x, next.x) - spanX * 0.25) return 'left';
+    }
+    return '';
+  }
+
+  function detectSvgVisualDirection(el) {
+    const shapes = Array.from(el.querySelectorAll('path[d], polyline[points], polygon[points]'));
+    for (const shape of shapes) {
+      const rawPoints = shape.getAttribute('points');
+      const points = rawPoints
+        ? (rawPoints.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) || []).map(Number).reduce((acc, n, i, arr) => {
+            if (i % 2 === 0 && Number.isFinite(n) && Number.isFinite(arr[i + 1])) acc.push({ x: n, y: arr[i + 1] });
+            return acc;
+          }, [])
+        : pathPointsFromD(shape.getAttribute('d'));
+      const direction = inferChevronDirection(points);
+      if (direction) return direction;
+    }
+    return '';
+  }
+
+  function hasDirectionSignal(info, direction) {
+    const haystack = `${info?.svgDirection || ''} ${info?.ariaLabel || ''} ${info?.title || ''} ${info?.text || ''}`;
+    return direction === 'prev'
+      ? /\b(left|prev|previous|back)\b|←|‹/i.test(haystack)
+      : /\b(right|next|forward)\b|→|›/i.test(haystack);
   }
 
   function isLikelySidebarButton(el) {
@@ -1021,7 +1096,8 @@
   function chooseHeaderArrowCandidate(direction, scan) {
     // Filter out rejected candidates
     const active = scan.buttons.filter(b => !b.disabled && b.smallCircular && !b.rejectedReason);
-    const sorted = active.slice().sort((a, b) => a.rect.left - b.rect.left);
+    const signalActive = active.filter(b => hasDirectionSignal(b, direction));
+    const sorted = signalActive.slice().sort((a, b) => a.rect.left - b.rect.left);
     const pairs = [];
 
     for (let i = 0; i < sorted.length - 1; i++) {
@@ -1040,14 +1116,10 @@
     pairs.sort((a, b) => b.score - a.score);
     if (pairs[0]) return direction === 'prev' ? pairs[0].left : pairs[0].right;
 
-    const desired = direction === 'prev' ? /left|prev|back/i : /right|next|forward/i;
-    const explicit = active
-      .filter(b => desired.test(`${b.svgDirection} ${b.ariaLabel} ${b.title} ${b.text}`))
+    const explicit = signalActive
       .sort((a, b) => a.distanceFromLessonLabelY - b.distanceFromLessonLabelY)[0];
     if (explicit) return explicit;
 
-    if (direction === 'next' && sorted.length) return sorted[sorted.length - 1];
-    if (direction === 'prev' && sorted.length) return sorted[0];
     return null;
   }
 
@@ -1058,7 +1130,7 @@
     const edge = chooseViewportEdgeArrowCandidate(direction);
     if (edge) return { ...edge, strategy: 'viewport-edge' };
 
-    const bodyCandidate = scanBodyArrowCandidates(direction)[0];
+    const bodyCandidate = scanBodyArrowCandidates(direction).find(c => hasDirectionSignal(c, direction));
     if (bodyCandidate && bodyCandidate.score >= 70) return { ...bodyCandidate, strategy: 'body-arrow' };
 
     return null;
@@ -1314,6 +1386,7 @@
     for (const item of allClickable) {
       if (item.disabled) continue;
       if (item.inNav) continue; // skip global nav
+      if (!hasDirectionSignal(item, 'next')) continue;
       let score = 0;
       const reasons = [];
 
@@ -1452,7 +1525,7 @@
       try {
         el.scrollIntoView({ block: 'center', inline: 'center' });
         await sleep(100);
-        el.click();
+        activateClick(el);
       } catch (err) {
         probeResults.push({ index: i, text: c.text, ariaLabel: c.ariaLabel, score: c.score, result: 'click_error', error: String(err) });
         continue;
