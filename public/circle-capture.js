@@ -1616,12 +1616,14 @@
       }
     }
 
-    const discovered = indicator.total || lessons.length;
+    const importLessons = payload.lessons || [];
+    const discovered = indicator.total || lessons.length || importLessons.length;
     const navigationFailed = lessons.filter(l => l.capture_issue === 'navigation_failed').length;
-    const failed = lessons.filter(l => l.capture_issue && l.capture_issue !== 'navigation_failed').length;
-    const transcripts = lessons.filter(l => l.transcript).length;
-    const resources = lessons.reduce((s, l) => s + (l.resources?.length || 0), 0);
-    const withContent = lessons.filter(l => l.body_text || l.transcript || l.resources?.length).length;
+    const failed = importLessons.filter(l => l.capture_issue && l.capture_issue !== 'navigation_failed').length;
+    const transcripts = importLessons.filter(l => l.transcript).length;
+    const resources = importLessons.reduce((s, l) => s + (l.resources?.length || 0), 0);
+    const media = importLessons.filter(l => l.media_url).length;
+    const withContent = importLessons.filter(l => l.body_text || l.transcript || l.resources?.length || l.media_url).length;
 
     const json = JSON.stringify(payload, null, 2);
     const ok = await copyToClipboard(json);
@@ -1629,9 +1631,10 @@
     const lines = [`${discovered} discovered, ${withContent} captured with content, ${navigationFailed} navigation failed.`];
     if (transcripts) lines.push(`✓ ${transcripts} transcript${transcripts === 1 ? '' : 's'}`);
     if (resources) lines.push(`✓ ${resources} resource${resources === 1 ? '' : 's'}`);
+    if (media) lines.push(`✓ ${media} media item${media === 1 ? '' : 's'}`);
     if (failed) lines.push(`⚠ ${failed} failed`);
     if (!withContent) {
-      lines.push('⚠ no content/transcript/resources detected — open browser console for [Circle Capture] debug logs');
+      lines.push('⚠ no content/transcript/resources/media detected — open browser console for [Circle Capture] debug logs');
     }
     if (walkResult.fatalNavigationFailure) {
       lines.push(`⚠ course navigation failed — ${payload.lessons.length} captured lesson${payload.lessons.length === 1 ? '' : 's'} salvaged for import`);
