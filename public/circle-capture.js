@@ -1334,7 +1334,7 @@
 
   async function navigateAdjacentLesson(direction, preferredMethod) {
     const before = getLessonState();
-    const methods = ['lesson-href-arrow', 'lesson-link'];
+    const methods = ['lesson-link'];
     const attempts = [];
     let lastDiagnostics = null;
 
@@ -1892,8 +1892,9 @@
   }
 
   /**
-   * Walk every lesson using only the visible Previous/Next controls next to the
-   * lesson header. Sidebar lesson rows are diagnostics-only and are never clicked.
+   * Walk every lesson using the course's ordered lesson links only. We avoid
+   * Circle's course-content / table-of-contents controls because they can route
+   * away from the lesson player and strand the capture on the outline page.
    */
   async function autoWalk(startIndicator) {
     const total = startIndicator.total;
