@@ -1197,12 +1197,17 @@
     const state = getLessonState();
     const scan = scanVisibleButtonsNearHeader();
     const candidate = choosePageArrowCandidate(direction || 'next', scan);
+    const lessonLinks = discoverLessonLinkSequence();
+    const adjacentLink = chooseAdjacentLessonLink(direction || 'next', state, lessonLinks);
     return {
       lessonLabel: scan.header.lessonLabel,
       title: state.title,
       h1Title: state.title,
       urlBefore: state.url,
       titleBefore: state.title,
+      visibleLessonLinks: lessonLinks.map(stripLessonLinkInfo),
+      candidateAdjacentLessonLink: stripLessonLinkInfo(adjacentLink.candidate),
+      adjacentLessonLinkReason: adjacentLink.reason,
       visibleButtonsNearHeader: scan.buttons.map(stripButtonInfo),
       candidateButtonsAfterFilter: scan.buttons.filter(b => !b.rejectedReason).map(stripButtonInfo),
       candidateNextButton: direction === 'prev' ? null : stripButtonInfo(candidate),
@@ -1214,13 +1219,43 @@
 
   async function navigateAdjacentLesson(direction, preferredMethod) {
     const before = getLessonState();
-    const methods = ['geometry'];
+    const methods = ['lesson-link', 'geometry'];
     const attempts = [];
     let lastDiagnostics = null;
 
     for (const method of methods) {
       const attempt = { method, success: false };
-      if (method === 'geometry') {
+      if (method === 'lesson-link') {
+        const sequence = discoverLessonLinkSequence();
+        const adjacent = chooseAdjacentLessonLink(direction, before, sequence);
+        attempt.visibleLessonLinks = sequence.map(stripLessonLinkInfo);
+        attempt.candidateLessonLink = stripLessonLinkInfo(adjacent.candidate);
+        if (!adjacent.candidate?.el) {
+          attempt.reason = adjacent.reason || 'no_adjacent_lesson_link';
+          attempts.push(attempt);
+          continue;
+        }
+        log('nav candidate', {
+          strategy: 'lesson-link',
+          href: adjacent.candidate.href,
+          text: adjacent.candidate.text,
+          currentIndex: adjacent.currentIndex,
+          targetIndex: adjacent.targetIndex,
+          urlBefore: before.url,
+          titleBefore: before.title,
+          lessonBefore: before.lesson_number,
+        });
+        try {
+          adjacent.candidate.el.scrollIntoView({ block: 'center', inline: 'center' });
+          await sleep(100);
+          activateClick(adjacent.candidate.el);
+        } catch (e) {
+          attempt.reason = 'click_error';
+          attempt.error = String(e?.message || e);
+          attempts.push(attempt);
+          continue;
+        }
+      } else if (method === 'geometry') {
         const diagnostics = buildNavigationDiagnostics(direction);
         lastDiagnostics = diagnostics;
         const scan = scanVisibleButtonsNearHeader();
