@@ -88,7 +88,7 @@ function buildBookmarkletHref(loaderUrl: string, captureEndpoint: string, mode: 
       u.searchParams.set('endpoint', new URL(captureEndpoint, window.location.origin).toString());
       u.searchParams.set('mode', mode);
       if (projectRef) u.searchParams.set('project', projectRef);
-      u.searchParams.set('v', 'state-machine-v2-20260514');
+      u.searchParams.set('v', 'sectioned-lessons-url-20260514a');
       return u.toString();
     } catch {
       return loaderUrl;
