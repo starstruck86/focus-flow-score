@@ -624,7 +624,11 @@
   function isLessonPageUrl(url) {
     try {
       const u = new URL(url, location.href);
-      return u.host === location.host && /\/(lessons?|posts?)\/[^/?#]+/i.test(u.pathname || '');
+      // For Circle course capture, only real lesson pages are safe navigation
+      // targets. Course/table-of-contents routes can contain lesson lists, but
+      // the page URL itself will not contain /lessons/ and must never be used
+      // as an auto-walk destination.
+      return u.host === location.host && /\/lessons?\/[^/?#]+/i.test(u.pathname || '');
     } catch (_) { return false; }
   }
 
@@ -706,12 +710,16 @@
 
   async function openLessonsDrawer() {
     if (findLessonsDrawerRoot()) return true;
-    // Try to find a button that opens the lessons drawer
+    // Only open an already in-page Lessons drawer. Do NOT click "Table of
+    // contents", "Course content", or anchors: in Circle those commonly route
+    // to the course outline page, which is exactly where capture gets stuck.
     const candidates = Array.from(document.querySelectorAll('button,[role="button"],a'));
     for (const c of candidates) {
       const t = (safeText(c) + ' ' + (c.getAttribute('aria-label') || '') + ' ' + (c.getAttribute('title') || '')).toLowerCase();
-      if (/^(lessons|course content|curriculum|table of contents|contents)$/i.test(safeText(c).trim()) ||
-          /\b(open\s+lessons|view\s+lessons|all\s+lessons|course\s+content|curriculum|table\s+of\s+contents)\b/.test(t)) {
+      const tag = (c.tagName || '').toLowerCase();
+      if (tag === 'a' || c.getAttribute('href')) continue;
+      if (/\b(table\s+of\s+contents?|contents?|course\s+content|curriculum)\b/.test(t)) continue;
+      if (/^(lessons)$/i.test(safeText(c).trim()) || /\b(open\s+lessons|view\s+lessons|all\s+lessons|show\s+lessons)\b/.test(t)) {
         if (!isVisible(c) || isDisabled(c)) continue;
         try { activateClick(c); } catch (_) {}
         await sleep(400);
