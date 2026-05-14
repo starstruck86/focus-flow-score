@@ -1166,8 +1166,13 @@
         ? (direction === 'prev' ? before.lesson_number - 1 : before.lesson_number + 1)
         : null;
       const lessonNumberAdvanced = expectedLesson != null && after.lesson_number === expectedLesson;
+      const movedInRightDirection = before.lesson_number != null && after.lesson_number != null && (
+        direction === 'prev'
+          ? after.lesson_number < before.lesson_number
+          : after.lesson_number > before.lesson_number
+      );
       const fallbackChanged = expectedLesson == null && change.changed;
-      const success = !!(lessonNumberAdvanced || fallbackChanged);
+      const success = !!(lessonNumberAdvanced || movedInRightDirection || fallbackChanged);
 
       log('nav result', {
         strategy: method,
