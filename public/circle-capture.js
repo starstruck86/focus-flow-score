@@ -640,6 +640,16 @@
     } catch (_) { return String(url || '').split('#')[0].replace(/\/+$/, '').toLowerCase(); }
   }
 
+  function navigateToLessonHref(href) {
+    const target = absUrl(href);
+    if (!target || !isLessonPageUrl(target) || isCourseRootUrl(target)) return false;
+    try { history.pushState({}, '', target); } catch (_) { location.href = target; return true; }
+    try { window.dispatchEvent(new PopStateEvent('popstate', { state: history.state })); } catch (_) {}
+    try { window.dispatchEvent(new HashChangeEvent('hashchange')); } catch (_) {}
+    try { window.dispatchEvent(new Event('locationchange')); } catch (_) {}
+    return true;
+  }
+
   function stripLessonLinkInfo(info) {
     if (!info) return null;
     const { el, ...rest } = info;
