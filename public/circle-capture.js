@@ -641,10 +641,12 @@
     return rest;
   }
 
-  function discoverLessonLinkSequence() {
-    const seen = new Set();
-    const links = [];
-    for (const a of Array.from(document.querySelectorAll('a[href]'))) {
+  function discoverLessonLinkSequence(currentUrl) {
+    const currentKey = lessonUrlKey(currentUrl || location.href);
+    const collectFrom = (root) => {
+      const seen = new Set();
+      const links = [];
+      for (const a of Array.from(root.querySelectorAll('a[href]'))) {
       const href = abs(a.getAttribute('href'));
       if (!href || !isLessonPageUrl(href) || isCourseRootUrl(href)) continue;
       if (!isVisible(a) || isDisabled(a)) continue;
@@ -661,6 +663,17 @@
         inNav: !!a.closest('nav, [role="navigation"], [role="banner"]'),
       });
     }
+      return links;
+    };
+    const roots = Array.from(document.querySelectorAll('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [aria-label*="sidebar" i], [data-testid*="course" i], [class*="course" i], main'));
+    const pools = roots.concat(document.body).map(root => {
+      const links = collectFrom(root);
+      const hasCurrent = links.some(l => l.key === currentKey);
+      const sidebarWeight = root.matches?.('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [aria-label*="sidebar" i]') ? 100 : 0;
+      return { root, links, score: sidebarWeight + (hasCurrent ? 80 : 0) + links.length };
+    }).filter(p => p.links.length >= 2);
+    pools.sort((a, b) => b.score - a.score);
+    const links = pools[0]?.links || [];
     log('lessonLinkSequence', links.map(stripLessonLinkInfo));
     return links;
   }
