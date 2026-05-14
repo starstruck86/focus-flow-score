@@ -665,8 +665,7 @@
 
   function discoverLessonLinkSequence(currentUrl) {
     const currentKey = lessonUrlKey(currentUrl || location.href);
-    const collectFrom = (root) => {
-      const seen = new Set();
+    const collectFrom = (root, seen) => {
       const links = [];
       for (const a of Array.from(root.querySelectorAll('a[href]'))) {
       const href = abs(a.getAttribute('href'));
@@ -689,15 +688,23 @@
     };
     const drawerRoot = findLessonsDrawerRoot();
     if (drawerRoot) {
-      const links = collectFrom(drawerRoot);
+      const links = collectFrom(drawerRoot, new Set());
       if (links.length >= 2) {
         log('lessonLinkSequence (drawer)', links.map(stripLessonLinkInfo));
         return links;
       }
     }
+    // Prefer the full course outline in document order, because Circle renders
+    // the live lesson list as normal links. This avoids fragile arrow/header UI
+    // and uses only hrefs whose URL itself contains /lessons/.
+    const documentLinks = collectFrom(document.body, new Set());
+    if (documentLinks.length >= 2 && documentLinks.some(l => l.key === currentKey)) {
+      log('lessonLinkSequence (document)', documentLinks.map(stripLessonLinkInfo));
+      return documentLinks;
+    }
     const roots = Array.from(document.querySelectorAll('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [aria-label*="sidebar" i], [data-testid*="course" i], [class*="course" i], main'));
     const pools = roots.concat(document.body).map(root => {
-      const links = collectFrom(root);
+      const links = collectFrom(root, new Set());
       const hasCurrent = links.some(l => l.key === currentKey);
       const sidebarWeight = root.matches?.('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [aria-label*="sidebar" i]') ? 100 : 0;
       return { root, links, score: sidebarWeight + (hasCurrent ? 80 : 0) + links.length };
