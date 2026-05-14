@@ -7,8 +7,8 @@
  *   • Designed to be run from an INDIVIDUAL LESSON PAGE (the screenshot:
  *     "Lesson X of Y", title, video, captions, "Show transcript", Takeaways,
  *     Resources Mentioned, sidebar with all lessons, next/prev arrows).
- *   • Auto-walks the entire course by clicking the next-lesson arrow until
- *     "Lesson X of Y" reaches Y. Falls back to clicking sidebar lesson rows.
+ *   • Auto-walks the course from Lesson 1 by clicking only the visible
+ *     right-arrow next-lesson control until "Lesson X of Y" reaches Y.
  *   • For each lesson it captures:
  *       url, lesson_number, title, body_text (caption + Takeaways + Resources +
  *       any other lesson body text), media_url (video iframe src), transcript
@@ -656,8 +656,12 @@
       } catch (_) {}
     }
 
-    // Exclude elements inside global nav/header (not lesson content)
-    if (el.closest('nav, header, [role="navigation"], [role="banner"]')) return 'global_nav';
+    // Exclude global navigation, but allow the lesson header itself: Circle's
+    // previous/next arrows may live in a semantic <header> beside "Lesson X of Y".
+    const navLike = el.closest('nav, [role="navigation"], [role="banner"]');
+    if (navLike) return 'global_nav';
+    const headerLike = el.closest('header');
+    if (headerLike && !findLessonOfIndicator(headerLike)) return 'global_header';
 
     return null; // Not bad
   }
@@ -877,20 +881,9 @@
     };
   }
 
-  async function dispatchArrowNavigation(direction) {
-    const key = direction === 'prev' ? 'ArrowLeft' : 'ArrowRight';
-    const target = document.activeElement || document.body || document;
-    const opts = { key, code: key, bubbles: true, cancelable: true };
-    try { target.dispatchEvent(new KeyboardEvent('keydown', opts)); } catch (_) {}
-    try { document.dispatchEvent(new KeyboardEvent('keydown', opts)); } catch (_) {}
-    await sleep(80);
-    try { target.dispatchEvent(new KeyboardEvent('keyup', opts)); } catch (_) {}
-    try { document.dispatchEvent(new KeyboardEvent('keyup', opts)); } catch (_) {}
-  }
-
   async function navigateAdjacentLesson(direction, preferredMethod) {
     const before = getLessonState();
-    const methods = preferredMethod === 'keyboard' ? ['keyboard', 'geometry'] : ['geometry', 'keyboard'];
+    const methods = ['geometry'];
     const attempts = [];
     let lastDiagnostics = null;
 
@@ -933,9 +926,6 @@
           attempts.push(attempt);
           continue;
         }
-      } else {
-        log('nav candidate', { strategy: 'keyboard', direction, urlBefore: before.url, lessonBefore: before.lesson_number });
-        await dispatchArrowNavigation(direction);
       }
 
       const change = await waitForLessonChange(before, 8000);
@@ -970,9 +960,12 @@
         continue;
       }
 
-      const numberChanged = before.lesson_number != null && after.lesson_number != null && after.lesson_number !== before.lesson_number;
-      const wrongDirection = numberChanged && (direction === 'prev' ? after.lesson_number > before.lesson_number : after.lesson_number < before.lesson_number);
-      const success = !!(change.changed && !wrongDirection);
+      const expectedLesson = before.lesson_number != null
+        ? (direction === 'prev' ? before.lesson_number - 1 : before.lesson_number + 1)
+        : null;
+      const lessonNumberAdvanced = expectedLesson != null && after.lesson_number === expectedLesson;
+      const fallbackChanged = expectedLesson == null && change.changed;
+      const success = !!(lessonNumberAdvanced || fallbackChanged);
 
       log('nav result', {
         strategy: method,
@@ -1071,91 +1064,6 @@
       });
     }
     return results;
-  }
-
-  /**
-   * Collect ORDERED clickable sidebar lesson anchors. Returns DOM elements
-   * (with metadata) sorted top-to-bottom by visual position. Filters to items
-   * that look like real lesson rows (have lesson-like href OR live inside a
-   * lesson-list container) and dedupes by href/text.
-   */
-  function collectSidebarLessonAnchors() {
-    const sidebar = document.querySelector('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [class*="lesson-list" i], [data-testid*="lesson-list" i]');
-    if (!sidebar) return [];
-    const anchors = Array.from(sidebar.querySelectorAll('a[href]'));
-    const seenHref = new Set();
-    const seenText = new Set();
-    const results = [];
-    for (const el of anchors) {
-      const href = el.getAttribute('href') || '';
-      if (!href || href.startsWith('#')) continue;
-      let abs = '';
-      try { abs = new URL(href, location.href).toString().split('#')[0]; } catch (_) { continue; }
-      // Must look like a lesson/post URL OR live in a list element
-      const looksLesson = /\/lessons?\/|\/posts?\/|\/modules?\/.+\/[^/]+/i.test(abs);
-      const inListItem = !!el.closest('li, [role="listitem"]');
-      if (!looksLesson && !inListItem) continue;
-      // Skip course-root style links
-      if (isCourseRootUrl(abs)) continue;
-      const r = el.getBoundingClientRect();
-      if (r.width === 0 || r.height === 0) continue;
-      const text = safeText(el).slice(0, 160);
-      if (!text || text.length < 2) continue;
-      if (seenHref.has(abs)) continue;
-      if (seenText.has(text)) continue;
-      seenHref.add(abs);
-      seenText.add(text);
-      results.push({ el, href: abs, text, top: r.top });
-    }
-    results.sort((a, b) => a.top - b.top);
-    return results;
-  }
-
-  /**
-   * Walk every lesson by clicking sidebar anchors in order. Captures each
-   * lesson page after waiting for it to load. Returns the same shape as
-   * autoWalk(): { lessons, fatalNavigationFailure, debugReport }.
-   */
-  async function autoWalkViaSidebar(anchors, total) {
-    const lessons = [];
-    const seenUrls = new Set();
-    showBanner(`Sidebar walk: ${anchors.length} lessons queued.`, 'info', true);
-    for (let i = 0; i < anchors.length; i++) {
-      const a = anchors[i];
-      const before = getLessonState();
-      try {
-        a.el.scrollIntoView({ block: 'center' });
-        await sleep(120);
-        a.el.click();
-      } catch (e) {
-        log('sidebar click error', { i, text: a.text, error: String(e?.message || e) });
-      }
-      // Wait for URL or content to actually change to the target href
-      const start = Date.now();
-      let landed = false;
-      while (Date.now() - start < 9000) {
-        await sleep(250);
-        const cur = location.href.split('#')[0];
-        if (cur === a.href || cur.startsWith(a.href) || a.href.startsWith(cur)) { landed = true; break; }
-        const change = getLessonState();
-        if (change.url !== before.url && change.title && change.title !== before.title) { landed = true; break; }
-      }
-      await sleep(500); // settle
-      let lesson;
-      try {
-        lesson = await extractCurrentLesson();
-      } catch (err) {
-        log('sidebar extract error', { i, error: String(err?.message || err) });
-        lesson = { url: location.href.split('#')[0], lesson_number: i + 1, title: a.text, capture_issue: 'extract_failed' };
-      }
-      if (!lesson.lesson_number) lesson.lesson_number = i + 1;
-      if (!lesson.title) lesson.title = a.text;
-      lessons.push(lesson);
-      seenUrls.add(lesson.url);
-      const withContent = lessons.filter(l => l.body_text || l.transcript || l.resources?.length || l.media_url).length;
-      showBanner(`Sidebar walk: ${i + 1} / ${anchors.length} · ${withContent} with content\nCurrent: ${lesson.title}`, 'info', true);
-    }
-    return { lessons, fatalNavigationFailure: false, debugReport: { method: 'sidebar_walk', anchorCount: anchors.length, total } };
   }
 
   function collectSidebarLessonRows() {
@@ -1489,44 +1397,20 @@
 
     const startDiagnostics = buildNavigationDiagnostics('next');
     log('navigation diagnostics', startDiagnostics);
-    showBanner(`Testing Circle next navigation from lesson ${startIndicator.current} of ${total}…`, 'info', true);
-
-    if (total > 1) {
-      let state = getLessonState();
-      if ((state.lesson_number || startIndicator.current) >= total) {
-        const stepBack = await navigateAdjacentLesson('prev', navigationMethod);
-        log('navigation proof: step back from final lesson', stepBack);
-        if (!stepBack.success) {
-          return { lessons: [], fatalNavigationFailure: true, debugReport: { ...startDiagnostics, clickResult: { success: false, reason: 'could_not_step_back_from_final_lesson', attempts: stepBack.attempts }, urlAfter: stepBack.after?.url, titleAfter: stepBack.after?.title } };
-        }
-        if (stepBack.method === 'keyboard') navigationMethod = 'keyboard';
-      }
-
-      const proof = await navigateAdjacentLesson('next', navigationMethod);
-      log('navigation proof: next', proof);
-      if (!proof.success) {
-        return { lessons: [], fatalNavigationFailure: true, debugReport: { ...startDiagnostics, clickResult: { success: false, attempts: proof.attempts }, urlAfter: proof.after?.url, titleAfter: proof.after?.title } };
-      }
-      if (proof.method === 'keyboard') navigationMethod = 'keyboard';
-
-      const returnFromProof = await navigateAdjacentLesson('prev', navigationMethod);
-      log('navigation proof: return to starting lesson', returnFromProof);
-      if (!returnFromProof.success) {
-        return { lessons: [], fatalNavigationFailure: true, debugReport: { ...startDiagnostics, clickResult: { success: false, reason: 'next_worked_but_previous_return_failed', attempts: returnFromProof.attempts }, urlAfter: returnFromProof.after?.url, titleAfter: returnFromProof.after?.title } };
-      }
-      if (returnFromProof.method === 'keyboard') navigationMethod = 'keyboard';
-
-      showBanner('Navigation works. Rewinding to lesson 1…', 'info', true);
-      let guard = 0;
-      while ((getLessonState().lesson_number || 1) > 1 && guard++ < total + 2) {
-        const prev = await navigateAdjacentLesson('prev', navigationMethod);
-        log('rewind step', prev);
-        if (!prev.success) {
-          return { lessons: [], fatalNavigationFailure: true, debugReport: { ...startDiagnostics, clickResult: { success: false, reason: 'could_not_rewind_to_first_lesson', attempts: prev.attempts }, urlAfter: prev.after?.url, titleAfter: prev.after?.title } };
-        }
-        if (prev.method === 'keyboard') navigationMethod = 'keyboard';
-      }
+    if ((startIndicator.current || getLessonState().lesson_number || 1) !== 1) {
+      return {
+        lessons: [],
+        fatalNavigationFailure: true,
+        debugReport: {
+          ...startDiagnostics,
+          clickResult: { success: false, reason: 'start_on_lesson_1_required_for_right_arrow_only_capture' },
+          urlAfter: location.href.split('#')[0],
+          titleAfter: getLessonState().title,
+        },
+      };
     }
+
+    showBanner(`Capturing from lesson 1 of ${total}. Advancing with the visible right arrow only…`, 'info', true);
 
     let consecutiveNavigationFailures = 0;
     const seenLessonNumbers = new Set();
@@ -1563,7 +1447,6 @@
 
       const nav = await navigateAdjacentLesson('next', navigationMethod);
       log('navigation proof', nav);
-      if (nav.method === 'keyboard') navigationMethod = 'keyboard';
       if (!nav.success) {
         consecutiveNavigationFailures += 1;
         const failedFrom = (latest.lesson_number || lessonNum) + 1;
@@ -1679,24 +1562,24 @@
 
     let walkResult;
     try {
-      // Prefer sidebar-walk when the sidebar exposes a clean ordered list of
-      // lesson anchors that covers the course (or at least 80% of it). This
-      // avoids the fragile geometry/keyboard next-arrow probe that fails on
-      // some Circle layouts.
-      const sidebarAnchors = collectSidebarLessonAnchors();
-      const coversCourse = sidebarAnchors.length >= Math.max(2, Math.floor(indicator.total * 0.8));
-      log('sidebar anchors found', { count: sidebarAnchors.length, total: indicator.total, coversCourse });
-      if (coversCourse) {
-        walkResult = await autoWalkViaSidebar(sidebarAnchors, indicator.total);
-      } else {
-        walkResult = await autoWalk(indicator);
-      }
+      // Course capture must mirror the user's page navigation: start on
+      // Lesson 1 and click only the visible right-arrow next control.
+      walkResult = await autoWalk(indicator);
     } catch (err) {
       log('auto-walk failed', err);
       showBanner('Capture failed: ' + (err?.message || err), 'error');
       return;
     }
     const lessons = walkResult.lessons || [];
+
+    if (walkResult.fatalNavigationFailure && lessons.length === 0) {
+      const reason = walkResult.debugReport?.clickResult?.reason;
+      const message = reason === 'start_on_lesson_1_required_for_right_arrow_only_capture'
+        ? 'Open Lesson 1, then run Capture entire course again. Course capture now uses only Circle’s visible right-arrow button.'
+        : 'Course capture could not start using the visible right-arrow button. Run Inspect navigation and paste the diagnostics.';
+      showBanner(message, 'error', true);
+      return;
+    }
 
     const payload = {
       source_url: location.href,
@@ -1708,15 +1591,6 @@
         ? lessons.filter(l => l && l.capture_issue !== 'navigation_failed')
         : lessons,
     };
-
-    if (walkResult.fatalNavigationFailure && payload.lessons.length === 0) {
-      try {
-        const currentLesson = await extractCurrentLesson();
-        payload.lessons = [currentLesson];
-      } catch (err) {
-        log('navigation failed and current lesson salvage failed', err);
-      }
-    }
 
     const importLessons = payload.lessons || [];
     const discovered = indicator.total || lessons.length || importLessons.length;

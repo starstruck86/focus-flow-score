@@ -473,8 +473,8 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
         <TabsContent value="capture" className="space-y-3 pt-3">
           <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
             <li>Open Circle in a tab where you're already signed in.</li>
-            <li>Navigate to <span className="font-medium text-foreground">any lesson page</span> (you should see <em>"Lesson X of Y"</em>).</li>
-            <li>Click one of the bookmarklets below. <span className="font-medium text-foreground">Capture entire course</span> is recommended.</li>
+            <li>Navigate to <span className="font-medium text-foreground">Lesson 1</span> (you should see <em>"Lesson 1 of N"</em>).</li>
+            <li>Click one of the bookmarklets below. <span className="font-medium text-foreground">Capture entire course</span> advances only by clicking Circle’s visible right-arrow lesson button.</li>
             <li>When the banner reads <em>"N lessons captured"</em>, return here and paste the JSON below.</li>
           </ol>
 
