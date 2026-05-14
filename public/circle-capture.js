@@ -1796,7 +1796,7 @@
       };
     }
 
-    showBanner(`Capturing from lesson 1 of ${total}. Advancing with the visible right arrow only…`, 'info', true);
+    showBanner(`Capturing from lesson 1 of ${total}. Advancing through lesson links only…`, 'info', true);
 
     let consecutiveNavigationFailures = 0;
     const seenLessonNumbers = new Set();
@@ -1948,8 +1948,8 @@
 
     let walkResult;
     try {
-      // Course capture must mirror the user's page navigation: start on
-      // Lesson 1 and click only the visible right-arrow next control.
+      // Course capture starts on Lesson 1 and advances only to adjacent
+      // lesson-page URLs. It never clicks course root / table-of-contents UI.
       walkResult = await autoWalk(indicator);
     } catch (err) {
       log('auto-walk failed', err);
