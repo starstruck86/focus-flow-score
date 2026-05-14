@@ -1596,23 +1596,25 @@
     }
     const lessons = walkResult.lessons || [];
 
-    if (walkResult.fatalNavigationFailure) {
-      const report = walkResult.debugReport || buildNavigationDiagnostics('next');
-      const json = JSON.stringify(report, null, 2);
-      const ok = await copyToClipboard(json);
-      if (!ok) showJsonModal(json);
-      showBanner('Navigation failed. Use current lesson capture or manual lesson-by-lesson capture.', 'error', true);
-      return;
-    }
-
     const payload = {
       source_url: location.href,
       platform: 'circle',
       capture_mode: 'auto_walk_lesson_ui',
       title: courseTitle,
       navigation_debug: walkResult.debugReport,
-      lessons,
+      lessons: walkResult.fatalNavigationFailure
+        ? lessons.filter(l => l && l.capture_issue !== 'navigation_failed')
+        : lessons,
     };
+
+    if (walkResult.fatalNavigationFailure && payload.lessons.length === 0) {
+      try {
+        const currentLesson = await extractCurrentLesson();
+        payload.lessons = [currentLesson];
+      } catch (err) {
+        log('navigation failed and current lesson salvage failed', err);
+      }
+    }
 
     const discovered = indicator.total || lessons.length;
     const navigationFailed = lessons.filter(l => l.capture_issue === 'navigation_failed').length;
@@ -1630,6 +1632,9 @@
     if (failed) lines.push(`⚠ ${failed} failed`);
     if (!withContent) {
       lines.push('⚠ no content/transcript/resources detected — open browser console for [Circle Capture] debug logs');
+    }
+    if (walkResult.fatalNavigationFailure) {
+      lines.push(`⚠ course navigation failed — ${payload.lessons.length} captured lesson${payload.lessons.length === 1 ? '' : 's'} salvaged for import`);
     }
     const summary = lines.join('\n') +
       '\nJSON copied — return to the app and paste it into the Circle Import panel.';
