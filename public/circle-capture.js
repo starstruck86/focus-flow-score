@@ -1094,12 +1094,13 @@
         const diagnostics = buildNavigationDiagnostics(direction);
         lastDiagnostics = diagnostics;
         const scan = scanVisibleButtonsNearHeader();
-        const candidate = chooseHeaderArrowCandidate(direction, scan);
+        const candidate = choosePageArrowCandidate(direction, scan);
 
         // Debug: log the candidate we're about to click
         if (candidate) {
           log('nav candidate', {
             strategy: 'geometry',
+            candidateStrategy: candidate.strategy || '',
             text: candidate.text,
             href: candidate.href || '',
             ariaLabel: candidate.ariaLabel,
@@ -1120,7 +1121,7 @@
         try {
           candidate.el.scrollIntoView({ block: 'center', inline: 'center' });
           await sleep(100);
-          candidate.el.click();
+          activateClick(candidate.el);
         } catch (e) {
           attempt.reason = 'click_error';
           attempt.error = String(e?.message || e);
