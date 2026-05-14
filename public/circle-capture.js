@@ -7,8 +7,8 @@
  *   • Designed to be run from an INDIVIDUAL LESSON PAGE (the screenshot:
  *     "Lesson X of Y", title, video, captions, "Show transcript", Takeaways,
  *     Resources Mentioned, sidebar with all lessons, next/prev arrows).
- *   • Auto-walks the entire course by clicking the next-lesson arrow until
- *     "Lesson X of Y" reaches Y. Falls back to clicking sidebar lesson rows.
+ *   • Auto-walks the course from Lesson 1 by clicking only the visible
+ *     right-arrow next-lesson control until "Lesson X of Y" reaches Y.
  *   • For each lesson it captures:
  *       url, lesson_number, title, body_text (caption + Takeaways + Resources +
  *       any other lesson body text), media_url (video iframe src), transcript
@@ -890,7 +890,7 @@
 
   async function navigateAdjacentLesson(direction, preferredMethod) {
     const before = getLessonState();
-    const methods = preferredMethod === 'keyboard' ? ['keyboard', 'geometry'] : ['geometry', 'keyboard'];
+    const methods = ['geometry'];
     const attempts = [];
     let lastDiagnostics = null;
 
@@ -970,9 +970,12 @@
         continue;
       }
 
-      const numberChanged = before.lesson_number != null && after.lesson_number != null && after.lesson_number !== before.lesson_number;
-      const wrongDirection = numberChanged && (direction === 'prev' ? after.lesson_number > before.lesson_number : after.lesson_number < before.lesson_number);
-      const success = !!(change.changed && !wrongDirection);
+      const expectedLesson = before.lesson_number != null
+        ? (direction === 'prev' ? before.lesson_number - 1 : before.lesson_number + 1)
+        : null;
+      const lessonNumberAdvanced = expectedLesson != null && after.lesson_number === expectedLesson;
+      const fallbackChanged = expectedLesson == null && change.changed;
+      const success = !!(lessonNumberAdvanced || fallbackChanged);
 
       log('nav result', {
         strategy: method,
