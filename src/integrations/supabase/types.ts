@@ -1467,6 +1467,68 @@ export type Database = {
         }
         Relationships: []
       }
+      course_imports: {
+        Row: {
+          course_authors: string | null
+          course_category: string | null
+          course_name: string
+          course_platform: string | null
+          course_url: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          primary_use_case: string | null
+          processed_at: string | null
+          ready_at: string | null
+          source_registry_id: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          course_authors?: string | null
+          course_category?: string | null
+          course_name: string
+          course_platform?: string | null
+          course_url?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          primary_use_case?: string | null
+          processed_at?: string | null
+          ready_at?: string | null
+          source_registry_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          course_authors?: string | null
+          course_category?: string | null
+          course_name?: string
+          course_platform?: string | null
+          course_url?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          primary_use_case?: string | null
+          processed_at?: string | null
+          ready_at?: string | null
+          source_registry_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_imports_source_registry_id_fkey"
+            columns: ["source_registry_id"]
+            isOneToOne: false
+            referencedRelation: "source_registry"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       course_lesson_imports: {
         Row: {
           course_title: string | null
@@ -1546,6 +1608,90 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "course_lesson_imports_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      course_lessons: {
+        Row: {
+          attachment_refs: Json
+          course_import_id: string
+          created_at: string
+          id: string
+          lesson_name: string | null
+          lesson_number: number | null
+          lesson_text: string | null
+          lesson_url: string | null
+          missing_fields: Json
+          processed_at: string | null
+          raw_source_text: string | null
+          resource_id: string | null
+          resource_links: Json
+          section_name: string | null
+          source_status: string
+          status: string
+          transcript_text: string | null
+          updated_at: string
+          user_id: string
+          user_notes: string | null
+        }
+        Insert: {
+          attachment_refs?: Json
+          course_import_id: string
+          created_at?: string
+          id?: string
+          lesson_name?: string | null
+          lesson_number?: number | null
+          lesson_text?: string | null
+          lesson_url?: string | null
+          missing_fields?: Json
+          processed_at?: string | null
+          raw_source_text?: string | null
+          resource_id?: string | null
+          resource_links?: Json
+          section_name?: string | null
+          source_status?: string
+          status?: string
+          transcript_text?: string | null
+          updated_at?: string
+          user_id: string
+          user_notes?: string | null
+        }
+        Update: {
+          attachment_refs?: Json
+          course_import_id?: string
+          created_at?: string
+          id?: string
+          lesson_name?: string | null
+          lesson_number?: number | null
+          lesson_text?: string | null
+          lesson_url?: string | null
+          missing_fields?: Json
+          processed_at?: string | null
+          raw_source_text?: string | null
+          resource_id?: string | null
+          resource_links?: Json
+          section_name?: string | null
+          source_status?: string
+          status?: string
+          transcript_text?: string | null
+          updated_at?: string
+          user_id?: string
+          user_notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_lessons_course_import_id_fkey"
+            columns: ["course_import_id"]
+            isOneToOne: false
+            referencedRelation: "course_imports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "course_lessons_resource_id_fkey"
             columns: ["resource_id"]
             isOneToOne: false
             referencedRelation: "resources"

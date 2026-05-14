@@ -65,6 +65,8 @@ const SmokeTest = lazy(() => import("./pages/SmokeTest"));
 const LifecycleReconciliation = lazy(() => import("./pages/LifecycleReconciliation"));
 const PhaseEvidenceRunner = lazy(() => import("./pages/PhaseEvidenceRunner"));
 const StrategyOpsPanel = lazy(() => import("./pages/StrategyOpsPanel"));
+const CourseImports = lazy(() => import("./pages/CourseImports"));
+const CourseImportDetail = lazy(() => import("./pages/CourseImportDetail"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -294,6 +296,20 @@ const App = () => (
                         <StrategyOpsPanel />
                       </Suspense>
                     </ProtectedRoute>
+                  } />
+                  <Route path="/course-import" element={
+                    <ProtectedPage routeName="Course Import">
+                      <Suspense fallback={<LazyFallback />}>
+                        <CourseImports />
+                      </Suspense>
+                    </ProtectedPage>
+                  } />
+                  <Route path="/course-import/:id" element={
+                    <ProtectedPage routeName="Course Import Detail">
+                      <Suspense fallback={<LazyFallback />}>
+                        <CourseImportDetail />
+                      </Suspense>
+                    </ProtectedPage>
                   } />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
