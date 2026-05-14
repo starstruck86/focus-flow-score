@@ -26,6 +26,7 @@
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const safeText = (el) => el ? (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim() : '';
   const abs = (url) => { try { return new URL(url, location.href).toString(); } catch (_) { return ''; } };
+  const absUrl = (url, base) => { try { return new URL(url, base || location.href).toString(); } catch (_) { return ''; } };
 
   // ── Read mode from script URL params ─────────────────────────────────────
   const CAPTURE_MODE = (() => {
@@ -624,7 +625,11 @@
   function isLessonPageUrl(url) {
     try {
       const u = new URL(url, location.href);
-      return u.host === location.host && /\/(lessons?|posts?)\/[^/?#]+/i.test(u.pathname || '');
+      // For Circle course capture, only real lesson pages are safe navigation
+      // targets. Course/table-of-contents routes can contain lesson lists, but
+      // the page URL itself will not contain /lessons/ and must never be used
+      // as an auto-walk destination.
+      return u.host === location.host && /\/lessons?\/[^/?#]+/i.test(u.pathname || '');
     } catch (_) { return false; }
   }
 
@@ -633,6 +638,16 @@
       const u = new URL(url, location.href);
       return `${u.origin}${u.pathname.replace(/\/+$/, '')}`.toLowerCase();
     } catch (_) { return String(url || '').split('#')[0].replace(/\/+$/, '').toLowerCase(); }
+  }
+
+  function navigateToLessonHref(href) {
+    const target = absUrl(href);
+    if (!target || !isLessonPageUrl(target) || isCourseRootUrl(target)) return false;
+    try { history.pushState({}, '', target); } catch (_) { location.href = target; return true; }
+    try { window.dispatchEvent(new PopStateEvent('popstate', { state: history.state })); } catch (_) {}
+    try { window.dispatchEvent(new HashChangeEvent('hashchange')); } catch (_) {}
+    try { window.dispatchEvent(new Event('locationchange')); } catch (_) {}
+    return true;
   }
 
   function stripLessonLinkInfo(info) {
@@ -661,8 +676,7 @@
 
   function discoverLessonLinkSequence(currentUrl) {
     const currentKey = lessonUrlKey(currentUrl || location.href);
-    const collectFrom = (root) => {
-      const seen = new Set();
+    const collectFrom = (root, seen) => {
       const links = [];
       for (const a of Array.from(root.querySelectorAll('a[href]'))) {
       const href = abs(a.getAttribute('href'));
@@ -685,15 +699,23 @@
     };
     const drawerRoot = findLessonsDrawerRoot();
     if (drawerRoot) {
-      const links = collectFrom(drawerRoot);
+      const links = collectFrom(drawerRoot, new Set());
       if (links.length >= 2) {
         log('lessonLinkSequence (drawer)', links.map(stripLessonLinkInfo));
         return links;
       }
     }
+    // Prefer the full course outline in document order, because Circle renders
+    // the live lesson list as normal links. This avoids fragile arrow/header UI
+    // and uses only hrefs whose URL itself contains /lessons/.
+    const documentLinks = collectFrom(document.body, new Set());
+    if (documentLinks.length >= 2 && documentLinks.some(l => l.key === currentKey)) {
+      log('lessonLinkSequence (document)', documentLinks.map(stripLessonLinkInfo));
+      return documentLinks;
+    }
     const roots = Array.from(document.querySelectorAll('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [aria-label*="sidebar" i], [data-testid*="course" i], [class*="course" i], main'));
     const pools = roots.concat(document.body).map(root => {
-      const links = collectFrom(root);
+      const links = collectFrom(root, new Set());
       const hasCurrent = links.some(l => l.key === currentKey);
       const sidebarWeight = root.matches?.('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [aria-label*="sidebar" i]') ? 100 : 0;
       return { root, links, score: sidebarWeight + (hasCurrent ? 80 : 0) + links.length };
@@ -706,12 +728,16 @@
 
   async function openLessonsDrawer() {
     if (findLessonsDrawerRoot()) return true;
-    // Try to find a button that opens the lessons drawer
+    // Only open an already in-page Lessons drawer. Do NOT click "Table of
+    // contents", "Course content", or anchors: in Circle those commonly route
+    // to the course outline page, which is exactly where capture gets stuck.
     const candidates = Array.from(document.querySelectorAll('button,[role="button"],a'));
     for (const c of candidates) {
       const t = (safeText(c) + ' ' + (c.getAttribute('aria-label') || '') + ' ' + (c.getAttribute('title') || '')).toLowerCase();
-      if (/^(lessons|course content|curriculum|table of contents|contents)$/i.test(safeText(c).trim()) ||
-          /\b(open\s+lessons|view\s+lessons|all\s+lessons|course\s+content|curriculum|table\s+of\s+contents)\b/.test(t)) {
+      const tag = (c.tagName || '').toLowerCase();
+      if (tag === 'a' || c.getAttribute('href')) continue;
+      if (/\b(table\s+of\s+contents?|contents?|course\s+content|curriculum)\b/.test(t)) continue;
+      if (/^(lessons)$/i.test(safeText(c).trim()) || /\b(open\s+lessons|view\s+lessons|all\s+lessons|show\s+lessons)\b/.test(t)) {
         if (!isVisible(c) || isDisabled(c)) continue;
         try { activateClick(c); } catch (_) {}
         await sleep(400);
@@ -1319,7 +1345,7 @@
 
   async function navigateAdjacentLesson(direction, preferredMethod) {
     const before = getLessonState();
-    const methods = ['lesson-href-arrow', 'lesson-link'];
+    const methods = ['lesson-link'];
     const attempts = [];
     let lastDiagnostics = null;
 
@@ -1365,11 +1391,13 @@
           lessonBefore: before.lesson_number,
         });
         try {
-          adjacent.candidate.el.scrollIntoView({ block: 'center', inline: 'center' });
-          await sleep(100);
-          activateClick(adjacent.candidate.el);
+          if (!navigateToLessonHref(adjacent.candidate.href)) {
+            attempt.reason = 'invalid_adjacent_lesson_href';
+            attempts.push(attempt);
+            continue;
+          }
         } catch (e) {
-          attempt.reason = 'click_error';
+          attempt.reason = 'navigation_error';
           attempt.error = String(e?.message || e);
           attempts.push(attempt);
           continue;
@@ -1877,8 +1905,9 @@
   }
 
   /**
-   * Walk every lesson using only the visible Previous/Next controls next to the
-   * lesson header. Sidebar lesson rows are diagnostics-only and are never clicked.
+   * Walk every lesson using the course's ordered lesson links only. We avoid
+   * Circle's course-content / table-of-contents controls because they can route
+   * away from the lesson player and strand the capture on the outline page.
    */
   async function autoWalk(startIndicator) {
     const total = startIndicator.total;
