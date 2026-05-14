@@ -1492,44 +1492,20 @@
 
     const startDiagnostics = buildNavigationDiagnostics('next');
     log('navigation diagnostics', startDiagnostics);
-    showBanner(`Testing Circle next navigation from lesson ${startIndicator.current} of ${total}…`, 'info', true);
-
-    if (total > 1) {
-      let state = getLessonState();
-      if ((state.lesson_number || startIndicator.current) >= total) {
-        const stepBack = await navigateAdjacentLesson('prev', navigationMethod);
-        log('navigation proof: step back from final lesson', stepBack);
-        if (!stepBack.success) {
-          return { lessons: [], fatalNavigationFailure: true, debugReport: { ...startDiagnostics, clickResult: { success: false, reason: 'could_not_step_back_from_final_lesson', attempts: stepBack.attempts }, urlAfter: stepBack.after?.url, titleAfter: stepBack.after?.title } };
-        }
-        if (stepBack.method === 'keyboard') navigationMethod = 'keyboard';
-      }
-
-      const proof = await navigateAdjacentLesson('next', navigationMethod);
-      log('navigation proof: next', proof);
-      if (!proof.success) {
-        return { lessons: [], fatalNavigationFailure: true, debugReport: { ...startDiagnostics, clickResult: { success: false, attempts: proof.attempts }, urlAfter: proof.after?.url, titleAfter: proof.after?.title } };
-      }
-      if (proof.method === 'keyboard') navigationMethod = 'keyboard';
-
-      const returnFromProof = await navigateAdjacentLesson('prev', navigationMethod);
-      log('navigation proof: return to starting lesson', returnFromProof);
-      if (!returnFromProof.success) {
-        return { lessons: [], fatalNavigationFailure: true, debugReport: { ...startDiagnostics, clickResult: { success: false, reason: 'next_worked_but_previous_return_failed', attempts: returnFromProof.attempts }, urlAfter: returnFromProof.after?.url, titleAfter: returnFromProof.after?.title } };
-      }
-      if (returnFromProof.method === 'keyboard') navigationMethod = 'keyboard';
-
-      showBanner('Navigation works. Rewinding to lesson 1…', 'info', true);
-      let guard = 0;
-      while ((getLessonState().lesson_number || 1) > 1 && guard++ < total + 2) {
-        const prev = await navigateAdjacentLesson('prev', navigationMethod);
-        log('rewind step', prev);
-        if (!prev.success) {
-          return { lessons: [], fatalNavigationFailure: true, debugReport: { ...startDiagnostics, clickResult: { success: false, reason: 'could_not_rewind_to_first_lesson', attempts: prev.attempts }, urlAfter: prev.after?.url, titleAfter: prev.after?.title } };
-        }
-        if (prev.method === 'keyboard') navigationMethod = 'keyboard';
-      }
+    if ((startIndicator.current || getLessonState().lesson_number || 1) !== 1) {
+      return {
+        lessons: [],
+        fatalNavigationFailure: true,
+        debugReport: {
+          ...startDiagnostics,
+          clickResult: { success: false, reason: 'start_on_lesson_1_required_for_right_arrow_only_capture' },
+          urlAfter: location.href.split('#')[0],
+          titleAfter: getLessonState().title,
+        },
+      };
     }
+
+    showBanner(`Capturing from lesson 1 of ${total}. Advancing with the visible right arrow only…`, 'info', true);
 
     let consecutiveNavigationFailures = 0;
     const seenLessonNumbers = new Set();
