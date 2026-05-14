@@ -146,11 +146,12 @@ type CapturedLesson = {
   body_text?: string;
   transcript?: string;
   media_url?: string;
+  resources?: CircleNormalizedLesson['resources'];
   source_url?: string;
 };
 
 function hasContent(l: CapturedLesson): boolean {
-  return !!(l.body_text?.trim() || l.transcript?.trim() || l.media_url?.trim());
+  return !!(l.body_text?.trim() || l.transcript?.trim() || l.media_url?.trim() || l.resources?.length);
 }
 
 export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) {
@@ -170,6 +171,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     lessonsCount: number;
     withBody: number;
     withTranscript: number;
+    withMedia: number;
     totalResources: number;
     firstTitle: string;
     firstBodyLen: number;
