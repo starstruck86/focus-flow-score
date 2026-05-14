@@ -1096,7 +1096,8 @@
   function chooseHeaderArrowCandidate(direction, scan) {
     // Filter out rejected candidates
     const active = scan.buttons.filter(b => !b.disabled && b.smallCircular && !b.rejectedReason);
-    const sorted = active.slice().sort((a, b) => a.rect.left - b.rect.left);
+    const signalActive = active.filter(b => hasDirectionSignal(b, direction));
+    const sorted = signalActive.slice().sort((a, b) => a.rect.left - b.rect.left);
     const pairs = [];
 
     for (let i = 0; i < sorted.length - 1; i++) {
@@ -1115,14 +1116,10 @@
     pairs.sort((a, b) => b.score - a.score);
     if (pairs[0]) return direction === 'prev' ? pairs[0].left : pairs[0].right;
 
-    const desired = direction === 'prev' ? /left|prev|back/i : /right|next|forward/i;
-    const explicit = active
-      .filter(b => desired.test(`${b.svgDirection} ${b.ariaLabel} ${b.title} ${b.text}`))
+    const explicit = signalActive
       .sort((a, b) => a.distanceFromLessonLabelY - b.distanceFromLessonLabelY)[0];
     if (explicit) return explicit;
 
-    if (direction === 'next' && sorted.length) return sorted[sorted.length - 1];
-    if (direction === 'prev' && sorted.length) return sorted[0];
     return null;
   }
 
@@ -1133,7 +1130,7 @@
     const edge = chooseViewportEdgeArrowCandidate(direction);
     if (edge) return { ...edge, strategy: 'viewport-edge' };
 
-    const bodyCandidate = scanBodyArrowCandidates(direction)[0];
+    const bodyCandidate = scanBodyArrowCandidates(direction).find(c => hasDirectionSignal(c, direction));
     if (bodyCandidate && bodyCandidate.score >= 70) return { ...bodyCandidate, strategy: 'body-arrow' };
 
     return null;
