@@ -690,6 +690,121 @@
     return !!(el.disabled || el.getAttribute('disabled') != null || el.getAttribute('aria-disabled') === 'true' || el.closest('[aria-disabled="true"]'));
   }
 
+  function clickableSelector() {
+    return 'button,[role="button"],a[href],a,[onclick],[tabindex="0"],[aria-label]';
+  }
+
+  function nearestClickable(el) {
+    return el?.closest?.(clickableSelector()) || el;
+  }
+
+  function activateClick(el) {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    const x = Math.max(1, Math.min(window.innerWidth - 1, r.left + r.width / 2));
+    const y = Math.max(1, Math.min(window.innerHeight - 1, r.top + r.height / 2));
+    const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y };
+    try { el.dispatchEvent(new PointerEvent('pointerdown', opts)); } catch (_) {}
+    try { el.dispatchEvent(new MouseEvent('mousedown', opts)); } catch (_) {}
+    try { el.dispatchEvent(new PointerEvent('pointerup', opts)); } catch (_) {}
+    try { el.dispatchEvent(new MouseEvent('mouseup', opts)); } catch (_) {}
+    try { el.dispatchEvent(new MouseEvent('click', opts)); } catch (_) { try { el.click(); } catch (__) { return false; } }
+    return true;
+  }
+
+  function scanViewportEdgeArrows(direction) {
+    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+    const seen = new Set();
+    const fromDom = Array.from(document.querySelectorAll(clickableSelector()));
+    const sampleYs = [0.28, 0.38, 0.5, 0.62, 0.72].map(p => Math.round(vh * p));
+    const sampleXs = direction === 'prev' ? [2, 8, 18, 32] : [vw - 2, vw - 8, vw - 18, vw - 32];
+    const fromPoints = [];
+    for (const x of sampleXs) for (const y of sampleYs) {
+      try {
+        for (const hit of document.elementsFromPoint(x, y)) {
+          const clickable = nearestClickable(hit);
+          if (clickable) fromPoints.push(clickable);
+        }
+      } catch (_) {}
+    }
+
+    const raw = fromDom.concat(fromPoints);
+    const candidates = [];
+    for (const el of raw) {
+      if (!el || seen.has(el)) continue;
+      seen.add(el);
+      if (!isVisible(el) || isDisabled(el) || isLikelySidebarButton(el)) continue;
+
+      const r = el.getBoundingClientRect();
+      const centerX = (r.left + r.right) / 2;
+      const centerY = (r.top + r.bottom) / 2;
+      if (r.bottom < 48 || r.top > vh - 36) continue;
+      if (r.width < 2 || r.height < 12 || r.width > 180 || r.height > 240) continue;
+
+      const text = safeText(el).slice(0, 120);
+      const ariaLabel = el.getAttribute('aria-label') || '';
+      const title = el.getAttribute('title') || '';
+      const href = el.getAttribute('href') || '';
+      const combined = `${text} ${ariaLabel} ${title}`.toLowerCase();
+      if (text.length > 80) continue;
+      if (/\b(course|courses|overview|home|profile|settings|search|notification|bookmark|menu|sidebar|toc|table\s+of\s+contents|continue|complete|mark\s+as)\b/.test(combined)) continue;
+      if (href) {
+        try { if (isCourseRootUrl(new URL(href, location.href).href)) continue; } catch (_) {}
+      }
+
+      const style = window.getComputedStyle(el);
+      let score = 0;
+      const reasons = [];
+      const svgDirection = detectSvgDirection(el);
+
+      if (direction === 'next') {
+        if (r.right >= vw - 6) { score += 110; reasons.push('flush_right_edge'); }
+        else if (r.right >= vw - 48) { score += 85; reasons.push('near_right_edge'); }
+        else if (r.left >= vw - 150) { score += 55; reasons.push('right_rail'); }
+        if (centerX > vw * 0.72) { score += 20; reasons.push('right_side'); }
+        if (/right|next|forward/i.test(svgDirection + ' ' + combined)) { score += 45; reasons.push('right_signal'); }
+        if (/left|prev|previous|back/i.test(svgDirection + ' ' + combined)) { score -= 90; reasons.push('left_penalty'); }
+      } else {
+        if (r.left <= 6) { score += 110; reasons.push('flush_left_edge'); }
+        else if (r.left <= 48) { score += 85; reasons.push('near_left_edge'); }
+        else if (r.right <= 150) { score += 55; reasons.push('left_rail'); }
+        if (centerX < vw * 0.28) { score += 20; reasons.push('left_side'); }
+        if (/left|prev|previous|back/i.test(svgDirection + ' ' + combined)) { score += 45; reasons.push('left_signal'); }
+        if (/right|next|forward/i.test(svgDirection + ' ' + combined)) { score -= 90; reasons.push('right_penalty'); }
+      }
+
+      if (style.position === 'fixed' || style.position === 'sticky') { score += 25; reasons.push(style.position); }
+      if (r.height > r.width * 1.25) { score += 18; reasons.push('vertical_pill'); }
+      if (!text || text.length <= 4) { score += 8; reasons.push('icon_only'); }
+      if (centerY > vh * 0.18 && centerY < vh * 0.86) { score += 12; reasons.push('middle_band'); }
+
+      candidates.push({
+        el,
+        text,
+        ariaLabel,
+        title,
+        href,
+        role: el.getAttribute('role') || el.tagName.toLowerCase(),
+        disabled: false,
+        rect: rectInfo(el),
+        svgDirection,
+        score,
+        reasons,
+      });
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+    log('viewportEdgeArrowCandidates', candidates.slice(0, 8).map(stripButtonInfo));
+    return candidates;
+  }
+
+  function chooseViewportEdgeArrowCandidate(direction) {
+    const candidates = scanViewportEdgeArrows(direction || 'next');
+    const best = candidates[0];
+    return best && best.score >= 90 ? best : null;
+  }
+
   function lessonLabelText(indicator) {
     if (!indicator) return '';
     const direct = safeText(indicator.el);
