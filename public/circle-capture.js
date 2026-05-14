@@ -621,6 +621,63 @@
     } catch (_) { return false; }
   }
 
+  function isLessonPageUrl(url) {
+    try {
+      const u = new URL(url, location.href);
+      return u.host === location.host && /\/(lessons?|posts?)\/[^/?#]+/i.test(u.pathname || '');
+    } catch (_) { return false; }
+  }
+
+  function lessonUrlKey(url) {
+    try {
+      const u = new URL(url, location.href);
+      return `${u.origin}${u.pathname.replace(/\/+$/, '')}`.toLowerCase();
+    } catch (_) { return String(url || '').split('#')[0].replace(/\/+$/, '').toLowerCase(); }
+  }
+
+  function stripLessonLinkInfo(info) {
+    if (!info) return null;
+    const { el, ...rest } = info;
+    return rest;
+  }
+
+  function discoverLessonLinkSequence() {
+    const seen = new Set();
+    const links = [];
+    for (const a of Array.from(document.querySelectorAll('a[href]'))) {
+      const href = abs(a.getAttribute('href'));
+      if (!href || !isLessonPageUrl(href) || isCourseRootUrl(href)) continue;
+      if (!isVisible(a) || isDisabled(a)) continue;
+      const key = lessonUrlKey(href);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      links.push({
+        el: a,
+        href,
+        key,
+        text: safeText(a).slice(0, 160),
+        rect: rectInfo(a),
+        inSidebar: !!a.closest('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [aria-label*="sidebar" i]'),
+        inNav: !!a.closest('nav, [role="navigation"], [role="banner"]'),
+      });
+    }
+    log('lessonLinkSequence', links.map(stripLessonLinkInfo));
+    return links;
+  }
+
+  function chooseAdjacentLessonLink(direction, before, sequence) {
+    if (!sequence || sequence.length < 2) return { candidate: null, reason: 'not_enough_visible_lesson_links' };
+    const currentKey = lessonUrlKey(before?.url || location.href);
+    let currentIndex = sequence.findIndex(l => l.key === currentKey);
+    if (currentIndex < 0 && before?.lesson_number && sequence[before.lesson_number - 1]) currentIndex = before.lesson_number - 1;
+    if (currentIndex < 0) return { candidate: null, reason: 'current_lesson_not_found_in_visible_lesson_links' };
+    const targetIndex = direction === 'prev' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= sequence.length) return { candidate: null, reason: 'no_adjacent_lesson_link' };
+    const candidate = sequence[targetIndex];
+    if (!candidate || candidate.key === currentKey || !isLessonPageUrl(candidate.href) || isCourseRootUrl(candidate.href)) return { candidate: null, reason: 'adjacent_link_was_not_a_lesson_url' };
+    return { candidate, reason: null, currentIndex, targetIndex };
+  }
+
   /**
    * Check if a candidate button/link should be excluded from navigation.
    * Excludes: back buttons, course title links, overview links, sidebar toggles,
