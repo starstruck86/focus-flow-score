@@ -146,11 +146,12 @@ type CapturedLesson = {
   body_text?: string;
   transcript?: string;
   media_url?: string;
+  resources?: CircleNormalizedLesson['resources'];
   source_url?: string;
 };
 
 function hasContent(l: CapturedLesson): boolean {
-  return !!(l.body_text?.trim() || l.transcript?.trim() || l.media_url?.trim());
+  return !!(l.body_text?.trim() || l.transcript?.trim() || l.media_url?.trim() || l.resources?.length);
 }
 
 export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) {
@@ -170,6 +171,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     lessonsCount: number;
     withBody: number;
     withTranscript: number;
+    withMedia: number;
     totalResources: number;
     firstTitle: string;
     firstBodyLen: number;
@@ -294,6 +296,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
       body_text: l.body_text,
       transcript: l.transcript,
       media_url: l.media_url,
+      resources: Array.isArray(l.resources) ? l.resources : undefined,
       source_url: payload.source_url,
     }));
     const withContent = lessons.filter(hasContent);
@@ -301,6 +304,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     // Compute pre-import summary (always shown for transparency).
     const withBody = lessons.filter(l => (l.body_text?.trim().length ?? 0) > 0).length;
     const withTranscript = lessons.filter(l => (l.transcript?.trim().length ?? 0) > 0).length;
+    const withMedia = lessons.filter(l => (l.media_url?.trim().length ?? 0) > 0).length;
     const totalResources = (payload.lessons as any[]).reduce(
       (n, l) => n + (Array.isArray(l.resources) ? l.resources.length : 0),
       0,
@@ -310,6 +314,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
       lessonsCount: lessons.length,
       withBody,
       withTranscript,
+      withMedia,
       totalResources,
       firstTitle: first?.title ?? '',
       firstBodyLen: first?.body_text?.trim().length ?? 0,
@@ -318,11 +323,11 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     setPreImportSummary(summary);
 
     // Hard-stop: nothing usable. Do NOT auto-import. Surface debug guidance.
-    if (withBody === 0 && withTranscript === 0 && totalResources === 0) {
+    if (withBody === 0 && withTranscript === 0 && withMedia === 0 && totalResources === 0) {
       setPhase('idle');
       setEmptyCaptureBlocked(true);
       setValidationError(
-        'Capture did not include lesson content. Open browser console and send [Circle Capture] debug logs.',
+        'Capture did not include lesson content, media, transcripts, or resources. Open browser console and send [Circle Capture] debug logs.',
       );
       return;
     }
@@ -638,6 +643,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                   <Badge variant="outline" className="text-[9px] h-4">lessons {preImportSummary.lessonsCount}</Badge>
                   <Badge variant="outline" className="text-[9px] h-4">with body {preImportSummary.withBody}</Badge>
                   <Badge variant="outline" className="text-[9px] h-4">with transcript {preImportSummary.withTranscript}</Badge>
+                  <Badge variant="outline" className="text-[9px] h-4">with media {preImportSummary.withMedia}</Badge>
                   <Badge variant="outline" className="text-[9px] h-4">resources {preImportSummary.totalResources}</Badge>
                 </div>
                 {preImportSummary.firstTitle && (
@@ -655,7 +661,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                   <div className="flex items-start gap-1.5 text-destructive">
                     <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
                     <span>
-                      Capture did not include lesson content. Open browser console and send{' '}
+                      Capture did not include lesson content, media, transcripts, or resources. Open browser console and send{' '}
                       <code className="font-mono">[Circle Capture]</code> debug logs.
                     </span>
                   </div>
@@ -697,6 +703,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                       {l.body_text && <Badge variant="outline" className="text-[9px] h-4">text</Badge>}
                       {l.media_url && <Badge variant="outline" className="text-[9px] h-4">video</Badge>}
                       {l.transcript && <Badge variant="outline" className="text-[9px] h-4">transcript</Badge>}
+                      {!!l.resources?.length && <Badge variant="outline" className="text-[9px] h-4">resources</Badge>}
                       <Button
                         variant="ghost"
                         size="sm"

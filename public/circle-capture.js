@@ -437,17 +437,23 @@
 
   function findVideoUrl() {
     const iframe = document.querySelector(
-      'iframe[src*="wistia"], iframe[src*="vimeo"], iframe[src*="youtube"], iframe[src*="youtu.be"], iframe[src*="loom"]'
+      'iframe[src*="wistia"], iframe[src*="vimeo"], iframe[src*="youtube"], iframe[src*="youtu.be"], iframe[src*="loom"], iframe[src*="mux"], iframe[src*="stream"], iframe[src*="cloudflare"], iframe[src*="mediadelivery"], iframe[src*="bunny"], iframe[src*="sproutvideo"], iframe[src*="vidyard"]'
     );
-    if (iframe) return iframe.getAttribute('src') || undefined;
+    if (iframe) return abs(iframe.getAttribute('src')) || undefined;
     const a = document.querySelector(
-      'a[href*="wistia"], a[href*="vimeo"], a[href*="youtube"], a[href*="youtu.be"], a[href*="loom"]'
+      'a[href*="wistia"], a[href*="vimeo"], a[href*="youtube"], a[href*="youtu.be"], a[href*="loom"], a[href*="mux"], a[href*="stream"], a[href*="cloudflare"], a[href*="mediadelivery"], a[href*="bunny"], a[href*="sproutvideo"], a[href*="vidyard"], a[href*=".m3u8"], a[href*=".mp4"]'
     );
-    if (a) return a.getAttribute('href') || undefined;
-    const v = document.querySelector('video[src]');
-    if (v) return v.getAttribute('src') || undefined;
-    const vsrc = document.querySelector('video source[src]');
-    if (vsrc) return vsrc.getAttribute('src') || undefined;
+    if (a) return abs(a.getAttribute('href')) || undefined;
+    const v = document.querySelector('video');
+    const videoSrc = v && (v.currentSrc || v.getAttribute('src') || v.getAttribute('data-src') || v.getAttribute('poster'));
+    if (videoSrc) return abs(videoSrc) || videoSrc;
+    const vsrc = document.querySelector('video source[src], video source[data-src], source[src*=".m3u8"], source[src*=".mp4"]');
+    if (vsrc) return abs(vsrc.getAttribute('src') || vsrc.getAttribute('data-src')) || undefined;
+    const genericFrame = Array.from(document.querySelectorAll('iframe[src], embed[src], object[data]'))
+      .map(el => el.getAttribute('src') || el.getAttribute('data') || '')
+      .map(abs)
+      .find(url => url && !/about:blank|recaptcha|captcha|intercom|stripe|analytics|segment|googletagmanager/i.test(url));
+    if (genericFrame) return genericFrame;
     return undefined;
   }
 
@@ -1458,14 +1464,14 @@
 
       const transcriptCount = lessons.filter(l => l.transcript).length;
       const resourceCount = lessons.reduce((s, l) => s + (l.resources?.length || 0), 0);
-      const withContentCount = lessons.filter(l => l.body_text || l.transcript || l.resources?.length).length;
+      const withContentCount = lessons.filter(l => l.body_text || l.transcript || l.resources?.length || l.media_url).length;
       showBanner(
         `${total} discovered · ${withContentCount} captured with content · ${lessons.filter(l => l.capture_issue === 'navigation_failed').length} navigation failed\n` +
           `Current: ${lessonData.lesson_number || lessonNum} of ${total}: ${lessonData.title || state.title || `Lesson ${lessonNum}`}\n` +
           `Transcripts: ${transcriptCount} · Resources: ${resourceCount}`,
         'info', true
       );
-      log('capture result', { index: lessonNum, total, success: !!(lessonData.body_text || lessonData.transcript || lessonData.resources?.length), title: lessonData.title, debug: lessonData._debug || null });
+      log('capture result', { index: lessonNum, total, success: !!(lessonData.body_text || lessonData.transcript || lessonData.resources?.length || lessonData.media_url), title: lessonData.title, debug: lessonData._debug || null });
 
       const latest = getLessonState();
       if ((latest.lesson_number || lessonNum) >= total) break;
@@ -1616,12 +1622,14 @@
       }
     }
 
-    const discovered = indicator.total || lessons.length;
+    const importLessons = payload.lessons || [];
+    const discovered = indicator.total || lessons.length || importLessons.length;
     const navigationFailed = lessons.filter(l => l.capture_issue === 'navigation_failed').length;
-    const failed = lessons.filter(l => l.capture_issue && l.capture_issue !== 'navigation_failed').length;
-    const transcripts = lessons.filter(l => l.transcript).length;
-    const resources = lessons.reduce((s, l) => s + (l.resources?.length || 0), 0);
-    const withContent = lessons.filter(l => l.body_text || l.transcript || l.resources?.length).length;
+    const failed = importLessons.filter(l => l.capture_issue && l.capture_issue !== 'navigation_failed').length;
+    const transcripts = importLessons.filter(l => l.transcript).length;
+    const resources = importLessons.reduce((s, l) => s + (l.resources?.length || 0), 0);
+    const media = importLessons.filter(l => l.media_url).length;
+    const withContent = importLessons.filter(l => l.body_text || l.transcript || l.resources?.length || l.media_url).length;
 
     const json = JSON.stringify(payload, null, 2);
     const ok = await copyToClipboard(json);
@@ -1629,9 +1637,10 @@
     const lines = [`${discovered} discovered, ${withContent} captured with content, ${navigationFailed} navigation failed.`];
     if (transcripts) lines.push(`✓ ${transcripts} transcript${transcripts === 1 ? '' : 's'}`);
     if (resources) lines.push(`✓ ${resources} resource${resources === 1 ? '' : 's'}`);
+    if (media) lines.push(`✓ ${media} media item${media === 1 ? '' : 's'}`);
     if (failed) lines.push(`⚠ ${failed} failed`);
     if (!withContent) {
-      lines.push('⚠ no content/transcript/resources detected — open browser console for [Circle Capture] debug logs');
+      lines.push('⚠ no content/transcript/resources/media detected — open browser console for [Circle Capture] debug logs');
     }
     if (walkResult.fatalNavigationFailure) {
       lines.push(`⚠ course navigation failed — ${payload.lessons.length} captured lesson${payload.lessons.length === 1 ? '' : 's'} salvaged for import`);
