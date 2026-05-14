@@ -437,17 +437,23 @@
 
   function findVideoUrl() {
     const iframe = document.querySelector(
-      'iframe[src*="wistia"], iframe[src*="vimeo"], iframe[src*="youtube"], iframe[src*="youtu.be"], iframe[src*="loom"]'
+      'iframe[src*="wistia"], iframe[src*="vimeo"], iframe[src*="youtube"], iframe[src*="youtu.be"], iframe[src*="loom"], iframe[src*="mux"], iframe[src*="stream"], iframe[src*="cloudflare"], iframe[src*="mediadelivery"], iframe[src*="bunny"], iframe[src*="sproutvideo"], iframe[src*="vidyard"]'
     );
-    if (iframe) return iframe.getAttribute('src') || undefined;
+    if (iframe) return abs(iframe.getAttribute('src')) || undefined;
     const a = document.querySelector(
-      'a[href*="wistia"], a[href*="vimeo"], a[href*="youtube"], a[href*="youtu.be"], a[href*="loom"]'
+      'a[href*="wistia"], a[href*="vimeo"], a[href*="youtube"], a[href*="youtu.be"], a[href*="loom"], a[href*="mux"], a[href*="stream"], a[href*="cloudflare"], a[href*="mediadelivery"], a[href*="bunny"], a[href*="sproutvideo"], a[href*="vidyard"], a[href*=".m3u8"], a[href*=".mp4"]'
     );
-    if (a) return a.getAttribute('href') || undefined;
-    const v = document.querySelector('video[src]');
-    if (v) return v.getAttribute('src') || undefined;
-    const vsrc = document.querySelector('video source[src]');
-    if (vsrc) return vsrc.getAttribute('src') || undefined;
+    if (a) return abs(a.getAttribute('href')) || undefined;
+    const v = document.querySelector('video');
+    const videoSrc = v && (v.currentSrc || v.getAttribute('src') || v.getAttribute('data-src') || v.getAttribute('poster'));
+    if (videoSrc) return abs(videoSrc) || videoSrc;
+    const vsrc = document.querySelector('video source[src], video source[data-src], source[src*=".m3u8"], source[src*=".mp4"]');
+    if (vsrc) return abs(vsrc.getAttribute('src') || vsrc.getAttribute('data-src')) || undefined;
+    const genericFrame = Array.from(document.querySelectorAll('iframe[src], embed[src], object[data]'))
+      .map(el => el.getAttribute('src') || el.getAttribute('data') || '')
+      .map(abs)
+      .find(url => url && !/about:blank|recaptcha|captcha|intercom|stripe|analytics|segment|googletagmanager/i.test(url));
+    if (genericFrame) return genericFrame;
     return undefined;
   }
 
