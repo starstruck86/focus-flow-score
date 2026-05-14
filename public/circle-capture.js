@@ -1,289 +1,469 @@
 /**
- * Circle Course Capture Bookmarklet
+ * Circle Course Capture Bookmarklet — v2 (state machine)
  * --------------------------------------------------------------------------
  * Runs INSIDE the user's already-authenticated Circle browser tab.
  *
- * Strategy:
- *   • Designed to be run from an INDIVIDUAL LESSON PAGE (the screenshot:
- *     "Lesson X of Y", title, video, captions, "Show transcript", Takeaways,
- *     Resources Mentioned, sidebar with all lessons, next/prev arrows).
- *   • Auto-walks the course from Lesson 1 by clicking only the visible
- *     right-arrow next-lesson control until "Lesson X of Y" reaches Y.
- *   • For each lesson it captures:
- *       url, lesson_number, title, body_text (caption + Takeaways + Resources +
- *       any other lesson body text), media_url (video iframe src), transcript
- *       (auto-clicks "Show transcript" if present), resources [{title, url}].
- *   • Then copies one JSON payload to the clipboard for the user to paste
- *     into the app's Circle Import panel.
+ * Architecture: DISCOVER → BUILD_QUEUE → (NAVIGATE → AWAIT_READY → EXTRACT
+ * → PERSIST) per-lesson loop → COMPLETE.
  *
- * If run from a course-index page (no "Lesson X of Y" visible), it asks the
- * user to open a lesson first.
+ * Key contracts:
+ *   • Build the full lesson queue ONCE from the right-hand sidebar (or
+ *     document body fallback). Persist it.
+ *   • Navigate via real anchor click (lets Next.js <Link> handle routing) or
+ *     window.location.assign() as a hard-nav fallback. Never history.pushState.
+ *   • A URL change alone is NOT success. Wait for: expected URL key + lesson
+ *     indicator/title + DOM stability via MutationObserver + polling.
+ *   • TOC/course-root landings trigger up-to-3 retries. history.back is never
+ *     used as recovery.
+ *   • Persist {queue, cursor, captured, status, errors, debug_logs} to
+ *     localStorage after every lesson. Resume on reload.
+ *   • One failed lesson is marked failed and skipped — never fatal.
+ *   • Body extraction is scoped to the lesson main column; aside/nav/drawer/
+ *     curriculum/sidebar subtrees are removed before reading text.
  */
 (function () {
   'use strict';
 
-  const log = (...args) => { try { console.log('[Circle Capture]', ...args); } catch (_) {} };
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  const safeText = (el) => el ? (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim() : '';
+  // ── Tiny helpers ─────────────────────────────────────────────────────────
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const safeText = (el) => (el ? (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim() : '');
   const abs = (url) => { try { return new URL(url, location.href).toString(); } catch (_) { return ''; } };
-  const absUrl = (url, base) => { try { return new URL(url, base || location.href).toString(); } catch (_) { return ''; } };
+  const VERSION = 'circle_bookmarklet_v2';
 
-  // ── Read mode from script URL params ─────────────────────────────────────
-  const CAPTURE_MODE = (() => {
+  // ── Mode + endpoint from script src ──────────────────────────────────────
+  const SCRIPT_PARAMS = (() => {
     try {
       const scripts = document.querySelectorAll('script[src*="circle-capture"]');
       const last = scripts[scripts.length - 1];
       if (last) {
         const u = new URL(last.src);
-        const m = u.searchParams.get('mode');
-        if (['single','course','debug-nav','inspect','probe'].includes(m)) return m;
+        return {
+          mode: u.searchParams.get('mode') || 'course',
+          endpoint: u.searchParams.get('endpoint') || '',
+          project: u.searchParams.get('project') || '',
+        };
       }
     } catch (_) {}
-    return 'course';
+    return { mode: 'course', endpoint: '', project: '' };
   })();
+  const CAPTURE_MODE = ['single', 'course'].includes(SCRIPT_PARAMS.mode) ? SCRIPT_PARAMS.mode : 'course';
 
-  log('starting, mode=' + CAPTURE_MODE);
-
-  // ── Banner UI ────────────────────────────────────────────────────────────
-
-  function showBanner(message, kind, persist) {
-    const id = '__circle_capture_banner';
-    document.getElementById(id)?.remove();
-    const div = document.createElement('div');
-    div.id = id;
-    const bg = kind === 'error' ? '#b91c1c' : kind === 'warn' ? '#a16207' : '#15803d';
-    Object.assign(div.style, {
-      position: 'fixed', top: '12px', right: '12px', maxWidth: '420px',
-      zIndex: '2147483647', background: bg, color: '#fff',
-      padding: '12px 16px', borderRadius: '8px',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      fontSize: '13px', lineHeight: '1.4',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.25)', whiteSpace: 'pre-wrap',
-    });
-    div.textContent = message;
-    document.body.appendChild(div);
-    if (!persist) setTimeout(() => { if (div.parentNode) div.remove(); }, 15000);
-    return div;
+  // ── Debug log buffer ─────────────────────────────────────────────────────
+  const DEBUG_LOG_MAX = 200;
+  const debugLogs = [];
+  function debugLog(event, payload) {
+    const entry = { t: new Date().toISOString(), event, payload: payload === undefined ? null : payload };
+    debugLogs.push(entry);
+    if (debugLogs.length > DEBUG_LOG_MAX) debugLogs.shift();
+    try { console.log('[CircleCapture]', event, payload ?? ''); } catch (_) {}
+    try { renderOverlayLastEvent(entry); } catch (_) {}
   }
 
-  function showJsonModal(text) {
-    const id = '__circle_capture_modal';
-    document.getElementById(id)?.remove();
-    const overlay = document.createElement('div');
-    overlay.id = id;
-    Object.assign(overlay.style, {
-      position: 'fixed', inset: '0', zIndex: '2147483646',
-      background: 'rgba(0,0,0,0.5)', display: 'flex',
-      alignItems: 'center', justifyContent: 'center',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-    });
-    const card = document.createElement('div');
-    Object.assign(card.style, {
-      background: '#fff', color: '#111', borderRadius: '10px',
-      width: 'min(640px, 92vw)', maxHeight: '80vh',
-      display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
-    });
-    const header = document.createElement('div');
-    header.textContent = 'Circle Capture — copy this JSON';
-    Object.assign(header.style, { padding: '12px 16px', fontWeight: '600', borderBottom: '1px solid #e5e7eb', fontSize: '14px' });
-    const body = document.createElement('div');
-    Object.assign(body.style, { padding: '12px 16px', fontSize: '12px', color: '#374151' });
-    body.textContent = 'Clipboard access was blocked. Select all the JSON below, copy it, then paste it into the Circle Import panel in the app.';
-    const ta = document.createElement('textarea');
-    ta.value = text; ta.readOnly = true;
-    Object.assign(ta.style, {
-      flex: '1', margin: '0 16px', minHeight: '240px',
-      fontFamily: 'ui-monospace, SFMono-Regular, monospace',
-      fontSize: '11px', padding: '8px', border: '1px solid #d1d5db',
-      borderRadius: '6px', background: '#f9fafb',
-    });
-    const footer = document.createElement('div');
-    Object.assign(footer.style, { padding: '12px 16px', display: 'flex', gap: '8px', justifyContent: 'flex-end', borderTop: '1px solid #e5e7eb' });
-    const copyBtn = document.createElement('button');
-    copyBtn.textContent = 'Copy JSON';
-    Object.assign(copyBtn.style, {
-      padding: '6px 12px', borderRadius: '6px', border: '0',
-      background: '#15803d', color: '#fff', fontWeight: '600', cursor: 'pointer', fontSize: '12px',
-    });
-    copyBtn.onclick = () => { ta.select(); try { document.execCommand('copy'); } catch (_) {} copyBtn.textContent = 'Copied!'; };
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = 'Close';
-    Object.assign(closeBtn.style, {
-      padding: '6px 12px', borderRadius: '6px', border: '1px solid #d1d5db',
-      background: '#fff', color: '#111', cursor: 'pointer', fontSize: '12px',
-    });
-    closeBtn.onclick = () => overlay.remove();
-    footer.appendChild(copyBtn); footer.appendChild(closeBtn);
-    card.appendChild(header); card.appendChild(body); card.appendChild(ta); card.appendChild(footer);
-    overlay.appendChild(card); document.body.appendChild(overlay);
-    setTimeout(() => { ta.focus(); ta.select(); }, 50);
+  // ── URL helpers ──────────────────────────────────────────────────────────
+  function isCircleLessonUrl(url) {
+    try {
+      const u = new URL(url, location.origin);
+      return u.host === location.host && /\/c\/[^/]+\/(lessons|posts)\/[^/?#]+/.test(u.pathname);
+    } catch (_) { return false; }
   }
-
-  async function copyToClipboard(text) {
+  function canonicalLessonKey(url) {
     try {
-      if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; }
-    } catch (_) {}
+      const u = new URL(url, location.origin);
+      return u.pathname.replace(/\/+$/, '').toLowerCase();
+    } catch (_) { return String(url || '').split('#')[0].split('?')[0].replace(/\/+$/, '').toLowerCase(); }
+  }
+  function currentCourseSlug() {
+    const m = (location.pathname || '').match(/\/c\/([^/]+)/);
+    return m ? m[1] : 'unknown-course';
+  }
+  function isCourseRootOrSection(url) {
     try {
-      const ta = document.createElement('textarea');
-      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-      document.body.appendChild(ta); ta.select();
-      const ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-      return ok;
+      const u = new URL(url, location.origin);
+      const p = u.pathname.replace(/\/+$/, '');
+      if (/^\/c\/[^/]+$/.test(p)) return true;
+      if (/^\/c\/[^/]+\/sections?\/[^/]+$/.test(p)) return true;
+      if (!/\/(lessons|posts)\//.test(p)) return true;
+      return false;
     } catch (_) { return false; }
   }
 
-  // ── Lesson X of Y parsing ───────────────────────────────────────────────
+  // ── Storage ──────────────────────────────────────────────────────────────
+  const STORAGE_KEY = `circle_course_capture:${location.origin}:${currentCourseSlug()}`;
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const s = JSON.parse(raw);
+      if (s && s.version === 2) return s;
+      return null;
+    } catch (_) { return null; }
+  }
+  function saveState(s) {
+    try {
+      s.updatedAt = new Date().toISOString();
+      // Cap debug_logs in storage
+      const toSave = { ...s, debug_logs: (s.debug_logs || []).slice(-DEBUG_LOG_MAX) };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+      debugLog('state:saved', { cursor: s.cursor, queue: s.queue?.length, captured: Object.keys(s.captured || {}).length });
+    } catch (e) { debugLog('state:save_failed', { error: String(e?.message || e) }); }
+  }
+  function clearState() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+  }
+  function newEmptyState() {
+    return {
+      version: 2,
+      courseSlug: currentCourseSlug(),
+      courseTitle: '',
+      courseUrl: location.href.split('#')[0],
+      queue: [],
+      cursor: 0,
+      captured: {},
+      status: {},
+      errors: {},
+      retries: {},
+      debug_logs: [],
+      startedAt: null,
+      updatedAt: null,
+      paused: false,
+    };
+  }
 
-  /**
-   * Find the "Lesson X of Y" indicator anywhere in the live DOM.
-   * Returns { current, total, el } or null.
-   */
+  // ── Lesson "X of Y" indicator ────────────────────────────────────────────
   function findLessonOfIndicator(root) {
     root = root || document;
-    // Walk text nodes; cheap because Circle's main column has limited text.
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-    let node;
-    const re = /Lesson\s+(\d+)\s+of\s+(\d+)/i;
-    while ((node = walker.nextNode())) {
-      const m = node.nodeValue && node.nodeValue.match(re);
-      if (m) {
-        return {
-          current: parseInt(m[1], 10),
-          total: parseInt(m[2], 10),
-          el: node.parentElement,
-        };
+    try {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+      const re = /Lesson\s+(\d+)\s+of\s+(\d+)/i;
+      let node;
+      while ((node = walker.nextNode())) {
+        const m = node.nodeValue && node.nodeValue.match(re);
+        if (m) return { current: parseInt(m[1], 10), total: parseInt(m[2], 10), el: node.parentElement };
       }
-    }
+    } catch (_) {}
     return null;
   }
 
-  // ── Page-mode detection ─────────────────────────────────────────────────
-
-  function detectPageMode() {
-    const path = location.pathname || '';
-    const indicator = findLessonOfIndicator();
-    const hasLessonUrl = /\/lessons\/[^/?#]+|\/posts\/[^/?#]+/i.test(path);
-    const hasPostBody = !!document.querySelector(
-      '[data-testid="post-body"], [data-testid*="lesson-content"], [data-testid*="post-content"], .trix-content'
-    );
-    const hasVideo = !!document.querySelector(
-      'iframe[src*="wistia"], iframe[src*="vimeo"], iframe[src*="youtube"], iframe[src*="youtu.be"], iframe[src*="loom"], video'
-    );
-
-    const mode = (indicator || hasLessonUrl || hasPostBody || hasVideo) ? 'lesson' : 'index';
-    log('mode detection', { path, indicator, hasLessonUrl, hasPostBody, hasVideo, mode });
-    return { mode, indicator };
-  }
-
   // ── Course title ─────────────────────────────────────────────────────────
-
   function deriveCourseTitle() {
-    // Top bar of a lesson page typically shows the course name.
-    // The screenshot shows "Cold Calls to President's Club" in an <h1>-ish
-    // header at top-left of the lesson view.
-    const header = document.querySelector(
-      'header h1, [data-testid*="header"] h1, [class*="header"] h1, [class*="course-title"]'
-    );
+    const header = document.querySelector('header h1, [data-testid*="header"] h1, [class*="header"] h1, [class*="course-title"]');
     const fromHeader = safeText(header);
     if (fromHeader && fromHeader.length < 200) return fromHeader;
-    // Sidebar root title
     const sideTitle = safeText(document.querySelector('[data-testid*="sidebar"] h1, aside h1'));
     if (sideTitle) return sideTitle;
     return (document.title || 'Untitled Circle Course').slice(0, 300);
   }
 
-  // ── Current lesson DOM extraction ───────────────────────────────────────
-
-  /**
-   * Click the "Show transcript" affordance, wait for the transcript region to
-   * mount, capture its text, then collapse it again. Returns a string ('' if
-   * no transcript was found).
-   */
-  async function captureTranscript() {
-    // Look for "Show transcript" trigger.
-    const all = Array.from(document.querySelectorAll('button, a, [role="button"], summary, [aria-expanded], span, div'));
-    const triggers = all.filter(el => {
-      const t = safeText(el);
-      if (!t || t.length > 60) return false;
-      return /\b(show|view|open|toggle|expand)\s+transcript\b/i.test(t) || /^transcript$/i.test(t);
+  // ── Drawer / sidebar discovery ───────────────────────────────────────────
+  function isElementVisible(el) {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return false;
+    const cs = getComputedStyle(el);
+    return cs.visibility !== 'hidden' && cs.display !== 'none' && cs.opacity !== '0';
+  }
+  function findLessonsDrawerRoot() {
+    // 1) by heading text
+    const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,[role="heading"]'));
+    for (const h of headings) {
+      const t = (h.textContent || '').trim().toLowerCase();
+      if (/^(lessons|course content|curriculum|contents|chapters)$/.test(t)) {
+        let cur = h.parentElement;
+        for (let i = 0; i < 8 && cur; i++) {
+          const linkCount = cur.querySelectorAll('a[href*="/lessons/"], a[href*="/posts/"]').length;
+          if (linkCount >= 2) return cur;
+          cur = cur.parentElement;
+        }
+      }
+    }
+    // 2) by structure: largest container of /lessons/ or /posts/ anchors that
+    //    isn't the whole <body>; prefer aside or right-anchored panel.
+    const containers = new Map();
+    const anchors = document.querySelectorAll('a[href*="/lessons/"], a[href*="/posts/"]');
+    anchors.forEach((a) => {
+      let p = a.parentElement;
+      for (let depth = 0; depth < 6 && p; depth++, p = p.parentElement) {
+        const k = p;
+        containers.set(k, (containers.get(k) || 0) + 1);
+      }
     });
-
-    let transcriptText = '';
-    let transcriptModalFound = false;
-    let transcriptChars = 0;
-
-    if (triggers.length === 0) {
-      log('transcript capture: no trigger found');
-      return { text: '', transcript_modal_found: false, transcript_chars: 0 };
-    }
-
-    // Count existing dialogs before click so we can detect new ones.
-    const dialogsBefore = document.querySelectorAll('[role="dialog"]').length;
-
-    for (const trigger of triggers) {
-      try { trigger.scrollIntoView({ block: 'center' }); } catch (_) {}
-      try { trigger.click(); } catch (_) { continue; }
-      await sleep(400);
-
-      // Strategy 1: Wait for a [role="dialog"] modal to appear.
-      const start = Date.now();
-      let modal = null;
-      while (Date.now() - start < 5000) {
-        const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
-        // Pick a dialog that appeared after the click.
-        modal = dialogs.length > dialogsBefore ? dialogs[dialogs.length - 1] : null;
-        // Also check if any dialog now has substantial text (>120 chars).
-        if (!modal) {
-          modal = dialogs.find(d => safeText(d).length > 120);
-        }
-        if (modal && safeText(modal).length > 120) break;
-        modal = null;
-        await sleep(200);
-      }
-
-      if (modal) {
-        transcriptModalFound = true;
-        transcriptText = safeText(modal);
-        transcriptChars = transcriptText.length;
-        log('transcript capture: modal found', { chars: transcriptChars });
-
-        // Close the modal.
-        const closeBtn = modal.querySelector('button[aria-label="Close"], button[aria-label="close"], [class*="close"]');
-        if (closeBtn) {
-          try { closeBtn.click(); } catch (_) {}
-        } else {
-          // Try pressing Escape.
-          try { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch (_) {}
-        }
-        await sleep(300);
-        break;
-      }
-
-      // Strategy 2: Fallback — check for transcript containers that appeared inline.
-      const containers = Array.from(document.querySelectorAll(
-        '[id*="transcript" i], [class*="transcript" i], [data-testid*="transcript" i], [class*="caption" i]'
-      ));
-      for (const c of containers) {
-        const t = safeText(c);
-        if (t.length > 120) {
-          transcriptText = t;
-          transcriptChars = t.length;
-          log('transcript capture: inline container found', { chars: transcriptChars });
-          break;
-        }
-      }
-      if (transcriptText) break;
-    }
-
-    log('transcript capture result', { triggersFound: triggers.length, modal: transcriptModalFound, chars: transcriptChars });
-    return { text: transcriptText, transcript_modal_found: transcriptModalFound, transcript_chars: transcriptChars };
+    let best = null;
+    let bestScore = 0;
+    containers.forEach((count, el) => {
+      if (count < 3) return;
+      if (el === document.body || el === document.documentElement) return;
+      const tag = el.tagName.toLowerCase();
+      const cls = (el.className || '').toString().toLowerCase();
+      const role = (el.getAttribute('role') || '').toLowerCase();
+      const looksDrawer =
+        tag === 'aside' ||
+        role === 'complementary' ||
+        /\b(sidebar|drawer|lessons|curriculum|outline|toc)\b/.test(cls);
+      const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { right: 0 };
+      const isRightSide = r.right > (window.innerWidth * 0.55);
+      const score = count + (looksDrawer ? 50 : 0) + (isRightSide ? 10 : 0);
+      if (score > bestScore) { bestScore = score; best = el; }
+    });
+    return best;
   }
 
-  /**
-   * Classify a URL into a coarse resource type used downstream.
-   */
+  async function openLessonsDrawerIfNeeded() {
+    if (findLessonsDrawerRoot()) return true;
+    // Try clicking a button labeled "Lessons" (avoid TOC/Curriculum which can
+    // route off the lesson page).
+    const candidates = Array.from(document.querySelectorAll('button,[role="button"]'));
+    for (const c of candidates) {
+      if (!isElementVisible(c)) continue;
+      const t = (safeText(c) + ' ' + (c.getAttribute('aria-label') || '') + ' ' + (c.getAttribute('title') || '')).toLowerCase();
+      if (/^(lessons)$/.test(safeText(c).trim()) || /\b(open\s+lessons|view\s+lessons|all\s+lessons|show\s+lessons|toggle\s+lessons)\b/.test(t)) {
+        try { c.click(); } catch (_) {}
+        await sleep(400);
+        if (findLessonsDrawerRoot()) return true;
+      }
+    }
+    return !!findLessonsDrawerRoot();
+  }
+
+  // ── Build the lesson queue ───────────────────────────────────────────────
+  async function buildLessonQueue() {
+    debugLog('queue:building');
+    await openLessonsDrawerIfNeeded();
+    const drawer = findLessonsDrawerRoot();
+    const source = drawer ? 'drawer' : 'body';
+    debugLog('queue:source', { source, drawerTag: drawer?.tagName, drawerClass: drawer?.className?.toString?.()?.slice(0, 200) });
+
+    const root = drawer || document.body;
+    const seen = new Map();
+    const items = [];
+
+    // Walk anchors in DOM order. Track preceding section heading for grouping.
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, null);
+    let n;
+    let currentSection = '';
+    while ((n = walker.nextNode())) {
+      if (/^H[1-6]$/.test(n.tagName)) {
+        const t = safeText(n);
+        if (t && t.length < 200 && !/^(lessons|course content|curriculum|contents|chapters)$/i.test(t)) {
+          currentSection = t;
+        }
+        continue;
+      }
+      if (n.tagName === 'A' && n.getAttribute('href')) {
+        const href = abs(n.getAttribute('href'));
+        if (!href || !isCircleLessonUrl(href)) continue;
+        const key = canonicalLessonKey(href);
+        if (seen.has(key)) continue;
+        const title = (safeText(n) || n.getAttribute('aria-label') || n.getAttribute('title') || '').slice(0, 300);
+        if (!title) continue;
+        seen.set(key, true);
+        items.push({
+          index: items.length,
+          url: href,
+          urlKey: key,
+          title,
+          sectionTitle: currentSection || '',
+        });
+      }
+    }
+
+    debugLog('queue:built', { count: items.length });
+    items.forEach((it) => debugLog('queue:item', { index: it.index, title: it.title, section: it.sectionTitle, urlKey: it.urlKey }));
+    return items;
+  }
+
+  // ── Navigation ───────────────────────────────────────────────────────────
+  function findAnchorForUrlKey(urlKey) {
+    const anchors = document.querySelectorAll('a[href]');
+    for (const a of anchors) {
+      const href = abs(a.getAttribute('href'));
+      if (!href) continue;
+      if (canonicalLessonKey(href) === urlKey && isElementVisible(a)) return a;
+    }
+    // Second pass without visibility check (drawer may be collapsed).
+    for (const a of anchors) {
+      const href = abs(a.getAttribute('href'));
+      if (!href) continue;
+      if (canonicalLessonKey(href) === urlKey) return a;
+    }
+    return null;
+  }
+
+  async function goToLesson(item) {
+    debugLog('nav:intent', { toIndex: item.index, expectedUrl: item.url, expectedTitle: item.title });
+
+    // If already on the right URL, no-op.
+    if (canonicalLessonKey(location.href) === item.urlKey) {
+      debugLog('nav:already_there', { urlKey: item.urlKey });
+      return { method: 'already_there' };
+    }
+
+    const anchor = findAnchorForUrlKey(item.urlKey);
+    if (anchor) {
+      debugLog('nav:anchor_found', { tag: anchor.tagName });
+      try { anchor.scrollIntoView({ block: 'center' }); } catch (_) {}
+      await sleep(60);
+      try {
+        anchor.dispatchEvent(new MouseEvent('click', {
+          bubbles: true, cancelable: true, view: window,
+          metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, button: 0,
+        }));
+        debugLog('nav:click', { urlKey: item.urlKey });
+        return { method: 'anchor_click' };
+      } catch (e) {
+        debugLog('nav:click_failed', { error: String(e?.message || e) });
+      }
+    } else {
+      debugLog('nav:anchor_missing', { urlKey: item.urlKey });
+    }
+    debugLog('nav:hard_assign', { url: item.url });
+    window.location.assign(item.url);
+    return { method: 'hard_assign' };
+  }
+
+  // ── Lesson main element + readiness ──────────────────────────────────────
+  function findLessonMainElement() {
+    return (
+      document.querySelector('[data-testid="post-body"]') ||
+      document.querySelector('[data-testid*="lesson-content"]') ||
+      document.querySelector('[data-testid*="post-content"]') ||
+      document.querySelector('article') ||
+      document.querySelector('.trix-content') ||
+      document.querySelector('main') ||
+      null
+    );
+  }
+
+  function findLessonTitleInMain(mainEl) {
+    const indicator = findLessonOfIndicator();
+    if (indicator?.el) {
+      let cursor = indicator.el;
+      for (let i = 0; i < 6 && cursor; i++) {
+        const h = cursor.parentElement?.querySelector('h1, h2, h3');
+        if (h && safeText(h) && safeText(h) !== safeText(indicator.el)) {
+          return safeText(h).slice(0, 300);
+        }
+        cursor = cursor.parentElement;
+      }
+    }
+    const main = mainEl || findLessonMainElement() || document.body;
+    const heads = Array.from(main.querySelectorAll('h1, h2'));
+    for (const h of heads) {
+      const t = safeText(h);
+      if (t && t.length > 3 && t.length < 200) return t.slice(0, 300);
+    }
+    return '';
+  }
+
+  function fuzzyTitleMatch(a, b) {
+    if (!a || !b) return false;
+    const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const A = norm(a), B = norm(b);
+    if (!A || !B) return false;
+    if (A === B) return true;
+    if (A.includes(B) || B.includes(A)) return true;
+    const tokens = (s) => new Set(s.split(' ').filter((t) => t.length > 2));
+    const ta = tokens(A), tb = tokens(B);
+    if (!ta.size || !tb.size) return false;
+    let inter = 0;
+    ta.forEach((t) => { if (tb.has(t)) inter += 1; });
+    const jacc = inter / (ta.size + tb.size - inter);
+    return jacc >= 0.5;
+  }
+
+  function isTocOrCourseRootPage(item) {
+    const url = location.href;
+    if (isCourseRootOrSection(url)) return true;
+    if (canonicalLessonKey(url) !== item.urlKey) {
+      const indicator = findLessonOfIndicator();
+      const title = findLessonTitleInMain();
+      if (!indicator && !fuzzyTitleMatch(title, item.title)) return true;
+    }
+    return false;
+  }
+
+  function awaitLessonReady(item, timeoutMs) {
+    timeoutMs = timeoutMs || 12000;
+    return new Promise((resolve, reject) => {
+      const started = Date.now();
+      let lastHtml = '';
+      let stableTicks = 0;
+
+      const observer = new MutationObserver(check);
+      try { observer.observe(document.body, { childList: true, subtree: true, characterData: true }); } catch (_) {}
+      const interval = setInterval(check, 250);
+
+      function cleanup() {
+        try { clearInterval(interval); } catch (_) {}
+        try { observer.disconnect(); } catch (_) {}
+      }
+
+      function check() {
+        try {
+          const actualKey = canonicalLessonKey(location.href);
+          const main = findLessonMainElement();
+          const title = findLessonTitleInMain(main);
+          const indicator = findLessonOfIndicator();
+          const html = main?.innerHTML || '';
+          const urlMatches = actualKey === item.urlKey;
+          const mainText = main ? safeText(main) : '';
+          const titleMatches = fuzzyTitleMatch(title, item.title) || (mainText && mainText.toLowerCase().includes((item.title || '').toLowerCase().slice(0, 40)));
+          const hasLessonSignal = !!(indicator || titleMatches);
+          const stable = html && html === lastHtml ? ++stableTicks >= 2 : 0;
+          if (html && html !== lastHtml) stableTicks = 0;
+          lastHtml = html;
+
+          if (urlMatches && hasLessonSignal && stable) {
+            debugLog('ready:success', { urlKey: actualKey, title, indicator: !!indicator });
+            cleanup();
+            resolve({ title, indicator });
+            return;
+          }
+          if (Date.now() - started > timeoutMs) {
+            debugLog('ready:timeout', { expected: item.urlKey, actual: actualKey, title, hasIndicator: !!indicator });
+            cleanup();
+            reject(new Error(`Lesson did not become ready: expected "${item.title}" at ${item.urlKey}, got title "${title}" at ${actualKey}`));
+          }
+        } catch (e) {
+          cleanup();
+          reject(e);
+        }
+      }
+      check();
+    });
+  }
+
+  async function navigateWithRetry(item, state) {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        if (attempt === 2) {
+          await openLessonsDrawerIfNeeded();
+        }
+        if (attempt === 3) {
+          debugLog('nav:retry', { attempt, mode: 'hard_assign' });
+          window.location.assign(item.url);
+          // hard nav will reload — this promise won't resolve here
+          await sleep(2000);
+        } else {
+          await goToLesson(item);
+        }
+        await awaitLessonReady(item, 12000);
+        if (isTocOrCourseRootPage(item)) {
+          debugLog('toc:detected', { attempt, url: location.href });
+          throw new Error('Landed on TOC/course-root');
+        }
+        return true;
+      } catch (err) {
+        state.retries[item.urlKey] = (state.retries[item.urlKey] || 0) + 1;
+        debugLog('nav:retry', { attempt, item: item.urlKey, error: String(err?.message || err) });
+        if (attempt === maxAttempts) throw err;
+        await sleep(500);
+      }
+    }
+    return false;
+  }
+
+  // ── Resource / video / transcript helpers ────────────────────────────────
   function inferResourceType(url) {
     const u = (url || '').toLowerCase();
     if (/\.pdf(\?|#|$)/.test(u)) return 'pdf';
@@ -292,130 +472,44 @@
     if (/\.(pptx?|key|odp)(\?|#|$)/.test(u) || /docs\.google\.com\/presentation/.test(u)) return 'slide';
     if (/\bdownload\b/.test(u) || /\.(zip|rar|7z|tar|gz)(\?|#|$)/.test(u)) return 'download';
     if (/notion\.so|notion\.site/.test(u)) return 'doc';
+    if (/drive\.google\.com|docs\.google\.com/.test(u)) return 'doc';
     if (/^https?:\/\//.test(u)) return 'link';
     return 'unknown';
   }
-
-  /**
-   * Decide whether a URL should be excluded (Circle nav, sidebar, profile,
-   * lesson/section/post links inside Circle, anchors, mailto, javascript:).
-   */
   function isExcludedResourceUrl(url) {
     const raw = (url || '').trim();
     if (!raw) return true;
     if (/^(mailto:|javascript:|tel:|#)/i.test(raw)) return true;
-    let u;
-    try { u = new URL(raw, location.href); } catch { return true; }
-    // Strip pure same-page anchors (no path, no host change).
+    let u; try { u = new URL(raw, location.href); } catch { return true; }
     if (!u.host) return true;
-    // Exclude Circle internal navigation (lessons, posts, sections, members,
-    // settings, notifications, search, etc.) — but only on the same Circle host.
     if (u.host === location.host) {
       const p = u.pathname || '';
       if (
-        /\/lessons?\//i.test(p) ||
-        /\/posts?\//i.test(p) ||
-        /\/sections?\//i.test(p) ||
-        /\/members?\//i.test(p) ||
-        /\/profile/i.test(p) ||
-        /\/settings/i.test(p) ||
-        /\/notifications/i.test(p) ||
-        /\/search/i.test(p) ||
-        /\/spaces?\//i.test(p) ||
-        /\/c\/[^/]+\/?$/i.test(p) ||      // course root
-        p === '/' || p === ''
+        /\/lessons?\//i.test(p) || /\/posts?\//i.test(p) || /\/sections?\//i.test(p) ||
+        /\/members?\//i.test(p) || /\/profile/i.test(p) || /\/settings/i.test(p) ||
+        /\/notifications/i.test(p) || /\/search/i.test(p) || /\/spaces?\//i.test(p) ||
+        /\/c\/[^/]+\/?$/i.test(p) || p === '/' || p === ''
       ) return true;
     }
     return false;
   }
-
-  /**
-   * Collect external link from one DOM block, pushing into out & seen-set.
-   */
   function collectLinksFrom(block, out, seen, sourceLabel) {
     if (!block) return '';
-    const anchors = block.querySelectorAll('a[href]');
-    anchors.forEach(a => {
+    block.querySelectorAll('a[href]').forEach((a) => {
       const href = a.getAttribute('href');
       const url = abs(href);
       if (!url || isExcludedResourceUrl(url)) return;
       const norm = url.split('#')[0].replace(/\/+$/, '').toLowerCase();
       if (seen.has(norm)) return;
       seen.add(norm);
-      const title =
-        safeText(a) ||
-        a.getAttribute('aria-label') ||
-        a.getAttribute('title') ||
-        url;
-      out.push({
-        title: title.slice(0, 300),
-        url,
-        type: inferResourceType(url),
-        source_section: sourceLabel,
-      });
+      const title = safeText(a) || a.getAttribute('aria-label') || a.getAttribute('title') || url;
+      out.push({ title: title.slice(0, 300), url, type: inferResourceType(url), source_section: sourceLabel });
     });
     return safeText(block);
   }
-
-  /**
-   * Collect resources mentioned in the lesson:
-   *   1. Explicit "Resources Mentioned" section (highest priority)
-   *   2. Any other external links inside the lesson body container
-   * Returns { resources, text } where `text` is the rendered "Resources Mentioned"
-   * section text used for display.
-   */
-  function captureResources() {
-    const resources = [];
-    const seen = new Set();
-    let text = '';
-
-    // 1. Explicit Resources section.
-    const headings = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, strong, [class*="heading"]'));
-    const heading = headings.find(h => /resources?\s+mentioned/i.test(safeText(h)));
-    if (heading) {
-      const collected = [];
-      let n = heading.nextElementSibling;
-      let safety = 0;
-      while (n && safety++ < 50) {
-        if (/^H[1-6]$/.test(n.tagName)) break;
-        collected.push(n);
-        n = n.nextElementSibling;
-      }
-      if (collected.length === 0 && heading.parentElement) {
-        const sibs = Array.from(heading.parentElement.children);
-        const idx = sibs.indexOf(heading);
-        for (let i = idx + 1; i < sibs.length; i++) {
-          if (/^H[1-6]$/.test(sibs[i].tagName)) break;
-          collected.push(sibs[i]);
-        }
-      }
-      for (const block of collected) {
-        const t = collectLinksFrom(block, resources, seen, 'resources_mentioned');
-        text += (text ? '\n' : '') + t;
-      }
-    }
-
-    // 2. All other in-body links — anything inside the main lesson container
-    // that isn't a Circle internal nav. This catches inline links and
-    // download links that aren't under a "Resources Mentioned" heading.
-    const bodyEl =
-      document.querySelector('[data-testid="post-body"]') ||
-      document.querySelector('[data-testid*="lesson-content"]') ||
-      document.querySelector('[data-testid*="post-content"]') ||
-      document.querySelector('article') ||
-      document.querySelector('.trix-content') ||
-      document.querySelector('main');
-    if (bodyEl) collectLinksFrom(bodyEl, resources, seen, 'lesson_body');
-
-    return { resources, text };
-  }
-
-  /**
-   * Find the section under a heading like "Takeaways" and return its text.
-   */
-  function captureSectionByHeading(headingRe) {
-    const headings = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, strong, [class*="heading"]'));
-    const heading = headings.find(h => headingRe.test(safeText(h)));
+  function captureSectionByHeading(scope, headingRe) {
+    const headings = Array.from((scope || document).querySelectorAll('h1, h2, h3, h4, h5, strong, [class*="heading"]'));
+    const heading = headings.find((h) => headingRe.test(safeText(h)));
     if (!heading) return '';
     const collected = [];
     let n = heading.nextElementSibling;
@@ -435,1721 +529,504 @@
     }
     return collected.map(safeText).filter(Boolean).join('\n');
   }
-
-  function findVideoUrl() {
-    const iframe = document.querySelector(
+  function findVideoAssets(scope) {
+    const root = scope || document;
+    const out = [];
+    const ifr = root.querySelector(
       'iframe[src*="wistia"], iframe[src*="vimeo"], iframe[src*="youtube"], iframe[src*="youtu.be"], iframe[src*="loom"], iframe[src*="mux"], iframe[src*="stream"], iframe[src*="cloudflare"], iframe[src*="mediadelivery"], iframe[src*="bunny"], iframe[src*="sproutvideo"], iframe[src*="vidyard"]'
     );
-    if (iframe) return abs(iframe.getAttribute('src')) || undefined;
-    const a = document.querySelector(
-      'a[href*="wistia"], a[href*="vimeo"], a[href*="youtube"], a[href*="youtu.be"], a[href*="loom"], a[href*="mux"], a[href*="stream"], a[href*="cloudflare"], a[href*="mediadelivery"], a[href*="bunny"], a[href*="sproutvideo"], a[href*="vidyard"], a[href*=".m3u8"], a[href*=".mp4"]'
-    );
-    if (a) return abs(a.getAttribute('href')) || undefined;
-    const v = document.querySelector('video');
-    const videoSrc = v && (v.currentSrc || v.getAttribute('src') || v.getAttribute('data-src') || v.getAttribute('poster'));
-    if (videoSrc) return abs(videoSrc) || videoSrc;
-    const vsrc = document.querySelector('video source[src], video source[data-src], source[src*=".m3u8"], source[src*=".mp4"]');
-    if (vsrc) return abs(vsrc.getAttribute('src') || vsrc.getAttribute('data-src')) || undefined;
-    const genericFrame = Array.from(document.querySelectorAll('iframe[src], embed[src], object[data]'))
-      .map(el => el.getAttribute('src') || el.getAttribute('data') || '')
-      .map(abs)
-      .find(url => url && !/about:blank|recaptcha|captcha|intercom|stripe|analytics|segment|googletagmanager/i.test(url));
-    if (genericFrame) return genericFrame;
-    return undefined;
-  }
-
-  /**
-   * Pick the lesson title from the main column (NOT the course header).
-   * The screenshot shows it as a large heading directly under "Lesson X of Y".
-   */
-  function findLessonTitle(indicatorEl) {
-    if (indicatorEl) {
-      // Walk up a few levels and look for the first sibling heading.
-      let cursor = indicatorEl;
-      for (let i = 0; i < 5 && cursor; i++) {
-        const h = cursor.parentElement?.querySelector('h1, h2, h3');
-        if (h && safeText(h) && safeText(h) !== safeText(indicatorEl)) {
-          return safeText(h).slice(0, 300);
-        }
-        cursor = cursor.parentElement;
-      }
+    if (ifr) out.push({ kind: 'iframe', url: abs(ifr.getAttribute('src')) || '' });
+    const v = root.querySelector('video');
+    if (v) {
+      const src = v.currentSrc || v.getAttribute('src') || v.getAttribute('data-src') || '';
+      const isBlob = /^blob:/i.test(src);
+      out.push({ kind: 'video', url: src, blob: isBlob, poster: v.getAttribute('poster') || '' });
     }
-    // Fallback: largest heading in <main>
-    const main = document.querySelector('main') || document.body;
-    const heads = Array.from(main.querySelectorAll('h1, h2'));
-    for (const h of heads) {
-      const t = safeText(h);
-      if (t && t.length > 3 && t.length < 200) return t.slice(0, 300);
-    }
-    return '';
+    const vs = root.querySelector('video source[src], video source[data-src]');
+    if (vs) out.push({ kind: 'source', url: abs(vs.getAttribute('src') || vs.getAttribute('data-src')) || '' });
+    const a = root.querySelector('a[href*="wistia"], a[href*="vimeo"], a[href*="youtube"], a[href*="youtu.be"], a[href*="loom"], a[href*=".m3u8"], a[href*=".mp4"]');
+    if (a) out.push({ kind: 'link', url: abs(a.getAttribute('href')) || '' });
+    return out;
   }
 
-  function getMainContentText() {
-    const el =
-      document.querySelector('[data-testid="post-body"]') ||
-      document.querySelector('[data-testid*="lesson-content"]') ||
-      document.querySelector('[data-testid*="post-content"]') ||
-      document.querySelector('article') ||
-      document.querySelector('.trix-content') ||
-      document.querySelector('main') ||
-      document.body;
-    return safeText(el);
-  }
-
-  function textHash(text) {
-    let h = 0;
-    const s = text || '';
-    for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-    return String(h);
-  }
-
-  function getLessonState() {
-    const indicator = findLessonOfIndicator();
-    const title = findLessonTitle(indicator?.el);
-    const mainText = getMainContentText();
-    return {
-      url: location.href.split('#')[0],
-      title,
-      lesson_number: indicator?.current,
-      total_lessons: indicator?.total,
-      content_hash: textHash(mainText),
-      content_chars: mainText.length,
-      indicator_el: indicator?.el || null,
-    };
-  }
-
-  /**
-   * Extract everything for the currently rendered lesson.
-   */
-  async function extractCurrentLesson() {
-    const indicator = findLessonOfIndicator();
-    const title = findLessonTitle(indicator?.el);
-    const media_url = findVideoUrl();
-    const selectorsMatched = [];
-
-    const takeaways = captureSectionByHeading(/^takeaways?$/i);
-    if (takeaways) selectorsMatched.push('takeaways');
-    const { resources, text: resourcesText } = captureResources();
-    if (resources.length) selectorsMatched.push(`resources(${resources.length})`);
-
-    // Body region — try multiple selectors, prefer ones with the most text.
-    const candidates = [
-      ['[data-testid="post-body"]', document.querySelector('[data-testid="post-body"]')],
-      ['[data-testid*="lesson-content"]', document.querySelector('[data-testid*="lesson-content"]')],
-      ['[data-testid*="post-content"]', document.querySelector('[data-testid*="post-content"]')],
-      ['article', document.querySelector('article')],
-      ['.trix-content', document.querySelector('.trix-content')],
-      ['main', document.querySelector('main')],
-    ].filter(([, el]) => el);
-
-    // Anchor-based fallback: section containing "Takeaways" or "Resources Mentioned".
-    const anchorEl = (() => {
-      const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,strong,[class*="heading"]'));
-      const h = headings.find(el => /takeaways?|resources?\s+mentioned/i.test(safeText(el)));
-      if (!h) return null;
-      // climb to a meaningful parent section
-      let p = h.parentElement, best = h;
-      for (let i = 0; i < 5 && p; i++, p = p.parentElement) {
-        if (safeText(p).length > safeText(best).length) best = p;
-      }
-      return best;
-    })();
-    if (anchorEl) candidates.push(['anchor:takeaways/resources', anchorEl]);
-
-    // Pick the candidate with the most text.
-    let bodyEl = null, bodyAll = '';
-    for (const [name, el] of candidates) {
-      const t = safeText(el);
-      if (t.length > bodyAll.length) { bodyAll = t; bodyEl = el; selectorsMatched.push(`body:${name}`); }
-    }
-
-    if (takeaways) bodyAll = bodyAll.replace(takeaways, '').replace(/\s+/g, ' ').trim();
-    if (resourcesText) bodyAll = bodyAll.replace(resourcesText, '').replace(/\s+/g, ' ').trim();
-
-    const transcriptResult = await captureTranscript();
-    const transcript = transcriptResult.text || '';
-    if (transcript) {
-      selectorsMatched.push('transcript');
-      bodyAll = bodyAll.replace(transcript, '').replace(/\s+/g, ' ').trim();
-    }
-
-    const parts = [];
-    if (bodyAll) parts.push(bodyAll);
-    if (takeaways) parts.push(`\n\nTakeaways\n${takeaways}`);
-    if (resourcesText) parts.push(`\n\nResources Mentioned\n${resourcesText}`);
-    const body_text = parts.join('').trim() || undefined;
-
-    const debugInfo = {
-      hasBodyText: body_text ? body_text.length : 0,
-      hasTranscript: !!transcript,
-      transcript_modal_found: transcriptResult.transcript_modal_found,
-      transcript_chars: transcriptResult.transcript_chars,
-      resourceCount: resources.length,
-      hasMedia: !!media_url,
-      selectorsMatched,
-    };
-    log('lesson extraction', debugInfo);
-
-    return {
-      url: location.href.split('#')[0],
-      lesson_number: indicator ? indicator.current : undefined,
-      total_lessons: indicator ? indicator.total : undefined,
-      title: title || (indicator ? `Lesson ${indicator.current}` : 'Untitled lesson'),
-      body_text,
-      media_url,
-      transcript: transcript || undefined,
-      resources: resources.length ? resources : undefined,
-      _debug: debugInfo,
-    };
-  }
-
-  // ── Auto-walk navigation ────────────────────────────────────────────────
-
-  /**
-   * Determine if a URL looks like the course root / index page.
-   * Course roots: /c/<slug>, /c/<slug>/, /c/<slug>?..., or path ending without /lessons/ or /posts/.
-   */
-  function isCourseRootUrl(url) {
-    if (!url) return false;
-    try {
-      const u = new URL(url, location.href);
-      const p = u.pathname.replace(/\/+$/, '');
-      // Course root patterns: /c/<slug> with no deeper path
-      if (/^\/c\/[^/]+$/.test(p)) return true;
-      // No /lessons/ or /posts/ segment = likely not a lesson page
-      if (!/\/(lessons?|posts?)\//.test(p)) return true;
-      return false;
-    } catch (_) { return false; }
-  }
-
-  function isLessonPageUrl(url) {
-    try {
-      const u = new URL(url, location.href);
-      // For Circle course capture, only real lesson pages are safe navigation
-      // targets. Course/table-of-contents routes can contain lesson lists, but
-      // the page URL itself will not contain /lessons/ and must never be used
-      // as an auto-walk destination.
-      return u.host === location.host && /\/lessons?\/[^/?#]+/i.test(u.pathname || '');
-    } catch (_) { return false; }
-  }
-
-  function lessonUrlKey(url) {
-    try {
-      const u = new URL(url, location.href);
-      return `${u.origin}${u.pathname.replace(/\/+$/, '')}`.toLowerCase();
-    } catch (_) { return String(url || '').split('#')[0].replace(/\/+$/, '').toLowerCase(); }
-  }
-
-  function navigateToLessonHref(href) {
-    const target = absUrl(href);
-    if (!target || !isLessonPageUrl(target) || isCourseRootUrl(target)) return false;
-    try { history.pushState({}, '', target); } catch (_) { location.href = target; return true; }
-    try { window.dispatchEvent(new PopStateEvent('popstate', { state: history.state })); } catch (_) {}
-    try { window.dispatchEvent(new HashChangeEvent('hashchange')); } catch (_) {}
-    try { window.dispatchEvent(new Event('locationchange')); } catch (_) {}
-    return true;
-  }
-
-  function stripLessonLinkInfo(info) {
-    if (!info) return null;
-    const { el, ...rest } = info;
-    return rest;
-  }
-
-  function findLessonsDrawerRoot() {
-    // Look for a container whose heading is "Lessons" (the drawer in screenshot)
-    const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,[role="heading"]'));
-    for (const h of headings) {
-      const t = (h.textContent || '').trim().toLowerCase();
-      if (t === 'lessons' || t === 'course content' || t === 'curriculum' || t === 'contents') {
-        // Walk up to the panel that contains lesson links
-        let cur = h.parentElement;
-        for (let i = 0; i < 8 && cur; i++) {
-          const linkCount = cur.querySelectorAll('a[href*="/lessons/"], a[href*="/posts/"]').length;
-          if (linkCount >= 2) return cur;
-          cur = cur.parentElement;
-        }
-      }
-    }
-    return null;
-  }
-
-  function discoverLessonLinkSequence(currentUrl) {
-    const currentKey = lessonUrlKey(currentUrl || location.href);
-    const collectFrom = (root, seen) => {
-      const links = [];
-      for (const a of Array.from(root.querySelectorAll('a[href]'))) {
-      const href = abs(a.getAttribute('href'));
-      if (!href || !isLessonPageUrl(href) || isCourseRootUrl(href)) continue;
-      if (!isVisible(a) || isDisabled(a)) continue;
-      const key = lessonUrlKey(href);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      links.push({
-        el: a,
-        href,
-        key,
-        text: safeText(a).slice(0, 160),
-        rect: rectInfo(a),
-        inSidebar: !!a.closest('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [aria-label*="sidebar" i]'),
-        inNav: !!a.closest('nav, [role="navigation"], [role="banner"]'),
+  async function captureTranscriptScoped(mainEl) {
+    const scope = mainEl || document;
+    const triggers = Array.from(scope.querySelectorAll('button, a, [role="button"], summary, [aria-expanded]'))
+      .filter((el) => {
+        const t = safeText(el);
+        if (!t || t.length > 60) return false;
+        return /\b(show|view|open|toggle|expand)\s+transcript\b/i.test(t) || /^transcript$/i.test(t);
       });
+    if (triggers.length === 0) {
+      debugLog('extract:transcript', { status: 'not_found' });
+      return { text: '', status: 'not_found' };
     }
-      return links;
-    };
-    const drawerRoot = findLessonsDrawerRoot();
-    if (drawerRoot) {
-      const links = collectFrom(drawerRoot, new Set());
-      if (links.length >= 2) {
-        log('lessonLinkSequence (drawer)', links.map(stripLessonLinkInfo));
-        return links;
+    const dialogsBefore = document.querySelectorAll('[role="dialog"]').length;
+    for (const trig of triggers) {
+      try { trig.scrollIntoView({ block: 'center' }); } catch (_) {}
+      try { trig.click(); } catch (_) { continue; }
+      await sleep(400);
+      const start = Date.now();
+      let modal = null;
+      while (Date.now() - start < 4000) {
+        const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
+        modal = dialogs.length > dialogsBefore ? dialogs[dialogs.length - 1] : null;
+        if (!modal) modal = dialogs.find((d) => safeText(d).length > 120);
+        if (modal && safeText(modal).length > 120) break;
+        modal = null;
+        await sleep(200);
+      }
+      if (modal) {
+        const text = safeText(modal);
+        const closeBtn = modal.querySelector('button[aria-label="Close" i], [class*="close"]');
+        try { closeBtn?.click(); } catch (_) {}
+        try { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch (_) {}
+        debugLog('extract:transcript', { status: 'ok', chars: text.length, source: 'modal' });
+        return { text, status: 'ok' };
+      }
+      const inline = Array.from(document.querySelectorAll('[id*="transcript" i], [class*="transcript" i], [data-testid*="transcript" i]'))
+        .find((c) => safeText(c).length > 120);
+      if (inline) {
+        const text = safeText(inline);
+        debugLog('extract:transcript', { status: 'ok', chars: text.length, source: 'inline' });
+        return { text, status: 'ok' };
       }
     }
-    // Prefer the full course outline in document order, because Circle renders
-    // the live lesson list as normal links. This avoids fragile arrow/header UI
-    // and uses only hrefs whose URL itself contains /lessons/.
-    const documentLinks = collectFrom(document.body, new Set());
-    if (documentLinks.length >= 2 && documentLinks.some(l => l.key === currentKey)) {
-      log('lessonLinkSequence (document)', documentLinks.map(stripLessonLinkInfo));
-      return documentLinks;
-    }
-    const roots = Array.from(document.querySelectorAll('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [aria-label*="sidebar" i], [data-testid*="course" i], [class*="course" i], main'));
-    const pools = roots.concat(document.body).map(root => {
-      const links = collectFrom(root, new Set());
-      const hasCurrent = links.some(l => l.key === currentKey);
-      const sidebarWeight = root.matches?.('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [aria-label*="sidebar" i]') ? 100 : 0;
-      return { root, links, score: sidebarWeight + (hasCurrent ? 80 : 0) + links.length };
-    }).filter(p => p.links.length >= 2);
-    pools.sort((a, b) => b.score - a.score);
-    const links = pools[0]?.links || [];
-    log('lessonLinkSequence', links.map(stripLessonLinkInfo));
-    return links;
+    debugLog('extract:transcript', { status: 'failed', triggersTried: triggers.length });
+    return { text: '', status: 'failed' };
   }
 
-  async function openLessonsDrawer() {
-    if (findLessonsDrawerRoot()) return true;
-    // Only open an already in-page Lessons drawer. Do NOT click "Table of
-    // contents", "Course content", or anchors: in Circle those commonly route
-    // to the course outline page, which is exactly where capture gets stuck.
-    const candidates = Array.from(document.querySelectorAll('button,[role="button"],a'));
-    for (const c of candidates) {
-      const t = (safeText(c) + ' ' + (c.getAttribute('aria-label') || '') + ' ' + (c.getAttribute('title') || '')).toLowerCase();
-      const tag = (c.tagName || '').toLowerCase();
-      if (tag === 'a' || c.getAttribute('href')) continue;
-      if (/\b(table\s+of\s+contents?|contents?|course\s+content|curriculum)\b/.test(t)) continue;
-      if (/^(lessons)$/i.test(safeText(c).trim()) || /\b(open\s+lessons|view\s+lessons|all\s+lessons|show\s+lessons)\b/.test(t)) {
-        if (!isVisible(c) || isDisabled(c)) continue;
-        try { activateClick(c); } catch (_) {}
-        await sleep(400);
-        if (findLessonsDrawerRoot()) return true;
-      }
-    }
-    return false;
-  }
-
-  function chooseAdjacentLessonLink(direction, before, sequence) {
-    if (!sequence || sequence.length < 2) return { candidate: null, reason: 'not_enough_visible_lesson_links' };
-    const currentKey = lessonUrlKey(before?.url || location.href);
-    let currentIndex = sequence.findIndex(l => l.key === currentKey);
-    if (currentIndex < 0 && before?.lesson_number && sequence[before.lesson_number - 1]) currentIndex = before.lesson_number - 1;
-    if (currentIndex < 0) return { candidate: null, reason: 'current_lesson_not_found_in_visible_lesson_links' };
-    const targetIndex = direction === 'prev' ? currentIndex - 1 : currentIndex + 1;
-    if (targetIndex < 0 || targetIndex >= sequence.length) return { candidate: null, reason: 'no_adjacent_lesson_link' };
-    const candidate = sequence[targetIndex];
-    if (!candidate || candidate.key === currentKey || !isLessonPageUrl(candidate.href) || isCourseRootUrl(candidate.href)) return { candidate: null, reason: 'adjacent_link_was_not_a_lesson_url' };
-    return { candidate, reason: null, currentIndex, targetIndex };
-  }
-
-  /**
-   * Check if a candidate button/link should be excluded from navigation.
-   * Excludes: back buttons, course title links, overview links, sidebar toggles,
-   * completed buttons, section headers.
-   */
-  function isBadNavigationCandidate(el) {
-    const text = safeText(el).toLowerCase();
-    const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
-    const title = (el.getAttribute('title') || '').toLowerCase();
-    const href = (el.getAttribute('href') || '').toLowerCase();
-    const combined = `${text} ${ariaLabel} ${title}`;
-
-    // Exclude back/overview/home links
-    if (/\b(back|overview|home|all\s+lessons|course\s+home|return|go\s+back)\b/.test(combined)) return 'back/overview/home';
-    // Exclude course title links (long text, not arrow-like)
-    if (text.length > 40) return 'text_too_long';
-    // Exclude sidebar open/close toggles
-    if (/\b(menu|sidebar|hamburger|toggle\s+nav|close\s+nav|open\s+nav)\b/.test(combined)) return 'sidebar_toggle';
-    // Exclude completion/mark-complete buttons
-    if (/\b(complete|mark\s+as|completed|finish)\b/.test(combined)) return 'completion_button';
-    // Exclude section header links
-    if (/\b(section|module|chapter)\b/.test(combined) && !/lesson/i.test(combined)) return 'section_header';
-    // Exclude top-nav header icons (bookmarks, table of contents, courses, etc.)
-      if (/\b(bookmark|toc|contents?|curriculum|syllabus|table\s+of\s+contents?|course\s+content|courses|notification|search|profile|settings|account)\b/.test(combined)) return 'header_icon';
-    // Exclude links to /courses
-    if (href === '/courses' || href.startsWith('/courses?')) return 'courses_link';
-
-    // Exclude links whose href resolves to course root
-    if (href && el.tagName === 'A') {
-      try {
-        const resolved = new URL(href, location.href).href;
-        if (isCourseRootUrl(resolved)) return 'href_is_course_root';
-      } catch (_) {}
-    }
-
-    // Exclude global navigation, but allow the lesson header itself: Circle's
-    // previous/next arrows may live in a semantic <header> beside "Lesson X of Y".
-    const navLike = el.closest('nav, [role="navigation"], [role="banner"]');
-    if (navLike) return 'global_nav';
-    const headerLike = el.closest('header');
-    if (headerLike && !findLessonOfIndicator(headerLike)) return 'global_header';
-
-    return null; // Not bad
-  }
-
-  function rectInfo(el) {
+  // ── Per-lesson extraction (scoped) ───────────────────────────────────────
+  function cloneAndStripChrome(el) {
     if (!el) return null;
-    const r = el.getBoundingClientRect();
-    return {
-      top: Math.round(r.top),
-      left: Math.round(r.left),
-      right: Math.round(r.right),
-      bottom: Math.round(r.bottom),
-      width: Math.round(r.width),
-      height: Math.round(r.height),
-    };
+    const clone = el.cloneNode(true);
+    const SELECTOR = 'aside, nav, [role="navigation"], [aria-label*="Lessons" i], [aria-label*="Curriculum" i], [class*="sidebar" i], [class*="drawer" i], [class*="toc" i], [class*="curriculum" i], [class*="outline" i], [data-testid*="sidebar" i]';
+    clone.querySelectorAll(SELECTOR).forEach((n) => n.remove());
+    return clone;
   }
 
-  function isVisible(el) {
-    if (!el) return false;
-    const r = el.getBoundingClientRect();
-    const style = window.getComputedStyle(el);
-    return r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' && style.opacity !== '0';
-  }
-
-  function isDisabled(el) {
-    return !!(el.disabled || el.getAttribute('disabled') != null || el.getAttribute('aria-disabled') === 'true' || el.closest('[aria-disabled="true"]'));
-  }
-
-  function clickableSelector() {
-    return 'button,[role="button"],a[href],a,[onclick],[tabindex="0"],[aria-label]';
-  }
-
-  function nearestClickable(el) {
-    return el?.closest?.(clickableSelector()) || el;
-  }
-
-  function activateClick(el) {
-    if (!el) return false;
-    const r = el.getBoundingClientRect();
-    const x = Math.max(1, Math.min(window.innerWidth - 1, r.left + r.width / 2));
-    const y = Math.max(1, Math.min(window.innerHeight - 1, r.top + r.height / 2));
-    const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y };
-    try { el.dispatchEvent(new PointerEvent('pointerdown', opts)); } catch (_) {}
-    try { el.dispatchEvent(new MouseEvent('mousedown', opts)); } catch (_) {}
-    try { el.dispatchEvent(new PointerEvent('pointerup', opts)); } catch (_) {}
-    try { el.dispatchEvent(new MouseEvent('mouseup', opts)); } catch (_) {}
-    try { el.dispatchEvent(new MouseEvent('click', opts)); } catch (_) { try { el.click(); } catch (__) { return false; } }
-    return true;
-  }
-
-  function scanViewportEdgeArrows(direction) {
-    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
-    const vh = window.innerHeight || document.documentElement.clientHeight || 0;
-    const seen = new Set();
-    const fromDom = Array.from(document.querySelectorAll(clickableSelector()));
-    const sampleYs = [0.28, 0.38, 0.5, 0.62, 0.72].map(p => Math.round(vh * p));
-    const sampleXs = direction === 'prev' ? [2, 8, 18, 32] : [vw - 2, vw - 8, vw - 18, vw - 32];
-    const fromPoints = [];
-    for (const x of sampleXs) for (const y of sampleYs) {
-      try {
-        for (const hit of document.elementsFromPoint(x, y)) {
-          const clickable = nearestClickable(hit);
-          if (clickable) fromPoints.push(clickable);
-        }
-      } catch (_) {}
-    }
-
-    const raw = fromDom.concat(fromPoints);
-    const candidates = [];
-    for (const el of raw) {
-      if (!el || seen.has(el)) continue;
-      seen.add(el);
-      if (!isVisible(el) || isDisabled(el) || isLikelySidebarButton(el)) continue;
-
-      const r = el.getBoundingClientRect();
-      const centerX = (r.left + r.right) / 2;
-      const centerY = (r.top + r.bottom) / 2;
-      if (r.bottom < 48 || r.top > vh - 36) continue;
-      if (r.width < 2 || r.height < 12 || r.width > 180 || r.height > 240) continue;
-
-      const text = safeText(el).slice(0, 120);
-      const ariaLabel = el.getAttribute('aria-label') || '';
-      const title = el.getAttribute('title') || '';
-      const href = el.getAttribute('href') || '';
-      const combined = `${text} ${ariaLabel} ${title}`.toLowerCase();
-      if (text.length > 80) continue;
-      if (/\b(course|courses|overview|home|profile|settings|search|notification|bookmark|menu|sidebar|toc|contents?|curriculum|syllabus|table\s+of\s+contents?|course\s+content|continue|complete|mark\s+as)\b/.test(combined)) continue;
-      if (href) {
-        try { if (isCourseRootUrl(new URL(href, location.href).href)) continue; } catch (_) {}
-      }
-
-      const style = window.getComputedStyle(el);
-      let score = 0;
-      const reasons = [];
-      const svgDirection = detectSvgDirection(el);
-
-      if (direction === 'next') {
-        if (r.right >= vw - 6) { score += 110; reasons.push('flush_right_edge'); }
-        else if (r.right >= vw - 48) { score += 85; reasons.push('near_right_edge'); }
-        else if (r.left >= vw - 150) { score += 55; reasons.push('right_rail'); }
-        if (centerX > vw * 0.72) { score += 20; reasons.push('right_side'); }
-        if (/right|next|forward/i.test(svgDirection + ' ' + combined)) { score += 45; reasons.push('right_signal'); }
-        if (/left|prev|previous|back/i.test(svgDirection + ' ' + combined)) { score -= 90; reasons.push('left_penalty'); }
-      } else {
-        if (r.left <= 6) { score += 110; reasons.push('flush_left_edge'); }
-        else if (r.left <= 48) { score += 85; reasons.push('near_left_edge'); }
-        else if (r.right <= 150) { score += 55; reasons.push('left_rail'); }
-        if (centerX < vw * 0.28) { score += 20; reasons.push('left_side'); }
-        if (/left|prev|previous|back/i.test(svgDirection + ' ' + combined)) { score += 45; reasons.push('left_signal'); }
-        if (/right|next|forward/i.test(svgDirection + ' ' + combined)) { score -= 90; reasons.push('right_penalty'); }
-      }
-
-      if (style.position === 'fixed' || style.position === 'sticky') { score += 5; reasons.push(style.position); }
-      if (!/right|next|forward/i.test(svgDirection + ' ' + combined)) { score -= 45; reasons.push('edge_requires_explicit_right_signal'); }
-      if (r.height > r.width * 1.25) { score += 18; reasons.push('vertical_pill'); }
-      if (!text || text.length <= 4) { score += 8; reasons.push('icon_only'); }
-      if (centerY > vh * 0.18 && centerY < vh * 0.86) { score += 12; reasons.push('middle_band'); }
-
-      candidates.push({
-        el,
-        text,
-        ariaLabel,
-        title,
-        href,
-        role: el.getAttribute('role') || el.tagName.toLowerCase(),
-        disabled: false,
-        rect: rectInfo(el),
-        svgDirection,
-        score,
-        reasons,
-      });
-    }
-
-    candidates.sort((a, b) => b.score - a.score);
-    log('viewportEdgeArrowCandidates', candidates.slice(0, 8).map(stripButtonInfo));
-    return candidates;
-  }
-
-  function chooseViewportEdgeArrowCandidate(direction) {
-    const candidates = scanViewportEdgeArrows(direction || 'next');
-    const best = candidates.find(c => hasDirectionSignal(c, direction || 'next'));
-    return best && best.score >= 70 ? best : null;
-  }
-
-  function lessonLabelText(indicator) {
-    if (!indicator) return '';
-    const direct = safeText(indicator.el);
-    const m = direct.match(/Lesson\s+\d+\s+of\s+\d+/i);
-    return m ? m[0] : `Lesson ${indicator.current} of ${indicator.total}`;
-  }
-
-  function getLessonHeaderRegion() {
-    const indicator = findLessonOfIndicator();
-    const indicatorEl = indicator?.el || null;
-    const main = document.querySelector('main') || document.body;
-    const mainRect = main.getBoundingClientRect();
-    let headerEl = indicatorEl;
-
-    if (indicatorEl) {
-      let cursor = indicatorEl;
-      for (let i = 0; i < 8 && cursor?.parentElement; i++) {
-        const parent = cursor.parentElement;
-        const r = parent.getBoundingClientRect();
-        const hasTitle = !!parent.querySelector('h1,h2,h3');
-        const hasButton = !!parent.querySelector('button,[role="button"],a[href]');
-        if (r.height >= 35 && r.height <= 420 && (hasTitle || hasButton)) headerEl = parent;
-        cursor = parent;
-      }
-    }
-
-    const headerRect = headerEl ? headerEl.getBoundingClientRect() : (indicatorEl ? indicatorEl.getBoundingClientRect() : mainRect);
-    const indicatorRect = indicatorEl ? indicatorEl.getBoundingClientRect() : headerRect;
-    const top = Math.max(0, Math.min(headerRect.top, indicatorRect.top) - 180);
-    const bottom = Math.min(window.innerHeight, Math.max(headerRect.bottom, indicatorRect.bottom) + 260);
-    return {
-      indicator,
-      lessonLabel: lessonLabelText(indicator),
-      title: findLessonTitle(indicatorEl),
-      headerRect: {
-        top: Math.round(top),
-        left: Math.round(Math.max(0, mainRect.left)),
-        right: Math.round(Math.min(window.innerWidth, mainRect.right || window.innerWidth)),
-        bottom: Math.round(bottom),
-        width: Math.round(Math.min(window.innerWidth, mainRect.right || window.innerWidth) - Math.max(0, mainRect.left)),
-        height: Math.round(bottom - top),
-      },
-      centerY: Math.round((indicatorRect.top + indicatorRect.bottom) / 2),
-      indicatorRect: indicatorEl ? rectInfo(indicatorEl) : null,
-    };
-  }
-
-  function detectSvgDirection(el) {
-    const label = `${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''} ${safeText(el)}`.toLowerCase();
-    if (/\b(prev|previous|back|left)\b|←|‹/.test(label)) return 'left';
-    if (/\b(next|forward|right)\b|→|›/.test(label)) return 'right';
-    const svgText = Array.from(el.querySelectorAll('svg, path, use'))
-      .map(n => `${n.getAttribute('aria-label') || ''} ${n.getAttribute('class') || ''} ${n.getAttribute('href') || ''} ${n.getAttribute('xlink:href') || ''} ${n.outerHTML || ''}`)
-      .join(' ')
-      .toLowerCase();
-    if (/chevron[-_\s]?left|arrow[-_\s]?left|caret[-_\s]?left|lucide-chevron-left|icon-chevron-left/.test(svgText)) return 'left';
-    if (/chevron[-_\s]?right|arrow[-_\s]?right|caret[-_\s]?right|lucide-chevron-right|icon-chevron-right/.test(svgText)) return 'right';
-    const visualDirection = detectSvgVisualDirection(el);
-    if (visualDirection) return visualDirection;
-    return '';
-  }
-
-  function pathPointsFromD(d) {
-    const tokens = String(d || '').match(/[a-zA-Z]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) || [];
-    const points = [];
-    let i = 0, cmd = '', x = 0, y = 0;
-    const isCmd = v => /^[a-zA-Z]$/.test(v || '');
-    const num = v => Number(v);
-    while (i < tokens.length) {
-      if (isCmd(tokens[i])) cmd = tokens[i++];
-      if (!cmd) break;
-      const lower = cmd.toLowerCase();
-      const rel = cmd === lower;
-      if (lower === 'm' || lower === 'l' || lower === 't') {
-        while (i + 1 < tokens.length && !isCmd(tokens[i]) && !isCmd(tokens[i + 1])) {
-          const nx = num(tokens[i++]);
-          const ny = num(tokens[i++]);
-          x = rel ? x + nx : nx;
-          y = rel ? y + ny : ny;
-          points.push({ x, y });
-          if (lower === 'm') cmd = rel ? 'l' : 'L';
-        }
-      } else if (lower === 'h') {
-        while (i < tokens.length && !isCmd(tokens[i])) { x = rel ? x + num(tokens[i++]) : num(tokens[i++]); points.push({ x, y }); }
-      } else if (lower === 'v') {
-        while (i < tokens.length && !isCmd(tokens[i])) { y = rel ? y + num(tokens[i++]) : num(tokens[i++]); points.push({ x, y }); }
-      } else {
-        // Curves/arcs are not needed for Circle's chevron icons; skip their numbers safely.
-        while (i < tokens.length && !isCmd(tokens[i])) i++;
-      }
-    }
-    return points;
-  }
-
-  function inferChevronDirection(points) {
-    if (!points || points.length < 3) return '';
-    const xs = points.map(p => p.x).filter(Number.isFinite);
-    const ys = points.map(p => p.y).filter(Number.isFinite);
-    if (xs.length < 3 || ys.length < 3) return '';
-    const spanX = Math.max(...xs) - Math.min(...xs);
-    const spanY = Math.max(...ys) - Math.min(...ys);
-    if (spanX < 2 || spanY < 2) return '';
-    for (let i = 1; i < points.length - 1; i++) {
-      const prev = points[i - 1], mid = points[i], next = points[i + 1];
-      const yMovement = Math.abs(mid.y - prev.y) + Math.abs(next.y - mid.y);
-      if (yMovement < spanY * 0.45) continue;
-      if (mid.x >= Math.max(prev.x, next.x) + spanX * 0.25) return 'right';
-      if (mid.x <= Math.min(prev.x, next.x) - spanX * 0.25) return 'left';
-    }
-    return '';
-  }
-
-  function detectSvgVisualDirection(el) {
-    const shapes = Array.from(el.querySelectorAll('path[d], polyline[points], polygon[points]'));
-    for (const shape of shapes) {
-      const rawPoints = shape.getAttribute('points');
-      const points = rawPoints
-        ? (rawPoints.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) || []).map(Number).reduce((acc, n, i, arr) => {
-            if (i % 2 === 0 && Number.isFinite(n) && Number.isFinite(arr[i + 1])) acc.push({ x: n, y: arr[i + 1] });
-            return acc;
-          }, [])
-        : pathPointsFromD(shape.getAttribute('d'));
-      const direction = inferChevronDirection(points);
-      if (direction) return direction;
-    }
-    return '';
-  }
-
-  function hasDirectionSignal(info, direction) {
-    const haystack = `${info?.svgDirection || ''} ${info?.ariaLabel || ''} ${info?.title || ''} ${info?.text || ''}`;
-    return direction === 'prev'
-      ? /\b(left|prev|previous|back)\b|←|‹/i.test(haystack)
-      : /\b(right|next|forward)\b|→|›/i.test(haystack);
-  }
-
-  function isLikelySidebarButton(el) {
-    if (el.closest('aside,[data-testid*="sidebar" i],[class*="sidebar" i],[aria-label*="sidebar" i]')) return true;
-    const rect = el.getBoundingClientRect();
-    const sidebarRects = Array.from(document.querySelectorAll('aside,[data-testid*="sidebar" i],[class*="sidebar" i]'))
-      .filter(isVisible)
-      .map(node => node.getBoundingClientRect());
-    return sidebarRects.some(r => rect.left >= r.left - 4 && rect.right <= r.right + 4 && rect.top >= r.top - 4 && rect.bottom <= r.bottom + 4);
-  }
-
-  function stripButtonInfo(info) {
-    if (!info) return null;
-    const { el, ...rest } = info;
-    return rest;
-  }
-
-  function scanVisibleButtonsNearHeader() {
-    const header = getLessonHeaderRegion();
-    const indicatorRect = header.indicatorRect;
-    const video = Array.from(document.querySelectorAll('iframe, video')).find(isVisible);
-    const videoTop = video ? video.getBoundingClientRect().top : null;
-    // Scope search to main content area only — exclude global nav
-    const mainEl = document.querySelector('main') || document.body;
-    const allButtons = Array.from(mainEl.querySelectorAll('button,[role="button"],a[href],a'));
-    const buttons = [];
-
-    // Tight vertical band around the lesson indicator
-    const yMin = indicatorRect ? indicatorRect.top - 30 : header.headerRect.top;
-    const yMax = indicatorRect ? indicatorRect.top + 160 : header.headerRect.bottom;
-    // Only buttons to the right of the indicator (for next) or left (for prev)
-    const xMinForScan = indicatorRect ? indicatorRect.right - 50 : header.headerRect.left;
-
-    for (const el of allButtons) {
-      if (!isVisible(el)) continue;
-      const r = el.getBoundingClientRect();
-      const centerY = (r.top + r.bottom) / 2;
-      // Must be within the tight vertical band around the lesson indicator
-      if (r.top < yMin || r.top > yMax) continue;
-      if (videoTop != null && r.top > videoTop + 12) continue;
-      if (isLikelySidebarButton(el)) continue;
-
-      const rejectedReason = isBadNavigationCandidate(el);
-
-      buttons.push({
-        el,
-        text: safeText(el).slice(0, 120),
-        ariaLabel: el.getAttribute('aria-label') || '',
-        title: el.getAttribute('title') || '',
-        href: el.getAttribute('href') || '',
-        role: el.getAttribute('role') || el.tagName.toLowerCase(),
-        disabled: isDisabled(el),
-        rect: rectInfo(el),
-        svgDirection: detectSvgDirection(el),
-        smallCircular: r.width >= 20 && r.height >= 20 && r.width <= 82 && r.height <= 82 && Math.abs(r.width - r.height) <= 28,
-        distanceFromLessonLabelY: Math.round(Math.abs(centerY - header.centerY)),
-        rejectedReason: rejectedReason || null,
-      });
-    }
-
-    const small = buttons
-      .filter(b => b.smallCircular && !b.rejectedReason)
-      .sort((a, b) => a.rect.left - b.rect.left);
-    for (let i = 0; i < small.length - 1; i++) {
-      const left = small[i];
-      const right = small[i + 1];
-      const gap = right.rect.left - left.rect.right;
-      const yDelta = Math.abs(((right.rect.top + right.rect.bottom) / 2) - ((left.rect.top + left.rect.bottom) / 2));
-      if (gap >= 0 && gap <= 96 && yDelta <= 32) {
-        if (!left.svgDirection) left.svgDirection = 'left-by-geometry';
-        if (!right.svgDirection) right.svgDirection = 'right-by-geometry';
-      }
-    }
-
-    // Debug: log filtered candidates
-    const candidatesAfterFilter = buttons.filter(b => !b.rejectedReason).map(stripButtonInfo);
-    log('candidateButtonsAfterFilter', candidatesAfterFilter);
-
-    return { header, buttons };
-  }
-
-  function scanBodyArrowCandidates(direction) {
-    const header = getLessonHeaderRegion();
-    const indicatorRect = header.indicatorRect;
-    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
-    const vh = window.innerHeight || document.documentElement.clientHeight || 0;
-    const mainEl = document.querySelector('main') || document.body;
-    const allButtons = Array.from(mainEl.querySelectorAll(clickableSelector()));
-    const candidates = [];
-
-    for (const el of allButtons) {
-      if (!isVisible(el) || isDisabled(el) || isLikelySidebarButton(el)) continue;
-      const rejectedReason = isBadNavigationCandidate(el);
-      if (rejectedReason) continue;
-      const r = el.getBoundingClientRect();
-      const centerX = (r.left + r.right) / 2;
-      const centerY = (r.top + r.bottom) / 2;
-      if (r.bottom < 60 || r.top > vh - 40) continue;
-      if (r.width < 16 || r.height < 16 || r.width > 130 || r.height > 130) continue;
-
-      const text = safeText(el).slice(0, 120);
-      const ariaLabel = el.getAttribute('aria-label') || '';
-      const title = el.getAttribute('title') || '';
-      const href = el.getAttribute('href') || '';
-      const combined = `${text} ${ariaLabel} ${title}`.toLowerCase();
-      if (text.length > 60) continue;
-
-      const svgDirection = detectSvgDirection(el);
-      let score = 0;
-      const reasons = [];
-      if (direction === 'next') {
-        if (/right|next|forward/i.test(`${svgDirection} ${combined}`)) { score += 55; reasons.push('right_signal'); }
-        if (/left|prev|previous|back/i.test(`${svgDirection} ${combined}`)) { score -= 80; reasons.push('left_penalty'); }
-        if (indicatorRect && centerX > indicatorRect.right) { score += 18; reasons.push('right_of_indicator'); }
-        if (centerX > vw * 0.55) { score += 18; reasons.push('right_half'); }
-        if (r.right >= vw - 180) { score += 22; reasons.push('near_right_side'); }
-      } else {
-        if (/left|prev|previous|back/i.test(`${svgDirection} ${combined}`)) { score += 55; reasons.push('left_signal'); }
-        if (/right|next|forward/i.test(`${svgDirection} ${combined}`)) { score -= 80; reasons.push('right_penalty'); }
-        if (indicatorRect && centerX < indicatorRect.left) { score += 18; reasons.push('left_of_indicator'); }
-        if (centerX < vw * 0.45) { score += 18; reasons.push('left_half'); }
-        if (r.left <= 180) { score += 22; reasons.push('near_left_side'); }
-      }
-      const isSmallIcon = r.width >= 20 && r.height >= 20 && r.width <= 82 && r.height <= 82 && Math.abs(r.width - r.height) <= 28;
-      if (isSmallIcon) { score += 18; reasons.push('small_icon'); }
-      if (indicatorRect) {
-        const vDist = Math.abs(centerY - ((indicatorRect.top + indicatorRect.bottom) / 2));
-        if (vDist < 80) { score += 18; reasons.push('near_indicator_v'); }
-        else if (vDist < 240) { score += 8; reasons.push('moderate_indicator_v'); }
-      }
-      if (!text || text.length <= 6) { score += 8; reasons.push('icon_only'); }
-
-      candidates.push({
-        el,
-        text,
-        ariaLabel,
-        title,
-        href,
-        role: el.getAttribute('role') || el.tagName.toLowerCase(),
-        disabled: false,
-        rect: rectInfo(el),
-        svgDirection,
-        smallCircular: isSmallIcon,
-        distanceFromLessonLabelY: indicatorRect ? Math.round(Math.abs(centerY - ((indicatorRect.top + indicatorRect.bottom) / 2))) : 0,
-        score,
-        reasons,
-      });
-    }
-
-    candidates.sort((a, b) => b.score - a.score);
-    log('bodyArrowCandidates', candidates.slice(0, 8).map(stripButtonInfo));
-    return candidates;
-  }
-
-  function chooseHeaderArrowCandidate(direction, scan) {
-    // Filter out rejected candidates
-    const active = scan.buttons.filter(b => !b.disabled && b.smallCircular && !b.rejectedReason);
-    const signalActive = active.filter(b => hasDirectionSignal(b, direction));
-    const sorted = signalActive.slice().sort((a, b) => a.rect.left - b.rect.left);
-    const pairs = [];
-
-    for (let i = 0; i < sorted.length - 1; i++) {
-      const a = sorted[i];
-      const b = sorted[i + 1];
-      const gap = b.rect.left - a.rect.right;
-      const yDelta = Math.abs(((b.rect.top + b.rect.bottom) / 2) - ((a.rect.top + a.rect.bottom) / 2));
-      if (gap < 0 || gap > 96 || yDelta > 32) continue;
-      let score = 100 - Math.min(60, Math.abs(((a.rect.top + a.rect.bottom) / 2) - scan.header.centerY));
-      if (/left/.test(a.svgDirection)) score += 35;
-      if (/right/.test(b.svgDirection)) score += 35;
-      if ((a.ariaLabel + a.title + a.text + b.ariaLabel + b.title + b.text).match(/lesson/i)) score += 10;
-      pairs.push({ left: a, right: b, score });
-    }
-
-    pairs.sort((a, b) => b.score - a.score);
-    if (pairs[0]) return direction === 'prev' ? pairs[0].left : pairs[0].right;
-
-    const explicit = signalActive
-      .sort((a, b) => a.distanceFromLessonLabelY - b.distanceFromLessonLabelY)[0];
-    if (explicit) return explicit;
-
-    return null;
-  }
-
-  function choosePageArrowCandidate(direction, scan) {
-    const headerCandidate = chooseHeaderArrowCandidate(direction, scan);
-    if (headerCandidate) return { ...headerCandidate, strategy: 'header-geometry' };
-
-    const edge = chooseViewportEdgeArrowCandidate(direction);
-    if (edge) return { ...edge, strategy: 'viewport-edge' };
-
-    const bodyCandidate = scanBodyArrowCandidates(direction).find(c => hasDirectionSignal(c, direction));
-    if (bodyCandidate && bodyCandidate.score >= 70) return { ...bodyCandidate, strategy: 'body-arrow' };
-
-    return null;
-  }
-
-  function buildNavigationDiagnostics(direction) {
-    const state = getLessonState();
-    const scan = scanVisibleButtonsNearHeader();
-    const candidate = choosePageArrowCandidate(direction || 'next', scan);
-    const lessonLinks = discoverLessonLinkSequence(state.url);
-    const adjacentLink = chooseAdjacentLessonLink(direction || 'next', state, lessonLinks);
-    return {
-      lessonLabel: scan.header.lessonLabel,
-      title: state.title,
-      h1Title: state.title,
-      urlBefore: state.url,
-      titleBefore: state.title,
-      visibleLessonLinks: lessonLinks.map(stripLessonLinkInfo),
-      candidateAdjacentLessonLink: stripLessonLinkInfo(adjacentLink.candidate),
-      adjacentLessonLinkReason: adjacentLink.reason,
-      visibleButtonsNearHeader: scan.buttons.map(stripButtonInfo),
-      candidateButtonsAfterFilter: scan.buttons.filter(b => !b.rejectedReason).map(stripButtonInfo),
-      candidateNextButton: direction === 'prev' ? null : stripButtonInfo(candidate),
-      candidatePreviousButton: direction === 'prev' ? stripButtonInfo(candidate) : null,
-      headerRegion: scan.header.headerRect,
-      lessonIndicatorRect: scan.header.indicatorRect,
-    };
-  }
-
-  /**
-   * Find the icon-only "right arrow" anchor whose href contains /lessons/.
-   * This is the per-lesson next/prev pager link Circle renders near the lesson header.
-   */
-  function findLessonHrefArrow(direction, before) {
-    const currentKey = lessonUrlKey(before?.url || location.href);
-    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
-    const anchors = Array.from(document.querySelectorAll('a[href*="/lessons/"], a[href*="/posts/"]'));
-    const candidates = [];
-    for (const a of anchors) {
-      const href = abs(a.getAttribute('href'));
-      if (!href || !isLessonPageUrl(href) || isCourseRootUrl(href)) continue;
-      const key = lessonUrlKey(href);
-      if (key === currentKey) continue;
-      if (!isVisible(a) || isDisabled(a)) continue;
-      const text = safeText(a);
-      // Only icon-only / very short labels (the arrow button), not full lesson titles
-      if (text.length > 6) continue;
-      const r = a.getBoundingClientRect();
-      if (r.width < 16 || r.height < 16) continue;
-      const svgDir = detectSvgDirection(a);
-      const aria = (a.getAttribute('aria-label') || '').toLowerCase();
-      const title = (a.getAttribute('title') || '').toLowerCase();
-      const dirSignal = `${svgDir} ${aria} ${title}`;
-      let score = 0;
-      const reasons = [];
-      if (direction === 'next') {
-        if (/right|next|forward/.test(dirSignal)) { score += 100; reasons.push('right_signal'); }
-        if (/left|prev|previous|back/.test(dirSignal)) { score -= 200; reasons.push('left_penalty'); }
-        score += Math.round(r.left / Math.max(1, vw) * 50); // prefer right side
-      } else {
-        if (/left|prev|previous|back/.test(dirSignal)) { score += 100; reasons.push('left_signal'); }
-        if (/right|next|forward/.test(dirSignal)) { score -= 200; reasons.push('right_penalty'); }
-        score += Math.round((vw - r.right) / Math.max(1, vw) * 50);
-      }
-      candidates.push({ el: a, href, key, text, rect: rectInfo(a), svgDirection: svgDir, ariaLabel: aria, title, score, reasons });
-    }
-    candidates.sort((a, b) => b.score - a.score);
-    log('lessonHrefArrowCandidates', candidates.slice(0, 6).map(c => ({ ...c, el: undefined })));
-    const best = candidates[0];
-    if (!best || best.score < 50) return null;
-    return best;
-  }
-
-  async function navigateAdjacentLesson(direction, preferredMethod) {
-    const before = getLessonState();
-    const methods = ['lesson-link'];
-    const attempts = [];
-    let lastDiagnostics = null;
-
-    for (const method of methods) {
-      const attempt = { method, success: false };
-      if (method === 'lesson-href-arrow') {
-        const candidate = findLessonHrefArrow(direction, before);
-        attempt.candidate = candidate ? { href: candidate.href, text: candidate.text, rect: candidate.rect, svgDirection: candidate.svgDirection, ariaLabel: candidate.ariaLabel, score: candidate.score, reasons: candidate.reasons } : null;
-        if (!candidate?.el) {
-          attempt.reason = 'no_lesson_href_arrow';
-          attempts.push(attempt);
-          continue;
-        }
-        log('nav candidate', { strategy: 'lesson-href-arrow', href: candidate.href, urlBefore: before.url, lessonBefore: before.lesson_number });
-        try {
-          candidate.el.scrollIntoView({ block: 'center', inline: 'center' });
-          await sleep(100);
-          activateClick(candidate.el);
-        } catch (e) {
-          attempt.reason = 'click_error';
-          attempt.error = String(e?.message || e);
-          attempts.push(attempt);
-          continue;
-        }
-      } else if (method === 'lesson-link') {
-        const sequence = discoverLessonLinkSequence(before.url);
-        const adjacent = chooseAdjacentLessonLink(direction, before, sequence);
-        attempt.visibleLessonLinks = sequence.map(stripLessonLinkInfo);
-        attempt.candidateLessonLink = stripLessonLinkInfo(adjacent.candidate);
-        if (!adjacent.candidate?.el) {
-          attempt.reason = adjacent.reason || 'no_adjacent_lesson_link';
-          attempts.push(attempt);
-          continue;
-        }
-        log('nav candidate', {
-          strategy: 'lesson-link',
-          href: adjacent.candidate.href,
-          text: adjacent.candidate.text,
-          currentIndex: adjacent.currentIndex,
-          targetIndex: adjacent.targetIndex,
-          urlBefore: before.url,
-          titleBefore: before.title,
-          lessonBefore: before.lesson_number,
-        });
-        try {
-          if (!navigateToLessonHref(adjacent.candidate.href)) {
-            attempt.reason = 'invalid_adjacent_lesson_href';
-            attempts.push(attempt);
-            continue;
-          }
-        } catch (e) {
-          attempt.reason = 'navigation_error';
-          attempt.error = String(e?.message || e);
-          attempts.push(attempt);
-          continue;
-        }
-      } else if (method === 'geometry') {
-        const diagnostics = buildNavigationDiagnostics(direction);
-        lastDiagnostics = diagnostics;
-        const scan = scanVisibleButtonsNearHeader();
-        const candidate = choosePageArrowCandidate(direction, scan);
-
-        // Debug: log the candidate we're about to click
-        if (candidate) {
-          log('nav candidate', {
-            strategy: 'geometry',
-            candidateStrategy: candidate.strategy || '',
-            text: candidate.text,
-            href: candidate.href || '',
-            ariaLabel: candidate.ariaLabel,
-            svgDirection: candidate.svgDirection,
-            selector: candidate.el?.tagName + (candidate.el?.className ? '.' + String(candidate.el.className).split(' ')[0] : ''),
-            urlBefore: before.url,
-            titleBefore: before.title,
-            lessonBefore: before.lesson_number,
-          });
-        }
-
-        attempt.candidateButton = stripButtonInfo(candidate);
-        if (!candidate?.el) {
-          attempt.reason = 'no_header_arrow_candidate';
-          attempts.push(attempt);
-          continue;
-        }
-        try {
-          candidate.el.scrollIntoView({ block: 'center', inline: 'center' });
-          await sleep(100);
-          activateClick(candidate.el);
-        } catch (e) {
-          attempt.reason = 'click_error';
-          attempt.error = String(e?.message || e);
-          attempts.push(attempt);
-          continue;
-        }
-      }
-
-      const change = await waitForLessonChange(before, 8000);
-      const after = change.state || getLessonState();
-
-      // ── GUARDRAIL: detect if we navigated to course root ──
-      if (isCourseRootUrl(after.url) && !isCourseRootUrl(before.url)) {
-        log('GUARDRAIL: navigated to course root! Going back.', { urlBefore: before.url, urlAfter: after.url });
-        try { history.back(); } catch (_) {}
-        await sleep(1500);
-        attempt.success = false;
-        attempt.reason = 'navigated_to_course_root';
-        attempt.urlBefore = before.url;
-        attempt.urlAfter = after.url;
-        attempt.titleBefore = before.title;
-        attempt.titleAfter = after.title;
-        attempts.push(attempt);
-        continue;
-      }
-
-      // ── GUARDRAIL: detect if lesson indicator disappeared (course home has none) ──
-      const afterIndicator = findLessonOfIndicator();
-      if (!afterIndicator && before.lesson_number) {
-        log('GUARDRAIL: lesson indicator disappeared after click! Going back.', { urlBefore: before.url, urlAfter: after.url });
-        try { history.back(); } catch (_) {}
-        await sleep(1500);
-        attempt.success = false;
-        attempt.reason = 'lesson_indicator_disappeared';
-        attempt.urlBefore = before.url;
-        attempt.urlAfter = after.url;
-        attempts.push(attempt);
-        continue;
-      }
-
-      const expectedLesson = before.lesson_number != null
-        ? (direction === 'prev' ? before.lesson_number - 1 : before.lesson_number + 1)
-        : null;
-      const lessonNumberAdvanced = expectedLesson != null && after.lesson_number === expectedLesson;
-      const movedInRightDirection = before.lesson_number != null && after.lesson_number != null && (
-        direction === 'prev'
-          ? after.lesson_number < before.lesson_number
-          : after.lesson_number > before.lesson_number
-      );
-      const fallbackChanged = expectedLesson == null && change.changed;
-      const success = !!(lessonNumberAdvanced || movedInRightDirection || fallbackChanged);
-
-      log('nav result', {
-        strategy: method,
-        success,
-        urlBefore: before.url,
-        urlAfter: after.url,
-        titleBefore: before.title,
-        titleAfter: after.title,
-        lessonBefore: before.lesson_number,
-        lessonAfter: after.lesson_number,
-      });
-
-      Object.assign(attempt, {
-        success,
-        urlBefore: before.url,
-        urlAfter: after.url,
-        titleBefore: before.title,
-        titleAfter: after.title,
-        lessonBefore: before.lesson_number,
-        lessonAfter: after.lesson_number,
-        lessonNumberChanged: change.lessonNumberChanged,
-        titleChanged: change.titleChanged,
-        urlChanged: change.urlChanged,
-        contentHashChanged: change.contentHashChanged,
-      });
-      attempts.push(attempt);
-      if (success) {
-        return { success: true, method, before, after, attempts, diagnostics: lastDiagnostics || buildNavigationDiagnostics(direction) };
-      }
-    }
-
-    return { success: false, method: null, before, after: getLessonState(), attempts, diagnostics: lastDiagnostics || buildNavigationDiagnostics(direction) };
-  }
-
-  async function runNavigationDebugCapture() {
-    const report = buildNavigationDiagnostics('next');
-    log('navigation diagnostics', report);
-    const result = await navigateAdjacentLesson('next', 'geometry');
-    const after = result.after || getLessonState();
-    Object.assign(report, {
-      clickResult: {
-        success: result.success,
-        method: result.method,
-        attempts: result.attempts,
-      },
-      urlAfter: after.url,
-      titleAfter: after.title,
+  async function extractCurrentLessonScoped(item) {
+    debugLog('extract:start', { item: item.urlKey, title: item.title });
+    const main = findLessonMainElement();
+    debugLog('extract:body_selector', {
+      tag: main?.tagName,
+      testid: main?.getAttribute?.('data-testid') || '',
+      cls: (main?.className || '').toString().slice(0, 120),
     });
-    log('navigation debug report', report);
-    const json = JSON.stringify(report, null, 2);
-    const ok = await copyToClipboard(json);
-    if (ok) {
-      showBanner(result.success ? 'Circle navigation debug copied. Next navigation works.' : 'Circle navigation debug copied. Navigation failed.', result.success ? 'info' : 'error', true);
-    } else {
-      showJsonModal(json);
-      showBanner('Clipboard blocked — copy the navigation debug JSON from the dialog.', 'warn', true);
-    }
-  }
+    const cleanedMain = cloneAndStripChrome(main);
 
-  // ── Navigation Inspector (inspect mode) ─────────────────────────────────
-  // Collects a comprehensive DOM inventory of ALL clickable elements.
-  // Does NOT click anything. Does NOT navigate. Pure read-only inspection.
+    const title = findLessonTitleInMain(main) || item.title;
+    const videos = findVideoAssets(main || document);
+    debugLog('extract:video', { count: videos.length, samples: videos.slice(0, 2) });
 
-  function collectAllClickableElements() {
-    const results = [];
-    const allEls = Array.from(document.querySelectorAll('a[href], button, [role="button"], [onclick], [tabindex="0"]'));
-    for (const el of allEls) {
-      if (!isVisible(el)) continue;
-      const r = el.getBoundingClientRect();
-      const parentText = (() => {
-        let p = el.parentElement;
-        for (let i = 0; i < 3 && p; i++) {
-          const t = safeText(p);
-          if (t && t !== safeText(el) && t.length < 200) return t;
-          p = p.parentElement;
-        }
-        return '';
-      })();
-      results.push({
-        tag: el.tagName.toLowerCase(),
-        role: el.getAttribute('role') || '',
-        text: safeText(el).slice(0, 200),
-        ariaLabel: el.getAttribute('aria-label') || '',
-        title: el.getAttribute('title') || '',
-        href: el.getAttribute('href') || '',
-        className: (el.className && typeof el.className === 'string') ? el.className.slice(0, 200) : '',
-        dataTestId: el.getAttribute('data-testid') || '',
-        rect: { top: Math.round(r.top), left: Math.round(r.left), right: Math.round(r.right), bottom: Math.round(r.bottom), width: Math.round(r.width), height: Math.round(r.height) },
-        closestParentText: parentText.slice(0, 200),
-        disabled: isDisabled(el),
-        inSidebar: !!el.closest('aside, [data-testid*="sidebar" i], [class*="sidebar" i]'),
-        inNav: !!el.closest('nav, header, [role="navigation"], [role="banner"]'),
-        inMain: !!el.closest('main'),
-        svgDirection: detectSvgDirection(el),
-        _el: el, // stripped before output
-      });
-    }
-    return results;
-  }
+    const takeaways = main ? captureSectionByHeading(main, /^takeaways?$/i) : '';
 
-  function collectSidebarLessonRows() {
-    const sidebar = document.querySelector('aside, [data-testid*="sidebar" i], [class*="sidebar" i]');
-    if (!sidebar) return [];
-    // Look for lesson-like rows: links or clickable items with lesson-like text
-    const rows = Array.from(sidebar.querySelectorAll('a[href], button, [role="button"], li, [role="listitem"]'));
+    const resources = [];
     const seen = new Set();
-    const results = [];
-    for (const el of rows) {
-      const text = safeText(el);
-      if (!text || text.length < 3 || text.length > 300) continue;
-      const key = text.slice(0, 80);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const r = el.getBoundingClientRect();
-      if (r.width === 0 || r.height === 0) continue;
-      const href = el.getAttribute('href') || '';
-      const isClickable = el.tagName === 'A' || el.tagName === 'BUTTON' || el.getAttribute('role') === 'button' || el.getAttribute('tabindex') === '0';
-      results.push({
-        text: text.slice(0, 200),
-        href,
-        tag: el.tagName.toLowerCase(),
-        rect: { top: Math.round(r.top), left: Math.round(r.left), width: Math.round(r.width), height: Math.round(r.height) },
-        isClickable,
-        ariaLabel: el.getAttribute('aria-label') || '',
-        className: (el.className && typeof el.className === 'string') ? el.className.slice(0, 150) : '',
-        _el: el,
-      });
+    if (main) {
+      const headings = Array.from(main.querySelectorAll('h1, h2, h3, h4, h5, strong, [class*="heading"]'));
+      const resHeading = headings.find((h) => /resources?\s+mentioned/i.test(safeText(h)));
+      if (resHeading) {
+        let n = resHeading.nextElementSibling;
+        let safety = 0;
+        while (n && safety++ < 50) {
+          if (/^H[1-6]$/.test(n.tagName)) break;
+          collectLinksFrom(n, resources, seen, 'resources_mentioned');
+          n = n.nextElementSibling;
+        }
+      }
+      collectLinksFrom(main, resources, seen, 'lesson_body');
     }
-    return results;
-  }
+    debugLog('extract:resources', { count: resources.length });
 
-  function rankNextButtonCandidates(allClickable, indicator) {
-    if (!indicator) return [];
-    const indicatorEl = indicator.el;
-    const indicatorRect = indicatorEl ? indicatorEl.getBoundingClientRect() : null;
-    const scored = [];
+    const body_text = cleanedMain ? safeText(cleanedMain) : '';
+    const body_html = cleanedMain ? (cleanedMain.innerHTML || '').slice(0, 200000) : '';
 
-    for (const item of allClickable) {
-      if (item.disabled) continue;
-      if (item.inNav) continue; // skip global nav
-      if (!hasDirectionSignal(item, 'next')) continue;
-      let score = 0;
-      const reasons = [];
+    const transcript = await captureTranscriptScoped(main);
 
-      // SVG direction
-      if (/right|next|forward/i.test(item.svgDirection)) { score += 40; reasons.push('svg_direction_right'); }
-      if (/left|prev|back/i.test(item.svgDirection)) { score -= 50; reasons.push('svg_direction_left_penalty'); }
+    const video_assets = videos;
+    const primary_video = videos.find((v) => v.url && !v.blob) || videos[0] || null;
+    const video_downloadable = !!(primary_video && primary_video.url && !primary_video.blob);
 
-      // Text/aria hints
-      const combined = `${item.text} ${item.ariaLabel} ${item.title}`.toLowerCase();
-      if (/\bnext\b/.test(combined)) { score += 30; reasons.push('text_next'); }
-      if (/\bprev(ious)?\b|\bback\b/.test(combined)) { score -= 40; reasons.push('text_prev_penalty'); }
-      if (/\blesson\b/.test(combined)) { score += 10; reasons.push('text_lesson'); }
-      if (/\b(bookmark|search|profile|settings|notification|menu|sidebar|toc|contents?|curriculum|syllabus|table\s+of\s+contents?|course\s+content|complete|overview|home)\b/.test(combined)) { score -= 60; reasons.push('excluded_keyword'); }
-
-      // Proximity to indicator
-      if (indicatorRect && item.rect) {
-        const vDist = Math.abs((item.rect.top + item.rect.bottom) / 2 - (indicatorRect.top + indicatorRect.bottom) / 2);
-        if (vDist < 40) { score += 25; reasons.push('near_indicator_v'); }
-        else if (vDist < 120) { score += 10; reasons.push('moderate_v_dist'); }
-        // To the right of indicator = good for next
-        if (item.rect.left > indicatorRect.right - 10) { score += 15; reasons.push('right_of_indicator'); }
-      }
-
-      // Small circular = likely icon button
-      const w = item.rect.width, h = item.rect.height;
-      if (w >= 20 && w <= 82 && h >= 20 && h <= 82 && Math.abs(w - h) <= 28) {
-        score += 10; reasons.push('small_circular');
-      }
-
-      // In sidebar = less likely to be next arrow
-      if (item.inSidebar) { score -= 20; reasons.push('in_sidebar'); }
-
-      // href to course root = bad
-      if (item.href) {
-        try {
-          if (isCourseRootUrl(new URL(item.href, location.href).href)) { score -= 50; reasons.push('href_course_root'); }
-        } catch (_) {}
-      }
-
-      scored.push({
-        text: item.text,
-        ariaLabel: item.ariaLabel,
-        title: item.title,
-        tag: item.tag,
-        href: item.href,
-        className: item.className,
-        dataTestId: item.dataTestId,
-        rect: item.rect,
-        svgDirection: item.svgDirection,
-        score,
-        reasons,
-        _el: item._el,
-      });
-    }
-
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, 10); // top 10
-  }
-
-  async function runInspectMode() {
-    const state = getLessonState();
-    const indicator = findLessonOfIndicator();
-    const allClickable = collectAllClickableElements();
-    const sidebarRows = collectSidebarLessonRows();
-    const ranked = rankNextButtonCandidates(allClickable, indicator);
-
-    // Strip _el from output
-    const strip = (arr) => arr.map(({ _el, ...rest }) => rest);
-
-    const report = {
-      mode: 'inspect',
-      timestamp: new Date().toISOString(),
-      current_url: state.url,
-      lesson_label: indicator ? `Lesson ${indicator.current} of ${indicator.total}` : null,
-      lesson_title: state.title,
-      indicator_rect: indicator?.el ? rectInfo(indicator.el) : null,
-      total_clickable_elements: allClickable.length,
-      clickable_in_main: allClickable.filter(e => e.inMain && !e.inNav).length,
-      clickable_in_sidebar: allClickable.filter(e => e.inSidebar).length,
-      clickable_in_nav: allClickable.filter(e => e.inNav).length,
-      top_5_next_candidates: strip(ranked.slice(0, 5)),
-      all_ranked_candidates: strip(ranked),
-      sidebar_lesson_rows: strip(sidebarRows),
-      all_clickable_in_main: strip(allClickable.filter(e => e.inMain && !e.inNav && !e.inSidebar)),
-      all_clickable_in_sidebar: strip(allClickable.filter(e => e.inSidebar)),
+    const result = {
+      course_title: '',
+      course_url: '',
+      section_title: item.sectionTitle || '',
+      lesson_index: item.index,
+      lesson_title: title,
+      lesson_url: item.url,
+      body_text,
+      body_html,
+      takeaways,
+      transcript_text: transcript.text || '',
+      transcript_status: transcript.status,
+      video_assets,
+      video_downloadable,
+      media_url: primary_video?.url || '',
+      resource_links: resources,
+      scraped_at: new Date().toISOString(),
+      capture_issue: undefined,
     };
-
-    log('inspect report', report);
-    const json = JSON.stringify(report, null, 2);
-    const ok = await copyToClipboard(json);
-    if (ok) {
-      showBanner(`Navigation inspector copied (${allClickable.length} elements, top 5 candidates ranked).\nPaste this into Lovable.`, 'info', true);
+    if (!body_text && !transcript.text && !resources.length && !primary_video) {
+      result.capture_issue = 'empty_capture';
+      debugLog('extract:partial', { item: item.urlKey });
     } else {
-      showJsonModal(json);
-      showBanner('Clipboard blocked — copy from the dialog. Paste into Lovable.', 'warn', true);
+      debugLog('extract:success', { item: item.urlKey, bodyChars: body_text.length, transcriptChars: transcript.text.length, resources: resources.length, hasVideo: !!primary_video });
     }
+    return result;
   }
 
-  // ── Navigation Probe (probe mode) ───────────────────────────────────────
-  // Tests candidates one at a time. After each click, checks if lesson moved
-  // forward. If not, restores via history.back(). Stops when one works.
+  // ── Overlay UI ───────────────────────────────────────────────────────────
+  let overlayEls = null;
+  let runtimeControls = { paused: false, stopped: false };
 
-  async function runProbeMode() {
-    const indicator = findLessonOfIndicator();
-    if (!indicator) {
-      showBanner('No "Lesson X of Y" found. Open a lesson page first.', 'warn', true);
-      return;
+  function buildOverlay(state) {
+    const id = '__circle_capture_overlay_v2';
+    document.getElementById(id)?.remove();
+    const wrap = document.createElement('div');
+    wrap.id = id;
+    Object.assign(wrap.style, {
+      position: 'fixed', top: '12px', right: '12px', width: '380px', maxHeight: '80vh',
+      zIndex: '2147483647', background: '#0f172a', color: '#e2e8f0',
+      fontFamily: 'system-ui, -apple-system, sans-serif', fontSize: '12px',
+      borderRadius: '10px', boxShadow: '0 12px 40px rgba(0,0,0,0.45)',
+      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    });
+    const header = document.createElement('div');
+    Object.assign(header.style, { padding: '10px 12px', background: '#1e293b', fontWeight: '600', display: 'flex', justifyContent: 'space-between', alignItems: 'center' });
+    const titleEl = document.createElement('div');
+    titleEl.textContent = 'Circle Capture v2';
+    const closeX = document.createElement('button');
+    closeX.textContent = '✕';
+    Object.assign(closeX.style, { background: 'transparent', border: '0', color: '#cbd5e1', cursor: 'pointer', fontSize: '14px' });
+    closeX.onclick = () => wrap.remove();
+    header.appendChild(titleEl); header.appendChild(closeX);
+
+    const body = document.createElement('div');
+    Object.assign(body.style, { padding: '10px 12px', overflowY: 'auto', flex: '1' });
+
+    const stats = document.createElement('div');
+    const current = document.createElement('div');
+    Object.assign(current.style, { marginTop: '8px', padding: '8px', background: '#1e293b', borderRadius: '6px' });
+    const lastEvent = document.createElement('div');
+    Object.assign(lastEvent.style, { marginTop: '8px', padding: '6px 8px', background: '#0b1220', borderRadius: '6px', fontFamily: 'ui-monospace, monospace', fontSize: '11px', color: '#94a3b8', minHeight: '28px', wordBreak: 'break-all' });
+    body.appendChild(stats);
+    body.appendChild(current);
+    body.appendChild(lastEvent);
+
+    const buttons = document.createElement('div');
+    Object.assign(buttons.style, { padding: '10px 12px', borderTop: '1px solid #1e293b', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' });
+    function mkBtn(label, onclick, style) {
+      const b = document.createElement('button');
+      b.textContent = label;
+      Object.assign(b.style, {
+        padding: '6px 8px', borderRadius: '6px', border: '0', cursor: 'pointer',
+        background: '#334155', color: '#f8fafc', fontSize: '11px', fontWeight: '600',
+      }, style || {});
+      b.onclick = onclick;
+      return b;
     }
+    const pauseBtn = mkBtn('Pause', () => {
+      runtimeControls.paused = !runtimeControls.paused;
+      pauseBtn.textContent = runtimeControls.paused ? 'Resume' : 'Pause';
+    });
+    const stopBtn = mkBtn('Stop', () => { runtimeControls.stopped = true; }, { background: '#7f1d1d' });
+    const exportBtn = mkBtn('Export JSON', () => exportCurrent());
+    const clearBtn = mkBtn('Clear Saved', () => { clearState(); alert('Saved progress cleared. Run bookmarklet again to start over.'); });
+    const copyDebugBtn = mkBtn('Copy Logs', async () => {
+      const ok = await copyToClipboard(JSON.stringify(debugLogs, null, 2));
+      copyDebugBtn.textContent = ok ? 'Copied!' : 'Copy failed';
+      setTimeout(() => { copyDebugBtn.textContent = 'Copy Logs'; }, 1500);
+    });
+    const submitBtn = mkBtn('Submit Now', () => submitCurrent(), { background: '#15803d' });
 
-    const allClickable = collectAllClickableElements();
-    const ranked = rankNextButtonCandidates(allClickable, indicator);
-    const candidates = ranked.slice(0, 5); // probe top 5 only
+    buttons.appendChild(pauseBtn); buttons.appendChild(stopBtn); buttons.appendChild(exportBtn);
+    buttons.appendChild(clearBtn); buttons.appendChild(copyDebugBtn); buttons.appendChild(submitBtn);
 
-    if (candidates.length === 0) {
-      const json = JSON.stringify({ mode: 'probe', error: 'no_candidates', total_clickable: allClickable.length }, null, 2);
-      await copyToClipboard(json);
-      showBanner('No navigation candidates found. Run inspect mode and paste into Lovable.', 'error', true);
-      return;
-    }
+    wrap.appendChild(header); wrap.appendChild(body); wrap.appendChild(buttons);
+    document.body.appendChild(wrap);
 
-    showBanner(`Probing ${candidates.length} candidates…`, 'info', true);
-    const probeResults = [];
-    let winner = null;
-
-    for (let i = 0; i < candidates.length; i++) {
-      const c = candidates[i];
-      const el = c._el;
-      if (!el || !isVisible(el)) {
-        probeResults.push({ index: i, text: c.text, ariaLabel: c.ariaLabel, score: c.score, result: 'not_visible' });
-        continue;
-      }
-
-      const before = getLessonState();
-      showBanner(`Probing candidate ${i + 1}/${candidates.length}: "${c.text || c.ariaLabel || c.tag}"…`, 'info', true);
-
-      try {
-        el.scrollIntoView({ block: 'center', inline: 'center' });
-        await sleep(100);
-        activateClick(el);
-      } catch (err) {
-        probeResults.push({ index: i, text: c.text, ariaLabel: c.ariaLabel, score: c.score, result: 'click_error', error: String(err) });
-        continue;
-      }
-
-      const change = await waitForLessonChange(before, 6000);
-      const after = change.state || getLessonState();
-
-      // Check if we went to course root
-      if (isCourseRootUrl(after.url) && !isCourseRootUrl(before.url)) {
-        try { history.back(); } catch (_) {}
-        await sleep(2000);
-        probeResults.push({
-          index: i, text: c.text, ariaLabel: c.ariaLabel, href: c.href, score: c.score,
-          result: 'navigated_to_course_root',
-          url_before: before.url, url_after: after.url,
-        });
-        continue;
-      }
-
-      // Check if indicator disappeared
-      const afterIndicator = findLessonOfIndicator();
-      if (!afterIndicator && before.lesson_number) {
-        try { history.back(); } catch (_) {}
-        await sleep(2000);
-        probeResults.push({
-          index: i, text: c.text, ariaLabel: c.ariaLabel, href: c.href, score: c.score,
-          result: 'indicator_disappeared',
-          url_before: before.url, url_after: after.url,
-        });
-        continue;
-      }
-
-      const moved = change.changed && afterIndicator &&
-        afterIndicator.current > before.lesson_number;
-
-      if (moved) {
-        probeResults.push({
-          index: i, text: c.text, ariaLabel: c.ariaLabel, href: c.href, className: c.className,
-          dataTestId: c.dataTestId, tag: c.tag, rect: c.rect, svgDirection: c.svgDirection,
-          score: c.score, reasons: c.reasons,
-          result: 'SUCCESS',
-          lesson_before: before.lesson_number, lesson_after: afterIndicator.current,
-          title_before: before.title, title_after: findLessonTitle(afterIndicator.el),
-          url_before: before.url, url_after: location.href.split('#')[0],
-          h1_before: before.title, h1_after: findLessonTitle(afterIndicator.el),
-          content_hash_before: before.content_hash, content_hash_after: getLessonState().content_hash,
-        });
-        winner = probeResults[probeResults.length - 1];
-        // Restore to original lesson
-        try { history.back(); } catch (_) {}
-        await sleep(2000);
-        break;
-      } else {
-        // Didn't move forward — restore
-        if (change.changed) {
-          try { history.back(); } catch (_) {}
-          await sleep(2000);
-        }
-        probeResults.push({
-          index: i, text: c.text, ariaLabel: c.ariaLabel, href: c.href, score: c.score,
-          result: 'no_forward_movement',
-          lesson_before: before.lesson_number, lesson_after: afterIndicator?.current,
-          url_before: before.url, url_after: after.url,
-          change_detected: change.changed,
-        });
-      }
-    }
-
-    const report = {
-      mode: 'probe',
-      timestamp: new Date().toISOString(),
-      starting_lesson: indicator.current,
-      total_lessons: indicator.total,
-      candidates_tested: probeResults.length,
-      winner: winner ? {
-        text: winner.text,
-        ariaLabel: winner.ariaLabel,
-        tag: winner.tag,
-        className: winner.className,
-        dataTestId: winner.dataTestId,
-        href: winner.href,
-        svgDirection: winner.svgDirection,
-        rect: winner.rect,
-        lesson_before: winner.lesson_before,
-        lesson_after: winner.lesson_after,
-      } : null,
-      probeResults,
-    };
-
-    log('probe report', report);
-    const json = JSON.stringify(report, null, 2);
-    const ok = await copyToClipboard(json);
-    if (winner) {
-      showBanner(
-        `✓ Proven: "${winner.text || winner.ariaLabel || winner.tag}" moves Lesson ${winner.lesson_before} → ${winner.lesson_after}.\n` +
-        `Navigation probe copied. Paste into Lovable.`,
-        'info', true
-      );
-    } else {
-      if (ok) {
-        showBanner(`No working next candidate found (${probeResults.length} tested). Probe report copied.\nPaste into Lovable.`, 'error', true);
-      } else {
-        showJsonModal(json);
-        showBanner('No working candidate. Copy from dialog and paste into Lovable.', 'error', true);
-      }
-    }
+    overlayEls = { wrap, stats, current, lastEvent, pauseBtn };
+    updateOverlay(state);
   }
-
-  /**
-   * Wait until the rendered lesson changes — either lesson_number advances,
-   * the title text changes, the URL changes, or the main content hash changes.
-   */
-  async function waitForLessonChange(prev, timeoutMs) {
-    timeoutMs = timeoutMs || 8000;
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      await sleep(250);
-      const now = getLessonState();
-      const lessonNumberChanged = now.lesson_number != null && prev.lesson_number != null && now.lesson_number !== prev.lesson_number;
-      const titleChanged = !!(now.title && prev.title && now.title !== prev.title);
-      const urlChanged = now.url !== prev.url;
-      const contentHashChanged = !!(now.content_hash && prev.content_hash && now.content_hash !== prev.content_hash);
-      if (lessonNumberChanged || titleChanged || urlChanged || contentHashChanged) {
-        await sleep(500);
-        const settled = getLessonState();
-        return {
-          changed: true,
-          lessonNumberChanged: settled.lesson_number != null && prev.lesson_number != null && settled.lesson_number !== prev.lesson_number,
-          titleChanged: !!(settled.title && prev.title && settled.title !== prev.title),
-          urlChanged: settled.url !== prev.url,
-          contentHashChanged: !!(settled.content_hash && prev.content_hash && settled.content_hash !== prev.content_hash),
-          state: settled,
-        };
-      }
-    }
-    return { changed: false, lessonNumberChanged: false, titleChanged: false, urlChanged: false, contentHashChanged: false, state: getLessonState() };
+  function updateOverlay(state) {
+    if (!overlayEls) return;
+    const total = state.queue?.length || 0;
+    const captured = Object.values(state.captured || {});
+    const success = Object.values(state.status || {}).filter((s) => s === 'success').length;
+    const failed = Object.values(state.status || {}).filter((s) => s === 'failed').length;
+    const totalRetries = Object.values(state.retries || {}).reduce((a, b) => a + (b || 0), 0);
+    const cur = state.queue?.[state.cursor] || null;
+    overlayEls.stats.innerHTML =
+      `<div><b>${escapeHtml(state.courseTitle || 'Course')}</b></div>` +
+      `<div style="margin-top:4px;color:#94a3b8">Queue: <b style="color:#e2e8f0">${total}</b> · Cursor: <b style="color:#e2e8f0">${state.cursor || 0}</b></div>` +
+      `<div style="color:#94a3b8">✓ Success: <span style="color:#22c55e">${success}</span> · ✗ Failed: <span style="color:#ef4444">${failed}</span> · Retries: ${totalRetries}</div>`;
+    overlayEls.current.innerHTML = cur
+      ? `<div style="color:#94a3b8;font-size:10px">CURRENT (${cur.index + 1}/${total})</div><div style="margin-top:2px">${escapeHtml(cur.title)}</div><div style="color:#64748b;font-size:10px;margin-top:2px">${escapeHtml(cur.sectionTitle || '')}</div>`
+      : `<div style="color:#94a3b8">${state.cursor >= total ? 'Done.' : 'Idle.'}</div>`;
   }
+  function renderOverlayLastEvent(entry) {
+    if (!overlayEls?.lastEvent) return;
+    overlayEls.lastEvent.textContent = `${entry.event}: ${JSON.stringify(entry.payload).slice(0, 200)}`;
+  }
+  function escapeHtml(s) { return String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
-  /**
-   * Walk every lesson using the course's ordered lesson links only. We avoid
-   * Circle's course-content / table-of-contents controls because they can route
-   * away from the lesson player and strand the capture on the outline page.
-   */
-  async function autoWalk(startIndicator) {
-    const total = startIndicator.total;
-    const lessons = [];
-    let navigationMethod = 'geometry';
-    let fatalNavigationFailure = false;
-    let fatalDebugReport = null;
-
-    const startDiagnostics = buildNavigationDiagnostics('next');
-    log('navigation diagnostics', startDiagnostics);
-    if ((startIndicator.current || getLessonState().lesson_number || 1) !== 1) {
-      return {
-        lessons: [],
-        fatalNavigationFailure: true,
-        debugReport: {
-          ...startDiagnostics,
-          clickResult: { success: false, reason: 'start_on_lesson_1_required_for_right_arrow_only_capture' },
-          urlAfter: location.href.split('#')[0],
-          titleAfter: getLessonState().title,
-        },
-      };
-    }
-
-    showBanner(`Capturing from lesson 1 of ${total}. Advancing through lesson links only…`, 'info', true);
-
-    // Open the Lessons drawer so the canonical lesson sequence is in the DOM.
+  // ── Clipboard / submit ───────────────────────────────────────────────────
+  async function copyToClipboard(text) {
+    try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } } catch (_) {}
     try {
-      const opened = await openLessonsDrawer();
-      log('lessons drawer open attempt', { opened });
-    } catch (err) { log('openLessonsDrawer error', err); }
-
-    let consecutiveNavigationFailures = 0;
-    const seenLessonNumbers = new Set();
-
-    while (lessons.length < total) {
-      const state = getLessonState();
-      const lessonNum = state.lesson_number || lessons.length + 1;
-      log(`capturing lesson ${lessonNum} of ${total}`, { title: state.title, url: state.url });
-      showBanner(`Capturing lesson ${lessonNum} of ${total}…`, 'info', true);
-
-      let lessonData;
-      try {
-        lessonData = await extractCurrentLesson();
-      } catch (err) {
-        log('capture error on lesson ' + lessonNum, err);
-        lessonData = { url: location.href.split('#')[0], lesson_number: lessonNum, title: state.title || `Lesson ${lessonNum}`, capture_issue: 'extract_failed' };
-      }
-      lessons.push(lessonData);
-      seenLessonNumbers.add(lessonNum);
-
-      const transcriptCount = lessons.filter(l => l.transcript).length;
-      const resourceCount = lessons.reduce((s, l) => s + (l.resources?.length || 0), 0);
-      const withContentCount = lessons.filter(l => l.body_text || l.transcript || l.resources?.length || l.media_url).length;
-      showBanner(
-        `${total} discovered · ${withContentCount} captured with content · ${lessons.filter(l => l.capture_issue === 'navigation_failed').length} navigation failed\n` +
-          `Current: ${lessonData.lesson_number || lessonNum} of ${total}: ${lessonData.title || state.title || `Lesson ${lessonNum}`}\n` +
-          `Transcripts: ${transcriptCount} · Resources: ${resourceCount}`,
-        'info', true
-      );
-      log('capture result', { index: lessonNum, total, success: !!(lessonData.body_text || lessonData.transcript || lessonData.resources?.length || lessonData.media_url), title: lessonData.title, debug: lessonData._debug || null });
-
-      const latest = getLessonState();
-      if ((latest.lesson_number || lessonNum) >= total) break;
-
-      const nav = await navigateAdjacentLesson('next', navigationMethod);
-      log('navigation proof', nav);
-      if (!nav.success) {
-        consecutiveNavigationFailures += 1;
-        const failedFrom = (latest.lesson_number || lessonNum) + 1;
-        fatalDebugReport = { ...startDiagnostics, clickResult: { success: false, reason: 'navigation_failed_during_course_capture', attempts: nav.attempts }, urlAfter: nav.after?.url, titleAfter: nav.after?.title };
-        fatalNavigationFailure = true;
-        lessons.push({
-          lesson_number: failedFrom,
-          title: `Lesson ${failedFrom}`,
-          capture_issue: 'navigation_failed',
-          _debug: { navigation: { attempts: nav.attempts, diagnostics: nav.diagnostics } },
-        });
-        for (let n = failedFrom + 1; n <= total; n++) {
-          lessons.push({ lesson_number: n, title: `Lesson ${n}`, capture_issue: 'navigation_failed', _debug: { navigation: { reason: 'stopped_after_navigation_failure' } } });
-        }
-        break;
-      } else {
-        consecutiveNavigationFailures = 0;
-        const afterNum = nav.after?.lesson_number;
-        if (afterNum && seenLessonNumbers.has(afterNum)) {
-          log('navigation loop detected', { afterNum, seen: Array.from(seenLessonNumbers) });
-          fatalNavigationFailure = true;
-          fatalDebugReport = { ...startDiagnostics, clickResult: { success: false, reason: 'navigation_loop_detected', attempts: nav.attempts }, urlAfter: nav.after?.url, titleAfter: nav.after?.title };
-          for (let n = lessons.length + 1; n <= total; n++) lessons.push({ lesson_number: n, title: `Lesson ${n}`, capture_issue: 'navigation_failed', _debug: { navigation: { reason: 'navigation_loop_detected' } } });
-          break;
-        }
-      }
-    }
-
-    return { lessons, fatalNavigationFailure, debugReport: fatalDebugReport || startDiagnostics };
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch (_) { return false; }
   }
-
-  // ── Main ─────────────────────────────────────────────────────────────────
-
-  (async function main() {
-    const { mode, indicator } = detectPageMode();
-
-    if (mode !== 'lesson') {
-      showBanner(
-        'Open any lesson in this Circle course, then run the bookmarklet again.\n' +
-          'Tip: click any lesson in the right-hand "Lessons" sidebar so the URL contains /lessons/ or /posts/ and "Lesson X of Y" is visible.',
-        'warn'
-      );
-      return;
-    }
-
-    if (CAPTURE_MODE === 'inspect') {
-      showBanner('Running Circle navigation inspector…', 'info', true);
-      await runInspectMode();
-      return;
-    }
-
-    if (CAPTURE_MODE === 'probe') {
-      showBanner('Running Circle navigation probe…', 'info', true);
-      await runProbeMode();
-      return;
-    }
-
-    if (CAPTURE_MODE === 'debug-nav') {
-      showBanner('Running Circle navigation diagnostics…', 'info', true);
-      await runNavigationDebugCapture();
-      return;
-    }
-
-    // ── Single-lesson mode: capture only the current page ──────────────
-    if (CAPTURE_MODE === 'single') {
-      showBanner('Capturing current lesson…', 'info', true);
-      const courseTitle = deriveCourseTitle();
-      let lesson;
-      try {
-        lesson = await extractCurrentLesson();
-      } catch (err) {
-        log('single capture failed', err);
-        showBanner('Capture failed: ' + (err?.message || err), 'error');
-        return;
-      }
-      const payload = {
-        source_url: location.href,
-        platform: 'circle',
-        capture_mode: 'single_lesson',
-        title: courseTitle,
-        lessons: [lesson],
-      };
-      const json = JSON.stringify(payload, null, 2);
-      const ok = await copyToClipboard(json);
-      const hasContent = !!(lesson.body_text || lesson.transcript || lesson.resources?.length);
-      const lines = ['1 lesson captured: ' + lesson.title];
-      if (lesson.body_text) lines.push('✓ body text (' + lesson.body_text.length + ' chars)');
-      if (lesson.transcript) lines.push('✓ transcript (' + lesson.transcript.length + ' chars)');
-      if (lesson.resources?.length) lines.push('✓ ' + lesson.resources.length + ' resource(s)');
-      if (!hasContent) lines.push('⚠ no content detected');
-      lines.push('\nJSON copied — paste into Circle Import panel.');
-      if (ok) {
-        showBanner(lines.join('\n'), hasContent ? 'info' : 'warn');
-      } else {
-        showJsonModal(json);
-        showBanner('Clipboard blocked — copy from the dialog.', 'warn');
-      }
-      return;
-    }
-
-    // ── Course mode: auto-walk all lessons ─────────────────────────────
-    if (!indicator) {
-      showBanner(
-        'Could not find "Lesson X of Y" indicator. Make sure you are on a lesson page.\n' +
-          'Tip: the lesson page should show "Lesson X of Y" above the lesson title.',
-        'warn'
-      );
-      return;
-    }
-
-    const courseTitle = deriveCourseTitle();
-    showBanner(`Starting auto-capture from lesson ${indicator.current} of ${indicator.total}…`, 'info', true);
-
-    let walkResult;
-    try {
-      // Course capture starts on Lesson 1 and advances only to adjacent
-      // lesson-page URLs. It never clicks course root / table-of-contents UI.
-      walkResult = await autoWalk(indicator);
-    } catch (err) {
-      log('auto-walk failed', err);
-      showBanner('Capture failed: ' + (err?.message || err), 'error');
-      return;
-    }
-    const lessons = walkResult.lessons || [];
-
-    if (walkResult.fatalNavigationFailure && lessons.length === 0) {
-      const reason = walkResult.debugReport?.clickResult?.reason;
-      const message = reason === 'start_on_lesson_1_required_for_right_arrow_only_capture'
-        ? 'Open Lesson 1, then run Capture entire course again. Course capture now uses only Circle’s visible right-arrow button.'
-        : 'Course capture could not start using the visible right-arrow button. Run Inspect navigation and paste the diagnostics.';
-      showBanner(message, 'error', true);
-      return;
-    }
-
-    const payload = {
-      source_url: location.href,
+  function buildFinalPayload(state) {
+    const lessons = (state.queue || []).map((q) => state.captured[q.urlKey] || {
+      lesson_title: q.title, lesson_url: q.url, section_title: q.sectionTitle, lesson_index: q.index,
+      capture_issue: 'not_captured',
+    });
+    return {
+      source: VERSION,
+      course_title: state.courseTitle,
+      course_url: state.courseUrl,
+      lesson_count: lessons.length,
+      lessons,
+      debug_logs: debugLogs,
+      started_at: state.startedAt,
+      completed_at: new Date().toISOString(),
+      // Back-compat fields for the existing import-course-capture endpoint
       platform: 'circle',
-      capture_mode: 'auto_walk_lesson_ui',
-      title: courseTitle,
-      navigation_debug: walkResult.debugReport,
-      lessons: walkResult.fatalNavigationFailure
-        ? lessons.filter(l => l && l.capture_issue !== 'navigation_failed')
-        : lessons,
+      capture_mode: 'state_machine_v2',
+      title: state.courseTitle,
+      source_url: state.courseUrl,
     };
-
-    const importLessons = payload.lessons || [];
-    const discovered = indicator.total || lessons.length || importLessons.length;
-    const navigationFailed = lessons.filter(l => l.capture_issue === 'navigation_failed').length;
-    const failed = importLessons.filter(l => l.capture_issue && l.capture_issue !== 'navigation_failed').length;
-    const transcripts = importLessons.filter(l => l.transcript).length;
-    const resources = importLessons.reduce((s, l) => s + (l.resources?.length || 0), 0);
-    const media = importLessons.filter(l => l.media_url).length;
-    const withContent = importLessons.filter(l => l.body_text || l.transcript || l.resources?.length || l.media_url).length;
-
+  }
+  async function exportCurrent() {
+    const state = loadState();
+    if (!state) { alert('No saved state to export.'); return; }
+    const payload = buildFinalPayload(state);
     const json = JSON.stringify(payload, null, 2);
     const ok = await copyToClipboard(json);
+    if (ok) alert('JSON copied to clipboard.');
+    else showJsonModal(json);
+  }
+  async function submitCurrent() {
+    const state = loadState();
+    if (!state) { alert('No saved state to submit.'); return; }
+    const payload = buildFinalPayload(state);
+    const ok = await copyToClipboard(JSON.stringify(payload, null, 2));
+    alert(ok
+      ? 'JSON copied. Paste it into the Circle Import panel in the app.'
+      : 'Could not copy. Use Export JSON.');
+  }
+  function showJsonModal(text) {
+    const id = '__circle_capture_modal';
+    document.getElementById(id)?.remove();
+    const overlay = document.createElement('div'); overlay.id = id;
+    Object.assign(overlay.style, { position: 'fixed', inset: '0', zIndex: '2147483646', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' });
+    const card = document.createElement('div');
+    Object.assign(card.style, { background: '#fff', color: '#111', borderRadius: '10px', width: 'min(640px,92vw)', maxHeight: '80vh', display: 'flex', flexDirection: 'column' });
+    const ta = document.createElement('textarea'); ta.value = text; ta.readOnly = true;
+    Object.assign(ta.style, { flex: '1', minHeight: '300px', margin: '12px', fontFamily: 'ui-monospace, monospace', fontSize: '11px' });
+    const close = document.createElement('button'); close.textContent = 'Close';
+    Object.assign(close.style, { margin: '0 12px 12px', padding: '6px 12px', cursor: 'pointer' });
+    close.onclick = () => overlay.remove();
+    card.appendChild(ta); card.appendChild(close); overlay.appendChild(card); document.body.appendChild(overlay);
+    setTimeout(() => { ta.focus(); ta.select(); }, 50);
+  }
 
-    const lines = [`${discovered} discovered, ${withContent} captured with content, ${navigationFailed} navigation failed.`];
-    if (transcripts) lines.push(`✓ ${transcripts} transcript${transcripts === 1 ? '' : 's'}`);
-    if (resources) lines.push(`✓ ${resources} resource${resources === 1 ? '' : 's'}`);
-    if (media) lines.push(`✓ ${media} media item${media === 1 ? '' : 's'}`);
-    if (failed) lines.push(`⚠ ${failed} failed`);
-    if (!withContent) {
-      lines.push('⚠ no content/transcript/resources/media detected — open browser console for [Circle Capture] debug logs');
-    }
-    if (walkResult.fatalNavigationFailure) {
-      lines.push(`⚠ course navigation failed — ${payload.lessons.length} captured lesson${payload.lessons.length === 1 ? '' : 's'} salvaged for import`);
-    }
-    const summary = lines.join('\n') +
-      '\nJSON copied — return to the app and paste it into the Circle Import panel.';
+  // ── Banner ───────────────────────────────────────────────────────────────
+  function showBanner(message, kind) {
+    const id = '__circle_capture_banner_v2';
+    document.getElementById(id)?.remove();
+    const div = document.createElement('div');
+    div.id = id;
+    const bg = kind === 'error' ? '#b91c1c' : kind === 'warn' ? '#a16207' : '#15803d';
+    Object.assign(div.style, {
+      position: 'fixed', top: '12px', left: '12px', maxWidth: '420px',
+      zIndex: '2147483647', background: bg, color: '#fff',
+      padding: '10px 14px', borderRadius: '8px',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      fontSize: '13px', lineHeight: '1.4', whiteSpace: 'pre-wrap',
+    });
+    div.textContent = message;
+    document.body.appendChild(div);
+    setTimeout(() => { if (div.parentNode) div.remove(); }, 8000);
+  }
 
+  // ── Resume prompt ────────────────────────────────────────────────────────
+  function askResume(state) {
+    const remaining = (state.queue?.length || 0) - (state.cursor || 0);
+    const captured = Object.keys(state.captured || {}).length;
+    const msg = `Saved Circle capture found for this course.\n\n` +
+      `Queue: ${state.queue?.length || 0} lessons\n` +
+      `Captured so far: ${captured}\n` +
+      `Cursor at: ${state.cursor}\n` +
+      `Remaining: ${remaining}\n\n` +
+      `OK = Resume\nCancel = Choose another action`;
+    if (confirm(msg)) return 'resume';
+    const choice = prompt('Type:\n  restart   – clear and rebuild queue\n  export    – copy current JSON\n  clear     – delete saved state\n  cancel    – do nothing', 'restart');
+    if (!choice) return 'cancel';
+    const c = choice.trim().toLowerCase();
+    if (['restart', 'export', 'clear'].includes(c)) return c;
+    return 'cancel';
+  }
+
+  // ── Main runner ──────────────────────────────────────────────────────────
+  async function runCourseScrape() {
+    debugLog('boot:start', { mode: CAPTURE_MODE, url: location.href });
+    let state = loadState();
+    if (state) {
+      debugLog('state:loaded', { cursor: state.cursor, queue: state.queue?.length });
+      const choice = askResume(state);
+      if (choice === 'cancel') { return; }
+      if (choice === 'export') { await exportCurrent(); return; }
+      if (choice === 'clear') { clearState(); state = null; }
+      if (choice === 'restart') { clearState(); state = null; }
+      // 'resume' falls through with existing state
+    }
+    if (!state) {
+      state = newEmptyState();
+      state.startedAt = new Date().toISOString();
+      state.courseTitle = deriveCourseTitle();
+      state.courseUrl = location.href.split('#')[0];
+    }
+
+    buildOverlay(state);
+
+    if (!state.queue?.length) {
+      try {
+        state.queue = await buildLessonQueue();
+      } catch (e) {
+        debugLog('queue:error', { error: String(e?.message || e) });
+        showBanner('Could not build lesson queue: ' + (e?.message || e), 'error');
+        return;
+      }
+      if (!state.queue || state.queue.length < 2) {
+        showBanner(
+          'Could not discover ≥2 lessons in the Circle sidebar.\n' +
+          'Open the right-hand Lessons drawer, then run again.\n' +
+          'Use “Copy Logs” for diagnostics.',
+          'error'
+        );
+        debugLog('queue:insufficient', { count: state.queue?.length || 0 });
+        // Still persist so the user can copy logs
+        state.debug_logs = debugLogs.slice();
+        saveState(state);
+        return;
+      }
+      saveState(state);
+    }
+
+    updateOverlay(state);
+
+    for (let i = state.cursor || 0; i < state.queue.length; i++) {
+      if (runtimeControls.stopped) { debugLog('run:stopped_by_user', { cursor: i }); break; }
+      while (runtimeControls.paused) { await sleep(400); if (runtimeControls.stopped) break; }
+      if (runtimeControls.stopped) break;
+
+      const item = state.queue[i];
+      state.cursor = i;
+      saveState(state);
+      updateOverlay(state);
+
+      try {
+        await navigateWithRetry(item, state);
+        const capture = await extractCurrentLessonScoped(item);
+        capture.course_title = state.courseTitle;
+        capture.course_url = state.courseUrl;
+        state.captured[item.urlKey] = capture;
+        state.status[item.urlKey] = capture.capture_issue ? 'partial' : 'success';
+      } catch (err) {
+        const msg = String(err?.message || err);
+        debugLog('lesson:failed', { item: item.urlKey, error: msg });
+        state.status[item.urlKey] = 'failed';
+        state.errors[item.urlKey] = msg;
+        state.captured[item.urlKey] = {
+          lesson_title: item.title,
+          lesson_url: item.url,
+          section_title: item.sectionTitle,
+          lesson_index: item.index,
+          capture_issue: 'lesson_failed',
+          error: msg,
+        };
+      }
+
+      state.cursor = i + 1;
+      state.debug_logs = debugLogs.slice();
+      saveState(state);
+      updateOverlay(state);
+    }
+
+    debugLog('run:complete', {
+      total: state.queue.length,
+      success: Object.values(state.status).filter((s) => s === 'success').length,
+      failed: Object.values(state.status).filter((s) => s === 'failed').length,
+      partial: Object.values(state.status).filter((s) => s === 'partial').length,
+    });
+
+    const payload = buildFinalPayload(state);
+    const json = JSON.stringify(payload, null, 2);
+    const ok = await copyToClipboard(json);
     if (ok) {
-      showBanner(summary, withContent === 0 || navigationFailed > 0 ? 'warn' : 'info');
+      showBanner(`Done. ${state.queue.length} lessons processed. JSON copied — paste into the Circle Import panel.`, 'info');
     } else {
       showJsonModal(json);
-      showBanner('Clipboard blocked — copy the JSON from the dialog and paste into Circle Import.', 'warn');
+      showBanner('Done. Clipboard blocked — copy the JSON from the dialog.', 'warn');
+    }
+  }
+
+  // ── Single-lesson mode ───────────────────────────────────────────────────
+  async function runSingleLessonScrape() {
+    debugLog('boot:start', { mode: 'single', url: location.href });
+    const item = {
+      index: 0,
+      url: location.href.split('#')[0],
+      urlKey: canonicalLessonKey(location.href),
+      title: findLessonTitleInMain() || document.title,
+      sectionTitle: '',
+    };
+    let capture;
+    try {
+      capture = await extractCurrentLessonScoped(item);
+    } catch (e) {
+      showBanner('Capture failed: ' + (e?.message || e), 'error');
+      return;
+    }
+    capture.course_title = deriveCourseTitle();
+    capture.course_url = location.href.split('#')[0];
+    const payload = {
+      source: VERSION,
+      platform: 'circle',
+      capture_mode: 'single_lesson_v2',
+      title: capture.course_title,
+      source_url: capture.course_url,
+      course_title: capture.course_title,
+      course_url: capture.course_url,
+      lesson_count: 1,
+      lessons: [capture],
+      debug_logs: debugLogs,
+    };
+    const json = JSON.stringify(payload, null, 2);
+    const ok = await copyToClipboard(json);
+    if (ok) showBanner(`1 lesson captured: ${capture.lesson_title}\nJSON copied.`, capture.capture_issue ? 'warn' : 'info');
+    else showJsonModal(json);
+  }
+
+  // ── Entrypoint ───────────────────────────────────────────────────────────
+  (async function main() {
+    try {
+      if (CAPTURE_MODE === 'single') {
+        await runSingleLessonScrape();
+      } else {
+        await runCourseScrape();
+      }
+    } catch (e) {
+      debugLog('boot:error', { error: String(e?.message || e) });
+      showBanner('Bookmarklet error: ' + (e?.message || e), 'error');
     }
   })();
 })();
