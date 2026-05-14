@@ -1050,10 +1050,23 @@
     return null;
   }
 
+  function choosePageArrowCandidate(direction, scan) {
+    const edge = chooseViewportEdgeArrowCandidate(direction);
+    if (edge) return { ...edge, strategy: 'viewport-edge' };
+
+    const headerCandidate = chooseHeaderArrowCandidate(direction, scan);
+    if (headerCandidate) return { ...headerCandidate, strategy: 'header-geometry' };
+
+    const bodyCandidate = scanBodyArrowCandidates(direction)[0];
+    if (bodyCandidate && bodyCandidate.score >= 70) return { ...bodyCandidate, strategy: 'body-arrow' };
+
+    return null;
+  }
+
   function buildNavigationDiagnostics(direction) {
     const state = getLessonState();
     const scan = scanVisibleButtonsNearHeader();
-    const candidate = chooseHeaderArrowCandidate(direction || 'next', scan);
+    const candidate = choosePageArrowCandidate(direction || 'next', scan);
     return {
       lessonLabel: scan.header.lessonLabel,
       title: state.title,
