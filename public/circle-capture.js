@@ -26,6 +26,7 @@
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const safeText = (el) => el ? (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim() : '';
   const abs = (url) => { try { return new URL(url, location.href).toString(); } catch (_) { return ''; } };
+  const absUrl = (url, base) => { try { return new URL(url, base || location.href).toString(); } catch (_) { return ''; } };
 
   // ── Read mode from script URL params ─────────────────────────────────────
   const CAPTURE_MODE = (() => {
