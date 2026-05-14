@@ -656,8 +656,12 @@
       } catch (_) {}
     }
 
-    // Exclude elements inside global nav/header (not lesson content)
-    if (el.closest('nav, header, [role="navigation"], [role="banner"]')) return 'global_nav';
+    // Exclude global navigation, but allow the lesson header itself: Circle's
+    // previous/next arrows may live in a semantic <header> beside "Lesson X of Y".
+    const navLike = el.closest('nav, [role="navigation"], [role="banner"]');
+    if (navLike) return 'global_nav';
+    const headerLike = el.closest('header');
+    if (headerLike && !findLessonOfIndicator(headerLike)) return 'global_header';
 
     return null; // Not bad
   }
@@ -877,17 +881,6 @@
     };
   }
 
-  async function dispatchArrowNavigation(direction) {
-    const key = direction === 'prev' ? 'ArrowLeft' : 'ArrowRight';
-    const target = document.activeElement || document.body || document;
-    const opts = { key, code: key, bubbles: true, cancelable: true };
-    try { target.dispatchEvent(new KeyboardEvent('keydown', opts)); } catch (_) {}
-    try { document.dispatchEvent(new KeyboardEvent('keydown', opts)); } catch (_) {}
-    await sleep(80);
-    try { target.dispatchEvent(new KeyboardEvent('keyup', opts)); } catch (_) {}
-    try { document.dispatchEvent(new KeyboardEvent('keyup', opts)); } catch (_) {}
-  }
-
   async function navigateAdjacentLesson(direction, preferredMethod) {
     const before = getLessonState();
     const methods = ['geometry'];
@@ -933,9 +926,6 @@
           attempts.push(attempt);
           continue;
         }
-      } else {
-        log('nav candidate', { strategy: 'keyboard', direction, urlBefore: before.url, lessonBefore: before.lesson_number });
-        await dispatchArrowNavigation(direction);
       }
 
       const change = await waitForLessonChange(before, 8000);
