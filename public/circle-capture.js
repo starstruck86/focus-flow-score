@@ -1391,11 +1391,13 @@
           lessonBefore: before.lesson_number,
         });
         try {
-          adjacent.candidate.el.scrollIntoView({ block: 'center', inline: 'center' });
-          await sleep(100);
-          activateClick(adjacent.candidate.el);
+          if (!navigateToLessonHref(adjacent.candidate.href)) {
+            attempt.reason = 'invalid_adjacent_lesson_href';
+            attempts.push(attempt);
+            continue;
+          }
         } catch (e) {
-          attempt.reason = 'click_error';
+          attempt.reason = 'navigation_error';
           attempt.error = String(e?.message || e);
           attempts.push(attempt);
           continue;
