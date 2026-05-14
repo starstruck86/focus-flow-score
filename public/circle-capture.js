@@ -1230,15 +1230,78 @@
     };
   }
 
+  /**
+   * Find the icon-only "right arrow" anchor whose href contains /lessons/.
+   * This is the per-lesson next/prev pager link Circle renders near the lesson header.
+   */
+  function findLessonHrefArrow(direction, before) {
+    const currentKey = lessonUrlKey(before?.url || location.href);
+    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    const anchors = Array.from(document.querySelectorAll('a[href*="/lessons/"], a[href*="/posts/"]'));
+    const candidates = [];
+    for (const a of anchors) {
+      const href = abs(a.getAttribute('href'));
+      if (!href || !isLessonPageUrl(href) || isCourseRootUrl(href)) continue;
+      const key = lessonUrlKey(href);
+      if (key === currentKey) continue;
+      if (!isVisible(a) || isDisabled(a)) continue;
+      const text = safeText(a);
+      // Only icon-only / very short labels (the arrow button), not full lesson titles
+      if (text.length > 6) continue;
+      const r = a.getBoundingClientRect();
+      if (r.width < 16 || r.height < 16) continue;
+      const svgDir = detectSvgDirection(a);
+      const aria = (a.getAttribute('aria-label') || '').toLowerCase();
+      const title = (a.getAttribute('title') || '').toLowerCase();
+      const dirSignal = `${svgDir} ${aria} ${title}`;
+      let score = 0;
+      const reasons = [];
+      if (direction === 'next') {
+        if (/right|next|forward/.test(dirSignal)) { score += 100; reasons.push('right_signal'); }
+        if (/left|prev|previous|back/.test(dirSignal)) { score -= 200; reasons.push('left_penalty'); }
+        score += Math.round(r.left / Math.max(1, vw) * 50); // prefer right side
+      } else {
+        if (/left|prev|previous|back/.test(dirSignal)) { score += 100; reasons.push('left_signal'); }
+        if (/right|next|forward/.test(dirSignal)) { score -= 200; reasons.push('right_penalty'); }
+        score += Math.round((vw - r.right) / Math.max(1, vw) * 50);
+      }
+      candidates.push({ el: a, href, key, text, rect: rectInfo(a), svgDirection: svgDir, ariaLabel: aria, title, score, reasons });
+    }
+    candidates.sort((a, b) => b.score - a.score);
+    log('lessonHrefArrowCandidates', candidates.slice(0, 6).map(c => ({ ...c, el: undefined })));
+    const best = candidates[0];
+    if (!best || best.score < 50) return null;
+    return best;
+  }
+
   async function navigateAdjacentLesson(direction, preferredMethod) {
     const before = getLessonState();
-    const methods = ['lesson-link'];
+    const methods = ['lesson-href-arrow', 'lesson-link'];
     const attempts = [];
     let lastDiagnostics = null;
 
     for (const method of methods) {
       const attempt = { method, success: false };
-      if (method === 'lesson-link') {
+      if (method === 'lesson-href-arrow') {
+        const candidate = findLessonHrefArrow(direction, before);
+        attempt.candidate = candidate ? { href: candidate.href, text: candidate.text, rect: candidate.rect, svgDirection: candidate.svgDirection, ariaLabel: candidate.ariaLabel, score: candidate.score, reasons: candidate.reasons } : null;
+        if (!candidate?.el) {
+          attempt.reason = 'no_lesson_href_arrow';
+          attempts.push(attempt);
+          continue;
+        }
+        log('nav candidate', { strategy: 'lesson-href-arrow', href: candidate.href, urlBefore: before.url, lessonBefore: before.lesson_number });
+        try {
+          candidate.el.scrollIntoView({ block: 'center', inline: 'center' });
+          await sleep(100);
+          activateClick(candidate.el);
+        } catch (e) {
+          attempt.reason = 'click_error';
+          attempt.error = String(e?.message || e);
+          attempts.push(attempt);
+          continue;
+        }
+      } else if (method === 'lesson-link') {
         const sequence = discoverLessonLinkSequence(before.url);
         const adjacent = chooseAdjacentLessonLink(direction, before, sequence);
         attempt.visibleLessonLinks = sequence.map(stripLessonLinkInfo);
