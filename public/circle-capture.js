@@ -1658,18 +1658,9 @@
 
     let walkResult;
     try {
-      // Prefer sidebar-walk when the sidebar exposes a clean ordered list of
-      // lesson anchors that covers the course (or at least 80% of it). This
-      // avoids the fragile geometry/keyboard next-arrow probe that fails on
-      // some Circle layouts.
-      const sidebarAnchors = collectSidebarLessonAnchors();
-      const coversCourse = sidebarAnchors.length >= Math.max(2, Math.floor(indicator.total * 0.8));
-      log('sidebar anchors found', { count: sidebarAnchors.length, total: indicator.total, coversCourse });
-      if (coversCourse) {
-        walkResult = await autoWalkViaSidebar(sidebarAnchors, indicator.total);
-      } else {
-        walkResult = await autoWalk(indicator);
-      }
+      // Course capture must mirror the user's page navigation: start on
+      // Lesson 1 and click only the visible right-arrow next control.
+      walkResult = await autoWalk(indicator);
     } catch (err) {
       log('auto-walk failed', err);
       showBanner('Capture failed: ' + (err?.message || err), 'error');
