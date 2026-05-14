@@ -1073,6 +1073,91 @@
     return results;
   }
 
+  /**
+   * Collect ORDERED clickable sidebar lesson anchors. Returns DOM elements
+   * (with metadata) sorted top-to-bottom by visual position. Filters to items
+   * that look like real lesson rows (have lesson-like href OR live inside a
+   * lesson-list container) and dedupes by href/text.
+   */
+  function collectSidebarLessonAnchors() {
+    const sidebar = document.querySelector('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [class*="lesson-list" i], [data-testid*="lesson-list" i]');
+    if (!sidebar) return [];
+    const anchors = Array.from(sidebar.querySelectorAll('a[href]'));
+    const seenHref = new Set();
+    const seenText = new Set();
+    const results = [];
+    for (const el of anchors) {
+      const href = el.getAttribute('href') || '';
+      if (!href || href.startsWith('#')) continue;
+      let abs = '';
+      try { abs = new URL(href, location.href).toString().split('#')[0]; } catch (_) { continue; }
+      // Must look like a lesson/post URL OR live in a list element
+      const looksLesson = /\/lessons?\/|\/posts?\/|\/modules?\/.+\/[^/]+/i.test(abs);
+      const inListItem = !!el.closest('li, [role="listitem"]');
+      if (!looksLesson && !inListItem) continue;
+      // Skip course-root style links
+      if (isCourseRootUrl(abs)) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      const text = safeText(el).slice(0, 160);
+      if (!text || text.length < 2) continue;
+      if (seenHref.has(abs)) continue;
+      if (seenText.has(text)) continue;
+      seenHref.add(abs);
+      seenText.add(text);
+      results.push({ el, href: abs, text, top: r.top });
+    }
+    results.sort((a, b) => a.top - b.top);
+    return results;
+  }
+
+  /**
+   * Walk every lesson by clicking sidebar anchors in order. Captures each
+   * lesson page after waiting for it to load. Returns the same shape as
+   * autoWalk(): { lessons, fatalNavigationFailure, debugReport }.
+   */
+  async function autoWalkViaSidebar(anchors, total) {
+    const lessons = [];
+    const seenUrls = new Set();
+    showBanner(`Sidebar walk: ${anchors.length} lessons queued.`, 'info', true);
+    for (let i = 0; i < anchors.length; i++) {
+      const a = anchors[i];
+      const before = getLessonState();
+      try {
+        a.el.scrollIntoView({ block: 'center' });
+        await sleep(120);
+        a.el.click();
+      } catch (e) {
+        log('sidebar click error', { i, text: a.text, error: String(e?.message || e) });
+      }
+      // Wait for URL or content to actually change to the target href
+      const start = Date.now();
+      let landed = false;
+      while (Date.now() - start < 9000) {
+        await sleep(250);
+        const cur = location.href.split('#')[0];
+        if (cur === a.href || cur.startsWith(a.href) || a.href.startsWith(cur)) { landed = true; break; }
+        const change = getLessonState();
+        if (change.url !== before.url && change.title && change.title !== before.title) { landed = true; break; }
+      }
+      await sleep(500); // settle
+      let lesson;
+      try {
+        lesson = await extractCurrentLesson();
+      } catch (err) {
+        log('sidebar extract error', { i, error: String(err?.message || err) });
+        lesson = { url: location.href.split('#')[0], lesson_number: i + 1, title: a.text, capture_issue: 'extract_failed' };
+      }
+      if (!lesson.lesson_number) lesson.lesson_number = i + 1;
+      if (!lesson.title) lesson.title = a.text;
+      lessons.push(lesson);
+      seenUrls.add(lesson.url);
+      const withContent = lessons.filter(l => l.body_text || l.transcript || l.resources?.length || l.media_url).length;
+      showBanner(`Sidebar walk: ${i + 1} / ${anchors.length} · ${withContent} with content\nCurrent: ${lesson.title}`, 'info', true);
+    }
+    return { lessons, fatalNavigationFailure: false, debugReport: { method: 'sidebar_walk', anchorCount: anchors.length, total } };
+  }
+
   function collectSidebarLessonRows() {
     const sidebar = document.querySelector('aside, [data-testid*="sidebar" i], [class*="sidebar" i]');
     if (!sidebar) return [];
@@ -1594,7 +1679,18 @@
 
     let walkResult;
     try {
-      walkResult = await autoWalk(indicator);
+      // Prefer sidebar-walk when the sidebar exposes a clean ordered list of
+      // lesson anchors that covers the course (or at least 80% of it). This
+      // avoids the fragile geometry/keyboard next-arrow probe that fails on
+      // some Circle layouts.
+      const sidebarAnchors = collectSidebarLessonAnchors();
+      const coversCourse = sidebarAnchors.length >= Math.max(2, Math.floor(indicator.total * 0.8));
+      log('sidebar anchors found', { count: sidebarAnchors.length, total: indicator.total, coversCourse });
+      if (coversCourse) {
+        walkResult = await autoWalkViaSidebar(sidebarAnchors, indicator.total);
+      } else {
+        walkResult = await autoWalk(indicator);
+      }
     } catch (err) {
       log('auto-walk failed', err);
       showBanner('Capture failed: ' + (err?.message || err), 'error');
