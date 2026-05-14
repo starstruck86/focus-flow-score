@@ -643,6 +643,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                   <Badge variant="outline" className="text-[9px] h-4">lessons {preImportSummary.lessonsCount}</Badge>
                   <Badge variant="outline" className="text-[9px] h-4">with body {preImportSummary.withBody}</Badge>
                   <Badge variant="outline" className="text-[9px] h-4">with transcript {preImportSummary.withTranscript}</Badge>
+                  <Badge variant="outline" className="text-[9px] h-4">with media {preImportSummary.withMedia}</Badge>
                   <Badge variant="outline" className="text-[9px] h-4">resources {preImportSummary.totalResources}</Badge>
                 </div>
                 {preImportSummary.firstTitle && (
@@ -660,7 +661,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                   <div className="flex items-start gap-1.5 text-destructive">
                     <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
                     <span>
-                      Capture did not include lesson content. Open browser console and send{' '}
+                      Capture did not include lesson content, media, transcripts, or resources. Open browser console and send{' '}
                       <code className="font-mono">[Circle Capture]</code> debug logs.
                     </span>
                   </div>
@@ -702,6 +703,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
                       {l.body_text && <Badge variant="outline" className="text-[9px] h-4">text</Badge>}
                       {l.media_url && <Badge variant="outline" className="text-[9px] h-4">video</Badge>}
                       {l.transcript && <Badge variant="outline" className="text-[9px] h-4">transcript</Badge>}
+                      {!!l.resources?.length && <Badge variant="outline" className="text-[9px] h-4">resources</Badge>}
                       <Button
                         variant="ghost"
                         size="sm"
