@@ -296,6 +296,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
       body_text: l.body_text,
       transcript: l.transcript,
       media_url: l.media_url,
+      resources: Array.isArray(l.resources) ? l.resources : undefined,
       source_url: payload.source_url,
     }));
     const withContent = lessons.filter(hasContent);
@@ -303,6 +304,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     // Compute pre-import summary (always shown for transparency).
     const withBody = lessons.filter(l => (l.body_text?.trim().length ?? 0) > 0).length;
     const withTranscript = lessons.filter(l => (l.transcript?.trim().length ?? 0) > 0).length;
+    const withMedia = lessons.filter(l => (l.media_url?.trim().length ?? 0) > 0).length;
     const totalResources = (payload.lessons as any[]).reduce(
       (n, l) => n + (Array.isArray(l.resources) ? l.resources.length : 0),
       0,
@@ -312,6 +314,7 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
       lessonsCount: lessons.length,
       withBody,
       withTranscript,
+      withMedia,
       totalResources,
       firstTitle: first?.title ?? '',
       firstBodyLen: first?.body_text?.trim().length ?? 0,
@@ -320,11 +323,11 @@ export function CircleImportPanel({ sourceUrl, captureHint, onLessons }: Props) 
     setPreImportSummary(summary);
 
     // Hard-stop: nothing usable. Do NOT auto-import. Surface debug guidance.
-    if (withBody === 0 && withTranscript === 0 && totalResources === 0) {
+    if (withBody === 0 && withTranscript === 0 && withMedia === 0 && totalResources === 0) {
       setPhase('idle');
       setEmptyCaptureBlocked(true);
       setValidationError(
-        'Capture did not include lesson content. Open browser console and send [Circle Capture] debug logs.',
+        'Capture did not include lesson content, media, transcripts, or resources. Open browser console and send [Circle Capture] debug logs.',
       );
       return;
     }
