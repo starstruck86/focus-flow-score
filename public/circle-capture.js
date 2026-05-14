@@ -944,6 +944,79 @@
     return { header, buttons };
   }
 
+  function scanBodyArrowCandidates(direction) {
+    const header = getLessonHeaderRegion();
+    const indicatorRect = header.indicatorRect;
+    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+    const mainEl = document.querySelector('main') || document.body;
+    const allButtons = Array.from(mainEl.querySelectorAll(clickableSelector()));
+    const candidates = [];
+
+    for (const el of allButtons) {
+      if (!isVisible(el) || isDisabled(el) || isLikelySidebarButton(el)) continue;
+      const rejectedReason = isBadNavigationCandidate(el);
+      if (rejectedReason) continue;
+      const r = el.getBoundingClientRect();
+      const centerX = (r.left + r.right) / 2;
+      const centerY = (r.top + r.bottom) / 2;
+      if (r.bottom < 60 || r.top > vh - 40) continue;
+      if (r.width < 16 || r.height < 16 || r.width > 130 || r.height > 130) continue;
+
+      const text = safeText(el).slice(0, 120);
+      const ariaLabel = el.getAttribute('aria-label') || '';
+      const title = el.getAttribute('title') || '';
+      const href = el.getAttribute('href') || '';
+      const combined = `${text} ${ariaLabel} ${title}`.toLowerCase();
+      if (text.length > 60) continue;
+
+      const svgDirection = detectSvgDirection(el);
+      let score = 0;
+      const reasons = [];
+      if (direction === 'next') {
+        if (/right|next|forward/i.test(`${svgDirection} ${combined}`)) { score += 55; reasons.push('right_signal'); }
+        if (/left|prev|previous|back/i.test(`${svgDirection} ${combined}`)) { score -= 80; reasons.push('left_penalty'); }
+        if (indicatorRect && centerX > indicatorRect.right) { score += 18; reasons.push('right_of_indicator'); }
+        if (centerX > vw * 0.55) { score += 18; reasons.push('right_half'); }
+        if (r.right >= vw - 180) { score += 22; reasons.push('near_right_side'); }
+      } else {
+        if (/left|prev|previous|back/i.test(`${svgDirection} ${combined}`)) { score += 55; reasons.push('left_signal'); }
+        if (/right|next|forward/i.test(`${svgDirection} ${combined}`)) { score -= 80; reasons.push('right_penalty'); }
+        if (indicatorRect && centerX < indicatorRect.left) { score += 18; reasons.push('left_of_indicator'); }
+        if (centerX < vw * 0.45) { score += 18; reasons.push('left_half'); }
+        if (r.left <= 180) { score += 22; reasons.push('near_left_side'); }
+      }
+      const isSmallIcon = r.width >= 20 && r.height >= 20 && r.width <= 82 && r.height <= 82 && Math.abs(r.width - r.height) <= 28;
+      if (isSmallIcon) { score += 18; reasons.push('small_icon'); }
+      if (indicatorRect) {
+        const vDist = Math.abs(centerY - ((indicatorRect.top + indicatorRect.bottom) / 2));
+        if (vDist < 80) { score += 18; reasons.push('near_indicator_v'); }
+        else if (vDist < 240) { score += 8; reasons.push('moderate_indicator_v'); }
+      }
+      if (!text || text.length <= 6) { score += 8; reasons.push('icon_only'); }
+
+      candidates.push({
+        el,
+        text,
+        ariaLabel,
+        title,
+        href,
+        role: el.getAttribute('role') || el.tagName.toLowerCase(),
+        disabled: false,
+        rect: rectInfo(el),
+        svgDirection,
+        smallCircular: isSmallIcon,
+        distanceFromLessonLabelY: indicatorRect ? Math.round(Math.abs(centerY - ((indicatorRect.top + indicatorRect.bottom) / 2))) : 0,
+        score,
+        reasons,
+      });
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+    log('bodyArrowCandidates', candidates.slice(0, 8).map(stripButtonInfo));
+    return candidates;
+  }
+
   function chooseHeaderArrowCandidate(direction, scan) {
     // Filter out rejected candidates
     const active = scan.buttons.filter(b => !b.disabled && b.smallCircular && !b.rejectedReason);
