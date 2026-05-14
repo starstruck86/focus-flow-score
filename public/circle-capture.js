@@ -641,6 +641,24 @@
     return rest;
   }
 
+  function findLessonsDrawerRoot() {
+    // Look for a container whose heading is "Lessons" (the drawer in screenshot)
+    const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,[role="heading"]'));
+    for (const h of headings) {
+      const t = (h.textContent || '').trim().toLowerCase();
+      if (t === 'lessons' || t === 'course content' || t === 'curriculum' || t === 'contents') {
+        // Walk up to the panel that contains lesson links
+        let cur = h.parentElement;
+        for (let i = 0; i < 8 && cur; i++) {
+          const linkCount = cur.querySelectorAll('a[href*="/lessons/"], a[href*="/posts/"]').length;
+          if (linkCount >= 2) return cur;
+          cur = cur.parentElement;
+        }
+      }
+    }
+    return null;
+  }
+
   function discoverLessonLinkSequence(currentUrl) {
     const currentKey = lessonUrlKey(currentUrl || location.href);
     const collectFrom = (root) => {
@@ -665,6 +683,14 @@
     }
       return links;
     };
+    const drawerRoot = findLessonsDrawerRoot();
+    if (drawerRoot) {
+      const links = collectFrom(drawerRoot);
+      if (links.length >= 2) {
+        log('lessonLinkSequence (drawer)', links.map(stripLessonLinkInfo));
+        return links;
+      }
+    }
     const roots = Array.from(document.querySelectorAll('aside, [data-testid*="sidebar" i], [class*="sidebar" i], [aria-label*="sidebar" i], [data-testid*="course" i], [class*="course" i], main'));
     const pools = roots.concat(document.body).map(root => {
       const links = collectFrom(root);
@@ -676,6 +702,23 @@
     const links = pools[0]?.links || [];
     log('lessonLinkSequence', links.map(stripLessonLinkInfo));
     return links;
+  }
+
+  async function openLessonsDrawer() {
+    if (findLessonsDrawerRoot()) return true;
+    // Try to find a button that opens the lessons drawer
+    const candidates = Array.from(document.querySelectorAll('button,[role="button"],a'));
+    for (const c of candidates) {
+      const t = (safeText(c) + ' ' + (c.getAttribute('aria-label') || '') + ' ' + (c.getAttribute('title') || '')).toLowerCase();
+      if (/^(lessons|course content|curriculum|table of contents|contents)$/i.test(safeText(c).trim()) ||
+          /\b(open\s+lessons|view\s+lessons|all\s+lessons|course\s+content|curriculum|table\s+of\s+contents)\b/.test(t)) {
+        if (!isVisible(c) || isDisabled(c)) continue;
+        try { activateClick(c); } catch (_) {}
+        await sleep(400);
+        if (findLessonsDrawerRoot()) return true;
+      }
+    }
+    return false;
   }
 
   function chooseAdjacentLessonLink(direction, before, sequence) {
