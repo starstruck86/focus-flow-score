@@ -307,14 +307,33 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Hard per-call timeouts so a hung upstream cannot drag us to the 150s idle limit.
     const tokenPromise = fetch(
       `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${ELEVENLABS_AGENT_ID}`,
-      { headers: { "xi-api-key": ELEVENLABS_API_KEY } }
+      { headers: { "xi-api-key": ELEVENLABS_API_KEY }, signal: AbortSignal.timeout(15000) }
     );
 
     const contextPromise = fetchCrmContext(supabase, userId, conversationHistory);
 
-    const [tokenResp, crmContext] = await Promise.all([tokenPromise, contextPromise]);
+    // Overall budget: 35s. If we blow past it, fail fast with a 504 instead of idling.
+    const deadline = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("dave-conversation-token: internal 35s deadline exceeded")), 35000)
+    );
+
+    let tokenResp: Response;
+    let crmContext: CrmContext;
+    try {
+      [tokenResp, crmContext] = await Promise.race([
+        Promise.all([tokenPromise, contextPromise]),
+        deadline,
+      ]) as [Response, CrmContext];
+    } catch (e) {
+      console.error("dave-conversation-token timeout/abort:", (e as Error)?.message);
+      return new Response(
+        JSON.stringify({ error: "Voice session start timed out. Please retry.", errorType: "timeout" }),
+        { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (!tokenResp.ok) {
       const errBody = await tokenResp.text();
