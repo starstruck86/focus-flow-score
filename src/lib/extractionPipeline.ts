@@ -9,6 +9,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { autoOperationalizeResource, type AutoOperationalizeResult } from './autoOperationalize';
+import { fetchAllPages } from './supabasePagination';
 import { createLogger } from './logger';
 
 const log = createLogger('ExtractionPipeline');
