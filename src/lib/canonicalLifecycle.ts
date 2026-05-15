@@ -182,8 +182,12 @@ export function deriveCanonicalStage(
   ki: { total: number; active: number; activeWithContexts: number },
 ): LifecycleStage {
   const contentLength = resource.content_length ?? 0;
-  // Placeholder content is NOT real content
-  if (isPlaceholderContent(resource.content ?? null) && !resource.manual_content_present) {
+  const prefix = (resource.content ?? '').trim();
+  // Only treat as placeholder when the prefix is NON-EMPTY and matches a
+  // placeholder pattern. An empty/missing prefix is unknown — fall back to
+  // content_length so resources with long bodies aren't wrongly demoted.
+  const prefixIsPlaceholder = prefix.length > 0 && PLACEHOLDER_PATTERNS.some(p => p.test(prefix));
+  if (prefixIsPlaceholder && !resource.manual_content_present) {
     return 'uploaded';
   }
   const isContentBacked = contentLength >= MIN_CONTENT_LENGTH || resource.manual_content_present === true;
