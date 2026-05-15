@@ -1610,6 +1610,13 @@ export type Database = {
             foreignKeyName: "course_lesson_imports_resource_id_fkey"
             columns: ["resource_id"]
             isOneToOne: false
+            referencedRelation: "resource_truth_drift"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "course_lesson_imports_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
             referencedRelation: "resources"
             referencedColumns: ["id"]
           },
@@ -1688,6 +1695,13 @@ export type Database = {
             columns: ["course_import_id"]
             isOneToOne: false
             referencedRelation: "course_imports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "course_lessons_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
+            referencedRelation: "resource_truth_drift"
             referencedColumns: ["id"]
           },
           {
@@ -5208,6 +5222,13 @@ export type Database = {
             foreignKeyName: "resource_chunks_resource_id_fkey"
             columns: ["resource_id"]
             isOneToOne: false
+            referencedRelation: "resource_truth_drift"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resource_chunks_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
             referencedRelation: "resources"
             referencedColumns: ["id"]
           },
@@ -5244,6 +5265,13 @@ export type Database = {
             columns: ["collection_id"]
             isOneToOne: false
             referencedRelation: "resource_collections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resource_collection_members_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
+            referencedRelation: "resource_truth_drift"
             referencedColumns: ["id"]
           },
           {
@@ -5294,6 +5322,13 @@ export type Database = {
             foreignKeyName: "resource_collections_parent_resource_id_fkey"
             columns: ["parent_resource_id"]
             isOneToOne: false
+            referencedRelation: "resource_truth_drift"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resource_collections_parent_resource_id_fkey"
+            columns: ["parent_resource_id"]
+            isOneToOne: false
             referencedRelation: "resources"
             referencedColumns: ["id"]
           },
@@ -5334,6 +5369,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "resource_digests_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: true
+            referencedRelation: "resource_truth_drift"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "resource_digests_resource_id_fkey"
             columns: ["resource_id"]
@@ -5563,6 +5605,13 @@ export type Database = {
             foreignKeyName: "resource_jobs_resource_id_fkey"
             columns: ["resource_id"]
             isOneToOne: false
+            referencedRelation: "resource_truth_drift"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resource_jobs_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
             referencedRelation: "resources"
             referencedColumns: ["id"]
           },
@@ -5698,6 +5747,13 @@ export type Database = {
           version_number?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "resource_versions_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
+            referencedRelation: "resource_truth_drift"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "resource_versions_resource_id_fkey"
             columns: ["resource_id"]
@@ -6160,6 +6216,13 @@ export type Database = {
             columns: ["source_registry_id"]
             isOneToOne: false
             referencedRelation: "source_registry"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resources_source_resource_id_fkey"
+            columns: ["source_resource_id"]
+            isOneToOne: false
+            referencedRelation: "resource_truth_drift"
             referencedColumns: ["id"]
           },
           {
@@ -8135,6 +8198,13 @@ export type Database = {
             foreignKeyName: "template_suggestions_source_resource_id_fkey"
             columns: ["source_resource_id"]
             isOneToOne: false
+            referencedRelation: "resource_truth_drift"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "template_suggestions_source_resource_id_fkey"
+            columns: ["source_resource_id"]
+            isOneToOne: false
             referencedRelation: "resources"
             referencedColumns: ["id"]
           },
@@ -8969,6 +9039,22 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
           website?: string | null
+        }
+        Relationships: []
+      }
+      resource_truth_drift: {
+        Row: {
+          active_ki_count: number | null
+          content_length: number | null
+          drift_reason: string | null
+          enrichment_status: string | null
+          extraction_attempt_count: number | null
+          extraction_failure_type: string | null
+          id: string | null
+          resource_type: string | null
+          title: string | null
+          updated_at: string | null
+          user_id: string | null
         }
         Relationships: []
       }
