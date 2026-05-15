@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllPages } from '@/lib/supabasePagination';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -60,15 +61,28 @@ export function ResourceIntelligenceDashboard() {
     setLoading(true);
 
     try {
-      const [resourcesRes, digestsRes, kisRes] = await Promise.all([
-        supabase.from('resources').select('id, title, enrichment_status, enriched_at, content_length, last_quality_tier').eq('user_id', user.id),
-        supabase.from('resource_digests').select('resource_id, use_cases, takeaways').eq('user_id', user.id),
-        supabase.from('knowledge_items' as any).select('source_resource_id').eq('user_id', user.id).eq('active', true),
+      // Paginated to bypass PostgREST 1000-row default cap.
+      const [resources, digests, activeKIs] = await Promise.all([
+        fetchAllPages<any>((from, to) =>
+          supabase.from('resources')
+            .select('id, title, enrichment_status, enriched_at, content_length, last_quality_tier')
+            .eq('user_id', user.id)
+            .range(from, to)
+        ),
+        fetchAllPages<any>((from, to) =>
+          supabase.from('resource_digests')
+            .select('resource_id, use_cases, takeaways')
+            .eq('user_id', user.id)
+            .range(from, to)
+        ),
+        fetchAllPages<any>((from, to) =>
+          supabase.from('knowledge_items' as any)
+            .select('source_resource_id')
+            .eq('user_id', user.id)
+            .eq('active', true)
+            .range(from, to)
+        ),
       ]);
-
-      const resources = (resourcesRes.data || []) as any[];
-      const digests = (digestsRes.data || []) as any[];
-      const activeKIs = (kisRes.data || []) as any[];
 
       // Build set of resource IDs that have at least 1 active KI
       const resourcesWithActiveKIs = new Set<string>();
