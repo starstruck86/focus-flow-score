@@ -317,10 +317,24 @@ export function useKnowledgeCoverageAudit() {
         console.warn(`[Coverage Audit] GUARDRAIL: ${zeroKisPer1kWithKIs.length}/${resourcesWithKIs.length} resources have KIs but show 0 KIs/1k — likely mapping issue`);
       }
 
+      // Mutually exclusive buckets — each resource falls into exactly ONE bucket so
+      // the four totals always sum to rows.length (no double-counting between
+      // under_extracted_flag and the shallow depth bucket).
+      // Priority: zero KIs → under-extracted → shallow → fully mined.
       const resourcesZeroKIs = rows.filter(r => r.ki_count_total === 0).length;
-      const resourcesUnderExtracted = rows.filter(r => r.under_extracted_flag).length;
-      const resourcesShallowlyMined = rows.filter(r => r.extraction_depth_bucket === 'shallow').length;
-      const resourcesFullyMined = rows.filter(r => r.extraction_depth_bucket === 'strong' || r.extraction_depth_bucket === 'moderate').length;
+      const resourcesUnderExtracted = rows.filter(
+        r => r.ki_count_total > 0 && r.under_extracted_flag,
+      ).length;
+      const resourcesShallowlyMined = rows.filter(
+        r => r.ki_count_total > 0
+          && !r.under_extracted_flag
+          && r.extraction_depth_bucket === 'shallow',
+      ).length;
+      const resourcesFullyMined = rows.filter(
+        r => r.ki_count_total > 0
+          && !r.under_extracted_flag
+          && (r.extraction_depth_bucket === 'strong' || r.extraction_depth_bucket === 'moderate'),
+      ).length;
 
       const totalContentLength = rows.reduce((s, r) => s + r.content_length, 0);
       const avgKisPer1k = totalContentLength > 0
