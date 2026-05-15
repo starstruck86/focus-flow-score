@@ -330,10 +330,13 @@ export function useKnowledgeCoverageAudit() {
           && !r.under_extracted_flag
           && r.extraction_depth_bucket === 'shallow',
       ).length;
+      // Catch-all: any KI-bearing resource that isn't under-extracted and isn't
+      // explicitly shallow counts as fully mined. Includes 'strong', 'moderate',
+      // and 'none'/null buckets so the four totals always sum to rows.length.
       const resourcesFullyMined = rows.filter(
         r => r.ki_count_total > 0
           && !r.under_extracted_flag
-          && (r.extraction_depth_bucket === 'strong' || r.extraction_depth_bucket === 'moderate'),
+          && r.extraction_depth_bucket !== 'shallow',
       ).length;
 
       const totalContentLength = rows.reduce((s, r) => s + r.content_length, 0);
