@@ -456,8 +456,9 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
 
                 {/* ── Bucket summary stats ── */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                  <MiniStat label="Ready to Use" value={audit.counts.operationalized} accent="emerald" />
-                  <MiniStat label="Needs Extraction" value={audit.counts.extractable_not_operationalized} accent="blue" />
+                  {/* Use canonical lifecycle as single source of truth so this matches Knowledge Overview / Library Intelligence */}
+                  <MiniStat label="Ready to Use" value={lifecycle.operationalized} accent="emerald" />
+                  <MiniStat label="Needs Extraction" value={lifecycle.blocked.no_extraction + lifecycle.blocked.no_activation + lifecycle.blocked.missing_contexts} accent="blue" />
                   <MiniStat label="Needs Review" value={audit.counts.content_backed_needs_fix} accent="orange" />
                   <MiniStat label="Underutilized" value={underutilizedCount} accent="amber" />
                 </div>
