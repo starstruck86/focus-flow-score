@@ -12,6 +12,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllPages } from '@/lib/supabasePagination';
 import { inferTags, mergeTags, type StructuredTag } from './resourceTags';
 import {
   extractKnowledgeHeuristic,
@@ -837,22 +838,24 @@ export async function getExtractionCoverage(): Promise<ExtractionCoverage> {
   const empty: ExtractionCoverage = { enrichedResources: 0, withKnowledgeItems: 0, operationalizedResources: 0, noKnowledgeYet: 0, contentEmptyDespiteLength: 0, kiCoveragePct: 0, opCoveragePct: 0, blockedByEmptyContent: 0, blockedByNoExtraction: 0, blockedByActivationCriteria: 0, blockedByMissingContexts: 0, blockedByStaleBlockerState: 0, examples: emptyExamples };
   if (!userId) return empty;
 
-  // Enriched + stale-blocker resources
-  const { data: allResources } = await supabase
-    .from('resources')
-    .select('id, title, content_length, content, enrichment_status, manual_input_required, recovery_queue_bucket, failure_reason')
-    .eq('user_id', userId);
-
-  const resList = (allResources ?? []) as any[];
+  // Paginated to bypass PostgREST 1000-row default cap.
+  const resList = await fetchAllPages<any>((from, to) =>
+    supabase
+      .from('resources')
+      .select('id, title, content_length, content, enrichment_status, manual_input_required, recovery_queue_bucket, failure_reason')
+      .eq('user_id', userId)
+      .range(from, to)
+  );
   const enrichedStatuses = ['enriched', 'deep_enriched', 'verified'];
 
-  // KI per resource
-  const { data: kiData } = await supabase
-    .from('knowledge_items' as any)
-    .select('source_resource_id, active, applies_to_contexts')
-    .eq('user_id', userId);
-
-  const kiList = (kiData ?? []) as any[];
+  // KI per resource (also paginated).
+  const kiList = await fetchAllPages<any>((from, to) =>
+    supabase
+      .from('knowledge_items' as any)
+      .select('source_resource_id, active, applies_to_contexts')
+      .eq('user_id', userId)
+      .range(from, to)
+  );
   const kiByResource = new Map<string, any[]>();
   for (const ki of kiList) {
     if (!ki.source_resource_id) continue;
