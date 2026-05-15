@@ -9,6 +9,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { autoOperationalizeResource, type AutoOperationalizeResult } from './autoOperationalize';
+import { fetchAllPages } from './supabasePagination';
 import { createLogger } from './logger';
 
 const log = createLogger('ExtractionPipeline');
@@ -466,25 +467,34 @@ export interface PipelineStats {
 }
 
 export async function getPipelineStats(userId: string): Promise<PipelineStats> {
-  const { data: resources } = await (supabase as any).from('resources')
-    .select('id, pipeline_queue, block_reason, block_terminal, block_auto_fixable, content_length, enrichment_status')
-    .eq('user_id', userId);
-
-  const { data: kiData } = await (supabase as any).from('knowledge_items')
-    .select('source_resource_id, active')
-    .eq('user_id', userId)
-    .eq('active', true);
+  // Paginate to bypass PostgREST 1000-row default cap (libraries can exceed 1k resources & 25k+ KIs).
+  const [resources, kiData, lifecycleData] = await Promise.all([
+    fetchAllPages<any>((from, to) =>
+      (supabase as any).from('resources')
+        .select('id, pipeline_queue, block_reason, block_terminal, block_auto_fixable, content_length, enrichment_status')
+        .eq('user_id', userId)
+        .range(from, to)
+    ),
+    fetchAllPages<any>((from, to) =>
+      (supabase as any).from('knowledge_items')
+        .select('source_resource_id, active')
+        .eq('user_id', userId)
+        .eq('active', true)
+        .range(from, to)
+    ),
+    fetchAllPages<any>((from, to) =>
+      (supabase as any).from('canonical_resource_status')
+        .select('resource_id, canonical_stage, blocked_reason')
+        .eq('user_id', userId)
+        .range(from, to)
+    ),
+  ]);
 
   const { data: jobs } = await (supabase as any).from('extraction_pipeline_jobs')
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(10);
-
-  // Also fetch canonical lifecycle for truth-aligned blocked count
-  const { data: lifecycleData } = await (supabase as any).from('canonical_resource_status')
-    .select('resource_id, canonical_stage, blocked_reason')
-    .eq('user_id', userId);
 
   const all = resources ?? [];
   const activeKIResources = new Set((kiData ?? []).map((k: any) => k.source_resource_id));
