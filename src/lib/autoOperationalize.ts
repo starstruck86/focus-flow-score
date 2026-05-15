@@ -12,6 +12,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllPages } from '@/lib/supabasePagination';
 import { inferTags, mergeTags, type StructuredTag } from './resourceTags';
 import {
   extractKnowledgeHeuristic,
