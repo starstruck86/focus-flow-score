@@ -132,23 +132,20 @@ function renderKI(ki: Row, idx: number): string {
   return lines.join('');
 }
 
-function buildMarkdown(rows: Row[], scopeLabel: string): string {
-  const byChapter = new Map<string, Row[]>();
-  for (const r of rows) {
-    const ch = r.chapter || 'uncategorized';
-    if (!byChapter.has(ch)) byChapter.set(ch, []);
-    byChapter.get(ch)!.push(r);
-  }
-
+function buildHeader(rows: Row[], scopeLabel: string, byChapter: Map<string, Row[]>, partInfo?: { part: number; total: number }): string {
   const generatedAt = new Date().toISOString();
   const totalActive = rows.filter(r => r.active).length;
+  const partSuffix = partInfo ? ` (Part ${partInfo.part} of ${partInfo.total})` : '';
+  const partNote = partInfo
+    ? `\n_This is **Part ${partInfo.part} of ${partInfo.total}**. Upload all parts together — they form one knowledge base. Chapters may be split across parts._\n`
+    : '';
 
-  const header = `# Sales Knowledge Base — ${scopeLabel}
+  return `# Sales Knowledge Base — ${scopeLabel}${partSuffix}
 
 _Generated: ${generatedAt}_
 _Scope: ${scopeLabel}_
-_Total Knowledge Items (KIs): ${rows.length} (${totalActive} active)_
-_Chapters: ${byChapter.size}_
+_Total Knowledge Items (KIs) in this export: ${rows.length} (${totalActive} active)_
+_Chapters: ${byChapter.size}_${partNote}
 
 ## How to use this document (instructions for the assistant)
 
@@ -165,27 +162,127 @@ Rules of engagement:
 
 ---
 
-## Table of contents
-
 `;
+}
 
-  const toc = Array.from(byChapter.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([ch, items]) => `- **${titleCase(ch)}** — ${items.length} KI${items.length === 1 ? '' : 's'}`)
-    .join('\n');
-
-  const body = Array.from(byChapter.entries())
+/** Build per-chapter section strings (header + KIs). Each entry is one chapter block. */
+function buildChapterSections(rows: Row[]): { chapter: string; section: string; kiCount: number }[] {
+  const byChapter = new Map<string, Row[]>();
+  for (const r of rows) {
+    const ch = r.chapter || 'uncategorized';
+    if (!byChapter.has(ch)) byChapter.set(ch, []);
+    byChapter.get(ch)!.push(r);
+  }
+  return Array.from(byChapter.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([ch, items]) => {
-      const sorted = [...items].sort(
-        (a, b) => (b.confidence_score ?? 0) - (a.confidence_score ?? 0),
-      );
-      const section = sorted.map((ki, i) => renderKI(ki, i + 1)).join('\n---\n\n');
-      return `\n\n## ${titleCase(ch)}\n\n_${items.length} Knowledge Item${items.length === 1 ? '' : 's'} in this chapter._\n\n${section}`;
-    })
-    .join('\n');
+      const sorted = [...items].sort((a, b) => (b.confidence_score ?? 0) - (a.confidence_score ?? 0));
+      const kis = sorted.map((ki, i) => renderKI(ki, i + 1)).join('\n---\n\n');
+      const section = `\n\n## ${titleCase(ch)}\n\n_${items.length} Knowledge Item${items.length === 1 ? '' : 's'} in this chapter._\n\n${kis}\n`;
+      return { chapter: ch, section, kiCount: items.length };
+    });
+}
 
-  return header + toc + '\n' + body + '\n';
+const MAX_BYTES = 28 * 1024 * 1024; // 28 MB safety margin under 29 MB cap
+const enc = new TextEncoder();
+const byteLen = (s: string) => enc.encode(s).length;
+
+/** Split a single oversized chapter section into smaller chapter sections at KI boundaries. */
+function splitOversizedChapter(chapter: string, rows: Row[], maxBodyBytes: number): { chapter: string; section: string; kiCount: number }[] {
+  const sorted = [...rows].sort((a, b) => (b.confidence_score ?? 0) - (a.confidence_score ?? 0));
+  const parts: Row[][] = [];
+  let current: Row[] = [];
+  let currentBytes = 0;
+  for (const ki of sorted) {
+    const rendered = renderKI(ki, 1) + '\n---\n\n';
+    const b = byteLen(rendered);
+    if (currentBytes + b > maxBodyBytes && current.length) {
+      parts.push(current);
+      current = [];
+      currentBytes = 0;
+    }
+    current.push(ki);
+    currentBytes += b;
+  }
+  if (current.length) parts.push(current);
+
+  return parts.map((items, idx) => {
+    const kis = items.map((ki, i) => renderKI(ki, i + 1)).join('\n---\n\n');
+    const label = `${titleCase(chapter)} (cont. ${idx + 1}/${parts.length})`;
+    const section = `\n\n## ${label}\n\n_${items.length} Knowledge Item${items.length === 1 ? '' : 's'} in this chapter slice._\n\n${kis}\n`;
+    return { chapter: `${chapter}__part${idx + 1}`, section, kiCount: items.length };
+  });
+}
+
+/** Build one or more markdown files, each ≤ MAX_BYTES. */
+function buildMarkdownParts(rows: Row[], scopeLabel: string): string[] {
+  const byChapter = new Map<string, Row[]>();
+  for (const r of rows) {
+    const ch = r.chapter || 'uncategorized';
+    if (!byChapter.has(ch)) byChapter.set(ch, []);
+    byChapter.get(ch)!.push(r);
+  }
+
+  // Probe header size with a placeholder; recompute per-part once we know total count.
+  const probeHeader = buildHeader(rows, scopeLabel, byChapter, { part: 1, total: 9 });
+  const headerBudget = byteLen(probeHeader) + 4096; // padding for TOC + part label growth
+  const bodyBudget = MAX_BYTES - headerBudget;
+
+  // Build sections, splitting any chapter that alone exceeds bodyBudget.
+  let sections = buildChapterSections(rows);
+  const expanded: typeof sections = [];
+  for (const sec of sections) {
+    if (byteLen(sec.section) > bodyBudget) {
+      const chapterRows = byChapter.get(sec.chapter) || [];
+      expanded.push(...splitOversizedChapter(sec.chapter, chapterRows, bodyBudget));
+    } else {
+      expanded.push(sec);
+    }
+  }
+  sections = expanded;
+
+  // Greedy bin-pack chapter sections into parts.
+  const partGroups: { sections: typeof sections; bytes: number }[] = [];
+  let group: typeof sections = [];
+  let groupBytes = 0;
+  for (const sec of sections) {
+    const b = byteLen(sec.section);
+    if (groupBytes + b > bodyBudget && group.length) {
+      partGroups.push({ sections: group, bytes: groupBytes });
+      group = [];
+      groupBytes = 0;
+    }
+    group.push(sec);
+    groupBytes += b;
+  }
+  if (group.length) partGroups.push({ sections: group, bytes: groupBytes });
+
+  const totalParts = partGroups.length;
+
+  return partGroups.map((g, idx) => {
+    const partRows = g.sections.flatMap(s => byChapter.get(s.chapter.replace(/__part\d+$/, '')) || []);
+    const partByChapter = new Map<string, Row[]>();
+    for (const s of g.sections) {
+      const baseCh = s.chapter.replace(/__part\d+$/, '');
+      if (!partByChapter.has(baseCh)) partByChapter.set(baseCh, []);
+    }
+    const header = buildHeader(
+      partRows,
+      scopeLabel,
+      partByChapter,
+      totalParts > 1 ? { part: idx + 1, total: totalParts } : undefined,
+    );
+    const toc = g.sections
+      .map(s => {
+        const label = s.chapter.includes('__part')
+          ? `${titleCase(s.chapter.replace(/__part\d+$/, ''))} (cont.)`
+          : titleCase(s.chapter);
+        return `- **${label}** — ${s.kiCount} KI${s.kiCount === 1 ? '' : 's'}`;
+      })
+      .join('\n');
+    const body = g.sections.map(s => s.section).join('\n');
+    return header + '## Table of contents (this part)\n\n' + toc + '\n' + body + '\n';
+  });
 }
 
 export function KnowledgeExport() {
