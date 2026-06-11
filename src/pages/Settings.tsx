@@ -1133,6 +1133,7 @@ export default function Settings() {
               </div>
               <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
             </Link>
+            <KnowledgeExport />
           </section>
 
           <section className="space-y-4">
