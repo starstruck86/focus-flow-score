@@ -218,7 +218,7 @@ export function KnowledgeExport() {
             .select('chapter')
             .range(from, from + PAGE - 1);
           if (error) { toast.error(error.message); break; }
-          const rows = (data ?? []) as { chapter: string | null }[];
+          const rows = (data ?? []) as unknown as { chapter: string | null }[];
           if (!rows.length) break;
           for (const r of rows) {
             const ch = r.chapter || 'uncategorized';
@@ -246,7 +246,7 @@ export function KnowledgeExport() {
             .not('source_resource_id', 'is', null)
             .range(from, from + PAGE - 1);
           if (error) { toast.error(error.message); break; }
-          const rows = (data ?? []) as { source_resource_id: string | null }[];
+          const rows = (data ?? []) as unknown as { source_resource_id: string | null }[];
           if (!rows.length) break;
           for (const r of rows) {
             if (!r.source_resource_id) continue;
@@ -264,7 +264,7 @@ export function KnowledgeExport() {
             .from('resources' as any)
             .select('id,title')
             .in('id', slice);
-          for (const r of (data ?? []) as { id: string; title: string | null }[]) {
+          for (const r of (data ?? []) as unknown as { id: string; title: string | null }[]) {
             titleMap.set(r.id, r.title || '(untitled)');
           }
         }
