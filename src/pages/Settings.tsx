@@ -3,6 +3,7 @@ import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useStore } from '@/store/useStore';
 import { ConversionBenchmarksSettings } from '@/components/settings/ConversionBenchmarksSettings';
 import { AppearanceSettings } from '@/components/settings/AppearanceSettings';
+import { KnowledgeExport } from '@/components/settings/KnowledgeExport';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { Layout } from '@/components/Layout';
 import { 
@@ -1133,6 +1134,7 @@ export default function Settings() {
               </div>
               <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
             </Link>
+            <KnowledgeExport />
           </section>
 
           <section className="space-y-4">
