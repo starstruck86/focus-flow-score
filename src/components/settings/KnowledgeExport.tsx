@@ -418,10 +418,7 @@ export function KnowledgeExport() {
         return;
       }
       toast.info(`Building markdown for ${rows.length} KIs…`);
-      const md = buildMarkdown(rows, scopeLabel);
-      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const parts = buildMarkdownParts(rows, scopeLabel);
       const stamp = new Date().toISOString().slice(0, 10);
       const tag =
         mode === 'full' ? 'full'
@@ -429,12 +426,24 @@ export function KnowledgeExport() {
         : mode === 'since_date' ? `since-${sinceDate}`
         : mode === 'chapters' ? `chapters-${chapters.length}`
         : `sources-${resourceIds.length}`;
-      a.href = url;
-      a.download = `sales-knowledge-base_${tag}_${stamp}.md`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+
+      let totalBytes = 0;
+      for (let i = 0; i < parts.length; i++) {
+        const md = parts[i];
+        const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+        totalBytes += blob.size;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const suffix = parts.length > 1 ? `_part-${String(i + 1).padStart(2, '0')}-of-${String(parts.length).padStart(2, '0')}` : '';
+        a.href = url;
+        a.download = `sales-knowledge-base_${tag}_${stamp}${suffix}.md`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        // Small delay so browsers don't drop concurrent downloads
+        if (i < parts.length - 1) await new Promise(r => setTimeout(r, 400));
+      }
 
       if (mode === 'full') {
         const ts = new Date().toISOString();
@@ -442,8 +451,12 @@ export function KnowledgeExport() {
         setLastFullAt(ts);
       }
 
-      const sizeKb = Math.round(blob.size / 1024);
-      toast.success(`Exported ${rows.length} KIs (${sizeKb} KB)`);
+      const sizeMb = (totalBytes / (1024 * 1024)).toFixed(2);
+      toast.success(
+        parts.length > 1
+          ? `Exported ${rows.length} KIs across ${parts.length} files (${sizeMb} MB total). Upload all parts to your CustomGPT.`
+          : `Exported ${rows.length} KIs (${sizeMb} MB)`,
+      );
     } catch (err: any) {
       console.error('KI export failed', err);
       toast.error(`Export failed: ${err?.message ?? 'unknown error'}`);
