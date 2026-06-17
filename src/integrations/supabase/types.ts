@@ -9207,6 +9207,29 @@ export type Database = {
         Args: { p_thread_id: string }
         Returns: string
       }
+      get_next_ki_for_dimension: {
+        Args: {
+          p_exclude_ki_id?: string
+          p_spider_dimension: string
+          p_user_id: string
+        }
+        Returns: {
+          chapter: string
+          example_usage: string
+          framework: string
+          how_to_execute: string
+          id: string
+          macro_situation: string
+          micro_strategy: string
+          spider_dimension: string
+          tactic_summary: string
+          what_this_unlocks: string
+          when_not_to_use: string
+          when_to_use: string
+          who: string
+          why_it_matters: string
+        }[]
+      }
       get_resource_content_prefixes: {
         Args: { p_user_id: string }
         Returns: {
