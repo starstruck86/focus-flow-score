@@ -68,6 +68,7 @@ const PhaseEvidenceRunner = lazy(() => import("./pages/PhaseEvidenceRunner"));
 const StrategyOpsPanel = lazy(() => import("./pages/StrategyOpsPanel"));
 const CourseImports = lazy(() => import("./pages/CourseImports"));
 const CourseImportDetail = lazy(() => import("./pages/CourseImportDetail"));
+const Home = lazy(() => import("./pages/Home"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -115,7 +116,7 @@ const App = () => (
               <BrowserRouter>
                 <Routes>
                   <Route path="/auth" element={<Auth />} />
-                  <Route path="/" element={<Navigate to="/dojo" replace />} />
+                  <Route path="/" element={<Home />} />
                   <Route path="/today" element={<ProtectedPage routeName="Dashboard"><Dashboard /></ProtectedPage>} />
                   <Route path="/dashboard" element={<ProtectedPage routeName="Dashboard"><Dashboard /></ProtectedPage>} />
                   <Route path="/outreach" element={<ProtectedPage routeName="Outreach"><WeeklyOutreach /></ProtectedPage>} />
