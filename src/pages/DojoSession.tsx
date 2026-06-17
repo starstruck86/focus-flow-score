@@ -15,6 +15,8 @@ import {
   Eye, PenLine, Volume2, VolumeX,
 } from 'lucide-react';
 import { getRandomScenario, getLaneScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
+import { generateKIDrill, type KnowledgeItemForDrill, type KIDrillScenario } from '@/lib/dojo/kiDrillGenerator';
+import { writeKIMastery } from '@/lib/dojo/kiMasteryWriter';
 import { selectSkillShapedScenario } from '@/lib/learning/skillScenarioSelector';
 import { DAY_ANCHORS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
 import {
