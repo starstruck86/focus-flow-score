@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Target, AlertTriangle, Sparkles, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { selectNextKI } from '@/lib/dojo/selectNextKI';
 import {
   ResponsiveContainer,
   RadarChart,
@@ -182,51 +183,7 @@ export default function Skills() {
                         setLoadingDim(d.dimension);
                         try {
                           const userId = (await supabase.auth.getUser()).data.user?.id ?? '';
-
-                          const { data: masteredIds } = await supabase
-                            .from('ki_mastery')
-                            .select('ki_id')
-                            .eq('user_id', userId)
-                            .eq('spider_dimension', d.dimension);
-
-                          const drilled = new Set((masteredIds ?? []).map((r: any) => r.ki_id));
-
-                          let ki: any = null;
-                          if (d.decay_risk_count > 0) {
-                            const { data: decayRow } = await supabase
-                              .from('ki_mastery')
-                              .select('ki_id')
-                              .eq('user_id', userId)
-                              .eq('spider_dimension', d.dimension)
-                              .eq('decay_risk', true)
-                              .limit(1)
-                              .maybeSingle();
-                            if (decayRow?.ki_id) {
-                              const { data: kiData } = await supabase
-                                .from('knowledge_items')
-                                .select('id, chapter, spider_dimension, tactic_summary, macro_situation, micro_strategy, when_to_use, when_not_to_use, how_to_execute, example_usage, why_it_matters, what_this_unlocks, framework, who')
-                                .eq('id', decayRow.ki_id)
-                                .maybeSingle();
-                              ki = kiData;
-                            }
-                          }
-
-                          if (!ki) {
-                            let query = supabase
-                              .from('knowledge_items')
-                              .select('id, chapter, spider_dimension, tactic_summary, macro_situation, micro_strategy, when_to_use, when_not_to_use, how_to_execute, example_usage, why_it_matters, what_this_unlocks, framework, who')
-                              .eq('spider_dimension', d.dimension)
-                              .eq('is_core_ae', true)
-                              .limit(1);
-
-                            if (drilled.size > 0) {
-                              query = query.not('id', 'in', `(${[...drilled].join(',')})`);
-                            }
-
-                            const { data: kiData } = await query.maybeSingle();
-                            ki = kiData;
-                          }
-
+                          const ki = await selectNextKI(userId, d.dimension);
                           if (ki) {
                             navigate('/dojo', { state: { kiContext: ki } });
                           } else {

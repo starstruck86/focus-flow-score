@@ -38,6 +38,7 @@ import {
   type ActiveLane,
 } from '@/lib/sessionDurability';
 import { motion, AnimatePresence } from 'framer-motion';
+import { selectNextKI } from '@/lib/dojo/selectNextKI';
 import DojoRoleplay from '@/components/dojo/DojoRoleplay';
 import { LaneContextBanner } from '@/components/dojo/LaneContextBanner';
 import DojoReview, { type ReviewScoreResult } from '@/components/dojo/DojoReview';
@@ -359,33 +360,10 @@ export default function DojoSession() {
   };
 
   const handleNextRep = useCallback(async () => {
-    // KI-driven auto-advance: fetch next undrilled KI in same dimension
-    if (kiContext && user) {
+    // KI-driven auto-advance: server-side priority selection (decay → undrilled → lowest score)
+    if (kiContext && user && kiContext.spider_dimension) {
       try {
-        const { data: masteredIds } = await supabase
-          .from('ki_mastery')
-          .select('ki_id')
-          .eq('user_id', user.id)
-          .eq('spider_dimension', kiContext.spider_dimension ?? '');
-
-        const drilled = new Set([
-          ...(masteredIds ?? []).map((r: any) => r.ki_id),
-          kiContext.id,
-        ]);
-
-        let query = supabase
-          .from('knowledge_items')
-          .select('id, chapter, spider_dimension, tactic_summary, macro_situation, micro_strategy, when_to_use, when_not_to_use, how_to_execute, example_usage, why_it_matters, what_this_unlocks, framework, who')
-          .eq('spider_dimension', kiContext.spider_dimension ?? '')
-          .eq('is_core_ae', true)
-          .limit(1);
-
-        if (drilled.size > 0) {
-          query = (query as any).not('id', 'in', `(${[...drilled].join(',')})`);
-        }
-
-        const { data: nextKI } = await query.maybeSingle();
-
+        const nextKI = await selectNextKI(user.id, kiContext.spider_dimension, kiContext.id);
         if (nextKI) {
           navigate('/dojo/session', {
             state: { kiContext: nextKI },
