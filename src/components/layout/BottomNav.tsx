@@ -45,6 +45,8 @@ export const COLOR_VAR: Record<NavColor, string> = {
   dojo: 'var(--nav-coach)',
   learn: 'var(--nav-prep)',
   skills: 'var(--nav-coach)',
+  work_toggle: 'var(--nav-today)',
+  train_toggle: 'var(--nav-today)',
 };
 
 export const navRow1: NavItemDef[] = [
