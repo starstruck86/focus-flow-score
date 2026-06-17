@@ -32,6 +32,7 @@ const DIMENSION_TO_SKILL: Record<SpiderDimensionKey, string> = {
 export default function Skills() {
   const navigate = useNavigate();
   const { data, isLoading } = useKiProficiency();
+  const [loadingDim, setLoadingDim] = useState<SpiderDimensionKey | null>(null);
 
   const dimensions = data?.dimensions ?? [];
   const hasReps = (data?.total_reps ?? 0) > 0;
