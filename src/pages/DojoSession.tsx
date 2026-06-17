@@ -138,8 +138,8 @@ export default function DojoSession() {
   const [kiDrill] = useState<KIDrillScenario | null>(() => (kiContext ? generateKIDrill(kiContext) : null));
 
   const [scenario] = useState<DojoScenario>(() => {
-    // KI-driven drill: derive scenario from KI content (highest priority)
-    if (kiContext) return generateKIDrill(kiContext);
+    // KI-driven drill: reuse already-computed kiDrill (highest priority)
+    if (kiDrill) return kiDrill;
     if (state?.scenario) return state.scenario;
     // Lane-aware selection: honor laneAnchor when present
     if (state?.laneAnchor) {
