@@ -5,6 +5,7 @@ import { Activity, AlertTriangle, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useKiProficiency } from '@/hooks/useKiProficiency';
+import { selectNextKI } from '@/lib/dojo/selectNextKI';
 
 export function KiProficiencyStrip() {
   const navigate = useNavigate();
@@ -23,28 +24,7 @@ export function KiProficiencyStrip() {
     setDrilling(true);
     try {
       const userId = (await supabase.auth.getUser()).data.user?.id ?? '';
-
-      const { data: masteredIds } = await supabase
-        .from('ki_mastery')
-        .select('ki_id')
-        .eq('user_id', userId)
-        .eq('spider_dimension', dim.dimension);
-
-      const drilled = new Set((masteredIds ?? []).map((r: any) => r.ki_id));
-
-      let query = supabase
-        .from('knowledge_items')
-        .select('id, chapter, spider_dimension, tactic_summary, macro_situation, micro_strategy, when_to_use, when_not_to_use, how_to_execute, example_usage, why_it_matters, what_this_unlocks, framework, who')
-        .eq('spider_dimension', dim.dimension)
-        .eq('is_core_ae', true)
-        .limit(1);
-
-      if (drilled.size > 0) {
-        query = (query as any).not('id', 'in', `(${[...drilled].join(',')})`);
-      }
-
-      const { data: ki } = await query.maybeSingle();
-
+      const ki = await selectNextKI(userId, dim.dimension);
       if (ki) {
         navigate('/dojo/session', { state: { kiContext: ki } });
       } else {
