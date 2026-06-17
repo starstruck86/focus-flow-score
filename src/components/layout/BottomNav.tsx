@@ -49,22 +49,28 @@ export const COLOR_VAR: Record<NavColor, string> = {
   train_toggle: 'var(--nav-today)',
 };
 
-export const navRow1: NavItemDef[] = [
-  { to: '/strategy', label: 'Strategy', icon: Crosshair, color: 'strategy' },
-  { to: '/tasks', label: 'Tasks', icon: CheckSquare, color: 'tasks' },
-  { to: '/outreach', label: 'New Logo', icon: Users, color: 'outreach' },
-  { to: '/renewals', label: 'Renewals', icon: RefreshCw, color: 'renewals' },
+// ── Train mode items ──────────────────────────────────────────────────
+export const trainNavItems: NavItemDef[] = [
+  { to: '/dojo',   label: 'Dojo',    icon: Swords,      color: 'dojo' },
+  { to: '/skills', label: 'Skills',  icon: Target,      color: 'skills' },
+  { to: '/coach',  label: 'Coach',   icon: Mic,         color: 'coach' },
+  { to: '/prep',   label: 'Library', icon: BookOpen,    color: 'prep' },
 ];
 
-export const navRow2: NavItemDef[] = [
-  { to: '/dojo', label: 'Dojo', icon: Swords, color: 'dojo' },
-  { to: '/skills', label: 'Skills', icon: Target, color: 'skills' },
-  { to: '/trends', label: 'Trends', icon: TrendingUp, color: 'trends' },
-  { to: '/quota', label: 'Quota', icon: DollarSign, color: 'quota' },
-  { to: '/settings', label: 'Settings', icon: Settings, color: 'settings' },
+// ── Work mode items ───────────────────────────────────────────────────
+export const workNavItems: NavItemDef[] = [
+  { to: '/tasks',    label: 'Tasks',    icon: CheckSquare, color: 'tasks' },
+  { to: '/outreach', label: 'New Logo', icon: Users,       color: 'outreach' },
+  { to: '/renewals', label: 'Renewals', icon: RefreshCw,   color: 'renewals' },
+  { to: '/strategy', label: 'Strategy', icon: Crosshair,   color: 'strategy' },
 ];
 
-export const ALL_NAV = [...navRow1, ...navRow2];
+// ALL_NAV must contain all routable items so useActiveTabColor still works
+export const ALL_NAV = [...trainNavItems, ...workNavItems];
+
+// Keep these as aliases for anything that still imports them
+export const navRow1 = workNavItems;
+export const navRow2 = trainNavItems;
 
 function NavItem({ item }: { item: NavItemDef }) {
   const location = useLocation();
