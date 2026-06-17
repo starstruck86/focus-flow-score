@@ -51,6 +51,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useNavigate } from 'react-router-dom';
+import { selectNextKI, type NextKIResult } from '@/lib/dojo/selectNextKI';
 
 const GRADE_COLORS: Record<string, string> = {
   'A+': 'text-grade-excellent', A: 'text-grade-excellent', 'A-': 'text-grade-excellent',
