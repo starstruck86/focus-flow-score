@@ -494,6 +494,27 @@ function CallScorecard({ grade, onRegrade, transcriptId, transcriptContent }: {
       </Card>
 
       {/* Post-call task creation prompt */}
+      {drillRecommendation && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-primary">
+                Dave recommends: Drill {drillRecommendation.dimensionLabel}
+              </p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                Scored {drillRecommendation.score}/5 on this call · {drillRecommendation.ki.tactic_summary.substring(0, 80)}…
+              </p>
+            </div>
+            <Button
+              size="sm"
+              className="shrink-0 text-xs h-7"
+              onClick={() => navigate('/dojo/session', { state: { kiContext: drillRecommendation.ki } })}
+            >
+              Start Drill
+            </Button>
+          </CardContent>
+        </Card>
+      )}
       {transcriptId && <PostCallTaskPrompt grade={grade} transcriptId={transcriptId} />}
 
       {/* Study material links for weak categories */}
