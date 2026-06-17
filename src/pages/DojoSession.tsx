@@ -230,6 +230,11 @@ export default function DojoSession() {
               scenario_family_id: scenarioFamilyId,
               pressure_level: pressureLevel,
               pressure_dimensions: pressureDimensions,
+              ki_source_id: kiContext?.id ?? null,
+              ki_chapter: kiContext?.chapter ?? null,
+              ki_spider_dimension: kiContext?.spider_dimension ?? null,
+              ki_ideal_response: kiDrill?.ki_ideal_response ?? null,
+              ki_rubric: kiDrill?.ki_rubric ?? null,
             })
             .select('id')
             .single();
