@@ -311,6 +311,17 @@ export default function DojoSession() {
                 score_json: scoreToJson(scoreData),
                 retry_of_turn_id: firstTurnId,
               });
+
+            // KI mastery write-back (retry — use best score)
+            if (kiContext) {
+              writeKIMastery({
+                userId: user.id,
+                kiId: kiContext.id,
+                chapter: kiContext.chapter,
+                spiderDimension: kiContext.spider_dimension,
+                score: bestScore,
+              }).catch(err => console.error('[DojoSession] writeKIMastery failed:', err));
+            }
           }
 
           setRetryResult(scoreData);
