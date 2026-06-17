@@ -24,6 +24,7 @@ import { getBlockSnapshots, compareSnapshots } from '@/lib/dojo/v3/snapshotManag
 
 import { BlockHeader } from '@/components/dojo/BlockHeader';
 import { DailyAssignmentCard } from '@/components/dojo/DailyAssignmentCard';
+import { KiProficiencyStrip } from '@/components/dojo/KiProficiencyStrip';
 import { TodaysFocus } from '@/components/dojo/TodaysFocus';
 import { TrainingModes } from '@/components/dojo/TrainingModes';
 import { PerformanceSignals } from '@/components/dojo/PerformanceSignals';
@@ -177,6 +178,9 @@ export default function Dojo() {
 
         {/* Resume active lane banner */}
         <ResumeLaneBanner />
+
+        {/* KI Proficiency strip — adaptive training entry point */}
+        <KiProficiencyStrip />
 
         {/* V3: Daily Assignment Card */}
         {dailyAssignment && (

@@ -358,7 +358,46 @@ export default function DojoSession() {
     setPhase('retry');
   };
 
-  const handleNextRep = () => {
+  const handleNextRep = useCallback(async () => {
+    // KI-driven auto-advance: fetch next undrilled KI in same dimension
+    if (kiContext && user) {
+      try {
+        const { data: masteredIds } = await supabase
+          .from('ki_mastery')
+          .select('ki_id')
+          .eq('user_id', user.id)
+          .eq('spider_dimension', kiContext.spider_dimension ?? '');
+
+        const drilled = new Set([
+          ...(masteredIds ?? []).map((r: any) => r.ki_id),
+          kiContext.id,
+        ]);
+
+        let query = supabase
+          .from('knowledge_items')
+          .select('id, chapter, spider_dimension, tactic_summary, macro_situation, micro_strategy, when_to_use, when_not_to_use, how_to_execute, example_usage, why_it_matters, what_this_unlocks, framework, who')
+          .eq('spider_dimension', kiContext.spider_dimension ?? '')
+          .eq('is_core_ae', true)
+          .limit(1);
+
+        if (drilled.size > 0) {
+          query = (query as any).not('id', 'in', `(${[...drilled].join(',')})`);
+        }
+
+        const { data: nextKI } = await query.maybeSingle();
+
+        if (nextKI) {
+          navigate('/dojo/session', {
+            state: { kiContext: nextKI },
+            replace: true,
+          });
+          return;
+        }
+      } catch (err) {
+        console.error('[handleNextRep] KI auto-advance failed:', err);
+      }
+    }
+
     // If we have skill context, stay in the same skill for the next rep
     if (state?.skillSession) {
       navigate('/dojo/session', {
@@ -387,7 +426,7 @@ export default function DojoSession() {
     }
 
     navigate('/dojo');
-  };
+  }, [kiContext, user, state, scenario.skillFocus, navigate]);
 
 
   // Handle roleplay completion — extract roleplay-specific extras
