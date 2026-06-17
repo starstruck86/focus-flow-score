@@ -267,6 +267,17 @@ export default function DojoSession() {
                 console.error('[DojoSession] completeAssignment failed:', err)
               );
             }
+
+            // KI mastery write-back (first attempt)
+            if (kiContext) {
+              writeKIMastery({
+                userId: user.id,
+                kiId: kiContext.id,
+                chapter: kiContext.chapter,
+                spiderDimension: kiContext.spider_dimension,
+                score: scoreData.score,
+              }).catch(err => console.error('[DojoSession] writeKIMastery failed:', err));
+            }
           }
 
           setResult(scoreData);
