@@ -13,9 +13,14 @@ import {
   Swords,
   GraduationCap,
   Target,
+  Briefcase,
+  Dumbbell,
+  BookOpen,
+  Mic,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAppMode } from '@/hooks/useAppMode';
 
 export type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings' | 'strategy' | 'dojo' | 'learn' | 'skills';
 
