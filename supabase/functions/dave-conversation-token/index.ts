@@ -510,6 +510,11 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
       .gte("created_at", twentyFourHoursAgo)
       .order("created_at", { ascending: false })
       .limit(1),
+    supabase
+      .from('ki_mastery')
+      .select('spider_dimension, times_drilled, avg_score, best_score, decay_risk')
+      .eq('user_id', userId)
+      .not('spider_dimension', 'is', null),
   ]);
 
   const sections: string[] = [];
