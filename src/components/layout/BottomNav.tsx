@@ -13,11 +13,16 @@ import {
   Swords,
   GraduationCap,
   Target,
+  Briefcase,
+  Dumbbell,
+  BookOpen,
+  Mic,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAppMode } from '@/hooks/useAppMode';
 
-export type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings' | 'strategy' | 'dojo' | 'learn' | 'skills';
+export type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings' | 'strategy' | 'dojo' | 'learn' | 'skills' | 'work_toggle' | 'train_toggle';
 
 export interface NavItemDef {
   to: string;
@@ -40,24 +45,32 @@ export const COLOR_VAR: Record<NavColor, string> = {
   dojo: 'var(--nav-coach)',
   learn: 'var(--nav-prep)',
   skills: 'var(--nav-coach)',
+  work_toggle: 'var(--nav-today)',
+  train_toggle: 'var(--nav-today)',
 };
 
-export const navRow1: NavItemDef[] = [
-  { to: '/strategy', label: 'Strategy', icon: Crosshair, color: 'strategy' },
-  { to: '/tasks', label: 'Tasks', icon: CheckSquare, color: 'tasks' },
-  { to: '/outreach', label: 'New Logo', icon: Users, color: 'outreach' },
-  { to: '/renewals', label: 'Renewals', icon: RefreshCw, color: 'renewals' },
+// ── Train mode items ──────────────────────────────────────────────────
+export const trainNavItems: NavItemDef[] = [
+  { to: '/dojo',   label: 'Dojo',    icon: Swords,      color: 'dojo' },
+  { to: '/skills', label: 'Skills',  icon: Target,      color: 'skills' },
+  { to: '/coach',  label: 'Coach',   icon: Mic,         color: 'coach' },
+  { to: '/prep',   label: 'Library', icon: BookOpen,    color: 'prep' },
 ];
 
-export const navRow2: NavItemDef[] = [
-  { to: '/dojo', label: 'Dojo', icon: Swords, color: 'dojo' },
-  { to: '/skills', label: 'Skills', icon: Target, color: 'skills' },
-  { to: '/trends', label: 'Trends', icon: TrendingUp, color: 'trends' },
-  { to: '/quota', label: 'Quota', icon: DollarSign, color: 'quota' },
-  { to: '/settings', label: 'Settings', icon: Settings, color: 'settings' },
+// ── Work mode items ───────────────────────────────────────────────────
+export const workNavItems: NavItemDef[] = [
+  { to: '/tasks',    label: 'Tasks',    icon: CheckSquare, color: 'tasks' },
+  { to: '/outreach', label: 'New Logo', icon: Users,       color: 'outreach' },
+  { to: '/renewals', label: 'Renewals', icon: RefreshCw,   color: 'renewals' },
+  { to: '/strategy', label: 'Strategy', icon: Crosshair,   color: 'strategy' },
 ];
 
-export const ALL_NAV = [...navRow1, ...navRow2];
+// ALL_NAV must contain all routable items so useActiveTabColor still works
+export const ALL_NAV = [...trainNavItems, ...workNavItems];
+
+// Keep these as aliases for anything that still imports them
+export const navRow1 = workNavItems;
+export const navRow2 = trainNavItems;
 
 function NavItem({ item }: { item: NavItemDef }) {
   const location = useLocation();
@@ -190,6 +203,8 @@ export function BottomNav({ variant = 'default' }: { variant?: 'default' | 'cond
   if (variant === 'hidden') return null;
   if (keyboardOpen) return null;
 
+  const { mode, toggleMode } = useAppMode();
+  const activeItems = mode === 'train' ? trainNavItems : workNavItems;
   const condensed = variant === 'condensed';
 
   return (
@@ -203,16 +218,28 @@ export function BottomNav({ variant = 'default' }: { variant?: 'default' | 'cond
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
       <div className="max-w-3xl mx-auto px-1 pb-1">
         <div className="flex items-center justify-around h-12">
-          {navRow1.map(item => <NavItem key={item.to} item={item} />)}
+          {activeItems.map(item => <NavItem key={item.to} item={item} />)}
+          {/* Mode toggle — always last */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={toggleMode}
+                className="relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full text-[11px] font-medium transition-all duration-200 rounded-lg min-w-[44px] min-h-[44px] text-muted-foreground hover:text-foreground"
+              >
+                {mode === 'train'
+                  ? <Briefcase className="h-5 w-5" />
+                  : <Dumbbell className="h-5 w-5" />
+                }
+                <span className="truncate opacity-70">
+                  {mode === 'train' ? 'Work' : 'Train'}
+                </span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              {mode === 'train' ? 'Switch to Work mode' : 'Switch to Train mode'}
+            </TooltipContent>
+          </Tooltip>
         </div>
-        {!condensed && (
-          <>
-            <div className="h-px bg-border/30 mx-4" />
-            <div className="flex items-center justify-around h-12">
-              {navRow2.map(item => <NavItem key={item.to} item={item} />)}
-            </div>
-          </>
-        )}
       </div>
     </nav>
   );
