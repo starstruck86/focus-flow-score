@@ -15,6 +15,8 @@ import {
   Eye, PenLine, Volume2, VolumeX,
 } from 'lucide-react';
 import { getRandomScenario, getLaneScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
+import { generateKIDrill, type KnowledgeItemForDrill, type KIDrillScenario } from '@/lib/dojo/kiDrillGenerator';
+import { writeKIMastery } from '@/lib/dojo/kiMasteryWriter';
 import { selectSkillShapedScenario } from '@/lib/learning/skillScenarioSelector';
 import { DAY_ANCHORS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
 import {
@@ -119,7 +121,7 @@ export default function DojoSession() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { isAudio, toggleMode } = useAudioPreference();
 
-  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; skillSession?: import('@/lib/learning/skillSession').SkillSession; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin; assignmentId?: string; benchmarkTag?: boolean; scenarioFamilyId?: string | null; assignmentReason?: string; assignmentAnchor?: string; assignmentFocusPattern?: string; fromLearn?: boolean; fromSkillBuilder?: boolean; pressureLevel?: string; pressureDimensions?: string[]; simulationArcId?: string; laneAnchor?: string; laneLabel?: string } | null;
+  const state = location.state as { scenario?: DojoScenario; skillFocus?: SkillFocus; skillSession?: import('@/lib/learning/skillSession').SkillSession; mode?: string; sessionType?: string; transcriptOrigin?: TranscriptOrigin; assignmentId?: string; benchmarkTag?: boolean; scenarioFamilyId?: string | null; assignmentReason?: string; assignmentAnchor?: string; assignmentFocusPattern?: string; fromLearn?: boolean; fromSkillBuilder?: boolean; pressureLevel?: string; pressureDimensions?: string[]; simulationArcId?: string; laneAnchor?: string; laneLabel?: string; kiContext?: KnowledgeItemForDrill } | null;
   const transcriptOrigin = state?.transcriptOrigin ?? null;
   const sessionType = state?.sessionType || (isAudio ? 'audio' : 'drill');
   const assignmentId = state?.assignmentId ?? null;
@@ -128,11 +130,16 @@ export default function DojoSession() {
   const pressureLevel = state?.pressureLevel ?? null;
   const pressureDimensions = state?.pressureDimensions ?? null;
   const simulationArc: SimulationArc | null = state?.simulationArcId ? getArcById(state.simulationArcId) ?? null : null;
+  const kiContext: KnowledgeItemForDrill | null = state?.kiContext ?? null;
 
   // Resolve skill focus — SkillSession takes priority, then legacy skillFocus, then scenario
   const resolvedSkillFocus: SkillFocus | undefined = state?.skillSession?.skillId ?? state?.skillFocus;
 
+  const [kiDrill] = useState<KIDrillScenario | null>(() => (kiContext ? generateKIDrill(kiContext) : null));
+
   const [scenario] = useState<DojoScenario>(() => {
+    // KI-driven drill: derive scenario from KI content (highest priority)
+    if (kiContext) return generateKIDrill(kiContext);
     if (state?.scenario) return state.scenario;
     // Lane-aware selection: honor laneAnchor when present
     if (state?.laneAnchor) {
@@ -223,6 +230,11 @@ export default function DojoSession() {
               scenario_family_id: scenarioFamilyId,
               pressure_level: pressureLevel,
               pressure_dimensions: pressureDimensions,
+              ki_source_id: kiContext?.id ?? null,
+              ki_chapter: kiContext?.chapter ?? null,
+              ki_spider_dimension: kiContext?.spider_dimension ?? null,
+              ki_ideal_response: kiDrill?.ki_ideal_response ?? null,
+              ki_rubric: kiDrill?.ki_rubric ?? null,
             })
             .select('id')
             .single();
@@ -254,6 +266,17 @@ export default function DojoSession() {
               completeAssignment(user.id, today, session.id).catch(err =>
                 console.error('[DojoSession] completeAssignment failed:', err)
               );
+            }
+
+            // KI mastery write-back (first attempt)
+            if (kiContext) {
+              writeKIMastery({
+                userId: user.id,
+                kiId: kiContext.id,
+                chapter: kiContext.chapter,
+                spiderDimension: kiContext.spider_dimension,
+                score: scoreData.score,
+              }).catch(err => console.error('[DojoSession] writeKIMastery failed:', err));
             }
           }
 
@@ -288,6 +311,17 @@ export default function DojoSession() {
                 score_json: scoreToJson(scoreData),
                 retry_of_turn_id: firstTurnId,
               });
+
+            // KI mastery write-back (retry — use best score)
+            if (kiContext) {
+              writeKIMastery({
+                userId: user.id,
+                kiId: kiContext.id,
+                chapter: kiContext.chapter,
+                spiderDimension: kiContext.spider_dimension,
+                score: bestScore,
+              }).catch(err => console.error('[DojoSession] writeKIMastery failed:', err));
+            }
           }
 
           setRetryResult(scoreData);
