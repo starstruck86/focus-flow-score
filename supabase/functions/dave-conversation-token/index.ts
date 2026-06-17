@@ -394,7 +394,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
     calendarRes, accountsRes, tasksRes, oppsRes, remindersRes,
     renewalsRes, contactsRes, resourcesRes, quotaRes, benchmarksRes,
     streakRes, transcriptsRes, gradesRes, battlePlanRes, journalRes,
-    timeBlocksRes, methodologyRes, lastSessionRes,
+    timeBlocksRes, methodologyRes, lastSessionRes, kiMasteryRes,
   ] = await Promise.all([
     supabase
       .from("calendar_events")
@@ -510,6 +510,11 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
       .gte("created_at", twentyFourHoursAgo)
       .order("created_at", { ascending: false })
       .limit(1),
+    supabase
+      .from('ki_mastery')
+      .select('spider_dimension, times_drilled, avg_score, best_score, decay_risk')
+      .eq('user_id', userId)
+      .not('spider_dimension', 'is', null),
   ]);
 
   const sections: string[] = [];
@@ -644,6 +649,35 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
       }).join("\n")
     );
   }
+
+  // ── KI Proficiency + Top Plays ──
+  const kiRows = (kiMasteryRes.data || []) as any[];
+  const dimMap: Record<string, { reps: number; avgScore: number; decayCount: number }> = {};
+  for (const row of kiRows) {
+    const dim = row.spider_dimension as string;
+    if (!dimMap[dim]) dimMap[dim] = { reps: 0, avgScore: 0, decayCount: 0 };
+    dimMap[dim].reps += row.times_drilled ?? 0;
+    dimMap[dim].avgScore = dimMap[dim].avgScore
+      ? Math.round((dimMap[dim].avgScore + (row.avg_score ?? 0)) / 2)
+      : Math.round(row.avg_score ?? 0);
+    if (row.decay_risk) dimMap[dim].decayCount += 1;
+  }
+
+  const DIMENSION_LABELS: Record<string, string> = {
+    discovery: 'Discovery', cold_outreach: 'Cold Outreach',
+    stakeholder_navigation: 'Stakeholder Nav', messaging: 'Messaging',
+    deal_control: 'Deal Control', objection_handling: 'Objection Handling',
+    coaching: 'Coaching', account_strategy: 'Account Strategy',
+  };
+
+  const dimSummary = Object.entries(DIMENSION_LABELS).map(([key, label]) => {
+    const m = dimMap[key];
+    if (!m || m.reps === 0) return `${label}: 0 reps`;
+    const proficiency = Math.round(m.avgScore * 0.7 + Math.min(m.reps / 50, 1) * 100 * 0.3);
+    return `${label}: ${proficiency}% (${m.reps} reps${m.decayCount > 0 ? `, ${m.decayCount} decaying` : ''})`;
+  }).join(' | ');
+
+  sections.push(`KI PROFICIENCY:\n${dimSummary || 'No drills completed yet — library ready to activate'}\n\nWhen coaching Corey on a skill, reference specific KIs from his library by chapter (discovery, cold_calling, stakeholder_navigation, messaging, closing, objection_handling, negotiation, follow_up). Tell him which KI to pull up and drill.`);
 
   if (quotaRes.data?.length) {
     const q = quotaRes.data[0] as any;

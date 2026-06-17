@@ -51,6 +51,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useNavigate } from 'react-router-dom';
+import { selectNextKI, type NextKIResult } from '@/lib/dojo/selectNextKI';
 
 const GRADE_COLORS: Record<string, string> = {
   'A+': 'text-grade-excellent', A: 'text-grade-excellent', 'A-': 'text-grade-excellent',
@@ -292,6 +294,58 @@ function CallScorecard({ grade, onRegrade, transcriptId, transcriptContent }: {
   const [showEvidence, setShowEvidence] = useState(false);
   const [qaOpen, setQaOpen] = useState(false);
   const [qaCategory, setQaCategory] = useState<string | undefined>();
+  const navigate = useNavigate();
+
+  const [drillRecommendation, setDrillRecommendation] = useState<{
+    ki: NextKIResult;
+    dimension: string;
+    dimensionLabel: string;
+    score: number;
+  } | null>(null);
+
+  const CATEGORY_TO_DIMENSION: Record<string, string> = {
+    discovery_score: 'discovery',
+    cotm_score: 'messaging',
+    structure_score: 'messaging',
+    meddicc_score: 'deal_control',
+    next_step_score: 'deal_control',
+    commercial_score: 'deal_control',
+    presence_score: 'stakeholder_navigation',
+  };
+
+  const DRILL_DIMENSION_LABELS: Record<string, string> = {
+    discovery: 'Discovery', messaging: 'Messaging',
+    deal_control: 'Deal Control', stakeholder_navigation: 'Stakeholder Nav',
+    objection_handling: 'Objection Handling', cold_outreach: 'Cold Outreach',
+  };
+
+  useEffect(() => {
+    if (!grade) return;
+    const scores: [string, number][] = Object.entries(CATEGORY_TO_DIMENSION)
+      .map(([field, dim]) => [dim, (grade as any)[field] ?? 5] as [string, number]);
+    const weakest = scores.reduce((min, curr) => curr[1] < min[1] ? curr : min, scores[0]);
+    if (!weakest || weakest[1] >= 4) {
+      setDrillRecommendation(null);
+      return;
+    }
+    const [weakDim, weakScore] = weakest;
+    let cancelled = false;
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user || cancelled) return;
+      selectNextKI(user.id, weakDim).then(ki => {
+        if (cancelled || !ki) return;
+        setDrillRecommendation({
+          ki,
+          dimension: weakDim,
+          dimensionLabel: DRILL_DIMENSION_LABELS[weakDim] ?? weakDim,
+          score: weakScore,
+        });
+      });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(grade as any)?.transcript_id, grade?.overall_score]);
+
 
   const categories = Object.entries(CATEGORY_LABELS).map(([key, { label, icon }]) => ({
     key, label, icon,
@@ -440,6 +494,27 @@ function CallScorecard({ grade, onRegrade, transcriptId, transcriptContent }: {
       </Card>
 
       {/* Post-call task creation prompt */}
+      {drillRecommendation && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-primary">
+                Dave recommends: Drill {drillRecommendation.dimensionLabel}
+              </p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                Scored {drillRecommendation.score}/5 on this call · {drillRecommendation.ki.tactic_summary.substring(0, 80)}…
+              </p>
+            </div>
+            <Button
+              size="sm"
+              className="shrink-0 text-xs h-7"
+              onClick={() => navigate('/dojo/session', { state: { kiContext: drillRecommendation.ki } })}
+            >
+              Start Drill
+            </Button>
+          </CardContent>
+        </Card>
+      )}
       {transcriptId && <PostCallTaskPrompt grade={grade} transcriptId={transcriptId} />}
 
       {/* Study material links for weak categories */}
