@@ -2399,6 +2399,11 @@ export type Database = {
           created_at: string
           difficulty: string
           id: string
+          ki_chapter: string | null
+          ki_ideal_response: string | null
+          ki_rubric: string | null
+          ki_source_id: string | null
+          ki_spider_dimension: string | null
           latest_score: number | null
           mode: string
           pressure_dimensions: string[] | null
@@ -2424,6 +2429,11 @@ export type Database = {
           created_at?: string
           difficulty?: string
           id?: string
+          ki_chapter?: string | null
+          ki_ideal_response?: string | null
+          ki_rubric?: string | null
+          ki_source_id?: string | null
+          ki_spider_dimension?: string | null
           latest_score?: number | null
           mode?: string
           pressure_dimensions?: string[] | null
@@ -2449,6 +2459,11 @@ export type Database = {
           created_at?: string
           difficulty?: string
           id?: string
+          ki_chapter?: string | null
+          ki_ideal_response?: string | null
+          ki_rubric?: string | null
+          ki_source_id?: string | null
+          ki_spider_dimension?: string | null
           latest_score?: number | null
           mode?: string
           pressure_dimensions?: string[] | null
@@ -2471,6 +2486,13 @@ export type Database = {
             columns: ["assignment_id"]
             isOneToOne: false
             referencedRelation: "daily_assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dojo_sessions_ki_source_id_fkey"
+            columns: ["ki_source_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_items"
             referencedColumns: ["id"]
           },
         ]
@@ -3269,6 +3291,71 @@ export type Database = {
         }
         Relationships: []
       }
+      ki_mastery: {
+        Row: {
+          avg_score: number | null
+          best_score: number | null
+          chapter: string | null
+          created_at: string | null
+          decay_risk: boolean | null
+          execution_score: number | null
+          first_drilled_at: string | null
+          id: string
+          ki_id: string
+          last_drilled_at: string | null
+          recognition_score: number | null
+          spider_dimension: string | null
+          times_drilled: number | null
+          transcript_evidenced: boolean | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          avg_score?: number | null
+          best_score?: number | null
+          chapter?: string | null
+          created_at?: string | null
+          decay_risk?: boolean | null
+          execution_score?: number | null
+          first_drilled_at?: string | null
+          id?: string
+          ki_id: string
+          last_drilled_at?: string | null
+          recognition_score?: number | null
+          spider_dimension?: string | null
+          times_drilled?: number | null
+          transcript_evidenced?: boolean | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          avg_score?: number | null
+          best_score?: number | null
+          chapter?: string | null
+          created_at?: string | null
+          decay_risk?: boolean | null
+          execution_score?: number | null
+          first_drilled_at?: string | null
+          id?: string
+          ki_id?: string
+          last_drilled_at?: string | null
+          recognition_score?: number | null
+          spider_dimension?: string | null
+          times_drilled?: number | null
+          transcript_evidenced?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ki_mastery_ki_id_fkey"
+            columns: ["ki_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       knowledge_items: {
         Row: {
           activation_metadata: Json | null
@@ -3284,6 +3371,7 @@ export type Database = {
           framework: string | null
           how_to_execute: string | null
           id: string
+          is_core_ae: boolean | null
           ki_fingerprint: string | null
           knowledge_type: string
           library_role: string | null
@@ -3299,6 +3387,7 @@ export type Database = {
           source_resource_id: string | null
           source_segment_index: number | null
           source_title: string | null
+          spider_dimension: string | null
           status: string
           sub_chapter: string | null
           tactic_summary: string | null
@@ -3327,6 +3416,7 @@ export type Database = {
           framework?: string | null
           how_to_execute?: string | null
           id?: string
+          is_core_ae?: boolean | null
           ki_fingerprint?: string | null
           knowledge_type?: string
           library_role?: string | null
@@ -3342,6 +3432,7 @@ export type Database = {
           source_resource_id?: string | null
           source_segment_index?: number | null
           source_title?: string | null
+          spider_dimension?: string | null
           status?: string
           sub_chapter?: string | null
           tactic_summary?: string | null
@@ -3370,6 +3461,7 @@ export type Database = {
           framework?: string | null
           how_to_execute?: string | null
           id?: string
+          is_core_ae?: boolean | null
           ki_fingerprint?: string | null
           knowledge_type?: string
           library_role?: string | null
@@ -3385,6 +3477,7 @@ export type Database = {
           source_resource_id?: string | null
           source_segment_index?: number | null
           source_title?: string | null
+          spider_dimension?: string | null
           status?: string
           sub_chapter?: string | null
           tactic_summary?: string | null
