@@ -56,6 +56,7 @@ const DojoSession = lazy(() => import("./pages/DojoSession"));
 const DojoQA = lazy(() => import("./pages/DojoQA"));
 const DojoV6QA = lazy(() => import("./pages/DojoV6QA"));
 const Learn = lazy(() => import("./pages/Learn"));
+const Skills = lazy(() => import("./pages/Skills"));
 const LearnLesson = lazy(() => import("./pages/LearnLesson"));
 const SkillBuilderSession = lazy(() => import("./pages/SkillBuilderSession"));
 const SkillBuilderAudit = lazy(() => import("./pages/SkillBuilderAudit"));
@@ -231,6 +232,13 @@ const App = () => (
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback />}>
                         <Learn />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/skills" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<LazyFallback />}>
+                        <Skills />
                       </Suspense>
                     </ProtectedRoute>
                   } />
