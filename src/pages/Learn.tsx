@@ -82,9 +82,9 @@ export default function Learn() {
     for (const course of courses) {
       for (const mod of course.learning_modules) {
         for (const lesson of mod.learning_lessons) {
-          const p = progressMap[lesson.id];
-          if (!p || p.status !== 'completed') {
-            return { lesson, course };
+          const p = progressMap[lesson.id] as any;
+          const passed = p?.status === 'passed' || p?.status === 'completed' || (p?.best_score ?? p?.mastery_score ?? 0) >= 65;
+          if (!passed) {
           }
         }
       }
