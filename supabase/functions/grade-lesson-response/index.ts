@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,7 +21,7 @@ serve(async (req) => {
       });
     }
 
-    const { userResponse, prompt, rubric, lessonTitle, concept } = await req.json();
+    const { userResponse, prompt, rubric, lessonTitle, concept, lessonId } = await req.json();
 
     if (!userResponse?.trim()) {
       return new Response(JSON.stringify({ error: "userResponse required" }), {
@@ -102,10 +103,54 @@ Grade this response.`;
       });
     }
 
-    return new Response(JSON.stringify({
-      score: parsed.score ?? 50,
-      feedback: parsed.feedback ?? "Unable to grade response.",
-    }), {
+    const score: number = typeof parsed.score === 'number' ? parsed.score : 50;
+    const feedback: string = parsed.feedback ?? "Unable to grade response.";
+
+    // Persist progress (mastery gate). Requires lessonId + authenticated user.
+    if (lessonId) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+        const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
+          global: { headers: { Authorization: authHeader } },
+        });
+        const { data: userData } = await userClient.auth.getUser();
+        const userId = userData?.user?.id;
+
+        if (userId) {
+          const adminClient = createClient(supabaseUrl, serviceKey);
+
+          const { data: existing } = await adminClient
+            .from('user_lesson_progress')
+            .select('best_score, attempts')
+            .eq('user_id', userId)
+            .eq('lesson_id', lessonId)
+            .maybeSingle();
+
+          const existingBestScore = existing?.best_score ?? 0;
+          const existingAttempts = existing?.attempts ?? 0;
+          const nowIso = new Date().toISOString();
+          const passed = score >= 65;
+
+          await adminClient.from('user_lesson_progress').upsert({
+            user_id: userId,
+            lesson_id: lessonId,
+            status: passed ? 'passed' : 'in_progress',
+            mastery_score: score,
+            best_score: Math.max(score, existingBestScore),
+            attempts: existingAttempts + 1,
+            last_attempt_at: nowIso,
+            passed_at: passed ? nowIso : null,
+            updated_at: nowIso,
+          }, { onConflict: 'user_id,lesson_id' });
+        }
+      } catch (e) {
+        console.error("progress upsert failed:", e);
+      }
+    }
+
+    return new Response(JSON.stringify({ score, feedback, passed: score >= 65 }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
