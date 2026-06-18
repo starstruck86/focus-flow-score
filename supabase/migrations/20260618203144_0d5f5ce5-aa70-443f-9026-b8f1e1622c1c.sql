@@ -1,0 +1,1 @@
+ALTER VIEW public.dimension_scores SET (security_invoker = true);

@@ -29,6 +29,8 @@ export interface DimensionProficiency {
   proficiency: number;
   decay_risk_count: number;
   last_drilled_at: string | null;
+  call_score: number | null;   // real call performance (0-100)
+  call_count: number;          // graded calls in this dimension
 }
 
 export interface KiProficiencyData {
@@ -39,6 +41,7 @@ export interface KiProficiencyData {
   weakest: DimensionProficiency | null;
   strongest: DimensionProficiency | null;
   decay_alerts: number;
+  total_call_data: boolean;
 }
 
 export function useKiProficiency() {
@@ -77,6 +80,21 @@ export function useKiProficiency() {
         .eq('user_id', user.id)
         .not('spider_dimension', 'is', null);
 
+      // Real call performance per dimension (from graded transcripts)
+      const { data: dimScores } = await (supabase as any)
+        .from('dimension_scores')
+        .select('spider_dimension, avg_score_100, call_count')
+        .eq('user_id', user.id);
+
+      const dimScoreMap: Record<string, number> = {};
+      const callCountMap: Record<string, number> = {};
+      (dimScores ?? []).forEach((row: any) => {
+        if (row?.avg_score_100 != null) {
+          dimScoreMap[row.spider_dimension] = Number(row.avg_score_100) || 0;
+        }
+        callCountMap[row.spider_dimension] = Number(row.call_count) || 0;
+      });
+
       const masteryMap: Record<string, {
         drilled_count: number;
         total_reps: number;
@@ -105,6 +123,8 @@ export function useKiProficiency() {
       const dimensions: DimensionProficiency[] = SPIDER_DIMENSIONS.map(({ key, label, color }) => {
         const lib = libMap[key] ?? 0;
         const m = masteryMap[key];
+        const call_score = dimScoreMap[key] ?? null;
+        const call_count = callCountMap[key] ?? 0;
 
         if (!m || m.total_reps === 0) {
           return {
@@ -112,6 +132,7 @@ export function useKiProficiency() {
             library_count: lib, drilled_count: 0, total_reps: 0,
             avg_score: 0, best_score: 0, proficiency: 0,
             decay_risk_count: 0, last_drilled_at: null,
+            call_score, call_count,
           };
         }
 
@@ -129,6 +150,7 @@ export function useKiProficiency() {
           avg_score, best_score, proficiency,
           decay_risk_count: m.decay_risk_count,
           last_drilled_at: m.last_drilled_at,
+          call_score, call_count,
         };
       });
 
@@ -137,6 +159,7 @@ export function useKiProficiency() {
       const total_drilled = dimensions.reduce((a, d) => a + d.drilled_count, 0);
       const total_reps = dimensions.reduce((a, d) => a + d.total_reps, 0);
       const decay_alerts = dimensions.reduce((a, d) => a + d.decay_risk_count, 0);
+      const total_call_data = dimensions.some(d => d.call_score != null);
 
       const sorted = [...drilled].sort((a, b) => a.proficiency - b.proficiency);
 
@@ -148,6 +171,7 @@ export function useKiProficiency() {
         weakest: sorted[0] ?? null,
         strongest: sorted[sorted.length - 1] ?? null,
         decay_alerts,
+        total_call_data,
       };
     },
     staleTime: 2 * 60 * 1000,

@@ -42,11 +42,15 @@ export default function Skills() {
 
   const chartData = dimensions.map(d => ({
     dimension: d.label,
-    proficiency: hasReps ? d.proficiency : 0,
+    practice_score: hasReps ? d.proficiency : 0,
+    call_score: d.call_score ?? 0,
     reps: d.total_reps,
     avg: d.avg_score,
+    call_count: d.call_count,
     fullMark: 100,
   }));
+
+  const hasCallData = !!data?.total_call_data;
 
   return (
     <Layout>
@@ -58,7 +62,7 @@ export default function Skills() {
             Proficiency Map
           </h1>
           <p className="text-sm text-muted-foreground">
-            Based on your KI library &amp; drill history
+            Real-call performance vs. practice reps
           </p>
         </div>
 
@@ -93,13 +97,24 @@ export default function Skills() {
                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
                   />
                   <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} axisLine={false} />
+                  {/* Outer ring: real call performance */}
                   <Radar
-                    name="Proficiency"
-                    dataKey="proficiency"
-                    stroke="hsl(var(--primary))"
-                    fill="hsl(var(--primary))"
-                    fillOpacity={hasReps ? 0.4 : 0.05}
+                    name="Real Calls"
+                    dataKey="call_score"
+                    stroke="#3b82f6"
+                    fill="#3b82f6"
+                    fillOpacity={0.08}
                     strokeWidth={2}
+                    strokeDasharray="5 3"
+                  />
+                  {/* Inner ring: practice performance */}
+                  <Radar
+                    name="Practice"
+                    dataKey="practice_score"
+                    stroke="#10b981"
+                    fill="#10b981"
+                    fillOpacity={0.15}
+                    strokeWidth={1.5}
                   />
                   <Tooltip
                     contentStyle={{
@@ -108,23 +123,40 @@ export default function Skills() {
                       borderRadius: 8,
                       fontSize: 12,
                     }}
-                    formatter={(value: any, _name: any, props: any) => [
-                      `${value}% · ${props.payload.reps} reps · avg ${props.payload.avg}`,
-                      props.payload.dimension,
-                    ]}
+                    formatter={(value: any, name: any, props: any) => {
+                      if (name === 'Real Calls') {
+                        return [`${value}% · ${props.payload.call_count} calls`, 'Real Calls'];
+                      }
+                      return [
+                        `${value}% · ${props.payload.reps} reps · avg ${props.payload.avg}`,
+                        'Practice',
+                      ];
+                    }}
                   />
                 </RadarChart>
               </ResponsiveContainer>
-              {!hasReps && !isLoading && (
+              {!hasReps && !hasCallData && !isLoading && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="bg-background/80 backdrop-blur-sm rounded-lg px-4 py-2 text-center">
                     <Sparkles className="h-4 w-4 inline mr-1 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">
-                      Complete your first drill to see proficiency
+                      Grade a call or run your first drill to see proficiency
                     </span>
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Legend */}
+            <div className="flex items-center justify-center gap-4 mt-2 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-0 border-t-2 border-dashed" style={{ borderColor: '#3b82f6' }} />
+                <span>Real Calls (dashed)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-0 border-t-2" style={{ borderColor: '#10b981' }} />
+                <span>Practice</span>
+              </div>
             </div>
           </CardContent>
         </Card>
