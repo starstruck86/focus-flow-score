@@ -116,7 +116,7 @@ const App = () => (
               <BrowserRouter>
                 <Routes>
                   <Route path="/auth" element={<Auth />} />
-                  <Route path="/" element={<Home />} />
+                  <Route path="/" element={<Navigate to="/dojo" replace />} />
                   <Route path="/today" element={<ProtectedPage routeName="Dashboard"><Dashboard /></ProtectedPage>} />
                   <Route path="/dashboard" element={<ProtectedPage routeName="Dashboard"><Dashboard /></ProtectedPage>} />
                   <Route path="/outreach" element={<ProtectedPage routeName="Outreach"><WeeklyOutreach /></ProtectedPage>} />
