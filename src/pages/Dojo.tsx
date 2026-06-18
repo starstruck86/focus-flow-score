@@ -10,6 +10,7 @@ import { getRandomScenario } from '@/lib/dojo/scenarios';
 import { buildPatternMemory, deriveCoachingInsights } from '@/lib/dojo/patternMemory';
 import { buildSkillMemory } from '@/lib/dojo/skillMemory';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import type { PatternMemory, CoachingInsights } from '@/lib/dojo/types';
 import type { LessonContext } from '@/lib/learning/practiceMapping';
 
@@ -34,7 +35,7 @@ import { MasteryLanes } from '@/components/dojo/MasteryLanes';
 import { ResumeLaneBanner } from '@/components/dojo/ResumeLaneBanner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Flame, Target } from 'lucide-react';
+import { Flame, Target, ChevronRight } from 'lucide-react';
 import { useIntensiveMode } from '@/hooks/useIntensiveMode';
 
 export default function Dojo() {
@@ -101,6 +102,19 @@ export default function Dojo() {
   });
 
   // V3: Block snapshots for comparison (show when retest exists)
+  const { data: hasBenchmark } = useQuery({
+    queryKey: ['has-benchmark'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+      const { count } = await (supabase as any)
+        .from('skill_benchmarks')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      return (count ?? 0) > 0;
+    },
+  });
+
   const { data: blockSnapshots } = useQuery({
     queryKey: ['dojo-v3-snapshots', activeBlock?.id],
     enabled: !!activeBlock?.id && activeBlock?.currentWeek === 8,
@@ -226,6 +240,23 @@ export default function Dojo() {
             </div>
           </button>
         )}
+
+        {!hasBenchmark && (
+          <button
+            onClick={() => navigate('/benchmark')}
+            className="w-full text-left p-2.5 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-primary shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-primary">Take Your Baseline Benchmark</p>
+                <p className="text-[11px] text-muted-foreground">10 scenarios · seeds your spider chart · 15 min</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-primary ml-auto shrink-0" />
+            </div>
+          </button>
+        )}
+
 
         {/* V3: Daily Assignment Card */}
         {dailyAssignment && (
