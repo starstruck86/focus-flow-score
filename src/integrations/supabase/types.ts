@@ -6623,6 +6623,44 @@ export type Database = {
           },
         ]
       }
+      skill_benchmarks: {
+        Row: {
+          created_at: string | null
+          dimension_count: number | null
+          id: string
+          overall_avg: number | null
+          run_at: string
+          scores: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          dimension_count?: number | null
+          id?: string
+          overall_avg?: number | null
+          run_at?: string
+          scores?: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          dimension_count?: number | null
+          id?: string
+          overall_avg?: number | null
+          run_at?: string
+          scores?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "skill_benchmarks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       skill_builder_sessions: {
         Row: {
           avg_score: number | null
