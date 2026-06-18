@@ -2,17 +2,20 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 export const SPIDER_DIMENSIONS = [
-  { key: 'discovery', label: 'Discovery', color: '#3b82f6' },
-  { key: 'cold_outreach', label: 'Cold Outreach', color: '#f59e0b' },
-  { key: 'stakeholder_navigation', label: 'Stakeholder Nav', color: '#8b5cf6' },
-  { key: 'messaging', label: 'Messaging', color: '#06b6d4' },
-  { key: 'deal_control', label: 'Deal Control', color: '#10b981' },
-  { key: 'objection_handling', label: 'Objection Handling', color: '#ef4444' },
-  { key: 'coaching', label: 'Coaching', color: '#f97316' },
-  { key: 'account_strategy', label: 'Account Strategy', color: '#ec4899' },
+  { key: 'discovery',              label: 'Discovery',            color: '#3b82f6' },
+  { key: 'internal_prospecting',   label: 'Internal Prospecting', color: '#8b5cf6' },
+  { key: 'stakeholder_navigation', label: 'Stakeholder Nav',      color: '#06b6d4' },
+  { key: 'messaging',              label: 'Messaging',            color: '#10b981' },
+  { key: 'deal_control',           label: 'Deal Control',         color: '#f59e0b' },
+  { key: 'objection_handling',     label: 'Objection Handling',   color: '#ef4444' },
+  { key: 'expansion_strategy',     label: 'Expansion',            color: '#84cc16' },
+  { key: 'c_suite_engagement',     label: 'C-Suite',              color: '#f97316' },
+  { key: 'competitive',            label: 'Competitive',          color: '#ec4899' },
+  { key: 'qualification',          label: 'Qualification',        color: '#6366f1' },
 ] as const;
 
 export type SpiderDimensionKey = typeof SPIDER_DIMENSIONS[number]['key'];
+export type SpiderDimension = SpiderDimensionKey;
 
 export interface DimensionProficiency {
   dimension: SpiderDimensionKey;

@@ -1,0 +1,6 @@
+UPDATE knowledge_items SET spider_dimension = NULL WHERE spider_dimension = 'coaching' OR chapter = 'coaching' OR chapter = 'call_coaching';
+UPDATE knowledge_items SET spider_dimension = 'internal_prospecting' WHERE spider_dimension = 'cold_outreach';
+UPDATE knowledge_items SET spider_dimension = 'expansion_strategy' WHERE chapter IN ('expansion', 'account_strategy', 'account_planning', 'account_management', 'territory_planning') AND is_core_ae = true AND active = true;
+UPDATE knowledge_items SET spider_dimension = 'c_suite_engagement' WHERE chapter IN ('c_suite_call', 'preparing_for_c_suite', 'executive_engagement', 'executive_response', 'personas') AND is_core_ae = true AND active = true;
+UPDATE knowledge_items SET spider_dimension = 'competitive' WHERE chapter IN ('competitive', 'competitors') AND is_core_ae = true AND active = true;
+UPDATE knowledge_items SET spider_dimension = 'qualification' WHERE chapter IN ('qualification', 'self_management', 'preparation') AND is_core_ae = true AND active = true;

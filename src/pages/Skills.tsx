@@ -21,13 +21,15 @@ import { cn } from '@/lib/utils';
 
 const DIMENSION_TO_SKILL: Record<SpiderDimensionKey, string> = {
   discovery: 'discovery',
-  cold_outreach: 'objection_handling',
+  internal_prospecting: 'objection_handling',
   stakeholder_navigation: 'deal_control',
   messaging: 'objection_handling',
   deal_control: 'deal_control',
   objection_handling: 'objection_handling',
-  coaching: 'discovery',
-  account_strategy: 'deal_control',
+  expansion_strategy: 'deal_control',
+  c_suite_engagement: 'executive_response',
+  competitive: 'objection_handling',
+  qualification: 'qualification',
 };
 
 export default function Skills() {
