@@ -136,9 +136,9 @@ export default function DojoSession() {
   // Resolve skill focus — SkillSession takes priority, then legacy skillFocus, then scenario
   const resolvedSkillFocus: SkillFocus | undefined = state?.skillSession?.skillId ?? state?.skillFocus;
 
-  const [kiDrill] = useState<KIDrillScenario | null>(() => (kiContext ? generateKIDrill(kiContext) : null));
+  const [kiDrill, setKiDrill] = useState<KIDrillScenario | null>(() => (kiContext ? generateKIDrill(kiContext) : null));
 
-  const [scenario] = useState<DojoScenario>(() => {
+  const [scenario, setScenario] = use ase<DojoScenario>(() => {
     // KI-driven drill: reuse already-computed kiDrill (highest priority)
     if (kiDrill) return kiDrill;
     if (state?.scenario) return state.scenario;
