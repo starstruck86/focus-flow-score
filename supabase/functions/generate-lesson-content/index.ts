@@ -77,7 +77,7 @@ serve(async (req) => {
 
     // ── Fetch relevant KIs ──
     const topic = lesson.topic;
-    const { data: kis } = await adminClient
+    let { data: kis } = await adminClient
       .from("knowledge_items")
       .select("id, title, tactic_summary, why_it_matters, when_to_use, when_not_to_use, example_usage, framework, chapter, sub_chapter")
       .eq("chapter", topic)
@@ -85,6 +85,23 @@ serve(async (req) => {
       .eq("is_core_ae", true)
       .order("confidence_score", { ascending: false })
       .limit(25);
+
+    // Fallback: if chapter name doesn't match (e.g. "deal_control" is a spider_dimension,
+    // not a chapter name), query by spider_dimension instead
+    if (!kis || kis.length < 5) {
+      const { data: dimKis } = await adminClient
+        .from("knowledge_items")
+        .select("id, title, tactic_summary, why_it_matters, when_to_use, when_not_to_use, example_usage, framework, chapter, sub_chapter")
+        .eq("spider_dimension", topic)
+        .eq("active", true)
+        .eq("is_core_ae", true)
+        .order("confidence_score", { ascending: false })
+        .limit(25);
+
+      if (dimKis && dimKis.length > (kis?.length ?? 0)) {
+        kis = dimKis;
+      }
+    }
 
     if (!kis || kis.length === 0) {
       await adminClient
