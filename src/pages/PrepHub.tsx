@@ -42,6 +42,55 @@ export default function PrepHub() {
           </div>
         </div>
 
+        {/* Branch.io Intelligence Checklist */}
+        <Card className="border-blue-500/20 bg-blue-500/5">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-5 w-5 rounded bg-blue-600 flex items-center justify-center shrink-0">
+                <span className="text-white text-[10px] font-bold">B</span>
+              </div>
+              <div>
+                <p className="text-sm font-semibold">Branch.io Intelligence</p>
+                <p className="text-xs text-muted-foreground">Ingest these before July to build your competitive edge</p>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              {[
+                { label: 'Branch.io Product Overview / Sales Deck', priority: 'critical' },
+                { label: 'Branch.io vs AppsFlyer Battle Card', priority: 'critical' },
+                { label: 'Branch.io vs Adjust Battle Card', priority: 'critical' },
+                { label: 'Branch.io vs Kochava Battle Card', priority: 'high' },
+                { label: 'E-commerce Customer Case Study', priority: 'high' },
+                { label: 'Gaming Customer Case Study', priority: 'high' },
+                { label: 'Fintech Customer Case Study', priority: 'high' },
+                { label: 'CMO Persona Guide', priority: 'medium' },
+                { label: 'VP Growth / Mobile Persona Guide', priority: 'medium' },
+                { label: 'ATT / SKAN Privacy FAQ', priority: 'medium' },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center gap-2 text-xs">
+                  <div className={cn(
+                    'h-1.5 w-1.5 rounded-full shrink-0',
+                    item.priority === 'critical' ? 'bg-red-500' :
+                    item.priority === 'high' ? 'bg-amber-500' : 'bg-blue-400'
+                  )} />
+                  <span className="text-foreground">{item.label}</span>
+                  <span className={cn(
+                    'ml-auto shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded',
+                    item.priority === 'critical' ? 'bg-red-500/15 text-red-600 dark:text-red-400' :
+                    item.priority === 'high' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' :
+                    'bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                  )}>
+                    {item.priority}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-3">
+              Submit each through the Ingest tab below ↓
+            </p>
+          </CardContent>
+        </Card>
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className={SHELL.tabs.list}>
             <TabsTrigger value="control-plane" className={SHELL.tabs.triggerWithIcon}>
