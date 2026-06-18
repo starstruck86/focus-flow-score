@@ -1169,6 +1169,43 @@ export default function Coach() {
   const [selectedTranscriptId, setSelectedTranscriptId] = useState<string | null>(null);
   const { data: selectedGrade } = useTranscriptGrade(selectedTranscriptId || undefined);
 
+  const { data: gradeBreakdownData } = useQuery({
+    queryKey: ['all-transcript-grades'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase
+        .from('transcript_grades')
+        .select('discovery_score, cotm_score, meddicc_score, presence_score, commercial_score, next_step_score, structure_score, overall_score')
+        .eq('user_id', user.id);
+      return data ?? [];
+    },
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const categoryBreakdown = useMemo(() => {
+    if (!gradeBreakdownData || gradeBreakdownData.length === 0) return [];
+    const cats = [
+      { key: 'discovery_score',    label: 'Discovery',        dimension: 'discovery' },
+      { key: 'cotm_score',         label: 'Command of Msg',   dimension: 'messaging' },
+      { key: 'meddicc_score',      label: 'MEDDICC',          dimension: 'deal_control' },
+      { key: 'presence_score',     label: 'Presence',         dimension: 'c_suite_engagement' },
+      { key: 'commercial_score',   label: 'Commercial',       dimension: 'deal_control' },
+      { key: 'next_step_score',    label: 'Next Step',        dimension: 'deal_control' },
+      { key: 'structure_score',    label: 'Structure',        dimension: 'messaging' },
+    ];
+    return cats.map(cat => {
+      const scores = (gradeBreakdownData as any[])
+        .map(g => g[cat.key])
+        .filter((s): s is number => s != null);
+      const avg = scores.length > 0
+        ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 20)
+        : 0;
+      const min = scores.length > 0 ? Math.round(Math.min(...scores) * 20) : 0;
+      return { ...cat, avg, min, count: scores.length };
+    }).sort((a, b) => a.avg - b.avg);
+  }, [gradeBreakdownData]);
+
   // Voice event listener for grading (practice events now handled by Dojo)
   useEffect(() => {
     const handleGradeCall = () => {
