@@ -359,10 +359,10 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
         <div className="px-4 lg:px-6 max-w-4xl mx-auto w-full pt-2 space-y-2 overflow-hidden">
           <div className="flex items-center gap-2 sm:gap-4">
             <div className="flex-1 min-w-0 overflow-hidden">
-              <GlobalWeekStrip />
+              {isWork && <GlobalWeekStrip />}
             </div>
             <div className="shrink-0">
-              <ActivityRings />
+              {isWork && <ActivityRings />}
             </div>
           </div>
           <DayTimeline />
