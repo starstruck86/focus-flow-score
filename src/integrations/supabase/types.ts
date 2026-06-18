@@ -420,7 +420,15 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "approved_users_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       asset_provenance: {
         Row: {
@@ -675,7 +683,15 @@ export type Database = {
           metadata?: Json | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "badges_earned_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       batch_run_jobs: {
         Row: {
@@ -782,7 +798,15 @@ export type Database = {
           total_resources?: number
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "batch_runs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       block_snapshots: {
         Row: {
@@ -871,7 +895,15 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "calendar_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       call_transcripts: {
         Row: {
@@ -1226,7 +1258,15 @@ export type Database = {
           template_name?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "command_feedback_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       command_shortcuts: {
         Row: {
@@ -1283,7 +1323,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "command_shortcuts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       contacts: {
         Row: {
@@ -2100,7 +2148,15 @@ export type Database = {
           workday_start_time?: string | null
           yesterday_commitment_met?: boolean | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "daily_journal_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       daily_plan_preferences: {
         Row: {
@@ -2151,7 +2207,15 @@ export type Database = {
           work_end_time?: string
           work_start_time?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "daily_plan_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       daily_time_blocks: {
         Row: {
@@ -2618,7 +2682,15 @@ export type Database = {
           trace_id?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "error_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       execution_outputs: {
         Row: {
@@ -3037,7 +3109,15 @@ export type Database = {
           name?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "holidays_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       icp_sourced_accounts: {
         Row: {
@@ -3353,6 +3433,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "knowledge_items"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ki_mastery_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -4699,7 +4786,15 @@ export type Database = {
           target_type?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "playbook_feedback_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       playbook_usage_events: {
         Row: {
@@ -4981,6 +5076,13 @@ export type Database = {
             referencedRelation: "source_registry"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "podcast_import_queue_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       power_hour_sessions: {
@@ -5059,7 +5161,15 @@ export type Database = {
           note?: string | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pto_days_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       quota_targets: {
         Row: {
@@ -5125,7 +5235,15 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "quota_targets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       renewals: {
         Row: {
@@ -5592,6 +5710,13 @@ export type Database = {
             referencedRelation: "resource_folders"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "resource_folders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       resource_job_steps: {
@@ -5862,6 +5987,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "resources"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resource_versions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -6348,6 +6480,13 @@ export type Database = {
             referencedRelation: "strategy_threads"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "resources_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       routing_decisions: {
@@ -6474,7 +6613,15 @@ export type Database = {
           user_id?: string | null
           week_ending?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "sales_age_snapshots_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       skill_builder_sessions: {
         Row: {
@@ -6573,7 +6720,15 @@ export type Database = {
           total_ms?: number | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "smoke_test_results_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       source_registry: {
         Row: {
@@ -6666,7 +6821,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "stage_playbooks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       stage_resources: {
         Row: {
@@ -6696,7 +6859,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "stage_resources_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       strategy_artifact_feedback: {
         Row: {
@@ -7948,7 +8119,15 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "streak_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       streak_summary: {
         Row: {
@@ -7993,7 +8172,15 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "streak_summary_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       task_run_sections: {
         Row: {
@@ -8126,6 +8313,13 @@ export type Database = {
             referencedRelation: "task_templates"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "task_runs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       task_templates: {
@@ -8162,7 +8356,15 @@ export type Database = {
           use_case?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "task_templates_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       tasks: {
         Row: {
@@ -8629,6 +8831,13 @@ export type Database = {
             referencedRelation: "learning_lessons"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "user_lesson_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       user_settings: {
@@ -8653,7 +8862,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_settings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       verification_runs: {
         Row: {
@@ -8737,7 +8954,15 @@ export type Database = {
           remind_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "voice_reminders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       weekly_battle_plans: {
         Row: {
@@ -9019,7 +9244,15 @@ export type Database = {
           user_id?: string | null
           working_days?: number[]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "work_schedule_config_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       workday_overrides: {
         Row: {
@@ -9046,7 +9279,15 @@ export type Database = {
           reason?: string | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "workday_overrides_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
     }
     Views: {
@@ -9218,6 +9459,16 @@ export type Database = {
         }
         Relationships: []
       }
+      branch_readiness: {
+        Row: {
+          avg_drill_score: number | null
+          coverage_pct: number | null
+          drilled_branch_kis: number | null
+          total_branch_kis: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
       dimension_scores: {
         Row: {
           avg_score_100: number | null
@@ -9242,7 +9493,15 @@ export type Database = {
           updated_at: string | null
           user_id: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "resources_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
     }
     Functions: {
