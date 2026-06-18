@@ -177,6 +177,50 @@ export default function Skills() {
           </CardContent>
         </Card>
 
+        {/* Branch.io Readiness */}
+        <Card className={cn(
+          'border',
+          (branchReadiness?.total_branch_kis ?? 0) === 0
+            ? 'border-amber-500/30 bg-amber-500/5'
+            : 'border-blue-500/20 bg-blue-500/5'
+        )}>
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-7 w-7 rounded-md bg-blue-600 flex items-center justify-center shrink-0">
+                  <span className="text-white text-xs font-bold">B</span>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Branch.io Readiness</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(branchReadiness?.total_branch_kis ?? 0) === 0
+                      ? 'No Branch.io KIs yet — ingest resources in PrepHub'
+                      : `${branchReadiness?.drilled_branch_kis ?? 0} of ${branchReadiness?.total_branch_kis} KIs drilled`}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <p className={cn(
+                  'text-lg font-bold font-mono',
+                  (branchReadiness?.total_branch_kis ?? 0) === 0 ? 'text-muted-foreground' : 'text-blue-600'
+                )}>
+                  {(branchReadiness?.total_branch_kis ?? 0) === 0
+                    ? '—'
+                    : `${branchReadiness?.coverage_pct ?? 0}%`}
+                </p>
+                <p className="text-[10px] text-muted-foreground">coverage</p>
+              </div>
+            </div>
+            {(branchReadiness?.total_branch_kis ?? 0) === 0 && (
+              <div className="mt-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  Branch.io intelligence is your moat. Ingest battle cards, case studies, and persona guides before July 1.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Dimension Breakdown */}
         <div>
           <h2 className="font-display text-lg font-semibold mb-3">Dimension Breakdown</h2>
