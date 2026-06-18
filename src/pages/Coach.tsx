@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { WeeklyPlaybookPracticeCard } from '@/components/WeeklyPlaybookPracticeCard';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -1169,6 +1169,43 @@ export default function Coach() {
   const [selectedTranscriptId, setSelectedTranscriptId] = useState<string | null>(null);
   const { data: selectedGrade } = useTranscriptGrade(selectedTranscriptId || undefined);
 
+  const { data: gradeBreakdownData } = useQuery({
+    queryKey: ['all-transcript-grades'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase
+        .from('transcript_grades')
+        .select('discovery_score, cotm_score, meddicc_score, presence_score, commercial_score, next_step_score, structure_score, overall_score')
+        .eq('user_id', user.id);
+      return data ?? [];
+    },
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const categoryBreakdown = useMemo(() => {
+    if (!gradeBreakdownData || gradeBreakdownData.length === 0) return [];
+    const cats = [
+      { key: 'discovery_score',    label: 'Discovery',        dimension: 'discovery' },
+      { key: 'cotm_score',         label: 'Command of Msg',   dimension: 'messaging' },
+      { key: 'meddicc_score',      label: 'MEDDICC',          dimension: 'deal_control' },
+      { key: 'presence_score',     label: 'Presence',         dimension: 'c_suite_engagement' },
+      { key: 'commercial_score',   label: 'Commercial',       dimension: 'deal_control' },
+      { key: 'next_step_score',    label: 'Next Step',        dimension: 'deal_control' },
+      { key: 'structure_score',    label: 'Structure',        dimension: 'messaging' },
+    ];
+    return cats.map(cat => {
+      const scores = (gradeBreakdownData as any[])
+        .map(g => g[cat.key])
+        .filter((s): s is number => s != null);
+      const avg = scores.length > 0
+        ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 20)
+        : 0;
+      const min = scores.length > 0 ? Math.round(Math.min(...scores) * 20) : 0;
+      return { ...cat, avg, min, count: scores.length };
+    }).sort((a, b) => a.avg - b.avg);
+  }, [gradeBreakdownData]);
+
   // Voice event listener for grading (practice events now handled by Dojo)
   useEffect(() => {
     const handleGradeCall = () => {
@@ -1330,6 +1367,60 @@ export default function Coach() {
                   </div>
                 )}
               </div>
+            )}
+
+            {categoryBreakdown.length > 0 && (
+              <Card className="mt-4">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-sm font-semibold">Skill Breakdown</p>
+                      <p className="text-xs text-muted-foreground">
+                        Avg across {gradeBreakdownData?.length ?? 0} graded calls · lowest first
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      Overall: {Math.round((gradeBreakdownData ?? []).reduce((a: number, g: any) => a + (g.overall_score ?? 0), 0) / Math.max((gradeBreakdownData ?? []).length, 1))}%
+                    </Badge>
+                  </div>
+
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart
+                      data={categoryBreakdown}
+                      layout="vertical"
+                      margin={{ left: 8, right: 32, top: 0, bottom: 0 }}
+                    >
+                      <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10 }} tickCount={6} />
+                      <YAxis type="category" dataKey="label" width={96} tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                        formatter={(value: any) => [`${value}/100`, 'Avg score']}
+                      />
+                      <Bar dataKey="avg" radius={[0, 3, 3, 0]} maxBarSize={20}>
+                        {categoryBreakdown.map((entry, index) => (
+                          <Cell
+                            key={entry.key}
+                            fill={
+                              entry.avg < 40 ? '#ef4444' :
+                              entry.avg < 60 ? '#f59e0b' :
+                              '#10b981'
+                            }
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+
+                  {categoryBreakdown[0] && categoryBreakdown[0].avg < 60 && (
+                    <div className="mt-3 p-2 rounded-lg bg-red-500/8 border border-red-500/20">
+                      <p className="text-xs text-red-600 dark:text-red-400 font-medium">
+                        Focus: {categoryBreakdown[0].label} ({categoryBreakdown[0].avg}/100)
+                        {' '}— drill {categoryBreakdown[0].dimension.replace('_', ' ')} KIs daily
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             )}
           </TabsContent>
 
