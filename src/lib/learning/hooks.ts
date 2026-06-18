@@ -60,12 +60,21 @@ export function useUserProgress() {
     enabled: !!user?.id,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('learning_progress' as any)
+        .from('user_lesson_progress' as any)
         .select('*')
         .eq('user_id', user!.id);
 
       if (error) throw error;
-      return (data || []) as unknown as LearningProgress[];
+      // Normalize to LearningProgress shape used elsewhere; expose mastery fields.
+      return (data || []).map((r: any) => ({
+        lesson_id: r.lesson_id,
+        status: r.status,
+        mastery_score: r.mastery_score,
+        best_score: r.best_score,
+        attempts: r.attempts,
+        passed_at: r.passed_at,
+        last_attempt_at: r.last_attempt_at,
+      })) as unknown as LearningProgress[];
     },
   });
 }
