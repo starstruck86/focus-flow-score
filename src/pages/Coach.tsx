@@ -1368,6 +1368,60 @@ export default function Coach() {
                 )}
               </div>
             )}
+
+            {categoryBreakdown.length > 0 && (
+              <Card className="mt-4">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-sm font-semibold">Skill Breakdown</p>
+                      <p className="text-xs text-muted-foreground">
+                        Avg across {gradeBreakdownData?.length ?? 0} graded calls · lowest first
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      Overall: {Math.round((gradeBreakdownData ?? []).reduce((a: number, g: any) => a + (g.overall_score ?? 0), 0) / Math.max((gradeBreakdownData ?? []).length, 1))}%
+                    </Badge>
+                  </div>
+
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart
+                      data={categoryBreakdown}
+                      layout="vertical"
+                      margin={{ left: 8, right: 32, top: 0, bottom: 0 }}
+                    >
+                      <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10 }} tickCount={6} />
+                      <YAxis type="category" dataKey="label" width={96} tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                        formatter={(value: any) => [`${value}/100`, 'Avg score']}
+                      />
+                      <Bar dataKey="avg" radius={[0, 3, 3, 0]} maxBarSize={20}>
+                        {categoryBreakdown.map((entry, index) => (
+                          <Cell
+                            key={entry.key}
+                            fill={
+                              entry.avg < 40 ? '#ef4444' :
+                              entry.avg < 60 ? '#f59e0b' :
+                              '#10b981'
+                            }
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+
+                  {categoryBreakdown[0] && categoryBreakdown[0].avg < 60 && (
+                    <div className="mt-3 p-2 rounded-lg bg-red-500/8 border border-red-500/20">
+                      <p className="text-xs text-red-600 dark:text-red-400 font-medium">
+                        Focus: {categoryBreakdown[0].label} ({categoryBreakdown[0].avg}/100)
+                        {' '}— drill {categoryBreakdown[0].dimension.replace('_', ' ')} KIs daily
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* ── HISTORY TAB ── */}
