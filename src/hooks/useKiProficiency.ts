@@ -130,7 +130,7 @@ export function useKiProficiency() {
       });
 
       const drilled = dimensions.filter(d => d.total_reps > 0);
-      const total_ki_library = Object.values(libMap).reduce((a, b) => a + b, 0);
+      const total_ki_library = total_ki_library_count ?? 0;
       const total_drilled = dimensions.reduce((a, d) => a + d.drilled_count, 0);
       const total_reps = dimensions.reduce((a, d) => a + d.total_reps, 0);
       const decay_alerts = dimensions.reduce((a, d) => a + d.decay_risk_count, 0);
