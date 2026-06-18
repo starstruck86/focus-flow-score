@@ -260,6 +260,82 @@ export default function Learn() {
         {/* Coaching History */}
         <DaveCoachingHistory />
 
+        {/* ═══ Mastery Gate · Lesson List ═══ */}
+        {courses && courses.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-sm font-semibold text-foreground">Mastery Progression</h2>
+            {courses.map(course => (
+              <div key={course.id} className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-border bg-muted/30">
+                  <p className="text-sm font-medium text-foreground">{course.title}</p>
+                </div>
+                <div className="divide-y divide-border">
+                  {course.learning_modules.map(mod => (
+                    <div key={mod.id} className="px-4 py-3">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                        {mod.title}
+                      </p>
+                      <ul className="space-y-1.5">
+                        {mod.learning_lessons.map((lesson, idx) => {
+                          const lp = progressMap[lesson.id] as any;
+                          const bestScore = lp?.best_score ?? lp?.mastery_score ?? 0;
+                          const isPassed = lp?.status === 'passed' || bestScore >= 65;
+                          const inProgress = !isPassed && (lp?.status === 'in_progress' || bestScore > 0);
+
+                          const prev = idx > 0 ? mod.learning_lessons[idx - 1] : null;
+                          const prevLp = prev ? (progressMap[prev.id] as any) : null;
+                          const prevPassed = !prev
+                            ? true
+                            : prevLp?.status === 'passed' || (prevLp?.best_score ?? prevLp?.mastery_score ?? 0) >= 65;
+                          const isLocked = idx > 0 && !prevPassed && !isPassed && !inProgress;
+
+                          return (
+                            <li key={lesson.id}>
+                              <button
+                                onClick={() => navigate(`/learn/lesson/${lesson.id}`)}
+                                className="w-full flex items-center gap-3 py-1.5 px-2 -mx-2 rounded-md hover:bg-accent/50 transition-colors text-left"
+                              >
+                                <span className="shrink-0">
+                                  {isPassed ? (
+                                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                  ) : inProgress ? (
+                                    <Circle className="h-4 w-4 text-amber-500" strokeWidth={2.5} />
+                                  ) : (
+                                    <Circle className="h-4 w-4 text-muted-foreground/50" />
+                                  )}
+                                </span>
+                                <span className="flex-1 min-w-0 flex items-center gap-1.5">
+                                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground shrink-0" />}
+                                  <span className={cn(
+                                    "text-sm truncate",
+                                    isLocked ? "text-muted-foreground" : "text-foreground"
+                                  )}>
+                                    {lesson.title}
+                                  </span>
+                                </span>
+                                <span className={cn(
+                                  "shrink-0 text-xs font-medium",
+                                  isPassed ? "text-green-600" :
+                                  inProgress ? "text-amber-600" :
+                                  "text-muted-foreground"
+                                )}>
+                                  {isPassed ? `Mastered · ${bestScore}/100` :
+                                   inProgress ? `In Progress · ${bestScore}/100` :
+                                   'Start'}
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Secondary lesson CTA */}
         {nextLesson && !learnLoop?.primaryAction && (
           <button
