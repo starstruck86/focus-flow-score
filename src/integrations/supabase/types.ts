@@ -9135,6 +9135,16 @@ export type Database = {
         }
         Relationships: []
       }
+      dimension_scores: {
+        Row: {
+          avg_score_100: number | null
+          call_count: number | null
+          min_score_100: number | null
+          spider_dimension: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
       resource_truth_drift: {
         Row: {
           active_ki_count: number | null
