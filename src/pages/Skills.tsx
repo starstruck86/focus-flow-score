@@ -185,7 +185,7 @@ export default function Skills() {
                           const userId = (await supabase.auth.getUser()).data.user?.id ?? '';
                           const ki = await selectNextKI(userId, d.dimension);
                           if (ki) {
-                            navigate('/dojo', { state: { kiContext: ki } });
+                            navigate('/dojo/session', { state: { kiContext: ki, sessionType: 'drill' } });
                           } else {
                             navigate('/dojo', {
                               state: { skillFocus: DIMENSION_TO_SKILL[d.dimension] },

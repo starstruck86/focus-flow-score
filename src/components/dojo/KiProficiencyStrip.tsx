@@ -26,7 +26,7 @@ export function KiProficiencyStrip() {
       const userId = (await supabase.auth.getUser()).data.user?.id ?? '';
       const ki = await selectNextKI(userId, dim.dimension);
       if (ki) {
-        navigate('/dojo/session', { state: { kiContext: ki } });
+        navigate('/dojo/session', { state: { kiContext: ki, sessionType: 'drill' } });
       } else {
         navigate('/skills');
       }
