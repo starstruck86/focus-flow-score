@@ -38,6 +38,21 @@ export default function Skills() {
   const { data, isLoading } = useKiProficiency();
   const [loadingDim, setLoadingDim] = useState<SpiderDimensionKey | null>(null);
 
+  const { data: branchReadiness } = useQuery({
+    queryKey: ['branch-readiness'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await (supabase as any)
+        .from('branch_readiness')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
   const dimensions = data?.dimensions ?? [];
   const hasReps = (data?.total_reps ?? 0) > 0;
 
