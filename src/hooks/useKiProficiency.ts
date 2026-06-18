@@ -45,23 +45,34 @@ export function useKiProficiency() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const { data: libCounts } = await supabase
+      const { count: total_ki_library_count } = await supabase
         .from('knowledge_items')
-        .select('spider_dimension')
+        .select('*', { count: 'exact', head: true })
         .eq('is_core_ae', true)
+        .eq('active', true)
         .not('spider_dimension', 'is', null);
+
+      const libQueries = SPIDER_DIMENSIONS.map(({ key }) =>
+        supabase
+          .from('knowledge_items')
+          .select('*', { count: 'exact', head: true })
+          .eq('is_core_ae', true)
+          .eq('active', true)
+          .eq('spider_dimension', key)
+          .then(({ count }) => ({ key, count: count ?? 0 }))
+      );
+
+      const libResults = await Promise.all(libQueries);
+      const libMap: Record<string, number> = {};
+      for (const { key, count } of libResults) {
+        libMap[key] = count;
+      }
 
       const { data: masteryRows } = await supabase
         .from('ki_mastery')
         .select('spider_dimension, times_drilled, avg_score, best_score, decay_risk, last_drilled_at')
         .eq('user_id', user.id)
         .not('spider_dimension', 'is', null);
-
-      const libMap: Record<string, number> = {};
-      for (const row of libCounts ?? []) {
-        const dim = row.spider_dimension as string;
-        libMap[dim] = (libMap[dim] ?? 0) + 1;
-      }
 
       const masteryMap: Record<string, {
         drilled_count: number;
@@ -119,7 +130,7 @@ export function useKiProficiency() {
       });
 
       const drilled = dimensions.filter(d => d.total_reps > 0);
-      const total_ki_library = Object.values(libMap).reduce((a, b) => a + b, 0);
+      const total_ki_library = total_ki_library_count ?? 0;
       const total_drilled = dimensions.reduce((a, d) => a + d.drilled_count, 0);
       const total_reps = dimensions.reduce((a, d) => a + d.total_reps, 0);
       const decay_alerts = dimensions.reduce((a, d) => a + d.decay_risk_count, 0);
