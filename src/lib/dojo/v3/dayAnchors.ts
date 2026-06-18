@@ -152,3 +152,17 @@ export const ANCHOR_LABELS: Record<DayAnchor, string> = {
   deal_control_negotiation: 'Deal Control / Negotiation',
   executive_roi_mixed: 'Executive / ROI',
 };
+
+/**
+ * Intensive Mode anchor override.
+ * When Intensive Mode is active, Mondays target Expansion and Wednesdays target Deal Control.
+ * dayOfWeek: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+ */
+export function getIntensiveAnchor(
+  dayOfWeek: number
+): { dimension: string; label: string } | null {
+  if (dayOfWeek === 1) return { dimension: 'expansion_strategy', label: 'Expansion' };
+  if (dayOfWeek === 3) return { dimension: 'deal_control', label: 'Deal Control' };
+  return null;
+}
+
