@@ -3621,6 +3621,9 @@ export type Database = {
           id: string
           is_active: boolean
           lesson_content: Json | null
+          mastery_attempts: number | null
+          mastery_passed_at: string | null
+          mastery_score: number | null
           module_id: string
           order_index: number
           quiz_content: Json | null
@@ -3637,6 +3640,9 @@ export type Database = {
           id?: string
           is_active?: boolean
           lesson_content?: Json | null
+          mastery_attempts?: number | null
+          mastery_passed_at?: string | null
+          mastery_score?: number | null
           module_id: string
           order_index?: number
           quiz_content?: Json | null
@@ -3653,6 +3659,9 @@ export type Database = {
           id?: string
           is_active?: boolean
           lesson_content?: Json | null
+          mastery_attempts?: number | null
+          mastery_passed_at?: string | null
+          mastery_score?: number | null
           module_id?: string
           order_index?: number
           quiz_content?: Json | null
@@ -8568,6 +8577,56 @@ export type Database = {
             columns: ["transcript_id"]
             isOneToOne: true
             referencedRelation: "call_transcripts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_lesson_progress: {
+        Row: {
+          attempts: number | null
+          best_score: number | null
+          created_at: string | null
+          id: string
+          last_attempt_at: string | null
+          lesson_id: string
+          mastery_score: number | null
+          passed_at: string | null
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          attempts?: number | null
+          best_score?: number | null
+          created_at?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          lesson_id: string
+          mastery_score?: number | null
+          passed_at?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          attempts?: number | null
+          best_score?: number | null
+          created_at?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          lesson_id?: string
+          mastery_score?: number | null
+          passed_at?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_lesson_progress_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "learning_lessons"
             referencedColumns: ["id"]
           },
         ]

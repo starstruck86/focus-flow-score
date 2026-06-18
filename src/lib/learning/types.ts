@@ -59,13 +59,16 @@ export interface LearningLesson {
 }
 
 export interface LearningProgress {
-  id: string;
-  user_id: string;
+  id?: string;
+  user_id?: string;
   lesson_id: string;
-  status: 'not_started' | 'in_progress' | 'completed';
+  status: 'not_started' | 'in_progress' | 'completed' | 'passed';
   mastery_score: number | null;
+  best_score?: number | null;
+  attempts?: number | null;
+  passed_at?: string | null;
   last_attempt_at: string | null;
-  created_at: string;
+  created_at?: string;
 }
 
 export interface LearningQuizAnswer {
