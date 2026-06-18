@@ -223,14 +223,16 @@ export function BottomNav({ variant = 'default' }: { variant?: 'default' | 'cond
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                onClick={() => navigate('/')}
+                onClick={toggleMode}
                 className="relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full text-[11px] font-medium transition-all duration-200 rounded-lg min-w-[44px] min-h-[44px] text-muted-foreground hover:text-foreground"
               >
                 {mode === 'train'
                   ? <Briefcase className="h-5 w-5" />
                   : <Dumbbell className="h-5 w-5" />
                 }
-                <span className="truncate opacity-70">Switch</span>
+                <span className="truncate opacity-70">
+                  {mode === 'train' ? 'Work' : 'Train'}
+                </span>
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-xs">
