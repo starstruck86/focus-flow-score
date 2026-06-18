@@ -35,7 +35,7 @@ import { MasteryLanes } from '@/components/dojo/MasteryLanes';
 import { ResumeLaneBanner } from '@/components/dojo/ResumeLaneBanner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Flame, Target } from 'lucide-react';
+import { Flame, Target, ChevronRight } from 'lucide-react';
 import { useIntensiveMode } from '@/hooks/useIntensiveMode';
 
 export default function Dojo() {
@@ -240,6 +240,23 @@ export default function Dojo() {
             </div>
           </button>
         )}
+
+        {!hasBenchmark && (
+          <button
+            onClick={() => navigate('/benchmark')}
+            className="w-full text-left p-2.5 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-primary shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-primary">Take Your Baseline Benchmark</p>
+                <p className="text-[11px] text-muted-foreground">10 scenarios · seeds your spider chart · 15 min</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-primary ml-auto shrink-0" />
+            </div>
+          </button>
+        )}
+
 
         {/* V3: Daily Assignment Card */}
         {dailyAssignment && (
