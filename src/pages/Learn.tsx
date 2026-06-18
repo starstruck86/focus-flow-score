@@ -85,6 +85,7 @@ export default function Learn() {
           const p = progressMap[lesson.id] as any;
           const passed = p?.status === 'passed' || p?.status === 'completed' || (p?.best_score ?? p?.mastery_score ?? 0) >= 65;
           if (!passed) {
+            return { lesson, course };
           }
         }
       }
