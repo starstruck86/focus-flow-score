@@ -300,12 +300,13 @@ export default function DojoSession() {
             }
 
             // KI mastery write-back (first attempt)
-            if (kiContext) {
+            const activeKI = kiContext ?? kiContextOverride;
+            if (activeKI) {
               writeKIMastery({
                 userId: user.id,
-                kiId: kiContext.id,
-                chapter: kiContext.chapter,
-                spiderDimension: kiContext.spider_dimension,
+                kiId: activeKI.id,
+                chapter: activeKI.chapter,
+                spiderDimension: activeKI.spider_dimension,
                 score: scoreData.score,
               }).catch(err => console.error('[DojoSession] writeKIMastery failed:', err));
             }
@@ -344,12 +345,13 @@ export default function DojoSession() {
               });
 
             // KI mastery write-back (retry — use best score)
-            if (kiContext) {
+            const activeKI = kiContext ?? kiContextOverride;
+            if (activeKI) {
               writeKIMastery({
                 userId: user.id,
-                kiId: kiContext.id,
-                chapter: kiContext.chapter,
-                spiderDimension: kiContext.spider_dimension,
+                kiId: activeKI.id,
+                chapter: activeKI.chapter,
+                spiderDimension: activeKI.spider_dimension,
                 score: bestScore,
               }).catch(err => console.error('[DojoSession] writeKIMastery failed:', err));
             }
