@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { WeeklyPlaybookPracticeCard } from '@/components/WeeklyPlaybookPracticeCard';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { motion, AnimatePresence } from 'framer-motion';
