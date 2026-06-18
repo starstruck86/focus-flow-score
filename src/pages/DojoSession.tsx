@@ -1138,6 +1138,23 @@ function FeedbackView({
         sessionType={sessionType}
       />
 
+      {/* Session end actions */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/95 backdrop-blur border-t border-border/60 flex gap-3 z-50">
+        <Button
+          variant="outline"
+          className="flex-1"
+          onClick={() => navigate('/dojo')}
+        >
+          Done
+        </Button>
+        <Button
+          className="flex-1"
+          onClick={onNextRep}
+        >
+          Next Rep →
+        </Button>
+      </div>
+
       {/* Non-drill navigation */}
       {sessionType !== 'drill' && (
         <div className="flex gap-3 pt-2">
