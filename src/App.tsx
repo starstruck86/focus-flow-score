@@ -69,6 +69,7 @@ const StrategyOpsPanel = lazy(() => import("./pages/StrategyOpsPanel"));
 const CourseImports = lazy(() => import("./pages/CourseImports"));
 const CourseImportDetail = lazy(() => import("./pages/CourseImportDetail"));
 const Home = lazy(() => import("./pages/Home"));
+const Benchmark = lazy(() => import("./pages/Benchmark"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -240,6 +241,13 @@ const App = () => (
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback />}>
                         <Skills />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/benchmark" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<LazyFallback />}>
+                        <Benchmark />
                       </Suspense>
                     </ProtectedRoute>
                   } />

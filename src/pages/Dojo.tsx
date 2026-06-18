@@ -101,6 +101,19 @@ export default function Dojo() {
   });
 
   // V3: Block snapshots for comparison (show when retest exists)
+  const { data: hasBenchmark } = useQuery({
+    queryKey: ['has-benchmark'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+      const { count } = await (supabase as any)
+        .from('skill_benchmarks')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      return (count ?? 0) > 0;
+    },
+  });
+
   const { data: blockSnapshots } = useQuery({
     queryKey: ['dojo-v3-snapshots', activeBlock?.id],
     enabled: !!activeBlock?.id && activeBlock?.currentWeek === 8,
