@@ -6,11 +6,14 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useKiProficiency } from '@/hooks/useKiProficiency';
 import { selectNextKI } from '@/lib/dojo/selectNextKI';
+import { useIntensiveMode } from '@/hooks/useIntensiveMode';
+import { getIntensiveAnchor } from '@/lib/dojo/v3/dayAnchors';
 
 export function KiProficiencyStrip() {
   const navigate = useNavigate();
   const { data, isLoading } = useKiProficiency();
   const [drilling, setDrilling] = useState(false);
+  const intensiveMode = useIntensiveMode();
 
   if (isLoading || !data) return null;
 
@@ -19,12 +22,15 @@ export function KiProficiencyStrip() {
 
   const drillWeakest = async () => {
     const dim = weakest ?? data.dimensions[0];
-    if (!dim) return navigate('/skills');
+    const dayOfWeek = new Date().getDay();
+    const intensiveAnchor = intensiveMode.active ? getIntensiveAnchor(dayOfWeek) : null;
+    const targetDimension = intensiveAnchor?.dimension ?? dim?.dimension;
+    if (!targetDimension) return navigate('/skills');
 
     setDrilling(true);
     try {
       const userId = (await supabase.auth.getUser()).data.user?.id ?? '';
-      const ki = await selectNextKI(userId, dim.dimension);
+      const ki = await selectNextKI(userId, targetDimension);
       if (ki) {
         navigate('/dojo/session', { state: { kiContext: ki, sessionType: 'drill' } });
       } else {

@@ -32,8 +32,13 @@ import { WeeklySummaryCard } from '@/components/dojo/WeeklySummaryCard';
 import { BlockComparisonView } from '@/components/dojo/BlockComparisonView';
 import { MasteryLanes } from '@/components/dojo/MasteryLanes';
 import { ResumeLaneBanner } from '@/components/dojo/ResumeLaneBanner';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Flame, Target } from 'lucide-react';
+import { useIntensiveMode } from '@/hooks/useIntensiveMode';
 
 export default function Dojo() {
+  const intensive = useIntensiveMode();
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -181,6 +186,46 @@ export default function Dojo() {
 
         {/* KI Proficiency strip — adaptive training entry point */}
         <KiProficiencyStrip />
+
+        {/* Intensive mode card — visible when active */}
+        {intensive.active && (
+          <Card className="border-orange-500/40 bg-orange-500/5">
+            <CardContent className="p-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <Flame className="h-3.5 w-3.5 text-orange-500 shrink-0" />
+                  <p className="text-sm font-bold text-orange-500">Intensive Mode · Day {intensive.daysIn + 1}</p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Mon &amp; Wed anchors → Expansion + Deal Control until July
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] text-muted-foreground shrink-0"
+                onClick={() => intensive.toggle()}
+              >
+                Pause
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {!intensive.active && (
+          <button
+            onClick={() => intensive.toggle()}
+            className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-orange-500/40 hover:bg-orange-500/5 transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Enable Intensive Mode</p>
+                <p className="text-[11px] text-muted-foreground">Mon &amp; Wed → Expansion + Deal Control drills</p>
+              </div>
+            </div>
+          </button>
+        )}
 
         {/* V3: Daily Assignment Card */}
         {dailyAssignment && (
