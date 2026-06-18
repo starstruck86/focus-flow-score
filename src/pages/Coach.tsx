@@ -341,6 +341,31 @@ function CallScorecard({ grade, onRegrade, transcriptId, transcriptContent }: {
           score: weakScore,
         });
       });
+
+      // Signal weakness to ki_mastery so tomorrow's drills are auto-adjusted.
+      // Any category < 3/5 (60/100) flags the 5 stalest KIs in that dimension.
+      const CATEGORY_SCORE_MAP: Record<string, number> = {
+        discovery_score: (grade as any).discovery_score ?? 5,
+        cotm_score: (grade as any).cotm_score ?? 5,
+        structure_score: (grade as any).structure_score ?? 5,
+        meddicc_score: (grade as any).meddicc_score ?? 5,
+        next_step_score: (grade as any).next_step_score ?? 5,
+        commercial_score: (grade as any).commercial_score ?? 5,
+        presence_score: (grade as any).presence_score ?? 5,
+      };
+      const weakDimSignals = Object.entries(CATEGORY_TO_DIMENSION)
+        .filter(([field]) => (CATEGORY_SCORE_MAP[field] ?? 5) < 3)
+        .map(([field, dim]) => ({
+          dimension: dim,
+          score: (CATEGORY_SCORE_MAP[field] ?? 5) * 20,
+        }));
+      for (const { dimension, score } of weakDimSignals) {
+        (supabase.rpc as any)('signal_dimension_weakness', {
+          p_user_id: user.id,
+          p_spider_dimension: dimension,
+          p_signal_score: score,
+        }).then(() => { /* silent — affects tomorrow's drills */ });
+      }
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
