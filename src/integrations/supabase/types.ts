@@ -9252,6 +9252,14 @@ export type Database = {
         Returns: Json
       }
       is_approved_user: { Args: { _user_id: string }; Returns: boolean }
+      signal_dimension_weakness: {
+        Args: {
+          p_signal_score: number
+          p_spider_dimension: string
+          p_user_id: string
+        }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never
