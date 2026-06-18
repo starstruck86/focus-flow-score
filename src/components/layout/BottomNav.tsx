@@ -203,8 +203,7 @@ export function BottomNav({ variant = 'default' }: { variant?: 'default' | 'cond
   if (variant === 'hidden') return null;
   if (keyboardOpen) return null;
 
-  const { mode } = useAppMode();
-  const navigate = useNavigate();
+  const { mode, toggleMode } = useAppMode();
   const activeItems = mode === 'train' ? trainNavItems : workNavItems;
   const condensed = variant === 'condensed';
 
