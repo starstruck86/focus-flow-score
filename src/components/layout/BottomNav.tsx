@@ -1,4 +1,4 @@
-import { NavLink as RouterNavLink, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink as RouterNavLink, useLocation } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import {
   LayoutDashboard,
