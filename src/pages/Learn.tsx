@@ -3,7 +3,7 @@ import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { Layout } from '@/components/Layout';
 import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
-import { GraduationCap, Loader2, BookOpen } from 'lucide-react';
+import { GraduationCap, Loader2, BookOpen, CheckCircle2, Circle, Lock } from 'lucide-react';
 import { useCourses, useUserProgress } from '@/lib/learning/hooks';
 import type { LearningProgress } from '@/lib/learning/types';
 import { useDailyKI } from '@/hooks/useDailyKI';
