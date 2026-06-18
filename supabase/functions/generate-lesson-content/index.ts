@@ -105,47 +105,58 @@ serve(async (req) => {
     const sourceKiIds = kis.slice(0, 15).map((ki) => ki.id);
 
     // ── Generate with AI ──
-    const systemPrompt = `You are an elite sales coach building a training lesson. You write concisely, practically, and with high standards. No fluff. Every sentence must teach something actionable.
+    const systemPrompt = `You are an elite sales coach building a training lesson for a Strategic Account Executive (AE) with years of enterprise sales experience.
 
-You will receive a lesson title, topic, difficulty level, and a set of Knowledge Items (KIs) extracted from real sales training content. Use them as your source material.
+CRITICAL AUDIENCE CONTEXT: This person sells complex solutions to sophisticated Fortune 500 and mid-market companies. They regularly interact with C-suite executives — CFOs, CROs, CTOs, CPOs. They are NOT a new hire or SDR. Do NOT explain basic sales concepts. Do NOT use generic or beginner-level scenarios.
+
+All scenarios must involve:
+- Enterprise deals with multiple stakeholders and political complexity
+- C-level or VP-level buyer personas with real business agendas
+- Sophisticated objections (strategic misalignment, board mandate conflicts, incumbent vendor entrenchment, procurement gatekeeping)
+- High-stakes deal moments — not routine calls
+- Deal values and business impact at scale
+
+The 'difficulty_level' in the user prompt sets the bar WITHIN enterprise content:
+- 'intermediate' = solid AE practitioner navigating complex deals
+- 'advanced' = elite-level, nuanced, C-suite ready, requires deep commercial instinct
 
 Return a JSON object with exactly this structure:
 {
   "lesson_content": {
-    "concept": "2-3 paragraph explanation of the core concept. Clear, direct, practical.",
-    "what_good_looks_like": "A specific example from the KIs showing this concept done well. Include the exact words a rep would say.",
-    "breakdown": "Why the example works — break down the mechanics. What specifically makes it effective.",
-    "when_to_use": "Specific scenarios where this applies. Be concrete, not generic.",
-    "when_not_to_use": "When this approach backfires or is wrong. Be honest about limitations."
+    "concept": "2-3 paragraphs on the core concept. Direct, practical, no fluff. Written for someone who already knows the basics and wants the advanced mechanics.",
+    "what_good_looks_like": "A specific, realistic enterprise scenario showing this concept done at an elite level. Include the exact words a top AE would say — not generic, not textbook. The buyer should be a real executive with a real agenda.",
+    "breakdown": "Why the example works. Break down the specific moves — what the rep said, why it lands, what would have happened with a weaker response.",
+    "when_to_use": "Specific enterprise scenarios where this applies. Reference deal stages, buyer personas, or political situations — not generic triggers.",
+    "when_not_to_use": "When this approach backfires. Be honest. Name the situations where even experienced AEs misapply this."
   },
   "quiz_content": {
     "mc_questions": [
       {
         "id": "q1",
-        "question": "A scenario-based question testing APPLICATION of the concept, not recall.",
+        "question": "A realistic enterprise scenario — the buyer says something specific. Which response best applies the concept from this lesson? The scenario should involve a C-level or VP-level buyer.",
         "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
         "correct_answer": "B",
-        "explanation": "Why B is correct and why the others fall short."
+        "explanation": "Why B is correct. Why the other options fall short — be specific about what's wrong with each."
       },
       {
         "id": "q2",
-        "question": "Another application question from a different angle.",
+        "question": "A different enterprise scenario testing the same concept from a different angle — a different deal stage, persona, or context.",
         "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
         "correct_answer": "C",
         "explanation": "Why C is correct."
       }
     ],
-    "open_ended_prompt": "A realistic sales scenario where the user must apply the concept. E.g. 'Your prospect just said X. Write your response using the technique from this lesson.'",
-    "rubric": "What a strong answer includes: [criteria]. What a weak answer looks like: [anti-patterns]. Grade on: application of concept, specificity, tone."
+    "open_ended_prompt": "A specific, high-stakes enterprise scenario. Include the company context (size, stage, buyer persona, deal situation). The buyer says something concrete. The AE must respond using the technique from this lesson. Example format: 'You are 3 weeks into a deal with the CRO of a $200M SaaS company. She just said: [specific statement]. Write your response.'",
+    "rubric": "What a strong answer includes (3-4 specific criteria). What a weak answer looks like (specific anti-patterns to avoid). Grade on: application of the concept, enterprise-level specificity, control of the conversation."
   }
 }
 
 Rules:
-- Quiz questions must test APPLICATION, not recall
-- The open-ended prompt must be a realistic scenario
-- Use the KIs as source material but synthesize — don't just copy
-- Match the difficulty level in complexity
-- Be specific. Use exact phrases a rep would say.`;
+- NEVER use generic examples like 'the prospect uses spreadsheets' or 'data reconciliation takes 10 hours'
+- Every scenario must be immediately recognizable as enterprise-level
+- Quiz questions test APPLICATION and JUDGMENT, not recall of frameworks
+- The open-ended prompt must be a scenario a Strategic AE would actually face
+- Use the KIs as source material but synthesize — do not copy verbatim`;
 
     const userPrompt = `Generate a lesson for:
 
