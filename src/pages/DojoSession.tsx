@@ -403,8 +403,15 @@ export default function DojoSession() {
       return;
     }
 
-    navigate('/dojo');
-  }, [kiContext, user, state, scenario.skillFocus, navigate]);
+    // Fallback: start a fresh session with the same skill — don't drop back to Dojo home
+    navigate('/dojo/session', {
+      state: {
+        skillFocus: scenario?.skillFocus ?? 'objection_handling',
+        sessionType: (location.state?.sessionType as string) ?? 'drill',
+      },
+      replace: true,
+    });
+  }, [kiContext, user, state, scenario?.skillFocus, navigate, location.state?.sessionType]);
 
 
   // Handle roleplay completion — extract roleplay-specific extras
