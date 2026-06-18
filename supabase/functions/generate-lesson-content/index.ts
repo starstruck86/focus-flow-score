@@ -82,6 +82,7 @@ serve(async (req) => {
       .select("id, title, tactic_summary, why_it_matters, when_to_use, when_not_to_use, example_usage, framework, chapter, sub_chapter")
       .eq("chapter", topic)
       .eq("active", true)
+      .eq("is_core_ae", true)
       .order("confidence_score", { ascending: false })
       .limit(25);
 
