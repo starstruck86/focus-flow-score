@@ -26,6 +26,7 @@ import { useCopilot, type PageContext } from '@/contexts/CopilotContext';
 import { DayTimeline } from '@/components/tasks/DayTimeline';
 import { ActivityRings } from '@/components/ActivityRings';
 import { GlobalWeekStrip } from '@/components/GlobalWeekStrip';
+import { useAppMode } from '@/hooks/useAppMode';
 import { useDaveContext, DaveSessionError, type DaveSessionData } from '@/hooks/useDaveContext';
 import { useGroupDrift } from '@/hooks/useGroupDrift';
 import { useVoiceReminders } from '@/hooks/useVoiceReminders';
@@ -85,6 +86,7 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
   const { setPageContext } = useCopilot();
   const activeColor = useActiveTabColor();
   const isMobile = useIsMobile();
+  const { isWork } = useAppMode();
   const isStrategy = location.pathname === '/strategy';
   // /strategy desktop replaces the bottom nav with a top global rail.
   // /strategy mobile keeps the full bottom nav; the shell reserves its
@@ -357,10 +359,10 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
         <div className="px-4 lg:px-6 max-w-4xl mx-auto w-full pt-2 space-y-2 overflow-hidden">
           <div className="flex items-center gap-2 sm:gap-4">
             <div className="flex-1 min-w-0 overflow-hidden">
-              <GlobalWeekStrip />
+              {isWork && <GlobalWeekStrip />}
             </div>
             <div className="shrink-0">
-              <ActivityRings />
+              {isWork && <ActivityRings />}
             </div>
           </div>
           <DayTimeline />
