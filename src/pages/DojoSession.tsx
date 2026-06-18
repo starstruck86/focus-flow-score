@@ -693,6 +693,7 @@ function FeedbackView({
   sessionId, skillFocus, transcriptOrigin, originalCallScore, firstAttemptResult,
   assignmentContext, pressureLevel, pressureDimensions, skillLevelForFeedback, onRetry, onNextRep,
 }: FeedbackViewProps) {
+  const navigate = useNavigate();
   const [showDeepDive, setShowDeepDive] = useState(false);
   const hasDimensions = !!(currentResult as unknown as Record<string, unknown>).dimensions;
   const dims = hasDimensions ? (currentResult as unknown as Record<string, unknown>).dimensions as Record<string, unknown> : null;
