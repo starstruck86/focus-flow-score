@@ -444,7 +444,7 @@ export default function DojoSession() {
       },
       replace: true,
     });
-  }, [kiContext, user, state, scenario?.skillFocus, navigate, location.state?.sessionType]);
+  }, [kiContext, kiContextOverride, user, state, scenario?.skillFocus, navigate, location.state?.sessionType]);
 
 
   // Handle roleplay completion — extract roleplay-specific extras
