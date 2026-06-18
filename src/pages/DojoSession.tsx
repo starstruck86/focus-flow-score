@@ -393,9 +393,10 @@ export default function DojoSession() {
 
   const handleNextRep = useCallback(async () => {
     // KI-driven auto-advance: server-side priority selection (decay → undrilled → lowest score)
-    if (kiContext && user && kiContext.spider_dimension) {
+    const activeKI = kiContext ?? kiContextOverride;
+    if (activeKI && user && activeKI.spider_dimension) {
       try {
-        const nextKI = await selectNextKI(user.id, kiContext.spider_dimension, kiContext.id);
+        const nextKI = await selectNextKI(user.id, activeKI.spider_dimension, activeKI.id);
         if (nextKI) {
           navigate('/dojo/session', {
             state: { kiContext: nextKI },
