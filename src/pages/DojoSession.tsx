@@ -136,9 +136,9 @@ export default function DojoSession() {
   // Resolve skill focus — SkillSession takes priority, then legacy skillFocus, then scenario
   const resolvedSkillFocus: SkillFocus | undefined = state?.skillSession?.skillId ?? state?.skillFocus;
 
-  const [kiDrill] = useState<KIDrillScenario | null>(() => (kiContext ? generateKIDrill(kiContext) : null));
+  const [kiDrill, setKiDrill] = useState<KIDrillScenario | null>(() => (kiContext ? generateKIDrill(kiContext) : null));
 
-  const [scenario] = useState<DojoScenario>(() => {
+  const [scenario, setScenario] = useState<DojoScenario>(() => {
     // KI-driven drill: reuse already-computed kiDrill (highest priority)
     if (kiDrill) return kiDrill;
     if (state?.scenario) return state.scenario;
@@ -166,6 +166,7 @@ export default function DojoSession() {
   const [retryCount, setRetryCount] = useState(0);
   const [reviewExtras, setReviewExtras] = useState<ReviewExtras | null>(null);
   const [roleplayExtras, setRoleplayExtras] = useState<RoleplayExtras | null>(null);
+  const [kiContextOverride, setKiContextOverride] = useState<KnowledgeItemForDrill | null>(null);
   const { scoreOriginal, isScoring: isScoringOriginal, originalScore } = useScoreOriginalResponse();
   const { data: skillLevels } = useSkillLevels();
   const skillLevelForFeedback = skillLevels?.find(l => l.skill === scenario.skillFocus) ?? null;
@@ -178,6 +179,35 @@ export default function DojoSession() {
         transcriptOrigin.repResponse
       );
     }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // KI-first session bootstrap: if no KI was passed via navigation,
+  // fetch the next KI for this skill dimension and swap the scenario
+  // before the user starts typing.
+  useEffect(() => {
+    if (kiContext) return;
+
+    const skillFocusToSpiderDimension: Record<string, string> = {
+      discovery: 'discovery',
+      objection_handling: 'objection_handling',
+      deal_control: 'deal_control',
+      executive_response: 'c_suite_engagement',
+      qualification: 'qualification',
+      cold_calling: 'internal_prospecting',
+    };
+
+    const targetDimension = skillFocusToSpiderDimension[resolvedSkillFocus ?? ''] ?? 'discovery';
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      selectNextKI(user.id, targetDimension).then(nextKI => {
+        if (!nextKI) return;
+        const kiScenario = generateKIDrill(nextKI);
+        setScenario(kiScenario);
+        setKiDrill(kiScenario);
+        setKiContextOverride(nextKI);
+      });
+    });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -231,9 +261,9 @@ export default function DojoSession() {
               scenario_family_id: scenarioFamilyId,
               pressure_level: pressureLevel,
               pressure_dimensions: pressureDimensions,
-              ki_source_id: kiContext?.id ?? null,
-              ki_chapter: kiContext?.chapter ?? null,
-              ki_spider_dimension: kiContext?.spider_dimension ?? null,
+              ki_source_id: (kiContext ?? kiContextOverride)?.id ?? null,
+              ki_chapter: (kiContext ?? kiContextOverride)?.chapter ?? null,
+              ki_spider_dimension: (kiContext ?? kiContextOverride)?.spider_dimension ?? null,
               ki_ideal_response: kiDrill?.ki_ideal_response ?? null,
               ki_rubric: kiDrill?.ki_rubric ?? null,
             })
@@ -270,12 +300,13 @@ export default function DojoSession() {
             }
 
             // KI mastery write-back (first attempt)
-            if (kiContext) {
+            const activeKI = kiContext ?? kiContextOverride;
+            if (activeKI) {
               writeKIMastery({
                 userId: user.id,
-                kiId: kiContext.id,
-                chapter: kiContext.chapter,
-                spiderDimension: kiContext.spider_dimension,
+                kiId: activeKI.id,
+                chapter: activeKI.chapter,
+                spiderDimension: activeKI.spider_dimension,
                 score: scoreData.score,
               }).catch(err => console.error('[DojoSession] writeKIMastery failed:', err));
             }
@@ -314,12 +345,13 @@ export default function DojoSession() {
               });
 
             // KI mastery write-back (retry — use best score)
-            if (kiContext) {
+            const activeKI = kiContext ?? kiContextOverride;
+            if (activeKI) {
               writeKIMastery({
                 userId: user.id,
-                kiId: kiContext.id,
-                chapter: kiContext.chapter,
-                spiderDimension: kiContext.spider_dimension,
+                kiId: activeKI.id,
+                chapter: activeKI.chapter,
+                spiderDimension: activeKI.spider_dimension,
                 score: bestScore,
               }).catch(err => console.error('[DojoSession] writeKIMastery failed:', err));
             }
@@ -361,9 +393,10 @@ export default function DojoSession() {
 
   const handleNextRep = useCallback(async () => {
     // KI-driven auto-advance: server-side priority selection (decay → undrilled → lowest score)
-    if (kiContext && user && kiContext.spider_dimension) {
+    const activeKI = kiContext ?? kiContextOverride;
+    if (activeKI && user && activeKI.spider_dimension) {
       try {
-        const nextKI = await selectNextKI(user.id, kiContext.spider_dimension, kiContext.id);
+        const nextKI = await selectNextKI(user.id, activeKI.spider_dimension, activeKI.id);
         if (nextKI) {
           navigate('/dojo/session', {
             state: { kiContext: nextKI },
@@ -411,7 +444,7 @@ export default function DojoSession() {
       },
       replace: true,
     });
-  }, [kiContext, user, state, scenario?.skillFocus, navigate, location.state?.sessionType]);
+  }, [kiContext, kiContextOverride, user, state, scenario?.skillFocus, navigate, location.state?.sessionType]);
 
 
   // Handle roleplay completion — extract roleplay-specific extras
