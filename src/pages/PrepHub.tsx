@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
+import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Crosshair, Brain, Download, Shield } from 'lucide-react';
 import { SHELL } from '@/lib/layout';
+import { cn } from '@/lib/utils';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { PodcastQueueIndicator } from '@/components/prep/PodcastQueueIndicator';
 
