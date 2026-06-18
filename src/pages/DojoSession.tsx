@@ -181,6 +181,35 @@ export default function DojoSession() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // KI-first session bootstrap: if no KI was passed via navigation,
+  // fetch the next KI for this skill dimension and swap the scenario
+  // before the user starts typing.
+  useEffect(() => {
+    if (kiContext) return;
+
+    const skillFocusToSpiderDimension: Record<string, string> = {
+      discovery: 'discovery',
+      objection_handling: 'objection_handling',
+      deal_control: 'deal_control',
+      executive_response: 'c_suite_engagement',
+      qualification: 'qualification',
+      cold_calling: 'internal_prospecting',
+    };
+
+    const targetDimension = skillFocusToSpiderDimension[resolvedSkillFocus ?? ''] ?? 'discovery';
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      selectNextKI(user.id, targetDimension).then(nextKI => {
+        if (!nextKI) return;
+        const kiScenario = generateKIDrill(nextKI);
+        setScenario(kiScenario);
+        setKiDrill(kiScenario);
+        setKiContextOverride(nextKI);
+      });
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (phase === 'respond' || phase === 'retry') {
       setTimeout(() => textareaRef.current?.focus(), 300);
