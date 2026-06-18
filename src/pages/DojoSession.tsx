@@ -166,6 +166,7 @@ export default function DojoSession() {
   const [retryCount, setRetryCount] = useState(0);
   const [reviewExtras, setReviewExtras] = useState<ReviewExtras | null>(null);
   const [roleplayExtras, setRoleplayExtras] = useState<RoleplayExtras | null>(null);
+  const [kiContextOverride, setKiContextOverride] = useState<KnowledgeItemForDrill | null>(null);
   const { scoreOriginal, isScoring: isScoringOriginal, originalScore } = useScoreOriginalResponse();
   const { data: skillLevels } = useSkillLevels();
   const skillLevelForFeedback = skillLevels?.find(l => l.skill === scenario.skillFocus) ?? null;
