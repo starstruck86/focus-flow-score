@@ -29,6 +29,8 @@ export interface DimensionProficiency {
   proficiency: number;
   decay_risk_count: number;
   last_drilled_at: string | null;
+  call_score: number | null;   // real call performance (0-100)
+  call_count: number;          // graded calls in this dimension
 }
 
 export interface KiProficiencyData {
@@ -39,6 +41,7 @@ export interface KiProficiencyData {
   weakest: DimensionProficiency | null;
   strongest: DimensionProficiency | null;
   decay_alerts: number;
+  total_call_data: boolean;
 }
 
 export function useKiProficiency() {
