@@ -31,6 +31,7 @@ import { DaveLoopCompletionCard } from '@/components/DaveLoopCompletionCard';
 import { SkillTierUpModal } from '@/components/learn/SkillTierUpModal';
 import { SubSkillProgressPanel } from '@/components/learn/SubSkillProgressPanel';
 import { DaveCoachingHistory } from '@/components/DaveCoachingHistory';
+import { LessonGenerationPanel } from '@/components/learn/LessonGenerationPanel';
 
 export default function Learn() {
   const navigate = useNavigate();
@@ -100,6 +101,24 @@ export default function Learn() {
     });
   }, [skillLevels]);
 
+  // All lessons with generation status for batch generation panel
+  const allLessonsForGeneration = useMemo(() => {
+    if (!courses) return [];
+    const result: { id: string; title: string; generation_status: string | null }[] = [];
+    for (const course of courses) {
+      for (const mod of course.learning_modules) {
+        for (const lesson of mod.learning_lessons) {
+          result.push({
+            id: lesson.id,
+            title: lesson.title,
+            generation_status: (lesson as any).generation_status ?? null,
+          });
+        }
+      }
+    }
+    return result;
+  }, [courses]);
+
   // Focus skill = weakest
   const focusSkill = sortedLevels[0] ?? null;
   // Other skills = everything except focus
@@ -146,6 +165,12 @@ export default function Learn() {
       />
 
       <div className={cn('px-4 pt-4 space-y-5', SHELL.main.bottomPad)}>
+        {/* Lesson Generation Panel */}
+        <LessonGenerationPanel
+          lessons={allLessonsForGeneration}
+          onComplete={() => window.location.reload()}
+        />
+
         {/* Header */}
         {(() => {
           const activeLane = loadActiveLane();
