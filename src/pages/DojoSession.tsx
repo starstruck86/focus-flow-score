@@ -138,7 +138,7 @@ export default function DojoSession() {
 
   const [kiDrill, setKiDrill] = useState<KIDrillScenario | null>(() => (kiContext ? generateKIDrill(kiContext) : null));
 
-  const [scenario, setScenario] = use ase<DojoScenario>(() => {
+  const [scenario, setScenario] = useState<DojoScenario>(() => {
     // KI-driven drill: reuse already-computed kiDrill (highest priority)
     if (kiDrill) return kiDrill;
     if (state?.scenario) return state.scenario;
