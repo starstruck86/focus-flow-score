@@ -45,6 +45,7 @@ export default function Sharpen() {
   const [response, setResponse] = useState('');
   const [repsDone, setRepsDone] = useState(0);
   const repsDoneRef = useRef(0);
+  useEffect(() => { repsDoneRef.current = repsDone; }, [repsDone]);
   const [reps, setReps] = useState<Rep[]>([]);
   const [currentScore, setCurrentScore] = useState<number | null>(null);
   const [currentCoaching, setCurrentCoaching] = useState('');
