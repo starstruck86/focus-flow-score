@@ -246,7 +246,7 @@ export default function Progress() {
                 <LineChart data={callTrend} margin={{ left: -20, right: 8, top: 4, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="week" tick={{ fontSize: 10 }} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} tickCount={5} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} ticks={[0, 25, 50, 75, 100]} />
                   <Tooltip
                     contentStyle={{ fontSize: 12, borderRadius: 8 }}
                     formatter={(v: any) => [`${v}/100`, 'Avg score']}
