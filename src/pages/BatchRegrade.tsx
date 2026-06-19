@@ -112,7 +112,9 @@ export default function BatchRegrade() {
       .select('transcript_id, overall_score, overall_grade')
       .in('transcript_id', TRANSCRIPT_IDS);
 
-    const gradeMap = new Map((existingGrades || []).map((g: any) => [g.transcript_id, g]));
+    const gradeMap = new Map<string, { overall_score: number; overall_grade: string }>(
+      (existingGrades || []).map((g: any) => [g.transcript_id, g])
+    );
 
     for (let i = 0; i < TRANSCRIPT_IDS.length; i++) {
       const id = TRANSCRIPT_IDS[i];
