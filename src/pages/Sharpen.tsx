@@ -44,6 +44,8 @@ export default function Sharpen() {
   const [dimension, setDimension] = useState('discovery');
   const [response, setResponse] = useState('');
   const [repsDone, setRepsDone] = useState(0);
+  const repsDoneRef = useRef(0);
+  useEffect(() => { repsDoneRef.current = repsDone; }, [repsDone]);
   const [reps, setReps] = useState<Rep[]>([]);
   const [currentScore, setCurrentScore] = useState<number | null>(null);
   const [currentCoaching, setCurrentCoaching] = useState('');
@@ -90,7 +92,7 @@ export default function Sharpen() {
     if (!user) return;
     setPhase('loading');
     try {
-      const effectiveDimension = interleaved ? getInterleavedDimension(repsDone) : dimension;
+      const effectiveDimension = interleaved ? getInterleavedDimension(repsDoneRef.current) : dimension;
       const ki = await selectNextKI(user.id, effectiveDimension, excludeId);
       if (ki) {
         setCurrentKI(ki);
@@ -104,7 +106,7 @@ export default function Sharpen() {
     } catch {
       setPhase('input');
     }
-  }, [user, dimension, interleaved, repsDone]);
+  }, [user, dimension, interleaved]);
 
   useEffect(() => {
     if (phase !== 'end') return;
@@ -212,7 +214,7 @@ export default function Sharpen() {
           </div>
           <p className="text-lg font-semibold">{TARGET_REPS} reps done</p>
           {streak > 0 && (
-            <p className="text-sm text-muted-foreground">🔥 Day {streak + 1} streak</p>
+            <p className="text-sm text-muted-foreground">🔥 {streak} day streak</p>
           )}
         </div>
 

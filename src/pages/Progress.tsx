@@ -110,7 +110,7 @@ export default function Progress() {
   });
 
   const callTrend = useMemo(() =>
-    grades ? groupByWeek(grades as any[], (g: any) => (g.overall_score ?? 0) * 20) : [],
+    grades ? groupByWeek(grades as any[], (g: any) => (g.overall_score ?? 0)) : [],
     [grades],
   );
 
