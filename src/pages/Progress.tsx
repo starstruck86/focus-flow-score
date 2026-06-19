@@ -261,6 +261,14 @@ export default function Progress() {
             >
               Open Courses <ChevronRight className="h-3.5 w-3.5 ml-1" />
             </Button>
+            <Button
+              variant="outline"
+              className="w-full mt-2"
+              onClick={() => navigate('/review')}
+            >
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Weekly Review
+            </Button>
           </CardContent>
         </Card>
       </div>

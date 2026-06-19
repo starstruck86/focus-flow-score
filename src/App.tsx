@@ -270,7 +270,14 @@ const App = () => (
                     </ProtectedRoute>
                   } />
                   <Route path="/brief" element={<ProtectedPage routeName="Pre-Call Brief"><Brief /></ProtectedPage>} />
-                  <Route path="/progress" element={<ProtectedPage routeName="Progress"><Progress /></ProtectedPage>} />
+                   <Route path="/progress" element={<ProtectedPage routeName="Progress"><Progress /></ProtectedPage>} />
+                   <Route path="/review" element={
+                     <ProtectedRoute>
+                       <Suspense fallback={<LazyFallback />}>
+                         <WeeklyReview />
+                       </Suspense>
+                     </ProtectedRoute>
+                   } />
 
                   <Route path="/learn/lesson/:id" element={
                     <ProtectedRoute>
