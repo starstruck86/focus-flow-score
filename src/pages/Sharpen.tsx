@@ -174,6 +174,9 @@ export default function Sharpen() {
     }
   }, [user, dimension, interleaved]);
 
+  const loadNextKIRef = useRef(loadNextKI);
+  useEffect(() => { loadNextKIRef.current = loadNextKI; }, [loadNextKI]);
+
   useEffect(() => {
     if (phase !== 'end' || reps.length === 0) return;
 
@@ -281,7 +284,7 @@ export default function Sharpen() {
 
     if (newReps.length < TARGET_REPS) {
       const timer = setTimeout(() => {
-        loadNextKI(currentKI.id);
+        loadNextKIRef.current(currentKI.id);
       }, 3000);
       setAutoAdvanceTimer(timer);
     } else {
