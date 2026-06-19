@@ -4,6 +4,11 @@ import { Layout } from '@/components/Layout';
 import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
 import { GraduationCap, Loader2, BookOpen, CheckCircle2, Circle, Lock } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/AuthContext';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
 import { useCourses, useUserProgress } from '@/lib/learning/hooks';
 import type { LearningProgress } from '@/lib/learning/types';
 import { useDailyKI } from '@/hooks/useDailyKI';
@@ -42,6 +47,7 @@ export default function Learn() {
   const { data: skillLevels } = useSkillLevels();
   const { data: subSkillSummaries } = useSubSkillProgress();
   const closedLoop = useClosedLoopCoaching();
+  const { user } = useAuth();
 
   // Tier-up modal
   const [tierUpLevel, setTierUpLevel] = useState<UserSkillLevel | null>(null);
@@ -77,21 +83,46 @@ export default function Learn() {
     return map;
   }, [progress]);
 
-  const nextLesson = useMemo(() => {
-    if (!courses) return null;
-    for (const course of courses) {
-      for (const mod of course.learning_modules) {
-        for (const lesson of mod.learning_lessons) {
-          const p = progressMap[lesson.id] as any;
-          const passed = p?.status === 'passed' || p?.status === 'completed' || (p?.best_score ?? p?.mastery_score ?? 0) >= 65;
-          if (!passed) {
-            return { lesson, course };
-          }
-        }
-      }
-    }
-    return null;
-  }, [courses, progressMap]);
+  const { data: nextLesson } = useQuery({
+    queryKey: ['recommended-lesson', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      if (!user) return null;
+      const { data: passed } = await (supabase as any)
+        .from('user_lesson_progress')
+        .select('lesson_id')
+        .eq('user_id', user.id)
+        .eq('status', 'passed');
+      const passedIds = new Set((passed ?? []).map((r: any) => r.lesson_id));
+
+      const { data: lessons } = await (supabase as any)
+        .from('learning_lessons')
+        .select(`
+          id, title, module_id, generation_status,
+          learning_modules!inner(
+            id, title, course_id,
+            learning_courses!inner(id, title)
+          )
+        `)
+        .eq('generation_status', 'complete')
+        .order('id');
+
+      if (!lessons?.length) return null;
+
+      const next = lessons.find((l: any) => !passedIds.has(l.id));
+      if (!next) return null;
+
+      return {
+        lessonId: next.id,
+        lessonTitle: next.title,
+        moduleTitle: next.learning_modules?.[0]?.title,
+        courseTitle: next.learning_modules?.[0]?.learning_courses?.[0]?.title,
+        passedCount: passedIds.size,
+        totalCount: lessons.length,
+      };
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Sorted skill levels: weakest first
   const sortedLevels = useMemo(() => {
@@ -199,6 +230,42 @@ export default function Learn() {
             </div>
           );
         })()}
+
+        {/* Recommended next lesson */}
+        {nextLesson ? (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-4 space-y-3">
+              <div className="space-y-0.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold text-primary uppercase tracking-wider">Next Lesson</p>
+                  <p className="text-[10px] text-muted-foreground">{nextLesson.passedCount}/{nextLesson.totalCount} complete</p>
+                </div>
+                <p className="text-base font-bold leading-snug">{nextLesson.lessonTitle}</p>
+                <p className="text-xs text-muted-foreground">{nextLesson.courseTitle} · {nextLesson.moduleTitle}</p>
+              </div>
+              {/* Progress bar */}
+              <div className="h-1 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all"
+                  style={{ width: `${Math.round((nextLesson.passedCount / nextLesson.totalCount) * 100)}%` }}
+                />
+              </div>
+              <Button
+                className="w-full"
+                onClick={() => navigate(`/learn/lesson/${nextLesson.lessonId}`)}
+              >
+                Start Lesson →
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-green-500/30 bg-green-500/5">
+            <CardContent className="p-4">
+              <p className="text-sm font-semibold text-green-600 dark:text-green-400">All lessons complete 🎉</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Review any course below to revisit the material.</p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Loop completion */}
         {closedLoop.session && !closedLoop.isActive && closedLoop.session.status === 'completed' && (
@@ -335,17 +402,6 @@ export default function Learn() {
               </div>
             ))}
           </div>
-        )}
-
-        {/* Secondary lesson CTA */}
-        {nextLesson && !learnLoop?.primaryAction && (
-          <button
-            onClick={() => navigate(`/learn/lesson/${nextLesson.lesson.id}`)}
-            className="w-full h-11 rounded-md border border-border bg-card text-foreground font-medium text-sm flex items-center justify-center gap-2 hover:bg-accent/50 transition-colors"
-          >
-            <BookOpen className="h-4 w-4" />
-            Continue: {nextLesson.lesson.title}
-          </button>
         )}
       </div>
     </Layout>
