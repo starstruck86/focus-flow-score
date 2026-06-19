@@ -1061,7 +1061,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                     value={pasteContent}
                     onChange={e => setPasteContent(e.target.value)}
                     rows={6}
-                    className="font-mono text-xs resize-y"
+                    className="font-mono text-xs resize-y min-h-[160px]"
                   />
                   <div className="flex items-center justify-between">
                     {pasteContent && (
