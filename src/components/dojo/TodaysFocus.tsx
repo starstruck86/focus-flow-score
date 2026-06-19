@@ -167,7 +167,15 @@ export function TodaysFocus({
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-3">
         <StatCard icon={Flame} label="Streak" value={`${streak}d`} color="text-orange-500" />
-        <StatCard icon={Target} label="Last Score" value={lastScore != null ? `${lastScore}` : '—'} color="text-blue-500" />
+        <StatCard
+          icon={Target}
+          label="Last Score"
+          value={lastScore != null ? `${lastScore}` : '—'}
+          color="text-blue-500"
+          valueClassName={lastScore != null ? (
+            lastScore >= 70 ? 'text-green-500' : lastScore >= 50 ? 'text-amber-500' : 'text-red-500'
+          ) : undefined}
+        />
         <StatCard icon={Zap} label="Best" value={bestScore ? `${bestScore}` : '—'} color="text-yellow-500" />
       </div>
     </div>
