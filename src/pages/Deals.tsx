@@ -46,6 +46,8 @@ export default function Deals() {
   const [newStage, setNewStage] = useState('expansion');
   const [newArr, setNewArr] = useState('');
   const [newNextAction, setNewNextAction] = useState('');
+  const [editingAction, setEditingAction] = useState<string | null>(null);
+  const [actionText, setActionText] = useState('');
 
   useEffect(() => { saveDeals(deals); }, [deals]);
 
@@ -158,8 +160,34 @@ export default function Deals() {
                           <p className="text-sm font-semibold truncate">{deal.account}</p>
                           {deal.arr && <span className="text-xs text-muted-foreground font-mono shrink-0">{deal.arr}</span>}
                         </div>
-                        {deal.nextAction && (
-                          <p className="text-[11px] text-muted-foreground mt-0.5 ml-6">→ {deal.nextAction}</p>
+                        {editingAction === deal.id ? (
+                          <div className="flex items-center gap-1.5 mt-0.5 ml-6">
+                            <input
+                              type="text"
+                              value={actionText}
+                              onChange={e => setActionText(e.target.value)}
+                              onBlur={() => {
+                                setDeals(prev => prev.map(d => d.id === deal.id ? { ...d, nextAction: actionText } : d));
+                                setEditingAction(null);
+                              }}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  setDeals(prev => prev.map(d => d.id === deal.id ? { ...d, nextAction: actionText } : d));
+                                  setEditingAction(null);
+                                }
+                                if (e.key === 'Escape') setEditingAction(null);
+                              }}
+                              className="text-[11px] bg-transparent border-b border-primary/40 outline-none flex-1 text-muted-foreground"
+                              autoFocus
+                            />
+                          </div>
+                        ) : (
+                          <p
+                            className="text-[11px] text-muted-foreground mt-0.5 ml-6 cursor-pointer hover:text-foreground"
+                            onClick={() => { setEditingAction(deal.id); setActionText(deal.nextAction || ''); }}
+                          >
+                            {deal.nextAction ? `→ ${deal.nextAction}` : <span className="opacity-40">+ add next action</span>}
+                          </p>
                         )}
                       </div>
                       <button onClick={() => removeDeal(deal.id)} className="text-muted-foreground/40 hover:text-red-500 p-1 shrink-0">

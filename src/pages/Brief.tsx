@@ -321,9 +321,14 @@ export default function Brief() {
                 </CardContent>
               </Card>
             )}
-            <Button className="w-full max-w-sm" onClick={() => { setWarmupPhase('idle'); navigate('/dojo'); }}>
-              Walk In Ready ✓
-            </Button>
+            <div className="w-full max-w-sm space-y-2">
+              <Button className="w-full" onClick={() => { setWarmupPhase('idle'); }}>
+                ← Back to Brief
+              </Button>
+              <Button variant="ghost" className="w-full text-muted-foreground" onClick={() => { setWarmupPhase('idle'); navigate('/dojo'); }}>
+                Done — back to home
+              </Button>
+            </div>
           </div>
         )}
       </div>
