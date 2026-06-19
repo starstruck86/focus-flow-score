@@ -59,6 +59,34 @@ function BranchCountdown() {
     </div>
   );
 }
+function DailyProgress() {
+  const storageKey = `daily_reps_${new Date().toISOString().split('T')[0]}`;
+  const repsToday = (() => {
+    try { return parseInt(localStorage.getItem(storageKey) ?? '0', 10) || 0; }
+    catch { return 0; }
+  })();
+  const GOAL = 15;
+  const pct = Math.min((repsToday / GOAL) * 100, 100);
+  if (repsToday === 0) return null;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">Today</p>
+        <p className="text-xs font-mono font-semibold">
+          {repsToday}/{GOAL} reps
+          {repsToday >= GOAL && ' ✓'}
+        </p>
+      </div>
+      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+        <div
+          className={cn('h-full rounded-full transition-all', pct >= 100 ? 'bg-green-500' : 'bg-primary')}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 import { useIntensiveMode } from '@/hooks/useIntensiveMode';
 
 export default function Dojo() {
