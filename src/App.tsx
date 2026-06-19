@@ -238,8 +238,15 @@ const App = () => (
                       <Suspense fallback={<LazyFallback />}>
                         <Sharpen />
                       </Suspense>
-                    </ProtectedRoute>
-                  } />
+                  </ProtectedRoute>
+                } />
+                <Route path="/grind" element={
+                  <ProtectedRoute>
+                    <Suspense fallback={<LazyFallback />}>
+                      <Grind />
+                    </Suspense>
+                  </ProtectedRoute>
+                } />
                   <Route path="/learn" element={
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback />}>
