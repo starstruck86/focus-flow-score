@@ -386,6 +386,91 @@ export default function Skills() {
           </div>
         </div>
       </div>
+
+      {selectedDim && (() => {
+        const dim = dimensions.find(d => d.dimension === selectedDim);
+        if (!dim) return null;
+        return (
+          <div className="fixed inset-0 bg-background z-50 flex flex-col">
+            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-border/40">
+              <div className="flex items-center gap-2">
+                <div className="h-3 w-3 rounded-full" style={{ background: dim.color }} />
+                <span className="text-base font-bold">{dim.label}</span>
+              </div>
+              <button onClick={() => setSelectedDim(null)} className="text-muted-foreground p-1">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <Card>
+                  <CardContent className="p-3 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Real Calls</p>
+                    <p className={cn('text-2xl font-bold font-mono mt-1',
+                      dim.call_score == null ? 'text-muted-foreground' :
+                      dim.call_score < 40 ? 'text-red-500' : dim.call_score < 60 ? 'text-amber-500' : 'text-green-500'
+                    )}>
+                      {dim.call_score != null ? Math.round(dim.call_score) : '—'}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{dim.call_count} calls</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Practice</p>
+                    <p className={cn('text-2xl font-bold font-mono mt-1',
+                      dim.avg_score === 0 ? 'text-muted-foreground' :
+                      dim.avg_score < 50 ? 'text-red-500' : dim.avg_score < 70 ? 'text-amber-500' : 'text-green-500'
+                    )}>
+                      {dim.avg_score > 0 ? dim.avg_score : '—'}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{dim.total_reps} reps</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {dim.trend && (
+                <div className="flex items-center gap-2 px-1">
+                  {dim.trend === 'up' ? <TrendingUp className="h-4 w-4 text-green-500" /> :
+                   dim.trend === 'down' ? <TrendingDown className="h-4 w-4 text-red-500" /> :
+                   <Minus className="h-4 w-4 text-muted-foreground" />}
+                  <span className="text-sm text-muted-foreground">
+                    {dim.trend === 'up' ? 'Improving over the last 30 days' :
+                     dim.trend === 'down' ? 'Declining — needs attention' :
+                     'Flat — consistent but not growing'}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between px-1">
+                <p className="text-xs text-muted-foreground">KI Library</p>
+                <p className="text-xs font-medium">{dim.library_count.toLocaleString()} plays available</p>
+              </div>
+
+              <Button
+                className="w-full"
+                onClick={() => {
+                  setSelectedDim(null);
+                  navigate('/sharpen', { state: { dimension: dim.dimension } });
+                }}
+              >
+                Drill {dim.label} →
+              </Button>
+
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setSelectedDim(null);
+                  navigate('/grind', { state: { dimension: dim.dimension } });
+                }}
+              >
+                Deep Session →
+              </Button>
+            </div>
+          </div>
+        );
+      })()}
     </Layout>
   );
 }
