@@ -59,6 +59,7 @@ const DojoQA = lazy(() => import("./pages/DojoQA"));
 const DojoV6QA = lazy(() => import("./pages/DojoV6QA"));
 const Sharpen = lazy(() => import("./pages/Sharpen"));
 const Grind = lazy(() => import("./pages/Grind"));
+const WeeklyReview = lazy(() => import("./pages/WeeklyReview"));
 const Learn = lazy(() => import("./pages/Learn"));
 const Skills = lazy(() => import("./pages/Skills"));
 const LearnLesson = lazy(() => import("./pages/LearnLesson"));
