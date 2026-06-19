@@ -238,9 +238,19 @@ export default function Progress() {
               <span className="text-xs text-muted-foreground ml-auto">8 weeks</span>
             </div>
             {callTrend.length < 2 ? (
-              <p className="text-xs text-muted-foreground py-4 text-center">
-                Grade more calls to see your trend. {grades?.length ?? 0} call{(grades?.length ?? 0) !== 1 ? 's' : ''} graded.
-              </p>
+              <div className="py-4 text-center space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  {(grades?.length ?? 0) === 0
+                    ? 'No calls graded yet — your trend lives here.'
+                    : `${grades?.length} call${(grades?.length ?? 0) !== 1 ? 's' : ''} graded, but all outside the 8-week window.`}
+                </p>
+                <button
+                  onClick={() => navigate('/coach')}
+                  className="text-xs font-medium text-primary hover:text-primary/80"
+                >
+                  Grade a call →
+                </button>
+              </div>
             ) : (
               <ResponsiveContainer width="100%" height={120}>
                 <LineChart data={callTrend} margin={{ left: -20, right: 8, top: 4, bottom: 0 }}>
