@@ -252,6 +252,7 @@ const App = () => (
                       </Suspense>
                     </ProtectedRoute>
                   } />
+                  <Route path="/brief" element={<ProtectedPage routeName="Pre-Call Brief"><Brief /></ProtectedPage>} />
                   <Route path="/learn/lesson/:id" element={
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback />}>
