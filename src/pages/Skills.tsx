@@ -5,7 +5,7 @@ import { Layout } from '@/components/Layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Target, AlertTriangle, Sparkles, Loader2, TrendingUp } from 'lucide-react';
+import { Target, AlertTriangle, Sparkles, Loader2, TrendingUp, TrendingDown, Minus, ChevronRight, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { selectNextKI } from '@/lib/dojo/selectNextKI';
 import {
