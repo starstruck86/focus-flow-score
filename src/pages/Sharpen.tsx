@@ -251,34 +251,67 @@ export default function Sharpen() {
 
   if (phase === 'end') {
     return (
-      <div className="fixed inset-0 bg-background flex flex-col items-center justify-center px-6 gap-6">
-        <div className="text-center space-y-2">
-          <div className="flex items-center justify-center gap-2 text-primary">
-            <Flame className="h-6 w-6" />
-            <span className="text-2xl font-bold font-mono">{avgScore}</span>
-            <span className="text-muted-foreground text-sm">/ 100 avg</span>
+      <div className="fixed inset-0 bg-background flex flex-col">
+        {/* Score hero */}
+        <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
+          <div className="text-center space-y-1">
+            <p className={cn(
+              'text-7xl font-bold font-mono leading-none',
+              avgScore >= 70 ? 'text-green-500' :
+              avgScore >= 50 ? 'text-amber-500' : 'text-red-500'
+            )}>{"}></p>
+            <p className="text-base text-muted-foreground">
+              {avgScore >= 70 ? 'Strong session' : avgScore >= 50 ? 'Solid work' : 'Keep drilling'}
+            </p>
           </div>
-          <p className="text-lg font-semibold">{TARGET_REPS} reps done</p>
+
+          {/* Rep dots recap */}
+          <div className="flex items-center gap-2">
+            {reps.map((rep, i) => (
+              <div
+                key={i}
+                className={cn(
+                  'h-2 w-2 rounded-full',
+                  rep.score >= 70 ? 'bg-green-500' :
+                  rep.score >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                )}
+              />
+            ))}
+          </div>
+
+          {/* Streak */}
           {streak > 0 && (
-            <p className="text-sm text-muted-foreground">🔥 {streak} day streak</p>
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
+              <span className="text-lg">🔥</span>
+              <span className="text-sm font-semibold">{streak} day streak</span>
+            </div>
+          )}
+
+          {/* Daily rep counter — count today's dojo session turns + these reps */}
+          <DailyRepCounter completedReps={reps.length} />
+
+          {/* Worst rep coaching note */}
+          {worstRep && (
+            <div className="w-full max-w-sm rounded-xl border border-border bg-muted/30 p-4 space-y-1.5">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Coach note</p>
+              <p className="text-sm leading-relaxed">{worstRep.coaching}</p>
+            </div>
           )}
         </div>
 
-        {worstRep && (
-          <div className="w-full max-w-sm p-4 rounded-xl border border-border bg-muted/30 space-y-1.5">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Focus for next session</p>
-            <p className="text-sm leading-relaxed">{worstRep.coaching}</p>
-          </div>
-        )}
-
-        <div className="space-y-2 w-full max-w-sm">
-          <Button className="w-full" onClick={() => navigate('/dojo')}>
-            Done
+        {/* Actions */}
+        <div className="px-6 pb-safe pb-8 space-y-3">
+          <Button
+            className="w-full h-12 text-base"
+            onClick={() => {
+              setReps([]); setRepsDone(0); setCurrentScore(null);
+              setCurrentCoaching(''); setPhase('loading'); loadNextKI();
+            }}
+          >
+            Go Again — 5 More Reps
           </Button>
-          <Button variant="ghost" className="w-full text-muted-foreground" onClick={() => {
-            setReps([]); setRepsDone(0); setPhase('loading'); loadNextKI();
-          }}>
-            5 more reps
+          <Button variant="ghost" className="w-full text-muted-foreground" onClick={() => navigate('/dojo')}>
+            Done for now
           </Button>
         </div>
       </div>
