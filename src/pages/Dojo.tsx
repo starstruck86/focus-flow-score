@@ -146,6 +146,11 @@ export default function Dojo() {
     return [...stats.skillBreakdown].sort((a, b) => a.avgFirstAttempt - b.avgFirstAttempt);
   }, [stats?.skillBreakdown]);
 
+  const sessionCount = stats?.totalSessions ?? 0;
+  const isNew = sessionCount < 5;
+  const isEarly = sessionCount >= 5 && sessionCount < 20;
+  const isMature = sessionCount >= 20;
+
   const startAutopilot = () => {
     // If launched with SkillSession from Learn, go directly to session with skill context
     if (skillSession) {
@@ -197,8 +202,36 @@ export default function Dojo() {
   return (
     <Layout>
       <div className={cn('px-4 pt-4 space-y-6', SHELL.main.bottomPad)}>
-        {/* V3: Block Header — uses real anchor completion data */}
-        {activeBlock && (
+        {/* Streak — always visible, loss-aversion framing */}
+        {(stats?.streak ?? 0) > 0 ? (
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🔥</span>
+              <div>
+                <p className="text-2xl font-bold font-mono leading-none">{stats?.streak}</p>
+                <p className="text-xs text-muted-foreground">day streak</p>
+              </div>
+            </div>
+            {(stats?.lastSessionDate && new Date().toDateString() !== new Date(stats.lastSessionDate).toDateString()) ? (
+              <div className="text-right">
+                <p className="text-xs text-amber-500 font-medium">Streak at risk</p>
+                <p className="text-[10px] text-muted-foreground">Do 1 rep to protect it</p>
+              </div>
+            ) : stats?.streak > 0 ? (
+              <div className="text-right">
+                <p className="text-xs text-green-500 font-medium">Protected today ✓</p>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-xl">🎯</span>
+            <p className="text-sm text-muted-foreground">Start your streak today</p>
+          </div>
+        )}
+
+        {/* Mature-only: Block Header */}
+        {isMature && activeBlock && (
           <BlockHeader
             blockNumber={activeBlock.blockNumber}
             currentWeek={activeBlock.currentWeek}
@@ -209,16 +242,45 @@ export default function Dojo() {
           />
         )}
 
-        {/* Resume active lane banner */}
-        <ResumeLaneBanner />
+        {/* Mature-only: Resume active lane banner */}
+        {isMature && <ResumeLaneBanner />}
 
-        {/* Proactive Dave — time-of-day contextual nudge */}
+        {/* New users: large Start Session button */}
+        {isNew && (
+          <button
+            onClick={() => navigate('/sharpen')}
+            className="w-full py-5 rounded-2xl bg-primary text-primary-foreground flex flex-col items-center gap-1.5 shadow-lg active:scale-95 transition-transform"
+          >
+            <span className="text-2xl">▶</span>
+            <p className="text-base font-bold">Start Today's Session</p>
+            <p className="text-xs opacity-80">5 reps · ~12 minutes</p>
+          </button>
+        )}
+
+        {/* Benchmark CTA — always when no benchmark */}
+        {!hasBenchmark && (
+          <button
+            onClick={() => navigate('/benchmark')}
+            className="w-full text-left p-2.5 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-primary shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-primary">Take Your Baseline Benchmark</p>
+                <p className="text-[11px] text-muted-foreground">10 scenarios · seeds your spider chart · 15 min</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-primary ml-auto shrink-0" />
+            </div>
+          </button>
+        )}
+
+        {/* Proactive Dave — always visible */}
         <ProactiveDaveCard onMicroDrill={() => navigate('/sharpen')} />
 
-        {/* KI Proficiency strip — adaptive training entry point */}
-        <KiProficiencyStrip />
+        {/* Early / Mature: KI Proficiency strip */}
+        {(isEarly || isMature) && <KiProficiencyStrip />}
 
-        {/* Intensive mode card — visible when active */}
+        {/* Intensive mode card — visible when active (don't hide for early if enabled) */}
         {intensive.active && (
           <Card className="border-orange-500/40 bg-orange-500/5">
             <CardContent className="p-3 flex items-start justify-between gap-3">
@@ -243,7 +305,8 @@ export default function Dojo() {
           </Card>
         )}
 
-        {!intensive.active && (
+        {/* Mature: Enable Intensive Mode button */}
+        {isMature && !intensive.active && (
           <button
             onClick={() => intensive.toggle()}
             className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-orange-500/40 hover:bg-orange-500/5 transition-all"
@@ -258,52 +321,43 @@ export default function Dojo() {
           </button>
         )}
 
-        {!hasBenchmark && (
+        {/* Early / Mature: Pre-Call Brief */}
+        {(isEarly || isMature) && (
           <button
-            onClick={() => navigate('/benchmark')}
-            className="w-full text-left p-2.5 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-all"
+            onClick={() => navigate('/brief')}
+            className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
           >
             <div className="flex items-center gap-2">
-              <Target className="h-4 w-4 text-primary shrink-0" />
+              <Zap className="h-4 w-4 text-muted-foreground shrink-0" />
               <div>
-                <p className="text-sm font-semibold text-primary">Take Your Baseline Benchmark</p>
-                <p className="text-[11px] text-muted-foreground">10 scenarios · seeds your spider chart · 15 min</p>
+                <p className="text-sm font-medium">Pre-Call Brief</p>
+                <p className="text-[11px] text-muted-foreground">Top plays + coaching focus before any call</p>
               </div>
-              <ChevronRight className="h-4 w-4 text-primary ml-auto shrink-0" />
+              <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
             </div>
           </button>
         )}
 
-        <button
-          onClick={() => navigate('/brief')}
-          className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
-        >
-          <div className="flex items-center gap-2">
-            <Zap className="h-4 w-4 text-muted-foreground shrink-0" />
-            <div>
-              <p className="text-sm font-medium">Pre-Call Brief</p>
-              <p className="text-[11px] text-muted-foreground">Top plays + coaching focus before any call</p>
+        {/* Early / Mature: Recognition Drill */}
+        {(isEarly || isMature) && (
+          <button
+            onClick={() => navigate('/dojo/session', {
+              state: { skillFocus: 'discovery', sessionType: 'recognition' }
+            })}
+            className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Brain className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Recognition Drill</p>
+                <p className="text-[11px] text-muted-foreground">Identify which play applies · 30-sec reps · no writing</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
             </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
-          </div>
-        </button>
+          </button>
+        )}
 
-        <button
-          onClick={() => navigate('/dojo/session', {
-            state: { skillFocus: 'discovery', sessionType: 'recognition' }
-          })}
-          className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
-        >
-          <div className="flex items-center gap-2">
-            <Brain className="h-4 w-4 text-muted-foreground shrink-0" />
-            <div>
-              <p className="text-sm font-medium">Recognition Drill</p>
-              <p className="text-[11px] text-muted-foreground">Identify which play applies · 30-sec reps · no writing</p>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
-          </div>
-        </button>
-
+        {/* Quick Drill / Start Session — always visible, label shifts for new users */}
         <button
           onClick={() => navigate('/sharpen')}
           className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
@@ -311,78 +365,84 @@ export default function Dojo() {
           <div className="flex items-center gap-2">
             <Flame className="h-4 w-4 text-muted-foreground shrink-0" />
             <div>
-              <p className="text-sm font-medium">Quick Drill</p>
+              <p className="text-sm font-medium">{isNew ? 'Start Session' : 'Quick Drill'}</p>
               <p className="text-[11px] text-muted-foreground">Fast-fire reps · Enter to submit · auto-advances</p>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
           </div>
         </button>
 
-        <button
-          onClick={() => navigate('/dojo/session', {
-            state: { skillFocus: 'deal_control', sessionType: 'adversarial' }
-          })}
-          className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-red-500/30 hover:bg-red-500/5 transition-all"
-        >
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
-            <div>
-              <p className="text-sm font-medium">Adversarial Drill</p>
-              <p className="text-[11px] text-muted-foreground">Spot the anti-pattern · hardest drill type</p>
+        {/* Early / Mature: Adversarial Drill */}
+        {(isEarly || isMature) && (
+          <button
+            onClick={() => navigate('/dojo/session', {
+              state: { skillFocus: 'deal_control', sessionType: 'adversarial' }
+            })}
+            className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-red-500/30 hover:bg-red-500/5 transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Adversarial Drill</p>
+                <p className="text-[11px] text-muted-foreground">Spot the anti-pattern · hardest drill type</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
             </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
-          </div>
-        </button>
+          </button>
+        )}
 
-
-
-
-        {/* V3: Daily Assignment Card */}
-        {dailyAssignment && (
+        {/* Mature-only: Daily Assignment Card */}
+        {isMature && dailyAssignment && (
           <DailyAssignmentCard assignment={dailyAssignment} />
         )}
 
-        {/* V3: Block Comparison — benchmark vs retest (Week 8+) */}
-        {snapshotComparison && activeBlock && (
+        {/* Mature-only: Block Comparison — benchmark vs retest (Week 8+) */}
+        {isMature && snapshotComparison && activeBlock && (
           <BlockComparisonView comparison={snapshotComparison} blockNumber={activeBlock.blockNumber} />
         )}
 
-        {/* V3: Weekly Summary — shows after at least 1 anchor completed */}
-        {weeklySummary && weeklySummary.totalSessions > 0 && (
+        {/* Mature-only: Weekly Summary */}
+        {isMature && weeklySummary && weeklySummary.totalSessions > 0 && (
           <WeeklySummaryCard summary={weeklySummary} />
         )}
 
-        {/* Section 1: Today's Focus */}
-        <TodaysFocus
-          recommendation={recommendation}
-          skillStats={skillStats}
-          streak={stats?.streak ?? 0}
-          lastScore={stats?.lastScore ?? null}
-          bestScore={stats?.bestScore ?? null}
-          onStartAutopilot={startAutopilot}
-          lessonContext={lessonContext}
-          dailyFocus={skillMemory?.dailyFocus ?? null}
-          hideScenarioPreview={!!dailyAssignment}
-          assignmentCompleted={dailyAssignment?.completed ?? false}
-        />
+        {/* Mature-only: Today's Focus */}
+        {isMature && (
+          <TodaysFocus
+            recommendation={recommendation}
+            skillStats={skillStats}
+            streak={stats?.streak ?? 0}
+            lastScore={stats?.lastScore ?? null}
+            bestScore={stats?.bestScore ?? null}
+            onStartAutopilot={startAutopilot}
+            lessonContext={lessonContext}
+            dailyFocus={skillMemory?.dailyFocus ?? null}
+            hideScenarioPreview={!!dailyAssignment}
+            assignmentCompleted={dailyAssignment?.completed ?? false}
+          />
+        )}
 
-        {/* Mastery Lanes — explicit lane entry */}
-        <MasteryLanes todayAnchor={todayAnchor} />
+        {/* Mature-only: Mastery Lanes */}
+        {isMature && <MasteryLanes todayAnchor={todayAnchor} />}
 
-        {/* Section 2: Training Modes */}
-        <TrainingModes
-          skillStats={skillStats}
-          onStartAutopilot={startAutopilot}
-          highlightMode={lessonContext?.recommendedMode ?? null}
-        />
+        {/* Mature-only: Training Modes */}
+        {isMature && (
+          <TrainingModes
+            skillStats={skillStats}
+            onStartAutopilot={startAutopilot}
+            highlightMode={lessonContext?.recommendedMode ?? null}
+          />
+        )}
 
-        {/* Section 3: Performance + Coaching Signals */}
-        <PerformanceSignals
-          skillStats={skillStats}
-          coachingInsights={coachingInsights}
-          skillProfiles={skillMemory?.profiles ?? null}
-          progressSignals={skillMemory?.progressSignals ?? null}
-        />
+        {/* Mature-only: Performance + Coaching Signals */}
+        {isMature && (
+          <PerformanceSignals
+            skillStats={skillStats}
+            coachingInsights={coachingInsights}
+            skillProfiles={skillMemory?.profiles ?? null}
+            progressSignals={skillMemory?.progressSignals ?? null}
+          />
+        )}
       </div>
     </Layout>
   );
