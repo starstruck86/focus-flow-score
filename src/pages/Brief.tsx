@@ -128,7 +128,7 @@ export default function Brief() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
         body: JSON.stringify({
           scenario: {
-            skillFocus: warmupKI.chapter || 'deal_control',
+            skillFocus: CALL_TYPE_TO_DIMENSION[selectedType?.id ?? 'discovery'] ?? 'discovery',
             context: warmupKI.when_to_use || 'Pre-call scenario',
             objection: warmupKI.example_usage || warmupKI.tactic_summary || 'Apply this play.',
           },
