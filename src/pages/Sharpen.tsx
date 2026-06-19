@@ -259,7 +259,7 @@ export default function Sharpen() {
               'text-7xl font-bold font-mono leading-none',
               avgScore >= 70 ? 'text-green-500' :
               avgScore >= 50 ? 'text-amber-500' : 'text-red-500'
-            )}>{"}></p>
+            )}>{avgScore}</p>
             <p className="text-base text-muted-foreground">
               {avgScore >= 70 ? 'Strong session' : avgScore >= 50 ? 'Solid work' : 'Keep drilling'}
             </p>
