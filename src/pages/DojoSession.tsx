@@ -168,6 +168,27 @@ export default function DojoSession() {
   const [reviewExtras, setReviewExtras] = useState<ReviewExtras | null>(null);
   const [roleplayExtras, setRoleplayExtras] = useState<RoleplayExtras | null>(null);
   const [kiContextOverride, setKiContextOverride] = useState<KnowledgeItemForDrill | null>(null);
+  const [difficultyLevel, setDifficultyLevel] = useState<'foundational' | 'standard' | 'advanced' | null>(null);
+
+  // Adaptive difficulty signal: rolling 10-rep avg per dimension
+  useEffect(() => {
+    const active = kiContext ?? kiContextOverride;
+    const dim = active?.spider_dimension;
+    if (!user || !dim) return;
+    (supabase as any)
+      .from('ki_mastery')
+      .select('avg_score')
+      .eq('user_id', user.id)
+      .eq('spider_dimension', dim)
+      .order('updated_at', { ascending: false })
+      .limit(10)
+      .then(({ data }: any) => {
+        if (!data?.length) { setDifficultyLevel('standard'); return; }
+        const avg = data.reduce((a: number, r: any) => a + (Number(r.avg_score) || 0), 0) / data.length;
+        setDifficultyLevel(avg > 70 ? 'advanced' : avg < 50 ? 'foundational' : 'standard');
+      });
+  }, [user?.id, (kiContext ?? kiContextOverride)?.id, (kiContext ?? kiContextOverride)?.spider_dimension]);
+
   const { scoreOriginal, isScoring: isScoringOriginal, originalScore } = useScoreOriginalResponse();
   const { data: skillLevels } = useSkillLevels();
   const skillLevelForFeedback = skillLevels?.find(l => l.skill === scenario.skillFocus) ?? null;
@@ -503,8 +524,22 @@ export default function DojoSession() {
           {isAudio ? <Volume2 className="h-4 w-4 text-primary" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
         </button>
         <Badge variant="outline" className="text-xs shrink-0">5 min</Badge>
+        {difficultyLevel && difficultyLevel !== 'standard' && (
+          <Badge
+            variant="outline"
+            className={cn(
+              'text-[10px] shrink-0',
+              difficultyLevel === 'advanced'
+                ? 'border-green-500/50 text-green-600 dark:text-green-400'
+                : 'border-blue-500/50 text-blue-600 dark:text-blue-400'
+            )}
+          >
+            {difficultyLevel === 'advanced' ? '↑ Advanced' : '↓ Foundational'}
+          </Badge>
+        )}
         <SaveIndicator />
       </div>
+
 
       {/* ── Content ── */}
       <div className={cn('flex-1 px-4 py-4 space-y-4', SHELL.main.bottomPad)}>
