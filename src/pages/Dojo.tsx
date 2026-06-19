@@ -387,6 +387,7 @@ export default function Dojo() {
         <BranchCountdown />
         <KrystenCard />
         <DailyProgress />
+        <WeeklyCommitmentCard />
 
         {/* Mature-only: Block Header */}
         {isMature && activeBlock && (
