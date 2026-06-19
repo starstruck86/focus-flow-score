@@ -67,3 +67,14 @@ try {
   console.error('[main] Fatal render error:', err);
   renderFatalFallback(err);
 }
+
+// Register service worker for PWA push notifications
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      await navigator.serviceWorker.register('/sw.js');
+    } catch (e) {
+      // Service worker registration failed — non-critical, app still works
+    }
+  });
+}

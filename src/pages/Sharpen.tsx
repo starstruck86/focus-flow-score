@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { selectNextKI } from '@/lib/dojo/selectNextKI';
@@ -13,6 +13,15 @@ import { Flame, ChevronRight, Loader2, X } from 'lucide-react';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const TARGET_REPS = 5;
 
+const DIMENSION_CYCLE = [
+  'deal_control', 'expansion_strategy', 'stakeholder_navigation',
+  'internal_prospecting', 'discovery', 'messaging',
+];
+
+const getInterleavedDimension = (repsDone: number) => {
+  return DIMENSION_CYCLE[repsDone % DIMENSION_CYCLE.length];
+};
+
 interface Rep {
   ki: any;
   userResponse: string;
@@ -24,6 +33,8 @@ type Phase = 'loading' | 'input' | 'scoring' | 'feedback' | 'end';
 
 export default function Sharpen() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const interleaved = (location.state as any)?.interleaved ?? false;
   const { user } = useAuth();
   const { data: stats } = useDojoStats();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -79,7 +90,8 @@ export default function Sharpen() {
     if (!user) return;
     setPhase('loading');
     try {
-      const ki = await selectNextKI(user.id, dimension, excludeId);
+      const effectiveDimension = interleaved ? getInterleavedDimension(repsDone) : dimension;
+      const ki = await selectNextKI(user.id, effectiveDimension, excludeId);
       if (ki) {
         setCurrentKI(ki);
         setResponse('');
@@ -92,7 +104,18 @@ export default function Sharpen() {
     } catch {
       setPhase('input');
     }
-  }, [user, dimension]);
+  }, [user, dimension, interleaved, repsDone]);
+
+  useEffect(() => {
+    if (phase !== 'end') return;
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          localStorage.setItem('notifications_enabled', 'true');
+        }
+      });
+    }
+  }, [phase]);
 
   useEffect(() => {
     if (dimension && user) loadNextKI();
