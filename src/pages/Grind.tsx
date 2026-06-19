@@ -28,7 +28,7 @@ export default function Grind() {
 
   const stateDimension = (location.state as any)?.dimension as string | undefined;
 
-  const [phase, setPhase] = useState<GrindPhase>('pick');
+  const [phase, setPhase] = useState<GrindPhase>(stateDimension ? 'loading' : 'pick');
   const [selectedDimension, setSelectedDimension] = useState(stateDimension ?? '');
   const [conceptKI, setConceptKI] = useState<any>(null);
   const [drillKIs, setDrillKIs] = useState<any[]>([]);
