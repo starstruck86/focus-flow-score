@@ -285,7 +285,7 @@ export default function Sharpen() {
     if (newReps.length < TARGET_REPS) {
       const timer = setTimeout(() => {
         loadNextKIRef.current(currentKI.id);
-      }, 3000);
+      }, 6000);
       setAutoAdvanceTimer(timer);
     } else {
       setTimeout(() => setPhase('end'), 1500);
