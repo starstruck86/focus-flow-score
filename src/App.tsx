@@ -32,6 +32,7 @@ import OpportunityDetail from "./pages/OpportunityDetail";
 import Auth from "./pages/Auth";
 import Coach from "./pages/Coach";
 import PrepHub from "./pages/PrepHub";
+import Brief from "./pages/Brief";
 import NotFound from "./pages/NotFound";
 
 import { lazy, Suspense } from "react";
