@@ -37,7 +37,7 @@ import { ResumeLaneBanner } from '@/components/dojo/ResumeLaneBanner';
 import { Card, CardContent } from '@/components/ui/card';
 import { MicroDrillSession } from '@/components/dojo/MicroDrillSession';
 import { Button } from '@/components/ui/button';
-import { Flame, Target, ChevronRight, Zap, Brain, AlertTriangle } from 'lucide-react';
+import { Flame, Target, ChevronRight, Zap, Brain, AlertTriangle, TrendingUp } from 'lucide-react';
 
 function BranchCountdown() {
   const startDate = new Date('2026-07-01');
