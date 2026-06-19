@@ -102,6 +102,43 @@ function KrystenCard() {
     </div>
   );
 }
+
+function WeeklyCommitmentCard() {
+  const navigate = useNavigate();
+  const day = new Date().getDay(); // 1=Mon, 2=Tue
+  if (day !== 1 && day !== 2) return null;
+
+  try {
+    const raw = localStorage.getItem('weekly_commitment');
+    if (!raw) return null;
+    const { text, dimension, setAt } = JSON.parse(raw);
+    if (!text) return null;
+    const setDate = new Date(setAt);
+    const daysSince = Math.floor((Date.now() - setDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSince > 7) return null; // stale — older than a week
+
+    const dimLabel = dimension?.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+    return (
+      <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 space-y-1.5">
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] font-bold text-primary uppercase tracking-wider">This Week's Focus</p>
+          {dimLabel && <span className="text-[10px] text-muted-foreground">{dimLabel}</span>}
+        </div>
+        <p className="text-sm leading-relaxed">{text}</p>
+        <button
+          onClick={() => navigate('/sharpen', { state: { dimension } })}
+          className="text-[11px] font-medium text-primary hover:text-primary/80"
+        >
+          Drill this focus →
+        </button>
+      </div>
+    );
+  } catch {
+    return null;
+  }
+}
+
 function DailyProgress() {
   const storageKey = `daily_reps_${new Date().toISOString().split('T')[0]}`;
   const repsToday = (() => {

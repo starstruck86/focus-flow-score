@@ -179,6 +179,14 @@ export default function Skills() {
         </Card>
 
         {/* Tappable dimension list */}
+        {/* Context framing */}
+        <div className="px-1">
+          <p className="text-xs text-muted-foreground">
+            {data?.total_call_data
+              ? 'Real call scores — your current baseline. Each drill rep moves these up.'
+              : 'No call data yet. Grade a call in Coach to see your real baseline.'}
+          </p>
+        </div>
         <div className="space-y-2">
           {dimensions.map(dim => (
             <button
@@ -424,7 +432,9 @@ export default function Skills() {
                     )}>
                       {dim.avg_score > 0 ? dim.avg_score : '—'}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">{dim.total_reps} reps</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {dim.total_reps > 0 ? `${dim.total_reps} reps` : 'No drills yet'}
+                    </p>
                   </CardContent>
                 </Card>
               </div>
