@@ -124,6 +124,22 @@ export default function Learn() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: allLessonProgress } = useQuery({
+    queryKey: ['all-lesson-progress'],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u) return {};
+      const { data } = await (supabase as any)
+        .from('user_lesson_progress')
+        .select('lesson_id, status')
+        .eq('user_id', u.id);
+      const map: Record<string, string> = {};
+      (data ?? []).forEach((r: any) => { map[r.lesson_id] = r.status; });
+      return map;
+    },
+  });
+
   // Sorted skill levels: weakest first
   const sortedLevels = useMemo(() => {
     if (!skillLevels || skillLevels.length === 0) return [];
