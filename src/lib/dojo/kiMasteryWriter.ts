@@ -35,6 +35,10 @@ export async function writeKIMastery({
     ? (Date.now() - new Date(existing.last_drilled_at).getTime()) > 14 * 24 * 60 * 60 * 1000
     : false;
 
+  // SM-2 inspired: interval grows with score, resets on poor performance
+  const intervalDays = score >= 80 ? 21 : score >= 65 ? 7 : score >= 50 ? 3 : 1;
+  const nextReviewAt = new Date(Date.now() + intervalDays * 24 * 60 * 60 * 1000).toISOString();
+
   await supabase.from('ki_mastery').upsert(
     {
       user_id: userId,
@@ -47,6 +51,7 @@ export async function writeKIMastery({
       last_drilled_at: now,
       first_drilled_at: existing ? undefined : now,
       decay_risk: decayRisk,
+      next_review_at: nextReviewAt,
       updated_at: now,
       ...(recognitionScore != null && { recognition_score: recognitionScore }),
       ...(executionScore != null && { execution_score: executionScore }),
