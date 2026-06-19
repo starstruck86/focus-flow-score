@@ -1,11 +1,13 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, Zap, Target, BookOpen, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Loader2, Zap, BookOpen, AlertTriangle, ChevronRight, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { selectNextKI } from '@/lib/dojo/selectNextKI';
 import { cn } from '@/lib/utils';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -21,20 +23,38 @@ const CALL_TYPES = [
   { id: 'qbr', label: 'QBR / Check-in', dimension: 'expansion_strategy', icon: '📋' },
 ];
 
+const CALL_TYPE_TO_DIMENSION: Record<string, string> = {
+  discovery: 'discovery',
+  expansion: 'expansion_strategy',
+  executive: 'c_suite_engagement',
+  negotiation: 'deal_control',
+  qbr: 'deal_control',
+  competitive: 'competitive',
+  renewal: 'expansion_strategy',
+  demo: 'messaging',
+  champion: 'stakeholder_navigation',
+};
+
 interface BriefingData {
   callType: string;
   company: string;
   topKIs: { title: string; tactic_summary: string; why_it_matters: string }[];
   weakestCategory: { label: string; score: number } | null;
-  branchReadiness: { total: number; drilled: number } | null;
   focusCue: string;
 }
 
 export default function Brief() {
+  const navigate = useNavigate();
   const [company, setCompany] = useState('');
   const [selectedType, setSelectedType] = useState<typeof CALL_TYPES[0] | null>(null);
   const [loading, setLoading] = useState(false);
   const [briefing, setBriefing] = useState<BriefingData | null>(null);
+
+  const [warmupPhase, setWarmupPhase] = useState<'idle' | 'loading' | 'input' | 'scoring' | 'done'>('idle');
+  const [warmupKI, setWarmupKI] = useState<any>(null);
+  const [warmupResponse, setWarmupResponse] = useState('');
+  const [warmupScore, setWarmupScore] = useState<number | null>(null);
+  const [warmupCoaching, setWarmupCoaching] = useState('');
 
   const generate = async () => {
     if (!selectedType) return;
@@ -46,7 +66,6 @@ export default function Brief() {
     });
     if (!user || !session) { setLoading(false); return; }
 
-    // Fetch top KIs for this dimension
     const { data: kis } = await (supabase as any)
       .from('knowledge_items')
       .select('title, tactic_summary, why_it_matters')
@@ -56,7 +75,6 @@ export default function Brief() {
       .order('confidence_score', { ascending: false })
       .limit(5);
 
-    // Fetch weakest coach category from dimension_scores
     const { data: dimScore } = await (supabase as any)
       .from('dimension_scores')
       .select('avg_score_100, call_count')
@@ -64,14 +82,6 @@ export default function Brief() {
       .eq('spider_dimension', selectedType.dimension)
       .maybeSingle();
 
-    // Fetch Branch.io readiness
-    const { data: branch } = await (supabase as any)
-      .from('branch_readiness')
-      .select('total_branch_kis, drilled_branch_kis')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    // Build focus cue based on dimension score
     const score = dimScore?.avg_score_100 ?? null;
     const focusCue = score !== null
       ? score < 50
@@ -86,23 +96,76 @@ export default function Brief() {
       company: company || 'this account',
       topKIs: kis ?? [],
       weakestCategory: score !== null ? { label: selectedType.label, score: Math.round(score) } : null,
-      branchReadiness: branch ? { total: branch.total_branch_kis, drilled: branch.drilled_branch_kis } : null,
       focusCue,
     });
     setLoading(false);
   };
 
+  const handleStartWarmup = async () => {
+    setWarmupPhase('loading');
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setWarmupPhase('idle'); return; }
+
+    const dimension = CALL_TYPE_TO_DIMENSION[selectedType?.id ?? 'discovery'] ?? 'discovery';
+    const ki = await selectNextKI(user.id, dimension);
+    if (ki) {
+      setWarmupKI(ki);
+      setWarmupResponse('');
+      setWarmupPhase('input');
+    } else {
+      setWarmupPhase('idle');
+    }
+  };
+
+  const handleSubmitWarmup = async () => {
+    if (!warmupResponse.trim() || !warmupKI) return;
+    setWarmupPhase('scoring');
+    const { data: { session } } = await supabase.auth.getSession();
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/dojo-score`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({
+          scenario: {
+            skillFocus: warmupKI.chapter || 'deal_control',
+            context: warmupKI.when_to_use || 'Pre-call scenario',
+            objection: warmupKI.example_usage || warmupKI.tactic_summary || 'Apply this play.',
+          },
+          userResponse: warmupResponse,
+          ki: {
+            title: warmupKI.title ?? '',
+            tactic_summary: warmupKI.tactic_summary ?? '',
+            example_usage: warmupKI.example_usage ?? '',
+            when_to_use: warmupKI.when_to_use ?? '',
+            when_not_to_use: warmupKI.when_not_to_use ?? '',
+            why_it_matters: warmupKI.why_it_matters ?? '',
+          },
+        }),
+      });
+      const data = await res.json();
+      setWarmupScore(data.score ?? 50);
+      setWarmupCoaching(((data.feedback || '').split(/[.!?]/)[0].trim() + '.') || 'Rep recorded.');
+    } catch {
+      setWarmupScore(50);
+      setWarmupCoaching("Rep recorded. You're ready.");
+    }
+    setWarmupPhase('done');
+  };
+
   return (
     <Layout>
       <div className="px-4 pt-4 pb-24 space-y-4 max-w-lg mx-auto">
-        <div className="flex items-center gap-2">
-          <Zap className="h-5 w-5 text-primary" />
-          <h1 className="font-display text-xl font-bold">Pre-Call Brief</h1>
+        <div>
+          <div className="flex items-center gap-2">
+            <Zap className="h-5 w-5 text-primary" />
+            <h1 className="font-display text-xl font-bold">Scout</h1>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5 ml-7">Pre-call preparation</p>
         </div>
 
         {!briefing ? (
           <div className="space-y-4">
-            {/* Company */}
             <div className="space-y-1.5">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Account (optional)</p>
               <Input
@@ -112,7 +175,6 @@ export default function Brief() {
               />
             </div>
 
-            {/* Call type */}
             <div className="space-y-1.5">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Call Type</p>
               <div className="grid grid-cols-2 gap-2">
@@ -147,16 +209,14 @@ export default function Brief() {
           </div>
         ) : (
           <div className="space-y-3">
-            {/* Header */}
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-lg font-bold">{briefing.company}</p>
-                <p className="text-xs text-muted-foreground">{briefing.callType} · Pre-call brief</p>
+                <p className="text-xs text-muted-foreground">{briefing.callType} · Scout brief</p>
               </div>
               <Button variant="ghost" size="sm" onClick={() => setBriefing(null)}>New brief</Button>
             </div>
 
-            {/* Focus cue */}
             <Card className={cn('border', briefing.weakestCategory && briefing.weakestCategory.score < 50 ? 'border-red-500/30 bg-red-500/5' : 'border-amber-500/30 bg-amber-500/5')}>
               <CardContent className="p-3">
                 <div className="flex items-start gap-2">
@@ -166,7 +226,6 @@ export default function Brief() {
               </CardContent>
             </Card>
 
-            {/* Top KIs */}
             {briefing.topKIs.length > 0 && (
               <Card>
                 <CardContent className="p-4 space-y-3">
@@ -185,26 +244,86 @@ export default function Brief() {
                       </div>
                     ))}
                   </div>
-                </CardContent>
-              </Card>
-            )}
 
-            {/* Branch.io readiness */}
-            {briefing.branchReadiness && (
-              <Card className={cn('border', briefing.branchReadiness.total === 0 ? 'border-amber-500/30' : 'border-blue-500/20')}>
-                <CardContent className="p-3 flex items-center gap-3">
-                  <div className="h-7 w-7 rounded-md bg-blue-600 flex items-center justify-center shrink-0 text-white text-xs font-bold">B</div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">Branch.io Intelligence</p>
-                    <p className="text-xs text-muted-foreground">
-                      {briefing.branchReadiness.total === 0
-                        ? 'No Branch.io KIs ingested yet — add resources in PrepHub'
-                        : `${briefing.branchReadiness.drilled} of ${briefing.branchReadiness.total} Branch.io KIs drilled`}
-                    </p>
-                  </div>
+                  <Button
+                    className="w-full mt-4"
+                    onClick={handleStartWarmup}
+                    disabled={warmupPhase === 'loading'}
+                  >
+                    {warmupPhase === 'loading' ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Loading rep…</>
+                    ) : (
+                      <><Zap className="h-4 w-4 mr-2" />Do 1 Warm-Up Rep</>
+                    )}
+                  </Button>
                 </CardContent>
               </Card>
             )}
+          </div>
+        )}
+
+        {warmupPhase === 'input' && warmupKI && (
+          <div className="fixed inset-0 bg-background z-50 flex flex-col">
+            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-border/40" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}>
+              <div>
+                <p className="text-sm font-semibold">Warm-Up Rep</p>
+                <p className="text-xs text-muted-foreground">1 rep before you walk in</p>
+              </div>
+              <button onClick={() => setWarmupPhase('idle')} className="text-muted-foreground p-1">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+              <Card>
+                <CardContent className="p-4 space-y-2">
+                  <p className="text-xs font-semibold text-foreground">{warmupKI.title}</p>
+                  <p className="text-xs text-muted-foreground">Apply this play — respond to the scenario:</p>
+                  <p className="text-sm leading-relaxed">{warmupKI.when_to_use || warmupKI.tactic_summary}</p>
+                </CardContent>
+              </Card>
+            </div>
+            <div className="border-t border-border px-4 py-3 bg-background space-y-2" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+              <Textarea
+                placeholder="Your response…"
+                value={warmupResponse}
+                onChange={e => setWarmupResponse(e.target.value)}
+                className="text-sm min-h-[72px] resize-none"
+                rows={3}
+              />
+              <Button className="w-full" disabled={!warmupResponse.trim()} onClick={handleSubmitWarmup}>
+                Submit
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {warmupPhase === 'scoring' && (
+          <div className="fixed inset-0 bg-background z-50 flex flex-col items-center justify-center gap-3">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Scoring your rep…</p>
+          </div>
+        )}
+
+        {warmupPhase === 'done' && (
+          <div className="fixed inset-0 bg-background z-50 flex flex-col items-center justify-center px-6 gap-5">
+            <div className="text-center">
+              <p className={cn(
+                'text-5xl font-bold font-mono',
+                (warmupScore ?? 0) >= 70 ? 'text-green-500' :
+                (warmupScore ?? 0) >= 50 ? 'text-amber-500' : 'text-red-500'
+              )}>{warmupScore}</p>
+              <p className="text-sm text-muted-foreground mt-1">warm-up score</p>
+            </div>
+            {warmupCoaching && (
+              <Card className="w-full max-w-sm">
+                <CardContent className="p-3">
+                  <p className="text-sm leading-relaxed text-muted-foreground">{warmupCoaching}</p>
+                </CardContent>
+              </Card>
+            )}
+            <Button className="w-full max-w-sm" onClick={() => { setWarmupPhase('idle'); navigate('/dojo'); }}>
+              Walk In Ready ✓
+            </Button>
           </div>
         )}
       </div>
