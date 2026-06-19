@@ -125,7 +125,7 @@ export default function BatchRegrade() {
         existing.overall_grade !== 'C-';
 
       if (alreadyDone) {
-        setResults(prev => !prev => prev.map(r =>
+        setResults(prev => prev.map(r =>
           r.id === id ? { ...r, status: 'skipped', grade: existing.overall_grade, score: existing.overall_score } : r
         ));
         addLog(`${id.slice(0, 8)} already graded (${existing.overall_grade}) — skipping`);
