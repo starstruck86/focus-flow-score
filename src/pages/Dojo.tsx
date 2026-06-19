@@ -389,6 +389,23 @@ export default function Dojo() {
           </button>
         )}
 
+        {/* Mature: Interleaved Drill */}
+        {isMature && (
+          <button
+            onClick={() => navigate('/sharpen', { state: { interleaved: true } })}
+            className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Interleaved Drill</p>
+                <p className="text-[11px] text-muted-foreground">Mix dimensions · proven for long-term retention</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
+            </div>
+          </button>
+        )}
+
         {/* Early / Mature: Adversarial Drill */}
         {(isEarly || isMature) && (
           <button
