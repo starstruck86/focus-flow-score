@@ -251,6 +251,8 @@ export default function Dojo() {
           </div>
         )}
 
+        <BranchCountdown />
+
         {/* Mature-only: Block Header */}
         {isMature && activeBlock && (
           <BlockHeader
