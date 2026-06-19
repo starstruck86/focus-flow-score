@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { PlaybookGeneratorCard } from '@/components/prep/PlaybookGeneratorCard';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -41,6 +42,9 @@ export default function PrepHub() {
             <VoiceCommandButton />
           </div>
         </div>
+
+        {/* Playbook Generation */}
+        <PlaybookGeneratorCard />
 
         {/* Branch.io Intelligence Checklist */}
         <Card className="border-blue-500/20 bg-blue-500/5">
