@@ -85,6 +85,11 @@ export function KiProficiencyStrip() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {dueCount && dueCount > 0 ? (
+            <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border-amber-500/30">
+              {dueCount} due for review
+            </Badge>
+          ) : null}
           {data.decay_alerts > 0 && (
             <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
           )}
