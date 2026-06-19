@@ -362,13 +362,25 @@ export default function Grind() {
 
   // ─── COMPLETE ──────────────────────────────────────────────────────
   if (phase === 'complete') {
+    const scoreColor = avgScore >= 85 ? 'text-green-500' : avgScore >= 70 ? 'text-yellow-500' : 'text-orange-500';
+    const coachNote = avgScore >= 85
+      ? 'Elite execution. Take this exact pattern into your next live call.'
+      : avgScore >= 70
+        ? 'Solid work. One more pass and this becomes automatic.'
+        : 'Reps logged. Run it again — the pattern only sticks with repetition.';
     return (
       <div className="fixed inset-0 bg-background flex flex-col items-center justify-center px-6 gap-5">
-        <CheckCircle2 className="h-12 w-12 text-green-500" />
         <div className="text-center">
-          <p className="text-xl font-bold">{dimLabel} — Session Complete</p>
-          <p className="text-sm text-muted-foreground mt-1">{avgScore}/100 avg · {DRILL_REPS} reps</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{dimLabel}</p>
+          <p className={`text-7xl font-bold tabular-nums ${scoreColor}`}>{avgScore}</p>
+          <p className="text-xs text-muted-foreground mt-1">avg across {DRILL_REPS} reps</p>
         </div>
+        <Card className="w-full max-w-sm border-border/50">
+          <CardContent className="p-3">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Coach</p>
+            <p className="text-sm leading-relaxed">{coachNote}</p>
+          </CardContent>
+        </Card>
         {reflectionText && (
           <Card className="w-full max-w-sm border-primary/20 bg-primary/5">
             <CardContent className="p-3">
@@ -378,9 +390,11 @@ export default function Grind() {
           </Card>
         )}
         <div className="space-y-2 w-full max-w-sm">
-          <Button className="w-full" onClick={() => navigate('/dojo')}>Done</Button>
-          <Button variant="ghost" className="w-full" onClick={() => { setPhase('pick'); setDrillResults([]); setCurrentDrillIdx(0); }}>
-            Another session
+          <Button className="w-full" onClick={() => { setPhase('pick'); setDrillResults([]); setCurrentDrillIdx(0); }}>
+            Go Again
+          </Button>
+          <Button variant="ghost" className="w-full" onClick={() => navigate('/dojo')}>
+            Done
           </Button>
         </div>
       </div>
