@@ -407,6 +407,42 @@ export default function Sharpen() {
                 <span>{reviewCount} plays flagged from your last call · drilling those first</span>
               </div>
             )}
+
+            {/* First-rep onboarding callout — shows for new users on first rep */}
+            {!onboardingDismissed && totalSessions < 5 && repsDone === 0 && (
+              <div className="flex items-start justify-between gap-3 p-3 rounded-xl bg-primary/10 border border-primary/20">
+                <div className="space-y-0.5 min-w-0">
+                  <p className="text-[11px] font-bold text-primary">How this works</p>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Read the play below. Write exactly what you'd say on a live call. Hit Enter to submit — we'll score you and show you a better version.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setOnboardingDismissed(true);
+                    localStorage.setItem('sharpen_onboarded', 'true');
+                  }}
+                  className="text-[10px] text-muted-foreground/60 hover:text-foreground shrink-0 pt-0.5"
+                >
+                  Got it
+                </button>
+              </div>
+            )}
+
+            {/* Why this rep */}
+            {dimScore !== null && dimScore < 80 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/40 border border-border/40">
+                <span className="text-[10px] text-muted-foreground">
+                  Your {dimension.replace(/_/g, ' ')} score:{' '}
+                  <span className={cn(
+                    'font-bold',
+                    dimScore < 40 ? 'text-red-500' : dimScore < 65 ? 'text-amber-500' : 'text-yellow-500'
+                  )}>{dimScore}/100</span>
+                  {' '}from real calls · drilling this
+                </span>
+              </div>
+            )}
+
             <div className="p-4 rounded-xl border border-border bg-muted/20 space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider shrink-0">
