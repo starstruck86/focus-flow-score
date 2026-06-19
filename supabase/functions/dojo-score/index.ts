@@ -567,10 +567,29 @@ Keep coachingNote short and concrete. Anchor judgment to internal deal movement,
       stakeholderBlock = `\n\nSTAKEHOLDER CONTEXT:${tensionLabel}\n${lines.join('\n')}`;
     }
 
+    // Build KI context block when a specific play is being practiced
+    const kiBlock = (ki?.tactic_summary || ki?.example_usage) ? `
+
+THE SPECIFIC PLAY BEING PRACTICED:
+${ki.title ? `Play: ${ki.title}` : ''}
+What this play does: ${ki.tactic_summary ?? ''}
+${ki.example_usage ? `World-class execution — real call example: "${ki.example_usage}"` : ''}
+${ki.when_to_use ? `When to use: ${ki.when_to_use}` : ''}
+${ki.when_not_to_use ? `When NOT to use (the trap): ${ki.when_not_to_use}` : ''}
+${ki.why_it_matters ? `Why this matters: ${ki.why_it_matters}` : ''}
+
+KI-SPECIFIC GRADING — THREE DIMENSIONS (return alongside overall score):
+1. recognitionScore (0-33): Did the rep recognize this situation calls for THIS specific play? 0 = wrong play entirely, 33 = immediately and correctly applied it.
+2. executionScore (0-34): How closely does their response match the INTENT and STRUCTURE of the real call example? Grade on commercial precision, key moves, and framing — NOT verbatim matching. 0 = didn't attempt the play, 34 = matched elite execution.
+3. awarenessScore (0-33): Did they avoid the "when NOT to use" traps listed above? 0 = fell into a clear trap, 33 = cleanly avoided all pitfalls.
+Total score = recognitionScore + executionScore + awarenessScore.
+
+CRITICAL: When ki context is provided, the "worldClassResponse" in your output MUST be based on the real call example above — adapt it lightly to this specific scenario's context and numbers, but preserve the structure, moves, and commercial precision of the original. Do NOT generate a completely new response. You are showing the rep how that actual play was executed in a real call.` : '';
+
     const userPrompt = `SCENARIO:
 Skill being tested: ${skill}
 Situation: ${scenario.context}
-Buyer says: "${scenario.objection}"${stakeholderBlock}
+Buyer says: "${scenario.objection}"${stakeholderBlock}${kiBlock}
 
 REP'S RESPONSE:
 "${userResponse}"
@@ -862,6 +881,16 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
         triggerReasons,
         succeeded: regenSucceeded,
       }));
+    }
+
+    // Normalize KI sub-scores when present
+    if (ki?.tactic_summary || ki?.example_usage) {
+      parsed.recognitionScore = typeof parsed.recognitionScore === 'number'
+        ? Math.max(0, Math.min(33, Math.round(parsed.recognitionScore))) : null;
+      parsed.executionScore = typeof parsed.executionScore === 'number'
+        ? Math.max(0, Math.min(34, Math.round(parsed.executionScore))) : null;
+      parsed.awarenessScore = typeof parsed.awarenessScore === 'number'
+        ? Math.max(0, Math.min(33, Math.round(parsed.awarenessScore))) : null;
     }
 
     return new Response(JSON.stringify(parsed), {
