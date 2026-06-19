@@ -367,6 +367,11 @@ function CallScorecard({ grade, onRegrade, transcriptId, transcriptContent }: {
           p_signal_score: score,
         }).then(() => { /* silent — affects tomorrow's drills */ });
       }
+      if (weakDimSignals.length > 0) {
+        toast('📞 Drill queue updated from this call', {
+          description: `${weakDimSignals.length} weak area${weakDimSignals.length > 1 ? 's' : ''} flagged for tomorrow's session`,
+        });
+      }
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
