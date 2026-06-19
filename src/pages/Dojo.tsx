@@ -101,7 +101,7 @@ function KrystenCard() {
 
   const handleClick = () => {
     if (isAfterClass) {
-      navigate('/grind', { state: { dimension: 'deal_control' } });
+      navigate('/grind'); // user picks what was covered in class
     } else {
       navigate('/brief');
     }
