@@ -12,7 +12,7 @@ import {
   CheckCircle2, Lightbulb, Swords, ChevronRight, ChevronUp, ChevronDown, Crown, Sparkles,
   Crosshair, ListOrdered, MessageCircle, GraduationCap,
   TrendingUp, TrendingDown, Minus, Zap, Shield, XCircle,
-  Eye, PenLine, Volume2, VolumeX,
+  Eye, PenLine, Volume2, VolumeX, BookOpen,
 } from 'lucide-react';
 import { getRandomScenario, getLaneScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
 import { generateKIDrill, type KnowledgeItemForDrill, type KIDrillScenario } from '@/lib/dojo/kiDrillGenerator';
@@ -255,6 +255,14 @@ export default function DojoSession() {
           userResponse: text,
           retryCount: isRetry ? retryCount + 1 : 0,
           focusReminder: currentFocus,
+          ki: (kiContext ?? kiContextOverride) ? {
+            title: (kiContext ?? kiContextOverride)!.title ?? '',
+            tactic_summary: (kiContext ?? kiContextOverride)!.tactic_summary ?? '',
+            example_usage: (kiContext ?? kiContextOverride)!.example_usage ?? '',
+            when_to_use: (kiContext ?? kiContextOverride)!.when_to_use ?? '',
+            when_not_to_use: (kiContext ?? kiContextOverride)!.when_not_to_use ?? '',
+            why_it_matters: (kiContext ?? kiContextOverride)!.why_it_matters ?? '',
+          } : undefined,
         },
       });
 
@@ -331,6 +339,9 @@ export default function DojoSession() {
                 chapter: activeKI.chapter,
                 spiderDimension: activeKI.spider_dimension,
                 score: scoreData.score,
+                recognitionScore: (scoreData as any).recognitionScore ?? null,
+                executionScore: (scoreData as any).executionScore ?? null,
+                awarenessScore: (scoreData as any).awarenessScore ?? null,
               }).catch(err => console.error('[DojoSession] writeKIMastery failed:', err));
             }
           }
@@ -376,6 +387,9 @@ export default function DojoSession() {
                 chapter: activeKI.chapter,
                 spiderDimension: activeKI.spider_dimension,
                 score: bestScore,
+                recognitionScore: (scoreData as any).recognitionScore ?? null,
+                executionScore: (scoreData as any).executionScore ?? null,
+                awarenessScore: (scoreData as any).awarenessScore ?? null,
               }).catch(err => console.error('[DojoSession] writeKIMastery failed:', err));
             }
           }
@@ -1026,6 +1040,25 @@ function FeedbackView({
             {(currentResult.worldClassResponse || currentResult.teachingNote) && (
               <div className="space-y-2">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60 px-0.5">Teaching</p>
+
+                {(kiContext ?? kiContextOverride)?.example_usage && (
+                  <Card className="border-amber-500/30 bg-amber-500/5">
+                    <CardContent className="p-4 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                        <p className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">Real Call Example</p>
+                        {(kiContext ?? kiContextOverride)?.title && (
+                          <span className="text-[10px] text-muted-foreground ml-1 truncate">
+                            — {(kiContext ?? kiContextOverride)!.title}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-foreground leading-relaxed italic">
+                        "{(kiContext ?? kiContextOverride)!.example_usage}"
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {currentResult.worldClassResponse && (
                   <Card className="border-primary/40 bg-gradient-to-br from-primary/5 to-primary/10 ring-1 ring-primary/10">

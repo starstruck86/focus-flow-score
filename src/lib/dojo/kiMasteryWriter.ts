@@ -6,12 +6,18 @@ export async function writeKIMastery({
   chapter,
   spiderDimension,
   score,
+  recognitionScore,
+  executionScore,
+  awarenessScore,
 }: {
   userId: string;
   kiId: string;
   chapter: string;
   spiderDimension: string | null;
   score: number;
+  recognitionScore?: number | null;
+  executionScore?: number | null;
+  awarenessScore?: number | null;
 }) {
   const { data: existing } = await supabase
     .from('ki_mastery')
@@ -42,6 +48,9 @@ export async function writeKIMastery({
       first_drilled_at: existing ? undefined : now,
       decay_risk: decayRisk,
       updated_at: now,
+      ...(recognitionScore != null && { recognition_score: recognitionScore }),
+      ...(executionScore != null && { execution_score: executionScore }),
+      ...(awarenessScore != null && { awareness_score: awarenessScore }),
     },
     { onConflict: 'user_id,ki_id' },
   );
