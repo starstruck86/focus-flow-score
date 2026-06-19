@@ -394,7 +394,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
     calendarRes, accountsRes, tasksRes, oppsRes, remindersRes,
     renewalsRes, contactsRes, resourcesRes, quotaRes, benchmarksRes,
     streakRes, transcriptsRes, gradesRes, battlePlanRes, journalRes,
-    timeBlocksRes, methodologyRes, lastSessionRes, kiMasteryRes,
+    timeBlocksRes, methodologyRes, lastSessionRes, kiMasteryRes, aarRes,
   ] = await Promise.all([
     supabase
       .from("calendar_events")
