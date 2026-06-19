@@ -402,6 +402,7 @@ export default function Grind() {
       : avgScore >= 70
         ? 'Solid work. One more pass and this becomes automatic.'
         : 'Reps logged. Run it again — the pattern only sticks with repetition.';
+    const worstRep = drillResults.length > 0 ? drillResults.reduce((a, r) => r.score < a.score ? r : a) : null;
     return (
       <div className="fixed inset-0 bg-background flex flex-col items-center justify-center px-6 gap-5">
         <div className="text-center">
@@ -415,6 +416,14 @@ export default function Grind() {
             <p className="text-sm leading-relaxed">{coachNote}</p>
           </CardContent>
         </Card>
+        {worstRep?.coaching && (
+          <Card className="w-full max-w-sm border-border/50">
+            <CardContent className="p-3 space-y-1.5">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Coaching from your worst rep</p>
+              <p className="text-sm leading-relaxed text-muted-foreground">{worstRep.coaching}</p>
+            </CardContent>
+          </Card>
+        )}
         {reflectionText && (
           <Card className="w-full max-w-sm border-primary/20 bg-primary/5">
             <CardContent className="p-3">

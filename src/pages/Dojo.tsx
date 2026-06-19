@@ -38,9 +38,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { MicroDrillSession } from '@/components/dojo/MicroDrillSession';
 import { Button } from '@/components/ui/button';
 import { Flame, Target, ChevronRight, Zap, Brain, AlertTriangle, TrendingUp } from 'lucide-react';
+import { useIntensiveMode } from '@/hooks/useIntensiveMode';
 
 function BranchCountdown() {
-  const startDate = new Date('2026-07-01');
+  const startDate = new Date('2026-07-13');
   const today = new Date();
   const daysLeft = Math.ceil((startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -166,7 +167,6 @@ function DailyProgress() {
     </div>
   );
 }
-import { useIntensiveMode } from '@/hooks/useIntensiveMode';
 
 function PWAInstallBanner() {
   const [installEvent, setInstallEvent] = useState<any>(null);
