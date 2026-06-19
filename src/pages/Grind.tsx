@@ -16,7 +16,7 @@ import { BookOpen, Target, ChevronRight, Loader2, X, CheckCircle2, Brain } from 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const DRILL_REPS = 5;
 
-type GrindPhase = 'pick' | 'concept' | 'drilling' | 'scoring' | 'rep-feedback' | 'reflect' | 'complete';
+type GrindPhase = 'pick' | 'loading' | 'concept' | 'drilling' | 'scoring' | 'rep-feedback' | 'reflect' | 'complete';
 
 interface DrillResult { score: number; coaching: string; ki: any; }
 
