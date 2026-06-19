@@ -3384,6 +3384,7 @@ export type Database = {
           id: string
           ki_id: string
           last_drilled_at: string | null
+          next_review_at: string | null
           recognition_score: number | null
           spider_dimension: string | null
           times_drilled: number | null
@@ -3403,6 +3404,7 @@ export type Database = {
           id?: string
           ki_id: string
           last_drilled_at?: string | null
+          next_review_at?: string | null
           recognition_score?: number | null
           spider_dimension?: string | null
           times_drilled?: number | null
@@ -3422,6 +3424,7 @@ export type Database = {
           id?: string
           ki_id?: string
           last_drilled_at?: string | null
+          next_review_at?: string | null
           recognition_score?: number | null
           spider_dimension?: string | null
           times_drilled?: number | null
