@@ -231,6 +231,42 @@ export default function Learn() {
           );
         })()}
 
+        {/* Recommended next lesson */}
+        {nextLesson ? (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-4 space-y-3">
+              <div className="space-y-0.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold text-primary uppercase tracking-wider">Next Lesson</p>
+                  <p className="text-[10px] text-muted-foreground">{nextLesson.passedCount}/{nextLesson.totalCount} complete</p>
+                </div>
+                <p className="text-base font-bold leading-snug">{nextLesson.lessonTitle}</p>
+                <p className="text-xs text-muted-foreground">{nextLesson.courseTitle} · {nextLesson.moduleTitle}</p>
+              </div>
+              {/* Progress bar */}
+              <div className="h-1 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all"
+                  style={{ width: `${Math.round((nextLesson.passedCount / nextLesson.totalCount) * 100)}%` }}
+                />
+              </div>
+              <Button
+                className="w-full"
+                onClick={() => navigate(`/learn/lesson/${nextLesson.lessonId}`)}
+              >
+                Start Lesson →
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-green-500/30 bg-green-500/5">
+            <CardContent className="p-4">
+              <p className="text-sm font-semibold text-green-600 dark:text-green-400">All lessons complete 🎉</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Review any course below to revisit the material.</p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Loop completion */}
         {closedLoop.session && !closedLoop.isActive && closedLoop.session.status === 'completed' && (
           <DaveLoopCompletionCard
