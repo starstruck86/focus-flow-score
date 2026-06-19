@@ -8665,6 +8665,7 @@ export type Database = {
       }
       transcript_grades: {
         Row: {
+          aar_responses: Json | null
           actionable_feedback: string
           acumen_notes: string | null
           acumen_score: number
@@ -8714,6 +8715,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          aar_responses?: Json | null
           actionable_feedback?: string
           acumen_notes?: string | null
           acumen_score?: number
@@ -8763,6 +8765,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          aar_responses?: Json | null
           actionable_feedback?: string
           acumen_notes?: string | null
           acumen_score?: number

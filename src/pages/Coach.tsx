@@ -53,6 +53,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useNavigate } from 'react-router-dom';
 import { selectNextKI, type NextKIResult } from '@/lib/dojo/selectNextKI';
+import { AfterActionReview } from '@/components/coach/AfterActionReview';
 
 const GRADE_COLORS: Record<string, string> = {
   'A+': 'text-grade-excellent', A: 'text-grade-excellent', 'A-': 'text-grade-excellent',
@@ -1291,6 +1292,12 @@ export default function Coach() {
                     onRegrade={() => gradeTranscript.mutate(selectedTranscriptId!)}
                     transcriptId={selectedTranscriptId!}
                     transcriptContent={selectedTranscript?.content}
+                  />
+                )}
+                {selectedGrade?.id && (
+                  <AfterActionReview
+                    transcriptGradeId={selectedGrade.id}
+                    existingResponses={(selectedGrade as any).aar_responses}
                   />
                 )}
               </div>

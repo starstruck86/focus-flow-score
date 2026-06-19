@@ -394,7 +394,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
     calendarRes, accountsRes, tasksRes, oppsRes, remindersRes,
     renewalsRes, contactsRes, resourcesRes, quotaRes, benchmarksRes,
     streakRes, transcriptsRes, gradesRes, battlePlanRes, journalRes,
-    timeBlocksRes, methodologyRes, lastSessionRes, kiMasteryRes,
+    timeBlocksRes, methodologyRes, lastSessionRes, kiMasteryRes, aarRes,
   ] = await Promise.all([
     supabase
       .from("calendar_events")
@@ -515,6 +515,14 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
       .select('spider_dimension, times_drilled, avg_score, best_score, decay_risk')
       .eq('user_id', userId)
       .not('spider_dimension', 'is', null),
+    supabase
+      .from('transcript_grades')
+      .select('aar_responses, created_at')
+      .eq('user_id', userId)
+      .not('aar_responses', 'is', null)
+      .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1),
   ]);
 
   const sections: string[] = [];
@@ -716,6 +724,17 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
       (gradesRes.data as any[]).map((g: any) =>
         `- ${g.overall_grade || "—"} (${g.overall_score || "—"}/100): issue=${g.coaching_issue || "—"} why=${trunc(g.coaching_why || "", 80)} strengths=${trunc(g.strengths || "", 60)} improve=${trunc(g.improvements || "", 60)}`
       ).join("\n")
+    );
+  }
+
+  if (aarRes?.data?.length) {
+    const a = aarRes.data[0];
+    const r = a.aar_responses || {};
+    sections.push(
+      `RECENT AFTER-ACTION REVIEW (${new Date(a.created_at).toLocaleDateString()}):\n` +
+      `- What they planned: ${r.q1 ?? 'N/A'}\n` +
+      `- What they missed: ${r.q3 ?? 'N/A'}\n` +
+      `- This week they're drilling: ${r.q5 ?? 'N/A'}`
     );
   }
 

@@ -1,0 +1,1 @@
+ALTER TABLE public.transcript_grades ADD COLUMN IF NOT EXISTS aar_responses jsonb;
