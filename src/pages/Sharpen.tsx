@@ -243,6 +243,12 @@ export default function Sharpen() {
 
         {phase === 'input' && currentKI && (
           <div className="space-y-3">
+            {showReviewNotice && repsDone === 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400">
+                <span>📞</span>
+                <span>{reviewCount} plays flagged from your last call · drilling those first</span>
+              </div>
+            )}
             <div className="p-4 rounded-xl border border-border bg-muted/20 space-y-2">
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                 {dimension.replace(/_/g, ' ')}
