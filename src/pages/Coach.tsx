@@ -1189,6 +1189,39 @@ export default function Coach() {
     staleTime: 2 * 60 * 1000,
   });
 
+  const { data: lastGradeInfo } = useQuery({
+    queryKey: ['last-grade-info'],
+    queryFn: async () => {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u) return null;
+      const { data } = await (supabase as any)
+        .from('transcript_grades')
+        .select('created_at, overall_score')
+        .eq('user_id', u.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!data) return null;
+      const daysAgo = Math.floor((Date.now() - new Date(data.created_at).getTime()) / (1000 * 60 * 60 * 24));
+      return { daysAgo, score: Math.round(Number(data.overall_score)) };
+    },
+  });
+
+  const { data: recentGrades } = useQuery({
+    queryKey: ['recent-grades'],
+    queryFn: async () => {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u) return [];
+      const { data } = await (supabase as any)
+        .from('transcript_grades')
+        .select('overall_score, created_at')
+        .eq('user_id', u.id)
+        .order('created_at', { ascending: false })
+        .limit(3);
+      return data ?? [];
+    },
+  });
+
   const categoryBreakdown = useMemo(() => {
     if (!gradeBreakdownData || gradeBreakdownData.length === 0) return [];
     const cats = [
