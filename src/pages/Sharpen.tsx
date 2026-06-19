@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { Flame, ChevronRight, Loader2, X } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const TARGET_REPS = 5;
@@ -78,6 +79,7 @@ export default function Sharpen() {
   const interleaved = (location.state as any)?.interleaved ?? false;
   const stateDimension = (location.state as any)?.dimension;
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { data: stats } = useDojoStats();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -155,7 +157,33 @@ export default function Sharpen() {
   }, [user, dimension, interleaved]);
 
   useEffect(() => {
-    if (phase !== 'end') return;
+    if (phase !== 'end' || reps.length === 0) return;
+
+    // Write a dojo_sessions row so the streak counter updates
+    if (user) {
+      const avgScore = Math.round(reps.reduce((a, r) => a + r.score, 0) / reps.length);
+      const bestScore = Math.max(...reps.map(r => r.score));
+      const now = new Date().toISOString();
+      const approxStart = new Date(Date.now() - reps.length * 50000).toISOString();
+      supabase.from('dojo_sessions').insert({
+        user_id: user.id,
+        mode: 'sharpen',
+        session_type: 'drill',
+        skill_focus: dimension,
+        difficulty: 'standard',
+        status: 'completed',
+        best_score: bestScore,
+        latest_score: avgScore,
+        retry_count: 0,
+        started_at: approxStart,
+        completed_at: now,
+        benchmark_tag: false,
+      }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['dojo-stats', user.id] });
+      });
+    }
+
+    // Request notification permission
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().then(permission => {
         if (permission === 'granted') {
@@ -163,7 +191,7 @@ export default function Sharpen() {
         }
       });
     }
-  }, [phase]);
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (dimension && user) loadNextKI();
@@ -177,6 +205,9 @@ export default function Sharpen() {
     const { data: { session } } = await supabase.auth.getSession();
     let score = 50;
     let coaching = '';
+    let recognitionScore: number | null = null;
+    let executionScore: number | null = null;
+    let awarenessScore: number | null = null;
 
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/dojo-score`, {
@@ -184,7 +215,7 @@ export default function Sharpen() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
         body: JSON.stringify({
           scenario: {
-            skillFocus: currentKI.chapter || dimension,
+            skillFocus: dimension,
             context: currentKI.when_to_use || 'Enterprise sales scenario',
             objection: currentKI.example_usage || currentKI.tactic_summary || 'Respond to this situation.',
           },
@@ -201,8 +232,10 @@ export default function Sharpen() {
       });
       const data = await res.json();
       score = data.score ?? 50;
-      const rawFeedback = data.feedback || '';
-      coaching = rawFeedback.split(/[.!?]/)[0].trim() + '.';
+      coaching = data.feedback || '';
+      recognitionScore = data.recognitionScore ?? null;
+      executionScore = data.executionScore ?? null;
+      awarenessScore = data.awarenessScore ?? null;
     } catch {
       coaching = 'Rep recorded.';
     }
@@ -214,6 +247,9 @@ export default function Sharpen() {
         chapter: currentKI.chapter,
         spiderDimension: currentKI.spider_dimension ?? null,
         score,
+        recognitionScore,
+        executionScore,
+        awarenessScore,
       }).catch(() => {});
     }
 
@@ -353,21 +389,50 @@ export default function Sharpen() {
                 <span>{reviewCount} plays flagged from your last call · drilling those first</span>
               </div>
             )}
-            <div className="p-4 rounded-xl border border-border bg-muted/20 space-y-2">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                {dimension.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-              </p>
-              <div className="space-y-2">
-                <p className="text-[10px] font-semibold text-primary uppercase tracking-wider">Apply this play:</p>
-                <p className="text-sm leading-relaxed">
-                  {currentKI.when_to_use || currentKI.tactic_summary || currentKI.example_usage}
+            <div className="p-4 rounded-xl border border-border bg-muted/20 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider shrink-0">
+                  {dimension.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
                 </p>
-                {currentKI.example_usage && currentKI.when_to_use && (
-                  <p className="text-[11px] text-muted-foreground italic leading-relaxed">
-                    e.g. "{currentKI.example_usage.substring(0, 120)}{currentKI.example_usage.length > 120 ? '…' : ''}"
-                  </p>
+                {currentKI.title && (
+                  <p className="text-[10px] text-muted-foreground/60 truncate text-right">{currentKI.title}</p>
                 )}
               </div>
+
+              {/* The play — what to do */}
+              <div className="space-y-1">
+                <p className="text-[10px] font-bold text-primary uppercase tracking-wider">The play</p>
+                <p className="text-sm leading-relaxed font-medium">
+                  {currentKI.tactic_summary || currentKI.when_to_use || currentKI.example_usage}
+                </p>
+              </div>
+
+              {/* Situation — when to use it */}
+              {currentKI.when_to_use && currentKI.tactic_summary && (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">When</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {currentKI.when_to_use.length > 160
+                      ? currentKI.when_to_use.substring(0, 160) + '…'
+                      : currentKI.when_to_use}
+                  </p>
+                </div>
+              )}
+
+              {/* Example line */}
+              {currentKI.example_usage && (
+                <div className="pl-3 border-l-2 border-primary/30">
+                  <p className="text-[11px] text-muted-foreground italic">
+                    "{currentKI.example_usage.length > 130
+                      ? currentKI.example_usage.substring(0, 130) + '…'
+                      : currentKI.example_usage}"
+                  </p>
+                </div>
+              )}
+
+              <p className="text-[11px] font-semibold text-primary pt-1">
+                ↓ Write how you'd say this on a real call
+              </p>
             </div>
           </div>
         )}
