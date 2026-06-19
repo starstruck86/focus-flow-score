@@ -71,6 +71,10 @@ export default function Sharpen() {
   }, [user]);
 
   useEffect(() => {
+    if (stateDimension) {
+      setDimension(stateDimension);
+      return;
+    }
     const skillBreakdown = (stats as any)?.skillBreakdown;
     if (skillBreakdown?.length) {
       const sorted = [...skillBreakdown].sort((a: any, b: any) => a.avgFirstAttempt - b.avgFirstAttempt);
@@ -87,7 +91,7 @@ export default function Sharpen() {
     } else {
       setDimension('deal_control');
     }
-  }, [stats]);
+  }, [stats, stateDimension]);
 
   const loadNextKI = useCallback(async (excludeId?: string) => {
     if (!user) return;
