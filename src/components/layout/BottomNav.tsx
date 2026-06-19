@@ -51,7 +51,7 @@ export const COLOR_VAR: Record<NavColor, string> = {
 
 // ── Train mode items ──────────────────────────────────────────────────
 export const trainNavItems: NavItemDef[] = [
-  { to: '/dojo',   label: 'Dojo',    icon: Swords,      color: 'dojo' },
+  { to: '/dojo',   label: 'Train',   icon: Swords,      color: 'dojo' },
   { to: '/skills', label: 'Skills',  icon: Target,      color: 'skills' },
   { to: '/coach',  label: 'Coach',   icon: Mic,         color: 'coach' },
   { to: '/learn',  label: 'Learn',   icon: BookOpen,    color: 'prep' },

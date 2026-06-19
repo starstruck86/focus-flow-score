@@ -38,6 +38,27 @@ import { Card, CardContent } from '@/components/ui/card';
 import { MicroDrillSession } from '@/components/dojo/MicroDrillSession';
 import { Button } from '@/components/ui/button';
 import { Flame, Target, ChevronRight, Zap, Brain, AlertTriangle } from 'lucide-react';
+
+function BranchCountdown() {
+  const startDate = new Date('2026-07-01');
+  const today = new Date();
+  const daysLeft = Math.ceil((startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (daysLeft <= 0) return null;
+
+  return (
+    <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-primary/5 border border-primary/20">
+      <div>
+        <p className="text-xs font-semibold">Branch.io starts in</p>
+        <p className="text-[11px] text-muted-foreground">Get your expansion plays sharp</p>
+      </div>
+      <div className="text-right">
+        <p className="text-2xl font-bold font-mono text-primary">{daysLeft}</p>
+        <p className="text-[10px] text-muted-foreground">days</p>
+      </div>
+    </div>
+  );
+}
 import { useIntensiveMode } from '@/hooks/useIntensiveMode';
 
 export default function Dojo() {
