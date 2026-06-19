@@ -83,21 +83,46 @@ export default function Learn() {
     return map;
   }, [progress]);
 
-  const nextLesson = useMemo(() => {
-    if (!courses) return null;
-    for (const course of courses) {
-      for (const mod of course.learning_modules) {
-        for (const lesson of mod.learning_lessons) {
-          const p = progressMap[lesson.id] as any;
-          const passed = p?.status === 'passed' || p?.status === 'completed' || (p?.best_score ?? p?.mastery_score ?? 0) >= 65;
-          if (!passed) {
-            return { lesson, course };
-          }
-        }
-      }
-    }
-    return null;
-  }, [courses, progressMap]);
+  const { data: nextLesson } = useQuery({
+    queryKey: ['recommended-lesson', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      if (!user) return null;
+      const { data: passed } = await (supabase as any)
+        .from('user_lesson_progress')
+        .select('lesson_id')
+        .eq('user_id', user.id)
+        .eq('status', 'passed');
+      const passedIds = new Set((passed ?? []).map((r: any) => r.lesson_id));
+
+      const { data: lessons } = await (supabase as any)
+        .from('learning_lessons')
+        .select(`
+          id, title, module_id, generation_status,
+          learning_modules!inner(
+            id, title, course_id,
+            learning_courses!inner(id, title)
+          )
+        `)
+        .eq('generation_status', 'complete')
+        .order('id');
+
+      if (!lessons?.length) return null;
+
+      const next = lessons.find((l: any) => !passedIds.has(l.id));
+      if (!next) return null;
+
+      return {
+        lessonId: next.id,
+        lessonTitle: next.title,
+        moduleTitle: next.learning_modules?.[0]?.title,
+        courseTitle: next.learning_modules?.[0]?.learning_courses?.[0]?.title,
+        passedCount: passedIds.size,
+        totalCount: lessons.length,
+      };
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Sorted skill levels: weakest first
   const sortedLevels = useMemo(() => {
