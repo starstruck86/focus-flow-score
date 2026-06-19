@@ -1027,6 +1027,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
               className="overflow-hidden"
             >
               <div className="px-3 pb-3 space-y-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-primary">Grade a Call</p>
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs">Transcript</Label>
@@ -1060,7 +1061,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                     value={pasteContent}
                     onChange={e => setPasteContent(e.target.value)}
                     rows={6}
-                    className="font-mono text-xs resize-y"
+                    className="font-mono text-xs resize-y min-h-[160px]"
                   />
                   <div className="flex items-center justify-between">
                     {pasteContent && (
@@ -1189,6 +1190,39 @@ export default function Coach() {
     staleTime: 2 * 60 * 1000,
   });
 
+  const { data: lastGradeInfo } = useQuery({
+    queryKey: ['last-grade-info'],
+    queryFn: async () => {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u) return null;
+      const { data } = await (supabase as any)
+        .from('transcript_grades')
+        .select('created_at, overall_score')
+        .eq('user_id', u.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!data) return null;
+      const daysAgo = Math.floor((Date.now() - new Date(data.created_at).getTime()) / (1000 * 60 * 60 * 24));
+      return { daysAgo, score: Math.round(Number(data.overall_score)) };
+    },
+  });
+
+  const { data: recentGrades } = useQuery({
+    queryKey: ['recent-grades'],
+    queryFn: async () => {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u) return [];
+      const { data } = await (supabase as any)
+        .from('transcript_grades')
+        .select('overall_score, created_at')
+        .eq('user_id', u.id)
+        .order('created_at', { ascending: false })
+        .limit(3);
+      return data ?? [];
+    },
+  });
+
   const categoryBreakdown = useMemo(() => {
     if (!gradeBreakdownData || gradeBreakdownData.length === 0) return [];
     const cats = [
@@ -1255,6 +1289,19 @@ export default function Coach() {
           )}
         </div>
 
+        {lastGradeInfo && lastGradeInfo.daysAgo > 7 && (
+          <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            <div className="flex items-center gap-2">
+              <span className="text-amber-500">⚠</span>
+              <div>
+                <p className="text-xs font-semibold">Last call graded {lastGradeInfo.daysAgo} days ago</p>
+                <p className="text-[11px] text-muted-foreground">Grade a recent call to refresh your drill queue</p>
+              </div>
+            </div>
+            <p className="text-xs font-mono text-amber-500">{lastGradeInfo.score}/100</p>
+          </div>
+        )}
+
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className={SHELL.tabs.list}>
             <TabsTrigger value="scorecard" className={SHELL.tabs.trigger}>Scorecard</TabsTrigger>
@@ -1309,6 +1356,28 @@ export default function Coach() {
             ) : (
               <div className="space-y-4">
                 <TranscriptIngestion onSaved={() => refetchTranscripts()} />
+
+                {recentGrades && recentGrades.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">Recent Grades</p>
+                    <div className="flex gap-2">
+                      {recentGrades.slice(0, 3).map((g: any, i: number) => (
+                        <div key={i} className={cn(
+                          'flex-1 rounded-lg border p-2 text-center',
+                          Number(g.overall_score) >= 60 ? 'border-green-500/30 bg-green-500/5' :
+                          Number(g.overall_score) >= 40 ? 'border-amber-500/30 bg-amber-500/5' :
+                          'border-red-500/30 bg-red-500/5'
+                        )}>
+                          <p className={cn('text-lg font-bold font-mono',
+                            Number(g.overall_score) >= 60 ? 'text-green-500' :
+                            Number(g.overall_score) >= 40 ? 'text-amber-500' : 'text-red-500'
+                          )}>{Math.round(Number(g.overall_score))}</p>
+                          <p className="text-[9px] text-muted-foreground">{new Date(g.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {ungraded.length > 0 && (
                   <div className="space-y-2">
