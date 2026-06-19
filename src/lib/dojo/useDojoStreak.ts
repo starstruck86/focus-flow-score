@@ -10,6 +10,7 @@ export interface DojoStats {
   lastScore: number | null;
   bestScore: number;
   streak: number;
+  lastSessionDate: string | null;
   skillBreakdown: SkillStat[];
 }
 
