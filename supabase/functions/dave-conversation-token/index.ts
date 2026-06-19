@@ -515,6 +515,14 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
       .select('spider_dimension, times_drilled, avg_score, best_score, decay_risk')
       .eq('user_id', userId)
       .not('spider_dimension', 'is', null),
+    supabase
+      .from('transcript_grades')
+      .select('aar_responses, created_at')
+      .eq('user_id', userId)
+      .not('aar_responses', 'is', null)
+      .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1),
   ]);
 
   const sections: string[] = [];
