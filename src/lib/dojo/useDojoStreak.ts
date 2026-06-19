@@ -110,7 +110,7 @@ export function useDojoStats() {
         };
       });
 
-      return { totalSessions, lastScore, bestScore, streak, skillBreakdown };
+      return { totalSessions, lastScore, bestScore, streak, lastSessionDate: sessions[0]?.started_at ?? null, skillBreakdown };
     },
   });
 }
