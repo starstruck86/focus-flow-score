@@ -34,6 +34,7 @@ import Auth from "./pages/Auth";
 import Coach from "./pages/Coach";
 import PrepHub from "./pages/PrepHub";
 import Brief from "./pages/Brief";
+import BatchRegrade from "./pages/BatchRegrade";
 import Progress from "./pages/Progress";
 import NotFound from "./pages/NotFound";
 
