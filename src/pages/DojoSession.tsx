@@ -17,6 +17,7 @@ import {
 import { getRandomScenario, getLaneScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
 import { generateKIDrill, type KnowledgeItemForDrill, type KIDrillScenario } from '@/lib/dojo/kiDrillGenerator';
 import { writeKIMastery } from '@/lib/dojo/kiMasteryWriter';
+import { RecognitionDrill } from '@/components/dojo/RecognitionDrill';
 import { selectSkillShapedScenario } from '@/lib/learning/skillScenarioSelector';
 import { DAY_ANCHORS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
 import {
@@ -633,6 +634,32 @@ export default function DojoSession() {
             scenarioFamilyId={scenarioFamilyId}
           />
         )}
+
+        {/* ── Recognition Drill ── */}
+        {sessionType === 'recognition' && (kiContext ?? kiContextOverride) && (
+          <RecognitionDrill
+            ki={{
+              id: (kiContext ?? kiContextOverride)!.id,
+              tactic_summary: (kiContext ?? kiContextOverride)!.tactic_summary ?? '',
+              example_usage: (kiContext ?? kiContextOverride)!.example_usage ?? '',
+              spider_dimension: (kiContext ?? kiContextOverride)!.spider_dimension ?? 'discovery',
+            }}
+            onResult={(_correct, score) => {
+              const activeKI = kiContext ?? kiContextOverride;
+              if (user && activeKI) {
+                writeKIMastery({
+                  userId: user.id,
+                  kiId: activeKI.id,
+                  chapter: activeKI.chapter,
+                  spiderDimension: activeKI.spider_dimension ?? null,
+                  score,
+                }).catch(err => console.error('[RecognitionDrill] writeKIMastery failed:', err));
+              }
+              setTimeout(() => handleNextRep(), 2000);
+            }}
+          />
+        )}
+
 
         {/* ── Drill Mode ── */}
         {sessionType === 'drill' && (
