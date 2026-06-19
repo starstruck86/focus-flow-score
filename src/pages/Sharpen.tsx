@@ -31,6 +31,47 @@ interface Rep {
 
 type Phase = 'loading' | 'input' | 'scoring' | 'feedback' | 'end';
 
+function DailyRepCounter({ completedReps }: { completedReps: number }) {
+  const DAILY_GOAL = 15;
+  const storageKey = `daily_reps_${new Date().toISOString().split('T')[0]}`;
+
+  const [totalToday, setTotalToday] = useState(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      return saved ? parseInt(saved, 10) : 0;
+    } catch { return 0; }
+  });
+
+  useEffect(() => {
+    const newTotal = totalToday + completedReps;
+    localStorage.setItem(storageKey, String(newTotal));
+    setTotalToday(newTotal);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const display = totalToday + completedReps;
+  const pct = Math.min((display / DAILY_GOAL) * 100, 100);
+
+  return (
+    <div className="w-full max-w-sm space-y-1.5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">Today's reps</p>
+        <p className="text-xs font-mono font-semibold">{display} / {DAILY_GOAL}</p>
+      </div>
+      <div className="h-2 bg-muted rounded-full overflow-hidden">
+        <div
+          className={cn('h-full rounded-full transition-all duration-700',
+            pct >= 100 ? 'bg-green-500' : 'bg-primary'
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {display >= DAILY_GOAL && (
+        <p className="text-xs text-green-500 font-medium text-center">Daily goal hit ✓</p>
+      )}
+    </div>
+  );
+}
+
 export default function Sharpen() {
   const navigate = useNavigate();
   const location = useLocation();
