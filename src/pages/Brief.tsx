@@ -145,7 +145,7 @@ export default function Brief() {
       });
       const data = await res.json();
       setWarmupScore(data.score ?? 50);
-      setWarmupCoaching(((data.feedback || '').split(/[.!?]/)[0].trim() + '.') || 'Rep recorded.');
+      setWarmupCoaching(data.feedback || 'Rep recorded.');
     } catch {
       setWarmupScore(50);
       setWarmupCoaching("Rep recorded. You're ready.");
