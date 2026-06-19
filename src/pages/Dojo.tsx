@@ -279,6 +279,22 @@ export default function Dojo() {
   const isEarly = sessionCount >= 5 && sessionCount < 20;
   const isMature = sessionCount >= 20;
 
+  const streak = (stats as any)?.streak ?? 0;
+
+  // Save streak for recovery messaging
+  useEffect(() => {
+    if (streak > 0) {
+      localStorage.setItem('dynamic_last_streak', String(streak));
+    }
+  }, [streak]);
+
+  const lastKnownStreak = (() => {
+    try {
+      const v = localStorage.getItem('dynamic_last_streak');
+      return v ? parseInt(v, 10) : 0;
+    } catch { return 0; }
+  })();
+
   const startAutopilot = () => {
     // If launched with SkillSession from Learn, go directly to session with skill context
     if (skillSession) {
