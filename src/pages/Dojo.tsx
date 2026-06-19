@@ -431,6 +431,23 @@ export default function Dojo() {
           </button>
         )}
 
+        {/* Early / Mature: Deal Tracker */}
+        {(isEarly || isMature) && (
+          <button
+            onClick={() => navigate('/deals')}
+            className="w-full flex items-center justify-between p-3 rounded-xl border border-border/60 hover:border-primary/30 hover:bg-primary/5 transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-lg">📊</span>
+              <div className="text-left">
+                <p className="text-sm font-medium">Deals</p>
+                <p className="text-[11px] text-muted-foreground">Pipeline stages → drill dimensions</p>
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </button>
+        )}
+
         {isEarly && (
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 px-1">Train</p>
         )}

@@ -26,6 +26,7 @@ import Tasks from "./pages/Tasks";
 import RecurringTasks from "./pages/RecurringTasks";
 import Trends from "./pages/Trends";
 import Quota from "./pages/Quota";
+import Deals from "./pages/Deals";
 import Settings from "./pages/Settings";
 import AccountDetail from "./pages/AccountDetail";
 import OpportunityDetail from "./pages/OpportunityDetail";
@@ -133,6 +134,7 @@ const App = () => (
                   <Route path="/recurring" element={<ProtectedPage routeName="Recurring Tasks"><RecurringTasks /></ProtectedPage>} />
                   <Route path="/trends" element={<ProtectedPage routeName="Trends"><Trends /></ProtectedPage>} />
                   <Route path="/quota" element={<ProtectedPage routeName="Quota"><Quota /></ProtectedPage>} />
+                  <Route path="/deals" element={<ProtectedPage routeName="Deals"><Deals /></ProtectedPage>} />
                   <Route path="/coach" element={<ProtectedPage routeName="Coach"><Coach /></ProtectedPage>} />
                   {/* Coach is no longer a nav destination — accessible via /coach for transcript grading */}
                   <Route path="/prep" element={<ProtectedPage routeName="Sales Brain OS"><PrepHub /></ProtectedPage>} />
