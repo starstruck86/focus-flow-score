@@ -92,7 +92,7 @@ export default function Sharpen() {
     if (!user) return;
     setPhase('loading');
     try {
-      const effectiveDimension = interleaved ? getInterleavedDimension(repsDone) : dimension;
+      const effectiveDimension = interleaved ? getInterleavedDimension(repsDoneRef.current) : dimension;
       const ki = await selectNextKI(user.id, effectiveDimension, excludeId);
       if (ki) {
         setCurrentKI(ki);
@@ -106,7 +106,7 @@ export default function Sharpen() {
     } catch {
       setPhase('input');
     }
-  }, [user, dimension, interleaved, repsDone]);
+  }, [user, dimension, interleaved]);
 
   useEffect(() => {
     if (phase !== 'end') return;
