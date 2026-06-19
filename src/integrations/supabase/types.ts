@@ -3374,6 +3374,7 @@ export type Database = {
       ki_mastery: {
         Row: {
           avg_score: number | null
+          awareness_score: number | null
           best_score: number | null
           chapter: string | null
           created_at: string | null
@@ -3392,6 +3393,7 @@ export type Database = {
         }
         Insert: {
           avg_score?: number | null
+          awareness_score?: number | null
           best_score?: number | null
           chapter?: string | null
           created_at?: string | null
@@ -3410,6 +3412,7 @@ export type Database = {
         }
         Update: {
           avg_score?: number | null
+          awareness_score?: number | null
           best_score?: number | null
           chapter?: string | null
           created_at?: string | null
