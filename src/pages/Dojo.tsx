@@ -522,7 +522,17 @@ export default function Dojo() {
 
 
         {/* Proactive Dave — always visible */}
-        <ProactiveDaveCard onMicroDrill={() => navigate('/sharpen')} />
+        <ProactiveDaveCard
+          onMicroDrill={() => navigate('/sharpen')}
+          hasCompletedRepsToday={(() => {
+            try {
+              const key = `daily_reps_${new Date().toISOString().split('T')[0]}`;
+              return parseInt(localStorage.getItem(key) ?? '0', 10) > 0;
+            } catch { return false; }
+          })()}
+          streak={streak}
+          hasBenchmark={hasBenchmark ?? true}
+        />
 
         {/* Early / Mature: KI Proficiency strip */}
         {(isEarly || isMature) && <KiProficiencyStrip />}
