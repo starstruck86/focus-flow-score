@@ -38,6 +38,27 @@ import { Card, CardContent } from '@/components/ui/card';
 import { MicroDrillSession } from '@/components/dojo/MicroDrillSession';
 import { Button } from '@/components/ui/button';
 import { Flame, Target, ChevronRight, Zap, Brain, AlertTriangle } from 'lucide-react';
+
+function BranchCountdown() {
+  const startDate = new Date('2026-07-01');
+  const today = new Date();
+  const daysLeft = Math.ceil((startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (daysLeft <= 0) return null;
+
+  return (
+    <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-primary/5 border border-primary/20">
+      <div>
+        <p className="text-xs font-semibold">Branch.io starts in</p>
+        <p className="text-[11px] text-muted-foreground">Get your expansion plays sharp</p>
+      </div>
+      <div className="text-right">
+        <p className="text-2xl font-bold font-mono text-primary">{daysLeft}</p>
+        <p className="text-[10px] text-muted-foreground">days</p>
+      </div>
+    </div>
+  );
+}
 import { useIntensiveMode } from '@/hooks/useIntensiveMode';
 
 export default function Dojo() {
@@ -230,6 +251,8 @@ export default function Dojo() {
           </div>
         )}
 
+        <BranchCountdown />
+
         {/* Mature-only: Block Header */}
         {isMature && activeBlock && (
           <BlockHeader
@@ -322,6 +345,9 @@ export default function Dojo() {
         )}
 
         {/* Early / Mature: Pre-Call Brief */}
+        {isEarly && (
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 px-1">Explore</p>
+        )}
         {(isEarly || isMature) && (
           <button
             onClick={() => navigate('/brief')}
@@ -355,6 +381,29 @@ export default function Dojo() {
               <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
             </div>
           </button>
+        )}
+
+        {/* Early / Mature: Adversarial Drill */}
+        {(isEarly || isMature) && (
+          <button
+            onClick={() => navigate('/dojo/session', {
+              state: { skillFocus: 'deal_control', sessionType: 'adversarial' }
+            })}
+            className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-red-500/30 hover:bg-red-500/5 transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Adversarial Drill</p>
+                <p className="text-[11px] text-muted-foreground">Spot the anti-pattern · hardest drill type</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
+            </div>
+          </button>
+        )}
+
+        {isEarly && (
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 px-1">Train</p>
         )}
 
         {/* Quick Drill / Start Session — always visible, label shifts for new users */}
@@ -400,25 +449,6 @@ export default function Dojo() {
               <div>
                 <p className="text-sm font-medium">Interleaved Drill</p>
                 <p className="text-[11px] text-muted-foreground">Mix dimensions · proven for long-term retention</p>
-              </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
-            </div>
-          </button>
-        )}
-
-        {/* Early / Mature: Adversarial Drill */}
-        {(isEarly || isMature) && (
-          <button
-            onClick={() => navigate('/dojo/session', {
-              state: { skillFocus: 'deal_control', sessionType: 'adversarial' }
-            })}
-            className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-red-500/30 hover:bg-red-500/5 transition-all"
-          >
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
-              <div>
-                <p className="text-sm font-medium">Adversarial Drill</p>
-                <p className="text-[11px] text-muted-foreground">Spot the anti-pattern · hardest drill type</p>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
             </div>
