@@ -168,6 +168,65 @@ function DailyProgress() {
 }
 import { useIntensiveMode } from '@/hooks/useIntensiveMode';
 
+function PWAInstallBanner() {
+  const [installEvent, setInstallEvent] = useState<any>(null);
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem('pwa_install_dismissed') === 'true'; } catch { return false; }
+  });
+
+  useEffect(() => {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+      || (window.navigator as any).standalone === true;
+    if (isStandalone) { setDismissed(true); return; }
+
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallEvent(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  if (dismissed || !installEvent) return null;
+
+  return (
+    <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-muted/60 border border-border/60">
+      <div className="flex items-center gap-2.5">
+        <span className="text-base">📱</span>
+        <div>
+          <p className="text-xs font-semibold">Install Dynamic</p>
+          <p className="text-[11px] text-muted-foreground">Add to home screen for one-tap access</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={async () => {
+            if (!installEvent) return;
+            (installEvent as any).prompt();
+            const { outcome } = await (installEvent as any).userChoice;
+            if (outcome === 'accepted') {
+              localStorage.setItem('pwa_install_dismissed', 'true');
+              setDismissed(true);
+            }
+          }}
+          className="text-xs font-medium text-primary hover:text-primary/80 px-2 py-1 rounded-lg border border-primary/30 bg-primary/5"
+        >
+          Install
+        </button>
+        <button
+          onClick={() => {
+            localStorage.setItem('pwa_install_dismissed', 'true');
+            setDismissed(true);
+          }}
+          className="text-xs text-muted-foreground/60 hover:text-muted-foreground"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Dojo() {
   const intensive = useIntensiveMode();
   const navigate = useNavigate();
@@ -346,6 +405,7 @@ export default function Dojo() {
   return (
     <Layout>
       <div className={cn('px-4 pt-4 space-y-6', SHELL.main.bottomPad)}>
+        <PWAInstallBanner />
         {/* Streak — always visible, loss-aversion framing */}
         {(stats?.streak ?? 0) > 0 ? (
           <div className="flex items-center justify-between px-1">
@@ -547,22 +607,6 @@ export default function Dojo() {
           </button>
         )}
 
-        {/* Early / Mature: Deal Tracker */}
-        {(isEarly || isMature) && (
-          <button
-            onClick={() => navigate('/deals')}
-            className="w-full flex items-center justify-between p-3 rounded-xl border border-border/60 hover:border-primary/30 hover:bg-primary/5 transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-lg">📊</span>
-              <div className="text-left">
-                <p className="text-sm font-medium">Deals</p>
-                <p className="text-[11px] text-muted-foreground">Pipeline stages → drill dimensions</p>
-              </div>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </button>
-        )}
 
         {isEarly && (
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 px-1">Train</p>
