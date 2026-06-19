@@ -204,7 +204,7 @@ export default function Sharpen() {
             {Array.from({ length: TARGET_REPS }).map((_, i) => (
               <div key={i} className={cn(
                 'h-1.5 w-1.5 rounded-full transition-all',
-                i < repsDone ? 'bg-primary' : i === repsDone && phase !== 'end' ? 'bg-primary/40 scale-110' : 'bg-muted'
+                i < repsDone ? 'bg-primary' : i === repsDone ? 'bg-primary/40 scale-110' : 'bg-muted'
               )} />
             ))}
           </div>
