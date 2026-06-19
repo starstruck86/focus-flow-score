@@ -18,6 +18,7 @@ import { getRandomScenario, getLaneScenario, SKILL_LABELS, MISTAKE_LABELS, type 
 import { generateKIDrill, type KnowledgeItemForDrill, type KIDrillScenario } from '@/lib/dojo/kiDrillGenerator';
 import { writeKIMastery } from '@/lib/dojo/kiMasteryWriter';
 import { RecognitionDrill } from '@/components/dojo/RecognitionDrill';
+import { AdversarialDrill } from '@/components/dojo/AdversarialDrill';
 import { selectSkillShapedScenario } from '@/lib/learning/skillScenarioSelector';
 import { DAY_ANCHORS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
 import {
@@ -694,6 +695,35 @@ export default function DojoSession() {
             }}
           />
         )}
+
+        {/* ── Adversarial Drill ── */}
+        {sessionType === 'adversarial' && (kiContext ?? kiContextOverride) && (
+          <AdversarialDrill
+            ki={{
+              id: (kiContext ?? kiContextOverride)!.id,
+              tactic_summary: (kiContext ?? kiContextOverride)!.tactic_summary ?? '',
+              when_not_to_use: (kiContext ?? kiContextOverride)!.when_not_to_use ?? null,
+              example_usage: (kiContext ?? kiContextOverride)!.example_usage ?? null,
+              spider_dimension: (kiContext ?? kiContextOverride)!.spider_dimension ?? null,
+              chapter: (kiContext ?? kiContextOverride)!.chapter ?? '',
+            }}
+            onResult={(score) => {
+              const activeKI = kiContext ?? kiContextOverride;
+              if (user && activeKI) {
+                writeKIMastery({
+                  userId: user.id,
+                  kiId: activeKI.id,
+                  chapter: activeKI.chapter,
+                  spiderDimension: activeKI.spider_dimension ?? null,
+                  score,
+                }).catch(err => console.error('[AdversarialDrill] writeKIMastery failed:', err));
+              }
+              setTimeout(() => handleNextRep(), 2500);
+            }}
+          />
+        )}
+
+
 
 
         {/* ── Drill Mode ── */}
