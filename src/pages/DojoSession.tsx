@@ -829,6 +829,8 @@ interface FeedbackViewProps {
   pressureLevel?: string | null;
   pressureDimensions?: string[] | null;
   skillLevelForFeedback?: UserSkillLevel | null;
+  kiExampleUsage?: string | null;
+  kiTitle?: string | null;
   onRetry: () => void;
   onNextRep: () => void;
 }
@@ -837,7 +839,8 @@ function FeedbackView({
   currentResult, scoreDelta, retryCount, retryResult, retryAssessment,
   userText, activeFocus, reviewExtras, roleplayExtras, sessionType,
   sessionId, skillFocus, transcriptOrigin, originalCallScore, firstAttemptResult,
-  assignmentContext, pressureLevel, pressureDimensions, skillLevelForFeedback, onRetry, onNextRep,
+  assignmentContext, pressureLevel, pressureDimensions, skillLevelForFeedback,
+  kiExampleUsage, kiTitle, onRetry, onNextRep,
 }: FeedbackViewProps) {
   const navigate = useNavigate();
   const [showDeepDive, setShowDeepDive] = useState(false);
@@ -1041,20 +1044,20 @@ function FeedbackView({
               <div className="space-y-2">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60 px-0.5">Teaching</p>
 
-                {(kiContext ?? kiContextOverride)?.example_usage && (
+                {kiExampleUsage && (
                   <Card className="border-amber-500/30 bg-amber-500/5">
                     <CardContent className="p-4 space-y-2">
                       <div className="flex items-center gap-2">
                         <BookOpen className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                         <p className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">Real Call Example</p>
-                        {(kiContext ?? kiContextOverride)?.title && (
+                        {kiTitle && (
                           <span className="text-[10px] text-muted-foreground ml-1 truncate">
-                            — {(kiContext ?? kiContextOverride)!.title}
+                            — {kiTitle}
                           </span>
                         )}
                       </div>
                       <p className="text-sm text-foreground leading-relaxed italic">
-                        "{(kiContext ?? kiContextOverride)!.example_usage}"
+                        "{kiExampleUsage}"
                       </p>
                     </CardContent>
                   </Card>
