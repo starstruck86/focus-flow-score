@@ -349,11 +349,18 @@ export default function Learn() {
         {courses && courses.length > 0 && (
           <div className="space-y-4">
             <h2 className="text-sm font-semibold text-foreground">Mastery Progression</h2>
-            {courses.map(course => (
-              <div key={course.id} className="rounded-lg border border-border bg-card overflow-hidden">
-                <div className="px-4 py-2.5 border-b border-border bg-muted/30">
-                  <p className="text-sm font-medium text-foreground">{course.title}</p>
-                </div>
+            {courses.map(course => {
+              const allLessons = course.learning_modules.flatMap((mod: any) => mod.learning_lessons);
+              const courseProgress = allLessons.filter((l: any) => allLessonProgress?.[l.id] === 'passed').length;
+              const totalLessons = allLessons.length;
+              return (
+                <div key={course.id} className="rounded-lg border border-border bg-card overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-border bg-muted/30 flex items-center justify-between">
+                    <p className="text-sm font-medium text-foreground">{course.title}</p>
+                    <Badge variant="secondary" className="text-[10px] font-normal">
+                      {courseProgress > 0 ? `${courseProgress}/${totalLessons}` : `${totalLessons} lessons`}
+                    </Badge>
+                  </div>
                 <div className="divide-y divide-border">
                   {course.learning_modules.map(mod => (
                     <div key={mod.id} className="px-4 py-3">
