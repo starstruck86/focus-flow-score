@@ -178,6 +178,31 @@ export default function Skills() {
           </CardContent>
         </Card>
 
+        {/* Tappable dimension list */}
+        <div className="space-y-2">
+          {dimensions.map(dim => (
+            <button
+              key={dim.dimension}
+              onClick={() => setSelectedDim(dim.dimension)}
+              className="w-full flex items-center justify-between p-2.5 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all text-left"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: dim.color }} />
+                <span className="text-sm font-medium">{dim.label}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                {dim.call_score != null && (
+                  <span className={cn('text-xs font-mono',
+                    dim.call_score < 40 ? 'text-red-500' : dim.call_score < 60 ? 'text-amber-500' : 'text-green-500'
+                  )}>{Math.round(dim.call_score)}</span>
+                )}
+                <span className="text-xs text-muted-foreground font-mono">{dim.total_reps}r</span>
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              </div>
+            </button>
+          ))}
+        </div>
+
         {dimensions.some(d => d.stagnant && (d.call_score ?? 100) < 50) && (
           <Card className="border-red-500/30 bg-red-500/5">
             <CardContent className="p-3">
