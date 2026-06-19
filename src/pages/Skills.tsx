@@ -37,6 +37,7 @@ export default function Skills() {
   const navigate = useNavigate();
   const { data, isLoading } = useKiProficiency();
   const [loadingDim, setLoadingDim] = useState<SpiderDimensionKey | null>(null);
+  const [selectedDim, setSelectedDim] = useState<string | null>(null);
 
   const { data: branchReadiness } = useQuery({
     queryKey: ['branch-readiness'],
