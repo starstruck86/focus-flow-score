@@ -323,6 +323,7 @@ export default function Dojo() {
         )}
 
         <BranchCountdown />
+        <KrystenCard />
         <DailyProgress />
 
         {/* Mature-only: Block Header */}
