@@ -37,6 +37,24 @@ export default function Sharpen() {
   const [currentScore, setCurrentScore] = useState<number | null>(null);
   const [currentCoaching, setCurrentCoaching] = useState('');
   const [autoAdvanceTimer, setAutoAdvanceTimer] = useState<NodeJS.Timeout | null>(null);
+  const [reviewCount, setReviewCount] = useState(0);
+  const [showReviewNotice, setShowReviewNotice] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    (supabase as any)
+      .from('ki_mastery')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .lte('next_review_at', new Date().toISOString())
+      .not('next_review_at', 'is', null)
+      .then(({ count }: { count: number | null }) => {
+        if ((count ?? 0) > 0) {
+          setReviewCount(count ?? 0);
+          setShowReviewNotice(true);
+        }
+      });
+  }, [user]);
 
   useEffect(() => {
     const skillBreakdown = (stats as any)?.skillBreakdown;
@@ -225,6 +243,12 @@ export default function Sharpen() {
 
         {phase === 'input' && currentKI && (
           <div className="space-y-3">
+            {showReviewNotice && repsDone === 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400">
+                <span>📞</span>
+                <span>{reviewCount} plays flagged from your last call · drilling those first</span>
+              </div>
+            )}
             <div className="p-4 rounded-xl border border-border bg-muted/20 space-y-2">
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                 {dimension.replace(/_/g, ' ')}
