@@ -37,6 +37,24 @@ export default function Sharpen() {
   const [currentScore, setCurrentScore] = useState<number | null>(null);
   const [currentCoaching, setCurrentCoaching] = useState('');
   const [autoAdvanceTimer, setAutoAdvanceTimer] = useState<NodeJS.Timeout | null>(null);
+  const [reviewCount, setReviewCount] = useState(0);
+  const [showReviewNotice, setShowReviewNotice] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    (supabase as any)
+      .from('ki_mastery')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .lte('next_review_at', new Date().toISOString())
+      .not('next_review_at', 'is', null)
+      .then(({ count }: { count: number | null }) => {
+        if ((count ?? 0) > 0) {
+          setReviewCount(count ?? 0);
+          setShowReviewNotice(true);
+        }
+      });
+  }, [user]);
 
   useEffect(() => {
     const skillBreakdown = (stats as any)?.skillBreakdown;
