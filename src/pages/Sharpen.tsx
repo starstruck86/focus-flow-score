@@ -35,6 +35,7 @@ export default function Sharpen() {
   const navigate = useNavigate();
   const location = useLocation();
   const interleaved = (location.state as any)?.interleaved ?? false;
+  const stateDimension = (location.state as any)?.dimension;
   const { user } = useAuth();
   const { data: stats } = useDojoStats();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
