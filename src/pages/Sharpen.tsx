@@ -214,7 +214,7 @@ export default function Sharpen() {
           </div>
           <p className="text-lg font-semibold">{TARGET_REPS} reps done</p>
           {streak > 0 && (
-            <p className="text-sm text-muted-foreground">🔥 Day {streak + 1} streak</p>
+            <p className="text-sm text-muted-foreground">🔥 {streak} day streak</p>
           )}
         </div>
 
