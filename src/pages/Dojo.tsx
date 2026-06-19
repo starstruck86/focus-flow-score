@@ -35,7 +35,7 @@ import { MasteryLanes } from '@/components/dojo/MasteryLanes';
 import { ResumeLaneBanner } from '@/components/dojo/ResumeLaneBanner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Flame, Target, ChevronRight } from 'lucide-react';
+import { Flame, Target, ChevronRight, Zap } from 'lucide-react';
 import { useIntensiveMode } from '@/hooks/useIntensiveMode';
 
 export default function Dojo() {
