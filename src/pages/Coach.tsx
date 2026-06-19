@@ -1288,6 +1288,19 @@ export default function Coach() {
           )}
         </div>
 
+        {lastGradeInfo && lastGradeInfo.daysAgo > 7 && (
+          <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            <div className="flex items-center gap-2">
+              <span className="text-amber-500">⚠</span>
+              <div>
+                <p className="text-xs font-semibold">Last call graded {lastGradeInfo.daysAgo} days ago</p>
+                <p className="text-[11px] text-muted-foreground">Grade a recent call to refresh your drill queue</p>
+              </div>
+            </div>
+            <p className="text-xs font-mono text-amber-500">{lastGradeInfo.score}/100</p>
+          </div>
+        )}
+
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className={SHELL.tabs.list}>
             <TabsTrigger value="scorecard" className={SHELL.tabs.trigger}>Scorecard</TabsTrigger>
