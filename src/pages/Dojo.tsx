@@ -375,8 +375,17 @@ export default function Dojo() {
             <div className="flex items-center gap-2">
               <span className="text-2xl">🔥</span>
               <div className="text-left">
-                <p className="text-sm font-bold">Day 1 starts now</p>
-                <p className="text-[11px] opacity-80">5 reps to start your streak</p>
+                {lastKnownStreak > 2 ? (
+                  <>
+                    <p className="text-sm font-bold">Streak ended at {lastKnownStreak} days</p>
+                    <p className="text-[11px] opacity-80">1 rep starts the rebuild →</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-bold">Day 1 starts now</p>
+                    <p className="text-[11px] opacity-80">5 reps to start your streak</p>
+                  </>
+                )}
               </div>
             </div>
             <span className="text-lg font-bold">→</span>
