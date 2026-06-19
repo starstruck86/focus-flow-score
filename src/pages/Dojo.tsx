@@ -644,6 +644,23 @@ export default function Dojo() {
             progressSignals={skillMemory?.progressSignals ?? null}
           />
         )}
+        {/* Bottom quick links — progress + review */}
+        <div className="flex gap-2 pt-2 pb-2">
+          <button
+            onClick={() => navigate('/progress')}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-border/60 hover:border-primary/30 text-xs text-muted-foreground hover:text-foreground transition-all"
+          >
+            <TrendingUp className="h-3.5 w-3.5" />
+            Progress
+          </button>
+          <button
+            onClick={() => navigate('/review')}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-border/60 hover:border-primary/30 text-xs text-muted-foreground hover:text-foreground transition-all"
+          >
+            <Target className="h-3.5 w-3.5" />
+            Weekly Review
+          </button>
+        </div>
       </div>
     </Layout>
   );
