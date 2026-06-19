@@ -80,14 +80,17 @@ export default function Benchmark() {
         body: JSON.stringify({
           userResponse: response,
           scenario: {
-            prompt: ki?.example_usage || ki?.tactic_summary || ki?.title || '',
             skillFocus: dim,
-            title: ki?.title || '',
+            context: ki?.when_to_use || ki?.tactic_summary || '',
+            objection: ki?.example_usage || ki?.tactic_summary || '',
           },
           ki: {
-            tactic_summary: ki?.tactic_summary,
-            why_it_matters: ki?.why_it_matters,
-            when_to_use: ki?.when_to_use,
+            title: ki?.title ?? '',
+            tactic_summary: ki?.tactic_summary ?? '',
+            example_usage: ki?.example_usage ?? '',
+            when_to_use: ki?.when_to_use ?? '',
+            when_not_to_use: ki?.when_not_to_use ?? '',
+            why_it_matters: ki?.why_it_matters ?? '',
           },
           benchmarkMode: true,
         }),
@@ -254,8 +257,8 @@ export default function Benchmark() {
                   <CardContent className="p-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-medium">{r.label}</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {r.feedback ? `${r.feedback.substring(0, 80)}…` : ''}
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {r.feedback || ''}
                       </p>
                     </div>
                     <span
