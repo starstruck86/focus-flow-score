@@ -33,6 +33,7 @@ import Auth from "./pages/Auth";
 import Coach from "./pages/Coach";
 import PrepHub from "./pages/PrepHub";
 import Brief from "./pages/Brief";
+import Progress from "./pages/Progress";
 import NotFound from "./pages/NotFound";
 
 import { lazy, Suspense } from "react";
@@ -253,6 +254,8 @@ const App = () => (
                     </ProtectedRoute>
                   } />
                   <Route path="/brief" element={<ProtectedPage routeName="Pre-Call Brief"><Brief /></ProtectedPage>} />
+                  <Route path="/progress" element={<ProtectedPage routeName="Progress"><Progress /></ProtectedPage>} />
+
                   <Route path="/learn/lesson/:id" element={
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback />}>
