@@ -182,12 +182,12 @@ export function TodaysFocus({
   );
 }
 
-function StatCard({ icon: Icon, label, value, color }: { icon: React.ElementType; label: string; value: string; color: string }) {
+function StatCard({ icon: Icon, label, value, color, valueClassName }: { icon: React.ElementType; label: string; value: string; color: string; valueClassName?: string }) {
   return (
     <Card>
       <CardContent className="p-3 flex flex-col items-center gap-1">
         <Icon className={cn('h-4 w-4', color)} />
-        <span className="text-lg font-bold">{value}</span>
+        <span className={cn('text-lg font-bold', valueClassName)}>{value}</span>
         <span className="text-[10px] text-muted-foreground">{label}</span>
       </CardContent>
     </Card>
