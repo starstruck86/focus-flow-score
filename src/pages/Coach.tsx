@@ -1357,6 +1357,28 @@ export default function Coach() {
               <div className="space-y-4">
                 <TranscriptIngestion onSaved={() => refetchTranscripts()} />
 
+                {recentGrades && recentGrades.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">Recent Grades</p>
+                    <div className="flex gap-2">
+                      {recentGrades.slice(0, 3).map((g: any, i: number) => (
+                        <div key={i} className={cn(
+                          'flex-1 rounded-lg border p-2 text-center',
+                          Number(g.overall_score) >= 60 ? 'border-green-500/30 bg-green-500/5' :
+                          Number(g.overall_score) >= 40 ? 'border-amber-500/30 bg-amber-500/5' :
+                          'border-red-500/30 bg-red-500/5'
+                        )}>
+                          <p className={cn('text-lg font-bold font-mono',
+                            Number(g.overall_score) >= 60 ? 'text-green-500' :
+                            Number(g.overall_score) >= 40 ? 'text-amber-500' : 'text-red-500'
+                          )}>{Math.round(Number(g.overall_score))}</p>
+                          <p className="text-[9px] text-muted-foreground">{new Date(g.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {ungraded.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ready to Grade</p>
