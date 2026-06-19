@@ -1175,6 +1175,20 @@ export default function Coach() {
   const gradeTranscript = useGradeTranscript();
   const [selectedTranscriptId, setSelectedTranscriptId] = useState<string | null>(null);
   const { data: selectedGrade } = useTranscriptGrade(selectedTranscriptId || undefined);
+  const aarRef = useRef<HTMLDivElement>(null);
+  const prevGradeId = useRef<string | null>(null);
+
+  // Auto-scroll to AAR when a new grade loads and AAR is not yet completed
+  useEffect(() => {
+    if (selectedGrade?.id && selectedGrade.id !== prevGradeId.current) {
+      prevGradeId.current = selectedGrade.id;
+      if (!(selectedGrade as any).aar_responses) {
+        setTimeout(() => {
+          aarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 2500);
+      }
+    }
+  }, [selectedGrade?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: gradeBreakdownData } = useQuery({
     queryKey: ['all-transcript-grades'],
@@ -1346,12 +1360,23 @@ export default function Coach() {
                     transcriptContent={selectedTranscript?.content}
                   />
                 )}
-                {selectedGrade?.id && (
-                  <AfterActionReview
-                    transcriptGradeId={selectedGrade.id}
-                    existingResponses={(selectedGrade as any).aar_responses}
-                  />
-                )}
+                <div ref={aarRef}>
+                  {selectedGrade?.id && !(selectedGrade as any).aar_responses && (
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-primary/10 border border-primary/20">
+                      <Brain className="h-4 w-4 text-primary shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-primary">After-Action Review</p>
+                        <p className="text-[11px] text-muted-foreground">3 questions to cement what you learned — takes 2 minutes.</p>
+                      </div>
+                    </div>
+                  )}
+                  {selectedGrade?.id && (
+                    <AfterActionReview
+                      transcriptGradeId={selectedGrade.id}
+                      existingResponses={(selectedGrade as any).aar_responses}
+                    />
+                  )}
+                </div>
               </div>
             ) : (
               <div className="space-y-4">
