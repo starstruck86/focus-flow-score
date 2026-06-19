@@ -128,7 +128,7 @@ export default function Brief() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
         body: JSON.stringify({
           scenario: {
-            skillFocus: warmupKI.chapter || 'deal_control',
+            skillFocus: CALL_TYPE_TO_DIMENSION[selectedType?.id ?? 'discovery'] ?? 'discovery',
             context: warmupKI.when_to_use || 'Pre-call scenario',
             objection: warmupKI.example_usage || warmupKI.tactic_summary || 'Apply this play.',
           },
@@ -145,7 +145,7 @@ export default function Brief() {
       });
       const data = await res.json();
       setWarmupScore(data.score ?? 50);
-      setWarmupCoaching(((data.feedback || '').split(/[.!?]/)[0].trim() + '.') || 'Rep recorded.');
+      setWarmupCoaching(data.feedback || 'Rep recorded.');
     } catch {
       setWarmupScore(50);
       setWarmupCoaching("Rep recorded. You're ready.");
@@ -275,10 +275,31 @@ export default function Brief() {
             </div>
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
               <Card>
-                <CardContent className="p-4 space-y-2">
-                  <p className="text-xs font-semibold text-foreground">{warmupKI.title}</p>
-                  <p className="text-xs text-muted-foreground">Apply this play — respond to the scenario:</p>
-                  <p className="text-sm leading-relaxed">{warmupKI.when_to_use || warmupKI.tactic_summary}</p>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider shrink-0">{selectedType?.label}</p>
+                    <p className="text-[10px] text-muted-foreground/60 truncate text-right">{warmupKI.title}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold text-primary uppercase tracking-wider">The play</p>
+                    <p className="text-sm leading-relaxed font-medium">{warmupKI.tactic_summary || warmupKI.when_to_use}</p>
+                  </div>
+                  {warmupKI.when_to_use && warmupKI.tactic_summary && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">When</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {warmupKI.when_to_use.length > 160 ? warmupKI.when_to_use.substring(0, 160) + '…' : warmupKI.when_to_use}
+                      </p>
+                    </div>
+                  )}
+                  {warmupKI.example_usage && (
+                    <div className="pl-3 border-l-2 border-primary/30">
+                      <p className="text-[11px] text-muted-foreground italic">
+                        "{warmupKI.example_usage.length > 130 ? warmupKI.example_usage.substring(0, 130) + '…' : warmupKI.example_usage}"
+                      </p>
+                    </div>
+                  )}
+                  <p className="text-[11px] font-semibold text-primary pt-1">↓ Write how you'd say this on a real call</p>
                 </CardContent>
               </Card>
             </div>

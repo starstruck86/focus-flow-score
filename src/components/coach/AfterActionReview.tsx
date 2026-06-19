@@ -28,6 +28,7 @@ export function AfterActionReview({ transcriptGradeId, existingResponses, onSave
   const [saved, setSaved] = useState(!!existingResponses?.completed_at);
   const [expanded, setExpanded] = useState(!existingResponses?.completed_at);
 
+  const hasAnyAnswer = QUESTIONS.some(q => responses[q.id]?.trim());
   const isComplete = QUESTIONS.every(q => responses[q.id]?.trim());
   const answeredCount = QUESTIONS.filter(q => responses[q.id]?.trim()).length;
 
@@ -92,13 +93,16 @@ export function AfterActionReview({ transcriptGradeId, existingResponses, onSave
 
         <Button
           className="w-full"
-          disabled={!isComplete || saving}
+          variant={isComplete ? 'default' : 'outline'}
+          disabled={!hasAnyAnswer || saving}
           onClick={save}
         >
           {saving ? (
             <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving…</>
-          ) : (
+          ) : isComplete ? (
             <>Save Review <ChevronRight className="h-4 w-4 ml-1" /></>
+          ) : (
+            <>Save Progress ({answeredCount}/5)</>
           )}
         </Button>
       </CardContent>

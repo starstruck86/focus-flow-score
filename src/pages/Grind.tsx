@@ -16,7 +16,7 @@ import { BookOpen, Target, ChevronRight, Loader2, X, CheckCircle2, Brain } from 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const DRILL_REPS = 5;
 
-type GrindPhase = 'pick' | 'concept' | 'drilling' | 'scoring' | 'rep-feedback' | 'reflect' | 'complete';
+type GrindPhase = 'pick' | 'loading' | 'concept' | 'drilling' | 'scoring' | 'rep-feedback' | 'reflect' | 'complete';
 
 interface DrillResult { score: number; coaching: string; ki: any; }
 
@@ -28,7 +28,7 @@ export default function Grind() {
 
   const stateDimension = (location.state as any)?.dimension as string | undefined;
 
-  const [phase, setPhase] = useState<GrindPhase>('pick');
+  const [phase, setPhase] = useState<GrindPhase>(stateDimension ? 'loading' : 'pick');
   const [selectedDimension, setSelectedDimension] = useState(stateDimension ?? '');
   const [conceptKI, setConceptKI] = useState<any>(null);
   const [drillKIs, setDrillKIs] = useState<any[]>([]);

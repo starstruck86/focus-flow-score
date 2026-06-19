@@ -285,7 +285,7 @@ export default function Sharpen() {
     if (newReps.length < TARGET_REPS) {
       const timer = setTimeout(() => {
         loadNextKIRef.current(currentKI.id);
-      }, 3000);
+      }, 6000);
       setAutoAdvanceTimer(timer);
     } else {
       setTimeout(() => setPhase('end'), 1500);
@@ -510,7 +510,7 @@ export default function Sharpen() {
               </div>
             )}
             {repsDone < TARGET_REPS && (
-              <p className="text-[11px] text-center text-muted-foreground">Next rep in 3s…</p>
+              <p className="text-[11px] text-center text-muted-foreground">Next rep in 6s…</p>
             )}
           </div>
         )}
