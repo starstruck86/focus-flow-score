@@ -22,10 +22,13 @@ interface DrillResult { score: number; coaching: string; ki: any; }
 
 export default function Grind() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
 
+  const stateDimension = (location.state as any)?.dimension as string | undefined;
+
   const [phase, setPhase] = useState<GrindPhase>('pick');
-  const [selectedDimension, setSelectedDimension] = useState('');
+  const [selectedDimension, setSelectedDimension] = useState(stateDimension ?? '');
   const [conceptKI, setConceptKI] = useState<any>(null);
   const [drillKIs, setDrillKIs] = useState<any[]>([]);
   const [currentDrillIdx, setCurrentDrillIdx] = useState(0);
