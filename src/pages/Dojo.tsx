@@ -110,15 +110,14 @@ function DailyProgress() {
   })();
   const GOAL = 15;
   const pct = Math.min((repsToday / GOAL) * 100, 100);
-  if (repsToday === 0) return null;
+  
 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">Today</p>
         <p className="text-xs font-mono font-semibold">
-          {repsToday}/{GOAL} reps
-          {repsToday >= GOAL && ' ✓'}
+          {repsToday === 0 ? `0/${GOAL} — start here` : `${repsToday}/${GOAL} reps${repsToday >= GOAL ? ' ✓' : ''}`}
         </p>
       </div>
       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -316,10 +315,36 @@ export default function Dojo() {
             ) : null}
           </div>
         ) : (
-          <div className="flex items-center gap-2 px-1">
-            <span className="text-xl">🎯</span>
-            <p className="text-sm text-muted-foreground">Start your streak today</p>
-          </div>
+          <button
+            onClick={() => navigate('/sharpen')}
+            className="w-full flex items-center justify-between p-3 rounded-xl bg-primary text-primary-foreground active:scale-95 transition-transform"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🔥</span>
+              <div className="text-left">
+                <p className="text-sm font-bold">Day 1 starts now</p>
+                <p className="text-[11px] opacity-80">5 reps to start your streak</p>
+              </div>
+            </div>
+            <span className="text-lg font-bold">→</span>
+          </button>
+        )}
+
+        {/* Benchmark CTA — always when no benchmark */}
+        {!hasBenchmark && (
+          <button
+            onClick={() => navigate('/benchmark')}
+            className="w-full text-left p-2.5 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-primary shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-primary">Take Your Baseline Benchmark</p>
+                <p className="text-[11px] text-muted-foreground">10 scenarios · seeds your spider chart · 15 min</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-primary ml-auto shrink-0" />
+            </div>
+          </button>
         )}
 
         <BranchCountdown />
@@ -353,22 +378,6 @@ export default function Dojo() {
           </button>
         )}
 
-        {/* Benchmark CTA — always when no benchmark */}
-        {!hasBenchmark && (
-          <button
-            onClick={() => navigate('/benchmark')}
-            className="w-full text-left p-2.5 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-all"
-          >
-            <div className="flex items-center gap-2">
-              <Target className="h-4 w-4 text-primary shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-primary">Take Your Baseline Benchmark</p>
-                <p className="text-[11px] text-muted-foreground">10 scenarios · seeds your spider chart · 15 min</p>
-              </div>
-              <ChevronRight className="h-4 w-4 text-primary ml-auto shrink-0" />
-            </div>
-          </button>
-        )}
 
         {/* Proactive Dave — always visible */}
         <ProactiveDaveCard onMicroDrill={() => navigate('/sharpen')} />
