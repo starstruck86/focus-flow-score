@@ -164,8 +164,25 @@ export default function Progress() {
             <TrendingUp className="h-5 w-5 text-primary" />
             <h1 className="font-display text-xl font-bold">Progress</h1>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>← Back</Button>
+        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>← Back</Button>
         </div>
+
+        {weekSummary && (
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: 'Sessions', value: weekSummary.sessions },
+              { label: 'Reps', value: weekSummary.reps },
+              { label: 'Avg Score', value: weekSummary.avgScore != null ? `${weekSummary.avgScore}` : '—' },
+            ].map(s => (
+              <Card key={s.label}>
+                <CardContent className="p-3 text-center">
+                  <p className="text-xl font-bold font-mono">{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground">{s.label} this week</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
         <Card>
           <CardContent className="p-4">
