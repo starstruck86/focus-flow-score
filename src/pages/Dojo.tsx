@@ -280,6 +280,7 @@ export default function Dojo() {
         )}
 
         <BranchCountdown />
+        <DailyProgress />
 
         {/* Mature-only: Block Header */}
         {isMature && activeBlock && (
