@@ -187,7 +187,9 @@ export default function WeeklyReview() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs text-muted-foreground">Avg drill score this week</p>
-                      <p className="text-3xl font-bold font-mono">{weeklyData.avgScoreThisWeek}</p>
+                      <p className={cn('text-3xl font-bold font-mono',
+                        (weeklyData.avgScoreThisWeek ?? 0) >= 70 ? 'text-green-500' : (weeklyData.avgScoreThisWeek ?? 0) >= 50 ? 'text-amber-500' : 'text-red-500'
+                      )}>{weeklyData.avgScoreThisWeek}</p>
                     </div>
                     {scoreDelta !== null && (
                       <div className={cn('flex items-center gap-1 text-sm font-medium',

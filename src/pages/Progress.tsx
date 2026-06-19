@@ -167,7 +167,7 @@ export default function Progress() {
         <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>← Back</Button>
         </div>
 
-        {weekSummary && (
+        {weekSummary && (weekSummary.sessions > 0 || weekSummary.reps > 0) && (
           <div className="grid grid-cols-3 gap-2">
             {[
               { label: 'Sessions', value: weekSummary.sessions },

@@ -167,19 +167,27 @@ export function TodaysFocus({
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-3">
         <StatCard icon={Flame} label="Streak" value={`${streak}d`} color="text-orange-500" />
-        <StatCard icon={Target} label="Last Score" value={lastScore != null ? `${lastScore}` : '—'} color="text-blue-500" />
+        <StatCard
+          icon={Target}
+          label="Last Score"
+          value={lastScore != null ? `${lastScore}` : '—'}
+          color="text-blue-500"
+          valueClassName={lastScore != null ? (
+            lastScore >= 70 ? 'text-green-500' : lastScore >= 50 ? 'text-amber-500' : 'text-red-500'
+          ) : undefined}
+        />
         <StatCard icon={Zap} label="Best" value={bestScore ? `${bestScore}` : '—'} color="text-yellow-500" />
       </div>
     </div>
   );
 }
 
-function StatCard({ icon: Icon, label, value, color }: { icon: React.ElementType; label: string; value: string; color: string }) {
+function StatCard({ icon: Icon, label, value, color, valueClassName }: { icon: React.ElementType; label: string; value: string; color: string; valueClassName?: string }) {
   return (
     <Card>
       <CardContent className="p-3 flex flex-col items-center gap-1">
         <Icon className={cn('h-4 w-4', color)} />
-        <span className="text-lg font-bold">{value}</span>
+        <span className={cn('text-lg font-bold', valueClassName)}>{value}</span>
         <span className="text-[10px] text-muted-foreground">{label}</span>
       </CardContent>
     </Card>
