@@ -109,6 +109,36 @@ export default function Progress() {
     },
   });
 
+  const { data: weekSummary } = useQuery({
+    queryKey: ['progress-week-summary'],
+    queryFn: async () => {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u) return null;
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const [{ count: sessions }, { data: turns }] = await Promise.all([
+        (supabase as any).from('dojo_sessions').select('id', { count: 'exact', head: true }).eq('user_id', u.id).eq('status', 'completed').gte('completed_at', weekAgo),
+        (supabase as any).from('dojo_session_turns').select('score').eq('user_id', u.id).gte('created_at', weekAgo),
+      ]);
+      const scores = (turns ?? []).map((t: any) => Number(t.score)).filter(Boolean);
+      const avgScore = scores.length > 0 ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : null;
+      return { sessions: sessions ?? 0, reps: scores.length, avgScore };
+    },
+  });
+
+  const { data: dimPerf } = useQuery({
+    queryKey: ['dimension-performance'],
+    queryFn: async () => {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u) return [];
+      const { data } = await (supabase as any)
+        .from('dimension_scores')
+        .select('spider_dimension, avg_score_100')
+        .eq('user_id', u.id)
+        .order('avg_score_100', { ascending: true });
+      return data ?? [];
+    },
+  });
+
   const callTrend = useMemo(() =>
     grades ? groupByWeek(grades as any[], (g: any) => (g.overall_score ?? 0)) : [],
     [grades],
