@@ -101,15 +101,16 @@ export function useUpsertProgress() {
   return useMutation({
     mutationFn: async (params: { lessonId: string; status: string; mastery_score?: number }) => {
       if (!user) throw new Error('Not authenticated');
-      const { error } = await supabase
-        .from('learning_progress' as any)
+      const { error } = await (supabase as any)
+        .from('user_lesson_progress')
         .upsert({
           user_id: user.id,
           lesson_id: params.lessonId,
           status: params.status,
           mastery_score: params.mastery_score ?? null,
           last_attempt_at: new Date().toISOString(),
-        } as any, { onConflict: 'user_id,lesson_id' });
+          ...(params.status === 'passed' ? { passed_at: new Date().toISOString() } : {}),
+        }, { onConflict: 'user_id,lesson_id' });
       if (error) throw error;
     },
     onSuccess: () => {

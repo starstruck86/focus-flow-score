@@ -110,10 +110,11 @@ export default function LearnLesson() {
     const totalMC = lesson.quiz_content?.mc_questions?.length || 1;
     const mcPct = mcScore / totalMC;
     const overallMastery = (mcPct * 0.4 + (openScore / 100) * 0.6);
+    const masteryPct = Math.round(overallMastery * 100);
     upsertProgress.mutate({
       lessonId: lesson.id,
-      status: 'completed',
-      mastery_score: Math.round(overallMastery * 100) / 100,
+      status: masteryPct >= 70 ? 'passed' : 'completed',
+      mastery_score: masteryPct,
     });
     setPhase('results');
   }, [lesson, mcScore, openScore, upsertProgress]);
