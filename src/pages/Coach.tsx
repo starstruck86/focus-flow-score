@@ -1027,6 +1027,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
               className="overflow-hidden"
             >
               <div className="px-3 pb-3 space-y-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-primary">Grade a Call</p>
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs">Transcript</Label>
