@@ -2,25 +2,31 @@ import { supabase } from '@/integrations/supabase/client';
 
 export interface NextKIResult {
   id: string;
+  title: string;
   chapter: string;
+  sub_chapter: string | null;
   spider_dimension: string | null;
   tactic_summary: string;
-  macro_situation: string | null;
-  micro_strategy: string | null;
   when_to_use: string | null;
   when_not_to_use: string | null;
-  how_to_execute: string | null;
   example_usage: string | null;
   why_it_matters: string | null;
-  what_this_unlocks: string | null;
   framework: string | null;
-  who: string | null;
+  confidence_score: number | null;
+  active: boolean;
+  // Legacy fields no longer returned by the RPC — kept optional so callers compile
+  macro_situation?: string | null;
+  micro_strategy?: string | null;
+  how_to_execute?: string | null;
+  what_this_unlocks?: string | null;
+  who?: string | null;
 }
 
 /**
  * Fetches the next KI to drill for a given spider dimension.
- * Server-side priority: decaying → undrilled → lowest score.
- * No large IN-clause string building.
+ * Server-side adaptive difficulty: filters confidence_score band based on
+ * rolling 10-rep avg for the dimension (advanced >70, foundational <50).
+ * Then prioritizes: decaying → undrilled → lowest score.
  */
 export async function selectNextKI(
   userId: string,
@@ -30,7 +36,7 @@ export async function selectNextKI(
   const { data, error } = await supabase.rpc('get_next_ki_for_dimension', {
     p_user_id: userId,
     p_spider_dimension: spiderDimension,
-    p_exclude_ki_id: excludeKiId ?? null,
+    p_limit: excludeKiId ? 5 : 1,
   });
 
   if (error) {
@@ -38,6 +44,7 @@ export async function selectNextKI(
     return null;
   }
 
-  const rows = data as NextKIResult[] | null;
-  return rows?.[0] ?? null;
+  const rows = (data as unknown as NextKIResult[]) ?? [];
+  const filtered = excludeKiId ? rows.filter(r => r.id !== excludeKiId) : rows;
+  return filtered[0] ?? null;
 }
