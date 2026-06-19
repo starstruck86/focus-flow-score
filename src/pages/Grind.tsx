@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { selectNextKI } from '@/lib/dojo/selectNextKI';
@@ -24,6 +24,7 @@ export default function Grind() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   const stateDimension = (location.state as any)?.dimension as string | undefined;
 
@@ -70,14 +71,17 @@ export default function Grind() {
     const { data: { session } } = await supabase.auth.getSession();
     let score = 50;
     let coaching = '';
+    let recognitionScore: number | null = null;
+    let executionScore: number | null = null;
+    let awarenessScore: number | null = null;
 
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/dojo-score`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-        body: JSON.stringify({
+          body: JSON.stringify({
           scenario: {
-            skillFocus: ki.chapter || selectedDimension,
+            skillFocus: selectedDimension,
             context: ki.when_to_use || 'Enterprise sales scenario',
             objection: ki.example_usage || ki.tactic_summary || 'Apply this play.',
           },
@@ -94,17 +98,25 @@ export default function Grind() {
       });
       const data = await res.json();
       score = data.score ?? 50;
-      coaching = (data.feedback || '').split(/[.!?]/)[0].trim() + '.';
+      coaching = data.feedback || '';
+      recognitionScore = data.recognitionScore ?? null;
+      executionScore = data.executionScore ?? null;
+      awarenessScore = data.awarenessScore ?? null;
     } catch { coaching = 'Rep recorded.'; }
 
     writeKIMastery({
       userId: user.id, kiId: ki.id, chapter: ki.chapter,
       spiderDimension: ki.spider_dimension ?? null, score,
+      recognitionScore, executionScore, awarenessScore,
     }).catch(() => {});
 
     const result: DrillResult = { score, coaching, ki };
     setDrillResults(prev => [...prev, result]);
     setCurrentResult(result);
+    // Increment daily rep counter (same key as Sharpen DailyRepCounter)
+    const repKey = `daily_reps_${new Date().toISOString().split('T')[0]}`;
+    const todayReps = parseInt(localStorage.getItem(repKey) ?? '0', 10);
+    localStorage.setItem(repKey, String(todayReps + 1));
     setPhase('rep-feedback');
   }, [drillKIs, currentDrillIdx, response, user, selectedDimension]);
 
@@ -351,7 +363,29 @@ export default function Grind() {
           </div>
         </div>
         <div className="border-t border-border px-4 py-3 pb-safe bg-background">
-          <Button className="w-full" onClick={() => setPhase('complete')}>
+          <Button className="w-full" onClick={() => {
+            if (user && drillResults.length > 0) {
+              const now = new Date().toISOString();
+              const approxStart = new Date(Date.now() - drillResults.length * 55000).toISOString();
+              supabase.from('dojo_sessions').insert({
+                user_id: user.id,
+                mode: 'grind',
+                session_type: 'drill',
+                skill_focus: selectedDimension,
+                difficulty: 'standard',
+                status: 'completed',
+                best_score: Math.max(...drillResults.map(r => r.score)),
+                latest_score: avgScore,
+                retry_count: 0,
+                started_at: approxStart,
+                completed_at: now,
+                benchmark_tag: false,
+              }).then(() => {
+                queryClient.invalidateQueries({ queryKey: ['dojo-stats', user.id] });
+              });
+            }
+            setPhase('complete');
+          }}>
             <CheckCircle2 className="h-4 w-4 mr-2" />
             Complete Session
           </Button>
