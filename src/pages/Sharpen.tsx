@@ -510,7 +510,7 @@ export default function Sharpen() {
               </div>
             )}
             {repsDone < TARGET_REPS && (
-              <p className="text-[11px] text-center text-muted-foreground">Next rep in 3s…</p>
+              <p className="text-[11px] text-center text-muted-foreground">Next rep in 6s…</p>
             )}
           </div>
         )}
