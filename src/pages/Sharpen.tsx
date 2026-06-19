@@ -310,7 +310,7 @@ export default function Sharpen() {
     return (
       <div className="fixed inset-0 bg-background flex flex-col">
         {/* Score hero */}
-        <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
+        <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center px-6 gap-6 py-4">
           <div className="text-center space-y-1">
             <p className={cn(
               'text-7xl font-bold font-mono leading-none',
