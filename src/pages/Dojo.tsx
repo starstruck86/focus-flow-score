@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Layout } from '@/components/Layout';
@@ -34,6 +34,7 @@ import { BlockComparisonView } from '@/components/dojo/BlockComparisonView';
 import { MasteryLanes } from '@/components/dojo/MasteryLanes';
 import { ResumeLaneBanner } from '@/components/dojo/ResumeLaneBanner';
 import { Card, CardContent } from '@/components/ui/card';
+import { MicroDrillSession } from '@/components/dojo/MicroDrillSession';
 import { Button } from '@/components/ui/button';
 import { Flame, Target, ChevronRight, Zap, Brain } from 'lucide-react';
 import { useIntensiveMode } from '@/hooks/useIntensiveMode';
@@ -180,6 +181,18 @@ export default function Dojo() {
     });
   };
 
+  const [microDimension, setMicroDimension] = useState<string | null>(null);
+
+  if (microDimension && user) {
+    return (
+      <MicroDrillSession
+        userId={user.id}
+        dimension={microDimension}
+        onExit={() => setMicroDimension(null)}
+      />
+    );
+  }
+
   return (
     <Layout>
       <div className={cn('px-4 pt-4 space-y-6', SHELL.main.bottomPad)}>
@@ -282,6 +295,20 @@ export default function Dojo() {
             <div>
               <p className="text-sm font-medium">Recognition Drill</p>
               <p className="text-[11px] text-muted-foreground">Identify which play applies · 30-sec reps · no writing</p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
+          </div>
+        </button>
+
+        <button
+          onClick={() => setMicroDimension(skillStats[0]?.skill ?? 'discovery')}
+          className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+        >
+          <div className="flex items-center gap-2">
+            <Flame className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-sm font-medium">Quick Drill</p>
+              <p className="text-[11px] text-muted-foreground">Fast-fire reps · Enter to submit · auto-advances</p>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
           </div>
