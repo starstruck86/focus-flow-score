@@ -5,7 +5,7 @@ import { Layout } from '@/components/Layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Target, AlertTriangle, Sparkles, Loader2, TrendingUp } from 'lucide-react';
+import { Target, AlertTriangle, Sparkles, Loader2, TrendingUp, TrendingDown, Minus, ChevronRight, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { selectNextKI } from '@/lib/dojo/selectNextKI';
 import {
@@ -37,6 +37,7 @@ export default function Skills() {
   const navigate = useNavigate();
   const { data, isLoading } = useKiProficiency();
   const [loadingDim, setLoadingDim] = useState<SpiderDimensionKey | null>(null);
+  const [selectedDim, setSelectedDim] = useState<string | null>(null);
 
   const { data: branchReadiness } = useQuery({
     queryKey: ['branch-readiness'],
@@ -176,6 +177,31 @@ export default function Skills() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Tappable dimension list */}
+        <div className="space-y-2">
+          {dimensions.map(dim => (
+            <button
+              key={dim.dimension}
+              onClick={() => setSelectedDim(dim.dimension)}
+              className="w-full flex items-center justify-between p-2.5 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all text-left"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: dim.color }} />
+                <span className="text-sm font-medium">{dim.label}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                {dim.call_score != null && (
+                  <span className={cn('text-xs font-mono',
+                    dim.call_score < 40 ? 'text-red-500' : dim.call_score < 60 ? 'text-amber-500' : 'text-green-500'
+                  )}>{Math.round(dim.call_score)}</span>
+                )}
+                <span className="text-xs text-muted-foreground font-mono">{dim.total_reps}r</span>
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              </div>
+            </button>
+          ))}
+        </div>
 
         {dimensions.some(d => d.stagnant && (d.call_score ?? 100) < 50) && (
           <Card className="border-red-500/30 bg-red-500/5">
@@ -360,6 +386,91 @@ export default function Skills() {
           </div>
         </div>
       </div>
+
+      {selectedDim && (() => {
+        const dim = dimensions.find(d => d.dimension === selectedDim);
+        if (!dim) return null;
+        return (
+          <div className="fixed inset-0 bg-background z-50 flex flex-col">
+            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-border/40">
+              <div className="flex items-center gap-2">
+                <div className="h-3 w-3 rounded-full" style={{ background: dim.color }} />
+                <span className="text-base font-bold">{dim.label}</span>
+              </div>
+              <button onClick={() => setSelectedDim(null)} className="text-muted-foreground p-1">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <Card>
+                  <CardContent className="p-3 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Real Calls</p>
+                    <p className={cn('text-2xl font-bold font-mono mt-1',
+                      dim.call_score == null ? 'text-muted-foreground' :
+                      dim.call_score < 40 ? 'text-red-500' : dim.call_score < 60 ? 'text-amber-500' : 'text-green-500'
+                    )}>
+                      {dim.call_score != null ? Math.round(dim.call_score) : '—'}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{dim.call_count} calls</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Practice</p>
+                    <p className={cn('text-2xl font-bold font-mono mt-1',
+                      dim.avg_score === 0 ? 'text-muted-foreground' :
+                      dim.avg_score < 50 ? 'text-red-500' : dim.avg_score < 70 ? 'text-amber-500' : 'text-green-500'
+                    )}>
+                      {dim.avg_score > 0 ? dim.avg_score : '—'}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{dim.total_reps} reps</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {dim.trend && (
+                <div className="flex items-center gap-2 px-1">
+                  {dim.trend === 'up' ? <TrendingUp className="h-4 w-4 text-green-500" /> :
+                   dim.trend === 'down' ? <TrendingDown className="h-4 w-4 text-red-500" /> :
+                   <Minus className="h-4 w-4 text-muted-foreground" />}
+                  <span className="text-sm text-muted-foreground">
+                    {dim.trend === 'up' ? 'Improving over the last 30 days' :
+                     dim.trend === 'down' ? 'Declining — needs attention' :
+                     'Flat — consistent but not growing'}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between px-1">
+                <p className="text-xs text-muted-foreground">KI Library</p>
+                <p className="text-xs font-medium">{dim.library_count.toLocaleString()} plays available</p>
+              </div>
+
+              <Button
+                className="w-full"
+                onClick={() => {
+                  setSelectedDim(null);
+                  navigate('/sharpen', { state: { dimension: dim.dimension } });
+                }}
+              >
+                Drill {dim.label} →
+              </Button>
+
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setSelectedDim(null);
+                  navigate('/grind', { state: { dimension: dim.dimension } });
+                }}
+              >
+                Deep Session →
+              </Button>
+            </div>
+          </div>
+        );
+      })()}
     </Layout>
   );
 }

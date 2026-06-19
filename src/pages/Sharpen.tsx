@@ -35,6 +35,7 @@ export default function Sharpen() {
   const navigate = useNavigate();
   const location = useLocation();
   const interleaved = (location.state as any)?.interleaved ?? false;
+  const stateDimension = (location.state as any)?.dimension;
   const { user } = useAuth();
   const { data: stats } = useDojoStats();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -70,6 +71,10 @@ export default function Sharpen() {
   }, [user]);
 
   useEffect(() => {
+    if (stateDimension) {
+      setDimension(stateDimension);
+      return;
+    }
     const skillBreakdown = (stats as any)?.skillBreakdown;
     if (skillBreakdown?.length) {
       const sorted = [...skillBreakdown].sort((a: any, b: any) => a.avgFirstAttempt - b.avgFirstAttempt);
@@ -86,7 +91,7 @@ export default function Sharpen() {
     } else {
       setDimension('deal_control');
     }
-  }, [stats]);
+  }, [stats, stateDimension]);
 
   const loadNextKI = useCallback(async (excludeId?: string) => {
     if (!user) return;
