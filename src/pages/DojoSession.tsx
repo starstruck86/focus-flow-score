@@ -640,25 +640,26 @@ export default function DojoSession() {
           <RecognitionDrill
             ki={{
               id: (kiContext ?? kiContextOverride)!.id,
-              title: (kiContext ?? kiContextOverride)!.title,
               tactic_summary: (kiContext ?? kiContextOverride)!.tactic_summary ?? '',
               example_usage: (kiContext ?? kiContextOverride)!.example_usage ?? '',
               spider_dimension: (kiContext ?? kiContextOverride)!.spider_dimension ?? 'discovery',
             }}
-            onResult={(correct, score) => {
+            onResult={(_correct, score) => {
               const activeKI = kiContext ?? kiContextOverride;
               if (user && activeKI) {
                 writeKIMastery({
                   userId: user.id,
-                  ki: activeKI,
+                  kiId: activeKI.id,
+                  chapter: activeKI.chapter,
+                  spiderDimension: activeKI.spider_dimension ?? null,
                   score,
-                  feedback: correct ? 'Correct pattern recognition' : 'Incorrect — review the play',
                 }).catch(err => console.error('[RecognitionDrill] writeKIMastery failed:', err));
               }
               setTimeout(() => handleNextRep(), 2000);
             }}
           />
         )}
+
 
         {/* ── Drill Mode ── */}
         {sessionType === 'drill' && (

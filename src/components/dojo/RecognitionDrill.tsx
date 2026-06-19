@@ -7,7 +7,6 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface RecognitionKI {
   id: string;
-  title: string;
   tactic_summary: string;
   example_usage: string;
   spider_dimension: string;
@@ -19,37 +18,50 @@ interface RecognitionDrillProps {
 }
 
 export function RecognitionDrill({ ki, onResult }: RecognitionDrillProps) {
+  const [correctTitle, setCorrectTitle] = useState<string | null>(null);
   const [options, setOptions] = useState<string[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
-    (supabase as any)
-      .from('knowledge_items')
-      .select('title')
-      .eq('spider_dimension', ki.spider_dimension)
-      .eq('is_core_ae', true)
-      .eq('active', true)
-      .neq('id', ki.id)
-      .order('confidence_score', { ascending: false })
-      .limit(20)
-      .then(({ data }: any) => {
-        if (!data) return;
-        const shuffled = [...data].sort(() => Math.random() - 0.5).slice(0, 3);
-        const all = [ki.title, ...shuffled.map((d: any) => d.title)];
-        setOptions(all.sort(() => Math.random() - 0.5));
-      });
-  }, [ki.id, ki.spider_dimension, ki.title]);
+    let cancelled = false;
+    (async () => {
+      const { data: self } = await (supabase as any)
+        .from('knowledge_items')
+        .select('title')
+        .eq('id', ki.id)
+        .maybeSingle();
+      if (cancelled || !self?.title) return;
+
+      const { data: peers } = await (supabase as any)
+        .from('knowledge_items')
+        .select('title')
+        .eq('spider_dimension', ki.spider_dimension)
+        .eq('is_core_ae', true)
+        .eq('active', true)
+        .neq('id', ki.id)
+        .order('confidence_score', { ascending: false })
+        .limit(20);
+
+      if (cancelled) return;
+      const pool: { title: string }[] = peers ?? [];
+      const distractors = [...pool].sort(() => Math.random() - 0.5).slice(0, 3).map(d => d.title);
+      const all = [self.title, ...distractors].sort(() => Math.random() - 0.5);
+      setCorrectTitle(self.title);
+      setOptions(all);
+    })();
+    return () => { cancelled = true; };
+  }, [ki.id, ki.spider_dimension]);
 
   const select = useCallback((opt: string) => {
-    if (revealed) return;
+    if (revealed || !correctTitle) return;
     setSelected(opt);
     setRevealed(true);
-    const correct = opt === ki.title;
+    const correct = opt === correctTitle;
     onResult(correct, correct ? 100 : 0);
-  }, [revealed, ki.title, onResult]);
+  }, [revealed, correctTitle, onResult]);
 
-  if (options.length === 0) {
+  if (options.length === 0 || !correctTitle) {
     return (
       <Card>
         <CardContent className="p-4">
@@ -76,7 +88,7 @@ export function RecognitionDrill({ ki, onResult }: RecognitionDrillProps) {
       <div className="space-y-2">
         {options.map((opt) => {
           const isSelected = selected === opt;
-          const isCorrect = opt === ki.title;
+          const isCorrect = opt === correctTitle;
           const showResult = revealed;
 
           return (
@@ -115,11 +127,11 @@ export function RecognitionDrill({ ki, onResult }: RecognitionDrillProps) {
       {revealed && (
         <Card className={cn(
           'border',
-          selected === ki.title ? 'border-green-500/30 bg-green-500/5' : 'border-amber-500/30 bg-amber-500/5'
+          selected === correctTitle ? 'border-green-500/30 bg-green-500/5' : 'border-amber-500/30 bg-amber-500/5'
         )}>
           <CardContent className="p-3">
             <p className="text-xs font-medium mb-1">
-              {selected === ki.title ? '✓ Correct' : `✗ The play was: ${ki.title}`}
+              {selected === correctTitle ? '✓ Correct' : `✗ The play was: ${correctTitle}`}
             </p>
             <p className="text-xs text-muted-foreground">{ki.tactic_summary}</p>
           </CardContent>
