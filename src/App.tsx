@@ -59,6 +59,7 @@ const DojoQA = lazy(() => import("./pages/DojoQA"));
 const DojoV6QA = lazy(() => import("./pages/DojoV6QA"));
 const Sharpen = lazy(() => import("./pages/Sharpen"));
 const Grind = lazy(() => import("./pages/Grind"));
+const WeeklyReview = lazy(() => import("./pages/WeeklyReview"));
 const Learn = lazy(() => import("./pages/Learn"));
 const Skills = lazy(() => import("./pages/Skills"));
 const LearnLesson = lazy(() => import("./pages/LearnLesson"));
@@ -270,7 +271,14 @@ const App = () => (
                     </ProtectedRoute>
                   } />
                   <Route path="/brief" element={<ProtectedPage routeName="Pre-Call Brief"><Brief /></ProtectedPage>} />
-                  <Route path="/progress" element={<ProtectedPage routeName="Progress"><Progress /></ProtectedPage>} />
+                   <Route path="/progress" element={<ProtectedPage routeName="Progress"><Progress /></ProtectedPage>} />
+                   <Route path="/review" element={
+                     <ProtectedRoute>
+                       <Suspense fallback={<LazyFallback />}>
+                         <WeeklyReview />
+                       </Suspense>
+                     </ProtectedRoute>
+                   } />
 
                   <Route path="/learn/lesson/:id" element={
                     <ProtectedRoute>
