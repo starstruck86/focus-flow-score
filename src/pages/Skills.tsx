@@ -177,6 +177,21 @@ export default function Skills() {
           </CardContent>
         </Card>
 
+        {dimensions.some(d => d.stagnant && (d.call_score ?? 100) < 50) && (
+          <Card className="border-red-500/30 bg-red-500/5">
+            <CardContent className="p-3">
+              <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-1">⚠ Regression Risk</p>
+              <p className="text-xs text-muted-foreground">
+                {dimensions
+                  .filter(d => d.stagnant && (d.call_score ?? 100) < 50)
+                  .map(d => d.label)
+                  .join(', ')}{' '}
+                {dimensions.filter(d => d.stagnant && (d.call_score ?? 100) < 50).length === 1 ? 'has' : 'have'} shown no improvement in 30 days and score below 50 on real calls.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Branch.io Readiness */}
         <Card className={cn(
           'border',
@@ -220,6 +235,36 @@ export default function Skills() {
             )}
           </CardContent>
         </Card>
+
+        {dimensions.some(d => d.trend !== null) && (
+          <Card>
+            <CardContent className="p-3">
+              <p className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wide">30-Day Trend</p>
+              <div className="space-y-1.5">
+                {dimensions
+                  .filter(d => d.trend !== null || d.stagnant)
+                  .map(d => (
+                    <div key={d.dimension} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-muted-foreground">{d.label}</span>
+                      <div className="flex items-center gap-1.5">
+                        {d.stagnant && (
+                          <span className="text-[10px] text-amber-500 font-medium">STAGNANT</span>
+                        )}
+                        <span className={cn(
+                          'font-semibold',
+                          d.trend === 'up' ? 'text-green-500' :
+                          d.trend === 'down' ? 'text-red-500' : 'text-muted-foreground'
+                        )}>
+                          {d.trend === 'up' ? '↑' : d.trend === 'down' ? '↓' : '→'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
 
         <Button
           variant="outline"

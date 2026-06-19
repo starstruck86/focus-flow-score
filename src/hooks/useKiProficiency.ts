@@ -31,6 +31,8 @@ export interface DimensionProficiency {
   last_drilled_at: string | null;
   call_score: number | null;   // real call performance (0-100)
   call_count: number;          // graded calls in this dimension
+  trend: 'up' | 'down' | 'flat' | null;
+  stagnant: boolean;
 }
 
 export interface KiProficiencyData {
@@ -95,6 +97,30 @@ export function useKiProficiency() {
         callCountMap[row.spider_dimension] = Number(row.call_count) || 0;
       });
 
+      // Fetch ki_mastery weekly data for trend calculation
+      const { data: weeklyData } = await (supabase as any)
+        .from('ki_mastery_weekly')
+        .select('spider_dimension, week_start, weekly_avg')
+        .eq('user_id', user.id)
+        .gte('week_start', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+        .order('week_start', { ascending: true });
+
+      const trendMap: Record<string, 'up' | 'down' | 'flat' | null> = {};
+      const stagnantMap: Record<string, boolean> = {};
+      SPIDER_DIMENSIONS.forEach(dim => {
+        const dimWeeks = (weeklyData ?? []).filter((r: any) => r.spider_dimension === dim.key);
+        if (dimWeeks.length < 2) {
+          trendMap[dim.key] = null;
+          stagnantMap[dim.key] = false;
+          return;
+        }
+        const earliest = Number((dimWeeks[0] as any).weekly_avg) || 0;
+        const latest = Number((dimWeeks[dimWeeks.length - 1] as any).weekly_avg) || 0;
+        const delta = latest - earliest;
+        trendMap[dim.key] = delta > 2 ? 'up' : delta < -2 ? 'down' : 'flat';
+        stagnantMap[dim.key] = Math.abs(delta) <= 2;
+      });
+
       const masteryMap: Record<string, {
         drilled_count: number;
         total_reps: number;
@@ -133,6 +159,8 @@ export function useKiProficiency() {
             avg_score: 0, best_score: 0, proficiency: 0,
             decay_risk_count: 0, last_drilled_at: null,
             call_score, call_count,
+            trend: trendMap[key] ?? null,
+            stagnant: stagnantMap[key] ?? false,
           };
         }
 
@@ -151,6 +179,8 @@ export function useKiProficiency() {
           decay_risk_count: m.decay_risk_count,
           last_drilled_at: m.last_drilled_at,
           call_score, call_count,
+          trend: trendMap[key] ?? null,
+          stagnant: stagnantMap[key] ?? false,
         };
       });
 

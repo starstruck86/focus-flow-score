@@ -9520,6 +9520,24 @@ export type Database = {
         }
         Relationships: []
       }
+      ki_mastery_weekly: {
+        Row: {
+          ki_count: number | null
+          spider_dimension: string | null
+          user_id: string | null
+          week_start: string | null
+          weekly_avg: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ki_mastery_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       resource_truth_drift: {
         Row: {
           active_ki_count: number | null
