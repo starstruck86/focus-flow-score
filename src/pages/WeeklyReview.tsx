@@ -96,7 +96,7 @@ export default function WeeklyReview() {
         }
       });
 
-      const callScores = (callGrades.data || []).map((g: any) => Number(g.overall_score) * 20).filter(Boolean);
+      const callScores = (callGrades.data || []).map((g: any) => Number(g.overall_score)).filter((s: number) => s > 0);
 
       return {
         sessionsThisWeek: thisScores.length,
@@ -229,7 +229,7 @@ export default function WeeklyReview() {
               <CardContent className="p-4 space-y-3">
                 <p className="text-sm font-semibold">Set Monday's focus</p>
                 <div className="grid grid-cols-2 gap-2">
-                  {SPIDER_DIMENSIONS.slice(0, 6).map(dim => (
+                  {SPIDER_DIMENSIONS.map(dim => (
                     <button
                       key={dim.key}
                       onClick={() => setFocusDimension(dim.key)}

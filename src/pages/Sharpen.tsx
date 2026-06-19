@@ -44,6 +44,7 @@ export default function Sharpen() {
   const [dimension, setDimension] = useState('discovery');
   const [response, setResponse] = useState('');
   const [repsDone, setRepsDone] = useState(0);
+  const repsDoneRef = useRef(0);
   const [reps, setReps] = useState<Rep[]>([]);
   const [currentScore, setCurrentScore] = useState<number | null>(null);
   const [currentCoaching, setCurrentCoaching] = useState('');
