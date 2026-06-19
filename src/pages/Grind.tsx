@@ -130,9 +130,14 @@ export default function Grind() {
     return (
       <div className="fixed inset-0 bg-background flex flex-col">
         <div className="flex items-center justify-between px-4 pt-safe pt-4 pb-3 border-b border-border/40">
-          <div className="flex items-center gap-2">
-            <Brain className="h-4 w-4 text-primary" />
-            <span className="text-sm font-semibold">Grind Session</span>
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <Brain className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold">Grind Session</span>
+            </div>
+            {selectedDimension && (
+              <span className="text-[10px] text-muted-foreground ml-6">Drilling: {dimLabel}</span>
+            )}
           </div>
           <button onClick={() => navigate('/dojo')} className="text-muted-foreground p-1"><X className="h-4 w-4" /></button>
         </div>
