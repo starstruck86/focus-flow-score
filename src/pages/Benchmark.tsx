@@ -80,14 +80,17 @@ export default function Benchmark() {
         body: JSON.stringify({
           userResponse: response,
           scenario: {
-            prompt: ki?.example_usage || ki?.tactic_summary || ki?.title || '',
             skillFocus: dim,
-            title: ki?.title || '',
+            context: ki?.when_to_use || ki?.tactic_summary || '',
+            objection: ki?.example_usage || ki?.tactic_summary || '',
           },
           ki: {
-            tactic_summary: ki?.tactic_summary,
-            why_it_matters: ki?.why_it_matters,
-            when_to_use: ki?.when_to_use,
+            title: ki?.title ?? '',
+            tactic_summary: ki?.tactic_summary ?? '',
+            example_usage: ki?.example_usage ?? '',
+            when_to_use: ki?.when_to_use ?? '',
+            when_not_to_use: ki?.when_not_to_use ?? '',
+            why_it_matters: ki?.why_it_matters ?? '',
           },
           benchmarkMode: true,
         }),
