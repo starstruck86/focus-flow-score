@@ -28,6 +28,7 @@ export function AfterActionReview({ transcriptGradeId, existingResponses, onSave
   const [saved, setSaved] = useState(!!existingResponses?.completed_at);
   const [expanded, setExpanded] = useState(!existingResponses?.completed_at);
 
+  const hasAnyAnswer = QUESTIONS.some(q => responses[q.id]?.trim());
   const isComplete = QUESTIONS.every(q => responses[q.id]?.trim());
   const answeredCount = QUESTIONS.filter(q => responses[q.id]?.trim()).length;
 
