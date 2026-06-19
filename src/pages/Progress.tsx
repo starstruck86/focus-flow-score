@@ -109,6 +109,36 @@ export default function Progress() {
     },
   });
 
+  const { data: weekSummary } = useQuery({
+    queryKey: ['progress-week-summary'],
+    queryFn: async () => {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u) return null;
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const [{ count: sessions }, { data: turns }] = await Promise.all([
+        (supabase as any).from('dojo_sessions').select('id', { count: 'exact', head: true }).eq('user_id', u.id).eq('status', 'completed').gte('completed_at', weekAgo),
+        (supabase as any).from('dojo_session_turns').select('score').eq('user_id', u.id).gte('created_at', weekAgo),
+      ]);
+      const scores = (turns ?? []).map((t: any) => Number(t.score)).filter(Boolean);
+      const avgScore = scores.length > 0 ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : null;
+      return { sessions: sessions ?? 0, reps: scores.length, avgScore };
+    },
+  });
+
+  const { data: dimPerf } = useQuery({
+    queryKey: ['dimension-performance'],
+    queryFn: async () => {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u) return [];
+      const { data } = await (supabase as any)
+        .from('dimension_scores')
+        .select('spider_dimension, avg_score_100')
+        .eq('user_id', u.id)
+        .order('avg_score_100', { ascending: true });
+      return data ?? [];
+    },
+  });
+
   const callTrend = useMemo(() =>
     grades ? groupByWeek(grades as any[], (g: any) => (g.overall_score ?? 0)) : [],
     [grades],
@@ -134,8 +164,25 @@ export default function Progress() {
             <TrendingUp className="h-5 w-5 text-primary" />
             <h1 className="font-display text-xl font-bold">Progress</h1>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>← Back</Button>
+        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>← Back</Button>
         </div>
+
+        {weekSummary && (
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: 'Sessions', value: weekSummary.sessions },
+              { label: 'Reps', value: weekSummary.reps },
+              { label: 'Avg Score', value: weekSummary.avgScore != null ? `${weekSummary.avgScore}` : '—' },
+            ].map(s => (
+              <Card key={s.label}>
+                <CardContent className="p-3 text-center">
+                  <p className="text-xl font-bold font-mono">{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground">{s.label} this week</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
         <Card>
           <CardContent className="p-4">
@@ -199,7 +246,7 @@ export default function Progress() {
                 <LineChart data={callTrend} margin={{ left: -20, right: 8, top: 4, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="week" tick={{ fontSize: 10 }} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} tickCount={5} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} ticks={[0, 25, 50, 75, 100]} />
                   <Tooltip
                     contentStyle={{ fontSize: 12, borderRadius: 8 }}
                     formatter={(v: any) => [`${v}/100`, 'Avg score']}
@@ -214,6 +261,40 @@ export default function Progress() {
             )}
           </CardContent>
         </Card>
+
+        {dimPerf && dimPerf.length > 0 && (
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <p className="text-sm font-semibold">Call Performance by Skill</p>
+              <p className="text-[11px] text-muted-foreground">From {grades?.length ?? 0} graded calls</p>
+              <div className="space-y-2">
+                {dimPerf.map((d: any) => {
+                  const score = Math.round(Number(d.avg_score_100));
+                  const dim = SPIDER_DIMENSIONS.find(s => s.key === d.spider_dimension);
+                  return (
+                    <div key={d.spider_dimension} className="space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground">{dim?.label ?? d.spider_dimension.replace(/_/g, ' ')}</p>
+                        <p className={cn('text-xs font-mono font-semibold',
+                          score < 40 ? 'text-red-500' : score < 60 ? 'text-amber-500' : 'text-green-500'
+                        )}>{score}</p>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${score}%`,
+                            background: score < 40 ? 'rgb(239,68,68)' : score < 60 ? 'rgb(245,158,11)' : 'rgb(34,197,94)'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardContent className="p-4">
