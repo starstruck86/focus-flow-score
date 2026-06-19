@@ -34,6 +34,7 @@ import Auth from "./pages/Auth";
 import Coach from "./pages/Coach";
 import PrepHub from "./pages/PrepHub";
 import Brief from "./pages/Brief";
+import BatchRegrade from "./pages/BatchRegrade";
 import Progress from "./pages/Progress";
 import NotFound from "./pages/NotFound";
 
@@ -137,6 +138,7 @@ const App = () => (
                   <Route path="/deals" element={<ProtectedPage routeName="Deals"><Deals /></ProtectedPage>} />
                   <Route path="/coach" element={<ProtectedPage routeName="Coach"><Coach /></ProtectedPage>} />
                   {/* Coach is no longer a nav destination — accessible via /coach for transcript grading */}
+                  <Route path="/regrade" element={<ProtectedPage routeName="Batch Regrade"><BatchRegrade /></ProtectedPage>} />
                   <Route path="/prep" element={<ProtectedPage routeName="Sales Brain OS"><PrepHub /></ProtectedPage>} />
                   <Route path="/settings" element={<ProtectedPage routeName="Settings"><Settings /></ProtectedPage>} />
                   <Route path="/strategy" element={
