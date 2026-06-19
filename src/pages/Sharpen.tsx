@@ -441,7 +441,7 @@ export default function Sharpen() {
                     'font-bold',
                     dimScore < 40 ? 'text-red-500' : dimScore < 65 ? 'text-amber-500' : 'text-yellow-500'
                   )}>{dimScore}/100</span>
-                  {' '}from real calls · drilling this
+                  {' '}on real calls · focus area
                 </span>
               </div>
             )}

@@ -66,7 +66,7 @@ export function AfterActionReview({ transcriptGradeId, existingResponses, onSave
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-semibold">After-Action Review</p>
-            <p className="text-xs text-muted-foreground">{answeredCount}/5 questions · feeds Dave for 7 days</p>
+            <p className="text-xs text-muted-foreground">{answeredCount}/5 questions · your call debrief</p>
           </div>
           {answeredCount > 0 && (
             <Badge variant="outline" className="text-xs">{answeredCount}/5</Badge>
