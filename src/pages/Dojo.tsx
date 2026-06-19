@@ -101,7 +101,7 @@ function KrystenCard() {
 
   const handleClick = () => {
     if (isAfterClass) {
-      navigate('/grind', { state: { dimension: 'deal_control' } });
+      navigate('/grind'); // user picks what was covered in class
     } else {
       navigate('/brief');
     }
@@ -111,7 +111,9 @@ function KrystenCard() {
     <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-violet-500/10 border border-violet-500/20">
       <div>
         <p className="text-xs font-semibold">{label}</p>
-        <p className="text-[11px] text-muted-foreground">Enterprise Sales Accelerator</p>
+        <p className="text-[11px] text-muted-foreground">
+          {isAfterClass ? 'Pick what was covered in class' : 'Enterprise Sales Accelerator'}
+        </p>
       </div>
       <button
         onClick={handleClick}

@@ -154,9 +154,9 @@ export default function Benchmark() {
         {phase === 'intro' && (
           <Card>
             <CardContent className="p-4 space-y-3">
-              <p className="text-sm font-medium">Baseline your skills before Branch.io</p>
+              <p className="text-sm font-medium">Establish your baseline</p>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                10 scenarios across all spider dimensions. One KI per dimension, randomly selected from the top plays. Takes 15-20 minutes. Your results seed the spider chart and set the benchmark every future session is measured against.
+                10 scenarios across all 10 spider dimensions. One KI per dimension. Takes 15-20 minutes. Your results seed the spider chart and become the baseline every future session is measured against.
               </p>
               <div className="space-y-1.5 pt-1">
                 {SPIDER_DIMENSIONS.map((d) => (
