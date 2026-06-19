@@ -51,6 +51,7 @@ export async function writeKIMastery({
       last_drilled_at: now,
       first_drilled_at: existing ? undefined : now,
       decay_risk: decayRisk,
+      next_review_at: nextReviewAt,
       updated_at: now,
       ...(recognitionScore != null && { recognition_score: recognitionScore }),
       ...(executionScore != null && { execution_score: executionScore }),
