@@ -257,8 +257,8 @@ export default function Benchmark() {
                   <CardContent className="p-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-medium">{r.label}</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {r.feedback ? `${r.feedback.substring(0, 80)}…` : ''}
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {r.feedback || ''}
                       </p>
                     </div>
                     <span
