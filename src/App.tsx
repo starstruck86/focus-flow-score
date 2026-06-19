@@ -57,6 +57,7 @@ const Dojo = lazy(() => import("./pages/Dojo"));
 const DojoSession = lazy(() => import("./pages/DojoSession"));
 const DojoQA = lazy(() => import("./pages/DojoQA"));
 const DojoV6QA = lazy(() => import("./pages/DojoV6QA"));
+const Sharpen = lazy(() => import("./pages/Sharpen"));
 const Learn = lazy(() => import("./pages/Learn"));
 const Skills = lazy(() => import("./pages/Skills"));
 const LearnLesson = lazy(() => import("./pages/LearnLesson"));
@@ -229,6 +230,13 @@ const App = () => (
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback />}>
                         <DojoV6QA />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/sharpen" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<LazyFallback />}>
+                        <Sharpen />
                       </Suspense>
                     </ProtectedRoute>
                   } />

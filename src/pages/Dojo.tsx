@@ -213,7 +213,7 @@ export default function Dojo() {
         <ResumeLaneBanner />
 
         {/* Proactive Dave — time-of-day contextual nudge */}
-        <ProactiveDaveCard onMicroDrill={() => setMicroDimension('discovery')} />
+        <ProactiveDaveCard onMicroDrill={() => navigate('/sharpen')} />
 
         {/* KI Proficiency strip — adaptive training entry point */}
         <KiProficiencyStrip />
@@ -305,7 +305,7 @@ export default function Dojo() {
         </button>
 
         <button
-          onClick={() => setMicroDimension(skillStats[0]?.skill ?? 'discovery')}
+          onClick={() => navigate('/sharpen')}
           className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
         >
           <div className="flex items-center gap-2">
