@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAppMode } from '@/hooks/useAppMode';
 
-export type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings' | 'strategy' | 'dojo' | 'learn' | 'skills' | 'work_toggle' | 'train_toggle';
+export type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings' | 'strategy' | 'dojo' | 'learn' | 'skills' | 'work_toggle' | 'train_toggle' | 'deals';
 
 export interface NavItemDef {
   to: string;
@@ -47,6 +47,7 @@ export const COLOR_VAR: Record<NavColor, string> = {
   skills: 'var(--nav-coach)',
   work_toggle: 'var(--nav-today)',
   train_toggle: 'var(--nav-today)',
+  deals: 'var(--nav-quota)',
 };
 
 // ── Train mode items ──────────────────────────────────────────────────
@@ -60,7 +61,7 @@ export const trainNavItems: NavItemDef[] = [
 // ── Work mode items ───────────────────────────────────────────────────
 export const workNavItems: NavItemDef[] = [
   { to: '/tasks',    label: 'Tasks',    icon: CheckSquare, color: 'tasks' },
-  { to: '/outreach', label: 'New Logo', icon: Users,       color: 'outreach' },
+  { to: '/deals',    label: 'Deals',    icon: TrendingUp,  color: 'deals' },
   { to: '/renewals', label: 'Renewals', icon: RefreshCw,   color: 'renewals' },
   { to: '/strategy', label: 'Strategy', icon: Crosshair,   color: 'strategy' },
 ];
