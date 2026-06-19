@@ -230,40 +230,6 @@ export default function Progress() {
           </CardContent>
         </Card>
 
-        {dimPerf && dimPerf.length > 0 && (
-          <Card>
-            <CardContent className="p-4 space-y-3">
-              <p className="text-sm font-semibold">Call Performance by Skill</p>
-              <p className="text-[11px] text-muted-foreground">From {grades?.length ?? 0} graded calls</p>
-              <div className="space-y-2">
-                {dimPerf.map((d: any) => {
-                  const score = Math.round(Number(d.avg_score_100));
-                  const dim = SPIDER_DIMENSIONS.find(s => s.key === d.spider_dimension);
-                  return (
-                    <div key={d.spider_dimension} className="space-y-0.5">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground">{dim?.label ?? d.spider_dimension.replace(/_/g, ' ')}</p>
-                        <p className={cn('text-xs font-mono font-semibold',
-                          score < 40 ? 'text-red-500' : score < 60 ? 'text-amber-500' : 'text-green-500'
-                        )}>{score}</p>
-                      </div>
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{
-                            width: `${score}%`,
-                            background: score < 40 ? 'rgb(239,68,68)' : score < 60 ? 'rgb(245,158,11)' : 'rgb(34,197,94)'
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-3">
