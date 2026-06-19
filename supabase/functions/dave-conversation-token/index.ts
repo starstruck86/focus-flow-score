@@ -727,6 +727,17 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
     );
   }
 
+  if (aarRes?.data?.length) {
+    const a = aarRes.data[0];
+    const r = a.aar_responses || {};
+    sections.push(
+      `RECENT AFTER-ACTION REVIEW (${new Date(a.created_at).toLocaleDateString()}):\n` +
+      `- What they planned: ${r.q1 ?? 'N/A'}\n` +
+      `- What they missed: ${r.q3 ?? 'N/A'}\n` +
+      `- This week they're drilling: ${r.q5 ?? 'N/A'}`
+    );
+  }
+
   if (battlePlanRes.data?.length) {
     const bp = battlePlanRes.data[0];
     sections.push(
