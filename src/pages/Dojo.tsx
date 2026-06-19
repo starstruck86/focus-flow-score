@@ -212,6 +212,9 @@ export default function Dojo() {
         {/* Resume active lane banner */}
         <ResumeLaneBanner />
 
+        {/* Proactive Dave — time-of-day contextual nudge */}
+        <ProactiveDaveCard onMicroDrill={() => setMicroDimension('discovery')} />
+
         {/* KI Proficiency strip — adaptive training entry point */}
         <KiProficiencyStrip />
 
