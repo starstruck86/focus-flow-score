@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Layout } from '@/components/Layout';
@@ -279,6 +279,22 @@ export default function Dojo() {
   const isEarly = sessionCount >= 5 && sessionCount < 20;
   const isMature = sessionCount >= 20;
 
+  const streak = (stats as any)?.streak ?? 0;
+
+  // Save streak for recovery messaging
+  useEffect(() => {
+    if (streak > 0) {
+      localStorage.setItem('dynamic_last_streak', String(streak));
+    }
+  }, [streak]);
+
+  const lastKnownStreak = (() => {
+    try {
+      const v = localStorage.getItem('dynamic_last_streak');
+      return v ? parseInt(v, 10) : 0;
+    } catch { return 0; }
+  })();
+
   const startAutopilot = () => {
     // If launched with SkillSession from Learn, go directly to session with skill context
     if (skillSession) {
@@ -359,8 +375,17 @@ export default function Dojo() {
             <div className="flex items-center gap-2">
               <span className="text-2xl">🔥</span>
               <div className="text-left">
-                <p className="text-sm font-bold">Day 1 starts now</p>
-                <p className="text-[11px] opacity-80">5 reps to start your streak</p>
+                {lastKnownStreak > 2 ? (
+                  <>
+                    <p className="text-sm font-bold">Streak ended at {lastKnownStreak} days</p>
+                    <p className="text-[11px] opacity-80">1 rep starts the rebuild →</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-bold">Day 1 starts now</p>
+                    <p className="text-[11px] opacity-80">5 reps to start your streak</p>
+                  </>
+                )}
               </div>
             </div>
             <span className="text-lg font-bold">→</span>
