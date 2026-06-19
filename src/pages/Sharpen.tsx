@@ -119,6 +119,19 @@ export default function Sharpen() {
   }, [user]);
 
   useEffect(() => {
+    if (!user || !dimension) return;
+    (supabase as any)
+      .from('dimension_scores')
+      .select('avg_score_100')
+      .eq('user_id', user.id)
+      .eq('spider_dimension', dimension)
+      .maybeSingle()
+      .then(({ data }: { data: any }) => {
+        if (data?.avg_score_100) setDimScore(Math.round(data.avg_score_100));
+      });
+  }, [user, dimension]);
+
+  useEffect(() => {
     if (stateDimension) {
       setDimension(stateDimension);
       return;
