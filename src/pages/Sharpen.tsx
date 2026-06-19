@@ -96,6 +96,11 @@ export default function Sharpen() {
   const [autoAdvanceTimer, setAutoAdvanceTimer] = useState<NodeJS.Timeout | null>(null);
   const [reviewCount, setReviewCount] = useState(0);
   const [showReviewNotice, setShowReviewNotice] = useState(false);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
+    try { return localStorage.getItem('sharpen_onboarded') === 'true'; } catch { return false; }
+  });
+  const totalSessions = (stats as any)?.totalSessions ?? 0;
+  const [dimScore, setDimScore] = useState<number | null>(null);
 
   useEffect(() => {
     if (!user) return;
