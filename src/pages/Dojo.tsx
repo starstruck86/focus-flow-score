@@ -26,6 +26,7 @@ import { getBlockSnapshots, compareSnapshots } from '@/lib/dojo/v3/snapshotManag
 import { BlockHeader } from '@/components/dojo/BlockHeader';
 import { DailyAssignmentCard } from '@/components/dojo/DailyAssignmentCard';
 import { KiProficiencyStrip } from '@/components/dojo/KiProficiencyStrip';
+import { ProactiveDaveCard } from '@/components/dojo/ProactiveDaveCard';
 import { TodaysFocus } from '@/components/dojo/TodaysFocus';
 import { TrainingModes } from '@/components/dojo/TrainingModes';
 import { PerformanceSignals } from '@/components/dojo/PerformanceSignals';
@@ -210,6 +211,9 @@ export default function Dojo() {
 
         {/* Resume active lane banner */}
         <ResumeLaneBanner />
+
+        {/* Proactive Dave — time-of-day contextual nudge */}
+        <ProactiveDaveCard onMicroDrill={() => setMicroDimension('discovery')} />
 
         {/* KI Proficiency strip — adaptive training entry point */}
         <KiProficiencyStrip />
