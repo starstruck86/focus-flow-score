@@ -4,6 +4,7 @@ export interface KnowledgeItemForDrill {
   id: string;
   chapter: string;
   spider_dimension: string | null;
+  title?: string | null;
   tactic_summary: string;
   macro_situation: string | null;
   micro_strategy: string | null;

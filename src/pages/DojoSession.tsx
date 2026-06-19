@@ -12,7 +12,7 @@ import {
   CheckCircle2, Lightbulb, Swords, ChevronRight, ChevronUp, ChevronDown, Crown, Sparkles,
   Crosshair, ListOrdered, MessageCircle, GraduationCap,
   TrendingUp, TrendingDown, Minus, Zap, Shield, XCircle,
-  Eye, PenLine, Volume2, VolumeX,
+  Eye, PenLine, Volume2, VolumeX, BookOpen,
 } from 'lucide-react';
 import { getRandomScenario, getLaneScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
 import { generateKIDrill, type KnowledgeItemForDrill, type KIDrillScenario } from '@/lib/dojo/kiDrillGenerator';
@@ -255,6 +255,14 @@ export default function DojoSession() {
           userResponse: text,
           retryCount: isRetry ? retryCount + 1 : 0,
           focusReminder: currentFocus,
+          ki: (kiContext ?? kiContextOverride) ? {
+            title: (kiContext ?? kiContextOverride)!.title ?? '',
+            tactic_summary: (kiContext ?? kiContextOverride)!.tactic_summary ?? '',
+            example_usage: (kiContext ?? kiContextOverride)!.example_usage ?? '',
+            when_to_use: (kiContext ?? kiContextOverride)!.when_to_use ?? '',
+            when_not_to_use: (kiContext ?? kiContextOverride)!.when_not_to_use ?? '',
+            why_it_matters: (kiContext ?? kiContextOverride)!.why_it_matters ?? '',
+          } : undefined,
         },
       });
 
@@ -331,6 +339,9 @@ export default function DojoSession() {
                 chapter: activeKI.chapter,
                 spiderDimension: activeKI.spider_dimension,
                 score: scoreData.score,
+                recognitionScore: (scoreData as any).recognitionScore ?? null,
+                executionScore: (scoreData as any).executionScore ?? null,
+                awarenessScore: (scoreData as any).awarenessScore ?? null,
               }).catch(err => console.error('[DojoSession] writeKIMastery failed:', err));
             }
           }
@@ -376,6 +387,9 @@ export default function DojoSession() {
                 chapter: activeKI.chapter,
                 spiderDimension: activeKI.spider_dimension,
                 score: bestScore,
+                recognitionScore: (scoreData as any).recognitionScore ?? null,
+                executionScore: (scoreData as any).executionScore ?? null,
+                awarenessScore: (scoreData as any).awarenessScore ?? null,
               }).catch(err => console.error('[DojoSession] writeKIMastery failed:', err));
             }
           }
@@ -746,7 +760,7 @@ export default function DojoSession() {
 
           {phase === 'feedback' && currentResult && (
             <motion.div key="feedback" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
-             <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} originalCallScore={originalScore} firstAttemptResult={result} assignmentContext={state?.assignmentReason ? { anchor: state.assignmentAnchor!, focusPattern: state.assignmentFocusPattern!, reason: state.assignmentReason } : null} pressureLevel={pressureLevel} pressureDimensions={pressureDimensions} skillLevelForFeedback={skillLevelForFeedback} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+             <FeedbackView currentResult={currentResult} scoreDelta={scoreDelta} retryCount={retryCount} retryResult={retryResult} retryAssessment={retryAssessment} userText={userText} activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} originalCallScore={originalScore} firstAttemptResult={result} assignmentContext={state?.assignmentReason ? { anchor: state.assignmentAnchor!, focusPattern: state.assignmentFocusPattern!, reason: state.assignmentReason } : null} pressureLevel={pressureLevel} pressureDimensions={pressureDimensions} skillLevelForFeedback={skillLevelForFeedback} kiExampleUsage={(kiContext ?? kiContextOverride)?.example_usage ?? null} kiTitle={(kiContext ?? kiContextOverride)?.title ?? null} onRetry={handleStartRetry} onNextRep={handleNextRep} />
             </motion.div>
           )}
 
@@ -785,7 +799,7 @@ export default function DojoSession() {
         {/* ── Feedback for Roleplay / Review (non-drill) ── */}
         {sessionType !== 'drill' && phase === 'feedback' && currentResult && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} assignmentContext={state?.assignmentReason ? { anchor: state.assignmentAnchor!, focusPattern: state.assignmentFocusPattern!, reason: state.assignmentReason } : null} pressureLevel={pressureLevel} pressureDimensions={pressureDimensions} skillLevelForFeedback={skillLevelForFeedback} onRetry={handleStartRetry} onNextRep={handleNextRep} />
+            <FeedbackView currentResult={currentResult} scoreDelta={null} retryCount={0} retryResult={null} retryAssessment={null} userText="" activeFocus={activeFocus} reviewExtras={reviewExtras} roleplayExtras={roleplayExtras} sessionType={sessionType} sessionId={sessionId} skillFocus={scenario.skillFocus} transcriptOrigin={transcriptOrigin} assignmentContext={state?.assignmentReason ? { anchor: state.assignmentAnchor!, focusPattern: state.assignmentFocusPattern!, reason: state.assignmentReason } : null} pressureLevel={pressureLevel} pressureDimensions={pressureDimensions} skillLevelForFeedback={skillLevelForFeedback} kiExampleUsage={(kiContext ?? kiContextOverride)?.example_usage ?? null} kiTitle={(kiContext ?? kiContextOverride)?.title ?? null} onRetry={handleStartRetry} onNextRep={handleNextRep} />
           </motion.div>
         )}
       </div>
@@ -815,6 +829,8 @@ interface FeedbackViewProps {
   pressureLevel?: string | null;
   pressureDimensions?: string[] | null;
   skillLevelForFeedback?: UserSkillLevel | null;
+  kiExampleUsage?: string | null;
+  kiTitle?: string | null;
   onRetry: () => void;
   onNextRep: () => void;
 }
@@ -823,7 +839,8 @@ function FeedbackView({
   currentResult, scoreDelta, retryCount, retryResult, retryAssessment,
   userText, activeFocus, reviewExtras, roleplayExtras, sessionType,
   sessionId, skillFocus, transcriptOrigin, originalCallScore, firstAttemptResult,
-  assignmentContext, pressureLevel, pressureDimensions, skillLevelForFeedback, onRetry, onNextRep,
+  assignmentContext, pressureLevel, pressureDimensions, skillLevelForFeedback,
+  kiExampleUsage, kiTitle, onRetry, onNextRep,
 }: FeedbackViewProps) {
   const navigate = useNavigate();
   const [showDeepDive, setShowDeepDive] = useState(false);
@@ -1026,6 +1043,25 @@ function FeedbackView({
             {(currentResult.worldClassResponse || currentResult.teachingNote) && (
               <div className="space-y-2">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60 px-0.5">Teaching</p>
+
+                {kiExampleUsage && (
+                  <Card className="border-amber-500/30 bg-amber-500/5">
+                    <CardContent className="p-4 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                        <p className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">Real Call Example</p>
+                        {kiTitle && (
+                          <span className="text-[10px] text-muted-foreground ml-1 truncate">
+                            — {kiTitle}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-foreground leading-relaxed italic">
+                        "{kiExampleUsage}"
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {currentResult.worldClassResponse && (
                   <Card className="border-primary/40 bg-gradient-to-br from-primary/5 to-primary/10 ring-1 ring-primary/10">

@@ -1,0 +1,1 @@
+ALTER TABLE public.ki_mastery ADD COLUMN IF NOT EXISTS awareness_score numeric;
