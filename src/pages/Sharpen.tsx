@@ -355,11 +355,19 @@ export default function Sharpen() {
             )}
             <div className="p-4 rounded-xl border border-border bg-muted/20 space-y-2">
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                {dimension.replace(/_/g, ' ')}
+                {dimension.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
               </p>
-              <p className="text-sm leading-relaxed">
-                {currentKI.when_to_use || currentKI.tactic_summary || currentKI.example_usage}
-              </p>
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold text-primary uppercase tracking-wider">Apply this play:</p>
+                <p className="text-sm leading-relaxed">
+                  {currentKI.when_to_use || currentKI.tactic_summary || currentKI.example_usage}
+                </p>
+                {currentKI.example_usage && currentKI.when_to_use && (
+                  <p className="text-[11px] text-muted-foreground italic leading-relaxed">
+                    e.g. "{currentKI.example_usage.substring(0, 120)}{currentKI.example_usage.length > 120 ? '…' : ''}"
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         )}
