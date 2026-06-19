@@ -1293,6 +1293,12 @@ export default function Coach() {
                     transcriptContent={selectedTranscript?.content}
                   />
                 )}
+                {selectedGrade?.id && (
+                  <AfterActionReview
+                    transcriptGradeId={selectedGrade.id}
+                    existingResponses={(selectedGrade as any).aar_responses}
+                  />
+                )}
               </div>
             ) : (
               <div className="space-y-4">
