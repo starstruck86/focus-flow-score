@@ -235,12 +235,18 @@ export default function BatchRegrade() {
       )}
 
       {isComplete && (
-        <div className="max-w-md mx-auto">
+        <div className="max-w-md mx-auto space-y-2">
           <button
             onClick={() => navigate('/coach')}
             className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
           >
             View Grades in Coach →
+          </button>
+          <button
+            onClick={() => { localStorage.removeItem(DONE_KEY); window.location.reload(); }}
+            className="w-full py-2 rounded-lg border border-border text-xs text-muted-foreground"
+          >
+            Clear cache & re-run all
           </button>
         </div>
       )}
