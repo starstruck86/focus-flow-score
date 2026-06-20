@@ -44,6 +44,20 @@ interface Result {
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+const DONE_KEY = 'regrade_completed_ids';
+
+const getCompletedIds = (): Set<string> => {
+  try { return new Set(JSON.parse(localStorage.getItem(DONE_KEY) || '[]')); }
+  catch { return new Set(); }
+};
+const markCompleted = (id: string) => {
+  try {
+    const ids = getCompletedIds();
+    ids.add(id);
+    localStorage.setItem(DONE_KEY, JSON.stringify([...ids]));
+  } catch {}
+};
+
 export default function BatchRegrade() {
   const { user } = useAuth();
   const navigate = useNavigate();
