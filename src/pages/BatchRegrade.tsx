@@ -118,19 +118,12 @@ export default function BatchRegrade() {
 
     for (let i = 0; i < TRANSCRIPT_IDS.length; i++) {
       const id = TRANSCRIPT_IDS[i];
-      const existing = gradeMap.get(id);
 
-      // Skip if already has a varied score (was successfully re-graded)
-      // A score of 80 or 60 with a non-C- grade indicates real re-grading happened
-      const alreadyDone = existing &&
-        existing.overall_score >= 60 &&
-        existing.overall_grade !== 'C-';
-
-      if (alreadyDone) {
+      if (completedIds.has(id)) {
         setResults(prev => prev.map(r =>
-          r.id === id ? { ...r, status: 'skipped', grade: existing.overall_grade, score: existing.overall_score } : r
+          r.id === id ? { ...r, status: 'skipped' } : r
         ));
-        addLog(`${id.slice(0, 8)} already graded (${existing.overall_grade}) — skipping`);
+        addLog(`${id.slice(0, 8)} already done — skipping`);
         continue;
       }
 
