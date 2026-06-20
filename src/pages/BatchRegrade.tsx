@@ -106,15 +106,7 @@ export default function BatchRegrade() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { addLog('No session — please log in'); return; }
 
-    // Check which transcripts have already been graded with a non-default score
-    const { data: existingGrades } = await (supabase as any)
-      .from('transcript_grades')
-      .select('transcript_id, overall_score, overall_grade')
-      .in('transcript_id', TRANSCRIPT_IDS);
-
-    const gradeMap = new Map<string, { overall_score: number; overall_grade: string }>(
-      (existingGrades || []).map((g: any) => [g.transcript_id, g])
-    );
+    const completedIds = getCompletedIds();
 
     for (let i = 0; i < TRANSCRIPT_IDS.length; i++) {
       const id = TRANSCRIPT_IDS[i];
