@@ -8708,6 +8708,7 @@ export type Database = {
           presence_score: number | null
           presence_stats: Json | null
           progression_evidence: string | null
+          regraded_at: string | null
           replacement_behavior: string | null
           strengths: string[] | null
           structure_score: number | null
@@ -8758,6 +8759,7 @@ export type Database = {
           presence_score?: number | null
           presence_stats?: Json | null
           progression_evidence?: string | null
+          regraded_at?: string | null
           replacement_behavior?: string | null
           strengths?: string[] | null
           structure_score?: number | null
@@ -8808,6 +8810,7 @@ export type Database = {
           presence_score?: number | null
           presence_stats?: Json | null
           progression_evidence?: string | null
+          regraded_at?: string | null
           replacement_behavior?: string | null
           strengths?: string[] | null
           structure_score?: number | null
