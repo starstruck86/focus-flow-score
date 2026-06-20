@@ -44,6 +44,20 @@ interface Result {
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+const DONE_KEY = 'regrade_completed_ids';
+
+const getCompletedIds = (): Set<string> => {
+  try { return new Set(JSON.parse(localStorage.getItem(DONE_KEY) || '[]')); }
+  catch { return new Set(); }
+};
+const markCompleted = (id: string) => {
+  try {
+    const ids = getCompletedIds();
+    ids.add(id);
+    localStorage.setItem(DONE_KEY, JSON.stringify([...ids]));
+  } catch {}
+};
+
 export default function BatchRegrade() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -106,31 +120,16 @@ export default function BatchRegrade() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { addLog('No session — please log in'); return; }
 
-    // Check which transcripts have already been graded with a non-default score
-    const { data: existingGrades } = await (supabase as any)
-      .from('transcript_grades')
-      .select('transcript_id, overall_score, overall_grade')
-      .in('transcript_id', TRANSCRIPT_IDS);
-
-    const gradeMap = new Map<string, { overall_score: number; overall_grade: string }>(
-      (existingGrades || []).map((g: any) => [g.transcript_id, g])
-    );
+    const completedIds = getCompletedIds();
 
     for (let i = 0; i < TRANSCRIPT_IDS.length; i++) {
       const id = TRANSCRIPT_IDS[i];
-      const existing = gradeMap.get(id);
 
-      // Skip if already has a varied score (was successfully re-graded)
-      // A score of 80 or 60 with a non-C- grade indicates real re-grading happened
-      const alreadyDone = existing &&
-        existing.overall_score >= 60 &&
-        existing.overall_grade !== 'C-';
-
-      if (alreadyDone) {
+      if (completedIds.has(id)) {
         setResults(prev => prev.map(r =>
-          r.id === id ? { ...r, status: 'skipped', grade: existing.overall_grade, score: existing.overall_score } : r
+          r.id === id ? { ...r, status: 'skipped' } : r
         ));
-        addLog(`${id.slice(0, 8)} already graded (${existing.overall_grade}) — skipping`);
+        addLog(`${id.slice(0, 8)} already done — skipping`);
         continue;
       }
 
@@ -144,6 +143,7 @@ export default function BatchRegrade() {
             r.id === id ? { ...r, status: 'done', grade: result.grade, score: result.score } : r
           ));
           addLog(`✓ ${id.slice(0, 8)} → ${result.grade} (${result.score})`);
+          markCompleted(id);
         }
       } catch (e: any) {
         setResults(prev => prev.map(r =>
@@ -235,12 +235,18 @@ export default function BatchRegrade() {
       )}
 
       {isComplete && (
-        <div className="max-w-md mx-auto">
+        <div className="max-w-md mx-auto space-y-2">
           <button
             onClick={() => navigate('/coach')}
             className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
           >
             View Grades in Coach →
+          </button>
+          <button
+            onClick={() => { localStorage.removeItem(DONE_KEY); window.location.reload(); }}
+            className="w-full py-2 rounded-lg border border-border text-xs text-muted-foreground"
+          >
+            Clear cache & re-run all
           </button>
         </div>
       )}
