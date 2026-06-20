@@ -144,6 +144,7 @@ export default function BatchRegrade() {
             r.id === id ? { ...r, status: 'done', grade: result.grade, score: result.score } : r
           ));
           addLog(`✓ ${id.slice(0, 8)} → ${result.grade} (${result.score})`);
+          markCompleted(id);
         }
       } catch (e: any) {
         setResults(prev => prev.map(r =>
