@@ -97,8 +97,9 @@ export default function BatchRegrade() {
   }, [loading, queue, user]);
 
   const run = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { addLog('No session'); return; }
+    // Verify we have a session before starting
+    const { data: { session: initialSession } } = await supabase.auth.getSession();
+    if (!initialSession) { addLog('No session'); return; }
 
     const ids = ALL_IDS.filter(id =>
       queue.some(r => r.id === id)
@@ -110,7 +111,10 @@ export default function BatchRegrade() {
       addLog(`[${i + 1}/${ids.length}] ${id.slice(0, 8)}…`);
 
       try {
-        const result = await gradeOne(id, session.access_token);
+        // Get fresh token for every call — prevents Unauthorized after token refresh
+        const { data: { session: freshSession } } = await supabase.auth.getSession();
+        if (!freshSession) throw new Error('Session expired');
+        const result = await gradeOne(id, freshSession.access_token);
         if (result) {
           await (supabase as any)
             .from('transcript_grades')
