@@ -578,7 +578,7 @@ ${customScorecardContext}`;
 
         // Build methodology update — only set fields to true (never revert confirmed items)
         const methodologyUpdate: Record<string, any> = {
-          userId,
+          user_id: userId,
           opportunity_id: transcript.opportunity_id,
         };
 
