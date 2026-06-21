@@ -67,7 +67,7 @@ serve(async (req) => {
         ? supabase
             .from("transcript_grades")
             .select("meddicc_signals, cotm_signals, overall_grade, call_goals_inferred, deal_progressed, created_at")
-            .eq("user_id", user.id)
+            .eq("user_id", userId)
             .neq("transcript_id", transcript_id)
             .order("created_at", { ascending: false })
             .limit(5)
