@@ -13,20 +13,36 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader! } } }
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Parse body early so service role requests can pass user_id
+    const body = await req.json();
+    const { transcript_id, call_goals, user_id: bodyUserId } = body;
+
+    const isServiceRole = authHeader === `Bearer ${serviceRoleKey}` && !!bodyUserId;
+
+    let userId: string;
+    let supabase;
+
+    if (isServiceRole) {
+      // Server-side batch call — use admin client, trust provided user_id
+      supabase = createClient(supabaseUrl, serviceRoleKey);
+      userId = bodyUserId;
+    } else {
+      // Normal client call — validate user JWT
+      supabase = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader! } },
       });
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = user.id;
     }
-
-    const { transcript_id, call_goals } = await req.json();
     if (!transcript_id) throw new Error("transcript_id required");
 
     const { data: transcript, error: tErr } = await supabase
@@ -51,7 +67,7 @@ serve(async (req) => {
         ? supabase
             .from("transcript_grades")
             .select("meddicc_signals, cotm_signals, overall_grade, call_goals_inferred, deal_progressed, created_at")
-            .eq("user_id", user.id)
+            .eq("user_id", userId)
             .neq("transcript_id", transcript_id)
             .order("created_at", { ascending: false })
             .limit(5)
@@ -499,7 +515,7 @@ ${customScorecardContext}`;
     const { data: saved, error: saveErr } = await supabase
       .from("transcript_grades")
       .upsert({
-        user_id: user.id,
+        user_id: userId,
         transcript_id,
         overall_grade: grade.overall_grade,
         overall_score: grade.overall_score * 20, // Scale 1-5 to 0-100 for storage
@@ -562,7 +578,7 @@ ${customScorecardContext}`;
 
         // Build methodology update — only set fields to true (never revert confirmed items)
         const methodologyUpdate: Record<string, any> = {
-          user_id: user.id,
+          user_id: userId,
           opportunity_id: transcript.opportunity_id,
         };
 
