@@ -515,7 +515,7 @@ ${customScorecardContext}`;
     const { data: saved, error: saveErr } = await supabase
       .from("transcript_grades")
       .upsert({
-        user_id: user.id,
+        user_id: userId,
         transcript_id,
         overall_grade: grade.overall_grade,
         overall_score: grade.overall_score * 20, // Scale 1-5 to 0-100 for storage
@@ -578,7 +578,7 @@ ${customScorecardContext}`;
 
         // Build methodology update — only set fields to true (never revert confirmed items)
         const methodologyUpdate: Record<string, any> = {
-          user_id: user.id,
+          userId,
           opportunity_id: transcript.opportunity_id,
         };
 
