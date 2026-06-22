@@ -87,6 +87,19 @@ serve(async (req) => {
     const priorGrades = priorGradesRes.data || [];
     const opportunity = opportunityRes.data;
 
+    // Fetch top KIs per dimension to ground grading in the actual knowledge library
+    const { data: relevantKIs } = await supabase
+      .from('knowledge_items')
+      .select('tactic_summary, spider_dimension')
+      .eq('active', true)
+      .in('spider_dimension', ['discovery', 'deal_control', 'competitive', 'stakeholder_navigation', 'expansion_strategy', 'messaging', 'objection_handling'])
+      .order('created_at', { ascending: false })
+      .limit(24);
+
+    const kiContext = relevantKIs && relevantKIs.length > 0
+      ? `\n\n## KNOWLEDGE LIBRARY — ELITE TACTIC BENCHMARKS\nGrade the rep's execution against these specific elite tactics from their training library. A 4-5 score requires evidence of these behaviors:\n${relevantKIs.map((ki: any) => `- [${ki.spider_dimension}] ${ki.tactic_summary}`).join('\n')}\n\nWhen a tactic from this library was clearly missed, call it out specifically in missed_opportunities and replacement_behavior.`
+      : '';
+
     const resourceContext = resources.length > 0
       ? `The user follows these sales methodologies:\n${resources.map((r: any) => `- ${r.label} (${r.category})${r.notes ? ': ' + r.notes : ''}`).join('\n')}`
       : "No specific methodology resources uploaded. Use Command of the Message + MEDDICC as primary frameworks.";
@@ -149,6 +162,37 @@ serve(async (req) => {
       ? `\n\n## CALL GOALS (set by rep before this call)\n${(call_goals || transcript.call_goals).map((g: string, i: number) => `${i + 1}. ${g}`).join('\n')}\nEvaluate whether each goal was achieved in the transcript.`
       : "";
 
+    const isRolePlay = (transcript.call_type || '').toLowerCase().includes('role play') || (transcript.call_type || '').toLowerCase().includes('mock');
+
+    const rolePlayContext = isRolePlay ? `
+
+## CRITICAL: THIS IS A MOCK / ROLE PLAY CALL
+You are grading a practice session, NOT a real deal.
+- "deal_progressed" should ALWAYS be false for role plays (there is no real deal)
+- "likelihood_impact" should be "unchanged" for role plays
+- DO NOT downgrade scores because MEDDICC wasn't fully completed — this is a practice call
+- DO NOT penalize for lack of deal movement
+
+INSTEAD, grade on pure skill execution:
+- Did the rep ask layered, curious questions that went 2-3 levels deep?
+- Did they quantify business impact in real numbers?
+- Did they maintain agenda control or get pulled off track?
+- Did they use Challenger posture — teach, tailor, take control?
+- Did they multi-thread (engage all stakeholders present)?
+- Did they create urgency without a real deal?
+- Did they get a specific, committed next step?
+
+SCORING SCALE FOR ROLE PLAYS:
+- 5 = Elite execution. Would close a real deal. Questions were surgical, impact was quantified, next step was locked.
+- 4 = Strong. One or two missed opportunities but the rep controlled the conversation.
+- 3 = Adequate. The basics were there but the rep was reactive more than proactive.
+- 2 = Significant gaps. Rep was following the prospect's lead rather than driving discovery.
+- 1 = Directionless. No structure, no quantification, no commitment.
+
+DIFFERENTIATE your scores across dimensions. If discovery was 4 but commercial was 2, SHOW THAT. Do not cluster all scores at the same level.
+
+COMPARE this call to what an elite Strategic AE would have done in the same scenario. Be specific about the delta.` : '';
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
@@ -201,7 +245,9 @@ ${accountContext}
 ${opportunityContext}
 ${cumulativeContext}
 ${goalsContext}
-${customScorecardContext}`;
+${customScorecardContext}
+${rolePlayContext}
+${kiContext}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -213,7 +259,7 @@ ${customScorecardContext}`;
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Analyze this call transcript with full framework enforcement.\n\nTitle: ${transcript.title}\nType: ${transcript.call_type || 'Unknown'}\nParticipants: ${transcript.participants || 'Unknown'}\n\nTranscript:\n${transcript.content.substring(0, 15000)}` },
+          { role: "user", content: `Analyze this call transcript with full framework enforcement.\n\nTitle: ${transcript.title}\nType: ${transcript.call_type || 'Unknown'}\nParticipants: ${transcript.participants || 'Unknown'}\n\nTranscript:\n${transcript.content.substring(0, isRolePlay ? 22000 : 15000)}` },
         ],
         tools: [{
           type: "function",
