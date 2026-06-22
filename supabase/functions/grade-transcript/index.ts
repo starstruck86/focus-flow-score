@@ -902,10 +902,10 @@ ${kiContext}`;
 
           if (isRP) {
             // Role plays: use dedicated role-play-specific scores for competitive and expansion dimensions
-            const challenger = getCustom('challenger_posture_score');
-            const narrative = getCustom('narrative_arc_score');
-            const pressure = getCustom('pressure_recovery_score');
-            const multithread = getCustom('multi_thread_score');
+            const challenger = getCustom('Challenger Posture');
+            const narrative = getCustom('Narrative Arc');
+            const pressure = getCustom('Pressure Recovery');
+            const multithread = getCustom('Multi-Stakeholder Navigation');
 
             discoveryScores.push(g.discovery_score);
             dealControlScores.push(g.structure_score, g.next_step_score, pressure || g.commercial_score);
