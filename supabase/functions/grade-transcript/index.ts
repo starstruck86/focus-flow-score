@@ -828,11 +828,11 @@ ${kiContext}`;
       }
 
     // Recompute spider dimension scores from all transcript grades and write to dimension_scores
-    // This ensures role plays, Acoustic calls, and Branch.io calls all feed the spider chart
+    // Role plays use dedicated dimensions; real calls use standard framework scores
     try {
       const { data: allGrades } = await supabase
         .from('transcript_grades')
-        .select('discovery_score, cotm_score, meddicc_score, presence_score, commercial_score, next_step_score, structure_score')
+        .select('discovery_score, cotm_score, meddicc_score, presence_score, commercial_score, next_step_score, structure_score, call_type, custom_scorecard_results')
         .eq('user_id', userId);
 
       if (allGrades && allGrades.length > 0) {
@@ -842,12 +842,46 @@ ${kiContext}`;
           return Math.round(valid.reduce((a, b) => a + b, 0) / valid.length * 20);
         };
 
-        const dimensionMap: { dimension: string; scores: (number | null)[] }[] = [
-          { dimension: 'discovery', scores: allGrades.map((g: any) => g.discovery_score) },
-          { dimension: 'deal_control', scores: allGrades.flatMap((g: any) => [g.structure_score, g.next_step_score, g.commercial_score]) },
-          { dimension: 'stakeholder_navigation', scores: allGrades.map((g: any) => g.presence_score) },
-          { dimension: 'expansion_strategy', scores: allGrades.map((g: any) => g.cotm_score) },
-          { dimension: 'competitive', scores: allGrades.map((g: any) => g.meddicc_score) },
+        // For each grade, compute its contribution to each spider dimension
+        const discoveryScores: number[] = [];
+        const dealControlScores: number[] = [];
+        const stakeholderScores: number[] = [];
+        const expansionScores: number[] = [];
+        const competitiveScores: number[] = [];
+
+        for (const g of allGrades as any[]) {
+          const isRP = (g.call_type || '').toLowerCase().includes('role play') || (g.call_type || '').toLowerCase().includes('mock');
+          const custom = g.custom_scorecard_results || [];
+          const getCustom = (cat: string) => custom.find((c: any) => c.category === cat)?.score || null;
+
+          if (isRP) {
+            // Role plays: use dedicated role-play-specific scores for competitive and expansion dimensions
+            const challenger = getCustom('challenger_posture_score');
+            const narrative = getCustom('narrative_arc_score');
+            const pressure = getCustom('pressure_recovery_score');
+            const multithread = getCustom('multi_thread_score');
+
+            discoveryScores.push(g.discovery_score);
+            dealControlScores.push(g.structure_score, g.next_step_score, pressure || g.commercial_score);
+            stakeholderScores.push(g.presence_score, multithread || g.presence_score);
+            expansionScores.push(narrative || g.cotm_score);
+            competitiveScores.push(challenger || g.meddicc_score);
+          } else {
+            // Real calls: use standard framework scores
+            discoveryScores.push(g.discovery_score);
+            dealControlScores.push(g.structure_score, g.next_step_score, g.commercial_score);
+            stakeholderScores.push(g.presence_score);
+            expansionScores.push(g.cotm_score);
+            competitiveScores.push(g.meddicc_score);
+          }
+        }
+
+        const dimensionMap = [
+          { dimension: 'discovery', scores: discoveryScores },
+          { dimension: 'deal_control', scores: dealControlScores },
+          { dimension: 'stakeholder_navigation', scores: stakeholderScores },
+          { dimension: 'expansion_strategy', scores: expansionScores },
+          { dimension: 'competitive', scores: competitiveScores },
         ];
 
         for (const { dimension, scores } of dimensionMap) {
@@ -860,14 +894,9 @@ ${kiContext}`;
             .eq('spider_dimension', dimension)
             .maybeSingle();
           if (existing) {
-            await supabase
-              .from('dimension_scores')
-              .update({ avg_score_100: avgScore })
-              .eq('id', existing.id);
+            await supabase.from('dimension_scores').update({ avg_score_100: avgScore }).eq('id', existing.id);
           } else {
-            await supabase
-              .from('dimension_scores')
-              .insert({ user_id: userId, spider_dimension: dimension, avg_score_100: avgScore });
+            await supabase.from('dimension_scores').insert({ user_id: userId, spider_dimension: dimension, avg_score_100: avgScore });
           }
         }
         console.log(`[grade-transcript] Spider dimensions recomputed from ${allGrades.length} grades`);
