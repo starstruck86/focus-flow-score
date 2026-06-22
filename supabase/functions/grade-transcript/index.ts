@@ -515,21 +515,41 @@ ${kiContext}`;
                   type: "integer", minimum: 1, maximum: 5,
                   description: "Did the rep push back, reframe, or take control when the prospect went off script or offered an easy out? 5 = confidently challenged assumptions, reframed the conversation, taught the prospect something. 1 = followed wherever the prospect led, never pushed back."
                 },
+                challenger_posture_evidence: {
+                  type: "string",
+                  description: "Exact transcript quote or specific moment that justifies this score."
+                },
                 narrative_arc_score: {
                   type: "integer", minimum: 1, maximum: 5,
                   description: "Was there a coherent story arc? Current state → problem → gap → why change now → solution need. 5 = the narrative built logically and compellingly from first question to close. 1 = disjointed, jumped between topics, no through-line."
+                },
+                narrative_arc_evidence: {
+                  type: "string",
+                  description: "Exact transcript quote or specific moment that justifies this score."
                 },
                 pressure_recovery_score: {
                   type: "integer", minimum: 1, maximum: 5,
                   description: "When the conversation went sideways — timeout, hostile question, unexpected objection, hallucination challenge, panel format pressure — how did the rep handle it? 5 = adapted immediately, stayed composed, redirected skillfully. 1 = visibly lost control, never recovered."
                 },
+                pressure_recovery_evidence: {
+                  type: "string",
+                  description: "Exact transcript quote or specific moment that justifies this score."
+                },
                 multi_thread_score: {
                   type: "integer", minimum: 1, maximum: 5,
                   description: "Did the rep engage each stakeholder differently based on their role and what they care about? 5 = directed distinct questions to each person, named them, understood their perspective, bridged between personas. 1 = talked to the room generically, ignored one or more attendees."
                 },
+                multi_thread_evidence: {
+                  type: "string",
+                  description: "Exact transcript quote or specific moment that justifies this score."
+                },
                 self_awareness_score: {
                   type: "integer", minimum: 1, maximum: 5,
                   description: "Based on the rep's post-call self-assessment (if present in transcript): accuracy of self-diagnosis, growth mindset, candor about gaps. 5 = precisely identified strengths and gaps, showed genuine coachability. 1 = deflected, defensive, or had no self-awareness. Score 3 if no self-assessment present."
+                },
+                self_awareness_evidence: {
+                  type: "string",
+                  description: "Exact transcript quote from self-assessment that justifies this score."
                 },
 
                 // NEW: Outcome-based fields
