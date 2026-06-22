@@ -204,7 +204,30 @@ SCORING — BE BRUTALLY HONEST:
 - 2 = Developing. Significant gaps. Lost control multiple times.
 - 1 = Needs urgent work. Directionless.
 
-MANDATORY: Scores must be differentiated across ALL dimensions including the 5 role-play-specific ones (challenger_posture_score, narrative_arc_score, pressure_recovery_score, multi_thread_score, self_awareness_score). Each must have specific transcript evidence. Do not cluster.
+MANDATORY: Scores must be differentiated across ALL dimensions. Each must have specific transcript evidence. Do not cluster.
+
+COMPUTING overall_score FOR ROLE PLAYS — follow this formula exactly:
+Do NOT include meddicc_score or cotm_score in the overall — they measure deal execution, not standalone practice performance.
+
+overall_score (1-5) = weighted average of:
+  discovery_score          × 0.20
+  challenger_posture_score × 0.20
+  narrative_arc_score      × 0.20
+  structure_score          × 0.15
+  multi_thread_score       × 0.10
+  commercial_score         × 0.10
+  next_step_score          × 0.05
+
+Round to nearest integer. Then map to overall_grade:
+  5 → A or A+ (reserve A+ for flawless execution)
+  4 → B+ or A- (strong, 1-2 clear gaps)
+  3.5 → B or B- (adequate, rep was mostly reactive)
+  3 → C+ or C (developing, significant gaps)
+  2.5 or below → C- or D (needs urgent work)
+
+Example: discovery=4, challenger=3, narrative=2, structure=3, multi_thread=3, commercial=3, next_step=3
+= (4×0.20)+(3×0.20)+(2×0.20)+(3×0.15)+(3×0.10)+(3×0.10)+(3×0.05)
+= 0.80+0.60+0.40+0.45+0.30+0.30+0.15 = 3.0 → C+ or B-
 
 deal_progressed = false
 likelihood_impact = "unchanged"` : '';
@@ -492,21 +515,41 @@ ${kiContext}`;
                   type: "integer", minimum: 1, maximum: 5,
                   description: "Did the rep push back, reframe, or take control when the prospect went off script or offered an easy out? 5 = confidently challenged assumptions, reframed the conversation, taught the prospect something. 1 = followed wherever the prospect led, never pushed back."
                 },
+                challenger_posture_evidence: {
+                  type: "string",
+                  description: "Exact transcript quote or specific moment that justifies this score."
+                },
                 narrative_arc_score: {
                   type: "integer", minimum: 1, maximum: 5,
                   description: "Was there a coherent story arc? Current state → problem → gap → why change now → solution need. 5 = the narrative built logically and compellingly from first question to close. 1 = disjointed, jumped between topics, no through-line."
+                },
+                narrative_arc_evidence: {
+                  type: "string",
+                  description: "Exact transcript quote or specific moment that justifies this score."
                 },
                 pressure_recovery_score: {
                   type: "integer", minimum: 1, maximum: 5,
                   description: "When the conversation went sideways — timeout, hostile question, unexpected objection, hallucination challenge, panel format pressure — how did the rep handle it? 5 = adapted immediately, stayed composed, redirected skillfully. 1 = visibly lost control, never recovered."
                 },
+                pressure_recovery_evidence: {
+                  type: "string",
+                  description: "Exact transcript quote or specific moment that justifies this score."
+                },
                 multi_thread_score: {
                   type: "integer", minimum: 1, maximum: 5,
                   description: "Did the rep engage each stakeholder differently based on their role and what they care about? 5 = directed distinct questions to each person, named them, understood their perspective, bridged between personas. 1 = talked to the room generically, ignored one or more attendees."
                 },
+                multi_thread_evidence: {
+                  type: "string",
+                  description: "Exact transcript quote or specific moment that justifies this score."
+                },
                 self_awareness_score: {
                   type: "integer", minimum: 1, maximum: 5,
                   description: "Based on the rep's post-call self-assessment (if present in transcript): accuracy of self-diagnosis, growth mindset, candor about gaps. 5 = precisely identified strengths and gaps, showed genuine coachability. 1 = deflected, defensive, or had no self-awareness. Score 3 if no self-assessment present."
+                },
+                self_awareness_evidence: {
+                  type: "string",
+                  description: "Exact transcript quote from self-assessment that justifies this score."
                 },
 
                 // NEW: Outcome-based fields
@@ -561,7 +604,11 @@ ${kiContext}`;
                 "behavioral_flags", "style_notes", "acumen_notes", "cadence_notes",
                 "call_goals_inferred", "goals_achieved", "deal_progressed", "progression_evidence", "likelihood_impact", "competitors_mentioned",
                 "extracted_next_step", "extracted_next_step_date",
-                "challenger_posture_score", "narrative_arc_score", "pressure_recovery_score", "multi_thread_score", "self_awareness_score"
+                "challenger_posture_score", "challenger_posture_evidence",
+                "narrative_arc_score", "narrative_arc_evidence",
+                "pressure_recovery_score", "pressure_recovery_evidence",
+                "multi_thread_score", "multi_thread_evidence",
+                "self_awareness_score", "self_awareness_evidence"
               ],
               additionalProperties: false,
             },
@@ -639,18 +686,17 @@ ${kiContext}`;
         transcript_moment: grade.transcript_moment,
         call_type: transcript.call_type,
         custom_scorecard_results: (() => {
-          const base = grade.custom_scores?.length ? [...grade.custom_scores] : [];
           if (isRolePlay) {
-            const rpScores = [
-              { category: 'challenger_posture_score', score: grade.challenger_posture_score, evidence: 'Role play evaluation' },
-              { category: 'narrative_arc_score', score: grade.narrative_arc_score, evidence: 'Role play evaluation' },
-              { category: 'pressure_recovery_score', score: grade.pressure_recovery_score, evidence: 'Role play evaluation' },
-              { category: 'multi_thread_score', score: grade.multi_thread_score, evidence: 'Role play evaluation' },
-              { category: 'self_awareness_score', score: grade.self_awareness_score, evidence: 'Role play evaluation' },
+            // For role plays, store the 5 key dimensions with real evidence from the AI
+            return [
+              { category: 'Challenger Posture', score: grade.challenger_posture_score, evidence: grade.challenger_posture_evidence || '' },
+              { category: 'Narrative Arc', score: grade.narrative_arc_score, evidence: grade.narrative_arc_evidence || '' },
+              { category: 'Pressure Recovery', score: grade.pressure_recovery_score, evidence: grade.pressure_recovery_evidence || '' },
+              { category: 'Multi-Stakeholder Navigation', score: grade.multi_thread_score, evidence: grade.multi_thread_evidence || '' },
+              { category: 'Self-Awareness', score: grade.self_awareness_score, evidence: grade.self_awareness_evidence || '' },
             ].filter(s => s.score != null);
-            return [...base, ...rpScores];
           }
-          return base.length ? base : null;
+          return grade.custom_scores?.length ? grade.custom_scores : null;
         })(),
         // Outcome-based fields
         call_goals_inferred: grade.call_goals_inferred || [],
@@ -856,10 +902,10 @@ ${kiContext}`;
 
           if (isRP) {
             // Role plays: use dedicated role-play-specific scores for competitive and expansion dimensions
-            const challenger = getCustom('challenger_posture_score');
-            const narrative = getCustom('narrative_arc_score');
-            const pressure = getCustom('pressure_recovery_score');
-            const multithread = getCustom('multi_thread_score');
+            const challenger = getCustom('Challenger Posture');
+            const narrative = getCustom('Narrative Arc');
+            const pressure = getCustom('Pressure Recovery');
+            const multithread = getCustom('Multi-Stakeholder Navigation');
 
             discoveryScores.push(g.discovery_score);
             dealControlScores.push(g.structure_score, g.next_step_score, pressure || g.commercial_score);
