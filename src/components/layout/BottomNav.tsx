@@ -56,6 +56,7 @@ export const trainNavItems: NavItemDef[] = [
   { to: '/skills', label: 'Skills',  icon: Target,      color: 'skills' },
   { to: '/coach',  label: 'Coach',   icon: Mic,         color: 'coach' },
   { to: '/learn',  label: 'Learn',   icon: BookOpen,    color: 'prep' },
+  { to: '/prep',   label: 'Library', icon: Brain,       color: 'prep' },
 ];
 
 // ── Work mode items ───────────────────────────────────────────────────
