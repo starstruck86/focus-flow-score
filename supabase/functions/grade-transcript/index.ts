@@ -686,18 +686,17 @@ ${kiContext}`;
         transcript_moment: grade.transcript_moment,
         call_type: transcript.call_type,
         custom_scorecard_results: (() => {
-          const base = grade.custom_scores?.length ? [...grade.custom_scores] : [];
           if (isRolePlay) {
-            const rpScores = [
-              { category: 'challenger_posture_score', score: grade.challenger_posture_score, evidence: 'Role play evaluation' },
-              { category: 'narrative_arc_score', score: grade.narrative_arc_score, evidence: 'Role play evaluation' },
-              { category: 'pressure_recovery_score', score: grade.pressure_recovery_score, evidence: 'Role play evaluation' },
-              { category: 'multi_thread_score', score: grade.multi_thread_score, evidence: 'Role play evaluation' },
-              { category: 'self_awareness_score', score: grade.self_awareness_score, evidence: 'Role play evaluation' },
+            // For role plays, store the 5 key dimensions with real evidence from the AI
+            return [
+              { category: 'Challenger Posture', score: grade.challenger_posture_score, evidence: grade.challenger_posture_evidence || '' },
+              { category: 'Narrative Arc', score: grade.narrative_arc_score, evidence: grade.narrative_arc_evidence || '' },
+              { category: 'Pressure Recovery', score: grade.pressure_recovery_score, evidence: grade.pressure_recovery_evidence || '' },
+              { category: 'Multi-Stakeholder Navigation', score: grade.multi_thread_score, evidence: grade.multi_thread_evidence || '' },
+              { category: 'Self-Awareness', score: grade.self_awareness_score, evidence: grade.self_awareness_evidence || '' },
             ].filter(s => s.score != null);
-            return [...base, ...rpScores];
           }
-          return base.length ? base : null;
+          return grade.custom_scores?.length ? grade.custom_scores : null;
         })(),
         // Outcome-based fields
         call_goals_inferred: grade.call_goals_inferred || [],
