@@ -166,59 +166,45 @@ serve(async (req) => {
 
     const rolePlayContext = isRolePlay ? `
 
-## CRITICAL: THIS IS A MOCK / ROLE PLAY — STANDALONE CONVERSATION
+## CRITICAL: THIS IS A MOCK / ROLE PLAY — PRESSURE TEST EVALUATION
 
 Call: ${transcript.title}
 Participants: ${transcript.participants || 'Unknown'}
 
-This is a SINGLE STANDALONE practice call. There is no deal, no pipeline, no prior call history.
-- Do NOT require complete MEDDICC or CotM coverage — they are secondary diagnostic lenses only
-- Do NOT penalize for lack of deal movement — there is no deal
-- Do NOT assume what the rep should have covered from a deal cycle perspective
-- Grade ONLY what happened in this specific conversation
+This is a standalone practice call simulating a high-stakes enterprise sales scenario. The interviewers are sales leaders deliberately pressure-testing the rep. There is no real deal.
 
-WHAT "GOOD" LOOKS LIKE depends on the call type inferred from title and participants:
-- If 1st discovery: Elite = 3+ quantified pain points uncovered, decision process mapped, specific next step locked, prospect did 60%+ of talking
-- If 2nd discovery / multi-stakeholder: Elite = built on prior pain, engaged every stakeholder differently, created urgency, got commitment
-- If demo included: Elite = demo tied directly to specific pain stated earlier in call, objections handled confidently, clear POC next step
-- If panel / interview format: Elite = controlled the room, demonstrated expertise under pressure from multiple interviewers, closed confidently
+DO NOT require complete MEDDICC or CotM — they are diagnostic lenses only.
+DO NOT penalize for lack of deal movement — there is no deal.
+DO NOT grade this like a routine call — grade it like what it is: a performance evaluation.
 
-PRIMARY GRADING DIMENSIONS (in order of weight):
+WHAT INTERVIEWERS ARE ACTUALLY EVALUATING:
 
-1. DISCOVERY QUALITY (discovery_score)
-   What good looks like: Rep asked 2-3 layered follow-up questions per pain area. Got the prospect to articulate impact in their own words with real numbers. Did NOT accept surface-level answers.
-   What bad looks like: Accepted "yeah that's a problem" without going deeper. Asked one question and moved on. Led the witness.
+1. CONTROL — Does the rep own the room? Do they set the agenda and defend it? When the interviewer goes off-script, does the rep redirect or follow?
 
-2. COMMERCIAL ACUMEN (commercial_score)  
-   What good looks like: Got real numbers ($, %, timelines) within first 15 minutes. Connected pain to revenue impact without being asked. Did napkin math live on the call.
-   What bad looks like: Talked about pain without attaching a number. Accepted vague answers like "it's significant." Moved on without quantifying.
+2. CHALLENGER POSTURE — Does the rep ever push back, reframe, or teach? Elite reps don't just ask questions — they offer perspectives the prospect hadn't considered, challenge assumptions, and take a position. Did the rep ever make the prospect think differently?
 
-3. AGENDA & STRUCTURE CONTROL (structure_score)
-   What good looks like: Set clear agenda upfront. Recovered when conversation drifted. Controlled pacing. Did not let a single question derail the call narrative.
-   What bad looks like: Got pulled into rabbit holes. Lost thread. Jumped between topics without connecting them. Ran out of time before covering key areas.
+3. NARRATIVE ARC — Was there a coherent story from opener to close? Current state → acknowledged problem → quantified gap → why change now → solution need. Or did the call bounce between topics with no through-line?
 
-4. STAKEHOLDER ENGAGEMENT (presence_score)
-   What good looks like: Addressed each person by name and role. Asked role-specific questions. Understood what each person cared about. Multi-threaded naturally.
-   What bad looks like: Talked to the room generically. Missed one person's perspective entirely. Did not differentiate messaging by persona.
+4. PRESSURE RECOVERY — When the interviewer threw a curveball (timeout, hostile challenge, technical question, panel dynamics), did the rep handle it? Did they stay composed, adapt, and re-establish control?
 
-5. NEXT STEP CONTROL (next_step_score)
-   What good looks like: Got a specific, time-bound commitment before ending the call. Closed confidently and directly.
-   What bad looks like: Ended with "I'll send something over." Left next step vague. Did not ask for a decision.
+5. MULTI-STAKEHOLDER NAVIGATION — Did the rep engage each person in the room distinctly based on their role? Different personas care about different things. Did the rep understand that and act on it?
 
-6. CHALLENGER POSTURE (cotm_score as proxy)
-   What good looks like: Taught the prospect something they didn't know. Reframed their thinking. Took control when challenged. Used insight to create urgency.
-   What bad looks like: Stayed in "needs satisfaction" mode. Answered every question asked without redirecting. Accepted pushback without defending a position.
+6. SELF-AWARENESS — If the rep gave a post-call self-assessment, how accurate and candid was it? This is a signal of coachability and growth mindset.
 
-COMPETITOR HANDLING: If competitors came up, grade specifically. Elite = positioned confidently without bashing. Acknowledged strengths, then differentiated. Weak = went on defense or agreed with prospect's competitor framing.
+CALL TYPE STANDARDS:
+- 1st discovery: Elite = uncovers 3+ quantified pain points, maps decision process, locks specific demo with pre-call
+- 2nd discovery / multi-stakeholder panel: Elite = deepens prior pain, threads every stakeholder, creates urgency, gets commitment
+- Demo included: Elite = demo tied to specific pain, objections handled confidently, firm POC commitment
+- Panel format: Elite = controls a multi-person room, demonstrates expertise under pressure, closes confidently
 
-SCORING — BE EXACTING:
-- 5 = Elite. Would win the real deal. Evidence must be unmistakable.
-- 4 = Strong. One or two missed moments, but rep controlled the narrative.
-- 3 = Adequate. Skills present but inconsistent. Prospect led more than rep.
-- 2 = Developing. Significant gaps. Prospect controlled the conversation.
+SCORING — BE BRUTALLY HONEST:
+- 5 = Elite. Would have won the deal or got the job offer on the spot.
+- 4 = Strong. One or two clear gaps, but rep controlled the narrative throughout.
+- 3 = Adequate. Skills present but inconsistent. Prospect/interviewer led more than rep.
+- 2 = Developing. Significant gaps. Lost control multiple times.
 - 1 = Needs urgent work. Directionless.
 
-MANDATORY: Differentiate scores across dimensions. If discovery was 4 but commercial was 2, show that. Do not cluster all scores at 2 or 3. Each score must have specific transcript evidence.
+MANDATORY: Scores must be differentiated across ALL dimensions including the 5 role-play-specific ones (challenger_posture_score, narrative_arc_score, pressure_recovery_score, multi_thread_score, self_awareness_score). Each must have specific transcript evidence. Do not cluster.
 
 deal_progressed = false
 likelihood_impact = "unchanged"` : '';
