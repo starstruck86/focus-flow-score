@@ -604,7 +604,11 @@ ${kiContext}`;
                 "behavioral_flags", "style_notes", "acumen_notes", "cadence_notes",
                 "call_goals_inferred", "goals_achieved", "deal_progressed", "progression_evidence", "likelihood_impact", "competitors_mentioned",
                 "extracted_next_step", "extracted_next_step_date",
-                "challenger_posture_score", "narrative_arc_score", "pressure_recovery_score", "multi_thread_score", "self_awareness_score"
+                "challenger_posture_score", "challenger_posture_evidence",
+                "narrative_arc_score", "narrative_arc_evidence",
+                "pressure_recovery_score", "pressure_recovery_evidence",
+                "multi_thread_score", "multi_thread_evidence",
+                "self_awareness_score", "self_awareness_evidence"
               ],
               additionalProperties: false,
             },
