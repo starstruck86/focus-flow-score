@@ -166,59 +166,45 @@ serve(async (req) => {
 
     const rolePlayContext = isRolePlay ? `
 
-## CRITICAL: THIS IS A MOCK / ROLE PLAY — STANDALONE CONVERSATION
+## CRITICAL: THIS IS A MOCK / ROLE PLAY — PRESSURE TEST EVALUATION
 
 Call: ${transcript.title}
 Participants: ${transcript.participants || 'Unknown'}
 
-This is a SINGLE STANDALONE practice call. There is no deal, no pipeline, no prior call history.
-- Do NOT require complete MEDDICC or CotM coverage — they are secondary diagnostic lenses only
-- Do NOT penalize for lack of deal movement — there is no deal
-- Do NOT assume what the rep should have covered from a deal cycle perspective
-- Grade ONLY what happened in this specific conversation
+This is a standalone practice call simulating a high-stakes enterprise sales scenario. The interviewers are sales leaders deliberately pressure-testing the rep. There is no real deal.
 
-WHAT "GOOD" LOOKS LIKE depends on the call type inferred from title and participants:
-- If 1st discovery: Elite = 3+ quantified pain points uncovered, decision process mapped, specific next step locked, prospect did 60%+ of talking
-- If 2nd discovery / multi-stakeholder: Elite = built on prior pain, engaged every stakeholder differently, created urgency, got commitment
-- If demo included: Elite = demo tied directly to specific pain stated earlier in call, objections handled confidently, clear POC next step
-- If panel / interview format: Elite = controlled the room, demonstrated expertise under pressure from multiple interviewers, closed confidently
+DO NOT require complete MEDDICC or CotM — they are diagnostic lenses only.
+DO NOT penalize for lack of deal movement — there is no deal.
+DO NOT grade this like a routine call — grade it like what it is: a performance evaluation.
 
-PRIMARY GRADING DIMENSIONS (in order of weight):
+WHAT INTERVIEWERS ARE ACTUALLY EVALUATING:
 
-1. DISCOVERY QUALITY (discovery_score)
-   What good looks like: Rep asked 2-3 layered follow-up questions per pain area. Got the prospect to articulate impact in their own words with real numbers. Did NOT accept surface-level answers.
-   What bad looks like: Accepted "yeah that's a problem" without going deeper. Asked one question and moved on. Led the witness.
+1. CONTROL — Does the rep own the room? Do they set the agenda and defend it? When the interviewer goes off-script, does the rep redirect or follow?
 
-2. COMMERCIAL ACUMEN (commercial_score)  
-   What good looks like: Got real numbers ($, %, timelines) within first 15 minutes. Connected pain to revenue impact without being asked. Did napkin math live on the call.
-   What bad looks like: Talked about pain without attaching a number. Accepted vague answers like "it's significant." Moved on without quantifying.
+2. CHALLENGER POSTURE — Does the rep ever push back, reframe, or teach? Elite reps don't just ask questions — they offer perspectives the prospect hadn't considered, challenge assumptions, and take a position. Did the rep ever make the prospect think differently?
 
-3. AGENDA & STRUCTURE CONTROL (structure_score)
-   What good looks like: Set clear agenda upfront. Recovered when conversation drifted. Controlled pacing. Did not let a single question derail the call narrative.
-   What bad looks like: Got pulled into rabbit holes. Lost thread. Jumped between topics without connecting them. Ran out of time before covering key areas.
+3. NARRATIVE ARC — Was there a coherent story from opener to close? Current state → acknowledged problem → quantified gap → why change now → solution need. Or did the call bounce between topics with no through-line?
 
-4. STAKEHOLDER ENGAGEMENT (presence_score)
-   What good looks like: Addressed each person by name and role. Asked role-specific questions. Understood what each person cared about. Multi-threaded naturally.
-   What bad looks like: Talked to the room generically. Missed one person's perspective entirely. Did not differentiate messaging by persona.
+4. PRESSURE RECOVERY — When the interviewer threw a curveball (timeout, hostile challenge, technical question, panel dynamics), did the rep handle it? Did they stay composed, adapt, and re-establish control?
 
-5. NEXT STEP CONTROL (next_step_score)
-   What good looks like: Got a specific, time-bound commitment before ending the call. Closed confidently and directly.
-   What bad looks like: Ended with "I'll send something over." Left next step vague. Did not ask for a decision.
+5. MULTI-STAKEHOLDER NAVIGATION — Did the rep engage each person in the room distinctly based on their role? Different personas care about different things. Did the rep understand that and act on it?
 
-6. CHALLENGER POSTURE (cotm_score as proxy)
-   What good looks like: Taught the prospect something they didn't know. Reframed their thinking. Took control when challenged. Used insight to create urgency.
-   What bad looks like: Stayed in "needs satisfaction" mode. Answered every question asked without redirecting. Accepted pushback without defending a position.
+6. SELF-AWARENESS — If the rep gave a post-call self-assessment, how accurate and candid was it? This is a signal of coachability and growth mindset.
 
-COMPETITOR HANDLING: If competitors came up, grade specifically. Elite = positioned confidently without bashing. Acknowledged strengths, then differentiated. Weak = went on defense or agreed with prospect's competitor framing.
+CALL TYPE STANDARDS:
+- 1st discovery: Elite = uncovers 3+ quantified pain points, maps decision process, locks specific demo with pre-call
+- 2nd discovery / multi-stakeholder panel: Elite = deepens prior pain, threads every stakeholder, creates urgency, gets commitment
+- Demo included: Elite = demo tied to specific pain, objections handled confidently, firm POC commitment
+- Panel format: Elite = controls a multi-person room, demonstrates expertise under pressure, closes confidently
 
-SCORING — BE EXACTING:
-- 5 = Elite. Would win the real deal. Evidence must be unmistakable.
-- 4 = Strong. One or two missed moments, but rep controlled the narrative.
-- 3 = Adequate. Skills present but inconsistent. Prospect led more than rep.
-- 2 = Developing. Significant gaps. Prospect controlled the conversation.
+SCORING — BE BRUTALLY HONEST:
+- 5 = Elite. Would have won the deal or got the job offer on the spot.
+- 4 = Strong. One or two clear gaps, but rep controlled the narrative throughout.
+- 3 = Adequate. Skills present but inconsistent. Prospect/interviewer led more than rep.
+- 2 = Developing. Significant gaps. Lost control multiple times.
 - 1 = Needs urgent work. Directionless.
 
-MANDATORY: Differentiate scores across dimensions. If discovery was 4 but commercial was 2, show that. Do not cluster all scores at 2 or 3. Each score must have specific transcript evidence.
+MANDATORY: Scores must be differentiated across ALL dimensions including the 5 role-play-specific ones (challenger_posture_score, narrative_arc_score, pressure_recovery_score, multi_thread_score, self_awareness_score). Each must have specific transcript evidence. Do not cluster.
 
 deal_progressed = false
 likelihood_impact = "unchanged"` : '';
@@ -501,6 +487,28 @@ ${kiContext}`;
                   description: "Scores for custom scorecard criteria, if any were provided",
                 },
 
+                // ROLE PLAY SPECIFIC DIMENSIONS — populated only for call_type Role Play / Mock
+                challenger_posture_score: {
+                  type: "integer", minimum: 1, maximum: 5,
+                  description: "Did the rep push back, reframe, or take control when the prospect went off script or offered an easy out? 5 = confidently challenged assumptions, reframed the conversation, taught the prospect something. 1 = followed wherever the prospect led, never pushed back."
+                },
+                narrative_arc_score: {
+                  type: "integer", minimum: 1, maximum: 5,
+                  description: "Was there a coherent story arc? Current state → problem → gap → why change now → solution need. 5 = the narrative built logically and compellingly from first question to close. 1 = disjointed, jumped between topics, no through-line."
+                },
+                pressure_recovery_score: {
+                  type: "integer", minimum: 1, maximum: 5,
+                  description: "When the conversation went sideways — timeout, hostile question, unexpected objection, hallucination challenge, panel format pressure — how did the rep handle it? 5 = adapted immediately, stayed composed, redirected skillfully. 1 = visibly lost control, never recovered."
+                },
+                multi_thread_score: {
+                  type: "integer", minimum: 1, maximum: 5,
+                  description: "Did the rep engage each stakeholder differently based on their role and what they care about? 5 = directed distinct questions to each person, named them, understood their perspective, bridged between personas. 1 = talked to the room generically, ignored one or more attendees."
+                },
+                self_awareness_score: {
+                  type: "integer", minimum: 1, maximum: 5,
+                  description: "Based on the rep's post-call self-assessment (if present in transcript): accuracy of self-diagnosis, growth mindset, candor about gaps. 5 = precisely identified strengths and gaps, showed genuine coachability. 1 = deflected, defensive, or had no self-awareness. Score 3 if no self-assessment present."
+                },
+
                 // NEW: Outcome-based fields
                 call_goals_inferred: {
                   type: "array",
@@ -552,7 +560,8 @@ ${kiContext}`;
                 "strengths", "missed_opportunities", "suggested_questions",
                 "behavioral_flags", "style_notes", "acumen_notes", "cadence_notes",
                 "call_goals_inferred", "goals_achieved", "deal_progressed", "progression_evidence", "likelihood_impact", "competitors_mentioned",
-                "extracted_next_step", "extracted_next_step_date"
+                "extracted_next_step", "extracted_next_step_date",
+                "challenger_posture_score", "narrative_arc_score", "pressure_recovery_score", "multi_thread_score", "self_awareness_score"
               ],
               additionalProperties: false,
             },
@@ -629,7 +638,20 @@ ${kiContext}`;
         coaching_why: grade.coaching_why,
         transcript_moment: grade.transcript_moment,
         call_type: transcript.call_type,
-        custom_scorecard_results: grade.custom_scores?.length ? grade.custom_scores : null,
+        custom_scorecard_results: (() => {
+          const base = grade.custom_scores?.length ? [...grade.custom_scores] : [];
+          if (isRolePlay) {
+            const rpScores = [
+              { category: 'challenger_posture_score', score: grade.challenger_posture_score, evidence: 'Role play evaluation' },
+              { category: 'narrative_arc_score', score: grade.narrative_arc_score, evidence: 'Role play evaluation' },
+              { category: 'pressure_recovery_score', score: grade.pressure_recovery_score, evidence: 'Role play evaluation' },
+              { category: 'multi_thread_score', score: grade.multi_thread_score, evidence: 'Role play evaluation' },
+              { category: 'self_awareness_score', score: grade.self_awareness_score, evidence: 'Role play evaluation' },
+            ].filter(s => s.score != null);
+            return [...base, ...rpScores];
+          }
+          return base.length ? base : null;
+        })(),
         // Outcome-based fields
         call_goals_inferred: grade.call_goals_inferred || [],
         goals_achieved: grade.goals_achieved || [],
@@ -806,11 +828,11 @@ ${kiContext}`;
       }
 
     // Recompute spider dimension scores from all transcript grades and write to dimension_scores
-    // This ensures role plays, Acoustic calls, and Branch.io calls all feed the spider chart
+    // Role plays use dedicated dimensions; real calls use standard framework scores
     try {
       const { data: allGrades } = await supabase
         .from('transcript_grades')
-        .select('discovery_score, cotm_score, meddicc_score, presence_score, commercial_score, next_step_score, structure_score')
+        .select('discovery_score, cotm_score, meddicc_score, presence_score, commercial_score, next_step_score, structure_score, call_type, custom_scorecard_results')
         .eq('user_id', userId);
 
       if (allGrades && allGrades.length > 0) {
@@ -820,12 +842,46 @@ ${kiContext}`;
           return Math.round(valid.reduce((a, b) => a + b, 0) / valid.length * 20);
         };
 
-        const dimensionMap: { dimension: string; scores: (number | null)[] }[] = [
-          { dimension: 'discovery', scores: allGrades.map((g: any) => g.discovery_score) },
-          { dimension: 'deal_control', scores: allGrades.flatMap((g: any) => [g.structure_score, g.next_step_score, g.commercial_score]) },
-          { dimension: 'stakeholder_navigation', scores: allGrades.map((g: any) => g.presence_score) },
-          { dimension: 'expansion_strategy', scores: allGrades.map((g: any) => g.cotm_score) },
-          { dimension: 'competitive', scores: allGrades.map((g: any) => g.meddicc_score) },
+        // For each grade, compute its contribution to each spider dimension
+        const discoveryScores: number[] = [];
+        const dealControlScores: number[] = [];
+        const stakeholderScores: number[] = [];
+        const expansionScores: number[] = [];
+        const competitiveScores: number[] = [];
+
+        for (const g of allGrades as any[]) {
+          const isRP = (g.call_type || '').toLowerCase().includes('role play') || (g.call_type || '').toLowerCase().includes('mock');
+          const custom = g.custom_scorecard_results || [];
+          const getCustom = (cat: string) => custom.find((c: any) => c.category === cat)?.score || null;
+
+          if (isRP) {
+            // Role plays: use dedicated role-play-specific scores for competitive and expansion dimensions
+            const challenger = getCustom('challenger_posture_score');
+            const narrative = getCustom('narrative_arc_score');
+            const pressure = getCustom('pressure_recovery_score');
+            const multithread = getCustom('multi_thread_score');
+
+            discoveryScores.push(g.discovery_score);
+            dealControlScores.push(g.structure_score, g.next_step_score, pressure || g.commercial_score);
+            stakeholderScores.push(g.presence_score, multithread || g.presence_score);
+            expansionScores.push(narrative || g.cotm_score);
+            competitiveScores.push(challenger || g.meddicc_score);
+          } else {
+            // Real calls: use standard framework scores
+            discoveryScores.push(g.discovery_score);
+            dealControlScores.push(g.structure_score, g.next_step_score, g.commercial_score);
+            stakeholderScores.push(g.presence_score);
+            expansionScores.push(g.cotm_score);
+            competitiveScores.push(g.meddicc_score);
+          }
+        }
+
+        const dimensionMap = [
+          { dimension: 'discovery', scores: discoveryScores },
+          { dimension: 'deal_control', scores: dealControlScores },
+          { dimension: 'stakeholder_navigation', scores: stakeholderScores },
+          { dimension: 'expansion_strategy', scores: expansionScores },
+          { dimension: 'competitive', scores: competitiveScores },
         ];
 
         for (const { dimension, scores } of dimensionMap) {
@@ -838,14 +894,9 @@ ${kiContext}`;
             .eq('spider_dimension', dimension)
             .maybeSingle();
           if (existing) {
-            await supabase
-              .from('dimension_scores')
-              .update({ avg_score_100: avgScore })
-              .eq('id', existing.id);
+            await supabase.from('dimension_scores').update({ avg_score_100: avgScore }).eq('id', existing.id);
           } else {
-            await supabase
-              .from('dimension_scores')
-              .insert({ user_id: userId, spider_dimension: dimension, avg_score_100: avgScore });
+            await supabase.from('dimension_scores').insert({ user_id: userId, spider_dimension: dimension, avg_score_100: avgScore });
           }
         }
         console.log(`[grade-transcript] Spider dimensions recomputed from ${allGrades.length} grades`);
