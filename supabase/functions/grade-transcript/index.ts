@@ -87,6 +87,19 @@ serve(async (req) => {
     const priorGrades = priorGradesRes.data || [];
     const opportunity = opportunityRes.data;
 
+    // Fetch top KIs per dimension to ground grading in the actual knowledge library
+    const { data: relevantKIs } = await supabase
+      .from('knowledge_items')
+      .select('tactic_summary, spider_dimension')
+      .eq('active', true)
+      .in('spider_dimension', ['discovery', 'deal_control', 'competitive', 'stakeholder_navigation', 'expansion_strategy', 'messaging', 'objection_handling'])
+      .order('created_at', { ascending: false })
+      .limit(24);
+
+    const kiContext = relevantKIs && relevantKIs.length > 0
+      ? `\n\n## KNOWLEDGE LIBRARY — ELITE TACTIC BENCHMARKS\nGrade the rep's execution against these specific elite tactics from their training library. A 4-5 score requires evidence of these behaviors:\n${relevantKIs.map((ki: any) => `- [${ki.spider_dimension}] ${ki.tactic_summary}`).join('\n')}\n\nWhen a tactic from this library was clearly missed, call it out specifically in missed_opportunities and replacement_behavior.`
+      : '';
+
     const resourceContext = resources.length > 0
       ? `The user follows these sales methodologies:\n${resources.map((r: any) => `- ${r.label} (${r.category})${r.notes ? ': ' + r.notes : ''}`).join('\n')}`
       : "No specific methodology resources uploaded. Use Command of the Message + MEDDICC as primary frameworks.";
