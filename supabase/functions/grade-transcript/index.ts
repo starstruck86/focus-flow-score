@@ -204,7 +204,30 @@ SCORING — BE BRUTALLY HONEST:
 - 2 = Developing. Significant gaps. Lost control multiple times.
 - 1 = Needs urgent work. Directionless.
 
-MANDATORY: Scores must be differentiated across ALL dimensions including the 5 role-play-specific ones (challenger_posture_score, narrative_arc_score, pressure_recovery_score, multi_thread_score, self_awareness_score). Each must have specific transcript evidence. Do not cluster.
+MANDATORY: Scores must be differentiated across ALL dimensions. Each must have specific transcript evidence. Do not cluster.
+
+COMPUTING overall_score FOR ROLE PLAYS — follow this formula exactly:
+Do NOT include meddicc_score or cotm_score in the overall — they measure deal execution, not standalone practice performance.
+
+overall_score (1-5) = weighted average of:
+  discovery_score          × 0.20
+  challenger_posture_score × 0.20
+  narrative_arc_score      × 0.20
+  structure_score          × 0.15
+  multi_thread_score       × 0.10
+  commercial_score         × 0.10
+  next_step_score          × 0.05
+
+Round to nearest integer. Then map to overall_grade:
+  5 → A or A+ (reserve A+ for flawless execution)
+  4 → B+ or A- (strong, 1-2 clear gaps)
+  3.5 → B or B- (adequate, rep was mostly reactive)
+  3 → C+ or C (developing, significant gaps)
+  2.5 or below → C- or D (needs urgent work)
+
+Example: discovery=4, challenger=3, narrative=2, structure=3, multi_thread=3, commercial=3, next_step=3
+= (4×0.20)+(3×0.20)+(2×0.20)+(3×0.15)+(3×0.10)+(3×0.10)+(3×0.05)
+= 0.80+0.60+0.40+0.45+0.30+0.30+0.15 = 3.0 → C+ or B-
 
 deal_progressed = false
 likelihood_impact = "unchanged"` : '';
