@@ -162,6 +162,37 @@ serve(async (req) => {
       ? `\n\n## CALL GOALS (set by rep before this call)\n${(call_goals || transcript.call_goals).map((g: string, i: number) => `${i + 1}. ${g}`).join('\n')}\nEvaluate whether each goal was achieved in the transcript.`
       : "";
 
+    const isRolePlay = (transcript.call_type || '').toLowerCase().includes('role play') || (transcript.call_type || '').toLowerCase().includes('mock');
+
+    const rolePlayContext = isRolePlay ? `
+
+## CRITICAL: THIS IS A MOCK / ROLE PLAY CALL
+You are grading a practice session, NOT a real deal.
+- "deal_progressed" should ALWAYS be false for role plays (there is no real deal)
+- "likelihood_impact" should be "unchanged" for role plays
+- DO NOT downgrade scores because MEDDICC wasn't fully completed — this is a practice call
+- DO NOT penalize for lack of deal movement
+
+INSTEAD, grade on pure skill execution:
+- Did the rep ask layered, curious questions that went 2-3 levels deep?
+- Did they quantify business impact in real numbers?
+- Did they maintain agenda control or get pulled off track?
+- Did they use Challenger posture — teach, tailor, take control?
+- Did they multi-thread (engage all stakeholders present)?
+- Did they create urgency without a real deal?
+- Did they get a specific, committed next step?
+
+SCORING SCALE FOR ROLE PLAYS:
+- 5 = Elite execution. Would close a real deal. Questions were surgical, impact was quantified, next step was locked.
+- 4 = Strong. One or two missed opportunities but the rep controlled the conversation.
+- 3 = Adequate. The basics were there but the rep was reactive more than proactive.
+- 2 = Significant gaps. Rep was following the prospect's lead rather than driving discovery.
+- 1 = Directionless. No structure, no quantification, no commitment.
+
+DIFFERENTIATE your scores across dimensions. If discovery was 4 but commercial was 2, SHOW THAT. Do not cluster all scores at the same level.
+
+COMPARE this call to what an elite Strategic AE would have done in the same scenario. Be specific about the delta.` : '';
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
