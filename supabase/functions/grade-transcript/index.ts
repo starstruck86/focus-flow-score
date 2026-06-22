@@ -166,32 +166,62 @@ serve(async (req) => {
 
     const rolePlayContext = isRolePlay ? `
 
-## CRITICAL: THIS IS A MOCK / ROLE PLAY CALL
-You are grading a practice session, NOT a real deal.
-- "deal_progressed" should ALWAYS be false for role plays (there is no real deal)
-- "likelihood_impact" should be "unchanged" for role plays
-- DO NOT downgrade scores because MEDDICC wasn't fully completed — this is a practice call
-- DO NOT penalize for lack of deal movement
+## CRITICAL: THIS IS A MOCK / ROLE PLAY — STANDALONE CONVERSATION
 
-INSTEAD, grade on pure skill execution:
-- Did the rep ask layered, curious questions that went 2-3 levels deep?
-- Did they quantify business impact in real numbers?
-- Did they maintain agenda control or get pulled off track?
-- Did they use Challenger posture — teach, tailor, take control?
-- Did they multi-thread (engage all stakeholders present)?
-- Did they create urgency without a real deal?
-- Did they get a specific, committed next step?
+Call: ${transcript.title}
+Participants: ${transcript.participants || 'Unknown'}
 
-SCORING SCALE FOR ROLE PLAYS:
-- 5 = Elite execution. Would close a real deal. Questions were surgical, impact was quantified, next step was locked.
-- 4 = Strong. One or two missed opportunities but the rep controlled the conversation.
-- 3 = Adequate. The basics were there but the rep was reactive more than proactive.
-- 2 = Significant gaps. Rep was following the prospect's lead rather than driving discovery.
-- 1 = Directionless. No structure, no quantification, no commitment.
+This is a SINGLE STANDALONE practice call. There is no deal, no pipeline, no prior call history.
+- Do NOT require complete MEDDICC or CotM coverage — they are secondary diagnostic lenses only
+- Do NOT penalize for lack of deal movement — there is no deal
+- Do NOT assume what the rep should have covered from a deal cycle perspective
+- Grade ONLY what happened in this specific conversation
 
-DIFFERENTIATE your scores across dimensions. If discovery was 4 but commercial was 2, SHOW THAT. Do not cluster all scores at the same level.
+WHAT "GOOD" LOOKS LIKE depends on the call type inferred from title and participants:
+- If 1st discovery: Elite = 3+ quantified pain points uncovered, decision process mapped, specific next step locked, prospect did 60%+ of talking
+- If 2nd discovery / multi-stakeholder: Elite = built on prior pain, engaged every stakeholder differently, created urgency, got commitment
+- If demo included: Elite = demo tied directly to specific pain stated earlier in call, objections handled confidently, clear POC next step
+- If panel / interview format: Elite = controlled the room, demonstrated expertise under pressure from multiple interviewers, closed confidently
 
-COMPARE this call to what an elite Strategic AE would have done in the same scenario. Be specific about the delta.` : '';
+PRIMARY GRADING DIMENSIONS (in order of weight):
+
+1. DISCOVERY QUALITY (discovery_score)
+   What good looks like: Rep asked 2-3 layered follow-up questions per pain area. Got the prospect to articulate impact in their own words with real numbers. Did NOT accept surface-level answers.
+   What bad looks like: Accepted "yeah that's a problem" without going deeper. Asked one question and moved on. Led the witness.
+
+2. COMMERCIAL ACUMEN (commercial_score)  
+   What good looks like: Got real numbers ($, %, timelines) within first 15 minutes. Connected pain to revenue impact without being asked. Did napkin math live on the call.
+   What bad looks like: Talked about pain without attaching a number. Accepted vague answers like "it's significant." Moved on without quantifying.
+
+3. AGENDA & STRUCTURE CONTROL (structure_score)
+   What good looks like: Set clear agenda upfront. Recovered when conversation drifted. Controlled pacing. Did not let a single question derail the call narrative.
+   What bad looks like: Got pulled into rabbit holes. Lost thread. Jumped between topics without connecting them. Ran out of time before covering key areas.
+
+4. STAKEHOLDER ENGAGEMENT (presence_score)
+   What good looks like: Addressed each person by name and role. Asked role-specific questions. Understood what each person cared about. Multi-threaded naturally.
+   What bad looks like: Talked to the room generically. Missed one person's perspective entirely. Did not differentiate messaging by persona.
+
+5. NEXT STEP CONTROL (next_step_score)
+   What good looks like: Got a specific, time-bound commitment before ending the call. Closed confidently and directly.
+   What bad looks like: Ended with "I'll send something over." Left next step vague. Did not ask for a decision.
+
+6. CHALLENGER POSTURE (cotm_score as proxy)
+   What good looks like: Taught the prospect something they didn't know. Reframed their thinking. Took control when challenged. Used insight to create urgency.
+   What bad looks like: Stayed in "needs satisfaction" mode. Answered every question asked without redirecting. Accepted pushback without defending a position.
+
+COMPETITOR HANDLING: If competitors came up, grade specifically. Elite = positioned confidently without bashing. Acknowledged strengths, then differentiated. Weak = went on defense or agreed with prospect's competitor framing.
+
+SCORING — BE EXACTING:
+- 5 = Elite. Would win the real deal. Evidence must be unmistakable.
+- 4 = Strong. One or two missed moments, but rep controlled the narrative.
+- 3 = Adequate. Skills present but inconsistent. Prospect led more than rep.
+- 2 = Developing. Significant gaps. Prospect controlled the conversation.
+- 1 = Needs urgent work. Directionless.
+
+MANDATORY: Differentiate scores across dimensions. If discovery was 4 but commercial was 2, show that. Do not cluster all scores at 2 or 3. Each score must have specific transcript evidence.
+
+deal_progressed = false
+likelihood_impact = "unchanged"` : '';
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
