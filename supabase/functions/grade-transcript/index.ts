@@ -805,6 +805,55 @@ ${kiContext}`;
         console.error("Next step auto-fill failed (non-fatal):", nextStepErr);
       }
 
+    // Recompute spider dimension scores from all transcript grades and write to dimension_scores
+    // This ensures role plays, Acoustic calls, and Branch.io calls all feed the spider chart
+    try {
+      const { data: allGrades } = await supabase
+        .from('transcript_grades')
+        .select('discovery_score, cotm_score, meddicc_score, presence_score, commercial_score, next_step_score, structure_score')
+        .eq('user_id', userId);
+
+      if (allGrades && allGrades.length > 0) {
+        const avg100 = (scores: (number | null)[]) => {
+          const valid = scores.filter((s): s is number => s != null && s > 0);
+          if (!valid.length) return 0;
+          return Math.round(valid.reduce((a, b) => a + b, 0) / valid.length * 20);
+        };
+
+        const dimensionMap: { dimension: string; scores: (number | null)[] }[] = [
+          { dimension: 'discovery', scores: allGrades.map((g: any) => g.discovery_score) },
+          { dimension: 'deal_control', scores: allGrades.flatMap((g: any) => [g.structure_score, g.next_step_score, g.commercial_score]) },
+          { dimension: 'stakeholder_navigation', scores: allGrades.map((g: any) => g.presence_score) },
+          { dimension: 'expansion_strategy', scores: allGrades.map((g: any) => g.cotm_score) },
+          { dimension: 'competitive', scores: allGrades.map((g: any) => g.meddicc_score) },
+        ];
+
+        for (const { dimension, scores } of dimensionMap) {
+          const avgScore = avg100(scores);
+          if (avgScore === 0) continue;
+          const { data: existing } = await supabase
+            .from('dimension_scores')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('spider_dimension', dimension)
+            .maybeSingle();
+          if (existing) {
+            await supabase
+              .from('dimension_scores')
+              .update({ avg_score_100: avgScore })
+              .eq('id', existing.id);
+          } else {
+            await supabase
+              .from('dimension_scores')
+              .insert({ user_id: userId, spider_dimension: dimension, avg_score_100: avgScore });
+          }
+        }
+        console.log(`[grade-transcript] Spider dimensions recomputed from ${allGrades.length} grades`);
+      }
+    } catch (spiderErr) {
+      console.error('[grade-transcript] Spider dimension recompute failed (non-fatal):', spiderErr);
+    }
+
     return new Response(JSON.stringify(saved), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
