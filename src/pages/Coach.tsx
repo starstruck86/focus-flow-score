@@ -887,13 +887,14 @@ function TrendsDashboard() {
 }
 
 const CALL_TYPES = [
+  'Role Play',
   'Discovery Call', 'Demo', 'Technical Review', 'Executive Meeting',
   'Pricing Discussion', 'Contract Review', 'Renewal Check-in',
   'QBR', 'Follow-up', 'Other',
 ];
 
 // ─── TRANSCRIPT INGESTION ──────────────────────────────────
-function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
+function TranscriptIngestion({ onSaved, onSaveAndGrade }: { onSaved: () => void; onSaveAndGrade?: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [pasteContent, setPasteContent] = useState('');
   const [title, setTitle] = useState('');
@@ -1146,16 +1147,49 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                   />
                 </div>
 
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
                   <Button
                     size="sm"
+                    variant="outline"
                     onClick={handleSave}
                     disabled={!pasteContent.trim() || saveTranscript.isPending}
                     className="gap-1.5"
                   >
                     {saveTranscript.isPending
                       ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving...</>
-                      : <><FileText className="h-3.5 w-3.5" /> Save & Ready to Analyze</>}
+                      : <><FileText className="h-3.5 w-3.5" /> Save Only</>}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      if (!pasteContent.trim()) { toast.error('Paste a transcript first'); return; }
+                      const autoTitle = title.trim() || `${callType || 'Call'} — ${callDate}`;
+                      try {
+                        const result = await saveTranscript.mutateAsync({
+                          title: autoTitle,
+                          content: pasteContent.trim(),
+                          call_date: callDate,
+                          call_type: callType || undefined,
+                          participants: participants.trim() || undefined,
+                          account_id: accountId || undefined,
+                          opportunity_id: opportunityId || undefined,
+                        });
+                        toast.success('Saved — grading now…');
+                        setPasteContent(''); setTitle(''); setCallType(''); setParticipants('');
+                        setCallGoals(''); setAccountId(''); setOpportunityId('');
+                        setAutoDetected(null); manuallySelected.current = false; setExpanded(false);
+                        onSaved();
+                        if (result?.id && onSaveAndGrade) onSaveAndGrade(result.id);
+                      } catch (err: any) {
+                        toast.error('Failed to save', { description: err.message });
+                      }
+                    }}
+                    disabled={!pasteContent.trim() || saveTranscript.isPending}
+                    className="gap-1.5"
+                  >
+                    {saveTranscript.isPending
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving...</>
+                      : <><Sparkles className="h-3.5 w-3.5" /> Save & Grade Now</>}
                   </Button>
                 </div>
               </div>
@@ -1380,7 +1414,14 @@ export default function Coach() {
               </div>
             ) : (
               <div className="space-y-4">
-                <TranscriptIngestion onSaved={() => refetchTranscripts()} />
+                <TranscriptIngestion
+                  onSaved={() => refetchTranscripts()}
+                  onSaveAndGrade={(id) => {
+                    refetchTranscripts();
+                    setSelectedTranscriptId(id);
+                    gradeTranscript.mutate(id);
+                  }}
+                />
 
                 {recentGrades && recentGrades.length > 0 && (
                   <div className="space-y-1.5">
