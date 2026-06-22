@@ -638,7 +638,20 @@ ${kiContext}`;
         coaching_why: grade.coaching_why,
         transcript_moment: grade.transcript_moment,
         call_type: transcript.call_type,
-        custom_scorecard_results: grade.custom_scores?.length ? grade.custom_scores : null,
+        custom_scorecard_results: (() => {
+          const base = grade.custom_scores?.length ? [...grade.custom_scores] : [];
+          if (isRolePlay) {
+            const rpScores = [
+              { category: 'challenger_posture_score', score: grade.challenger_posture_score, evidence: 'Role play evaluation' },
+              { category: 'narrative_arc_score', score: grade.narrative_arc_score, evidence: 'Role play evaluation' },
+              { category: 'pressure_recovery_score', score: grade.pressure_recovery_score, evidence: 'Role play evaluation' },
+              { category: 'multi_thread_score', score: grade.multi_thread_score, evidence: 'Role play evaluation' },
+              { category: 'self_awareness_score', score: grade.self_awareness_score, evidence: 'Role play evaluation' },
+            ].filter(s => s.score != null);
+            return [...base, ...rpScores];
+          }
+          return base.length ? base : null;
+        })(),
         // Outcome-based fields
         call_goals_inferred: grade.call_goals_inferred || [],
         goals_achieved: grade.goals_achieved || [],
