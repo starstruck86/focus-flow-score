@@ -64,7 +64,7 @@ export const workNavItems: NavItemDef[] = [
   { to: '/tasks',    label: 'Tasks',    icon: CheckSquare, color: 'tasks' },
   { to: '/deals',    label: 'Deals',    icon: TrendingUp,  color: 'deals' },
   { to: '/renewals', label: 'Renewals', icon: RefreshCw,   color: 'renewals' },
-  { to: '/prep',     label: 'Library',  icon: Brain,       color: 'prep' },
+  { to: '/strategy', label: 'Strategy', icon: Crosshair,   color: 'strategy' },
 ];
 
 // ALL_NAV must contain all routable items so useActiveTabColor still works
