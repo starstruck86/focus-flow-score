@@ -62,7 +62,7 @@ export const trainNavItems: NavItemDef[] = [
 export const workNavItems: NavItemDef[] = [
   { to: '/tasks',    label: 'Tasks',    icon: CheckSquare, color: 'tasks' },
   { to: '/deals',    label: 'Deals',    icon: TrendingUp,  color: 'deals' },
-  { to: '/renewals', label: 'Renewals', icon: RefreshCw,   color: 'renewals' },
+  { to: '/settings', label: 'Settings', icon: Settings,    color: 'settings' },
   { to: '/strategy', label: 'Strategy', icon: Crosshair,   color: 'strategy' },
 ];
 
