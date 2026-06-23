@@ -326,6 +326,9 @@ export default function Dashboard() {
             <button onClick={() => navigate('/sharpen', { state: { branchMode: true } })} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/20 transition-all">
               <span>🌿</span> Drill
             </button>
+            <button onClick={() => navigate('/ki-library')} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-muted border border-border/60 text-foreground hover:bg-muted/80 transition-all">
+              <span>📚</span> KI Library
+            </button>
           </div>
         </div>
 
