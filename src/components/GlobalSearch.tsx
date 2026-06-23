@@ -69,24 +69,11 @@ export function GlobalSearch({ className }: { className?: string }) {
   };
 
   const handleSelect = (result: SearchResult) => {
-    if (result.type === 'account') {
-      navigate(`/accounts/${result.id}`);
-    } else if (result.type === 'opportunity') {
-      navigate(`/opportunities/${result.id}`);
-    } else if (result.type === 'renewal') {
-      setCurrentRecord({ type: 'renewal', id: result.id });
-      navigate(result.route);
-    } else if (result.type === 'contact') {
-      // Navigate to parent account if available
-      const contact = results.find(r => r.id === result.id);
-      setCurrentRecord({ type: 'account', id: result.id });
-      navigate(result.route);
-    } else {
-      navigate(result.route);
-    }
+    navigate(result.route);
     setOpen(false);
     setQuery('');
   };
+
 
   const iconForType = (type: string) => {
     switch (type) {
