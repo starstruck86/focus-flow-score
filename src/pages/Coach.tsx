@@ -354,6 +354,7 @@ function CallScorecard({ grade, onRegrade, transcriptId, transcriptContent }: {
         next_step_score: (grade as any).next_step_score ?? 5,
         commercial_score: (grade as any).commercial_score ?? 5,
         presence_score: (grade as any).presence_score ?? 5,
+        product_knowledge_score: (grade as any).product_knowledge_score ?? 5,
       };
       const weakDimSignals = Object.entries(CATEGORY_TO_DIMENSION)
         .filter(([field]) => (CATEGORY_SCORE_MAP[field] ?? 5) < 3)
