@@ -8707,6 +8707,7 @@ export type Database = {
           overall_score: number
           presence_score: number | null
           presence_stats: Json | null
+          product_knowledge_score: number | null
           progression_evidence: string | null
           regraded_at: string | null
           replacement_behavior: string | null
@@ -8758,6 +8759,7 @@ export type Database = {
           overall_score?: number
           presence_score?: number | null
           presence_stats?: Json | null
+          product_knowledge_score?: number | null
           progression_evidence?: string | null
           regraded_at?: string | null
           replacement_behavior?: string | null
@@ -8809,6 +8811,7 @@ export type Database = {
           overall_score?: number
           presence_score?: number | null
           presence_stats?: Json | null
+          product_knowledge_score?: number | null
           progression_evidence?: string | null
           regraded_at?: string | null
           replacement_behavior?: string | null

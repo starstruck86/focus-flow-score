@@ -232,8 +232,8 @@ Example: discovery=4, challenger=3, narrative=2, structure=3, multi_thread=3, co
 deal_progressed = false
 likelihood_impact = "unchanged"` : '';
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
     const systemPrompt = `You are an elite sales performance enforcement engine. You analyze call transcripts with brutal precision using mandatory frameworks. You are NOT a summarizer — you are a coaching system that drives behavioral change.
 
@@ -288,24 +288,24 @@ ${customScorecardContext}
 ${rolePlayContext}
 ${kiContext}`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "claude-sonnet-4-6",
+        max_tokens: 4096,
+        system: systemPrompt,
         messages: [
-          { role: "system", content: systemPrompt },
           { role: "user", content: `Analyze this call transcript with full framework enforcement.\n\nTitle: ${transcript.title}\nType: ${transcript.call_type || 'Unknown'}\nParticipants: ${transcript.participants || 'Unknown'}\n\nTranscript:\n${transcript.content}` },
         ],
         tools: [{
-          type: "function",
-          function: {
-            name: "score_transcript",
-            description: "Submit comprehensive framework-based scoring for a sales call transcript",
-            parameters: {
+          name: "score_transcript",
+          description: "Submit comprehensive framework-based scoring for a sales call transcript",
+          input_schema: {
               type: "object",
               properties: {
                 // Overall
@@ -617,9 +617,8 @@ ${kiContext}`;
               ],
               additionalProperties: false,
             },
-          },
         }],
-        tool_choice: { type: "function", function: { name: "score_transcript" } },
+        tool_choice: { type: "tool", name: "score_transcript" },
       }),
     });
 
@@ -640,10 +639,10 @@ ${kiContext}`;
     }
 
     const aiResult = await response.json();
-    const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
+    const toolCall = aiResult.content?.find((b: any) => b.type === "tool_use");
     if (!toolCall) throw new Error("No grading response from AI");
 
-    const grade = JSON.parse(toolCall.function.arguments);
+    const grade = toolCall.input;
 
     // Transform strengths array to simple strings for backward compat
     const strengthStrings = (grade.strengths || []).map((s: any) => typeof s === 'string' ? s : s.point);

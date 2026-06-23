@@ -421,8 +421,8 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
     const skill = scenario.skillFocus || "objection_handling";
     const rubric = RUBRICS[skill] || RUBRICS.objection_handling;
@@ -596,20 +596,20 @@ REP'S RESPONSE:
 
 Grade this response strictly. Your default is 58-63. Go higher only if genuinely earned.`;
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiResp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "claude-haiku-4-5",
+        max_tokens: 2000,
+        system: systemPrompt,
         messages: [
-          { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.3,
-        max_tokens: 2000,
       }),
     });
 
@@ -622,7 +622,7 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
     }
 
     const aiData = await aiResp.json();
-    let content = aiData.choices?.[0]?.message?.content || "";
+    let content = aiData.content?.[0]?.text || "";
     content = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     const parsed = JSON.parse(content);
 
@@ -842,23 +842,26 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
 
       let regenSucceeded = false;
       try {
-        const regenResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        const regenResp = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_API_KEY}` },
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+          },
           body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
+            model: "claude-haiku-4-5",
+            max_tokens: 500,
+            system: `You are Dave — an elite, encouraging sales coach. ${tone}`,
             messages: [
-              { role: "system", content: `You are Dave — an elite, encouraging sales coach. ${tone}` },
               { role: "user", content: regenPrompt },
             ],
-            temperature: 0.3,
-            max_tokens: 500,
           }),
         });
 
         if (regenResp.ok) {
           const rd = await regenResp.json();
-          let rc = rd.choices?.[0]?.message?.content || "";
+          let rc = rd.content?.[0]?.text || "";
           rc = rc.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
           const rp = JSON.parse(rc);
           for (const field of needsRegen) {
