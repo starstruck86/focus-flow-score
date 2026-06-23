@@ -99,8 +99,29 @@ export default function Simulate() {
   const [loading, setLoading] = useState(false);
   const [turnCount, setTurnCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [gradeResult, setGradeResult] = useState<any>(null);
+  const [grading, setGrading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const runGradeCall = async (finalMessages: Message[]) => {
+    setGrading(true);
+    try {
+      const { data } = await supabase.functions.invoke('simulate-chat', {
+        body: { messages: finalMessages, isGradeMode: true, system: '' },
+      });
+      if (data?.gradeResult) setGradeResult(data.gradeResult);
+    } catch (e) {
+      console.warn('[Simulate] grade error', e);
+    } finally {
+      setGrading(false);
+    }
+  };
+
+  const completeAndGrade = (finalMessages: Message[]) => {
+    setPhase('complete');
+    runGradeCall(finalMessages);
+  };
 
   const account = useMemo(() => accounts.find((a) => a.id === accountId) ?? null, [accounts, accountId]);
 
