@@ -395,6 +395,32 @@ Style: Direct, peer-to-peer, no buzzwords. Max 150 words.`;
           </DialogContent>
         </Dialog>
 
+        <Dialog open={showOutreach} onOpenChange={setShowOutreach}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{account.name} — Outreach Draft</DialogTitle>
+            </DialogHeader>
+            {outreachLoading ? (
+              <div className="flex items-center justify-center py-12 gap-3 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Drafting outreach…
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-border bg-muted/20 p-4">
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{outreachDraft}</p>
+                </div>
+                <p className="text-xs text-muted-foreground">Edit and paste into your email client. Dynamic never sends emails.</p>
+              </div>
+            )}
+            {!outreachLoading && outreachDraft && (
+              <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(outreachDraft)}>
+                Copy to clipboard
+              </Button>
+            )}
+          </DialogContent>
+        </Dialog>
+
 
         {/* Timeline — living record of this account */}
         <AccountTimeline accountId={account.id} />
