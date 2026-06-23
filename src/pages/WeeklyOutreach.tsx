@@ -1227,6 +1227,9 @@ export default function WeeklyOutreach() {
         {/* Priority Inbox — above tabs */}
         <PriorityInbox />
 
+        {/* This Week AI briefing — above tab bar */}
+        <ThisWeekPanel />
+
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'tree' | 'accounts' | 'coverage' | 'canvas' | 'digest')} className="space-y-4">
           <TabsList className="flex w-full overflow-x-auto gap-1 p-1 scrollbar-none max-w-sm">
