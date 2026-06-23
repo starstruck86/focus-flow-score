@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { fromActiveAccounts } from '@/data/accounts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
@@ -32,16 +33,19 @@ export default function PostCallLog() {
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [accountId, setAccountId] = useState<string>(params.get('accountId') ?? '');
+  const [contactName, setContactName] = useState('');
   const [summary, setSummary] = useState('');
   const [expansionOn, setExpansionOn] = useState(false);
   const [expansionText, setExpansionText] = useState('');
   const [nextStep, setNextStep] = useState('');
   const [nextStepDate, setNextStepDate] = useState(plusDays(7));
+  const [suggestingNextStep, setSuggestingNextStep] = useState(false);
   const [playOn, setPlayOn] = useState(false);
   const [playTitle, setPlayTitle] = useState('');
   const [playOther, setPlayOther] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const account = useMemo(() => accounts.find(a => a.id === accountId) || null, [accounts, accountId]);
 
@@ -55,6 +59,11 @@ export default function PostCallLog() {
       return (data ?? []) as { id: string; title: string }[];
     },
   });
+
+  const selectedPlaybookId = useMemo(() => {
+    if (!playOn || playTitle === '__other__') return null;
+    return (playbookOptions ?? []).find(p => p.title === playTitle)?.id ?? null;
+  }, [playOn, playTitle, playbookOptions]);
 
   useEffect(() => {
     if (!user) return;
@@ -70,6 +79,37 @@ export default function PostCallLog() {
 
   const canSubmit = accountId && summary.trim().length > 0 && !submitting;
 
+  const suggestNextStep = async () => {
+    if (!summary.trim()) return;
+    setSuggestingNextStep(true);
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 150,
+          messages: [{
+            role: 'user',
+            content: `Based on this sales call summary, suggest ONE specific next step (10-15 words max, action + deadline):
+
+Call summary: "${summary}"
+Account: ${account?.name ?? 'unknown'}
+
+Respond with ONLY the next step text, nothing else.`,
+          }],
+        }),
+      });
+      const data = await res.json();
+      const suggestion = data.content?.[0]?.text?.trim();
+      if (suggestion) setNextStep(suggestion);
+    } catch (e) {
+      console.error('Next step suggestion failed', e);
+    } finally {
+      setSuggestingNextStep(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!user || !canSubmit || !account) return;
     setSubmitting(true);
@@ -82,6 +122,7 @@ export default function PostCallLog() {
       user_id: user.id,
       account_id: accountId,
       account_name: account.name,
+      contact_name: contactName.trim() || null,
       call_date: new Date().toISOString().split('T')[0],
       summary: summary.trim(),
       expansion_signal_captured: expansionOn,
@@ -93,7 +134,11 @@ export default function PostCallLog() {
     };
 
     try {
-      const { error } = await (supabase as any).from('call_logs').insert(payload);
+      const { data: inserted, error } = await (supabase as any)
+        .from('call_logs')
+        .insert(payload)
+        .select('id')
+        .single();
       if (error) throw error;
 
       // Update account last_touch_date + next_step + next_touch_due
@@ -104,9 +149,25 @@ export default function PostCallLog() {
       }
       await supabase.from('accounts').update(accountUpdate).eq('id', accountId);
 
+      // Fire-and-forget: log playbook usage event
+      if (selectedPlaybookId && finalPlayTitle) {
+        try {
+          await (supabase as any).from('playbook_usage_events').insert({
+            user_id: user.id,
+            playbook_id: selectedPlaybookId,
+            playbook_title: finalPlayTitle,
+            event_type: 'used_on_call',
+            context_account_id: accountId,
+            metadata: { call_log_id: inserted?.id ?? null },
+          });
+        } catch (e) {
+          console.warn('playbook_usage_events insert failed (ignored)', e);
+        }
+      }
+
       toast.success('Logged ✓');
+      setSubmitted(true);
       setDone(true);
-      setTimeout(() => navigate('/outreach'), 1500);
     } catch (err: any) {
       // Offline / failure → queue locally
       try {
@@ -114,8 +175,8 @@ export default function PostCallLog() {
         const prev = JSON.parse(localStorage.getItem(key) || '[]');
         localStorage.setItem(key, JSON.stringify([{ ...payload, queued_at: new Date().toISOString() }, ...prev]));
         toast.success('Saved locally — will sync when online');
+        setSubmitted(true);
         setDone(true);
-        setTimeout(() => navigate('/outreach'), 1500);
       } catch {
         toast.error('Could not save. Try again.');
         setSubmitting(false);
@@ -125,13 +186,35 @@ export default function PostCallLog() {
 
   if (done) {
     return (
-      <SafePage className="flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-16 w-16 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center">
-            <Check className="h-8 w-8 text-green-500" />
+      <SafePage className="flex flex-col">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-16 w-16 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center">
+              <Check className="h-8 w-8 text-green-500" />
+            </div>
+            <p className="text-base font-semibold">Logged ✓</p>
           </div>
-          <p className="text-base font-semibold">Logged ✓</p>
         </div>
+        {submitted && (
+          <div className="fixed inset-x-0 bottom-0 bg-background border-t border-border px-4 py-4 space-y-2 z-40">
+            <p className="text-sm font-semibold text-center">Call logged ✓</p>
+            <div className="grid grid-cols-2 gap-2 max-w-lg mx-auto w-full">
+              <Button
+                variant="outline"
+                onClick={() => navigate('/outreach')}
+                className="h-11"
+              >
+                Back to Territory
+              </Button>
+              <Button
+                onClick={() => navigate('/coach')}
+                className="h-11 bg-green-600 hover:bg-green-700 text-white"
+              >
+                🌿 Grade It in Coach
+              </Button>
+            </div>
+          </div>
+        )}
       </SafePage>
     );
   }
@@ -160,6 +243,17 @@ export default function PostCallLog() {
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* Contact name */}
+        <div className="space-y-1.5">
+          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contact Name</Label>
+          <Input
+            placeholder="e.g. Sarah Chen, VP Marketing"
+            value={contactName}
+            onChange={e => setContactName(e.target.value)}
+            className="h-10"
+          />
         </div>
 
         {/* Summary */}
@@ -192,19 +286,28 @@ export default function PostCallLog() {
         </div>
 
         {/* Next step */}
-        <div className="space-y-2">
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Next step</label>
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Next Step</Label>
+            <button
+              onClick={suggestNextStep}
+              disabled={!summary.trim() || suggestingNextStep}
+              className="text-[11px] text-primary hover:text-primary/80 disabled:opacity-40 flex items-center gap-1"
+            >
+              {suggestingNextStep ? <Loader2 className="h-3 w-3 animate-spin" /> : '✨'} Suggest
+            </button>
+          </div>
           <Input
+            placeholder="e.g. Send pricing deck by Friday"
             value={nextStep}
             onChange={e => setNextStep(e.target.value)}
-            placeholder="e.g. Send Branch deep linking overview to Sarah"
-            className="h-12 text-base"
+            className="h-10"
           />
           <Input
             type="date"
             value={nextStepDate}
             onChange={e => setNextStepDate(e.target.value)}
-            className="h-12 text-base"
+            className="h-10"
           />
         </div>
 
