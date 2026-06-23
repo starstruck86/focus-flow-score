@@ -48,6 +48,7 @@ const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
   '/quota': { page: 'quota', description: 'Quota — quota attainment, commission, and pipeline math' },
   '/dojo': { page: 'dojo', description: 'Sales Dojo — Training drills, scoring, and skill practice' },
   '/meeting': { page: 'meeting', description: 'Meeting Mode — pre-call ritual with account context, KIs, and warm-up rep' },
+  '/post-call': { page: 'post-call', description: 'Post-Call Log — capture expansion signals, next steps, and Branch plays after a customer call' },
   '/settings': { page: 'settings', description: 'Settings — app configuration and preferences' },
 };
 
