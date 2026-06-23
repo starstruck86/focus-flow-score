@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { selectNextKI } from '@/lib/dojo/selectNextKI';
+import { selectNextBranchKI } from '@/lib/dojo/selectNextBranchKI';
 import { writeKIMastery } from '@/lib/dojo/kiMasteryWriter';
 import { useDojoStats } from '@/lib/dojo/useDojoStreak';
 import { Button } from '@/components/ui/button';
@@ -17,7 +18,17 @@ const TARGET_REPS = 5;
 const DIMENSION_CYCLE = [
   'deal_control', 'expansion_strategy', 'stakeholder_navigation',
   'internal_prospecting', 'discovery', 'messaging',
+  'product_knowledge', 'competitive',
 ];
+
+// Branch Mode cycle — rotates through Branch.io-specific dimensions
+const BRANCH_DIMENSION_CYCLE = [
+  'product_knowledge', 'expansion_strategy', 'deal_control',
+  'competitive', 'discovery', 'stakeholder_navigation',
+];
+
+const getBranchDimension = (repsDone: number) =>
+  BRANCH_DIMENSION_CYCLE[repsDone % BRANCH_DIMENSION_CYCLE.length];
 
 const getInterleavedDimension = (repsDone: number) => {
   return DIMENSION_CYCLE[repsDone % DIMENSION_CYCLE.length];
@@ -77,6 +88,7 @@ export default function Sharpen() {
   const navigate = useNavigate();
   const location = useLocation();
   const interleaved = (location.state as any)?.interleaved ?? false;
+  const branchMode = (location.state as any)?.branchMode ?? false;
   const stateDimension = (location.state as any)?.dimension;
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -147,6 +159,8 @@ export default function Sharpen() {
         executive_response: 'c_suite_engagement',
         qualification: 'qualification',
         cold_calling: 'internal_prospecting',
+        product_knowledge: 'product_knowledge',
+        competitive: 'competitive',
       };
       setDimension(skillToDimension[weakestSkill] || 'deal_control');
     } else {
@@ -158,8 +172,14 @@ export default function Sharpen() {
     if (!user) return;
     setPhase('loading');
     try {
-      const effectiveDimension = interleaved ? getInterleavedDimension(repsDoneRef.current) : dimension;
-      const ki = await selectNextKI(user.id, effectiveDimension, excludeId);
+      const effectiveDimension = branchMode
+        ? getBranchDimension(repsDoneRef.current)
+        : interleaved
+          ? getInterleavedDimension(repsDoneRef.current)
+          : dimension;
+      const ki = branchMode
+        ? await selectNextBranchKI(user.id, effectiveDimension, excludeId)
+        : await selectNextKI(user.id, effectiveDimension, excludeId);
       if (ki) {
         setCurrentKI(ki);
         setResponse('');
@@ -379,6 +399,11 @@ export default function Sharpen() {
     <div className="fixed inset-0 bg-background flex flex-col">
       <div className="flex items-center justify-between px-4 pt-safe pt-4 pb-3 border-b border-border/40">
         <div className="flex items-center gap-3">
+          {branchMode && (
+            <span className="text-[10px] font-bold text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 rounded-full">
+              🌿 Branch
+            </span>
+          )}
           <div className="flex items-center gap-1.5">
             {Array.from({ length: TARGET_REPS }).map((_, i) => (
               <div key={i} className={cn(
