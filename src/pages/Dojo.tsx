@@ -788,6 +788,19 @@ export default function Dojo() {
           />
         )}
 
+        {/* Proactive Dave — after drill buttons */}
+        <ProactiveDaveCard
+          onMicroDrill={() => navigate('/sharpen')}
+          hasCompletedRepsToday={(() => {
+            try {
+              const key = `daily_reps_${new Date().toISOString().split('T')[0]}`;
+              return parseInt(localStorage.getItem(key) ?? '0', 10) > 0;
+            } catch { return false; }
+          })()}
+          streak={streak}
+          hasBenchmark={hasBenchmark ?? true}
+        />
+
         {/* Mature-only: Performance + Coaching Signals */}
         {isMature && (
           <PerformanceSignals
