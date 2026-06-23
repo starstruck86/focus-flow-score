@@ -195,9 +195,10 @@ function CompetitorCard({ competitor }: { competitor: Competitor }) {
         onClick={() => setExpanded(e => !e)}
       >
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h3 className="text-base font-bold">{competitor.name}</h3>
             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">MMP</span>
+            <span className="text-[10px] text-muted-foreground">Updated {competitor.lastUpdated}</span>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">{competitor.tagline}</p>
         </div>
