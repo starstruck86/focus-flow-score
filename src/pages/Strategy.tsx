@@ -1,4 +1,5 @@
-import { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { StrategyShell } from '@/components/strategy/v2/StrategyShell';
 
