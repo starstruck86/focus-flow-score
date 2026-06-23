@@ -69,6 +69,7 @@ import {
 } from '@/components/ui/tabs';
 import { TerritoryTree } from '@/components/territory/TerritoryTree';
 import { TerritoryCoverage } from '@/components/territory/TerritoryCoverage';
+import { PriorityInbox } from '@/components/territory/PriorityInbox';
 import {
   Collapsible,
   CollapsibleContent,
@@ -1179,6 +1180,9 @@ export default function WeeklyOutreach() {
           </div>
         </div>
         
+        {/* Priority Inbox — above tabs */}
+        <PriorityInbox />
+
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'tree' | 'accounts' | 'coverage' | 'sourcing')} className="space-y-4">
           <TabsList className="flex w-full overflow-x-auto gap-1 p-1 scrollbar-none max-w-sm">
