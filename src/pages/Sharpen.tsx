@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { selectNextKI } from '@/lib/dojo/selectNextKI';
 import { selectNextBranchKI } from '@/lib/dojo/selectNextBranchKI';
+import { selectNextKIFromCategory } from '@/lib/dojo/selectNextKIFromCategory';
 import { writeKIMastery } from '@/lib/dojo/kiMasteryWriter';
 import { useDojoStats } from '@/lib/dojo/useDojoStreak';
 import { Button } from '@/components/ui/button';
