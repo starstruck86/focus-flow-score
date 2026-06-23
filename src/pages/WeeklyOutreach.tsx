@@ -72,6 +72,7 @@ import { TerritoryCoverage } from '@/components/territory/TerritoryCoverage';
 import { PriorityInbox } from '@/components/territory/PriorityInbox';
 import { WhitespaceCanvas } from '@/components/territory/WhitespaceCanvas';
 import { SignalDigest } from '@/components/territory/SignalDigest';
+import { ThisWeekPanel } from '@/components/territory/ThisWeekPanel';
 
 function WeeklyReviewPrompt() {
   const navigate = useNavigate();
