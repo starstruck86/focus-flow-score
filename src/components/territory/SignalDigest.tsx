@@ -96,6 +96,23 @@ In 2-3 sentences, tell the AE what these signals mean for their territory this w
 
   return (
     <div className="space-y-4">
+      {signalSynthesis ? (
+        <div className="rounded-xl bg-amber-500/5 border border-amber-500/20 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1.5">
+            🔔 Signal Intelligence
+          </p>
+          <p className="text-xs leading-relaxed text-foreground">{signalSynthesis}</p>
+        </div>
+      ) : signals.length > 0 && !synthesizing ? (
+        <button onClick={synthesizeSignals} className="text-xs text-primary">
+          Synthesize signals →
+        </button>
+      ) : synthesizing ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" /> Interpreting signals...
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap gap-3 items-center text-[11px]">
         <span className="font-semibold text-muted-foreground">
           Last 7 days: {signals.length} signal{signals.length !== 1 ? 's' : ''} across {entries.length} account
