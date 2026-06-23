@@ -438,9 +438,13 @@ export default function Sharpen() {
     <div className="fixed inset-0 bg-background flex flex-col">
       <div className="flex items-center justify-between px-4 pt-safe pt-4 pb-3 border-b border-border/40">
         <div className="flex items-center gap-3">
-          {branchMode && (
-            <span className="text-[10px] font-bold text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 rounded-full">
-              🌿 Branch
+          {categoryLabel && (
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+              branchMode
+                ? 'text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/20'
+                : 'text-primary bg-primary/10 border border-primary/20'
+            }`}>
+              {branchMode ? '🌿 Branch' : categoryLabel}
             </span>
           )}
           <div className="flex items-center gap-1.5">
