@@ -304,6 +304,19 @@ Style: Direct, peer-to-peer, no buzzwords. Max 150 words.`;
                       Log Call
                     </button>
                     <button
+                      onClick={() => navigate('/strategy', {
+                        state: {
+                          prefillAccountId: account.id,
+                          prefillAccountName: account.name,
+                          autoThread: true,
+                        },
+                      })}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+                    >
+                      <Crosshair className="h-3.5 w-3.5" />
+                      Strategy
+                    </button>
+                    <button
                       onClick={() => setShowDossier(true)}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 transition-all"
                     >
