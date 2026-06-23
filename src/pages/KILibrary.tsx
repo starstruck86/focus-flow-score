@@ -215,6 +215,22 @@ export default function KILibrary() {
     },
   });
 
+  const { data: annotations, refetch: refetchAnnotations } = useQuery({
+    queryKey: ['ki-annotations', user?.id],
+    enabled: !!user?.id,
+    staleTime: 60_000,
+    queryFn: async () => {
+      if (!user?.id) return {} as Record<string, string>;
+      const { data } = await (supabase as any)
+        .from('ki_annotations')
+        .select('ki_id, note')
+        .eq('user_id', user.id);
+      const map: Record<string, string> = {};
+      (data ?? []).forEach((a: any) => { map[a.ki_id] = a.note; });
+      return map;
+    },
+  });
+
   const handleDrill = (ki: KIResult) => {
     navigate('/sharpen', {
       state: { branchMode: true, dimension: ki.spider_dimension, specificKIId: ki.id },
@@ -308,7 +324,14 @@ export default function KILibrary() {
               {search.trim().length >= 2 ? ` for "${search}"` : ''}
             </p>
             {results.map((ki) => (
-              <KICard key={ki.id} ki={ki} onDrill={handleDrill} />
+              <KICard
+                key={ki.id}
+                ki={ki}
+                onDrill={handleDrill}
+                userId={user?.id ?? ''}
+                annotation={annotations?.[ki.id]}
+                onAnnotationSaved={() => refetchAnnotations()}
+              />
             ))}
           </>
         )}
