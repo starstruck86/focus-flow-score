@@ -1104,6 +1104,7 @@ export type Database = {
           branch_ki_title: string | null
           branch_play_used: boolean | null
           call_date: string
+          contact_name: string | null
           created_at: string
           expansion_signal_captured: boolean | null
           expansion_signal_text: string | null
@@ -1122,6 +1123,7 @@ export type Database = {
           branch_ki_title?: string | null
           branch_play_used?: boolean | null
           call_date?: string
+          contact_name?: string | null
           created_at?: string
           expansion_signal_captured?: boolean | null
           expansion_signal_text?: string | null
@@ -1140,6 +1142,7 @@ export type Database = {
           branch_ki_title?: string | null
           branch_play_used?: boolean | null
           call_date?: string
+          contact_name?: string | null
           created_at?: string
           expansion_signal_captured?: boolean | null
           expansion_signal_text?: string | null
