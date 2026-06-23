@@ -288,24 +288,24 @@ ${customScorecardContext}
 ${rolePlayContext}
 ${kiContext}`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "claude-sonnet-4-6",
+        max_tokens: 4096,
+        system: systemPrompt,
         messages: [
-          { role: "system", content: systemPrompt },
           { role: "user", content: `Analyze this call transcript with full framework enforcement.\n\nTitle: ${transcript.title}\nType: ${transcript.call_type || 'Unknown'}\nParticipants: ${transcript.participants || 'Unknown'}\n\nTranscript:\n${transcript.content}` },
         ],
         tools: [{
-          type: "function",
-          function: {
-            name: "score_transcript",
-            description: "Submit comprehensive framework-based scoring for a sales call transcript",
-            parameters: {
+          name: "score_transcript",
+          description: "Submit comprehensive framework-based scoring for a sales call transcript",
+          input_schema: {
               type: "object",
               properties: {
                 // Overall
