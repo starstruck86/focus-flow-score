@@ -150,6 +150,22 @@ export default function AccountDetail() {
                       <Badge variant="outline" className="text-[10px]">{account.motion}</Badge>
                     )}
                   </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <button
+                      onClick={() => navigate(`/meeting?accountId=${account.id}`)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-all"
+                    >
+                      <Zap className="h-3.5 w-3.5" />
+                      Prep Call
+                    </button>
+                    <button
+                      onClick={() => navigate(`/post-call?accountId=${account.id}`)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+                    >
+                      <Phone className="h-3.5 w-3.5" />
+                      Log Call
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
