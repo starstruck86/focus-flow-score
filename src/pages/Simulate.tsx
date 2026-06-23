@@ -400,7 +400,7 @@ export default function Simulate() {
           <p className="text-[11px] text-muted-foreground">Turn {turnCount}/{MAX_TURNS}</p>
         </div>
         <button
-          onClick={() => setPhase('complete')}
+          onClick={() => completeAndGrade(messages)}
           className="text-xs font-medium px-3 py-1.5 rounded-lg border border-border hover:bg-muted/40 shrink-0"
         >
           End call
