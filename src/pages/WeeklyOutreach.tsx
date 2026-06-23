@@ -1087,7 +1087,7 @@ export default function WeeklyOutreach() {
   // Apply search + quick filters
   // Filter to new-logo accounts first, then apply user filters
   const newLogoAccounts = useMemo(() => 
-    accounts.filter(a => a.motion === 'new-logo' || !a.motion),
+    accounts.filter(a => a.motion === 'new-logo' || a.motion === 'both' || !a.motion),
     [accounts]
   );
 
