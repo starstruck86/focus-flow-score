@@ -369,7 +369,7 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
         const dbContacts = (contactsRes.data || []).map(dbContactToStore);
         const dbTasks = (tasksRes.data || []).map(dbTaskToStore);
 
-        console.log(`[DataSync] Hydrating: ${dbAccounts.length} accounts, ${dbOpps.length} opps, ${dbRenewals.length} renewals, ${dbContacts.length} contacts, ${dbTasks.length} tasks`);
+        console.log(`[DataSync] Hydrating: ${dbAccounts.length} accounts from DB (authoritative), ${dbOpps.length} opps, ${dbRenewals.length} renewals, ${dbContacts.length} contacts, ${dbTasks.length} tasks`);
 
         const store = useStore.getState();
         
