@@ -67,6 +67,7 @@ const DIM_TO_KI: Record<string, { label: string; kiDim: string }> = {
   next_step_score: { label: 'Deal Control (Next Step)', kiDim: 'deal_control' },
   presence_score: { label: 'Discovery (Presence)', kiDim: 'discovery' },
   cotm_score: { label: 'Discovery (Cost of the Moment)', kiDim: 'discovery' },
+  product_knowledge_score: { label: 'Product Knowledge', kiDim: 'product_knowledge' },
 };
 
 function GradeCard({ grade }: { grade: TranscriptGrade }) {
@@ -120,7 +121,7 @@ function GradeCard({ grade }: { grade: TranscriptGrade }) {
             <div className="flex items-center gap-2">
               <Target className="h-4 w-4 text-amber-500" />
               <div>
-                <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Weakest this call: {weakestInfo.label} ({weakest.score}/100)</p>
+                <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Weakest this call: {weakestInfo.label} ({weakest.score}/5)</p>
                 <p className="text-xs text-muted-foreground">Drill these plays →</p>
               </div>
             </div>

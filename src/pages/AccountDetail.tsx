@@ -23,8 +23,12 @@ import { CollapsibleSection, LinkPill, LastTouchIndicator, safeFormat } from '@/
 import { useDebouncedUpdate } from '@/hooks/useDebouncedUpdate';
 import {
   ArrowLeft, ChevronRight, Building2, Target, Users,
-  FileText, CheckSquare, Calendar, Sparkles, Phone, Zap,
+  FileText, CheckSquare, Calendar, Sparkles, Phone, Zap, Loader2,
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import ReactMarkdown from 'react-markdown';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { AccountSynopsisModal } from '@/components/AccountSynopsisModal';
 import { FromStrategyPanel } from '@/components/strategy/FromStrategyPanel';
 import { cn } from '@/lib/utils';
@@ -58,14 +62,100 @@ const STATUS_OPTIONS: { value: AccountStatus; label: string }[] = [
   { value: 'meeting-booked', label: 'Meeting Booked' },
 ];
 
+async function generateDossier(account: any, _userId: string): Promise<string> {
+  const [callsRes, signalsRes, footprintRes] = await Promise.all([
+    supabase.from('call_logs').select('*')
+      .eq('account_id', account.id).order('call_date', { ascending: false }).limit(5),
+    supabase.from('account_signals').select('*')
+      .eq('linked_account_id', account.id).order('created_at', { ascending: false }).limit(10),
+    supabase.from('branch_footprint').select('*')
+      .eq('account_id', account.id).maybeSingle(),
+  ]);
+  const calls = callsRes.data ?? [];
+  const signals = signalsRes.data ?? [];
+  const fp = footprintRes.data as any;
+
+  const lines: string[] = [];
+  lines.push(`# ${account.name} — Account Dossier`);
+  lines.push(`*Generated ${new Date().toLocaleDateString()}*\n`);
+  lines.push(`## Account Overview`);
+  lines.push(`**Tier:** ${account.tier ?? '—'} | **ICP Score:** ${account.icpFitScore ?? '—'} | **Industry:** ${account.industry ?? '—'}`);
+  lines.push(`**Motion:** Expansion | **Last Touch:** ${account.lastTouchDate ?? 'Never'}`);
+  if (account.nextStep) lines.push(`**Next Step:** ${account.nextStep}`);
+  lines.push('');
+
+  if (fp) {
+    lines.push(`## Branch Footprint`);
+    const products = [
+      { key: 'deep_linking', label: 'Deep Linking' },
+      { key: 'universal_ads', label: 'Universal Ads' },
+      { key: 'email_to_app', label: 'Email-to-App' },
+      { key: 'sms_to_app', label: 'SMS-to-App' },
+      { key: 'web_to_app', label: 'Web-to-App' },
+      { key: 'qr', label: 'QR Codes' },
+      { key: 'aio', label: 'AIO' },
+      { key: 'advanced_privacy', label: 'Advanced Privacy' },
+    ];
+    const confirmed = products.filter(p => fp[`${p.key}_status`] === 'confirmed');
+    const inferred = products.filter(p => fp[`${p.key}_status`] === 'inferred');
+    if (confirmed.length) lines.push(`**Active:** ${confirmed.map(p => p.label).join(', ')}`);
+    if (inferred.length) lines.push(`**Inferred:** ${inferred.map(p => p.label).join(', ')}`);
+    if (fp.estimated_arr) lines.push(`**Est. ARR:** $${Number(fp.estimated_arr).toLocaleString()}`);
+    if (fp.contract_renewal_date) lines.push(`**Contract Renewal:** ${fp.contract_renewal_date}`);
+    if (fp.notes) lines.push(`**Notes:** ${fp.notes}`);
+    lines.push('');
+  }
+
+  if (calls.length > 0) {
+    lines.push(`## Call History (Last ${calls.length})`);
+    calls.forEach((c: any) => {
+      lines.push(`**${c.call_date}:** ${c.summary ?? '(no summary)'}`);
+      if (c.expansion_signal_captured && c.expansion_signal_text) lines.push(`  ⚡ *Signal: ${c.expansion_signal_text}*`);
+      if (c.next_step) lines.push(`  → ${c.next_step}${c.next_step_date ? ` (by ${c.next_step_date})` : ''}`);
+      if (c.branch_play_used && c.branch_ki_title) lines.push(`  🌿 Branch play: ${c.branch_ki_title}`);
+    });
+    lines.push('');
+  }
+
+  if (signals.length > 0) {
+    lines.push(`## Intelligence Signals (${signals.length})`);
+    signals.forEach((s: any) => {
+      const typeLabel = ({ account: '👤 Account', competitive: '⚔️ Competitive', product: '🌿 Product', market: '📊 Market', strategic: '🎯 Strategic' } as any)[s.signal_type] ?? s.signal_type;
+      const text = (s.raw_text ?? '').length > 200 ? s.raw_text.slice(0, 200) + '…' : (s.raw_text ?? '');
+      lines.push(`**${typeLabel}** *(${new Date(s.created_at).toLocaleDateString()})*: ${text}`);
+      if (s.source_label) lines.push(`  *Source: ${s.source_label}*`);
+    });
+    lines.push('');
+  }
+
+  if (calls.length === 0 && signals.length === 0 && !fp) {
+    lines.push(`*No data collected yet. Log calls and signals to populate the dossier.*`);
+  }
+
+  return lines.join('\n');
+}
+
 export default function AccountDetail() {
   const [showSynopsis, setShowSynopsis] = useState(false);
+  const [showDossier, setShowDossier] = useState(false);
+  const [dossierContent, setDossierContent] = useState('');
+  const [dossierLoading, setDossierLoading] = useState(false);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { accounts, updateAccount, opportunities, renewals, tasks, contacts } = useStore();
 
   const account = accounts.find(a => a.id === id);
   const { setPageContext } = useCopilot();
+
+  useEffect(() => {
+    if (!showDossier || !account || !user) return;
+    setDossierLoading(true);
+    generateDossier(account as any, user.id)
+      .then(content => setDossierContent(content))
+      .catch(() => setDossierContent('Could not generate dossier. Try again.'))
+      .finally(() => setDossierLoading(false));
+  }, [showDossier, account?.id, user?.id]);
 
   // Set rich page context for copilot
   useEffect(() => {
@@ -165,6 +255,13 @@ export default function AccountDetail() {
                       <Phone className="h-3.5 w-3.5" />
                       Log Call
                     </button>
+                    <button
+                      onClick={() => setShowDossier(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 transition-all"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Dossier
+                    </button>
                   </div>
                 </div>
               </div>
@@ -217,6 +314,32 @@ export default function AccountDetail() {
           onOpenChange={setShowSynopsis}
           account={account}
         />
+
+        <Dialog open={showDossier} onOpenChange={setShowDossier}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{account.name} — Dossier</DialogTitle>
+            </DialogHeader>
+            {dossierLoading ? (
+              <div className="flex items-center justify-center py-12 gap-3 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Assembling dossier…
+              </div>
+            ) : (
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                <ReactMarkdown>{dossierContent}</ReactMarkdown>
+              </div>
+            )}
+            {!dossierLoading && dossierContent && (
+              <div className="flex gap-2 mt-2">
+                <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(dossierContent)}>
+                  Copy to clipboard
+                </Button>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
 
         {/* Timeline — living record of this account */}
         <AccountTimeline accountId={account.id} />
