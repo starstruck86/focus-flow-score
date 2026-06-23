@@ -61,6 +61,7 @@ const COMPETITORS: Competitor[] = [
       'Customer says "we just need attribution" and hasn\'t asked about deep linking',
       'Procurement comparison process — Adjust often leads with low pricing',
     ],
+    lastUpdated: 'June 2026',
   },
   {
     id: 'appsflyer',
@@ -104,6 +105,7 @@ const COMPETITORS: Competitor[] = [
       'Customer has international presence (AppsFlyer is strong in EMEA)',
       'Customer mentions OneLink and is dissatisfied with deep link accuracy',
     ],
+    lastUpdated: 'June 2026',
   },
   {
     id: 'kochava',
@@ -141,6 +143,7 @@ const COMPETITORS: Competitor[] = [
       'Gaming or sensitive category vertical',
       'Customer is running a fraud investigation or has invalid traffic concerns',
     ],
+    lastUpdated: 'June 2026',
   },
   {
     id: 'singular',
@@ -177,6 +180,7 @@ const COMPETITORS: Competitor[] = [
       'Customer has many paid channels and wants a single cost dashboard',
       'Customer doesn\'t mention deep linking, email, or CRM re-engagement',
     ],
+    lastUpdated: 'June 2026',
   },
 ];
 
