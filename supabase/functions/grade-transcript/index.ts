@@ -639,10 +639,10 @@ ${kiContext}`;
     }
 
     const aiResult = await response.json();
-    const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
+    const toolCall = aiResult.content?.find((b: any) => b.type === "tool_use");
     if (!toolCall) throw new Error("No grading response from AI");
 
-    const grade = JSON.parse(toolCall.function.arguments);
+    const grade = toolCall.input;
 
     // Transform strengths array to simple strings for backward compat
     const strengthStrings = (grade.strengths || []).map((s: any) => typeof s === 'string' ? s : s.point);
