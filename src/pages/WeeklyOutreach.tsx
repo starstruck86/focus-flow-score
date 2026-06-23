@@ -68,6 +68,7 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs';
 import { TerritoryTree } from '@/components/territory/TerritoryTree';
+import { TerritoryCoverage } from '@/components/territory/TerritoryCoverage';
 import {
   Collapsible,
   CollapsibleContent,
@@ -770,7 +771,7 @@ export default function WeeklyOutreach() {
     itemLabel: 'Account',
   });
   
-  const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities' | 'sourcing' | 'tree'>('opportunities');
+  const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities' | 'sourcing' | 'tree' | 'coverage'>('opportunities');
   const [stageFilter, setStageFilter] = useState<OpportunityStage | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1179,13 +1180,18 @@ export default function WeeklyOutreach() {
         </div>
         
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'tree' | 'accounts' | 'sourcing')} className="space-y-4">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'tree' | 'accounts' | 'coverage' | 'sourcing')} className="space-y-4">
           <TabsList className="flex w-full overflow-x-auto gap-1 p-1 scrollbar-none max-w-sm">
             <TabsTrigger value="opportunities" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Opportunities</TabsTrigger>
             <TabsTrigger value="tree" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Tree</TabsTrigger>
             <TabsTrigger value="accounts" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Accounts</TabsTrigger>
+            <TabsTrigger value="coverage" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Coverage</TabsTrigger>
             <TabsTrigger value="sourcing" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Sourcing</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="coverage" className="space-y-4">
+            <TerritoryCoverage />
+          </TabsContent>
 
           {/* Opportunities Tab */}
           <TabsContent value="opportunities" className="space-y-4">
