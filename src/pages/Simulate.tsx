@@ -278,9 +278,10 @@ export default function Simulate() {
               onChange={(e) => setAccountId(e.target.value)}
               className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-background"
             >
-              {accounts.length === 0 && <option>Loading…</option>}
+              <option value="">Generic prospect</option>
+              {accounts.length === 0 && <option disabled>Loading…</option>}
               {accounts.map((a) => (
-                <option key={a.id} value={a.id}>{a.name}</option>
+                <option key={a.id} value={a.id}>{a.name}{a.tier ? ` (Tier ${a.tier})` : ''}</option>
               ))}
             </select>
           </div>
