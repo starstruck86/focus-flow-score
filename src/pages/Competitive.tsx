@@ -16,6 +16,7 @@ interface Competitor {
   objection_reframes: Array<{ objection: string; reframe: string }>;
   who_uses_them: string;
   deal_signals: string[];
+  lastUpdated: string;
 }
 
 const COMPETITORS: Competitor[] = [
