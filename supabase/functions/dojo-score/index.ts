@@ -861,7 +861,7 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
 
         if (regenResp.ok) {
           const rd = await regenResp.json();
-          let rc = rd.choices?.[0]?.message?.content || "";
+          let rc = rd.content?.[0]?.text || "";
           rc = rc.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
           const rp = JSON.parse(rc);
           for (const field of needsRegen) {
