@@ -255,6 +255,13 @@ export default function AccountDetail() {
                       <Phone className="h-3.5 w-3.5" />
                       Log Call
                     </button>
+                    <button
+                      onClick={() => setShowDossier(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 transition-all"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Dossier
+                    </button>
                   </div>
                 </div>
               </div>
@@ -307,6 +314,32 @@ export default function AccountDetail() {
           onOpenChange={setShowSynopsis}
           account={account}
         />
+
+        <Dialog open={showDossier} onOpenChange={setShowDossier}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{account.name} — Dossier</DialogTitle>
+            </DialogHeader>
+            {dossierLoading ? (
+              <div className="flex items-center justify-center py-12 gap-3 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Assembling dossier…
+              </div>
+            ) : (
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                <ReactMarkdown>{dossierContent}</ReactMarkdown>
+              </div>
+            )}
+            {!dossierLoading && dossierContent && (
+              <div className="flex gap-2 mt-2">
+                <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(dossierContent)}>
+                  Copy to clipboard
+                </Button>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
 
         {/* Timeline — living record of this account */}
         <AccountTimeline accountId={account.id} />
