@@ -35,6 +35,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { BottomNav, useActiveTabColor, COLOR_VAR } from '@/components/layout/BottomNav';
 import { SHELL } from '@/lib/layout';
 import { GlobalRefreshButton } from '@/components/GlobalRefreshButton';
+import { supabase } from '@/integrations/supabase/client';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 
@@ -106,6 +107,33 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
   const daveConnMgr = useDaveConnectionManager();
   const daveChannelRef = useRef<BroadcastChannel | null>(null);
   useVoiceReminders();
+
+  // Lightweight Dave availability probe (cached 1h). Hides FAB when the
+  // edge function reports a missing ElevenLabs API key.
+  const [daveAvailable, setDaveAvailable] = useState<boolean | null>(null);
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('dave_available_check');
+      if (cached) {
+        const { value, ts } = JSON.parse(cached);
+        if (Date.now() - ts < 60 * 60 * 1000) {
+          setDaveAvailable(value);
+          return;
+        }
+      }
+    } catch {}
+    supabase.functions
+      .invoke('get-dave-session', { body: { probe: true } })
+      .then(({ error }) => {
+        const available = !error || !error.message?.includes('API key');
+        setDaveAvailable(available);
+        try {
+          localStorage.setItem('dave_available_check', JSON.stringify({ value: available, ts: Date.now() }));
+        } catch {}
+      })
+      .catch(() => setDaveAvailable(false));
+  }, []);
+
 
   // Wake word — "Hey Dave" (reactive to Settings toggle)
   const [wakeWordEnabled, setWakeWordEnabled] = useState(() =>
@@ -390,7 +418,7 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
       {/* Dave is the PRIMARY floating action — bottom-right, thumb-accessible.
           On /strategy we hide on mobile only (md:hidden) to avoid overlapping the
           composer send arrow. Desktop /strategy keeps the FAB. */}
-      {!daveDrift && !hideFloatingFab && (
+      {daveAvailable !== false && !daveDrift && !hideFloatingFab && (
         <div className={location.pathname === '/strategy' ? 'hidden md:block' : 'contents'}>
           <DaveMicFAB
             onTap={handleOpenDave}

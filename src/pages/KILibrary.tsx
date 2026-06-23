@@ -128,6 +128,13 @@ function KICard({ ki, onDrill, userId, annotation, onAnnotationSaved }: { ki: KI
         </div>
       )}
 
+      {expanded && ki.why_it_matters && (
+        <div className="pt-1 space-y-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Why it matters</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">{ki.why_it_matters}</p>
+        </div>
+      )}
+
       {expanded && ki.example_usage && (
         <div className="pl-2 border-l-2 border-primary/30">
           <p className="text-[11px] italic text-muted-foreground">

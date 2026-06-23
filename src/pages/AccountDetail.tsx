@@ -23,7 +23,7 @@ import { CollapsibleSection, LinkPill, LastTouchIndicator, safeFormat } from '@/
 import { useDebouncedUpdate } from '@/hooks/useDebouncedUpdate';
 import {
   ArrowLeft, ChevronRight, Building2, Target, Users,
-  FileText, CheckSquare, Calendar, Sparkles, Phone, Zap, Loader2, Mail,
+  FileText, CheckSquare, Calendar, Sparkles, Phone, Zap, Loader2, Mail, Crosshair,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
@@ -302,6 +302,19 @@ Style: Direct, peer-to-peer, no buzzwords. Max 150 words.`;
                     >
                       <Phone className="h-3.5 w-3.5" />
                       Log Call
+                    </button>
+                    <button
+                      onClick={() => navigate('/strategy', {
+                        state: {
+                          prefillAccountId: account.id,
+                          prefillAccountName: account.name,
+                          autoThread: true,
+                        },
+                      })}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+                    >
+                      <Crosshair className="h-3.5 w-3.5" />
+                      Strategy
                     </button>
                     <button
                       onClick={() => setShowDossier(true)}

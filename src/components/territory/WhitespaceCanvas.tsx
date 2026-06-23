@@ -66,8 +66,26 @@ export function WhitespaceCanvas() {
     return { ...p, confirmed, inferred };
   });
 
+  const hasAnyFootprint = Object.keys(footprints ?? {}).length > 0;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {!hasAnyFootprint && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm z-10 p-6 text-center gap-3 rounded-xl">
+          <p className="text-2xl">🗺️</p>
+          <p className="text-sm font-semibold">Canvas is empty</p>
+          <p className="text-xs text-muted-foreground max-w-xs">
+            Open any account → Branch Footprint tab to start tracking which Branch products each account uses.
+          </p>
+          <button
+            onClick={() => navigate('/outreach')}
+            className="text-xs font-medium text-primary hover:text-primary/80 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5"
+          >
+            Go to Accounts →
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-4 text-[11px]">
         <span className="font-semibold text-muted-foreground uppercase tracking-wider">Legend:</span>
         <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-green-500 inline-block"/> Confirmed</span>

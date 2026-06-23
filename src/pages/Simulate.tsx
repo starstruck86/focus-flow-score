@@ -99,8 +99,29 @@ export default function Simulate() {
   const [loading, setLoading] = useState(false);
   const [turnCount, setTurnCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [gradeResult, setGradeResult] = useState<any>(null);
+  const [grading, setGrading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const runGradeCall = async (finalMessages: Message[]) => {
+    setGrading(true);
+    try {
+      const { data } = await supabase.functions.invoke('simulate-chat', {
+        body: { messages: finalMessages, isGradeMode: true, system: '' },
+      });
+      if (data?.gradeResult) setGradeResult(data.gradeResult);
+    } catch (e) {
+      console.warn('[Simulate] grade error', e);
+    } finally {
+      setGrading(false);
+    }
+  };
+
+  const completeAndGrade = (finalMessages: Message[]) => {
+    setPhase('complete');
+    runGradeCall(finalMessages);
+  };
 
   const account = useMemo(() => accounts.find((a) => a.id === accountId) ?? null, [accounts, accountId]);
 
@@ -155,7 +176,8 @@ export default function Simulate() {
       if (!text) throw new Error('Empty response');
       setMessages((prev) => [...prev, { role: 'assistant', content: text }]);
       if (newTurn >= MAX_TURNS) {
-        setTimeout(() => setPhase('complete'), 600);
+        const finalMsgs = [...next, { role: 'assistant', content: text } as Message];
+        setTimeout(() => completeAndGrade(finalMsgs), 600);
       }
     } catch (e: any) {
       console.error('[Simulate] error', e);
@@ -287,10 +309,54 @@ export default function Simulate() {
           <p className="text-sm text-muted-foreground">
             {turnCount} turns · {account?.name} · {SCENARIO_LABELS[scenario]}
           </p>
-          <div className="rounded-xl border bg-card p-4 space-y-2">
-            <p className="text-sm font-semibold">{debrief.note}</p>
-            <p className="text-xs text-muted-foreground">{debrief.detail}</p>
-          </div>
+
+          {grading && (
+            <div className="rounded-xl border bg-card p-6 flex items-center justify-center gap-3">
+              <div className="h-4 w-4 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+              <p className="text-sm text-muted-foreground">Analyzing your call…</p>
+            </div>
+          )}
+
+          {!grading && gradeResult && (
+            <>
+              <div className="rounded-xl border bg-card p-4 flex items-center gap-4">
+                <div className="text-5xl font-bold font-mono leading-none">{gradeResult.grade}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-2xl font-bold leading-none">{gradeResult.score}<span className="text-sm text-muted-foreground font-normal">/100</span></p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-snug">{gradeResult.summary}</p>
+                </div>
+              </div>
+              {Array.isArray(gradeResult.strengths) && gradeResult.strengths.length > 0 && (
+                <div className="rounded-xl border bg-card p-4 space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-green-600">Strengths</p>
+                  {gradeResult.strengths.map((s: string, i: number) => (
+                    <p key={i} className="text-xs text-muted-foreground flex gap-2"><span className="text-green-500">✓</span>{s}</p>
+                  ))}
+                </div>
+              )}
+              {Array.isArray(gradeResult.improvements) && gradeResult.improvements.length > 0 && (
+                <div className="rounded-xl border bg-card p-4 space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">Improvements</p>
+                  {gradeResult.improvements.map((s: string, i: number) => (
+                    <p key={i} className="text-xs text-muted-foreground flex gap-2"><span className="text-amber-500">△</span>{s}</p>
+                  ))}
+                </div>
+              )}
+              {gradeResult.coachingNote && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600 mb-1">Coach note</p>
+                  <p className="text-sm leading-relaxed">{gradeResult.coachingNote}</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {!grading && !gradeResult && (
+            <div className="rounded-xl border bg-card p-4 space-y-2">
+              <p className="text-sm font-semibold">{debrief.note}</p>
+              <p className="text-xs text-muted-foreground">{debrief.detail}</p>
+            </div>
+          )}
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Drill these plays</p>
             <button
@@ -309,7 +375,7 @@ export default function Simulate() {
             )}
           </div>
           <button
-            onClick={() => { setPhase('setup'); setMessages([]); setTurnCount(0); }}
+            onClick={() => { setPhase('setup'); setMessages([]); setTurnCount(0); setGradeResult(null); }}
             className="w-full py-3 rounded-xl border border-border text-sm"
           >
             Run another simulation
@@ -334,7 +400,7 @@ export default function Simulate() {
           <p className="text-[11px] text-muted-foreground">Turn {turnCount}/{MAX_TURNS}</p>
         </div>
         <button
-          onClick={() => setPhase('complete')}
+          onClick={() => completeAndGrade(messages)}
           className="text-xs font-medium px-3 py-1.5 rounded-lg border border-border hover:bg-muted/40 shrink-0"
         >
           End call

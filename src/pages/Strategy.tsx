@@ -1,4 +1,5 @@
-import { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { StrategyShell } from '@/components/strategy/v2/StrategyShell';
 
@@ -41,6 +42,23 @@ class StrategyErrorBoundary extends Component<{ children: ReactNode }, { error: 
 }
 
 export default function Strategy() {
+  const location = useLocation();
+  const { prefillAccountId, prefillAccountName } = (location.state ?? {}) as {
+    prefillAccountId?: string;
+    prefillAccountName?: string;
+  };
+
+  useEffect(() => {
+    if (prefillAccountId) {
+      try {
+        sessionStorage.setItem(
+          'strategy_prefill_account',
+          JSON.stringify({ id: prefillAccountId, name: prefillAccountName ?? null, ts: Date.now() }),
+        );
+      } catch {}
+    }
+  }, [prefillAccountId, prefillAccountName]);
+
   return (
     <Layout>
       <StrategyErrorBoundary>

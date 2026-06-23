@@ -1,7 +1,8 @@
 // Competitive intelligence reference page — static data, no DB.
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Flag } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 interface Competitor {
@@ -15,6 +16,7 @@ interface Competitor {
   objection_reframes: Array<{ objection: string; reframe: string }>;
   who_uses_them: string;
   deal_signals: string[];
+  lastUpdated: string;
 }
 
 const COMPETITORS: Competitor[] = [
@@ -59,6 +61,7 @@ const COMPETITORS: Competitor[] = [
       'Customer says "we just need attribution" and hasn\'t asked about deep linking',
       'Procurement comparison process — Adjust often leads with low pricing',
     ],
+    lastUpdated: 'June 2026',
   },
   {
     id: 'appsflyer',
@@ -102,6 +105,7 @@ const COMPETITORS: Competitor[] = [
       'Customer has international presence (AppsFlyer is strong in EMEA)',
       'Customer mentions OneLink and is dissatisfied with deep link accuracy',
     ],
+    lastUpdated: 'June 2026',
   },
   {
     id: 'kochava',
@@ -139,6 +143,7 @@ const COMPETITORS: Competitor[] = [
       'Gaming or sensitive category vertical',
       'Customer is running a fraud investigation or has invalid traffic concerns',
     ],
+    lastUpdated: 'June 2026',
   },
   {
     id: 'singular',
@@ -175,6 +180,7 @@ const COMPETITORS: Competitor[] = [
       'Customer has many paid channels and wants a single cost dashboard',
       'Customer doesn\'t mention deep linking, email, or CRM re-engagement',
     ],
+    lastUpdated: 'June 2026',
   },
 ];
 
@@ -189,9 +195,10 @@ function CompetitorCard({ competitor }: { competitor: Competitor }) {
         onClick={() => setExpanded(e => !e)}
       >
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h3 className="text-base font-bold">{competitor.name}</h3>
             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">MMP</span>
+            <span className="text-[10px] text-muted-foreground">Updated {competitor.lastUpdated}</span>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">{competitor.tagline}</p>
         </div>
@@ -282,6 +289,16 @@ function CompetitorCard({ competitor }: { competitor: Competitor }) {
               ))}
             </div>
           )}
+
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(`${competitor.name}: [describe what's stale]`);
+              toast.success('Copied to clipboard — paste into your notes or flag in Slack');
+            }}
+            className="text-[10px] text-muted-foreground hover:text-foreground py-1 flex items-center gap-1 mt-2"
+          >
+            <Flag className="h-3 w-3" /> Report outdated intel
+          </button>
         </div>
       )}
     </div>
