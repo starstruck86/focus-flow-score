@@ -176,7 +176,8 @@ export default function Simulate() {
       if (!text) throw new Error('Empty response');
       setMessages((prev) => [...prev, { role: 'assistant', content: text }]);
       if (newTurn >= MAX_TURNS) {
-        setTimeout(() => setPhase('complete'), 600);
+        const finalMsgs = [...next, { role: 'assistant', content: text } as Message];
+        setTimeout(() => completeAndGrade(finalMsgs), 600);
       }
     } catch (e: any) {
       console.error('[Simulate] error', e);
