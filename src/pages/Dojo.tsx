@@ -254,6 +254,8 @@ export default function Dojo() {
   const location = useLocation();
   const { user } = useAuth();
   const { data: stats } = useDojoStats();
+  const { status: kiSyncStatus, cachedCount: kiCachedCount } = useKISync();
+
 
   // Resolve SkillSession from Learn → Dojo navigation
   const stateObj = (location.state ?? {}) as Record<string, unknown>;
@@ -506,7 +508,20 @@ export default function Dojo() {
               Drill →
             </button>
           </div>
+          {kiSyncStatus === 'synced' && (
+            <p className="text-[10px] text-green-600/80 dark:text-green-400/80">✅ {kiCachedCount} KIs cached offline</p>
+          )}
+          {kiSyncStatus === 'syncing' && (
+            <p className="text-[10px] text-muted-foreground">⟳ Caching KIs for offline...</p>
+          )}
+          {kiSyncStatus === 'offline' && kiCachedCount > 0 && (
+            <p className="text-[10px] text-amber-600 dark:text-amber-400">📶 Offline · {kiCachedCount} KIs available</p>
+          )}
+          {kiSyncStatus === 'offline' && kiCachedCount === 0 && (
+            <p className="text-[10px] text-destructive">⚠️ No offline cache — connect to sync</p>
+          )}
         </div>
+
 
         <KrystenCard />
         <DailyProgress />

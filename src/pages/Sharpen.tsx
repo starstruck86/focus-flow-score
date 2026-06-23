@@ -277,9 +277,16 @@ export default function Sharpen() {
       recognitionScore = data.recognitionScore ?? null;
       executionScore = data.executionScore ?? null;
       awarenessScore = data.awarenessScore ?? null;
-    } catch {
-      coaching = 'Rep recorded.';
+    } catch (err: any) {
+      const isOffline = !navigator.onLine || err?.message?.includes('fetch');
+      if (isOffline) {
+        score = 65;
+        coaching = '📶 Offline practice rep — scoring unavailable without internet. Keep drilling, this rep is logged.';
+      } else {
+        coaching = 'Rep recorded.';
+      }
     }
+
 
     if (user && currentKI) {
       writeKIMastery({
