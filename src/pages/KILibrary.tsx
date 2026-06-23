@@ -320,7 +320,7 @@ export default function KILibrary() {
                   : 'bg-transparent border-border/60 text-muted-foreground hover:bg-muted/40',
               )}
             >
-              {h.label} <span className="opacity-60">({h.count})</span>
+              {h.label} <span className="opacity-60">({h.value === 'all' ? (dimCounts?.all ?? h.count) : (dimCounts?.[`head_${h.value}`] ?? h.count)})</span>
             </button>
           ))}
         </div>
