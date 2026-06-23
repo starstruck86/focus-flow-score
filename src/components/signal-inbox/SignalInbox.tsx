@@ -44,16 +44,16 @@ const HEAD_LABEL: Record<IntelligenceHead, string> = {
 
 function classifySignal(text: string): { signal_type: SignalType; intelligence_head: IntelligenceHead } {
   const t = text.toLowerCase();
-  if (/adjust|appsflyer|kochava|singular|branch\s+compe|vs\s+branch|competitor|alternative to|switch from|considering|evaluating/.test(t)) {
+  if (/adjust|appsflyer|kochava|singular|airbridge|skadnetwork|skan|mmp\s+switch|vs\s+branch|alternative\s+to\s+branch|competitor|evaluate.*branch|considering.*adjust/.test(t)) {
     return { signal_type: 'competitive', intelligence_head: 'competitive' };
   }
-  if (/branch\s+(sdk|product|feature|update|release|launches|adds|new|deep link|attribution|universal ads|aio|email-to-app|sms|web-to-app|qr)/.test(t)) {
+  if (/branch\s+(sdk|product|feature|update|release|launches|adds|new|deep.?link|attribution|universal.?ads|aio|email.?to.?app|sms|web.?to.?app|qr|advanced.?privacy)|privacy.?sdk|fingerprint|probabilistic/.test(t)) {
     return { signal_type: 'product', intelligence_head: 'product' };
   }
-  if (/industry|market|trend|survey|report|gdp|ios|android|att|skan|privacy|regulation|app store/.test(t)) {
+  if (/ios.?(18|17)|android|att|privacy|cookie|gdpr|ccpa|cpra|app.?store|regulation|market.?trend|industry|mobile.?measurement|user.?acquisition|retargeting|re-engagement/.test(t)) {
     return { signal_type: 'market', intelligence_head: 'market' };
   }
-  if (/cmo|cto|ceo|svp|vp|director|hires|joins|leaves|launches|announces|acquisition|acquires|partners|partnership|funding|ipo|quarterly|earnings/.test(t)) {
+  if (/cmo|cto|ceo|svp|vp|director|hires|joins|leaves|launches|announces|acquisition|acquires|merger|partners|partnership|funding|ipo|quarterly|earnings|loyal|app.?launch|rebrand/.test(t)) {
     return { signal_type: 'account', intelligence_head: 'sales' };
   }
   return { signal_type: 'strategic', intelligence_head: 'sales' };
@@ -197,6 +197,22 @@ export function SignalInbox({ accountId, compact = false }: SignalInboxProps) {
             </button>
           ))}
         </div>
+
+        {text.trim().length > 0 && (
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span>Routes to:</span>
+            <span className={cn(
+              'px-2 py-0.5 rounded-full font-medium text-[10px]',
+              type === 'competitive' ? 'bg-red-500/15 text-red-600' :
+              type === 'product' ? 'bg-green-500/15 text-green-600' :
+              type === 'market' ? 'bg-purple-500/15 text-purple-600' :
+              'bg-blue-500/15 text-blue-600'
+            )}>
+              {HEAD_LABEL[TYPE_META[type].head]} →
+            </span>
+            <span className="text-muted-foreground/60">auto-classified</span>
+          </div>
+        )}
 
         <div className="flex flex-col sm:flex-row gap-2">
           {!accountId && (
