@@ -251,6 +251,7 @@ export type Database = {
       }
       accounts: {
         Row: {
+          account_family: string | null
           account_status: string | null
           cadence_name: string | null
           category_complexity: boolean | null
@@ -286,6 +287,7 @@ export type Database = {
           next_touch_due: string | null
           notes: string | null
           outreach_status: string | null
+          parent_account_id: string | null
           planhat_link: string | null
           priority: string | null
           priority_score: number | null
@@ -306,6 +308,7 @@ export type Database = {
           website: string | null
         }
         Insert: {
+          account_family?: string | null
           account_status?: string | null
           cadence_name?: string | null
           category_complexity?: boolean | null
@@ -341,6 +344,7 @@ export type Database = {
           next_touch_due?: string | null
           notes?: string | null
           outreach_status?: string | null
+          parent_account_id?: string | null
           planhat_link?: string | null
           priority?: string | null
           priority_score?: number | null
@@ -361,6 +365,7 @@ export type Database = {
           website?: string | null
         }
         Update: {
+          account_family?: string | null
           account_status?: string | null
           cadence_name?: string | null
           category_complexity?: boolean | null
@@ -396,6 +401,7 @@ export type Database = {
           next_touch_due?: string | null
           notes?: string | null
           outreach_status?: string | null
+          parent_account_id?: string | null
           planhat_link?: string | null
           priority?: string | null
           priority_score?: number | null
@@ -415,7 +421,22 @@ export type Database = {
           user_id?: string
           website?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "accounts_parent_account_id_fkey"
+            columns: ["parent_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounts_parent_account_id_fkey"
+            columns: ["parent_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ai_feedback: {
         Row: {

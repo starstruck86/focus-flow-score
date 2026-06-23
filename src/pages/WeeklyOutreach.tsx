@@ -67,6 +67,7 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs';
+import { TerritoryTree } from '@/components/territory/TerritoryTree';
 import {
   Collapsible,
   CollapsibleContent,
@@ -769,7 +770,7 @@ export default function WeeklyOutreach() {
     itemLabel: 'Account',
   });
   
-  const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities' | 'sourcing'>('opportunities');
+  const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities' | 'sourcing' | 'tree'>('opportunities');
   const [stageFilter, setStageFilter] = useState<OpportunityStage | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1178,9 +1179,10 @@ export default function WeeklyOutreach() {
         </div>
         
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'accounts' | 'sourcing')} className="space-y-4">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'tree' | 'accounts' | 'sourcing')} className="space-y-4">
           <TabsList className="flex w-full overflow-x-auto gap-1 p-1 scrollbar-none max-w-sm">
             <TabsTrigger value="opportunities" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Opportunities</TabsTrigger>
+            <TabsTrigger value="tree" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Tree</TabsTrigger>
             <TabsTrigger value="accounts" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Accounts</TabsTrigger>
             <TabsTrigger value="sourcing" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Sourcing</TabsTrigger>
           </TabsList>
@@ -1207,6 +1209,13 @@ export default function WeeklyOutreach() {
               <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} showChurnRisk={false} columnOrder="outreach" excludeRenewals stageFilter={stageFilter} onClearStageFilter={() => setStageFilter(null)} />
             </CollapsibleWidgetSection>
           </TabsContent>
+
+          {/* Tree Tab - Corporate Family Hierarchy */}
+          <TabsContent value="tree" className="space-y-4">
+            <TerritoryTree />
+          </TabsContent>
+
+
 
           {/* Accounts Tab - Funnel View */}
           <TabsContent value="accounts" className="space-y-4">
