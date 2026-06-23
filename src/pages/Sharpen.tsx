@@ -91,6 +91,14 @@ export default function Sharpen() {
   const interleaved = (location.state as any)?.interleaved ?? false;
   const branchMode = (location.state as any)?.branchMode ?? false;
   const stateDimension = (location.state as any)?.dimension;
+  const stateChapters = (location.state as any)?.chapters as string[] | undefined;
+  const stateChapter = (location.state as any)?.chapter as string | undefined;
+  const stateSpecificKIId = (location.state as any)?.specificKIId as string | undefined;
+  const categoryLabel = stateChapters
+    ? (location.state as any)?.categoryLabel ?? 'Training'
+    : branchMode
+    ? 'Branch'
+    : null;
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { data: stats } = useDojoStats();
