@@ -7,7 +7,15 @@ import { fromActiveAccounts } from '@/data/accounts';
 import { cn } from '@/lib/utils';
 
 type Message = { role: 'user' | 'assistant'; content: string };
-type AccountInfo = { id: string; name: string; industry: string | null };
+type AccountInfo = { id: string; name: string; industry: string | null; tier?: string | null };
+
+type AccountContext = {
+  account: { id: string; name: string; tier: string | null; industry: string | null; description: string | null; hq_city: string | null } | null;
+  footprint: { deep_linking_status: string | null; universal_ads_status: string | null; email_to_app_status: string | null; sms_to_app_status: string | null } | null;
+  lastCall: { summary: string | null; next_step: string | null; created_at: string | null; contact_name: string | null } | null;
+};
+
+const GENERIC_ACCOUNT: AccountInfo = { id: '', name: 'a target enterprise prospect', industry: null, tier: null };
 
 const SCENARIOS = [
   { value: 'discovery', label: 'First call — discovery with Head of Growth' },
