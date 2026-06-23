@@ -218,10 +218,11 @@ export function WhitespaceCanvas() {
           <p className="text-2xl">🗺️</p>
           <p className="text-sm font-semibold">Canvas is empty</p>
           <p className="text-xs text-muted-foreground max-w-xs">
-            Tap any grey cell to start mapping Branch products across your territory.
+            Tap any cell to start mapping Branch products.
           </p>
         </div>
       )}
+
 
       <div className="flex flex-wrap items-center gap-4 text-[11px]">
         <span className="font-semibold text-muted-foreground uppercase tracking-wider">Legend:</span>
