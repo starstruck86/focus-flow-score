@@ -81,50 +81,6 @@ function BranchCountdown() {
   return null;
 }
 
-function KrystenCard() {
-  const navigate = useNavigate();
-  const today = new Date();
-  const dayOfWeek = today.getDay();
-  const hour = today.getHours();
-
-  const isRelevant = dayOfWeek === 3 || (dayOfWeek === 2 && hour >= 17);
-  if (!isRelevant) return null;
-
-  const isBeforeClass = dayOfWeek === 3 && hour < 14;
-  const isAfterClass = dayOfWeek === 3 && hour >= 14;
-
-  const label = isBeforeClass
-    ? '🎓 Krysten class at 2pm'
-    : isAfterClass
-      ? '🎓 Drill what you just learned'
-      : '🎓 Prep for tomorrow\u2019s class';
-  const ctaLabel = isAfterClass ? 'Drill' : 'Prep';
-
-  const handleClick = () => {
-    if (isAfterClass) {
-      navigate('/grind'); // user picks what was covered in class
-    } else {
-      navigate('/brief');
-    }
-  };
-
-  return (
-    <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-violet-500/10 border border-violet-500/20">
-      <div>
-        <p className="text-xs font-semibold">{label}</p>
-        <p className="text-[11px] text-muted-foreground">
-          {isAfterClass ? 'Pick what was covered in class' : 'Enterprise Sales Accelerator'}
-        </p>
-      </div>
-      <button
-        onClick={handleClick}
-        className="text-xs font-medium text-violet-500 hover:text-violet-400"
-      >
-        {ctaLabel}
-      </button>
-    </div>
-  );
-}
 
 function WeeklyCommitmentCard() {
   const navigate = useNavigate();
@@ -602,8 +558,6 @@ export default function Dojo() {
         </div>
 
 
-
-        <KrystenCard />
         <DailyProgress />
         <WeeklyCommitmentCard />
 
@@ -634,19 +588,6 @@ export default function Dojo() {
           </button>
         )}
 
-
-        {/* Proactive Dave — always visible */}
-        <ProactiveDaveCard
-          onMicroDrill={() => navigate('/sharpen')}
-          hasCompletedRepsToday={(() => {
-            try {
-              const key = `daily_reps_${new Date().toISOString().split('T')[0]}`;
-              return parseInt(localStorage.getItem(key) ?? '0', 10) > 0;
-            } catch { return false; }
-          })()}
-          streak={streak}
-          hasBenchmark={hasBenchmark ?? true}
-        />
 
         {/* Early / Mature: KI Proficiency strip */}
         {(isEarly || isMature) && <KiProficiencyStrip />}
@@ -846,6 +787,19 @@ export default function Dojo() {
             highlightMode={lessonContext?.recommendedMode ?? null}
           />
         )}
+
+        {/* Proactive Dave — after drill buttons */}
+        <ProactiveDaveCard
+          onMicroDrill={() => navigate('/sharpen')}
+          hasCompletedRepsToday={(() => {
+            try {
+              const key = `daily_reps_${new Date().toISOString().split('T')[0]}`;
+              return parseInt(localStorage.getItem(key) ?? '0', 10) > 0;
+            } catch { return false; }
+          })()}
+          streak={streak}
+          hasBenchmark={hasBenchmark ?? true}
+        />
 
         {/* Mature-only: Performance + Coaching Signals */}
         {isMature && (

@@ -9773,6 +9773,7 @@ export type Database = {
           motion: string | null
           name: string | null
           next_step: string | null
+          next_step_date: string | null
           next_touch_due: string | null
           notes: string | null
           outreach_status: string | null
@@ -9828,6 +9829,7 @@ export type Database = {
           motion?: string | null
           name?: string | null
           next_step?: string | null
+          next_step_date?: string | null
           next_touch_due?: string | null
           notes?: string | null
           outreach_status?: string | null
@@ -9883,6 +9885,7 @@ export type Database = {
           motion?: string | null
           name?: string | null
           next_step?: string | null
+          next_step_date?: string | null
           next_touch_due?: string | null
           notes?: string | null
           outreach_status?: string | null

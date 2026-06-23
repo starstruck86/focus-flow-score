@@ -231,6 +231,31 @@ export default function KILibrary() {
     },
   });
 
+  const { data: dimCounts } = useQuery({
+    queryKey: ['ki-dim-counts', user?.id],
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      if (!user) return {} as Record<string, number>;
+      const { data } = await supabase
+        .from('knowledge_items')
+        .select('spider_dimension, intelligence_type')
+        .eq('user_id', user.id)
+        .eq('chapter', 'branch_io')
+        .eq('active', true);
+      const counts: Record<string, number> = { all: 0 };
+      (data ?? []).forEach((ki: any) => {
+        counts.all = (counts.all || 0) + 1;
+        if (ki.spider_dimension) counts[ki.spider_dimension] = (counts[ki.spider_dimension] || 0) + 1;
+        if (ki.intelligence_type) {
+          const headKey = `head_${ki.intelligence_type}`;
+          counts[headKey] = (counts[headKey] || 0) + 1;
+        }
+      });
+      return counts;
+    },
+  });
+
   const handleDrill = (ki: KIResult) => {
     navigate('/sharpen', {
       state: { branchMode: true, dimension: ki.spider_dimension, specificKIId: ki.id },
@@ -250,7 +275,7 @@ export default function KILibrary() {
         <div className="flex items-center gap-2 ml-2">
           <h1 className="text-base font-bold">KI Library</h1>
           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-            586 KIs
+            {dimCounts?.all ?? 0} KIs
           </span>
         </div>
       </div>
@@ -278,7 +303,7 @@ export default function KILibrary() {
                   : 'bg-muted/40 border-border text-muted-foreground hover:bg-muted',
               )}
             >
-              {d.label} <span className="opacity-60">({d.count})</span>
+              {d.label} <span className="opacity-60">({dimCounts?.[d.value] ?? d.count})</span>
             </button>
           ))}
         </div>
@@ -295,7 +320,7 @@ export default function KILibrary() {
                   : 'bg-transparent border-border/60 text-muted-foreground hover:bg-muted/40',
               )}
             >
-              {h.label} <span className="opacity-60">({h.count})</span>
+              {h.label} <span className="opacity-60">({h.value === 'all' ? (dimCounts?.all ?? h.count) : (dimCounts?.[`head_${h.value}`] ?? h.count)})</span>
             </button>
           ))}
         </div>
@@ -320,8 +345,9 @@ export default function KILibrary() {
         ) : (
           <>
             <p className="text-[11px] text-muted-foreground px-1">
-              {results.length} result{results.length === 1 ? '' : 's'}
-              {search.trim().length >= 2 ? ` for "${search}"` : ''}
+              {results.length >= 50
+                ? `Showing 50 of many${search.trim().length >= 2 ? ` for "${search}"` : ''} — refine your search`
+                : `${results.length} result${results.length === 1 ? '' : 's'}${search.trim().length >= 2 ? ` for "${search}"` : ''}`}
             </p>
             {results.map((ki) => (
               <KICard

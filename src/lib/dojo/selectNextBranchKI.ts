@@ -38,6 +38,7 @@ export async function selectNextBranchKI(
     .eq('chapter', 'branch_io')
     .eq('spider_dimension', spiderDimension)
     .eq('active', true)
+    .order('confidence_score', { ascending: false, nullsFirst: false })
     .limit(50);
   if (intelligenceType) q = q.eq('intelligence_type', intelligenceType);
   const { data: candidates } = await q;
@@ -53,6 +54,7 @@ export async function selectNextBranchKI(
       .eq('user_id', userId)
       .eq('chapter', 'branch_io')
       .eq('active', true)
+      .order('confidence_score', { ascending: false, nullsFirst: false })
       .limit(20);
     if (intelligenceType) fq = fq.eq('intelligence_type', intelligenceType);
     const { data: fallback } = await fq;

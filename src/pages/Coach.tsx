@@ -306,12 +306,13 @@ function CallScorecard({ grade, onRegrade, transcriptId, transcriptContent }: {
 
   const CATEGORY_TO_DIMENSION: Record<string, string> = {
     discovery_score: 'discovery',
-    cotm_score: 'messaging',
-    structure_score: 'messaging',
+    cotm_score: 'expansion_strategy',
+    structure_score: 'deal_control',
     meddicc_score: 'deal_control',
     next_step_score: 'deal_control',
-    commercial_score: 'deal_control',
+    commercial_score: 'expansion_strategy',
     presence_score: 'stakeholder_navigation',
+    product_knowledge_score: 'product_knowledge',
   };
 
   const DRILL_DIMENSION_LABELS: Record<string, string> = {
@@ -353,6 +354,7 @@ function CallScorecard({ grade, onRegrade, transcriptId, transcriptContent }: {
         next_step_score: (grade as any).next_step_score ?? 5,
         commercial_score: (grade as any).commercial_score ?? 5,
         presence_score: (grade as any).presence_score ?? 5,
+        product_knowledge_score: (grade as any).product_knowledge_score ?? 5,
       };
       const weakDimSignals = Object.entries(CATEGORY_TO_DIMENSION)
         .filter(([field]) => (CATEGORY_SCORE_MAP[field] ?? 5) < 3)

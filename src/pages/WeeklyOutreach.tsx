@@ -812,7 +812,7 @@ export default function WeeklyOutreach() {
     itemLabel: 'Account',
   });
   
-  const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities' | 'sourcing' | 'tree' | 'coverage' | 'canvas' | 'digest'>('opportunities');
+  const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities' | 'tree' | 'coverage' | 'canvas' | 'digest'>('accounts');
   const [stageFilter, setStageFilter] = useState<OpportunityStage | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1227,15 +1227,14 @@ export default function WeeklyOutreach() {
         <PriorityInbox />
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'tree' | 'accounts' | 'coverage' | 'sourcing' | 'canvas' | 'digest')} className="space-y-4">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'tree' | 'accounts' | 'coverage' | 'canvas' | 'digest')} className="space-y-4">
           <TabsList className="flex w-full overflow-x-auto gap-1 p-1 scrollbar-none max-w-sm">
-            <TabsTrigger value="opportunities" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Opportunities</TabsTrigger>
-            <TabsTrigger value="tree" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Tree</TabsTrigger>
             <TabsTrigger value="accounts" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Accounts</TabsTrigger>
+            <TabsTrigger value="opportunities" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Opps</TabsTrigger>
+            <TabsTrigger value="tree" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Tree</TabsTrigger>
             <TabsTrigger value="coverage" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Coverage</TabsTrigger>
             <TabsTrigger value="canvas" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Canvas</TabsTrigger>
             <TabsTrigger value="digest" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Digest</TabsTrigger>
-            <TabsTrigger value="sourcing" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Sourcing</TabsTrigger>
           </TabsList>
 
           <TabsContent value="coverage" className="space-y-4">
@@ -1840,23 +1839,6 @@ export default function WeeklyOutreach() {
             )}
           </TabsContent>
 
-          {/* Sourcing Tab */}
-          <TabsContent value="sourcing" className="space-y-4">
-            <CollapsibleWidgetSection
-              label="Sourcing Intelligence"
-              collapsed={isOutreachSectionCollapsed('sourcing-intelligence')}
-              onToggle={() => outreachSectionLayout.collapseWidget('sourcing-intelligence')}
-            >
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <WidgetErrorBoundary widgetId="icp-sourcing">
-                  <IcpAccountSourcing />
-                </WidgetErrorBoundary>
-                <WidgetErrorBoundary widgetId="company-monitor">
-                  <CompanyMonitorCard motionFilter="new-logo" />
-                </WidgetErrorBoundary>
-              </div>
-            </CollapsibleWidgetSection>
-          </TabsContent>
         </Tabs>
 
         {/* Opportunity Drawer */}

@@ -1,10 +1,17 @@
 // Playbooks page — browse and reference Branch expansion playbooks
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react';
+import { toast } from 'sonner';
+import { ArrowLeft, ChevronDown, ChevronRight, Plus, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
 
 const TYPE_LABELS: Record<string, { label: string; color: string }> = {
   competitive: { label: 'Competitive', color: 'bg-red-500/15 text-red-600' },
@@ -131,7 +138,20 @@ function PlaybookCard({ pb }: { pb: Playbook }) {
 
 export default function Playbooks() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const qc = useQueryClient();
   const [filter, setFilter] = useState<string>('all');
+  const [addOpen, setAddOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    title: '',
+    problem_type: 'objection',
+    when_to_use: '',
+    talk_tracks: '',
+    key_questions: '',
+    tactic_steps: '',
+    success_criteria: '',
+  });
 
   const { data: playbooks } = useQuery({
     queryKey: ['playbooks-page'],
@@ -144,6 +164,38 @@ export default function Playbooks() {
     },
     staleTime: 120_000,
   });
+
+  const splitLines = (s: string) => s.split('\n').map(l => l.trim()).filter(Boolean);
+
+  const handleSave = async () => {
+    if (!user || !form.title.trim()) {
+      toast.error('Title is required');
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await (supabase as any).from('playbooks').insert({
+        user_id: user.id,
+        title: form.title.trim(),
+        problem_type: form.problem_type,
+        when_to_use: form.when_to_use.trim() || null,
+        talk_tracks: splitLines(form.talk_tracks),
+        key_questions: splitLines(form.key_questions),
+        tactic_steps: splitLines(form.tactic_steps),
+        success_criteria: form.success_criteria.trim() || null,
+        confidence_score: 0.7,
+      });
+      if (error) throw error;
+      toast.success('Playbook added');
+      setAddOpen(false);
+      setForm({ title: '', problem_type: 'objection', when_to_use: '', talk_tracks: '', key_questions: '', tactic_steps: '', success_criteria: '' });
+      qc.invalidateQueries({ queryKey: ['playbooks-page'] });
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const types = ['all', ...Array.from(new Set((playbooks ?? []).map((p) => p.problem_type)))];
   const filtered = filter === 'all' ? (playbooks ?? []) : (playbooks ?? []).filter((p) => p.problem_type === filter);
@@ -159,6 +211,12 @@ export default function Playbooks() {
         </button>
         <h1 className="text-base font-bold ml-2">Playbooks</h1>
         <span className="text-[11px] text-muted-foreground ml-1">· {(playbooks ?? []).length} encoded situations</span>
+        <button
+          onClick={() => setAddOpen(true)}
+          className="ml-auto text-[11px] font-medium px-2.5 py-1 rounded-full border border-primary/40 text-primary hover:bg-primary/10 flex items-center gap-1"
+        >
+          <Plus className="h-3 w-3" /> New Playbook
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 max-w-2xl w-full mx-auto">
@@ -188,6 +246,55 @@ export default function Playbooks() {
           <PlaybookCard key={pb.id} pb={pb} />
         ))}
       </div>
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>New Playbook</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Title</label>
+              <Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="e.g. Handling 'we already have Adjust'" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Problem type</label>
+              <Select value={form.problem_type} onValueChange={v => setForm({ ...form, problem_type: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TYPE_LABELS).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">When to use</label>
+              <Textarea rows={2} value={form.when_to_use} onChange={e => setForm({ ...form, when_to_use: e.target.value })} placeholder="When this play applies..." />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Talk tracks (one per line)</label>
+              <Textarea rows={3} value={form.talk_tracks} onChange={e => setForm({ ...form, talk_tracks: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Trap questions (one per line)</label>
+              <Textarea rows={3} value={form.key_questions} onChange={e => setForm({ ...form, key_questions: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Steps (one per line)</label>
+              <Textarea rows={3} value={form.tactic_steps} onChange={e => setForm({ ...form, tactic_steps: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Success criteria</label>
+              <Input value={form.success_criteria} onChange={e => setForm({ ...form, success_criteria: e.target.value })} placeholder="Win looks like..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+            <Button onClick={handleSave} disabled={saving || !form.title.trim()}>
+              {saving ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving…</> : 'Save Playbook'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

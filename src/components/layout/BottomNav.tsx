@@ -232,8 +232,8 @@ export function BottomNav({ variant = 'default' }: { variant?: 'default' | 'cond
                   ? <Briefcase className="h-5 w-5" />
                   : <Dumbbell className="h-5 w-5" />
                 }
-                <span className="truncate opacity-70">
-                  {mode === 'train' ? 'Work' : 'Train'}
+                <span className="truncate opacity-70 text-[9px]">
+                  {mode === 'train' ? '→ Work' : '→ Train'}
                 </span>
               </button>
             </TooltipTrigger>

@@ -146,7 +146,7 @@ export function PriorityInbox() {
           <p className="text-[10px] font-bold uppercase tracking-wider text-red-500 mb-2">
             ⚠️ Relationship decay — {decayingAccounts.length} account{decayingAccounts.length > 1 ? 's' : ''}
           </p>
-          {decayingAccounts.slice(0, 4).map((account) => {
+          {decayingAccounts.map((account) => {
             const daysAgo = account.last_touch_date
               ? Math.floor((Date.now() - new Date(account.last_touch_date).getTime()) / 86400000)
               : null;
@@ -154,22 +154,32 @@ export function PriorityInbox() {
               <div
                 key={account.id}
                 onClick={() => navigate(`/accounts/${account.id}`)}
-                className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-muted/30 rounded-lg px-2 -mx-2 transition-colors"
+                className="flex items-center justify-between gap-2 py-1.5 cursor-pointer hover:bg-muted/30 rounded-lg px-2 -mx-2 transition-colors"
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
                   <span
                     className={cn(
-                      'text-[10px] font-bold px-1.5 py-0.5 rounded',
+                      'text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0',
                       account.tier === 'A' ? 'bg-green-500/15 text-green-600' : 'bg-amber-500/15 text-amber-600',
                     )}
                   >
                     {account.tier ?? '—'}
                   </span>
-                  <span className="text-sm font-medium">{account.name}</span>
+                  <span className="text-sm font-medium truncate">{account.name}</span>
                 </div>
-                <span className="text-xs text-red-500 font-medium">
-                  {daysAgo === null ? 'Never touched' : `${daysAgo}d ago`}
-                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-xs text-red-500 font-medium">
+                    {daysAgo === null ? 'Never' : `${daysAgo}d`}
+                  </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); navigate(`/meeting?accountId=${account.id}`); }}
+                    className="text-[10px] font-medium px-2 py-1 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-all"
+                  >Prep</button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); navigate(`/post-call?accountId=${account.id}`); }}
+                    className="text-[10px] font-medium px-2 py-1 rounded bg-muted text-muted-foreground hover:bg-muted/80 transition-all"
+                  >Log</button>
+                </div>
               </div>
             );
           })}

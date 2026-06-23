@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -38,11 +39,22 @@ export default function PostCallLog() {
   const [nextStepDate, setNextStepDate] = useState(plusDays(7));
   const [playOn, setPlayOn] = useState(false);
   const [playTitle, setPlayTitle] = useState('');
-  const [queueTranscript, setQueueTranscript] = useState(false);
+  const [playOther, setPlayOther] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
   const account = useMemo(() => accounts.find(a => a.id === accountId) || null, [accounts, accountId]);
+
+  const { data: playbookOptions } = useQuery({
+    queryKey: ['playbook-titles'],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from('playbooks')
+        .select('id, title')
+        .order('title');
+      return (data ?? []) as { id: string; title: string }[];
+    },
+  });
 
   useEffect(() => {
     if (!user) return;
@@ -62,6 +74,10 @@ export default function PostCallLog() {
     if (!user || !canSubmit || !account) return;
     setSubmitting(true);
 
+    const finalPlayTitle = playOn
+      ? (playTitle === '__other__' ? playOther.trim() : playTitle).trim() || null
+      : null;
+
     const payload = {
       user_id: user.id,
       account_id: accountId,
@@ -73,17 +89,19 @@ export default function PostCallLog() {
       next_step: nextStep.trim() || null,
       next_step_date: nextStep.trim() ? nextStepDate : null,
       branch_play_used: playOn,
-      branch_ki_title: playOn ? playTitle.trim() || null : null,
-      queue_transcript: queueTranscript,
+      branch_ki_title: finalPlayTitle,
     };
 
     try {
       const { error } = await (supabase as any).from('call_logs').insert(payload);
       if (error) throw error;
 
-      // Update account last_touch_date + next_step
+      // Update account last_touch_date + next_step + next_touch_due
       const accountUpdate: any = { last_touch_date: payload.call_date };
       if (payload.next_step) accountUpdate.next_step = payload.next_step;
+      if (payload.next_step_date && payload.next_step) {
+        accountUpdate.next_touch_due = payload.next_step_date;
+      }
       await supabase.from('accounts').update(accountUpdate).eq('id', accountId);
 
       toast.success('Logged ✓');
@@ -197,22 +215,28 @@ export default function PostCallLog() {
             <Switch checked={playOn} onCheckedChange={setPlayOn} />
           </div>
           {playOn && (
-            <Input
-              value={playTitle}
-              onChange={e => setPlayTitle(e.target.value)}
-              placeholder="e.g. Expansion hypothesis opener"
-              className="h-12 text-base"
-            />
+            <>
+              <Select value={playTitle} onValueChange={setPlayTitle}>
+                <SelectTrigger className="h-12 text-base">
+                  <SelectValue placeholder="Select a Branch play..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {(playbookOptions ?? []).map(p => (
+                    <SelectItem key={p.id} value={p.title}>{p.title}</SelectItem>
+                  ))}
+                  <SelectItem value="__other__">Other (not in playbooks)</SelectItem>
+                </SelectContent>
+              </Select>
+              {playTitle === '__other__' && (
+                <Input
+                  value={playOther}
+                  onChange={e => setPlayOther(e.target.value)}
+                  placeholder="Describe the play"
+                  className="h-12 text-base"
+                />
+              )}
+            </>
           )}
-        </div>
-
-        {/* Queue transcript */}
-        <div className="flex items-center justify-between rounded-xl border border-border/60 p-3">
-          <div>
-            <p className="text-sm font-semibold">Upload transcript for AI grading?</p>
-            <p className="text-[11px] text-muted-foreground">Upload happens later in Coach</p>
-          </div>
-          <Switch checked={queueTranscript} onCheckedChange={setQueueTranscript} />
         </div>
       </div>
 

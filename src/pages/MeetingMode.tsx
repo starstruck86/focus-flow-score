@@ -28,8 +28,29 @@ interface Account {
   next_step: string | null;
 }
 
-function inferDimensions(industry: string | null): [string, string] {
+function inferDimensions(industry: string | null, goal: string): [string, string] {
   const i = (industry || '').toLowerCase();
+  const g = goal.toLowerCase();
+
+  if (/champion|stakeholder|exec|cmo|cfo|vp|c-suite|multi.?thread/.test(g)) {
+    return ['stakeholder_navigation', 'expansion_strategy'];
+  }
+  if (/compet|adjust|appsflyer|kochava|singular|switch|alternative/.test(g)) {
+    return ['competitive', 'deal_control'];
+  }
+  if (/product|feature|sdk|deep link|technical|integration|how does/.test(g)) {
+    return ['product_knowledge', 'expansion_strategy'];
+  }
+  if (/budget|discount|price|pricing|renewal|close|contract|negotiat/.test(g)) {
+    return ['deal_control', 'expansion_strategy'];
+  }
+  if (/discover|understand|learn|pain|challenge|problem|goal|objective/.test(g)) {
+    return ['discovery', 'expansion_strategy'];
+  }
+  if (/expand|new product|new use case|whitespace|grow|upsell|cross.?sell/.test(g)) {
+    return ['expansion_strategy', 'product_knowledge'];
+  }
+
   if (/media|entertain|stream|content/.test(i)) return ['expansion_strategy', 'deal_control'];
   if (/retail|hospitality|travel|food|consumer/.test(i)) return ['expansion_strategy', 'product_knowledge'];
   if (/financ|bank|health|insur|pharma/.test(i)) return ['deal_control', 'discovery'];
@@ -84,7 +105,7 @@ export default function MeetingMode() {
     if (!user || !account) return;
     setLoadingKis(true);
     setPhase('kis');
-    const [d1, d2] = inferDimensions(account.industry);
+    const [d1, d2] = inferDimensions(account.industry, goal);
     const [k1, k2] = await Promise.all([
       selectNextBranchKI(user.id, d1).catch(() => null),
       selectNextBranchKI(user.id, d2).catch(() => null),
@@ -163,7 +184,7 @@ export default function MeetingMode() {
   return (
     <SafePage className="flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
-        <button onClick={() => navigate('/dojo')} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ChevronLeft className="h-4 w-4" /> Back
         </button>
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Meeting Mode</p>
@@ -358,9 +379,26 @@ export default function MeetingMode() {
               </Card>
             )}
 
-            <Button onClick={() => navigate('/outreach')} className="w-full h-12 text-base">
-              Done — back to territory
-            </Button>
+            <div className="flex flex-col gap-2">
+              <Button
+                onClick={() => {
+                  setResponse('');
+                  setScore(null);
+                  setCoaching('');
+                  if (kis.length) {
+                    setWarmupKi(kis[Math.floor(Math.random() * kis.length)]);
+                  }
+                  setPhase('warmup');
+                }}
+                variant="outline"
+                className="w-full h-12 text-base"
+              >
+                Run another warm-up rep
+              </Button>
+              <Button onClick={() => navigate('/outreach')} className="w-full h-12 text-base">
+                Done — back to territory
+              </Button>
+            </div>
           </div>
         )}
       </div>
