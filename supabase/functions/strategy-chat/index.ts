@@ -1697,6 +1697,10 @@ interface ContextPack {
   outputs: any[];
   recentMessages: any[];
   sourceCount: number;
+  // Branch-specific enrichment (optional; absent for non-account threads)
+  branchFootprint?: any | null;
+  recentCalls?: any[];
+  recentSignals?: any[];
   retrievalMeta: {
     memoriesScored: number;
     uploadsIncluded: number;
@@ -1816,6 +1820,29 @@ async function buildContextPack(
           ...mem.map((m: any) => ({ ...m, source: "account" })),
         );
       }
+    })());
+
+    // Branch-specific enrichment: footprint, recent calls, recent signals
+    promises.push((async () => {
+      const [fpRes, callsRes, signalsRes] = await Promise.all([
+        supabase.from('branch_footprint')
+          .select('deep_linking_status, universal_ads_status, email_to_app_status, sms_to_app_status, web_to_app_status, qr_status, aio_status, advanced_privacy_status, estimated_arr, contract_renewal_date, notes')
+          .eq('account_id', thread.linked_account_id)
+          .maybeSingle(),
+        supabase.from('call_logs')
+          .select('call_date, summary, expansion_signal_text, next_step, branch_ki_title')
+          .eq('account_id', thread.linked_account_id)
+          .order('call_date', { ascending: false })
+          .limit(3),
+        supabase.from('account_signals')
+          .select('signal_type, raw_text, created_at')
+          .eq('linked_account_id', thread.linked_account_id)
+          .order('created_at', { ascending: false })
+          .limit(5),
+      ]);
+      pack.branchFootprint = fpRes.data ?? null;
+      pack.recentCalls = (callsRes.data ?? []) as any[];
+      pack.recentSignals = (signalsRes.data ?? []) as any[];
     })());
   }
 
@@ -2051,6 +2078,48 @@ function packToPromptSection(pack: ContextPack): string {
     sections.push(s);
     charBudget -= s.length;
   }
+
+  // Branch-specific context (only renders when data exists)
+  if (pack.branchFootprint) {
+    const fp = pack.branchFootprint as any;
+    const PRODUCTS: [string, string][] = [
+      ['deep_linking', 'Deep Linking'], ['universal_ads', 'Universal Ads'],
+      ['email_to_app', 'Email-to-App'], ['sms_to_app', 'SMS-to-App'],
+      ['web_to_app', 'Web-to-App'], ['qr', 'QR Codes'],
+      ['aio', 'AIO'], ['advanced_privacy', 'Advanced Privacy'],
+    ];
+    const confirmed = PRODUCTS.filter(([k]) => fp[`${k}_status`] === 'confirmed').map(([, l]) => l);
+    const inferred = PRODUCTS.filter(([k]) => fp[`${k}_status`] === 'inferred').map(([, l]) => l);
+    const fpParts: string[] = [];
+    if (confirmed.length) fpParts.push(`Active: ${confirmed.join(', ')}`);
+    if (inferred.length) fpParts.push(`Inferred: ${inferred.join(', ')}`);
+    if (fp.estimated_arr) fpParts.push(`Est ARR: $${Number(fp.estimated_arr).toLocaleString()}`);
+    if (fp.contract_renewal_date) fpParts.push(`Renewal: ${fp.contract_renewal_date}`);
+    if (fp.notes) fpParts.push(`Notes: ${String(fp.notes).slice(0, 200)}`);
+    if (fpParts.length) {
+      const s2 = `\n### Branch Footprint\n${fpParts.join(' | ')}`;
+      if (charBudget - s2.length > 0) { sections.push(s2); charBudget -= s2.length; }
+    }
+  }
+  if (pack.recentCalls && pack.recentCalls.length > 0) {
+    let callSection = `\n### Recent Calls (${pack.recentCalls.length})`;
+    for (const c of pack.recentCalls as any[]) {
+      const line = `\n- ${c.call_date}: ${(c.summary ?? '(no summary)').slice(0, 150)}${c.expansion_signal_text ? ` [Signal: ${String(c.expansion_signal_text).slice(0, 80)}]` : ''}${c.next_step ? ` [Next: ${String(c.next_step).slice(0, 60)}]` : ''}${c.branch_ki_title ? ` [Play: ${String(c.branch_ki_title).slice(0, 50)}]` : ''}`;
+      if (charBudget - line.length < 0) break;
+      callSection += line; charBudget -= line.length;
+    }
+    sections.push(callSection);
+  }
+  if (pack.recentSignals && pack.recentSignals.length > 0) {
+    let sigSection = `\n### Intelligence Signals (${pack.recentSignals.length})`;
+    for (const s of pack.recentSignals as any[]) {
+      const line = `\n- [${s.signal_type}] ${(s.raw_text ?? '').slice(0, 120)}`;
+      if (charBudget - line.length < 0) break;
+      sigSection += line; charBudget -= line.length;
+    }
+    sections.push(sigSection);
+  }
+
   if (pack.opportunity) {
     const s = `\n### Linked Opportunity: ${pack.opportunity.name}\nStage: ${
       pack.opportunity.stage || "Unknown"
