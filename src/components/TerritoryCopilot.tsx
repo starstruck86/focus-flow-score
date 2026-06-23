@@ -5,6 +5,8 @@ import { Sparkles, Send, Loader2, MessageSquare, ArrowRight, Zap, RotateCcw, Sea
 import { cn } from '@/lib/utils';
 import { streamCopilot, SUGGESTED_QUESTIONS, PAGE_SUGGESTED_QUESTIONS, PAGE_PLACEHOLDERS, MODE_CONFIG, type CopilotMsg, type CopilotMode } from '@/lib/territoryCopilot';
 import { useCopilot } from '@/contexts/CopilotContext';
+import { useTerritoryProfile } from '@/hooks/useTerritoryProfile';
+import { Link } from 'react-router-dom';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -96,6 +98,7 @@ function CopilotDialog() {
   const processedQuestionRef = useRef<string | null>(null);
   const streamingRef = useRef(false);
   const voice = useVoiceMode();
+  const { profile: territoryProfile } = useTerritoryProfile();
   const activeChainRef = useRef<ChainedWorkflow | null>(null);
   const workflowTimerRef = useRef<(() => number) | null>(null);
 
@@ -369,6 +372,16 @@ function CopilotDialog() {
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border shrink-0">
           <Sparkles className="h-4 w-4 text-primary" />
           <span className="font-display text-sm font-bold">Territory Intelligence</span>
+          {territoryProfile ? (
+            <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400" title="Territory profile loaded">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+              Territory loaded
+            </span>
+          ) : (
+            <Link to="/settings/territory" className="text-[10px] text-primary hover:underline">
+              Set up territory →
+            </Link>
+          )}
           {pageContext && (
             <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full truncate max-w-[200px]">
               {pageContext.accountName || pageContext.opportunityName || pageContext.description}

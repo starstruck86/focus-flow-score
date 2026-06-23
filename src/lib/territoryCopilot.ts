@@ -18,7 +18,7 @@ export async function streamCopilot({
   messages: CopilotMsg[];
   mode?: CopilotMode;
   accountId?: string;
-  pageContext?: { page: string; description: string; accountId?: string; accountName?: string; opportunityId?: string; opportunityName?: string } | null;
+  pageContext?: { page: string; description: string; accountId?: string; accountName?: string; opportunityId?: string; opportunityName?: string; territoryContext?: string } | null;
   onDelta: (text: string) => void;
   onDone: () => void;
   onError: (error: string) => void;

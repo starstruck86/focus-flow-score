@@ -1,6 +1,7 @@
 // Copilot Context — allows any component to open the copilot with a question, mode, and page context
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import { streamCopilot, type CopilotMode } from '@/lib/territoryCopilot';
+import { useTerritoryProfile } from '@/hooks/useTerritoryProfile';
 import { toast } from 'sonner';
 
 export interface PageContext {
@@ -10,6 +11,8 @@ export interface PageContext {
   accountName?: string;
   opportunityId?: string;
   opportunityName?: string;
+  /** Territory profile context string injected automatically when set */
+  territoryContext?: string;
   /** Supercharge #3: Extra metadata for richer AI context */
   metadata?: Record<string, any>;
 }
@@ -46,8 +49,14 @@ const CopilotContext = createContext<CopilotContextValue | null>(null);
 
 export function CopilotProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<CopilotState>({ open: false });
-  const [pageContext, setPageContext] = useState<PageContext | null>(null);
+  const [rawPageContext, setPageContext] = useState<PageContext | null>(null);
   const [backgroundResult, setBackgroundResult] = useState<BackgroundResult | null>(null);
+  const { buildContextString } = useTerritoryProfile();
+
+  const territoryContext = buildContextString();
+  const pageContext: PageContext | null = rawPageContext
+    ? { ...rawPageContext, territoryContext: territoryContext || rawPageContext.territoryContext }
+    : (territoryContext ? { page: 'global', description: 'Global session', territoryContext } : null);
 
   const ask = (question: string, mode?: CopilotMode, accountId?: string) =>
     setState({ open: true, initialQuestion: question, mode, accountId });

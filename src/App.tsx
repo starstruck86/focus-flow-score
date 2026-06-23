@@ -77,6 +77,7 @@ const CourseImports = lazy(() => import("./pages/CourseImports"));
 const CourseImportDetail = lazy(() => import("./pages/CourseImportDetail"));
 const Home = lazy(() => import("./pages/Home"));
 const Benchmark = lazy(() => import("./pages/Benchmark"));
+const TerritorySetup = lazy(() => import("./pages/TerritorySetup"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -141,6 +142,7 @@ const App = () => (
                   <Route path="/regrade" element={<ProtectedPage routeName="Batch Regrade"><BatchRegrade /></ProtectedPage>} />
                   <Route path="/prep" element={<ProtectedPage routeName="Sales Brain OS"><PrepHub /></ProtectedPage>} />
                   <Route path="/settings" element={<ProtectedPage routeName="Settings"><Settings /></ProtectedPage>} />
+                  <Route path="/settings/territory" element={<ProtectedPage routeName="Territory Setup"><Suspense fallback={<LazyFallback />}><TerritorySetup /></Suspense></ProtectedPage>} />
                   <Route path="/strategy" element={
                     <ProtectedPage routeName="Strategy">
                       <Suspense fallback={<LazyFallback />}>

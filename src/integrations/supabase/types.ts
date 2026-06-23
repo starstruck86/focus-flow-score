@@ -8558,6 +8558,86 @@ export type Database = {
           },
         ]
       }
+      territory_profile: {
+        Row: {
+          company: string | null
+          company_context: string | null
+          created_at: string | null
+          csm_name: string | null
+          custom_notes: string | null
+          fiscal_year_end: string | null
+          fiscal_year_start: string | null
+          id: string
+          ki_library_summary: string | null
+          manager_name: string | null
+          motion: string | null
+          name: string | null
+          quota_amount: number | null
+          quota_currency: string | null
+          quota_type: string | null
+          role: string | null
+          se_name: string | null
+          start_date: string | null
+          territory_description: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          company?: string | null
+          company_context?: string | null
+          created_at?: string | null
+          csm_name?: string | null
+          custom_notes?: string | null
+          fiscal_year_end?: string | null
+          fiscal_year_start?: string | null
+          id?: string
+          ki_library_summary?: string | null
+          manager_name?: string | null
+          motion?: string | null
+          name?: string | null
+          quota_amount?: number | null
+          quota_currency?: string | null
+          quota_type?: string | null
+          role?: string | null
+          se_name?: string | null
+          start_date?: string | null
+          territory_description?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          company?: string | null
+          company_context?: string | null
+          created_at?: string | null
+          csm_name?: string | null
+          custom_notes?: string | null
+          fiscal_year_end?: string | null
+          fiscal_year_start?: string | null
+          id?: string
+          ki_library_summary?: string | null
+          manager_name?: string | null
+          motion?: string | null
+          name?: string | null
+          quota_amount?: number | null
+          quota_currency?: string | null
+          quota_type?: string | null
+          role?: string | null
+          se_name?: string | null
+          start_date?: string | null
+          territory_description?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "territory_profile_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       territory_strategy_memory: {
         Row: {
           confidence: number | null

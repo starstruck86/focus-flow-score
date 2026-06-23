@@ -695,6 +695,17 @@ export default function Settings() {
           <p className="text-sm text-muted-foreground">Customize your experience</p>
         </div>
 
+        <Link
+          to="/settings/territory"
+          className="mb-8 flex items-center justify-between rounded-lg border border-border bg-card p-4 hover:border-primary/40 transition-colors"
+        >
+          <div>
+            <h3 className="font-semibold">Territory Profile</h3>
+            <p className="text-sm text-muted-foreground">Tell the AI who you are, what you sell, and your territory.</p>
+          </div>
+          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+        </Link>
+
         <div className="space-y-10">
           <section className="space-y-6">
             <h2 className="text-base font-semibold text-foreground/90 border-b border-border/40 pb-2">Work Schedule</h2>
