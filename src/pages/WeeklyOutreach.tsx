@@ -71,6 +71,7 @@ import { TerritoryTree } from '@/components/territory/TerritoryTree';
 import { TerritoryCoverage } from '@/components/territory/TerritoryCoverage';
 import { PriorityInbox } from '@/components/territory/PriorityInbox';
 import { WhitespaceCanvas } from '@/components/territory/WhitespaceCanvas';
+import { SignalDigest } from '@/components/territory/SignalDigest';
 
 function WeeklyReviewPrompt() {
   const navigate = useNavigate();
@@ -811,7 +812,7 @@ export default function WeeklyOutreach() {
     itemLabel: 'Account',
   });
   
-  const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities' | 'sourcing' | 'tree' | 'coverage' | 'canvas'>('opportunities');
+  const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities' | 'sourcing' | 'tree' | 'coverage' | 'canvas' | 'digest'>('opportunities');
   const [stageFilter, setStageFilter] = useState<OpportunityStage | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1226,13 +1227,14 @@ export default function WeeklyOutreach() {
         <PriorityInbox />
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'tree' | 'accounts' | 'coverage' | 'sourcing' | 'canvas')} className="space-y-4">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'tree' | 'accounts' | 'coverage' | 'sourcing' | 'canvas' | 'digest')} className="space-y-4">
           <TabsList className="flex w-full overflow-x-auto gap-1 p-1 scrollbar-none max-w-sm">
             <TabsTrigger value="opportunities" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Opportunities</TabsTrigger>
             <TabsTrigger value="tree" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Tree</TabsTrigger>
             <TabsTrigger value="accounts" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Accounts</TabsTrigger>
             <TabsTrigger value="coverage" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Coverage</TabsTrigger>
             <TabsTrigger value="canvas" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Canvas</TabsTrigger>
+            <TabsTrigger value="digest" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Digest</TabsTrigger>
             <TabsTrigger value="sourcing" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Sourcing</TabsTrigger>
           </TabsList>
 
@@ -1242,6 +1244,13 @@ export default function WeeklyOutreach() {
 
           <TabsContent value="canvas" className="mt-0">
             <WhitespaceCanvas />
+          </TabsContent>
+
+          <TabsContent value="digest" className="mt-0">
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">All signals logged in the last 7 days, grouped by account.</p>
+              <SignalDigest />
+            </div>
           </TabsContent>
 
           {/* Opportunities Tab */}
