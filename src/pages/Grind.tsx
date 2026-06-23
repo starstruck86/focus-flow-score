@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { selectNextKI } from '@/lib/dojo/selectNextKI';
+import { selectNextBranchKI } from '@/lib/dojo/selectNextBranchKI';
 import { writeKIMastery } from '@/lib/dojo/kiMasteryWriter';
 import { SPIDER_DIMENSIONS } from '@/hooks/useKiProficiency';
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,7 @@ export default function Grind() {
   const [currentResult, setCurrentResult] = useState<DrillResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [reflectionText, setReflectionText] = useState('');
+  const [branchMode, setBranchMode] = useState(false);
 
   // Load concept + drills when dimension selected
   const loadSession = useCallback(async (dimension: string) => {
@@ -45,14 +47,15 @@ export default function Grind() {
     setLoading(true);
 
     // Fetch 1 concept KI (highest confidence) + DRILL_REPS drill KIs
-    const conceptResult = await selectNextKI(user.id, dimension);
+    const fetcher = branchMode ? selectNextBranchKI : selectNextKI;
+    const conceptResult = await fetcher(user.id, dimension);
     setConceptKI(conceptResult);
 
     // Fetch additional KIs for drills (different from concept)
     const drillSet: any[] = [];
     const excludeIds = conceptResult ? [conceptResult.id] : [];
     for (let i = 0; i < DRILL_REPS; i++) {
-      const ki = await selectNextKI(user.id, dimension, excludeIds[excludeIds.length - 1]);
+      const ki = await fetcher(user.id, dimension, excludeIds[excludeIds.length - 1]);
       if (ki && !excludeIds.includes(ki.id)) {
         drillSet.push(ki);
         excludeIds.push(ki.id);
@@ -61,7 +64,7 @@ export default function Grind() {
     setDrillKIs(drillSet);
     setLoading(false);
     setPhase('concept');
-  }, [user]);
+  }, [user, branchMode]);
 
   const submitDrill = useCallback(async () => {
     const ki = drillKIs[currentDrillIdx];
@@ -146,6 +149,7 @@ export default function Grind() {
             <div className="flex items-center gap-2">
               <Brain className="h-4 w-4 text-primary" />
               <span className="text-sm font-semibold">Grind Session</span>
+              {branchMode && <span className="text-[10px] font-bold text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 rounded-full">🌿 Branch</span>}
             </div>
             {selectedDimension && (
               <span className="text-[10px] text-muted-foreground ml-6">Drilling: {dimLabel}</span>
@@ -154,7 +158,20 @@ export default function Grind() {
           <button onClick={() => navigate('/dojo')} className="text-muted-foreground p-1"><X className="h-4 w-4" /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-          <p className="text-xs text-muted-foreground">Pick a topic. You'll get concept → 5 drills → reflection.</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">Pick a topic. You'll get concept → 5 drills → reflection.</p>
+            <button
+              onClick={() => setBranchMode(b => !b)}
+              className={cn(
+                'text-[10px] font-semibold px-2.5 py-1 rounded-full border transition-all',
+                branchMode
+                  ? 'bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400'
+                  : 'border-border text-muted-foreground hover:border-green-500/30'
+              )}
+            >
+              {branchMode ? '🌿 Branch Mode ON' : '🌿 Branch'}
+            </button>
+          </div>
           <div className="grid grid-cols-1 gap-2">
             {SPIDER_DIMENSIONS.map(dim => (
               <button
