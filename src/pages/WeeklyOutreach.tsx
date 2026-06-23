@@ -769,7 +769,7 @@ export default function WeeklyOutreach() {
     itemLabel: 'Account',
   });
   
-  const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities' | 'sourcing'>('opportunities');
+  const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities' | 'sourcing' | 'tree'>('opportunities');
   const [stageFilter, setStageFilter] = useState<OpportunityStage | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
