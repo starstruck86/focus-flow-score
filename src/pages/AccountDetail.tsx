@@ -352,6 +352,13 @@ export default function AccountDetail() {
 
         <Separator />
 
+        {/* Signal Inbox */}
+        <div className="py-2">
+          <SignalInbox accountId={account.id} compact />
+        </div>
+
+        <Separator />
+
         {/* Relationship Health */}
         <RelationshipHealthCard accountId={account.id} />
 
