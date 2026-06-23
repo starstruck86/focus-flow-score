@@ -68,6 +68,7 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs';
 import { TerritoryTree } from '@/components/territory/TerritoryTree';
+import { TerritoryCoverage } from '@/components/territory/TerritoryCoverage';
 import {
   Collapsible,
   CollapsibleContent,
