@@ -327,7 +327,7 @@ export default function Simulate() {
 
           <button
             onClick={startSimulation}
-            disabled={!account}
+            disabled={false}
             className="w-full py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
           >
             Start Simulation →
