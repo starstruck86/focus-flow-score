@@ -54,6 +54,7 @@ export async function selectNextBranchKI(
       .eq('user_id', userId)
       .eq('chapter', 'branch_io')
       .eq('active', true)
+      .order('confidence_score', { ascending: false, nullsFirst: false })
       .limit(20);
     if (intelligenceType) fq = fq.eq('intelligence_type', intelligenceType);
     const { data: fallback } = await fq;
