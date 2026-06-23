@@ -35,7 +35,7 @@ interface Playbook {
   confidence_score: number;
 }
 
-function PlaybookCard({ pb }: { pb: Playbook }) {
+function PlaybookCard({ pb, usageCount }: { pb: Playbook; usageCount?: number }) {
   const [expanded, setExpanded] = useState(false);
   const [section, setSection] = useState<'position' | 'questions' | 'steps'>('position');
   const meta = TYPE_LABELS[pb.problem_type] ?? { label: pb.problem_type, color: 'bg-muted text-muted-foreground' };
@@ -53,6 +53,9 @@ function PlaybookCard({ pb }: { pb: Playbook }) {
             {pb.confidence_score >= 0.85 && (
               <span className="text-[10px] text-green-500 font-medium shrink-0">High confidence</span>
             )}
+            {usageCount ? (
+              <span className="text-[10px] text-muted-foreground shrink-0">Used {usageCount}×</span>
+            ) : null}
           </div>
           <p className="text-xs text-muted-foreground line-clamp-2">{pb.when_to_use}</p>
         </div>
@@ -62,6 +65,7 @@ function PlaybookCard({ pb }: { pb: Playbook }) {
           <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
         )}
       </button>
+
 
       {expanded && (
         <div className="border-t border-border px-4 pb-4 space-y-3">
@@ -165,6 +169,23 @@ export default function Playbooks() {
     staleTime: 120_000,
   });
 
+  const { data: usageCounts } = useQuery({
+    queryKey: ['playbook-usage', user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from('playbook_usage_events')
+        .select('playbook_id')
+        .eq('user_id', user!.id);
+      const counts: Record<string, number> = {};
+      (data ?? []).forEach((r: any) => {
+        if (r.playbook_id) counts[r.playbook_id] = (counts[r.playbook_id] || 0) + 1;
+      });
+      return counts;
+    },
+  });
+
+
   const splitLines = (s: string) => s.split('\n').map(l => l.trim()).filter(Boolean);
 
   const handleSave = async () => {
@@ -243,7 +264,7 @@ export default function Playbooks() {
 
         {!playbooks && <div className="text-center py-8 text-sm text-muted-foreground">Loading playbooks…</div>}
         {filtered.map((pb) => (
-          <PlaybookCard key={pb.id} pb={pb} />
+          <PlaybookCard key={pb.id} pb={pb} usageCount={usageCounts?.[pb.id]} />
         ))}
       </div>
 
