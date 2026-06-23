@@ -264,7 +264,7 @@ export default function Playbooks() {
 
         {!playbooks && <div className="text-center py-8 text-sm text-muted-foreground">Loading playbooks…</div>}
         {filtered.map((pb) => (
-          <PlaybookCard key={pb.id} pb={pb} />
+          <PlaybookCard key={pb.id} pb={pb} usageCount={usageCounts?.[pb.id]} />
         ))}
       </div>
 
