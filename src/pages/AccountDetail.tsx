@@ -360,6 +360,13 @@ export default function AccountDetail() {
 
         <Separator />
 
+        {/* Branch Footprint */}
+        <div className="py-2">
+          <BranchFootprint accountId={account.id} />
+        </div>
+
+        <Separator />
+
         {/* Relationship Health */}
         <RelationshipHealthCard accountId={account.id} />
 
