@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { useCallTranscripts } from '@/hooks/useCallTranscripts';
 import { useAllTranscriptGrades, useGradeTranscript, useTranscriptGrade, type TranscriptGrade } from '@/hooks/useTranscriptGrades';
 import { format, parseISO } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend,
@@ -58,8 +59,24 @@ function ScoreBar({ label, score, icon: Icon }: { label: string; score: number; 
   );
 }
 
+const DIM_TO_KI: Record<string, { label: string; kiDim: string }> = {
+  discovery_score: { label: 'Discovery', kiDim: 'discovery' },
+  meddicc_score: { label: 'Deal Control (MEDDICC)', kiDim: 'deal_control' },
+  commercial_score: { label: 'Commercial / Expansion', kiDim: 'expansion_strategy' },
+  structure_score: { label: 'Deal Control (Structure)', kiDim: 'deal_control' },
+  next_step_score: { label: 'Deal Control (Next Step)', kiDim: 'deal_control' },
+  presence_score: { label: 'Discovery (Presence)', kiDim: 'discovery' },
+  cotm_score: { label: 'Discovery (Cost of the Moment)', kiDim: 'discovery' },
+};
+
 function GradeCard({ grade }: { grade: TranscriptGrade }) {
+  const navigate = useNavigate();
   const FocusIcon = FOCUS_ICONS[grade.feedback_focus] || Target;
+  const weakest = (Object.keys(DIM_TO_KI) as (keyof typeof DIM_TO_KI)[])
+    .map(k => ({ key: k, score: (grade as any)[k] as number ?? 100 }))
+    .filter(d => typeof d.score === 'number' && d.score > 0)
+    .sort((a, b) => a.score - b.score)[0];
+  const weakestInfo = weakest ? DIM_TO_KI[weakest.key] : null;
   return (
     <Card className="border-border/50">
       <CardContent className="p-4 space-y-4">
