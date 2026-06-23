@@ -940,6 +940,112 @@ export type Database = {
           },
         ]
       }
+      branch_footprint: {
+        Row: {
+          account_id: string
+          advanced_privacy_status: string | null
+          advanced_privacy_use_case: string | null
+          aio_status: string | null
+          aio_use_case: string | null
+          contract_renewal_date: string | null
+          created_at: string | null
+          deep_linking_status: string | null
+          deep_linking_use_case: string | null
+          email_to_app_status: string | null
+          email_to_app_use_case: string | null
+          estimated_arr: number | null
+          id: string
+          notes: string | null
+          qr_status: string | null
+          qr_use_case: string | null
+          relationship_owner: string | null
+          sms_to_app_status: string | null
+          sms_to_app_use_case: string | null
+          universal_ads_status: string | null
+          universal_ads_use_case: string | null
+          updated_at: string | null
+          user_id: string
+          web_to_app_status: string | null
+          web_to_app_use_case: string | null
+        }
+        Insert: {
+          account_id: string
+          advanced_privacy_status?: string | null
+          advanced_privacy_use_case?: string | null
+          aio_status?: string | null
+          aio_use_case?: string | null
+          contract_renewal_date?: string | null
+          created_at?: string | null
+          deep_linking_status?: string | null
+          deep_linking_use_case?: string | null
+          email_to_app_status?: string | null
+          email_to_app_use_case?: string | null
+          estimated_arr?: number | null
+          id?: string
+          notes?: string | null
+          qr_status?: string | null
+          qr_use_case?: string | null
+          relationship_owner?: string | null
+          sms_to_app_status?: string | null
+          sms_to_app_use_case?: string | null
+          universal_ads_status?: string | null
+          universal_ads_use_case?: string | null
+          updated_at?: string | null
+          user_id: string
+          web_to_app_status?: string | null
+          web_to_app_use_case?: string | null
+        }
+        Update: {
+          account_id?: string
+          advanced_privacy_status?: string | null
+          advanced_privacy_use_case?: string | null
+          aio_status?: string | null
+          aio_use_case?: string | null
+          contract_renewal_date?: string | null
+          created_at?: string | null
+          deep_linking_status?: string | null
+          deep_linking_use_case?: string | null
+          email_to_app_status?: string | null
+          email_to_app_use_case?: string | null
+          estimated_arr?: number | null
+          id?: string
+          notes?: string | null
+          qr_status?: string | null
+          qr_use_case?: string | null
+          relationship_owner?: string | null
+          sms_to_app_status?: string | null
+          sms_to_app_use_case?: string | null
+          universal_ads_status?: string | null
+          universal_ads_use_case?: string | null
+          updated_at?: string | null
+          user_id?: string
+          web_to_app_status?: string | null
+          web_to_app_use_case?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "branch_footprint_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "branch_footprint_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "branch_footprint_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       calendar_events: {
         Row: {
           all_day: boolean
