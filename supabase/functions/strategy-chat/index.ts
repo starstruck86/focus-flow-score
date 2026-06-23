@@ -1697,6 +1697,10 @@ interface ContextPack {
   outputs: any[];
   recentMessages: any[];
   sourceCount: number;
+  // Branch-specific enrichment (optional; absent for non-account threads)
+  branchFootprint?: any | null;
+  recentCalls?: any[];
+  recentSignals?: any[];
   retrievalMeta: {
     memoriesScored: number;
     uploadsIncluded: number;
