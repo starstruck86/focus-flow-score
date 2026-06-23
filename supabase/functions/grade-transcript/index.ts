@@ -651,7 +651,11 @@ ${kiContext}`;
                 "pressure_recovery_score", "pressure_recovery_evidence",
                 "multi_thread_score", "multi_thread_evidence",
                 "self_awareness_score", "self_awareness_evidence",
-                "product_knowledge_score"
+                "product_knowledge_score",
+                "branch_expansion_hypothesis_score", "branch_product_fit_score",
+                "branch_value_prop_score", "branch_objection_handling_score",
+                "branch_coaching_note"
+
               ],
               additionalProperties: false,
             },
