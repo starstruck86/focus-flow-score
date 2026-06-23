@@ -279,6 +279,20 @@ Evaluate segments:
 - Tie all feedback to revenue, risk, or deal progression — never abstract advice.
 - When cumulative context is provided, factor in what was ALREADY confirmed in prior calls vs what is NEW.
 
+## Branch-Specific Expansion Dimensions (score each 1-5)
+
+This rep is a Branch.io expansion AE. In addition to generic frameworks, score Branch execution on every call:
+
+**branch_expansion_hypothesis_score**: Did the AE open or identify a specific expansion hypothesis for this account? Did they articulate which Branch product could be added, to which BU or use case, and why now? Score 5 if they named a specific hypothesis with evidence (e.g., "Your email campaigns aren't deep-linking to the app — Branch Email-to-App would solve that"). Score 1 if no expansion angle was surfaced.
+
+**branch_product_fit_score**: Did the AE correctly identify and explain the right Branch product(s) for this account's situation? Score 5 if they accurately matched Branch capabilities (deep linking, attribution, Email-to-App, SMS-to-App, Universal Ads, QR, AIO) to the account's use case with specifics. Score 1 if they gave generic Branch positioning or mismatched the product.
+
+**branch_value_prop_score**: Did the AE articulate Branch's unique differentiation — specifically the combination of measurement AND deep linking in one SDK, or another core Branch differentiator? Score 5 if they delivered a crisp, specific value prop beyond "we do attribution." Score 1 if it was generic or cliché.
+
+**branch_objection_handling_score**: If any Branch-specific objections arose (build internally, "we already have Adjust/AppsFlyer", vendor consolidation, "we can use Firebase"), did the AE handle them correctly? Score 5 if they acknowledged the objection, quantified the build/switch cost, and pivoted to Branch's specific advantage. Score 1 if they folded or gave a generic response. Score 3 if no Branch-specific objection arose.
+
+Also produce a **branch_coaching_note**: 1-2 sentences specifically about Branch execution on this call — what was right or wrong about how Branch was positioned.
+
 ${resourceContext}
 ${accountContext}
 ${opportunityContext}
@@ -287,6 +301,7 @@ ${goalsContext}
 ${customScorecardContext}
 ${rolePlayContext}
 ${kiContext}`;
+
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
