@@ -69,6 +69,7 @@ import {
 } from '@/components/ui/tabs';
 import { TerritoryTree } from '@/components/territory/TerritoryTree';
 import { TerritoryCoverage } from '@/components/territory/TerritoryCoverage';
+import { PriorityInbox } from '@/components/territory/PriorityInbox';
 import {
   Collapsible,
   CollapsibleContent,
