@@ -23,6 +23,7 @@ import {
   ExternalLink as LinkIcon,
   Users,
   Sparkles,
+  Phone,
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { StreakChip } from '@/components/StreakChip';
