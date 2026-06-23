@@ -49,8 +49,14 @@ const CopilotContext = createContext<CopilotContextValue | null>(null);
 
 export function CopilotProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<CopilotState>({ open: false });
-  const [pageContext, setPageContext] = useState<PageContext | null>(null);
+  const [rawPageContext, setPageContext] = useState<PageContext | null>(null);
   const [backgroundResult, setBackgroundResult] = useState<BackgroundResult | null>(null);
+  const { buildContextString } = useTerritoryProfile();
+
+  const territoryContext = buildContextString();
+  const pageContext: PageContext | null = rawPageContext
+    ? { ...rawPageContext, territoryContext: territoryContext || rawPageContext.territoryContext }
+    : (territoryContext ? { page: 'global', description: 'Global session', territoryContext } : null);
 
   const ask = (question: string, mode?: CopilotMode, accountId?: string) =>
     setState({ open: true, initialQuestion: question, mode, accountId });
