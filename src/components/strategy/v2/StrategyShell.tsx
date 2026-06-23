@@ -731,6 +731,31 @@ export function StrategyShell() {
     runDetect().catch(() => { /* swallow */ });
   }, [threadId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Consume one-shot account prefill (set by /accounts/:id → Strategy button).
+  // Creates a new account-linked thread and switches to it.
+  const prefillConsumedRef = useRef(false);
+  useEffect(() => {
+    if (!user || prefillConsumedRef.current) return;
+    let raw: string | null = null;
+    try { raw = sessionStorage.getItem('strategy_prefill_account'); } catch {}
+    if (!raw) return;
+    let parsed: { id?: string; name?: string | null } | null = null;
+    try { parsed = JSON.parse(raw); } catch {}
+    if (!parsed?.id) return;
+    prefillConsumedRef.current = true;
+    try { sessionStorage.removeItem('strategy_prefill_account'); } catch {}
+    (async () => {
+      const { data: newThread } = await supabase.from('strategy_threads').insert({
+        user_id: user.id,
+        title: parsed!.name ? `${parsed!.name} — strategy` : 'New account strategy',
+        thread_type: 'account_linked',
+        linked_account_id: parsed!.id,
+      } as any).select().single();
+      if (newThread?.id) setActiveThreadId(newThread.id);
+    })().catch((e) => console.warn('[StrategyShell] prefill account thread failed', e));
+  }, [user, setActiveThreadId]);
+
+
   const handleSend = useCallback((text: string) => {
     if (pendingThreadId || isCreatingThread || isSending) return;
     // The surface we're sending from. Each workspace owns its own thread —
