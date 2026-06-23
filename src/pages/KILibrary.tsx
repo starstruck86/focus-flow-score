@@ -275,7 +275,7 @@ export default function KILibrary() {
         <div className="flex items-center gap-2 ml-2">
           <h1 className="text-base font-bold">KI Library</h1>
           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-            586 KIs
+            {dimCounts?.all ?? 0} KIs
           </span>
         </div>
       </div>
