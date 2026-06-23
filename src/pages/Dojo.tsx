@@ -479,6 +479,34 @@ export default function Dojo() {
           )}
         </div>
 
+        {/* Other Intelligence Categories */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 px-1">Train by Intelligence Type</p>
+          {[
+            { emoji: '📞', label: 'Prospecting', desc: 'Cold calling, messaging, follow-up', chapters: ['cold_calling', 'messaging', 'follow_up'] },
+            { emoji: '🔍', label: 'Discovery', desc: 'Questions, frameworks, demo technique', chapters: ['discovery', 'demo', 'qualification'] },
+            { emoji: '⚔️', label: 'Deal Control', desc: 'Negotiation, closing, objection handling', chapters: ['closing', 'negotiation', 'objection_handling'] },
+            { emoji: '🏛️', label: 'Stakeholder', desc: 'Executive engagement, champion building', chapters: ['stakeholder_navigation', 'personas'] },
+            { emoji: '🎯', label: 'Competitive', desc: 'Competitive intel and positioning', chapters: ['competitive', 'competitors'] },
+          ].map(cat => (
+            <button
+              key={cat.label}
+              onClick={() => navigate('/sharpen', { state: { chapters: cat.chapters } })}
+              className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-base shrink-0">{cat.emoji}</span>
+                <div>
+                  <p className="text-sm font-medium">{cat.label}</p>
+                  <p className="text-[11px] text-muted-foreground">{cat.desc}</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
+              </div>
+            </button>
+          ))}
+        </div>
+
+
         {/* KI Library quick entry */}
         <button
           onClick={() => navigate('/ki-library')}
