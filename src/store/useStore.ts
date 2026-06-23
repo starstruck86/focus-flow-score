@@ -717,7 +717,7 @@ export const useStore = create<QuotaCompassStore>()(
       },
       
       // Opportunities
-      opportunities: getDefaultOpportunities(),
+      opportunities: [],
       
       addOpportunity: (opportunity) => {
         const newOpportunity: Opportunity = {
