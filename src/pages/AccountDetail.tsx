@@ -29,6 +29,7 @@ import { AccountSynopsisModal } from '@/components/AccountSynopsisModal';
 import { FromStrategyPanel } from '@/components/strategy/FromStrategyPanel';
 import { cn } from '@/lib/utils';
 import type { AccountTier, AccountStatus } from '@/types';
+import { BranchIntelligenceCard } from '@/components/BranchIntelligenceCard';
 
 const TIER_COLORS: Record<AccountTier, string> = {
   'A': 'border-status-green text-status-green',
@@ -344,10 +345,15 @@ export default function AccountDetail() {
 
         <Separator />
 
-        {/* Relationship Health */}
-        <RelationshipHealthCard accountId={account.id} />
+        {/* Branch Intelligence */}
+        <div className="py-2">
+          <BranchIntelligenceCard account={account} />
+        </div>
 
         <Separator />
+
+        {/* Relationship Health */}
+        <RelationshipHealthCard accountId={account.id} />
 
         <Separator />
 
