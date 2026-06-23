@@ -309,10 +309,54 @@ export default function Simulate() {
           <p className="text-sm text-muted-foreground">
             {turnCount} turns · {account?.name} · {SCENARIO_LABELS[scenario]}
           </p>
-          <div className="rounded-xl border bg-card p-4 space-y-2">
-            <p className="text-sm font-semibold">{debrief.note}</p>
-            <p className="text-xs text-muted-foreground">{debrief.detail}</p>
-          </div>
+
+          {grading && (
+            <div className="rounded-xl border bg-card p-6 flex items-center justify-center gap-3">
+              <div className="h-4 w-4 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+              <p className="text-sm text-muted-foreground">Analyzing your call…</p>
+            </div>
+          )}
+
+          {!grading && gradeResult && (
+            <>
+              <div className="rounded-xl border bg-card p-4 flex items-center gap-4">
+                <div className="text-5xl font-bold font-mono leading-none">{gradeResult.grade}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-2xl font-bold leading-none">{gradeResult.score}<span className="text-sm text-muted-foreground font-normal">/100</span></p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-snug">{gradeResult.summary}</p>
+                </div>
+              </div>
+              {Array.isArray(gradeResult.strengths) && gradeResult.strengths.length > 0 && (
+                <div className="rounded-xl border bg-card p-4 space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-green-600">Strengths</p>
+                  {gradeResult.strengths.map((s: string, i: number) => (
+                    <p key={i} className="text-xs text-muted-foreground flex gap-2"><span className="text-green-500">✓</span>{s}</p>
+                  ))}
+                </div>
+              )}
+              {Array.isArray(gradeResult.improvements) && gradeResult.improvements.length > 0 && (
+                <div className="rounded-xl border bg-card p-4 space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">Improvements</p>
+                  {gradeResult.improvements.map((s: string, i: number) => (
+                    <p key={i} className="text-xs text-muted-foreground flex gap-2"><span className="text-amber-500">△</span>{s}</p>
+                  ))}
+                </div>
+              )}
+              {gradeResult.coachingNote && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600 mb-1">Coach note</p>
+                  <p className="text-sm leading-relaxed">{gradeResult.coachingNote}</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {!grading && !gradeResult && (
+            <div className="rounded-xl border bg-card p-4 space-y-2">
+              <p className="text-sm font-semibold">{debrief.note}</p>
+              <p className="text-xs text-muted-foreground">{debrief.detail}</p>
+            </div>
+          )}
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Drill these plays</p>
             <button
