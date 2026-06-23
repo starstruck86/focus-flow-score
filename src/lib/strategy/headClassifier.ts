@@ -39,7 +39,7 @@ export async function buildHeadKIBlock(head: IntelHead, _userId: string): Promis
       .eq('chapter', 'branch_io')
       .eq('active', true)
       .eq('intelligence_type', head)
-      .order('tactic_score', { ascending: false, nullsFirst: false })
+      .order('confidence_score', { ascending: false, nullsFirst: false })
       .limit(4);
 
     if (!data || data.length === 0) return '';
