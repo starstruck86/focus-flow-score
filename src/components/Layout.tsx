@@ -418,7 +418,7 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
       {/* Dave is the PRIMARY floating action — bottom-right, thumb-accessible.
           On /strategy we hide on mobile only (md:hidden) to avoid overlapping the
           composer send arrow. Desktop /strategy keeps the FAB. */}
-      {!daveDrift && !hideFloatingFab && (
+      {daveAvailable !== false && !daveDrift && !hideFloatingFab && (
         <div className={location.pathname === '/strategy' ? 'hidden md:block' : 'contents'}>
           <DaveMicFAB
             onTap={handleOpenDave}
