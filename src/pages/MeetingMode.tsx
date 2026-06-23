@@ -105,7 +105,7 @@ export default function MeetingMode() {
     if (!user || !account) return;
     setLoadingKis(true);
     setPhase('kis');
-    const [d1, d2] = inferDimensions(account.industry);
+    const [d1, d2] = inferDimensions(account.industry, goal);
     const [k1, k2] = await Promise.all([
       selectNextBranchKI(user.id, d1).catch(() => null),
       selectNextBranchKI(user.id, d2).catch(() => null),
