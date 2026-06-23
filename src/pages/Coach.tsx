@@ -313,6 +313,10 @@ function CallScorecard({ grade, onRegrade, transcriptId, transcriptContent }: {
     commercial_score: 'expansion_strategy',
     presence_score: 'stakeholder_navigation',
     product_knowledge_score: 'product_knowledge',
+    branch_expansion_hypothesis_score: 'expansion_strategy',
+    branch_product_fit_score: 'product_knowledge',
+    branch_value_prop_score: 'expansion_strategy',
+    branch_objection_handling_score: 'deal_control',
   };
 
   const DRILL_DIMENSION_LABELS: Record<string, string> = {
