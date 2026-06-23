@@ -23,7 +23,7 @@ import { CollapsibleSection, LinkPill, LastTouchIndicator, safeFormat } from '@/
 import { useDebouncedUpdate } from '@/hooks/useDebouncedUpdate';
 import {
   ArrowLeft, ChevronRight, Building2, Target, Users,
-  FileText, CheckSquare, Calendar, Sparkles, Phone, Zap, Loader2, Mail,
+  FileText, CheckSquare, Calendar, Sparkles, Phone, Zap, Loader2, Mail, Crosshair,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
