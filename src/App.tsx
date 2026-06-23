@@ -77,6 +77,7 @@ const CourseImports = lazy(() => import("./pages/CourseImports"));
 const CourseImportDetail = lazy(() => import("./pages/CourseImportDetail"));
 const Home = lazy(() => import("./pages/Home"));
 const Benchmark = lazy(() => import("./pages/Benchmark"));
+const TerritorySetup = lazy(() => import("./pages/TerritorySetup"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
