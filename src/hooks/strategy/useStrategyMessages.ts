@@ -52,6 +52,12 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
        * the freeform lane.
        */
       workspaceSource?: 'selected' | 'thread-tag' | 'default' | 'none';
+      /**
+       * S-I3: caller-supplied global instructions (e.g. auto-injected KI
+       * context block by intelligence head). Merged with the default
+       * buildGlobalInstructionsPayload() output before sending.
+       */
+      globalInstructions?: string;
     },
   ) => {
     if (!threadId || !user || !content.trim() || isSending) return;
@@ -109,7 +115,14 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
             : undefined,
           // Phase 2: lightweight Global Instructions. Null when the engine is
           // disabled — server treats absence as "no behavior change".
-          globalInstructions: buildGlobalInstructionsPayload() ?? undefined,
+          // S-I3: merge caller-provided block (auto-injected head KIs) with
+          // the default payload so both signals reach the server.
+          globalInstructions: (() => {
+            const base = buildGlobalInstructionsPayload() ?? '';
+            const extra = options?.globalInstructions ?? '';
+            const merged = [base, extra].filter(s => s && s.trim().length > 0).join('\n\n');
+            return merged.length > 0 ? merged : undefined;
+          })(),
           // Phase 7D-fix — workspace truth. Send the actual selected workspace
           // (or null when no surface is active). The server logs `workspace_sent`
           // and `workspace_source` so freeform/no-surface is no longer
