@@ -253,6 +253,7 @@ const App = () => (
                   </ProtectedRoute>
                 } />
                 <Route path="/ki-library" element={<ProtectedPage routeName="KI Library"><Suspense fallback={<LazyFallback />}><KILibrary /></Suspense></ProtectedPage>} />
+                <Route path="/simulate" element={<ProtectedPage routeName="Conversation Simulator"><Suspense fallback={<LazyFallback />}><Simulate /></Suspense></ProtectedPage>} />
                 <Route path="/grind" element={
                   <ProtectedRoute>
                     <Suspense fallback={<LazyFallback />}>
