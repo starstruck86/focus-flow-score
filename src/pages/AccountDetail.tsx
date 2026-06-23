@@ -201,6 +201,11 @@ export default function AccountDetail() {
           account={account}
         />
 
+        {/* Timeline — living record of this account */}
+        <AccountTimeline accountId={account.id} />
+
+        <Separator />
+
         {/* Details Section */}
         <CollapsibleSection title="Account Details" icon={Building2} defaultOpen={true}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 py-3">
