@@ -9,6 +9,7 @@ import { IncomingQueue } from '@/components/prep/IncomingQueue';
 import { EnrichmentEngine } from '@/components/prep/EnrichmentEngine';
 import { AudioTestHarness } from '@/components/prep/AudioTestHarness';
 import { KnowledgeOpsDashboard } from '@/components/knowledge/KnowledgeOpsDashboard';
+import { SignalInbox } from '@/components/signal-inbox/SignalInbox';
 
 export function IngestWorkspace() {
   return (
@@ -18,6 +19,7 @@ export function IngestWorkspace() {
           Add new source material — files, URLs, transcripts, feeds. Monitor enrichment and extraction pipeline.
         </p>
       </div>
+      <SignalInbox />
       <KnowledgeOpsDashboard />
       <EnrichmentEngine />
       <SourceRegistryManager />
