@@ -37,6 +37,7 @@ import { BranchIntelligenceCard } from '@/components/BranchIntelligenceCard';
 import { SignalInbox } from '@/components/signal-inbox/SignalInbox';
 import { BranchFootprint } from '@/components/territory/BranchFootprint';
 import { AccountTimeline } from '@/components/territory/AccountTimeline';
+import { useAccountContext } from '@/hooks/useAccountContext';
 
 const TIER_COLORS: Record<AccountTier, string> = {
   'A': 'border-status-green text-status-green',
@@ -157,17 +158,27 @@ export default function AccountDetail() {
       .finally(() => setDossierLoading(false));
   }, [showDossier, account?.id, user?.id]);
 
+  // ST6: enrich copilot context with live account data
+  const accountContext = useAccountContext(account?.id, account?.name);
+
   // Set rich page context for copilot
   useEffect(() => {
     if (account) {
       setPageContext({
         page: 'account-detail',
-        description: `Account Detail — ${account.name}`,
+        description: accountContext?.contextString
+          ? `Account detail page for ${account.name}\n\n${accountContext.contextString}`
+          : `Account detail page for ${account.name}`,
         accountId: account.id,
         accountName: account.name,
+        metadata: {
+          footprintSummary: accountContext?.footprintSummary,
+          callSummary: accountContext?.callSummary,
+          signalSummary: accountContext?.signalSummary,
+        },
       });
     }
-  }, [account?.id, account?.name, setPageContext]);
+  }, [account?.id, account?.name, accountContext, setPageContext]);
 
   // Debounced update for text inputs
   const { debouncedUpdate, flush } = useDebouncedUpdate(updateAccount, id || '');
