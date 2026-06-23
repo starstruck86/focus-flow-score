@@ -538,6 +538,22 @@ export default function Dojo() {
           </div>
         </button>
 
+        {/* Conversation Simulator */}
+        <button
+          onClick={() => navigate('/simulate')}
+          className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+        >
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-sm font-medium">Conversation Simulator</p>
+              <p className="text-[11px] text-muted-foreground">Practice full calls · Claude plays the VP</p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
+          </div>
+        </button>
+
+
 
         {/* Meeting Mode — pre-call ritual */}
         <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 px-3 py-3 flex items-center justify-between gap-3">
