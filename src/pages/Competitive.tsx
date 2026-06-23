@@ -1,7 +1,8 @@
 // Competitive intelligence reference page — static data, no DB.
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Flag } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 interface Competitor {
