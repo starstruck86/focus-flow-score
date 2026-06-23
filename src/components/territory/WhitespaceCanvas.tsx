@@ -185,16 +185,18 @@ export function WhitespaceCanvas() {
     if (!editCell || !user) return;
     setSaving(true);
     try {
+      const statusValue =
+        editStatus === 'confirmed' || editStatus === 'inferred' ? editStatus : null;
       const payload: Record<string, any> = {
         user_id: user.id,
         account_id: editCell.accountId,
-        [`${editCell.productKey}_status`]: editStatus,
+        [`${editCell.productKey}_status`]: statusValue,
         [`${editCell.productKey}_use_case`]: editNotes.trim() || null,
         updated_at: new Date().toISOString(),
       };
       const { error } = await (supabase as any)
         .from('branch_footprint')
-        .upsert(payload, { onConflict: 'account_id,user_id' });
+        .upsert(payload, { onConflict: 'account_id,user_id', ignoreDuplicates: false });
       if (error) throw error;
 
       queryClient.invalidateQueries({ queryKey: ['branch-footprint'] });
@@ -208,6 +210,7 @@ export function WhitespaceCanvas() {
     }
   };
 
+
   return (
     <div className="space-y-4 relative">
       {!hasAnyFootprint && (
@@ -215,10 +218,11 @@ export function WhitespaceCanvas() {
           <p className="text-2xl">🗺️</p>
           <p className="text-sm font-semibold">Canvas is empty</p>
           <p className="text-xs text-muted-foreground max-w-xs">
-            Tap any grey cell to start mapping Branch products across your territory.
+            Tap any cell to start mapping Branch products.
           </p>
         </div>
       )}
+
 
       <div className="flex flex-wrap items-center gap-4 text-[11px]">
         <span className="font-semibold text-muted-foreground uppercase tracking-wider">Legend:</span>
@@ -313,8 +317,9 @@ export function WhitespaceCanvas() {
       </div>
 
       <p className="text-xs text-muted-foreground text-center py-2">
-        {confirmedCount + inferredCount} of {totalCells} products mapped · tap any cell to update
+        {confirmedCount} confirmed · {inferredCount} inferred · {totalCells - confirmedCount - inferredCount} unknown — tap any cell to update
       </p>
+
 
       {editCell && (
         <CellEditSheet
