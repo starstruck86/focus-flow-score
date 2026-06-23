@@ -232,8 +232,8 @@ Example: discovery=4, challenger=3, narrative=2, structure=3, multi_thread=3, co
 deal_progressed = false
 likelihood_impact = "unchanged"` : '';
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
     const systemPrompt = `You are an elite sales performance enforcement engine. You analyze call transcripts with brutal precision using mandatory frameworks. You are NOT a summarizer — you are a coaching system that drives behavioral change.
 
