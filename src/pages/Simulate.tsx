@@ -434,9 +434,19 @@ export default function Simulate() {
   return (
     <div className="fixed inset-0 bg-background flex flex-col z-40">
       <div className="border-b border-border bg-card/50 px-4 py-3 flex items-center justify-between gap-3 shrink-0">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold truncate">{account?.name} · {SCENARIO_LABELS[scenario]?.split('—')[0].trim()}</p>
           <p className="text-[11px] text-muted-foreground">Turn {turnCount}/{MAX_TURNS}</p>
+          {accountId && account && account.id && (
+            <div className="inline-flex items-center gap-1.5 mt-1.5 px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-md">
+              <span className="text-[10px] font-semibold text-primary">
+                Simulating: {account.name}
+              </span>
+              {account.tier && (
+                <span className="text-[10px] text-muted-foreground">Tier {account.tier}</span>
+              )}
+            </div>
+          )}
         </div>
         <button
           onClick={() => completeAndGrade(messages)}
