@@ -375,7 +375,7 @@ export default function Simulate() {
             )}
           </div>
           <button
-            onClick={() => { setPhase('setup'); setMessages([]); setTurnCount(0); }}
+            onClick={() => { setPhase('setup'); setMessages([]); setTurnCount(0); setGradeResult(null); }}
             className="w-full py-3 rounded-xl border border-border text-sm"
           >
             Run another simulation
