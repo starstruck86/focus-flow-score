@@ -1,6 +1,7 @@
 // Copilot Context — allows any component to open the copilot with a question, mode, and page context
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import { streamCopilot, type CopilotMode } from '@/lib/territoryCopilot';
+import { useTerritoryProfile } from '@/hooks/useTerritoryProfile';
 import { toast } from 'sonner';
 
 export interface PageContext {
