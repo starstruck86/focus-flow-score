@@ -86,11 +86,12 @@ export function GlobalSearch({ className }: { className?: string }) {
     }
   };
 
-  const groupedResults = (['account', 'opportunity', 'renewal', 'contact', 'task'] as const).map(type => ({
+  const groupedResults = (['account'] as const).map(type => ({
     type,
-    label: type === 'account' ? 'Accounts' : type === 'opportunity' ? 'Opportunities' : type === 'renewal' ? 'Renewals' : type === 'contact' ? 'Contacts' : 'Tasks',
+    label: 'Accounts',
     items: results.filter(r => r.type === type),
   })).filter(g => g.items.length > 0);
+
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
