@@ -16,6 +16,9 @@ const SIGNAL_COLORS: Record<string, string> = {
 
 export function SignalDigest() {
   const navigate = useNavigate();
+  const [signalSynthesis, setSignalSynthesis] = useState<string | null>(null);
+  const [synthesizing, setSynthesizing] = useState(false);
+
 
   const { data: signals } = useQuery({
     queryKey: ['signal-digest'],
