@@ -231,6 +231,31 @@ export default function KILibrary() {
     },
   });
 
+  const { data: dimCounts } = useQuery({
+    queryKey: ['ki-dim-counts', user?.id],
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      if (!user) return {} as Record<string, number>;
+      const { data } = await supabase
+        .from('knowledge_items')
+        .select('spider_dimension, intelligence_type')
+        .eq('user_id', user.id)
+        .eq('chapter', 'branch_io')
+        .eq('active', true);
+      const counts: Record<string, number> = { all: 0 };
+      (data ?? []).forEach((ki: any) => {
+        counts.all = (counts.all || 0) + 1;
+        if (ki.spider_dimension) counts[ki.spider_dimension] = (counts[ki.spider_dimension] || 0) + 1;
+        if (ki.intelligence_type) {
+          const headKey = `head_${ki.intelligence_type}`;
+          counts[headKey] = (counts[headKey] || 0) + 1;
+        }
+      });
+      return counts;
+    },
+  });
+
   const handleDrill = (ki: KIResult) => {
     navigate('/sharpen', {
       state: { branchMode: true, dimension: ki.spider_dimension, specificKIId: ki.id },
