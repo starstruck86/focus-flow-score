@@ -372,6 +372,16 @@ function CopilotDialog() {
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border shrink-0">
           <Sparkles className="h-4 w-4 text-primary" />
           <span className="font-display text-sm font-bold">Territory Intelligence</span>
+          {territoryProfile ? (
+            <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400" title="Territory profile loaded">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+              Territory loaded
+            </span>
+          ) : (
+            <Link to="/settings/territory" className="text-[10px] text-primary hover:underline">
+              Set up territory →
+            </Link>
+          )}
           {pageContext && (
             <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full truncate max-w-[200px]">
               {pageContext.accountName || pageContext.opportunityName || pageContext.description}
