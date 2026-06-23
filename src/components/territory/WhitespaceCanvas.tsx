@@ -185,16 +185,18 @@ export function WhitespaceCanvas() {
     if (!editCell || !user) return;
     setSaving(true);
     try {
+      const statusValue =
+        editStatus === 'confirmed' || editStatus === 'inferred' ? editStatus : null;
       const payload: Record<string, any> = {
         user_id: user.id,
         account_id: editCell.accountId,
-        [`${editCell.productKey}_status`]: editStatus,
+        [`${editCell.productKey}_status`]: statusValue,
         [`${editCell.productKey}_use_case`]: editNotes.trim() || null,
         updated_at: new Date().toISOString(),
       };
       const { error } = await (supabase as any)
         .from('branch_footprint')
-        .upsert(payload, { onConflict: 'account_id,user_id' });
+        .upsert(payload, { onConflict: 'account_id,user_id', ignoreDuplicates: false });
       if (error) throw error;
 
       queryClient.invalidateQueries({ queryKey: ['branch-footprint'] });
@@ -207,6 +209,7 @@ export function WhitespaceCanvas() {
       setSaving(false);
     }
   };
+
 
   return (
     <div className="space-y-4 relative">
