@@ -132,6 +132,62 @@ const MODE_BRAINSTORM: WorkflowDef[] = [
       'Structure: (1) the contrarian thesis in one line, (2) the 3 supporting pillars, ' +
       '(3) the strongest objection and how I rebut it, (4) the call to action.',
   },
+  {
+    id: 'brainstorm.expansion_angles',
+    family: 'mode',
+    groupId: 'brainstorm',
+    label: 'Expansion angles',
+    description: 'Generate expansion hypotheses for a Branch customer account.',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true, placeholder: 'e.g. NBC Universal' },
+      { key: 'known', label: 'What I know about their Branch usage', kind: 'textarea', rows: 3, placeholder: 'Products active, use cases, champion, signals...' },
+      { key: 'vertical', label: 'Vertical', kind: 'select', options: ['Media/Entertainment', 'Retail', 'Travel/Hospitality', 'Financial Services', 'Healthcare', 'Other'] },
+    ],
+    promptTemplate:
+      'Generate 5 concrete expansion hypotheses for {{Account}}, a Branch.io customer in {{Vertical}}.\n\n' +
+      'What I know about their Branch usage: {{What I know about their Branch usage}}\n\n' +
+      'For each hypothesis: (1) the expansion angle (which Branch product/use case), (2) the business problem it solves for them, ' +
+      '(3) the signal I should look for to validate it, (4) the discovery question that opens the conversation. ' +
+      'Ground answers in real Branch product capabilities (Universal Ads, Deep Linking, Email-to-App, SMS-to-App, Web-to-App, QR, AIO, Advanced Privacy).',
+  },
+  {
+    id: 'brainstorm.qbr_narrative',
+    family: 'mode',
+    groupId: 'brainstorm',
+    label: 'QBR narrative',
+    description: 'Build a QBR story that opens expansion conversations.',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'current_state', label: 'Current Branch usage', kind: 'textarea', rows: 3, placeholder: 'Products active, results, usage trends...' },
+      { key: 'goal', label: 'Expansion goal', kind: 'text', placeholder: 'e.g. Expand to SMS-to-App + AIO attribution' },
+    ],
+    promptTemplate:
+      'Build a QBR narrative for {{Account}} that leads naturally to an expansion conversation.\n\n' +
+      'Current Branch usage: {{Current Branch usage}}\n' +
+      'Expansion goal: {{Expansion goal}}\n\n' +
+      'Structure: (1) Headline of what they have achieved with Branch, (2) metrics that demonstrate ROI, ' +
+      '(3) the natural next question that opens the expansion conversation, (4) the 2-3 slides that tell this story, ' +
+      '(5) how to handle "everything is going fine" objection.',
+  },
+  {
+    id: 'brainstorm.multithread',
+    family: 'mode',
+    groupId: 'brainstorm',
+    label: 'Multi-thread strategy',
+    description: 'Map who else to engage at this account for expansion.',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'current_contact', label: 'Who I talk to today', kind: 'text', placeholder: 'e.g. Head of Growth Marketing' },
+      { key: 'expansion_goal', label: 'What I want to expand into', kind: 'text', placeholder: 'e.g. Universal Ads, new business unit' },
+    ],
+    promptTemplate:
+      'Help me map a multi-threading strategy for expansion at {{Account}}.\n\n' +
+      'Who I talk to today: {{Who I talk to today}}\n' +
+      'Expansion goal: {{What I want to expand into}}\n\n' +
+      'Output: (1) Which new personas I should add and why, (2) their likely priorities and how Branch maps to them, ' +
+      '(3) the business case to get an introduction from my current champion, ' +
+      '(4) the specific ask I make of my current contact.',
+  },
 ];
 
 const MODE_DEEP_RESEARCH: WorkflowDef[] = [
