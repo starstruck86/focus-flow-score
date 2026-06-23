@@ -47,7 +47,7 @@ export function useKISync() {
         while (true) {
           const { data, error } = await supabase
             .from('knowledge_items')
-            .select('id, title, chapter, sub_chapter, spider_dimension, tactic_summary, when_to_use, when_not_to_use, example_usage, why_it_matters, framework, confidence_score, active')
+            .select('id, title, chapter, sub_chapter, spider_dimension, intelligence_type, tactic_summary, when_to_use, when_not_to_use, example_usage, why_it_matters, framework, confidence_score, active')
             .eq('user_id', user!.id)
             .eq('chapter', 'branch_io')
             .eq('active', true)
