@@ -27,7 +27,7 @@ export default function Home() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 gap-4">
       {/* App wordmark */}
       <div className="mb-2 text-center">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Quota CoPilot</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Dynamic</p>
       </div>
 
       {/* Train card */}

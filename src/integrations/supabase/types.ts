@@ -3734,6 +3734,7 @@ export type Database = {
           framework: string | null
           how_to_execute: string | null
           id: string
+          intelligence_type: string | null
           is_core_ae: boolean | null
           ki_fingerprint: string | null
           knowledge_type: string
@@ -3779,6 +3780,7 @@ export type Database = {
           framework?: string | null
           how_to_execute?: string | null
           id?: string
+          intelligence_type?: string | null
           is_core_ae?: boolean | null
           ki_fingerprint?: string | null
           knowledge_type?: string
@@ -3824,6 +3826,7 @@ export type Database = {
           framework?: string | null
           how_to_execute?: string | null
           id?: string
+          intelligence_type?: string | null
           is_core_ae?: boolean | null
           ki_fingerprint?: string | null
           knowledge_type?: string

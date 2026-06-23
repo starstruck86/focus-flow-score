@@ -5,15 +5,17 @@ import type { NextKIResult } from './selectNextKI';
 /**
  * Selects the next Branch.io-specific KI for a given spider dimension.
  * Filters to chapter = 'branch_io'. Falls back to IndexedDB when offline.
+ * Optionally filters by intelligence_type (sales | product | competitive | market).
  */
 export async function selectNextBranchKI(
   userId: string,
   spiderDimension: string,
   excludeKiId?: string | null,
+  intelligenceType?: string | null,
 ): Promise<NextKIResult | null> {
   // If offline, use IndexedDB cache
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    const offlineKI = await selectOfflineBranchKI(spiderDimension, new Set(), excludeKiId);
+    const offlineKI = await selectOfflineBranchKI(spiderDimension, new Set(), excludeKiId, intelligenceType);
     return offlineKI ? toResult(offlineKI) : null;
   }
 
@@ -29,27 +31,31 @@ export async function selectNextBranchKI(
   );
   if (excludeKiId) excludeIds.add(excludeKiId);
 
-  const { data: candidates } = await supabase
+  let q = supabase
     .from('knowledge_items')
-    .select('id, title, chapter, sub_chapter, spider_dimension, tactic_summary, when_to_use, when_not_to_use, example_usage, why_it_matters, framework, confidence_score, active')
+    .select('id, title, chapter, sub_chapter, spider_dimension, intelligence_type, tactic_summary, when_to_use, when_not_to_use, example_usage, why_it_matters, framework, confidence_score, active')
     .eq('user_id', userId)
     .eq('chapter', 'branch_io')
     .eq('spider_dimension', spiderDimension)
     .eq('active', true)
     .limit(50);
+  if (intelligenceType) q = q.eq('intelligence_type', intelligenceType);
+  const { data: candidates } = await q;
 
   if (!candidates?.length) {
     // Try offline cache as fallback even when online
-    const offlineKI = await selectOfflineBranchKI(spiderDimension, excludeIds, excludeKiId);
+    const offlineKI = await selectOfflineBranchKI(spiderDimension, excludeIds, excludeKiId, intelligenceType);
     if (offlineKI) return toResult(offlineKI);
 
-    const { data: fallback } = await supabase
+    let fq = supabase
       .from('knowledge_items')
-      .select('id, title, chapter, sub_chapter, spider_dimension, tactic_summary, when_to_use, when_not_to_use, example_usage, why_it_matters, framework, confidence_score, active')
+      .select('id, title, chapter, sub_chapter, spider_dimension, intelligence_type, tactic_summary, when_to_use, when_not_to_use, example_usage, why_it_matters, framework, confidence_score, active')
       .eq('user_id', userId)
       .eq('chapter', 'branch_io')
       .eq('active', true)
       .limit(20);
+    if (intelligenceType) fq = fq.eq('intelligence_type', intelligenceType);
+    const { data: fallback } = await fq;
     if (!fallback?.length) return null;
     const pick = fallback[Math.floor(Math.random() * fallback.length)] as any;
     return toResult(pick);
