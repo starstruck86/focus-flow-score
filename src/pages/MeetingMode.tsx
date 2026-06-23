@@ -314,6 +314,26 @@ export default function MeetingMode() {
               </Card>
             ))}
 
+            {!loadingKis && kis.length > 0 && (
+              <button
+                onClick={async () => {
+                  if (!user || !account) return;
+                  setLoadingKis(true);
+                  const [d1, d2] = inferDimensions(account.industry, goal);
+                  const [k1, k2] = await Promise.all([
+                    selectNextBranchKI(user.id, d1, kis[0]?.id).catch(() => null),
+                    selectNextBranchKI(user.id, d2, kis[1]?.id).catch(() => null),
+                  ]);
+                  const picks = [k1, k2].filter(Boolean);
+                  setKis(picks.length > 0 ? picks : kis);
+                  setLoadingKis(false);
+                }}
+                className="w-full text-xs text-muted-foreground hover:text-foreground py-1.5 border border-border/40 rounded-lg transition-all"
+              >
+                ↻ Re-roll plays
+              </button>
+            )}
+
             {!loadingKis && (
               <Button onClick={startWarmup} disabled={kis.length === 0} className="w-full h-12 text-base">
                 Start Warm-Up Rep →
