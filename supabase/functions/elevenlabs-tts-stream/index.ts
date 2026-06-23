@@ -60,7 +60,6 @@ serve(async (req) => {
       headers: {
         ...corsHeaders,
         "Content-Type": "audio/mpeg",
-        "Transfer-Encoding": "chunked",
       },
     });
   } catch (e) {
