@@ -70,6 +70,44 @@ import {
 import { TerritoryTree } from '@/components/territory/TerritoryTree';
 import { TerritoryCoverage } from '@/components/territory/TerritoryCoverage';
 import { PriorityInbox } from '@/components/territory/PriorityInbox';
+
+function WeeklyReviewPrompt() {
+  const navigate = useNavigate();
+  const today = new Date();
+  if (today.getDay() !== 1) return null;
+  return (
+    <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold">Weekly Territory Review</p>
+          <p className="text-[11px] text-muted-foreground">15 min · every Monday · know your territory</p>
+        </div>
+        <span className="text-xs text-muted-foreground">Monday ritual</span>
+      </div>
+      <div className="text-xs text-muted-foreground space-y-1">
+        <p>1. Check Coverage tab for health scores</p>
+        <p>2. Review Priority Inbox below</p>
+        <p>3. Log any relationship decay actions</p>
+        <p>4. Update next steps on Tier A accounts</p>
+        <p>5. Drill your weakest dimension</p>
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={() => navigate('/ki-library')}
+          className="text-xs font-medium px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-all"
+        >
+          Drill weakest plays
+        </button>
+        <button
+          onClick={() => navigate('/outreach?tab=coverage')}
+          className="text-xs font-medium px-3 py-1.5 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 transition-all"
+        >
+          See Coverage
+        </button>
+      </div>
+    </div>
+  );
+}
 import {
   Collapsible,
   CollapsibleContent,
@@ -1180,6 +1218,9 @@ export default function WeeklyOutreach() {
           </div>
         </div>
         
+        {/* Weekly Review (Mondays only) */}
+        <WeeklyReviewPrompt />
+
         {/* Priority Inbox — above tabs */}
         <PriorityInbox />
 
