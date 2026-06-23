@@ -130,6 +130,7 @@ const DASHBOARD_WIDGETS: WidgetConfig[] = [
 
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
   const [showCommissionDetail, setShowCommissionDetail] = useState(false);
   const [showWeeklyReview, setShowWeeklyReview] = useState(false);
