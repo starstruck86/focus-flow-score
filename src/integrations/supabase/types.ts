@@ -98,6 +98,70 @@ export type Database = {
           },
         ]
       }
+      account_signals: {
+        Row: {
+          created_at: string | null
+          id: string
+          implications: string | null
+          intelligence_head: string
+          linked_account_id: string | null
+          linked_account_name: string | null
+          raw_text: string
+          signal_type: string
+          source_label: string | null
+          source_url: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          implications?: string | null
+          intelligence_head: string
+          linked_account_id?: string | null
+          linked_account_name?: string | null
+          raw_text: string
+          signal_type: string
+          source_label?: string | null
+          source_url?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          implications?: string | null
+          intelligence_head?: string
+          linked_account_id?: string | null
+          linked_account_name?: string | null
+          raw_text?: string
+          signal_type?: string
+          source_label?: string | null
+          source_url?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_signals_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_signals_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_signals_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       account_strategy_memory: {
         Row: {
           account_id: string
