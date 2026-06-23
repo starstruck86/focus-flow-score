@@ -717,7 +717,7 @@ export const useStore = create<QuotaCompassStore>()(
       },
       
       // Opportunities
-      opportunities: getDefaultOpportunities(),
+      opportunities: [],
       
       addOpportunity: (opportunity) => {
         const newOpportunity: Opportunity = {
@@ -917,30 +917,3 @@ export const useStore = create<QuotaCompassStore>()(
     }
   )
 );
-
-// Default opportunities (seed data)
-function getDefaultOpportunities(): Opportunity[] {
-  return [
-    // Active
-    { id: generateId(), name: 'Isabella Stewart Gardner Museum', status: 'active', stage: 'Prospect', nextStepDate: '2026-02-11', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'Franklin Park Conservatory', status: 'active', stage: 'Discover', nextStepDate: '2026-02-06', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'Golden Lighting', status: 'active', stage: 'Demo', nextStepDate: '2026-02-06', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: '360 View', status: 'active', stage: 'Proposal', nextStep: 'TBD', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'Peabody Essex Museum', status: 'active', stage: '', nextStep: 'TBD', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'Ingram Book Group LLC', status: 'active', stage: '', nextStepDate: '2026-02-06', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'St Pete/Clearwater', status: 'active', stage: '', nextStepDate: '2026-02-09', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'FTD, Inc.', status: 'active', stage: '', nextStep: 'TBD', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    // Stalled
-    { id: generateId(), name: 'Visit Raleigh', status: 'stalled', stage: '', nextStepDate: '2026-02-09', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'Kensington Hotel', status: 'stalled', stage: '', nextStep: 'TBD', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'TopBuild', status: 'stalled', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'Groundworks', status: 'stalled', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'WorldStrides', status: 'stalled', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'World Emblem', status: 'stalled', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'Legend Fitness', status: 'stalled', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    // Closed Lost
-    { id: generateId(), name: 'HUB Industrial', status: 'closed-lost', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'Southern Gas', status: 'closed-lost', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'Beechwood Hotel', status: 'closed-lost', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  ];
-}
