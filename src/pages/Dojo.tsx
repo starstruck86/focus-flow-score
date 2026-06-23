@@ -491,6 +491,23 @@ export default function Dojo() {
         )}
 
         <BranchCountdown />
+
+        {/* Branch Prep Mode — drill Branch.io plays specifically */}
+        <div className="rounded-xl border border-green-500/30 bg-green-500/5 px-3 py-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-green-700 dark:text-green-400">🌿 Branch Prep Mode</p>
+              <p className="text-[11px] text-muted-foreground">586 Branch.io KIs · product, expansion, deal control, competitive</p>
+            </div>
+            <button
+              onClick={() => navigate('/sharpen', { state: { branchMode: true } })}
+              className="text-xs font-semibold text-green-600 dark:text-green-400 hover:text-green-500 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20 shrink-0"
+            >
+              Drill →
+            </button>
+          </div>
+        </div>
+
         <KrystenCard />
         <DailyProgress />
         <WeeklyCommitmentCard />
