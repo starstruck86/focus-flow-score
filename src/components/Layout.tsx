@@ -317,12 +317,11 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
         >
           <div className="flex items-center gap-1 shrink-0">
             <Compass className="h-5 w-5 shrink-0" style={{ color: `hsl(${COLOR_VAR[activeColor]})` }} />
-            <span className="font-display text-sm font-bold hidden lg:inline">Quota CoPilot</span>
+            <span className="font-display text-sm font-bold hidden lg:inline">Dynamic</span>
             <SaveIndicator />
           </div>
           <GlobalSearch className="flex-1 min-w-0 max-w-xs sm:max-w-sm lg:max-w-md" />
           <div className="flex items-center gap-1 shrink-0">
-            <BostonClock className="hidden sm:inline" />
             <GlobalRefreshButton />
             <TerritoryCopilot />
             {!isReviewMode && (
