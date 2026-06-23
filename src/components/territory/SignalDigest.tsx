@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format, subDays } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 
 const SIGNAL_COLORS: Record<string, string> = {
   competitive: 'bg-red-500/15 text-red-600',
@@ -14,6 +16,9 @@ const SIGNAL_COLORS: Record<string, string> = {
 
 export function SignalDigest() {
   const navigate = useNavigate();
+  const [signalSynthesis, setSignalSynthesis] = useState<string | null>(null);
+  const [synthesizing, setSynthesizing] = useState(false);
+
 
   const { data: signals } = useQuery({
     queryKey: ['signal-digest'],
@@ -28,6 +33,36 @@ export function SignalDigest() {
     },
     staleTime: 60_000,
   });
+
+  const synthesizeSignals = async () => {
+    if (!signals || signals.length === 0) return;
+    setSynthesizing(true);
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 400,
+          messages: [{
+            role: 'user',
+            content: `You are analyzing territory signals for a Branch.io expansion AE.
+
+Signals: ${JSON.stringify(signals)}
+
+In 2-3 sentences, tell the AE what these signals mean for their territory this week and what they should do about them. Be specific about account names and actions. Plain text only, no markdown.`,
+          }],
+        }),
+      });
+      const data = await response.json();
+      const text = data.content?.[0]?.text ?? '';
+      setSignalSynthesis(text.trim());
+    } catch (e) {
+      console.error('[SignalDigest] synthesize failed', e);
+    } finally {
+      setSynthesizing(false);
+    }
+  };
 
   if (!signals) return <div className="text-center py-8 text-sm text-muted-foreground">Loading digest…</div>;
   if (signals.length === 0)
@@ -61,6 +96,23 @@ export function SignalDigest() {
 
   return (
     <div className="space-y-4">
+      {signalSynthesis ? (
+        <div className="rounded-xl bg-amber-500/5 border border-amber-500/20 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1.5">
+            🔔 Signal Intelligence
+          </p>
+          <p className="text-xs leading-relaxed text-foreground">{signalSynthesis}</p>
+        </div>
+      ) : signals.length > 0 && !synthesizing ? (
+        <button onClick={synthesizeSignals} className="text-xs text-primary">
+          Synthesize signals →
+        </button>
+      ) : synthesizing ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" /> Interpreting signals...
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap gap-3 items-center text-[11px]">
         <span className="font-semibold text-muted-foreground">
           Last 7 days: {signals.length} signal{signals.length !== 1 ? 's' : ''} across {entries.length} account

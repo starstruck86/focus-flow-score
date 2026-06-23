@@ -72,6 +72,7 @@ import { TerritoryCoverage } from '@/components/territory/TerritoryCoverage';
 import { PriorityInbox } from '@/components/territory/PriorityInbox';
 import { WhitespaceCanvas } from '@/components/territory/WhitespaceCanvas';
 import { SignalDigest } from '@/components/territory/SignalDigest';
+import { ThisWeekPanel } from '@/components/territory/ThisWeekPanel';
 
 function WeeklyReviewPrompt() {
   const navigate = useNavigate();
@@ -1225,6 +1226,9 @@ export default function WeeklyOutreach() {
 
         {/* Priority Inbox — above tabs */}
         <PriorityInbox />
+
+        {/* This Week AI briefing — above tab bar */}
+        <ThisWeekPanel />
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'tree' | 'accounts' | 'coverage' | 'canvas' | 'digest')} className="space-y-4">
