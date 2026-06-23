@@ -622,7 +622,7 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
     }
 
     const aiData = await aiResp.json();
-    let content = aiData.choices?.[0]?.message?.content || "";
+    let content = aiData.content?.[0]?.text || "";
     content = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     const parsed = JSON.parse(content);
 
