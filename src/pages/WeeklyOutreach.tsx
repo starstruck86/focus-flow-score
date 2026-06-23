@@ -67,6 +67,7 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs';
+import { TerritoryTree } from '@/components/territory/TerritoryTree';
 import {
   Collapsible,
   CollapsibleContent,
