@@ -313,6 +313,10 @@ function CallScorecard({ grade, onRegrade, transcriptId, transcriptContent }: {
     commercial_score: 'expansion_strategy',
     presence_score: 'stakeholder_navigation',
     product_knowledge_score: 'product_knowledge',
+    branch_expansion_hypothesis_score: 'expansion_strategy',
+    branch_product_fit_score: 'product_knowledge',
+    branch_value_prop_score: 'expansion_strategy',
+    branch_objection_handling_score: 'deal_control',
   };
 
   const DRILL_DIMENSION_LABELS: Record<string, string> = {
@@ -355,6 +359,10 @@ function CallScorecard({ grade, onRegrade, transcriptId, transcriptContent }: {
         commercial_score: (grade as any).commercial_score ?? 5,
         presence_score: (grade as any).presence_score ?? 5,
         product_knowledge_score: (grade as any).product_knowledge_score ?? 5,
+        branch_expansion_hypothesis_score: (grade as any).branch_expansion_hypothesis_score ?? 5,
+        branch_product_fit_score: (grade as any).branch_product_fit_score ?? 5,
+        branch_value_prop_score: (grade as any).branch_value_prop_score ?? 5,
+        branch_objection_handling_score: (grade as any).branch_objection_handling_score ?? 5,
       };
       const weakDimSignals = Object.entries(CATEGORY_TO_DIMENSION)
         .filter(([field]) => (CATEGORY_SCORE_MAP[field] ?? 5) < 3)
@@ -497,6 +505,40 @@ function CallScorecard({ grade, onRegrade, transcriptId, transcriptContent }: {
           ))}
         </CardContent>
       </Card>
+
+      {/* Branch Execution Card — only shows when branch scores exist */}
+      {((grade as any).branch_expansion_hypothesis_score || (grade as any).branch_product_fit_score) && (
+        <Card className="border-green-500/20 bg-green-500/5">
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-xs uppercase tracking-wider text-green-600 dark:text-green-400 flex items-center gap-1.5">
+              🌿 Branch Execution
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3 space-y-2">
+            {[
+              { key: 'branch_expansion_hypothesis_score', label: 'Expansion Hypothesis' },
+              { key: 'branch_product_fit_score', label: 'Product Fit' },
+              { key: 'branch_value_prop_score', label: 'Value Prop' },
+              { key: 'branch_objection_handling_score', label: 'Objection Handling' },
+            ].filter(item => (grade as any)[item.key] != null).map(item => (
+              <ScoreBlock
+                key={item.key}
+                score={(grade as any)[item.key]}
+                label={item.label}
+                onAsk={() => handleAskCategory(item.key)}
+              />
+            ))}
+            {(grade as any).branch_coaching_note && (
+              <div className="rounded-lg bg-green-500/10 border border-green-500/20 p-2.5 mt-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-green-600 dark:text-green-400 mb-1">Branch Coach Note</p>
+                <p className="text-xs leading-relaxed">{(grade as any).branch_coaching_note}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+
 
       {/* PRIMARY COACHING ACTION */}
       <Card className="border-primary/30 bg-primary/5">

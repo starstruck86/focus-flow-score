@@ -9071,6 +9071,11 @@ export type Database = {
           acumen_notes: string | null
           acumen_score: number
           behavioral_flags: Json | null
+          branch_coaching_note: string | null
+          branch_expansion_hypothesis_score: number | null
+          branch_objection_handling_score: number | null
+          branch_product_fit_score: number | null
+          branch_value_prop_score: number | null
           cadence_notes: string | null
           cadence_score: number
           call_goals_inferred: string[] | null
@@ -9123,6 +9128,11 @@ export type Database = {
           acumen_notes?: string | null
           acumen_score?: number
           behavioral_flags?: Json | null
+          branch_coaching_note?: string | null
+          branch_expansion_hypothesis_score?: number | null
+          branch_objection_handling_score?: number | null
+          branch_product_fit_score?: number | null
+          branch_value_prop_score?: number | null
           cadence_notes?: string | null
           cadence_score?: number
           call_goals_inferred?: string[] | null
@@ -9175,6 +9185,11 @@ export type Database = {
           acumen_notes?: string | null
           acumen_score?: number
           behavioral_flags?: Json | null
+          branch_coaching_note?: string | null
+          branch_expansion_hypothesis_score?: number | null
+          branch_objection_handling_score?: number | null
+          branch_product_fit_score?: number | null
+          branch_value_prop_score?: number | null
           cadence_notes?: string | null
           cadence_score?: number
           call_goals_inferred?: string[] | null
