@@ -111,6 +111,24 @@ function GradeCard({ grade }: { grade: TranscriptGrade }) {
           <p className="text-sm leading-relaxed">{grade.actionable_feedback}</p>
         </div>
 
+        {/* L1 — Grade to Drill Feedback */}
+        {weakestInfo && weakest && (
+          <button
+            onClick={() => navigate(`/ki-library?dimension=${weakestInfo.kiDim}`)}
+            className="w-full flex items-center justify-between rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 hover:bg-amber-500/20 transition-colors text-left"
+          >
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-amber-500" />
+              <div>
+                <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Weakest this call: {weakestInfo.label} ({weakest.score}/100)</p>
+                <p className="text-xs text-muted-foreground">Drill these plays →</p>
+              </div>
+            </div>
+            <ArrowRight className="h-4 w-4 text-amber-500" />
+          </button>
+        )}
+
+
         {/* Strengths & Improvements */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
