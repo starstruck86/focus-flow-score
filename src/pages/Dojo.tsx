@@ -558,8 +558,6 @@ export default function Dojo() {
         </div>
 
 
-
-        <KrystenCard />
         <DailyProgress />
         <WeeklyCommitmentCard />
 
@@ -590,19 +588,6 @@ export default function Dojo() {
           </button>
         )}
 
-
-        {/* Proactive Dave — always visible */}
-        <ProactiveDaveCard
-          onMicroDrill={() => navigate('/sharpen')}
-          hasCompletedRepsToday={(() => {
-            try {
-              const key = `daily_reps_${new Date().toISOString().split('T')[0]}`;
-              return parseInt(localStorage.getItem(key) ?? '0', 10) > 0;
-            } catch { return false; }
-          })()}
-          streak={streak}
-          hasBenchmark={hasBenchmark ?? true}
-        />
 
         {/* Early / Mature: KI Proficiency strip */}
         {(isEarly || isMature) && <KiProficiencyStrip />}
