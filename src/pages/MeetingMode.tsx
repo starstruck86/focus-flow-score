@@ -46,7 +46,7 @@ function statusRank(s: string | null): number {
 export default function MeetingMode() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { data: territory } = useTerritoryProfile();
+  const { profile: territory } = useTerritoryProfile();
 
   const [phase, setPhase] = useState<Phase>('context');
   const [accounts, setAccounts] = useState<Account[]>([]);
