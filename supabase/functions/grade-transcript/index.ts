@@ -571,6 +571,29 @@ ${kiContext}`;
                   description: "Did the rep demonstrate accurate, specific knowledge of what the product does and how the market works? 5 = correct technical terms, accurate product mechanics, credible market context, avoided overclaiming. 3 = generally accurate but vague. 1 = generic, technically incorrect, couldn't explain how the product works. Score 3 for calls where product knowledge wasn't explicitly tested."
                 },
 
+                // Branch-specific expansion dimensions
+                branch_expansion_hypothesis_score: {
+                  type: "integer", minimum: 1, maximum: 5,
+                  description: "Did the AE open or identify a specific Branch expansion hypothesis (which product, which BU, why now)? 5 = named specific hypothesis with evidence. 1 = no expansion angle surfaced.",
+                },
+                branch_product_fit_score: {
+                  type: "integer", minimum: 1, maximum: 5,
+                  description: "Did the AE correctly identify and explain the right Branch product(s) (deep linking, attribution, Email-to-App, SMS-to-App, Universal Ads, QR, AIO) for this account's situation? 5 = accurate match with specifics. 1 = generic positioning or mismatch.",
+                },
+                branch_value_prop_score: {
+                  type: "integer", minimum: 1, maximum: 5,
+                  description: "Did the AE articulate Branch's unique differentiation — measurement + deep linking in one SDK, or another core differentiator? 5 = crisp specific value prop. 1 = generic or cliché.",
+                },
+                branch_objection_handling_score: {
+                  type: "integer", minimum: 1, maximum: 5,
+                  description: "Did the AE handle Branch-specific objections (build internally, Adjust/AppsFlyer, vendor consolidation, Firebase) correctly? 5 = acknowledged, quantified, pivoted to Branch advantage. 1 = folded or generic. Score 3 if no Branch-specific objection arose.",
+                },
+                branch_coaching_note: {
+                  type: "string",
+                  description: "1-2 sentences specifically about Branch execution on this call — what was right or wrong about how Branch was positioned.",
+                },
+
+
                 // NEW: Outcome-based fields
                 call_goals_inferred: {
                   type: "array",
