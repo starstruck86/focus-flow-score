@@ -10,6 +10,7 @@ export interface CachedBranchKI {
   chapter: string;
   sub_chapter: string | null;
   spider_dimension: string | null;
+  intelligence_type: string | null;
   tactic_summary: string;
   when_to_use: string | null;
   when_not_to_use: string | null;
