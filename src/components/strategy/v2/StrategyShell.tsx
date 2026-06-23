@@ -86,6 +86,7 @@ import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflo
 // /strategy/settings page (see src/pages/StrategySettings.tsx).
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
+import { classifyIntelHead, buildHeadKIBlock } from '@/lib/strategy/headClassifier';
 import { tagThread } from '@/lib/strategy/threadTags';
 import { buildWorkspaceTitle, WORKSPACE_LABEL, displayThreadTitle } from '@/lib/strategy/threadNaming';
 import { PromoteToLibrarySheet, type PromotePayload } from './promote/PromoteToLibrarySheet';
@@ -777,11 +778,22 @@ export function StrategyShell() {
     }
     {
       const ws = sendingFrom ?? activeSurface ?? null;
-      sendMessage(text, {
-        pickedResourceIds: sidecar,
-        workspace: ws,
-        workspaceSource: sendingFrom ? 'selected' : (activeSurface ? 'selected' : 'none'),
-      });
+      // S-I3: auto-inject KI context block by detected intelligence head.
+      // Classify synchronously; fetch async and dispatch sendMessage after.
+      const head = user?.id ? classifyIntelHead(text) : null;
+      const dispatch = (headKIBlock: string) => {
+        sendMessage(text, {
+          pickedResourceIds: sidecar,
+          workspace: ws,
+          workspaceSource: sendingFrom ? 'selected' : (activeSurface ? 'selected' : 'none'),
+          globalInstructions: headKIBlock || undefined,
+        });
+      };
+      if (head && user?.id) {
+        buildHeadKIBlock(head, user.id).then(dispatch).catch(() => dispatch(''));
+      } else {
+        dispatch('');
+      }
     }
   }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread]);
 
