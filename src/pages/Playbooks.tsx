@@ -169,6 +169,23 @@ export default function Playbooks() {
     staleTime: 120_000,
   });
 
+  const { data: usageCounts } = useQuery({
+    queryKey: ['playbook-usage', user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from('playbook_usage_events')
+        .select('playbook_id')
+        .eq('user_id', user!.id);
+      const counts: Record<string, number> = {};
+      (data ?? []).forEach((r: any) => {
+        if (r.playbook_id) counts[r.playbook_id] = (counts[r.playbook_id] || 0) + 1;
+      });
+      return counts;
+    },
+  });
+
+
   const splitLines = (s: string) => s.split('\n').map(l => l.trim()).filter(Boolean);
 
   const handleSave = async () => {
