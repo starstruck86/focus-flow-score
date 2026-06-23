@@ -379,9 +379,26 @@ export default function MeetingMode() {
               </Card>
             )}
 
-            <Button onClick={() => navigate('/outreach')} className="w-full h-12 text-base">
-              Done — back to territory
-            </Button>
+            <div className="flex flex-col gap-2">
+              <Button
+                onClick={() => {
+                  setResponse('');
+                  setScore(null);
+                  setCoaching('');
+                  if (kis.length) {
+                    setWarmupKi(kis[Math.floor(Math.random() * kis.length)]);
+                  }
+                  setPhase('warmup');
+                }}
+                variant="outline"
+                className="w-full h-12 text-base"
+              >
+                Run another warm-up rep
+              </Button>
+              <Button onClick={() => navigate('/outreach')} className="w-full h-12 text-base">
+                Done — back to territory
+              </Button>
+            </div>
           </div>
         )}
       </div>
