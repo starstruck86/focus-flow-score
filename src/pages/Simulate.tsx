@@ -205,8 +205,9 @@ export default function Simulate() {
 
     try {
       const system = buildSystemPrompt(account, scenario, pressure);
+      const accountContext = accountId ? await loadAccountContext(accountId) : null;
       const { data, error: fnError } = await supabase.functions.invoke('simulate-chat', {
-        body: { messages: next, system },
+        body: { messages: next, system, accountContext },
       });
       if (fnError) throw fnError;
       const text = (data?.text as string) ?? '';
