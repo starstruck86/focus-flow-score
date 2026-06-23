@@ -306,12 +306,13 @@ function CallScorecard({ grade, onRegrade, transcriptId, transcriptContent }: {
 
   const CATEGORY_TO_DIMENSION: Record<string, string> = {
     discovery_score: 'discovery',
-    cotm_score: 'messaging',
-    structure_score: 'messaging',
+    cotm_score: 'expansion_strategy',
+    structure_score: 'deal_control',
     meddicc_score: 'deal_control',
     next_step_score: 'deal_control',
-    commercial_score: 'deal_control',
+    commercial_score: 'expansion_strategy',
     presence_score: 'stakeholder_navigation',
+    product_knowledge_score: 'product_knowledge',
   };
 
   const DRILL_DIMENSION_LABELS: Record<string, string> = {
