@@ -1,5 +1,6 @@
 // CrossFit-style Dashboard: Walk in → See the WOD → Execute → Score
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, Reorder, AnimatePresence } from 'framer-motion';
 import { Calendar, Target, Phone, MessageSquare, Users, TrendingUp, GripVertical, ChevronDown } from 'lucide-react';
 import { StreakChip } from '@/components/StreakChip';
@@ -130,6 +131,7 @@ const DASHBOARD_WIDGETS: WidgetConfig[] = [
 
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
   const [showCommissionDetail, setShowCommissionDetail] = useState(false);
   const [showWeeklyReview, setShowWeeklyReview] = useState(false);
@@ -307,6 +309,26 @@ export default function Dashboard() {
           {/* Execution HUD */}
           <ExecutionHUD />
         </div>
+
+        {/* Quick Actions */}
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Quick Actions</p>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => navigate('/meeting')} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 transition-all">
+              <span>📞</span> Prep for Call
+            </button>
+            <button onClick={() => navigate('/post-call')} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-muted border border-border/60 text-foreground hover:bg-muted/80 transition-all">
+              <span>✍️</span> Log Call
+            </button>
+            <button onClick={() => navigate('/outreach?tab=coverage')} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-muted border border-border/60 text-foreground hover:bg-muted/80 transition-all">
+              <span>🗺️</span> Coverage
+            </button>
+            <button onClick={() => navigate('/sharpen', { state: { branchMode: true } })} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/20 transition-all">
+              <span>🌿</span> Drill
+            </button>
+          </div>
+        </div>
+
 
         {/* Weekly Review Banner — only when needed */}
         {!weeklyReviewLoading && !currentWeekReview?.completed && (

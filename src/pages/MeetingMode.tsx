@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTerritoryProfile } from '@/hooks/useTerritoryProfile';
@@ -50,7 +50,9 @@ export default function MeetingMode() {
 
   const [phase, setPhase] = useState<Phase>('context');
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [accountId, setAccountId] = useState<string>('');
+  const [params] = useSearchParams();
+  const urlAccountId = params.get('accountId');
+  const [accountId, setAccountId] = useState<string>(urlAccountId ?? '');
   const [goal, setGoal] = useState('');
   const [kis, setKis] = useState<any[]>([]);
   const [loadingKis, setLoadingKis] = useState(false);
