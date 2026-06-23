@@ -1158,51 +1158,11 @@ export default function WeeklyOutreach() {
   return (
     <Layout>
       <div className="p-4 sm:p-6 lg:p-8">
-        {/* Quick Links Bar */}
-        <div className="mb-4 sm:mb-6 space-y-2">
-          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider shrink-0 self-center mr-1">
-              Leads:
-            </span>
-            {QUICK_LINKS.leadsContacts.map((link) => (
-              <a
-                key={link.label}
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="quick-action text-[11px] py-1 px-2 shrink-0 whitespace-nowrap"
-                aria-label={`Open ${link.label} in Salesforce`}
-              >
-                {link.label}
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            ))}
-          </div>
-          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider shrink-0 self-center mr-1">
-              Accts:
-            </span>
-            {QUICK_LINKS.accounts.map((link) => (
-              <a
-                key={link.label}
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="quick-action text-[11px] py-1 px-2 shrink-0 whitespace-nowrap"
-                aria-label={`Open ${link.label} in Salesforce`}
-              >
-                {link.label}
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            ))}
-          </div>
-        </div>
-
         {/* Header + Staleness Alert */}
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="font-display text-2xl font-bold">Weekly Outreach</h1>
-            <p className="text-sm text-muted-foreground">Pipeline & Account Execution</p>
+            <h1 className="font-display text-2xl font-bold">Territory</h1>
+            <p className="text-sm text-muted-foreground">14 accounts · Expansion motion</p>
           </div>
           <StreakChip variant="full" />
         </div>
