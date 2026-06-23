@@ -303,7 +303,7 @@ export default function KILibrary() {
                   : 'bg-muted/40 border-border text-muted-foreground hover:bg-muted',
               )}
             >
-              {d.label} <span className="opacity-60">({d.count})</span>
+              {d.label} <span className="opacity-60">({dimCounts?.[d.value] ?? d.count})</span>
             </button>
           ))}
         </div>
