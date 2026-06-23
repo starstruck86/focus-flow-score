@@ -82,6 +82,7 @@ export async function selectOfflineBranchKI(
   spiderDimension: string,
   recentlyDrilledIds: Set<string>,
   excludeKiId?: string | null,
+  intelligenceType?: string | null,
 ): Promise<CachedBranchKI | null> {
   try {
     const excludeIds = new Set(recentlyDrilledIds);
@@ -89,13 +90,13 @@ export async function selectOfflineBranchKI(
 
     let candidates = await branchKIDb.kiItems
       .where('spider_dimension').equals(spiderDimension)
-      .and(ki => ki.active && ki.chapter === 'branch_io')
+      .and(ki => ki.active && ki.chapter === 'branch_io' && (!intelligenceType || ki.intelligence_type === intelligenceType))
       .toArray();
 
     if (!candidates.length) {
       candidates = await branchKIDb.kiItems
         .where('chapter').equals('branch_io')
-        .and(ki => ki.active)
+        .and(ki => ki.active && (!intelligenceType || ki.intelligence_type === intelligenceType))
         .limit(50)
         .toArray();
     }
