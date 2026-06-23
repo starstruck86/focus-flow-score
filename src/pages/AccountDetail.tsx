@@ -32,6 +32,7 @@ import type { AccountTier, AccountStatus } from '@/types';
 import { BranchIntelligenceCard } from '@/components/BranchIntelligenceCard';
 import { SignalInbox } from '@/components/signal-inbox/SignalInbox';
 import { BranchFootprint } from '@/components/territory/BranchFootprint';
+import { AccountTimeline } from '@/components/territory/AccountTimeline';
 
 const TIER_COLORS: Record<AccountTier, string> = {
   'A': 'border-status-green text-status-green',
@@ -200,6 +201,11 @@ export default function AccountDetail() {
           onOpenChange={setShowSynopsis}
           account={account}
         />
+
+        {/* Timeline — living record of this account */}
+        <AccountTimeline accountId={account.id} />
+
+        <Separator />
 
         {/* Details Section */}
         <CollapsibleSection title="Account Details" icon={Building2} defaultOpen={true}>
