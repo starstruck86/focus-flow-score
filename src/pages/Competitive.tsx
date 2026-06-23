@@ -289,6 +289,16 @@ function CompetitorCard({ competitor }: { competitor: Competitor }) {
               ))}
             </div>
           )}
+
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(`${competitor.name}: [describe what's stale]`);
+              toast.success('Copied to clipboard — paste into your notes or flag in Slack');
+            }}
+            className="text-[10px] text-muted-foreground hover:text-foreground py-1 flex items-center gap-1 mt-2"
+          >
+            <Flag className="h-3 w-3" /> Report outdated intel
+          </button>
         </div>
       )}
     </div>
