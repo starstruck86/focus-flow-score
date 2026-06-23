@@ -23,7 +23,7 @@ import { CollapsibleSection, LinkPill, LastTouchIndicator, safeFormat } from '@/
 import { useDebouncedUpdate } from '@/hooks/useDebouncedUpdate';
 import {
   ArrowLeft, ChevronRight, Building2, Target, Users,
-  FileText, CheckSquare, Calendar, Sparkles, Phone, Zap, Loader2,
+  FileText, CheckSquare, Calendar, Sparkles, Phone, Zap, Loader2, Mail,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
@@ -141,6 +141,9 @@ export default function AccountDetail() {
   const [showDossier, setShowDossier] = useState(false);
   const [dossierContent, setDossierContent] = useState('');
   const [dossierLoading, setDossierLoading] = useState(false);
+  const [showOutreach, setShowOutreach] = useState(false);
+  const [outreachDraft, setOutreachDraft] = useState('');
+  const [outreachLoading, setOutreachLoading] = useState(false);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -157,6 +160,40 @@ export default function AccountDetail() {
       .catch(() => setDossierContent('Could not generate dossier. Try again.'))
       .finally(() => setDossierLoading(false));
   }, [showDossier, account?.id, user?.id]);
+
+  // O6: Outreach Draft Generator
+  useEffect(() => {
+    if (!showOutreach || !account || !user) return;
+    setOutreachLoading(true);
+    setOutreachDraft('');
+    const prompt = `Write a personalized first outreach email to a contact at ${account.name} (${account.industry ?? 'technology'} company, Tier ${account.tier ?? 'B'}).
+
+Context:
+- This is an existing Branch.io customer (expansion motion, not new logo)
+- Branch is already installed — focus on expanding to additional products or new business units
+- Industry: ${account.industry ?? 'Not specified'}
+- Next step context: ${account.nextStep ?? 'No specific next step set'}
+
+Write a concise 3-paragraph email:
+1. Opening hook referencing their industry or recent signal
+2. Expansion hypothesis (what Branch capability could help them next)
+3. Clear ask (15-minute call to share what peers in their industry are doing)
+
+Style: Direct, peer-to-peer, no buzzwords. Max 150 words.`;
+
+    import('@/lib/territoryCopilot').then(({ streamCopilot }) => {
+      let draft = '';
+      streamCopilot({
+        messages: [{ role: 'user', content: prompt }],
+        mode: 'recap-email',
+        accountId: account.id,
+        pageContext: null,
+        onDelta: (chunk) => { draft += chunk; },
+        onDone: () => { setOutreachDraft(draft); setOutreachLoading(false); },
+        onError: () => { setOutreachDraft('Could not generate draft. Try again.'); setOutreachLoading(false); },
+      });
+    });
+  }, [showOutreach, account?.id, user?.id]);
 
   // ST6: enrich copilot context with live account data
   const accountContext = useAccountContext(account?.id, account?.name);
@@ -273,6 +310,13 @@ export default function AccountDetail() {
                       <FileText className="h-3.5 w-3.5" />
                       Dossier
                     </button>
+                    <button
+                      onClick={() => setShowOutreach(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-all"
+                    >
+                      <Mail className="h-3.5 w-3.5" />
+                      Draft Outreach
+                    </button>
                   </div>
                 </div>
               </div>
@@ -347,6 +391,32 @@ export default function AccountDetail() {
                   Copy to clipboard
                 </Button>
               </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showOutreach} onOpenChange={setShowOutreach}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{account.name} — Outreach Draft</DialogTitle>
+            </DialogHeader>
+            {outreachLoading ? (
+              <div className="flex items-center justify-center py-12 gap-3 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Drafting outreach…
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-border bg-muted/20 p-4">
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{outreachDraft}</p>
+                </div>
+                <p className="text-xs text-muted-foreground">Edit and paste into your email client. Dynamic never sends emails.</p>
+              </div>
+            )}
+            {!outreachLoading && outreachDraft && (
+              <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(outreachDraft)}>
+                Copy to clipboard
+              </Button>
             )}
           </DialogContent>
         </Dialog>
