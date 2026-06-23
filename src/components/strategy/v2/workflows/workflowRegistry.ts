@@ -386,6 +386,64 @@ const LIBRARY_WORKFLOWS: WorkflowDef[] = [
       'Output: 5 recurring patterns + the 1–2 strongest source citations for each. ' +
       'Note any contradictions. End with what I should do differently.',
   },
+  {
+    id: 'research.branch_footprint',
+    family: 'mode',
+    groupId: 'deep_research',
+    label: 'Branch footprint analysis',
+    description: 'Map what Branch products are live and where whitespace exists.',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'known_products', label: 'Products I know are active', kind: 'textarea', rows: 2, placeholder: 'e.g. Deep Linking, Universal Ads' },
+      { key: 'signals', label: 'Signals I have seen', kind: 'textarea', rows: 3, placeholder: 'Call notes, LinkedIn, news, app store observations...' },
+    ],
+    promptTemplate:
+      'Map the Branch footprint and expansion whitespace for {{Account}}.\n\n' +
+      'Products known to be active: {{Products I know are active}}\n' +
+      'Signals I have collected: {{Signals I have seen}}\n\n' +
+      'Branch product categories: Universal Ads, Deep Linking, Email-to-App, SMS-to-App, Web-to-App, QR Codes, AIO, Advanced Privacy.\n\n' +
+      'Output: (1) Confirmed products with confidence level, (2) Likely products they need but do not have (with rationale), ' +
+      '(3) Products definitely not in scope and why, (4) The top 2 expansion opportunities ranked by ease + impact, ' +
+      '(5) The one question I should ask to validate the top opportunity.',
+  },
+  {
+    id: 'research.competitive_branch',
+    family: 'mode',
+    groupId: 'deep_research',
+    label: 'Branch vs Adjust/Appsflyer',
+    description: 'Prepare competitive positioning for an account comparing Branch to alternatives.',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'competitor', label: 'Competitor mentioned', kind: 'select', options: ['Adjust', 'AppsFlyer', 'Kochava', 'Singular', 'Not specified'] },
+      { key: 'context', label: 'Context / what they said', kind: 'textarea', rows: 3, placeholder: 'What the customer said about the competitor...' },
+    ],
+    promptTemplate:
+      'Prepare competitive positioning for {{Account}} comparing Branch against {{Competitor mentioned}}.\n\n' +
+      'Context: {{Context / what they said}}\n\n' +
+      'Output: (1) Where Branch wins vs {{Competitor mentioned}} for this vertical, (2) Where the competitor appears stronger (be honest), ' +
+      '(3) The trap-setting questions that expose competitor weaknesses, (4) The Branch differentiation that matters most to this account, ' +
+      '(5) The one-line reframe I use if they say "Adjust does everything Branch does".',
+  },
+  {
+    id: 'research.expansion_readiness',
+    family: 'mode',
+    groupId: 'deep_research',
+    label: 'Expansion readiness score',
+    description: 'Assess how ready an account is to expand and what would accelerate it.',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'relationship', label: 'Relationship status', kind: 'select', options: ['New AE (first 90 days)', 'Established champion', 'Quiet — no recent contact', 'Renewal coming'] },
+      { key: 'usage', label: 'Usage signals', kind: 'textarea', rows: 3, placeholder: 'What do you know about their current Branch performance?' },
+      { key: 'expansion_target', label: 'Target expansion', kind: 'text', placeholder: 'e.g. Peacock sub-entity, AIO product add-on' },
+    ],
+    promptTemplate:
+      'Score the expansion readiness of {{Account}} for {{Target expansion}}.\n\n' +
+      'Relationship status: {{Relationship status}}\n' +
+      'Usage signals: {{Usage signals}}\n\n' +
+      'Output: (1) Readiness score 1-10 with rationale, (2) The 3 things that would accelerate readiness, ' +
+      '(3) The blockers I need to neutralize first, (4) The specific next action this week to move it forward, ' +
+      '(5) The risk if I do nothing for 30 days.',
+  },
 ];
 
 // ──────────────────────────── ARTIFACT TEMPLATES ────────────────────────────
