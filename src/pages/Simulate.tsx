@@ -184,7 +184,6 @@ export default function Simulate() {
   };
 
   const startSimulation = () => {
-    if (!account) return;
     const opener = SCENARIO_OPENERS[scenario] ?? SCENARIO_OPENERS.discovery;
     setMessages([{ role: 'assistant', content: opener }]);
     setTurnCount(0);
