@@ -1,10 +1,17 @@
 // Playbooks page — browse and reference Branch expansion playbooks
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react';
+import { toast } from 'sonner';
+import { ArrowLeft, ChevronDown, ChevronRight, Plus, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
 
 const TYPE_LABELS: Record<string, { label: string; color: string }> = {
   competitive: { label: 'Competitive', color: 'bg-red-500/15 text-red-600' },
