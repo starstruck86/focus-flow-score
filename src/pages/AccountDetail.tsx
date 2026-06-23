@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils';
 import type { AccountTier, AccountStatus } from '@/types';
 import { BranchIntelligenceCard } from '@/components/BranchIntelligenceCard';
 import { SignalInbox } from '@/components/signal-inbox/SignalInbox';
+import { BranchFootprint } from '@/components/territory/BranchFootprint';
 
 const TIER_COLORS: Record<AccountTier, string> = {
   'A': 'border-status-green text-status-green',
@@ -356,6 +357,13 @@ export default function AccountDetail() {
         {/* Signal Inbox */}
         <div className="py-2">
           <SignalInbox accountId={account.id} compact />
+        </div>
+
+        <Separator />
+
+        {/* Branch Footprint */}
+        <div className="py-2">
+          <BranchFootprint accountId={account.id} />
         </div>
 
         <Separator />
