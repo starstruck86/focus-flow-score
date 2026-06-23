@@ -317,8 +317,9 @@ export function WhitespaceCanvas() {
       </div>
 
       <p className="text-xs text-muted-foreground text-center py-2">
-        {confirmedCount + inferredCount} of {totalCells} products mapped · tap any cell to update
+        {confirmedCount} confirmed · {inferredCount} inferred · {totalCells - confirmedCount - inferredCount} unknown — tap any cell to update
       </p>
+
 
       {editCell && (
         <CellEditSheet
