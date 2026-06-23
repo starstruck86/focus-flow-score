@@ -45,8 +45,12 @@ export async function selectNextKIFromCategory(
 
   if (!candidates?.length) return null;
 
-  const undrilled = candidates.filter((k: any) => !excludeIds.has(k.id as string));
-  const pool = undrilled.length > 0 ? undrilled : candidates;
+  // Filter out fragment KIs (tactic_summary < 80 chars = extraction artifact)
+  const qualityCandidates = (candidates as any[]).filter(
+    (k: any) => k.tactic_summary && k.tactic_summary.length > 80
+  );
+  const undrilled = qualityCandidates.filter((k: any) => !excludeIds.has(k.id as string));
+  const pool = undrilled.length > 0 ? undrilled : (qualityCandidates.length > 0 ? qualityCandidates : candidates);
   const pick = pool[Math.floor(Math.random() * Math.min(pool.length, 10))] as any;
 
   return {

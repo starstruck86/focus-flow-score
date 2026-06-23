@@ -59,12 +59,20 @@ export async function selectNextBranchKI(
     if (intelligenceType) fq = fq.eq('intelligence_type', intelligenceType);
     const { data: fallback } = await fq;
     if (!fallback?.length) return null;
-    const pick = fallback[Math.floor(Math.random() * fallback.length)] as any;
+    const fallbackQuality = (fallback as any[]).filter(
+      (k: any) => k.tactic_summary && k.tactic_summary.length > 80
+    );
+    const fallbackPool = fallbackQuality.length > 0 ? fallbackQuality : fallback;
+    const pick = fallbackPool[Math.floor(Math.random() * fallbackPool.length)] as any;
     return toResult(pick);
   }
 
-  const undrilled = candidates.filter((k: any) => !excludeIds.has(k.id as string));
-  const pool = undrilled.length > 0 ? undrilled : candidates;
+  // Filter out fragment KIs (tactic_summary < 80 chars = extraction artifact)
+  const qualityCandidates = (candidates as any[]).filter(
+    (k: any) => k.tactic_summary && k.tactic_summary.length > 80
+  );
+  const undrilled = qualityCandidates.filter((k: any) => !excludeIds.has(k.id as string));
+  const pool = undrilled.length > 0 ? undrilled : (qualityCandidates.length > 0 ? qualityCandidates : candidates);
   const pick = pool[Math.floor(Math.random() * Math.min(pool.length, 10))] as any;
   return toResult(pick);
 }

@@ -61,100 +61,50 @@ type KIResult = {
 
 const PAGE_SIZE = 25;
 
-const CATEGORY_CHAPTERS: Record<string, string[]> = {
-  prospecting: ['cold_calling', 'messaging', 'follow_up', 'social_selling', 're_engagement', 'sequencing', 'running_sales_day', 'running_your_sales_day'],
-  discovery: ['discovery', 'qualification', 'demo', 'personas', 'rapport', 'rapport_building', 'building_trust'],
-  deal_control: ['closing', 'negotiation', 'objection_handling', 'pricing', 'expansion'],
-  stakeholder: ['stakeholder_navigation', 'personas', 'c_suite_call', 'preparing_for_c_suite', 'executive_engagement', 'stakeholder navigation'],
-  competitive: ['competitive', 'competitors'],
-  branch: ['branch_io'],
-  leadership: ['coaching', 'leadership', 'hiring', 'hiring top talent', 'hiring_top_talent', 'management', 'sales_leadership', 'team_management', 'sdr_management', 'onboarding', 'training', 'career_pathing', 'career_development', 'career_growth', 'mindset', 'personal_development', 'self_management', 'self_improvement', 'self_development', 'continuous_self_development', 'performance_management', 'developing_people', 'developing_your_people', 'people', 'motivation', 'skill_development', 'enablement', 'call_coaching', 'sales_management', 'sales_enablement'],
-  general: ['general', 'sales_process', 'data_driven_sales', 'general_sales_skills', 'planning', 'strategy', 'productivity', 'time_management', 'ai_enablement', 'ai strategy', 'strategic_planning', 'networking', 'personal_branding', 'sales_career', 'professional_development', 'marketing', 'product', 'product_feedback'],
-};
+type DimMeta = { value: string; label: string; emoji: string; color: string };
 
-type CategoryMeta = { value: string; label: string; emoji: string; color: string };
-
-const CATEGORIES: CategoryMeta[] = [
-  { value: 'all', label: 'All Intelligence', emoji: '🧠', color: 'bg-muted text-muted-foreground' },
-  { value: 'branch', label: 'Branch Intel', emoji: '🌿', color: 'bg-green-500/15 text-green-700 dark:text-green-400' },
-  { value: 'prospecting', label: 'Prospecting', emoji: '📞', color: 'bg-blue-500/15 text-blue-700 dark:text-blue-400' },
-  { value: 'discovery', label: 'Discovery', emoji: '🔍', color: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
-  { value: 'deal_control', label: 'Deal Control', emoji: '⚔️', color: 'bg-red-500/15 text-red-700 dark:text-red-400' },
-  { value: 'stakeholder', label: 'Stakeholder', emoji: '🏛️', color: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-400' },
-  { value: 'competitive', label: 'Competitive', emoji: '🎯', color: 'bg-purple-500/15 text-purple-700 dark:text-purple-400' },
-  { value: 'leadership', label: 'Leadership', emoji: '🎓', color: 'bg-pink-500/15 text-pink-700 dark:text-pink-400' },
-  { value: 'general', label: 'General', emoji: '⚙️', color: 'bg-slate-500/15 text-slate-700 dark:text-slate-400' },
+const INTELLIGENCE_TYPES: DimMeta[] = [
+  { value: 'all',                    label: 'All Intelligence', emoji: '🧠', color: 'bg-muted text-muted-foreground' },
+  { value: 'discovery',              label: 'Discovery',        emoji: '🔍', color: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
+  { value: 'internal_prospecting',   label: 'Prospecting',      emoji: '📞', color: 'bg-blue-500/15 text-blue-700 dark:text-blue-400' },
+  { value: 'stakeholder_navigation', label: 'Stakeholder',      emoji: '🏛️', color: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-400' },
+  { value: 'messaging',              label: 'Messaging',        emoji: '💬', color: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-400' },
+  { value: 'deal_control',           label: 'Deal Control',     emoji: '⚔️', color: 'bg-red-500/15 text-red-700 dark:text-red-400' },
+  { value: 'objection_handling',     label: 'Objections',       emoji: '🛑', color: 'bg-orange-500/15 text-orange-700 dark:text-orange-400' },
+  { value: 'expansion_strategy',     label: 'Expansion',        emoji: '📈', color: 'bg-green-500/15 text-green-700 dark:text-green-400' },
+  { value: 'product_knowledge',      label: 'Branch Product',   emoji: '🌿', color: 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' },
+  { value: 'competitive',            label: 'Competitive',      emoji: '🎯', color: 'bg-purple-500/15 text-purple-700 dark:text-purple-400' },
+  { value: 'c_suite_engagement',     label: 'C-Suite',          emoji: '👔', color: 'bg-violet-500/15 text-violet-700 dark:text-violet-400' },
+  { value: 'qualification',          label: 'Qualification',    emoji: '✅', color: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
+  { value: '__null__',               label: 'Leadership',       emoji: '🎓', color: 'bg-pink-500/15 text-pink-700 dark:text-pink-400' },
 ];
 
-const CATEGORY_BY_VALUE: Record<string, CategoryMeta> = Object.fromEntries(CATEGORIES.map(c => [c.value, c]));
+const DIM_BY_VALUE: Record<string, DimMeta> = Object.fromEntries(INTELLIGENCE_TYPES.map(d => [d.value, d]));
 
-const DIMENSIONS = [
-  { value: 'all', label: 'All Dimensions' },
-  { value: 'expansion_strategy', label: 'Expansion' },
-  { value: 'product_knowledge', label: 'Product' },
-  { value: 'discovery', label: 'Discovery' },
-  { value: 'deal_control', label: 'Deal Control' },
-  { value: 'competitive', label: 'Competitive' },
-  { value: 'stakeholder_navigation', label: 'Stakeholder' },
-  { value: 'internal_prospecting', label: 'Prospecting' },
-  { value: 'messaging', label: 'Messaging' },
-  { value: 'objection_handling', label: 'Objections' },
-  { value: 'c_suite_engagement', label: 'C-Suite' },
-  { value: 'qualification', label: 'Qualification' },
-];
-
-const DIM_COLORS: Record<string, string> = {
-  product_knowledge: 'bg-green-500/15 text-green-600',
-  expansion_strategy: 'bg-blue-500/15 text-blue-600',
-  discovery: 'bg-amber-500/15 text-amber-600',
-  deal_control: 'bg-red-500/15 text-red-600',
-  competitive: 'bg-purple-500/15 text-purple-600',
-  stakeholder_navigation: 'bg-indigo-500/15 text-indigo-600',
-  internal_prospecting: 'bg-blue-500/15 text-blue-600',
-  messaging: 'bg-cyan-500/15 text-cyan-600',
-  objection_handling: 'bg-orange-500/15 text-orange-600',
-  c_suite_engagement: 'bg-indigo-500/15 text-indigo-600',
-  qualification: 'bg-amber-500/15 text-amber-600',
+const DIMENSION_CHAPTERS: Record<string, string[]> = {
+  discovery: ['discovery', 'branch_io'],
+  internal_prospecting: ['cold_calling', 'social_selling'],
+  stakeholder_navigation: ['stakeholder_navigation', 'personas', 'branch_io'],
+  messaging: ['messaging', 'demo'],
+  deal_control: ['closing', 'negotiation', 'follow_up', 'branch_io'],
+  objection_handling: ['objection_handling'],
+  expansion_strategy: ['expansion', 'branch_io'],
+  product_knowledge: ['branch_io'],
+  competitive: ['competitive', 'competitors', 'branch_io'],
+  c_suite_engagement: ['personas'],
+  qualification: ['qualification'],
+  __null__: ['coaching', 'leadership', 'hiring', 'management', 'onboarding', 'general'],
 };
-
-const DIM_LABELS: Record<string, string> = {
-  product_knowledge: 'Product',
-  expansion_strategy: 'Expansion',
-  discovery: 'Discovery',
-  deal_control: 'Deal Control',
-  competitive: 'Competitive',
-  stakeholder_navigation: 'Stakeholder',
-  internal_prospecting: 'Prospecting',
-  messaging: 'Messaging',
-  objection_handling: 'Objections',
-  c_suite_engagement: 'C-Suite',
-  qualification: 'Qualification',
-};
-
-const BRANCH_HEADS = [
-  { value: 'all', label: 'All' },
-  { value: 'product', label: 'Product' },
-  { value: 'sales', label: 'Sales Plays' },
-  { value: 'competitive', label: 'Competitive' },
-];
-
-function getChapterCategory(chapter: string): string {
-  for (const [cat, chapters] of Object.entries(CATEGORY_CHAPTERS)) {
-    if (chapters.includes(chapter)) return cat;
-  }
-  return 'all';
-}
 
 function formatChapterLabel(chapter: string): string {
-  return chapter
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase());
+  if (chapter === 'branch_io') return '🌿 Branch';
+  return chapter.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function KICard({ ki, onDrill, userId, annotation, onAnnotationSaved }: { ki: KIResult; onDrill: (ki: KIResult) => void; userId: string; annotation?: string; onAnnotationSaved: () => void }) {
   const [expanded, setExpanded] = useState(false);
-  const catKey = getChapterCategory(ki.chapter);
-  const catMeta = CATEGORY_BY_VALUE[catKey] ?? CATEGORY_BY_VALUE.all;
+  const dimKey = ki.spider_dimension ?? '__null__';
+  const dimMeta = DIM_BY_VALUE[dimKey];
   return (
     <div
       className="rounded-lg border border-border bg-card p-3 space-y-2 cursor-pointer hover:border-primary/30 transition-colors"
@@ -164,22 +114,17 @@ function KICard({ ki, onDrill, userId, annotation, onAnnotationSaved }: { ki: KI
         <p className="text-sm font-semibold leading-snug line-clamp-2 flex-1">{ki.title}</p>
         <div className="flex items-center gap-1.5 shrink-0">
           {annotation && <span className="text-[10px] text-amber-500" title="You have a note">📝</span>}
-          {ki.spider_dimension && (
-            <span
-              className={cn(
-                'text-[10px] font-bold px-2 py-0.5 rounded-full',
-                DIM_COLORS[ki.spider_dimension] ?? 'bg-muted text-muted-foreground',
-              )}
-            >
-              {DIM_LABELS[ki.spider_dimension] ?? ki.spider_dimension}
+          {dimMeta && (
+            <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', dimMeta.color)}>
+              {dimMeta.emoji} {dimMeta.label}
             </span>
           )}
         </div>
       </div>
 
       <div className="flex items-center gap-1.5">
-        <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full', catMeta.color)}>
-          {catMeta.emoji} {formatChapterLabel(ki.chapter)}
+        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted/60 text-muted-foreground">
+          {formatChapterLabel(ki.chapter)}
         </span>
       </div>
 
@@ -245,17 +190,16 @@ export default function KILibrary() {
   const { user } = useAuth();
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState<string>('all');
-  const [chapter, setChapter] = useState<string>('all');
   const [dimension, setDimension] = useState<string>(params.get('dimension') ?? 'all');
+  const [chapterFilter, setChapterFilter] = useState<string>('all');
   const [branchHead, setBranchHead] = useState<string>('all');
   const [page, setPage] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
-  useEffect(() => { setPage(0); }, [search, category, chapter, dimension, branchHead]);
-  useEffect(() => { setChapter('all'); }, [category]);
+  useEffect(() => { setPage(0); }, [search, dimension, chapterFilter, branchHead]);
+  useEffect(() => { setChapterFilter('all'); setBranchHead('all'); }, [dimension]);
 
   const handleSearchChange = (value: string) => {
     setSearchInput(value);
@@ -263,39 +207,37 @@ export default function KILibrary() {
     debounceRef.current = setTimeout(() => setSearch(value), 300);
   };
 
-  const { data: categoryCounts } = useQuery({
-    queryKey: ['ki-category-counts', user?.id],
+  const { data: dimCounts } = useQuery({
+    queryKey: ['ki-dim-counts-v2', user?.id],
     enabled: !!user,
     staleTime: 10 * 60 * 1000,
     queryFn: async () => {
       if (!user) return {} as Record<string, number>;
-      // Paginate to avoid PostgREST 1000-row default cap
       const PAGE = 1000;
       let from = 0;
-      const allRows: { chapter: string }[] = [];
+      const counts: Record<string, number> = { all: 0 };
       while (true) {
         const { data, error } = await supabase
           .from('knowledge_items')
-          .select('chapter')
+          .select('spider_dimension')
           .eq('user_id', user.id)
           .eq('active', true)
           .range(from, from + PAGE - 1);
-        if (error) break;
-        if (!data || data.length === 0) break;
-        allRows.push(...(data as { chapter: string }[]));
+        if (error || !data || data.length === 0) break;
+        for (const ki of data as any[]) {
+          counts.all++;
+          const dim = ki.spider_dimension ?? '__null__';
+          counts[dim] = (counts[dim] || 0) + 1;
+        }
         if (data.length < PAGE) break;
         from += PAGE;
       }
-      const counts: Record<string, number> = { all: allRows.length };
-      Object.entries(CATEGORY_CHAPTERS).forEach(([cat, chapters]) => {
-        counts[cat] = allRows.filter(r => chapters.includes(r.chapter)).length;
-      });
       return counts;
     },
   });
 
   const { data: results, isLoading, isFetching } = useQuery({
-    queryKey: ['ki-search-v2', user?.id, search, category, chapter, dimension, branchHead, page],
+    queryKey: ['ki-search-v3', user?.id, search, dimension, chapterFilter, branchHead, page],
     enabled: !!user,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
@@ -307,13 +249,14 @@ export default function KILibrary() {
         .eq('user_id', user.id)
         .eq('active', true);
 
-      if (category !== 'all') {
-        const chapters = CATEGORY_CHAPTERS[category] ?? [];
-        if (chapters.length > 0) q = q.in('chapter', chapters);
+      if (dimension !== 'all') {
+        if (dimension === '__null__') q = q.is('spider_dimension', null);
+        else q = q.eq('spider_dimension', dimension);
       }
-      if (chapter !== 'all') q = q.eq('chapter', chapter);
-      if (dimension !== 'all') q = q.eq('spider_dimension', dimension);
-      if (category === 'branch' && branchHead !== 'all') q = q.eq('intelligence_type', branchHead);
+      if (chapterFilter !== 'all') q = q.eq('chapter', chapterFilter);
+      if (chapterFilter === 'branch_io' && branchHead !== 'all') {
+        q = q.eq('intelligence_type', branchHead);
+      }
 
       const trimmed = search.trim();
       if (trimmed.length >= 2) {
@@ -331,7 +274,7 @@ export default function KILibrary() {
   });
 
   const { data: totalCount } = useQuery({
-    queryKey: ['ki-count', user?.id, search, category, chapter, dimension, branchHead],
+    queryKey: ['ki-count-v3', user?.id, search, dimension, chapterFilter, branchHead],
     enabled: !!user,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
@@ -342,12 +285,19 @@ export default function KILibrary() {
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .eq('active', true);
-      if (category !== 'all') { const chapters = CATEGORY_CHAPTERS[category] ?? []; if (chapters.length > 0) q = q.in('chapter', chapters); }
-      if (chapter !== 'all') q = q.eq('chapter', chapter);
-      if (dimension !== 'all') q = q.eq('spider_dimension', dimension);
-      if (category === 'branch' && branchHead !== 'all') q = q.eq('intelligence_type', branchHead);
+      if (dimension !== 'all') {
+        if (dimension === '__null__') q = q.is('spider_dimension', null);
+        else q = q.eq('spider_dimension', dimension);
+      }
+      if (chapterFilter !== 'all') q = q.eq('chapter', chapterFilter);
+      if (chapterFilter === 'branch_io' && branchHead !== 'all') {
+        q = q.eq('intelligence_type', branchHead);
+      }
       const trimmed = search.trim();
-      if (trimmed.length >= 2) { const safe = trimmed.replace(/[%,()]/g, ' '); q = q.or(`title.ilike.%${safe}%,tactic_summary.ilike.%${safe}%`); }
+      if (trimmed.length >= 2) {
+        const safe = trimmed.replace(/[%,()]/g, ' ');
+        q = q.or(`title.ilike.%${safe}%,tactic_summary.ilike.%${safe}%`);
+      }
       const { count } = await q;
       return count ?? 0;
     },
@@ -369,14 +319,11 @@ export default function KILibrary() {
     },
   });
 
-  // Chapter sub-filter options for current category (only chapters with KIs)
   const availableChapters = useMemo(() => {
-    if (category === 'all') return [];
-    const chapters = CATEGORY_CHAPTERS[category] ?? [];
-    if (chapters.length <= 1) return [];
-    // We don't have per-chapter counts; just show all defined chapters for the category
-    return chapters;
-  }, [category]);
+    if (dimension === 'all') return [];
+    const chapters = DIMENSION_CHAPTERS[dimension] ?? [];
+    return chapters.length > 1 ? chapters : [];
+  }, [dimension]);
 
   const handleDrill = (ki: KIResult) => {
     if (ki.chapter === 'branch_io') {
@@ -394,7 +341,6 @@ export default function KILibrary() {
   const start = total === 0 ? 0 : page * PAGE_SIZE + 1;
   const end = Math.min((page + 1) * PAGE_SIZE, total);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const showDimensions = category !== 'leadership';
 
   return (
     <div className="fixed inset-0 bg-background flex flex-col z-40">
@@ -409,7 +355,7 @@ export default function KILibrary() {
         <div className="flex items-center gap-2 ml-2">
           <h1 className="text-base font-bold">Intelligence Library</h1>
           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-            {(categoryCounts?.all ?? 0).toLocaleString()} KIs
+            {(dimCounts?.all ?? 0).toLocaleString()} KIs
           </span>
         </div>
       </div>
@@ -425,51 +371,51 @@ export default function KILibrary() {
           className="w-full px-4 py-2.5 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
         />
 
-        {/* Category pills */}
+        {/* Dimension (intelligence type) pills */}
         <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-          {CATEGORIES.map((c) => {
-            const cnt = categoryCounts?.[c.value] ?? 0;
-            const selected = category === c.value;
+          {INTELLIGENCE_TYPES.map((d) => {
+            const cnt = dimCounts?.[d.value] ?? 0;
+            const selected = dimension === d.value;
             return (
               <button
-                key={c.value}
-                onClick={() => setCategory(c.value)}
+                key={d.value}
+                onClick={() => setDimension(d.value)}
                 className={cn(
                   'text-[11px] font-medium px-2.5 py-1 rounded-full border transition-all whitespace-nowrap shrink-0',
                   selected
-                    ? cn(c.color, 'border-current')
+                    ? cn(d.color, 'border-current')
                     : 'bg-muted/40 border-border text-muted-foreground hover:bg-muted',
                 )}
               >
-                <span className="mr-1">{c.emoji}</span>
-                {c.label}
+                <span className="mr-1">{d.emoji}</span>
+                {d.label}
                 <span className="opacity-60 ml-1">({cnt.toLocaleString()})</span>
               </button>
             );
           })}
         </div>
 
-        {/* Chapter sub-filter */}
+        {/* Chapter sub-filter (source within dimension) */}
         {availableChapters.length > 0 && (
           <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
             <button
-              onClick={() => setChapter('all')}
+              onClick={() => setChapterFilter('all')}
               className={cn(
                 'text-[10px] font-medium px-2 py-0.5 rounded-md border transition-all whitespace-nowrap shrink-0',
-                chapter === 'all'
+                chapterFilter === 'all'
                   ? 'bg-foreground/90 text-background border-foreground'
                   : 'bg-transparent border-border/60 text-muted-foreground hover:bg-muted/40',
               )}
             >
-              All chapters
+              All sources
             </button>
             {availableChapters.map((ch) => (
               <button
                 key={ch}
-                onClick={() => setChapter(ch)}
+                onClick={() => setChapterFilter(ch)}
                 className={cn(
                   'text-[10px] font-medium px-2 py-0.5 rounded-md border transition-all whitespace-nowrap shrink-0',
-                  chapter === ch
+                  chapterFilter === ch
                     ? 'bg-foreground/90 text-background border-foreground'
                     : 'bg-transparent border-border/60 text-muted-foreground hover:bg-muted/40',
                 )}
@@ -480,10 +426,15 @@ export default function KILibrary() {
           </div>
         )}
 
-        {/* Branch intelligence_type filter */}
-        {category === 'branch' && (
+        {/* Branch intelligence_type filter — only when viewing branch_io */}
+        {chapterFilter === 'branch_io' && (
           <div className="flex gap-1.5 flex-wrap">
-            {BRANCH_HEADS.map((h) => (
+            {[
+              { value: 'all', label: 'All Branch' },
+              { value: 'product', label: '🌿 Product' },
+              { value: 'sales', label: '📊 Sales Plays' },
+              { value: 'competitive', label: '🎯 Competitive' },
+            ].map((h) => (
               <button
                 key={h.value}
                 onClick={() => setBranchHead(h.value)}
@@ -495,26 +446,6 @@ export default function KILibrary() {
                 )}
               >
                 {h.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Dimension filter */}
-        {showDimensions && (
-          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-            {DIMENSIONS.map((d) => (
-              <button
-                key={d.value}
-                onClick={() => setDimension(d.value)}
-                className={cn(
-                  'text-[10px] font-medium px-2 py-0.5 rounded-md border transition-all whitespace-nowrap shrink-0',
-                  dimension === d.value
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-transparent border-border/60 text-muted-foreground hover:bg-muted/40',
-                )}
-              >
-                {d.label}
               </button>
             ))}
           </div>
