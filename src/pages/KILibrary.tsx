@@ -28,10 +28,10 @@ const DIMENSIONS = [
 ];
 
 const HEADS = [
-  { value: 'all', label: 'All Heads' },
-  { value: 'sales', label: 'Sales' },
-  { value: 'product', label: 'Product' },
-  { value: 'competitive', label: 'Competitive' },
+  { value: 'all', label: 'All Heads', count: 586 },
+  { value: 'sales', label: 'Sales Intel', count: 214 },
+  { value: 'product', label: 'Product Intel', count: 335 },
+  { value: 'competitive', label: 'Competitive Intel', count: 37 },
 ];
 
 const DIM_COLORS: Record<string, string> = {
@@ -226,7 +226,7 @@ export default function KILibrary() {
                   : 'bg-transparent border-border/60 text-muted-foreground hover:bg-muted/40',
               )}
             >
-              {h.label}
+              {h.label} <span className="opacity-60">({h.count})</span>
             </button>
           ))}
         </div>

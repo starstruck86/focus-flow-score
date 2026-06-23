@@ -15,6 +15,8 @@ const SCENARIOS = [
   { value: 'build_internally', label: 'Expansion blocker — engineering says they can build it' },
   { value: 'adjust', label: 'Competitive threat — Adjust gave them a 20% lower quote' },
   { value: 'quiet_champion', label: 'Champion went quiet — re-engagement call' },
+  { value: 'consolidate', label: 'Parent wants to consolidate vendors — cut Branch budget' },
+  { value: 'economic_buyer', label: 'Economic buyer wants 30% discount or no renewal' },
 ];
 
 const SCENARIO_LABELS: Record<string, string> = Object.fromEntries(SCENARIOS.map((s) => [s.value, s.label]));
@@ -40,6 +42,8 @@ const SCENARIO_DRILLS: Record<string, string[]> = {
   build_internally: ['deal_control', 'product_knowledge'],
   adjust: ['competitive', 'deal_control'],
   quiet_champion: ['stakeholder_navigation', 'deal_control'],
+  consolidate: ['deal_control', 'expansion_strategy'],
+  economic_buyer: ['deal_control', 'competitive'],
 };
 
 const SCENARIO_OPENERS: Record<string, string> = {
@@ -48,6 +52,8 @@ const SCENARIO_OPENERS: Record<string, string> = {
   build_internally: "Look, I appreciate the pitch, but my team thinks we can build this in-house in a quarter. Why should I pay you instead?",
   adjust: "I'll cut to it — Adjust came in 20% under your number. Why shouldn't I switch?",
   quiet_champion: "Hey. Yeah, sorry I've been quiet. Things have shifted internally. What do you need?",
+  consolidate: "Look, I'll be direct. Corporate has mandated a 20% vendor reduction across the company. Branch is on the list. What do we actually get from you that justifies the spend?",
+  economic_buyer: "I've been looking at your renewal proposal. We're asking for a 30% reduction. That's not negotiable. What can you actually do for us?",
 };
 
 function buildSystemPrompt(account: AccountInfo, scenario: string, pressure: string): string {
@@ -64,6 +70,8 @@ function buildSystemPrompt(account: AccountInfo, scenario: string, pressure: str
     build_internally: `You are the VP Engineering at ${account.name}. The AE wants to expand to a new Branch product. You think your team can build this internally. ${pressureDesc}`,
     adjust: `You are the CMO at ${account.name}. Adjust has offered you 20% less than Branch costs. ${pressureDesc} You're seriously considering switching.`,
     quiet_champion: `You are the Head of Mobile at ${account.name}, a former Branch champion who has gone quiet for 6 weeks. ${pressureDesc} Something has changed internally but you haven't shared it.`,
+    consolidate: `You are the CFO or a Senior VP overseeing vendor budgets at ${account.name}. Corporate mandated vendor consolidation. Branch is on the cut list. ${pressureDesc} You need clear ROI justification or you'll cut it.`,
+    economic_buyer: `You are the Head of Procurement at ${account.name} handling contract renewals. You want a 30% reduction in Branch's price and will not renew without it. ${pressureDesc} You have alternatives.`,
   };
 
   return `${scenarioContext[scenario] ?? scenarioContext.discovery}
