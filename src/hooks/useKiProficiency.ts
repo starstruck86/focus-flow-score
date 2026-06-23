@@ -12,6 +12,7 @@ export const SPIDER_DIMENSIONS = [
   { key: 'c_suite_engagement',     label: 'C-Suite',              color: '#f97316' },
   { key: 'competitive',            label: 'Competitive',          color: '#ec4899' },
   { key: 'qualification',          label: 'Qualification',        color: '#6366f1' },
+  { key: 'product_knowledge',      label: 'Product Knowledge',    color: '#0ea5e9' },
 ] as const;
 
 export type SpiderDimensionKey = typeof SPIDER_DIMENSIONS[number]['key'];
