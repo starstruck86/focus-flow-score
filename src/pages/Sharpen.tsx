@@ -186,9 +186,32 @@ export default function Sharpen() {
         : interleaved
           ? getInterleavedDimension(repsDoneRef.current)
           : dimension;
-      const ki = branchMode
-        ? await selectNextBranchKI(user.id, effectiveDimension, excludeId)
-        : await selectNextKI(user.id, effectiveDimension, excludeId);
+      let ki: any = null;
+      if (stateChapters && stateChapters.length > 0) {
+        ki = await selectNextKIFromCategory(user.id, stateChapters, {
+          spiderDimension: stateDimension || undefined,
+          excludeKiId: excludeId,
+        });
+      } else if (branchMode) {
+        ki = await selectNextBranchKI(user.id, effectiveDimension, excludeId);
+      } else if (stateSpecificKIId && repsDoneRef.current === 0) {
+        const { data } = await supabase
+          .from('knowledge_items')
+          .select('id, title, chapter, sub_chapter, spider_dimension, intelligence_type, tactic_summary, when_to_use, when_not_to_use, example_usage, why_it_matters, framework, confidence_score, active')
+          .eq('id', stateSpecificKIId)
+          .single();
+        ki = data ?? null;
+        if (!ki) {
+          ki = await selectNextKI(user.id, effectiveDimension, excludeId);
+        }
+      } else if (stateChapter) {
+        ki = await selectNextKIFromCategory(user.id, [stateChapter], {
+          spiderDimension: stateDimension || undefined,
+          excludeKiId: excludeId,
+        });
+      } else {
+        ki = await selectNextKI(user.id, effectiveDimension, excludeId);
+      }
       if (ki) {
         setCurrentKI(ki);
         setResponse('');
