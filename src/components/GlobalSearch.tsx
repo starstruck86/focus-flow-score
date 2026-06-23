@@ -46,41 +46,15 @@ export function GlobalSearch({ className }: { className?: string }) {
     const searchResults: SearchResult[] = [];
     const lower = q.toLowerCase();
 
-    const [accountsRes, oppsRes, renewalsRes, contactsRes, tasksRes] = await Promise.all([
-      fromActiveAccounts().select('id, name, industry, outreach_status').ilike('name', `%${lower}%`).limit(4),
-      supabase.from('opportunities').select('id, name, stage, arr, deal_type').ilike('name', `%${lower}%`).limit(4),
-      supabase.from('renewals').select('id, account_name, arr, renewal_stage').ilike('account_name', `%${lower}%`).limit(4),
-      supabase.from('contacts').select('id, name, title, email').ilike('name', `%${lower}%`).limit(4),
-      supabase.from('tasks').select('id, title, status, priority, due_date').ilike('title', `%${lower}%`).not('status', 'in', '("done","dropped")').limit(4),
-    ]);
+    const accountsRes = await fromActiveAccounts()
+      .select('id, name, industry, outreach_status')
+      .ilike('name', `%${lower}%`)
+      .limit(8);
 
     accountsRes.data?.forEach(a => searchResults.push({
       id: a.id, type: 'account', name: a.name,
       subtitle: [a.industry, a.outreach_status].filter(Boolean).join(' · '),
-      route: '/outreach',
-    }));
-    oppsRes.data?.forEach(o => {
-      const isRenewalOpp = o.deal_type === 'renewal' || o.deal_type === 'expansion';
-      searchResults.push({
-        id: o.id, type: 'opportunity', name: o.name,
-        subtitle: `$${(o.arr || 0).toLocaleString()} · ${o.stage || 'No stage'}`,
-        route: isRenewalOpp ? '/renewals' : '/outreach',
-      });
-    });
-    renewalsRes.data?.forEach(r => searchResults.push({
-      id: r.id, type: 'renewal', name: r.account_name,
-      subtitle: `$${(r.arr || 0).toLocaleString()} · ${r.renewal_stage || 'No stage'}`,
-      route: '/renewals',
-    }));
-    contactsRes.data?.forEach(c => searchResults.push({
-      id: c.id, type: 'contact', name: c.name,
-      subtitle: [c.title, c.email].filter(Boolean).join(' · '),
-      route: '/outreach',
-    }));
-    tasksRes.data?.forEach(t => searchResults.push({
-      id: t.id, type: 'task', name: t.title,
-      subtitle: `${t.priority || 'P2'} · ${t.status}${t.due_date ? ` · due ${t.due_date}` : ''}`,
-      route: '/tasks',
+      route: `/accounts/${a.id}`,
     }));
 
     setResults(searchResults);
@@ -95,24 +69,11 @@ export function GlobalSearch({ className }: { className?: string }) {
   };
 
   const handleSelect = (result: SearchResult) => {
-    if (result.type === 'account') {
-      navigate(`/accounts/${result.id}`);
-    } else if (result.type === 'opportunity') {
-      navigate(`/opportunities/${result.id}`);
-    } else if (result.type === 'renewal') {
-      setCurrentRecord({ type: 'renewal', id: result.id });
-      navigate(result.route);
-    } else if (result.type === 'contact') {
-      // Navigate to parent account if available
-      const contact = results.find(r => r.id === result.id);
-      setCurrentRecord({ type: 'account', id: result.id });
-      navigate(result.route);
-    } else {
-      navigate(result.route);
-    }
+    navigate(result.route);
     setOpen(false);
     setQuery('');
   };
+
 
   const iconForType = (type: string) => {
     switch (type) {
@@ -125,11 +86,12 @@ export function GlobalSearch({ className }: { className?: string }) {
     }
   };
 
-  const groupedResults = (['account', 'opportunity', 'renewal', 'contact', 'task'] as const).map(type => ({
+  const groupedResults = (['account'] as const).map(type => ({
     type,
-    label: type === 'account' ? 'Accounts' : type === 'opportunity' ? 'Opportunities' : type === 'renewal' ? 'Renewals' : type === 'contact' ? 'Contacts' : 'Tasks',
+    label: 'Accounts',
     items: results.filter(r => r.type === type),
   })).filter(g => g.items.length > 0);
+
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
