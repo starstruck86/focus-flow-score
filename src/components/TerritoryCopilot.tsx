@@ -5,6 +5,8 @@ import { Sparkles, Send, Loader2, MessageSquare, ArrowRight, Zap, RotateCcw, Sea
 import { cn } from '@/lib/utils';
 import { streamCopilot, SUGGESTED_QUESTIONS, PAGE_SUGGESTED_QUESTIONS, PAGE_PLACEHOLDERS, MODE_CONFIG, type CopilotMsg, type CopilotMode } from '@/lib/territoryCopilot';
 import { useCopilot } from '@/contexts/CopilotContext';
+import { useTerritoryProfile } from '@/hooks/useTerritoryProfile';
+import { Link } from 'react-router-dom';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
