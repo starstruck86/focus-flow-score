@@ -617,9 +617,8 @@ ${kiContext}`;
               ],
               additionalProperties: false,
             },
-          },
         }],
-        tool_choice: { type: "function", function: { name: "score_transcript" } },
+        tool_choice: { type: "tool", name: "score_transcript" },
       }),
     });
 
