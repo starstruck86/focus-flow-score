@@ -359,6 +359,10 @@ function CallScorecard({ grade, onRegrade, transcriptId, transcriptContent }: {
         commercial_score: (grade as any).commercial_score ?? 5,
         presence_score: (grade as any).presence_score ?? 5,
         product_knowledge_score: (grade as any).product_knowledge_score ?? 5,
+        branch_expansion_hypothesis_score: (grade as any).branch_expansion_hypothesis_score ?? 5,
+        branch_product_fit_score: (grade as any).branch_product_fit_score ?? 5,
+        branch_value_prop_score: (grade as any).branch_value_prop_score ?? 5,
+        branch_objection_handling_score: (grade as any).branch_objection_handling_score ?? 5,
       };
       const weakDimSignals = Object.entries(CATEGORY_TO_DIMENSION)
         .filter(([field]) => (CATEGORY_SCORE_MAP[field] ?? 5) < 3)
