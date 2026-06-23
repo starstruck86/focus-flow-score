@@ -30,6 +30,7 @@ import { FromStrategyPanel } from '@/components/strategy/FromStrategyPanel';
 import { cn } from '@/lib/utils';
 import type { AccountTier, AccountStatus } from '@/types';
 import { BranchIntelligenceCard } from '@/components/BranchIntelligenceCard';
+import { SignalInbox } from '@/components/signal-inbox/SignalInbox';
 
 const TIER_COLORS: Record<AccountTier, string> = {
   'A': 'border-status-green text-status-green',
