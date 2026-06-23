@@ -132,6 +132,62 @@ const MODE_BRAINSTORM: WorkflowDef[] = [
       'Structure: (1) the contrarian thesis in one line, (2) the 3 supporting pillars, ' +
       '(3) the strongest objection and how I rebut it, (4) the call to action.',
   },
+  {
+    id: 'brainstorm.expansion_angles',
+    family: 'mode',
+    groupId: 'brainstorm',
+    label: 'Expansion angles',
+    description: 'Generate expansion hypotheses for a Branch customer account.',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true, placeholder: 'e.g. NBC Universal' },
+      { key: 'known', label: 'What I know about their Branch usage', kind: 'textarea', rows: 3, placeholder: 'Products active, use cases, champion, signals...' },
+      { key: 'vertical', label: 'Vertical', kind: 'select', options: ['Media/Entertainment', 'Retail', 'Travel/Hospitality', 'Financial Services', 'Healthcare', 'Other'] },
+    ],
+    promptTemplate:
+      'Generate 5 concrete expansion hypotheses for {{Account}}, a Branch.io customer in {{Vertical}}.\n\n' +
+      'What I know about their Branch usage: {{What I know about their Branch usage}}\n\n' +
+      'For each hypothesis: (1) the expansion angle (which Branch product/use case), (2) the business problem it solves for them, ' +
+      '(3) the signal I should look for to validate it, (4) the discovery question that opens the conversation. ' +
+      'Ground answers in real Branch product capabilities (Universal Ads, Deep Linking, Email-to-App, SMS-to-App, Web-to-App, QR, AIO, Advanced Privacy).',
+  },
+  {
+    id: 'brainstorm.qbr_narrative',
+    family: 'mode',
+    groupId: 'brainstorm',
+    label: 'QBR narrative',
+    description: 'Build a QBR story that opens expansion conversations.',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'current_state', label: 'Current Branch usage', kind: 'textarea', rows: 3, placeholder: 'Products active, results, usage trends...' },
+      { key: 'goal', label: 'Expansion goal', kind: 'text', placeholder: 'e.g. Expand to SMS-to-App + AIO attribution' },
+    ],
+    promptTemplate:
+      'Build a QBR narrative for {{Account}} that leads naturally to an expansion conversation.\n\n' +
+      'Current Branch usage: {{Current Branch usage}}\n' +
+      'Expansion goal: {{Expansion goal}}\n\n' +
+      'Structure: (1) Headline of what they have achieved with Branch, (2) metrics that demonstrate ROI, ' +
+      '(3) the natural next question that opens the expansion conversation, (4) the 2-3 slides that tell this story, ' +
+      '(5) how to handle "everything is going fine" objection.',
+  },
+  {
+    id: 'brainstorm.multithread',
+    family: 'mode',
+    groupId: 'brainstorm',
+    label: 'Multi-thread strategy',
+    description: 'Map who else to engage at this account for expansion.',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'current_contact', label: 'Who I talk to today', kind: 'text', placeholder: 'e.g. Head of Growth Marketing' },
+      { key: 'expansion_goal', label: 'What I want to expand into', kind: 'text', placeholder: 'e.g. Universal Ads, new business unit' },
+    ],
+    promptTemplate:
+      'Help me map a multi-threading strategy for expansion at {{Account}}.\n\n' +
+      'Who I talk to today: {{Who I talk to today}}\n' +
+      'Expansion goal: {{What I want to expand into}}\n\n' +
+      'Output: (1) Which new personas I should add and why, (2) their likely priorities and how Branch maps to them, ' +
+      '(3) the business case to get an introduction from my current champion, ' +
+      '(4) the specific ask I make of my current contact.',
+  },
 ];
 
 const MODE_DEEP_RESEARCH: WorkflowDef[] = [
@@ -330,6 +386,64 @@ const LIBRARY_WORKFLOWS: WorkflowDef[] = [
       'Output: 5 recurring patterns + the 1–2 strongest source citations for each. ' +
       'Note any contradictions. End with what I should do differently.',
   },
+  {
+    id: 'research.branch_footprint',
+    family: 'mode',
+    groupId: 'deep_research',
+    label: 'Branch footprint analysis',
+    description: 'Map what Branch products are live and where whitespace exists.',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'known_products', label: 'Products I know are active', kind: 'textarea', rows: 2, placeholder: 'e.g. Deep Linking, Universal Ads' },
+      { key: 'signals', label: 'Signals I have seen', kind: 'textarea', rows: 3, placeholder: 'Call notes, LinkedIn, news, app store observations...' },
+    ],
+    promptTemplate:
+      'Map the Branch footprint and expansion whitespace for {{Account}}.\n\n' +
+      'Products known to be active: {{Products I know are active}}\n' +
+      'Signals I have collected: {{Signals I have seen}}\n\n' +
+      'Branch product categories: Universal Ads, Deep Linking, Email-to-App, SMS-to-App, Web-to-App, QR Codes, AIO, Advanced Privacy.\n\n' +
+      'Output: (1) Confirmed products with confidence level, (2) Likely products they need but do not have (with rationale), ' +
+      '(3) Products definitely not in scope and why, (4) The top 2 expansion opportunities ranked by ease + impact, ' +
+      '(5) The one question I should ask to validate the top opportunity.',
+  },
+  {
+    id: 'research.competitive_branch',
+    family: 'mode',
+    groupId: 'deep_research',
+    label: 'Branch vs Adjust/Appsflyer',
+    description: 'Prepare competitive positioning for an account comparing Branch to alternatives.',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'competitor', label: 'Competitor mentioned', kind: 'select', options: ['Adjust', 'AppsFlyer', 'Kochava', 'Singular', 'Not specified'] },
+      { key: 'context', label: 'Context / what they said', kind: 'textarea', rows: 3, placeholder: 'What the customer said about the competitor...' },
+    ],
+    promptTemplate:
+      'Prepare competitive positioning for {{Account}} comparing Branch against {{Competitor mentioned}}.\n\n' +
+      'Context: {{Context / what they said}}\n\n' +
+      'Output: (1) Where Branch wins vs {{Competitor mentioned}} for this vertical, (2) Where the competitor appears stronger (be honest), ' +
+      '(3) The trap-setting questions that expose competitor weaknesses, (4) The Branch differentiation that matters most to this account, ' +
+      '(5) The one-line reframe I use if they say "Adjust does everything Branch does".',
+  },
+  {
+    id: 'research.expansion_readiness',
+    family: 'mode',
+    groupId: 'deep_research',
+    label: 'Expansion readiness score',
+    description: 'Assess how ready an account is to expand and what would accelerate it.',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'relationship', label: 'Relationship status', kind: 'select', options: ['New AE (first 90 days)', 'Established champion', 'Quiet — no recent contact', 'Renewal coming'] },
+      { key: 'usage', label: 'Usage signals', kind: 'textarea', rows: 3, placeholder: 'What do you know about their current Branch performance?' },
+      { key: 'expansion_target', label: 'Target expansion', kind: 'text', placeholder: 'e.g. Peacock sub-entity, AIO product add-on' },
+    ],
+    promptTemplate:
+      'Score the expansion readiness of {{Account}} for {{Target expansion}}.\n\n' +
+      'Relationship status: {{Relationship status}}\n' +
+      'Usage signals: {{Usage signals}}\n\n' +
+      'Output: (1) Readiness score 1-10 with rationale, (2) The 3 things that would accelerate readiness, ' +
+      '(3) The blockers I need to neutralize first, (4) The specific next action this week to move it forward, ' +
+      '(5) The risk if I do nothing for 30 days.',
+  },
 ];
 
 // ──────────────────────────── ARTIFACT TEMPLATES ────────────────────────────
@@ -456,6 +570,90 @@ const ARTIFACT_TEMPLATES: WorkflowDef[] = [
       'Goal: {{What do you want to create?}}\n' +
       'Context: {{Context}}\n' +
       'Output format: {{Output format}}',
+  },
+  {
+    id: 'artifact.qbr_prep',
+    family: 'artifact',
+    groupId: 'qbr_prep',
+    label: 'QBR Prep — Branch Customer',
+    description: 'Comprehensive QBR prep for a Branch.io expansion conversation.',
+    formTitle: 'QBR Prep',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'attendees', label: 'Attendees', kind: 'textarea', rows: 2, placeholder: 'Names + titles' },
+      { key: 'branch_products', label: 'Active Branch products', kind: 'text', required: true, placeholder: 'e.g. Deep Linking, Universal Ads' },
+      { key: 'results', label: 'Key results / metrics', kind: 'textarea', rows: 3, placeholder: 'Known performance data, usage metrics...' },
+      { key: 'expansion_goal', label: 'My expansion goal for this QBR', kind: 'text', placeholder: 'e.g. Get intro to Peacock team, open AIO conversation' },
+    ],
+    promptTemplate:
+      'Create a QBR prep document for {{Account}}.\n\n' +
+      'Attendees: {{Attendees}}\n' +
+      'Active Branch products: {{Active Branch products}}\n' +
+      'Known results/metrics: {{Key results / metrics}}\n' +
+      'Expansion goal: {{My expansion goal for this QBR}}\n\n' +
+      'Sections: Meeting objective · Branch ROI story (build from what we know) · Strategic priorities for their business · ' +
+      'Expansion conversation opener · The 3 questions I will ask · Objection prep · Desired next step + ask.',
+  },
+  {
+    id: 'artifact.expansion_proposal',
+    family: 'artifact',
+    groupId: 'expansion_proposal',
+    label: 'Expansion Proposal Outline',
+    description: 'Structured outline for presenting an expansion to a Branch customer.',
+    formTitle: 'Expansion Proposal',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'expansion', label: 'Proposed expansion', kind: 'text', required: true, placeholder: 'e.g. SMS-to-App + AIO for Peacock' },
+      { key: 'business_case', label: 'Business case', kind: 'textarea', rows: 3, placeholder: 'Why does this make sense for them now?' },
+      { key: 'champion', label: 'Champion / sponsor', kind: 'text', placeholder: 'Name + title' },
+      { key: 'investment', label: 'Estimated ARR', kind: 'text', placeholder: 'e.g. $250K-$400K' },
+    ],
+    promptTemplate:
+      'Create an expansion proposal outline for {{Account}}: {{Proposed expansion}}.\n\n' +
+      'Business case: {{Business case}}\n' +
+      'Champion: {{Champion / sponsor}}\n' +
+      'Estimated ARR: {{Estimated ARR}}\n\n' +
+      'Sections: Executive summary (1 page) · Current state with Branch · The opportunity · ' +
+      'Why now (urgency drivers) · Proposed solution + ROI model · Implementation timeline · ' +
+      'Commercial terms · Next steps.',
+  },
+  {
+    id: 'artifact.stakeholder_map',
+    family: 'artifact',
+    groupId: 'stakeholder_map',
+    label: 'Stakeholder Map',
+    description: 'Map the buying committee for an expansion deal.',
+    formTitle: 'Stakeholder Map',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'contacts', label: 'Contacts I know', kind: 'textarea', rows: 4, placeholder: 'Name, title, relationship (champion/friendly/neutral/blocker), engagement level' },
+      { key: 'expansion', label: 'Expansion I am pursuing', kind: 'text', required: true },
+    ],
+    promptTemplate:
+      'Build a stakeholder map for the expansion at {{Account}}: {{Expansion I am pursuing}}.\n\n' +
+      'Contacts I know: {{Contacts I know}}\n\n' +
+      'Output: (1) Stakeholder table with role/influence/stance/engagement, (2) The gaps in my coverage (who is missing), ' +
+      '(3) Influence map (who talks to who), (4) The single most important relationship to build next and why, ' +
+      '(5) The risk if a specific stakeholder is not aligned.',
+  },
+  {
+    id: 'artifact.competitive_response',
+    family: 'artifact',
+    groupId: 'competitive_response',
+    label: 'Competitive Response — Adjust',
+    description: 'Prepare a thorough response to the Adjust competitive threat.',
+    formTitle: 'Competitive Response Prep',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'situation', label: 'What the customer said / situation', kind: 'textarea', rows: 4, required: true, placeholder: 'e.g. "Adjust does everything Branch does and they offered us 20% less"' },
+      { key: 'competitor', label: 'Competitor', kind: 'select', options: ['Adjust', 'AppsFlyer', 'Kochava', 'Singular', 'Other'] },
+    ],
+    promptTemplate:
+      'Prepare a full competitive response for {{Account}} facing a {{Competitor}} comparison.\n\n' +
+      'Situation: {{What the customer said / situation}}\n\n' +
+      'Output: (1) The reframe in 2 sentences, (2) Where Branch genuinely wins in their vertical, ' +
+      '(3) The trap questions to ask that expose {{Competitor}} gaps, (4) The anchor data point or case study to cite, ' +
+      '(5) The economic argument (total cost of ownership, not just price), (6) What I should NOT say.',
   },
 ];
 
