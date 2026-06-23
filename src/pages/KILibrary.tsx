@@ -379,13 +379,13 @@ export default function KILibrary() {
   }, [category]);
 
   const handleDrill = (ki: KIResult) => {
-    if (category === 'branch' || ki.chapter === 'branch_io') {
+    if (ki.chapter === 'branch_io') {
       navigate('/sharpen', {
         state: { branchMode: true, dimension: ki.spider_dimension, specificKIId: ki.id },
       });
     } else {
       navigate('/sharpen', {
-        state: { chapter: ki.chapter, specificKIId: ki.id },
+        state: { chapter: ki.chapter, specificKIId: ki.id, dimension: ki.spider_dimension },
       });
     }
   };
