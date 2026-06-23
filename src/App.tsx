@@ -82,6 +82,7 @@ const MeetingMode = lazy(() => import("./pages/MeetingMode"));
 const PostCallLog = lazy(() => import("./pages/PostCallLog"));
 const KILibrary = lazy(() => import("./pages/KILibrary"));
 const Simulate = lazy(() => import("./pages/Simulate"));
+const Competitive = lazy(() => import("./pages/Competitive"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -254,6 +255,7 @@ const App = () => (
                 } />
                 <Route path="/ki-library" element={<ProtectedPage routeName="KI Library"><Suspense fallback={<LazyFallback />}><KILibrary /></Suspense></ProtectedPage>} />
                 <Route path="/simulate" element={<ProtectedPage routeName="Conversation Simulator"><Suspense fallback={<LazyFallback />}><Simulate /></Suspense></ProtectedPage>} />
+                <Route path="/competitive" element={<ProtectedPage routeName="Competitive Intel"><Suspense fallback={<LazyFallback />}><Competitive /></Suspense></ProtectedPage>} />
                 <Route path="/grind" element={
                   <ProtectedRoute>
                     <Suspense fallback={<LazyFallback />}>

@@ -70,6 +70,7 @@ import {
 import { TerritoryTree } from '@/components/territory/TerritoryTree';
 import { TerritoryCoverage } from '@/components/territory/TerritoryCoverage';
 import { PriorityInbox } from '@/components/territory/PriorityInbox';
+import { WhitespaceCanvas } from '@/components/territory/WhitespaceCanvas';
 
 function WeeklyReviewPrompt() {
   const navigate = useNavigate();
@@ -1225,17 +1226,22 @@ export default function WeeklyOutreach() {
         <PriorityInbox />
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'tree' | 'accounts' | 'coverage' | 'sourcing')} className="space-y-4">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'tree' | 'accounts' | 'coverage' | 'sourcing' | 'canvas')} className="space-y-4">
           <TabsList className="flex w-full overflow-x-auto gap-1 p-1 scrollbar-none max-w-sm">
             <TabsTrigger value="opportunities" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Opportunities</TabsTrigger>
             <TabsTrigger value="tree" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Tree</TabsTrigger>
             <TabsTrigger value="accounts" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Accounts</TabsTrigger>
             <TabsTrigger value="coverage" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Coverage</TabsTrigger>
+            <TabsTrigger value="canvas" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Canvas</TabsTrigger>
             <TabsTrigger value="sourcing" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Sourcing</TabsTrigger>
           </TabsList>
 
           <TabsContent value="coverage" className="space-y-4">
             <TerritoryCoverage />
+          </TabsContent>
+
+          <TabsContent value="canvas" className="mt-0">
+            <WhitespaceCanvas />
           </TabsContent>
 
           {/* Opportunities Tab */}
