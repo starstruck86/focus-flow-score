@@ -184,7 +184,7 @@ export default function MeetingMode() {
   return (
     <SafePage className="flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
-        <button onClick={() => navigate('/dojo')} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ChevronLeft className="h-4 w-4" /> Back
         </button>
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Meeting Mode</p>
