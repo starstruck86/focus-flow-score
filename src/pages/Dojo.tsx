@@ -38,7 +38,7 @@ import { ResumeLaneBanner } from '@/components/dojo/ResumeLaneBanner';
 import { Card, CardContent } from '@/components/ui/card';
 import { MicroDrillSession } from '@/components/dojo/MicroDrillSession';
 import { Button } from '@/components/ui/button';
-import { Flame, Target, ChevronRight, Zap, Brain, AlertTriangle, TrendingUp, BookOpen } from 'lucide-react';
+import { Flame, Target, ChevronRight, Zap, Brain, AlertTriangle, TrendingUp, BookOpen, MessageSquare } from 'lucide-react';
 import { useIntensiveMode } from '@/hooks/useIntensiveMode';
 
 function BranchCountdown() {
