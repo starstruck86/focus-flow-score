@@ -842,17 +842,20 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
 
       let regenSucceeded = false;
       try {
-        const regenResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        const regenResp = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_API_KEY}` },
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+          },
           body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
+            model: "claude-haiku-4-5",
+            max_tokens: 500,
+            system: `You are Dave — an elite, encouraging sales coach. ${tone}`,
             messages: [
-              { role: "system", content: `You are Dave — an elite, encouraging sales coach. ${tone}` },
               { role: "user", content: regenPrompt },
             ],
-            temperature: 0.3,
-            max_tokens: 500,
           }),
         });
 
