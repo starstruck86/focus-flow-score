@@ -523,6 +523,21 @@ export default function Dojo() {
           )}
         </div>
 
+        {/* Meeting Mode — pre-call ritual */}
+        <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 px-3 py-3 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-indigo-700 dark:text-indigo-400">📞 Meeting Mode — before any call</p>
+            <p className="text-[11px] text-muted-foreground">90 seconds · Account + KIs + warm-up rep</p>
+          </div>
+          <button
+            onClick={() => navigate('/meeting')}
+            className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 shrink-0"
+          >
+            Open →
+          </button>
+        </div>
+
+
 
         <KrystenCard />
         <DailyProgress />
