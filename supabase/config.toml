@@ -121,3 +121,6 @@ verify_jwt = false
 verify_jwt = false
 
 
+
+[functions.simulate-chat]
+verify_jwt = false

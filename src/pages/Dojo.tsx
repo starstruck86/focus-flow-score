@@ -38,7 +38,7 @@ import { ResumeLaneBanner } from '@/components/dojo/ResumeLaneBanner';
 import { Card, CardContent } from '@/components/ui/card';
 import { MicroDrillSession } from '@/components/dojo/MicroDrillSession';
 import { Button } from '@/components/ui/button';
-import { Flame, Target, ChevronRight, Zap, Brain, AlertTriangle, TrendingUp, BookOpen } from 'lucide-react';
+import { Flame, Target, ChevronRight, Zap, Brain, AlertTriangle, TrendingUp, BookOpen, MessageSquare } from 'lucide-react';
 import { useIntensiveMode } from '@/hooks/useIntensiveMode';
 
 function BranchCountdown() {
@@ -537,6 +537,22 @@ export default function Dojo() {
             <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
           </div>
         </button>
+
+        {/* Conversation Simulator */}
+        <button
+          onClick={() => navigate('/simulate')}
+          className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+        >
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-sm font-medium">Conversation Simulator</p>
+              <p className="text-[11px] text-muted-foreground">Practice full calls · Claude plays the VP</p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
+          </div>
+        </button>
+
 
 
         {/* Meeting Mode — pre-call ritual */}

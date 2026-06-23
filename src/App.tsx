@@ -81,6 +81,7 @@ const TerritorySetup = lazy(() => import("./pages/TerritorySetup"));
 const MeetingMode = lazy(() => import("./pages/MeetingMode"));
 const PostCallLog = lazy(() => import("./pages/PostCallLog"));
 const KILibrary = lazy(() => import("./pages/KILibrary"));
+const Simulate = lazy(() => import("./pages/Simulate"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -252,6 +253,7 @@ const App = () => (
                   </ProtectedRoute>
                 } />
                 <Route path="/ki-library" element={<ProtectedPage routeName="KI Library"><Suspense fallback={<LazyFallback />}><KILibrary /></Suspense></ProtectedPage>} />
+                <Route path="/simulate" element={<ProtectedPage routeName="Conversation Simulator"><Suspense fallback={<LazyFallback />}><Simulate /></Suspense></ProtectedPage>} />
                 <Route path="/grind" element={
                   <ProtectedRoute>
                     <Suspense fallback={<LazyFallback />}>
