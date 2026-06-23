@@ -1209,6 +1209,13 @@ export default function WeeklyOutreach() {
             </CollapsibleWidgetSection>
           </TabsContent>
 
+          {/* Tree Tab - Corporate Family Hierarchy */}
+          <TabsContent value="tree" className="space-y-4">
+            <TerritoryTree />
+          </TabsContent>
+
+
+
           {/* Accounts Tab - Funnel View */}
           <TabsContent value="accounts" className="space-y-4">
             <CollapsibleWidgetSection
