@@ -87,7 +87,7 @@ Grade this conversation on a 0-100 scale. Return ONLY valid JSON:
     const response = await callAnthropic({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 250,
-      system,
+      system: accountSection ? `${accountSection}\n\n${system ?? ''}` : system,
       messages,
     });
 
