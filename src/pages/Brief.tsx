@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,6 +9,8 @@ import { Loader2, Zap, BookOpen, AlertTriangle, ChevronRight, X } from 'lucide-r
 import { supabase } from '@/integrations/supabase/client';
 import { selectNextKI } from '@/lib/dojo/selectNextKI';
 import { cn } from '@/lib/utils';
+import { useStore } from '@/store/useStore';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -56,9 +58,55 @@ export default function Brief() {
   const [warmupScore, setWarmupScore] = useState<number | null>(null);
   const [warmupCoaching, setWarmupCoaching] = useState('');
 
+  const { accounts } = useStore() as any;
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
+  const [branchIntel, setBranchIntel] = useState<any>(null);
+
+  const territoryAccounts = (accounts ?? [])
+    .filter((a: any) => a.accountStatus === 'active' || a.accountStatus === 'researched' || a.accountStatus === 'prepped')
+    .sort((a: any, b: any) => (b.icp_fit_score ?? 0) - (a.icp_fit_score ?? 0))
+    .slice(0, 20);
+
+  useEffect(() => {
+    if (!selectedAccountId) { setBranchIntel(null); return; }
+    const selected = (accounts ?? []).find((a: any) => a.id === selectedAccountId);
+    if (!selected) return;
+
+    const cacheKey = `branch_intel_${selectedAccountId}`;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) { setBranchIntel(JSON.parse(cached)); return; }
+    } catch {}
+
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      try {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/branch-intelligence`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({
+            accountName: selected.name,
+            industry: selected.industry,
+            notes: selected.notes,
+            tags: selected.tags,
+            vertical: selected.industry,
+          }),
+        });
+        const data = await res.json();
+        setBranchIntel(data);
+        localStorage.setItem(cacheKey, JSON.stringify(data));
+      } catch {}
+    })();
+  }, [selectedAccountId, accounts]);
+
   const generate = async () => {
     if (!selectedType) return;
     setLoading(true);
+
+    const effectiveCompany = company
+      || (selectedAccountId ? (accounts ?? []).find((a: any) => a.id === selectedAccountId)?.name : '')
+      || 'this account';
 
     const { data: { user, session } } = await supabase.auth.getSession().then(async r => {
       const u = await supabase.auth.getUser();
@@ -83,17 +131,20 @@ export default function Brief() {
       .maybeSingle();
 
     const score = dimScore?.avg_score_100 ?? null;
-    const focusCue = score !== null
-      ? score < 50
-        ? `Your ${selectedType.label.toLowerCase()} scores average ${Math.round(score)}/100 on real calls. Lead with questions before statements.`
-        : score < 70
-        ? `${selectedType.label} is improving (${Math.round(score)}/100). Watch for talk-time ratio — you may be over-presenting.`
-        : `${selectedType.label} is a strength (${Math.round(score)}/100). Focus on deepening, not covering basics.`
-      : `No call data yet for ${selectedType.label.toLowerCase()}. Apply the KIs below deliberately.`;
+    const branchAngle = branchIntel?.expansion_angle || null;
+    const focusCue = branchAngle
+      ? `🌿 ${branchAngle}`
+      : score !== null
+        ? score < 50
+          ? `Your ${selectedType.label.toLowerCase()} scores average ${Math.round(score)}/100 on real calls. Lead with questions before statements.`
+          : score < 70
+          ? `${selectedType.label} is improving (${Math.round(score)}/100). Watch for talk-time ratio — you may be over-presenting.`
+          : `${selectedType.label} is a strength (${Math.round(score)}/100). Focus on deepening, not covering basics.`
+        : `No call data yet for ${selectedType.label.toLowerCase()}. Apply the KIs below deliberately.`;
 
     setBriefing({
       callType: selectedType.label,
-      company: company || 'this account',
+      company: effectiveCompany,
       topKIs: kis ?? [],
       weakestCategory: score !== null ? { label: selectedType.label, score: Math.round(score) } : null,
       focusCue,
@@ -165,11 +216,39 @@ export default function Brief() {
         </div>
 
         {!briefing ? (
-          <div className="space-y-4">
+        <div className="space-y-4">
+            {territoryAccounts.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Territory Account</p>
+                <Select
+                  value={selectedAccountId || '__none__'}
+                  onValueChange={(v) => setSelectedAccountId(v === '__none__' ? '' : v)}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select account…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None selected</SelectItem>
+                    {territoryAccounts.map((acc: any) => (
+                      <SelectItem key={acc.id} value={acc.id}>
+                        {acc.name}
+                        {acc.tier && <span className="text-muted-foreground ml-1.5">· Tier {acc.tier}</span>}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {branchIntel?.expansion_angle && (
+                  <div className="flex items-start gap-1.5 px-2.5 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20">
+                    <span className="text-green-500 shrink-0">🌿</span>
+                    <p className="text-[11px] text-green-700 dark:text-green-400 leading-relaxed">{branchIntel.expansion_angle}</p>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Account (optional)</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Account (optional override)</p>
               <Input
-                placeholder="Company or contact name…"
+                placeholder="Or type a company name…"
                 value={company}
                 onChange={e => setCompany(e.target.value)}
               />
@@ -244,6 +323,20 @@ export default function Brief() {
                       </div>
                     ))}
                   </div>
+
+                  {branchIntel?.discovery_questions?.length > 0 && (
+                    <div className="space-y-2 pt-1 border-t border-border/40">
+                      <p className="text-[10px] font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">Branch Discovery Questions</p>
+                      <ol className="space-y-1.5">
+                        {branchIntel.discovery_questions.slice(0, 3).map((q: string, i: number) => (
+                          <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                            <span className="font-mono shrink-0 mt-0.5">{i + 1}.</span>
+                            <span className="leading-relaxed">{q}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
 
                   <Button
                     className="w-full mt-4"
