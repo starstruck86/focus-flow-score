@@ -42,14 +42,11 @@ import { useIsMobile } from '@/hooks/use-mobile';
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
   '/': { page: 'dashboard', description: 'Today / Dashboard — daily plan, agenda, and key metrics' },
   '/strategy': { page: 'strategy', description: 'Strategy — strategic workspace for research, evaluation, and planning' },
-  '/tasks': { page: 'tasks', description: 'Tasks — action items, follow-ups, and to-dos' },
-  '/outreach': { page: 'outreach', description: 'New Logo Outreach — prospecting accounts and pipeline building' },
-  '/renewals': { page: 'renewals', description: 'Renewals — existing customer renewals and retention' },
   '/prep': { page: 'prep-hub', description: 'Sales Brain OS — execute, learn, ingest, and manage your sales intelligence' },
   '/coach': { page: 'coach', description: 'Sales Coach — call analysis, roleplay, and skill development' },
   '/trends': { page: 'trends', description: 'Trends — performance trends and analytics over time' },
   '/quota': { page: 'quota', description: 'Quota — quota attainment, commission, and pipeline math' },
-  '/dojo': { page: 'dojo', description: 'Sales Dojo — Dave-led training drills, scoring, and skill practice' },
+  '/dojo': { page: 'dojo', description: 'Sales Dojo — Training drills, scoring, and skill practice' },
   '/settings': { page: 'settings', description: 'Settings — app configuration and preferences' },
 };
 
