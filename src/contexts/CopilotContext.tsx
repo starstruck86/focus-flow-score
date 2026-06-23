@@ -11,6 +11,8 @@ export interface PageContext {
   accountName?: string;
   opportunityId?: string;
   opportunityName?: string;
+  /** Territory profile context string injected automatically when set */
+  territoryContext?: string;
   /** Supercharge #3: Extra metadata for richer AI context */
   metadata?: Record<string, any>;
 }
