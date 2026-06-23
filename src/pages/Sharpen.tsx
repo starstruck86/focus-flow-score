@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { selectNextKI } from '@/lib/dojo/selectNextKI';
 import { selectNextBranchKI } from '@/lib/dojo/selectNextBranchKI';
+import { selectNextKIFromCategory } from '@/lib/dojo/selectNextKIFromCategory';
 import { writeKIMastery } from '@/lib/dojo/kiMasteryWriter';
 import { useDojoStats } from '@/lib/dojo/useDojoStreak';
 import { Button } from '@/components/ui/button';
@@ -90,6 +91,14 @@ export default function Sharpen() {
   const interleaved = (location.state as any)?.interleaved ?? false;
   const branchMode = (location.state as any)?.branchMode ?? false;
   const stateDimension = (location.state as any)?.dimension;
+  const stateChapters = (location.state as any)?.chapters as string[] | undefined;
+  const stateChapter = (location.state as any)?.chapter as string | undefined;
+  const stateSpecificKIId = (location.state as any)?.specificKIId as string | undefined;
+  const categoryLabel = stateChapters
+    ? (location.state as any)?.categoryLabel ?? 'Training'
+    : branchMode
+    ? 'Branch'
+    : null;
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { data: stats } = useDojoStats();
@@ -177,9 +186,32 @@ export default function Sharpen() {
         : interleaved
           ? getInterleavedDimension(repsDoneRef.current)
           : dimension;
-      const ki = branchMode
-        ? await selectNextBranchKI(user.id, effectiveDimension, excludeId)
-        : await selectNextKI(user.id, effectiveDimension, excludeId);
+      let ki: any = null;
+      if (stateChapters && stateChapters.length > 0) {
+        ki = await selectNextKIFromCategory(user.id, stateChapters, {
+          spiderDimension: stateDimension || undefined,
+          excludeKiId: excludeId,
+        });
+      } else if (branchMode) {
+        ki = await selectNextBranchKI(user.id, effectiveDimension, excludeId);
+      } else if (stateSpecificKIId && repsDoneRef.current === 0) {
+        const { data } = await supabase
+          .from('knowledge_items')
+          .select('id, title, chapter, sub_chapter, spider_dimension, intelligence_type, tactic_summary, when_to_use, when_not_to_use, example_usage, why_it_matters, framework, confidence_score, active')
+          .eq('id', stateSpecificKIId)
+          .single();
+        ki = data ?? null;
+        if (!ki) {
+          ki = await selectNextKI(user.id, effectiveDimension, excludeId);
+        }
+      } else if (stateChapter) {
+        ki = await selectNextKIFromCategory(user.id, [stateChapter], {
+          spiderDimension: stateDimension || undefined,
+          excludeKiId: excludeId,
+        });
+      } else {
+        ki = await selectNextKI(user.id, effectiveDimension, excludeId);
+      }
       if (ki) {
         setCurrentKI(ki);
         setResponse('');
@@ -406,9 +438,13 @@ export default function Sharpen() {
     <div className="fixed inset-0 bg-background flex flex-col">
       <div className="flex items-center justify-between px-4 pt-safe pt-4 pb-3 border-b border-border/40">
         <div className="flex items-center gap-3">
-          {branchMode && (
-            <span className="text-[10px] font-bold text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 rounded-full">
-              🌿 Branch
+          {categoryLabel && (
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+              branchMode
+                ? 'text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/20'
+                : 'text-primary bg-primary/10 border border-primary/20'
+            }`}>
+              {branchMode ? '🌿 Branch' : categoryLabel}
             </span>
           )}
           <div className="flex items-center gap-1.5">
