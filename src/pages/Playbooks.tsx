@@ -35,7 +35,7 @@ interface Playbook {
   confidence_score: number;
 }
 
-function PlaybookCard({ pb }: { pb: Playbook }) {
+function PlaybookCard({ pb, usageCount }: { pb: Playbook; usageCount?: number }) {
   const [expanded, setExpanded] = useState(false);
   const [section, setSection] = useState<'position' | 'questions' | 'steps'>('position');
   const meta = TYPE_LABELS[pb.problem_type] ?? { label: pb.problem_type, color: 'bg-muted text-muted-foreground' };
@@ -53,6 +53,9 @@ function PlaybookCard({ pb }: { pb: Playbook }) {
             {pb.confidence_score >= 0.85 && (
               <span className="text-[10px] text-green-500 font-medium shrink-0">High confidence</span>
             )}
+            {usageCount ? (
+              <span className="text-[10px] text-muted-foreground shrink-0">Used {usageCount}×</span>
+            ) : null}
           </div>
           <p className="text-xs text-muted-foreground line-clamp-2">{pb.when_to_use}</p>
         </div>
@@ -62,6 +65,7 @@ function PlaybookCard({ pb }: { pb: Playbook }) {
           <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
         )}
       </button>
+
 
       {expanded && (
         <div className="border-t border-border px-4 pb-4 space-y-3">
