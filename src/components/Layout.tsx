@@ -35,6 +35,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { BottomNav, useActiveTabColor, COLOR_VAR } from '@/components/layout/BottomNav';
 import { SHELL } from '@/lib/layout';
 import { GlobalRefreshButton } from '@/components/GlobalRefreshButton';
+import { supabase } from '@/integrations/supabase/client';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 
