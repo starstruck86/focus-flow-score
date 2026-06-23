@@ -7,7 +7,15 @@ import { fromActiveAccounts } from '@/data/accounts';
 import { cn } from '@/lib/utils';
 
 type Message = { role: 'user' | 'assistant'; content: string };
-type AccountInfo = { id: string; name: string; industry: string | null };
+type AccountInfo = { id: string; name: string; industry: string | null; tier?: string | null };
+
+type AccountContext = {
+  account: { id: string; name: string; tier: string | null; industry: string | null; description: string | null; hq_city: string | null } | null;
+  footprint: { deep_linking_status: string | null; universal_ads_status: string | null; email_to_app_status: string | null; sms_to_app_status: string | null } | null;
+  lastCall: { summary: string | null; next_step: string | null; created_at: string | null; contact_name: string | null } | null;
+};
+
+const GENERIC_ACCOUNT: AccountInfo = { id: '', name: 'a target enterprise prospect', industry: null, tier: null };
 
 const SCENARIOS = [
   { value: 'discovery', label: 'First call — discovery with Head of Growth' },
@@ -123,20 +131,25 @@ export default function Simulate() {
     runGradeCall(finalMessages);
   };
 
-  const account = useMemo(() => accounts.find((a) => a.id === accountId) ?? null, [accounts, accountId]);
+  const account = useMemo(() => accounts.find((a) => a.id === accountId) ?? GENERIC_ACCOUNT, [accounts, accountId]);
+  const accountContextRef = useRef<AccountContext | null>(null);
 
   useEffect(() => {
     if (!user) return;
     (async () => {
       const { data } = await fromActiveAccounts()
-        .select('id, name, industry')
+        .select('id, name, industry, tier')
         .eq('user_id', user.id)
         .limit(50);
       const list = ((data ?? []) as AccountInfo[]).sort((a, b) => a.name.localeCompare(b.name));
       setAccounts(list);
-      if (!accountId && list[0]) setAccountId(list[0].id);
     })();
   }, [user]);
+
+  // Reset cached context whenever the selected account changes
+  useEffect(() => {
+    accountContextRef.current = null;
+  }, [accountId]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -146,8 +159,31 @@ export default function Simulate() {
     if (phase === 'active') textareaRef.current?.focus();
   }, [phase, loading]);
 
+  const loadAccountContext = async (id: string): Promise<AccountContext> => {
+    if (accountContextRef.current) return accountContextRef.current;
+    const [accountRes, footprintRes, lastCallRes] = await Promise.all([
+      (supabase as any).from('accounts')
+        .select('id, name, tier, industry, description, hq_city')
+        .eq('id', id).single(),
+      (supabase as any).from('branch_footprint')
+        .select('deep_linking_status, universal_ads_status, email_to_app_status, sms_to_app_status')
+        .eq('account_id', id).maybeSingle(),
+      (supabase as any).from('call_logs')
+        .select('summary, next_step, created_at, contact_name')
+        .eq('account_id', id)
+        .order('created_at', { ascending: false })
+        .limit(1).maybeSingle(),
+    ]);
+    const ctx: AccountContext = {
+      account: accountRes?.data ?? null,
+      footprint: footprintRes?.data ?? null,
+      lastCall: lastCallRes?.data ?? null,
+    };
+    accountContextRef.current = ctx;
+    return ctx;
+  };
+
   const startSimulation = () => {
-    if (!account) return;
     const opener = SCENARIO_OPENERS[scenario] ?? SCENARIO_OPENERS.discovery;
     setMessages([{ role: 'assistant', content: opener }]);
     setTurnCount(0);
@@ -168,8 +204,9 @@ export default function Simulate() {
 
     try {
       const system = buildSystemPrompt(account, scenario, pressure);
+      const accountContext = accountId ? await loadAccountContext(accountId) : null;
       const { data, error: fnError } = await supabase.functions.invoke('simulate-chat', {
-        body: { messages: next, system },
+        body: { messages: next, system, accountContext },
       });
       if (fnError) throw fnError;
       const text = (data?.text as string) ?? '';
@@ -240,9 +277,10 @@ export default function Simulate() {
               onChange={(e) => setAccountId(e.target.value)}
               className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-background"
             >
-              {accounts.length === 0 && <option>Loading…</option>}
+              <option value="">Generic prospect</option>
+              {accounts.length === 0 && <option disabled>Loading…</option>}
               {accounts.map((a) => (
-                <option key={a.id} value={a.id}>{a.name}</option>
+                <option key={a.id} value={a.id}>{a.name}{a.tier ? ` (Tier ${a.tier})` : ''}</option>
               ))}
             </select>
           </div>
@@ -289,7 +327,7 @@ export default function Simulate() {
 
           <button
             onClick={startSimulation}
-            disabled={!account}
+            disabled={false}
             className="w-full py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
           >
             Start Simulation →
@@ -395,9 +433,19 @@ export default function Simulate() {
   return (
     <div className="fixed inset-0 bg-background flex flex-col z-40">
       <div className="border-b border-border bg-card/50 px-4 py-3 flex items-center justify-between gap-3 shrink-0">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold truncate">{account?.name} · {SCENARIO_LABELS[scenario]?.split('—')[0].trim()}</p>
           <p className="text-[11px] text-muted-foreground">Turn {turnCount}/{MAX_TURNS}</p>
+          {accountId && account && account.id && (
+            <div className="inline-flex items-center gap-1.5 mt-1.5 px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-md">
+              <span className="text-[10px] font-semibold text-primary">
+                Simulating: {account.name}
+              </span>
+              {account.tier && (
+                <span className="text-[10px] text-muted-foreground">Tier {account.tier}</span>
+              )}
+            </div>
+          )}
         </div>
         <button
           onClick={() => completeAndGrade(messages)}

@@ -27,7 +27,21 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { messages, system, isGradeMode } = body;
+    const { messages, system, isGradeMode, accountContext } = body;
+
+    const accountSection = accountContext?.account ? `
+You are roleplaying as a senior marketing or technology executive at ${accountContext.account.name}, a ${accountContext.account.tier ?? 'target'}-tier ${accountContext.account.industry ?? 'enterprise'} company${accountContext.account.hq_city ? ` based in ${accountContext.account.hq_city}` : ''}.
+
+Known Branch footprint:
+- Deep Linking: ${accountContext.footprint?.deep_linking_status ?? 'unknown'}
+- Universal Ads: ${accountContext.footprint?.universal_ads_status ?? 'unknown'}
+- Email-to-App: ${accountContext.footprint?.email_to_app_status ?? 'unknown'}
+
+${accountContext.lastCall ? `Last interaction with this AE: ${accountContext.lastCall.summary}. Next step was: ${accountContext.lastCall.next_step}.` : 'This is a cold/warm outreach — no prior relationship with this AE.'}
+
+Stay in character as someone from ${accountContext.account.name} throughout the entire conversation. Reference the company's industry, size, and known product usage naturally.
+` : '';
+
 
     if (isGradeMode) {
       const conversationText = (messages || [])
@@ -73,7 +87,7 @@ Grade this conversation on a 0-100 scale. Return ONLY valid JSON:
     const response = await callAnthropic({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 250,
-      system,
+      system: accountSection ? `${accountSection}\n\n${system ?? ''}` : system,
       messages,
     });
 
