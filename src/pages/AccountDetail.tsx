@@ -37,6 +37,7 @@ import { BranchIntelligenceCard } from '@/components/BranchIntelligenceCard';
 import { SignalInbox } from '@/components/signal-inbox/SignalInbox';
 import { BranchFootprint } from '@/components/territory/BranchFootprint';
 import { AccountTimeline } from '@/components/territory/AccountTimeline';
+import { useAccountContext } from '@/hooks/useAccountContext';
 
 const TIER_COLORS: Record<AccountTier, string> = {
   'A': 'border-status-green text-status-green',
