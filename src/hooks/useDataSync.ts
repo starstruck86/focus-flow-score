@@ -397,11 +397,23 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
         const dbOppNames = new Set(dbOpps.map(o => o.name.toLowerCase()));
         const dbRenewalNames = new Set(dbRenewals.map(r => r.accountName.toLowerCase()));
         
-        const newLocalAccounts = localAccounts.filter(a => !dbAccountIds.has(a.id) && !dbAccountNames.has(a.name.toLowerCase()));
-        const newLocalOpps = localOpps.filter(o => !dbOppIds.has(o.id) && !dbOppNames.has(o.name.toLowerCase()));
-        const newLocalRenewals = localRenewals.filter(r => !dbRenewalIds.has(r.id) && !dbRenewalNames.has(r.accountName.toLowerCase()));
-        const newLocalContacts = localContacts.filter(c => !dbContactIds.has(c.id));
-        const newLocalTasks = localTasks.filter(t => !dbTaskIds.has(t.id));
+        // DB is always authoritative — only merge local items if DB is completely empty for that entity.
+        // This prevents deleted DB records from being re-created from a stale localStorage cache.
+        const newLocalAccounts = dbAccounts.length === 0
+          ? localAccounts.filter(a => !dbAccountIds.has(a.id) && !dbAccountNames.has(a.name.toLowerCase()))
+          : [];
+        const newLocalOpps = dbOpps.length === 0
+          ? localOpps.filter(o => !dbOppIds.has(o.id) && !dbOppNames.has(o.name.toLowerCase()))
+          : [];
+        const newLocalRenewals = dbRenewals.length === 0
+          ? localRenewals.filter(r => !dbRenewalIds.has(r.id) && !dbRenewalNames.has(r.accountName.toLowerCase()))
+          : [];
+        const newLocalContacts = dbContacts.length === 0
+          ? localContacts.filter(c => !dbContactIds.has(c.id))
+          : [];
+        const newLocalTasks = dbTasks.length === 0
+          ? localTasks.filter(t => !dbTaskIds.has(t.id))
+          : [];
 
         const mergedAccounts = [...dbAccounts, ...newLocalAccounts];
         const mergedOpps = [...dbOpps, ...newLocalOpps];
@@ -416,6 +428,32 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
           contacts: mergedContacts,
           tasks: mergedTasks,
         });
+
+        // Clear stale local-only items from persistence so they can't re-infect DB on next load
+        try {
+          const persistKey = 'quota-compass-storage';
+          const raw = localStorage.getItem(persistKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed?.state) {
+              const dbAcctIds = new Set(dbAccounts.map(a => a.id));
+              const dbOppIdSet = new Set(dbOpps.map(o => o.id));
+              const dbRenIdSet = new Set(dbRenewals.map(r => r.id));
+              const dbContactIdSet = new Set(dbContacts.map(c => c.id));
+              const dbTaskIdSet = new Set(dbTasks.map(t => t.id));
+              if (Array.isArray(parsed.state.accounts)) parsed.state.accounts = parsed.state.accounts.filter((a: any) => dbAcctIds.has(a.id));
+              if (Array.isArray(parsed.state.opportunities)) parsed.state.opportunities = parsed.state.opportunities.filter((o: any) => dbOppIdSet.has(o.id));
+              if (Array.isArray(parsed.state.renewals)) parsed.state.renewals = parsed.state.renewals.filter((r: any) => dbRenIdSet.has(r.id));
+              if (Array.isArray(parsed.state.contacts)) parsed.state.contacts = parsed.state.contacts.filter((c: any) => dbContactIdSet.has(c.id));
+              if (Array.isArray(parsed.state.tasks)) parsed.state.tasks = parsed.state.tasks.filter((t: any) => dbTaskIdSet.has(t.id));
+              localStorage.setItem(persistKey, JSON.stringify(parsed));
+              console.log('[DataSync] Cleaned stale items from localStorage persistence');
+            }
+          }
+        } catch (e) {
+          console.warn('[DataSync] Could not clean localStorage:', e);
+        }
+
 
         // Push local-only items to DB
         if (newLocalAccounts.length > 0) {
