@@ -50,7 +50,9 @@ export default function MeetingMode() {
 
   const [phase, setPhase] = useState<Phase>('context');
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [accountId, setAccountId] = useState<string>('');
+  const [params] = useSearchParams();
+  const urlAccountId = params.get('accountId');
+  const [accountId, setAccountId] = useState<string>(urlAccountId ?? '');
   const [goal, setGoal] = useState('');
   const [kis, setKis] = useState<any[]>([]);
   const [loadingKis, setLoadingKis] = useState(false);
