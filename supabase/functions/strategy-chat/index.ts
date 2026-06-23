@@ -1821,6 +1821,29 @@ async function buildContextPack(
         );
       }
     })());
+
+    // Branch-specific enrichment: footprint, recent calls, recent signals
+    promises.push((async () => {
+      const [fpRes, callsRes, signalsRes] = await Promise.all([
+        supabase.from('branch_footprint')
+          .select('deep_linking_status, universal_ads_status, email_to_app_status, sms_to_app_status, web_to_app_status, qr_status, aio_status, advanced_privacy_status, estimated_arr, contract_renewal_date, notes')
+          .eq('account_id', thread.linked_account_id)
+          .maybeSingle(),
+        supabase.from('call_logs')
+          .select('call_date, summary, expansion_signal_text, next_step, branch_ki_title')
+          .eq('account_id', thread.linked_account_id)
+          .order('call_date', { ascending: false })
+          .limit(3),
+        supabase.from('account_signals')
+          .select('signal_type, raw_text, created_at')
+          .eq('linked_account_id', thread.linked_account_id)
+          .order('created_at', { ascending: false })
+          .limit(5),
+      ]);
+      pack.branchFootprint = fpRes.data ?? null;
+      pack.recentCalls = (callsRes.data ?? []) as any[];
+      pack.recentSignals = (signalsRes.data ?? []) as any[];
+    })());
   }
 
   if (thread.linked_opportunity_id) {
