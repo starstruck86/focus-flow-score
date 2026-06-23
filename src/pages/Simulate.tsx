@@ -131,20 +131,25 @@ export default function Simulate() {
     runGradeCall(finalMessages);
   };
 
-  const account = useMemo(() => accounts.find((a) => a.id === accountId) ?? null, [accounts, accountId]);
+  const account = useMemo(() => accounts.find((a) => a.id === accountId) ?? GENERIC_ACCOUNT, [accounts, accountId]);
+  const accountContextRef = useRef<AccountContext | null>(null);
 
   useEffect(() => {
     if (!user) return;
     (async () => {
       const { data } = await fromActiveAccounts()
-        .select('id, name, industry')
+        .select('id, name, industry, tier')
         .eq('user_id', user.id)
         .limit(50);
       const list = ((data ?? []) as AccountInfo[]).sort((a, b) => a.name.localeCompare(b.name));
       setAccounts(list);
-      if (!accountId && list[0]) setAccountId(list[0].id);
     })();
   }, [user]);
+
+  // Reset cached context whenever the selected account changes
+  useEffect(() => {
+    accountContextRef.current = null;
+  }, [accountId]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -153,6 +158,30 @@ export default function Simulate() {
   useEffect(() => {
     if (phase === 'active') textareaRef.current?.focus();
   }, [phase, loading]);
+
+  const loadAccountContext = async (id: string): Promise<AccountContext> => {
+    if (accountContextRef.current) return accountContextRef.current;
+    const [accountRes, footprintRes, lastCallRes] = await Promise.all([
+      (supabase as any).from('accounts')
+        .select('id, name, tier, industry, description, hq_city')
+        .eq('id', id).single(),
+      (supabase as any).from('branch_footprint')
+        .select('deep_linking_status, universal_ads_status, email_to_app_status, sms_to_app_status')
+        .eq('account_id', id).maybeSingle(),
+      (supabase as any).from('call_logs')
+        .select('summary, next_step, created_at, contact_name')
+        .eq('account_id', id)
+        .order('created_at', { ascending: false })
+        .limit(1).maybeSingle(),
+    ]);
+    const ctx: AccountContext = {
+      account: accountRes?.data ?? null,
+      footprint: footprintRes?.data ?? null,
+      lastCall: lastCallRes?.data ?? null,
+    };
+    accountContextRef.current = ctx;
+    return ctx;
+  };
 
   const startSimulation = () => {
     if (!account) return;
