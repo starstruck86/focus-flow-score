@@ -23,7 +23,7 @@ import { CollapsibleSection, LinkPill, LastTouchIndicator, safeFormat } from '@/
 import { useDebouncedUpdate } from '@/hooks/useDebouncedUpdate';
 import {
   ArrowLeft, ChevronRight, Building2, Target, Users,
-  FileText, CheckSquare, Calendar, Sparkles,
+  FileText, CheckSquare, Calendar, Sparkles, Phone, Zap,
 } from 'lucide-react';
 import { AccountSynopsisModal } from '@/components/AccountSynopsisModal';
 import { FromStrategyPanel } from '@/components/strategy/FromStrategyPanel';
