@@ -38,7 +38,7 @@ import { ResumeLaneBanner } from '@/components/dojo/ResumeLaneBanner';
 import { Card, CardContent } from '@/components/ui/card';
 import { MicroDrillSession } from '@/components/dojo/MicroDrillSession';
 import { Button } from '@/components/ui/button';
-import { Flame, Target, ChevronRight, Zap, Brain, AlertTriangle, TrendingUp, BookOpen, MessageSquare, Swords } from 'lucide-react';
+import { Flame, Target, ChevronRight, Zap, Brain, AlertTriangle, TrendingUp, BookOpen, MessageSquare, Swords, BookMarked } from 'lucide-react';
 import { useIntensiveMode } from '@/hooks/useIntensiveMode';
 
 function BranchCountdown() {
@@ -567,6 +567,23 @@ export default function Dojo() {
             <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
           </div>
         </button>
+
+        {/* Playbooks */}
+        <button
+          onClick={() => navigate('/playbooks')}
+          className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+        >
+          <div className="flex items-center gap-2">
+            <BookMarked className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-sm font-medium">Playbooks</p>
+              <p className="text-[11px] text-muted-foreground">7 encoded situations · Adjust · Champion · Negotiation</p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
+          </div>
+        </button>
+
+
 
 
 

@@ -3641,6 +3641,48 @@ export type Database = {
         }
         Relationships: []
       }
+      ki_annotations: {
+        Row: {
+          created_at: string
+          id: string
+          ki_id: string
+          note: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ki_id: string
+          note?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ki_id?: string
+          note?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ki_annotations_ki_id_fkey"
+            columns: ["ki_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ki_annotations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       ki_mastery: {
         Row: {
           avg_score: number | null

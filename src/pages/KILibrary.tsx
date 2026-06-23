@@ -6,6 +6,47 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 
+function AnnotationField({ kiId, userId, initialNote, onSaved }: { kiId: string; userId: string; initialNote: string; onSaved: () => void }) {
+  const [note, setNote] = useState(initialNote);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => { setNote(initialNote); }, [initialNote]);
+
+  const save = async () => {
+    if (!userId) return;
+    if (note === initialNote) return;
+    setSaving(true);
+    await (supabase as any).from('ki_annotations').upsert(
+      { user_id: userId, ki_id: kiId, note, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id,ki_id' }
+    );
+    setSaving(false);
+    setSaved(true);
+    onSaved();
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="mt-3 pt-3 border-t border-border/40" onClick={(e) => e.stopPropagation()}>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">📝 My Note</p>
+      <textarea
+        className="w-full text-xs bg-muted/30 border border-border/60 rounded-lg p-2 resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 placeholder:text-muted-foreground/50"
+        rows={2}
+        placeholder="Add your own context, memory cue, or deal application..."
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        onBlur={save}
+      />
+      <div className="flex items-center justify-between mt-1">
+        <span className="text-[10px] text-muted-foreground">Auto-saves on blur</span>
+        {saving && <span className="text-[10px] text-muted-foreground">Saving…</span>}
+        {saved && <span className="text-[10px] text-green-500">✓ Saved</span>}
+      </div>
+    </div>
+  );
+}
+
 type KIResult = {
   id: string;
   title: string;
@@ -52,7 +93,7 @@ const DIM_LABELS: Record<string, string> = {
   stakeholder_navigation: 'Stakeholder',
 };
 
-function KICard({ ki, onDrill }: { ki: KIResult; onDrill: (ki: KIResult) => void }) {
+function KICard({ ki, onDrill, userId, annotation, onAnnotationSaved }: { ki: KIResult; onDrill: (ki: KIResult) => void; userId: string; annotation?: string; onAnnotationSaved: () => void }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <div
@@ -61,14 +102,17 @@ function KICard({ ki, onDrill }: { ki: KIResult; onDrill: (ki: KIResult) => void
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-semibold leading-snug line-clamp-2 flex-1">{ki.title}</p>
-        <span
-          className={cn(
-            'text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0',
-            DIM_COLORS[ki.spider_dimension ?? ''] ?? 'bg-muted text-muted-foreground',
-          )}
-        >
-          {DIM_LABELS[ki.spider_dimension ?? ''] ?? ki.spider_dimension}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {annotation && <span className="text-[10px] text-amber-500" title="You have a note">📝</span>}
+          <span
+            className={cn(
+              'text-[10px] font-bold px-2 py-0.5 rounded-full',
+              DIM_COLORS[ki.spider_dimension ?? ''] ?? 'bg-muted text-muted-foreground',
+            )}
+          >
+            {DIM_LABELS[ki.spider_dimension ?? ''] ?? ki.spider_dimension}
+          </span>
+        </div>
       </div>
 
       {ki.tactic_summary && (
@@ -91,6 +135,15 @@ function KICard({ ki, onDrill }: { ki: KIResult; onDrill: (ki: KIResult) => void
             {ki.example_usage.length > 200 ? '…' : ''}"
           </p>
         </div>
+      )}
+
+      {expanded && (
+        <AnnotationField
+          kiId={ki.id}
+          userId={userId}
+          initialNote={annotation ?? ''}
+          onSaved={onAnnotationSaved}
+        />
       )}
 
       <div className="flex items-center justify-between pt-1">
@@ -159,6 +212,22 @@ export default function KILibrary() {
         return [];
       }
       return (data ?? []) as KIResult[];
+    },
+  });
+
+  const { data: annotations, refetch: refetchAnnotations } = useQuery({
+    queryKey: ['ki-annotations', user?.id],
+    enabled: !!user?.id,
+    staleTime: 60_000,
+    queryFn: async () => {
+      if (!user?.id) return {} as Record<string, string>;
+      const { data } = await (supabase as any)
+        .from('ki_annotations')
+        .select('ki_id, note')
+        .eq('user_id', user.id);
+      const map: Record<string, string> = {};
+      (data ?? []).forEach((a: any) => { map[a.ki_id] = a.note; });
+      return map;
     },
   });
 
@@ -255,7 +324,14 @@ export default function KILibrary() {
               {search.trim().length >= 2 ? ` for "${search}"` : ''}
             </p>
             {results.map((ki) => (
-              <KICard key={ki.id} ki={ki} onDrill={handleDrill} />
+              <KICard
+                key={ki.id}
+                ki={ki}
+                onDrill={handleDrill}
+                userId={user?.id ?? ''}
+                annotation={annotations?.[ki.id]}
+                onAnnotationSaved={() => refetchAnnotations()}
+              />
             ))}
           </>
         )}
