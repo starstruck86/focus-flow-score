@@ -1227,15 +1227,14 @@ export default function WeeklyOutreach() {
         <PriorityInbox />
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'tree' | 'accounts' | 'coverage' | 'sourcing' | 'canvas' | 'digest')} className="space-y-4">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'tree' | 'accounts' | 'coverage' | 'canvas' | 'digest')} className="space-y-4">
           <TabsList className="flex w-full overflow-x-auto gap-1 p-1 scrollbar-none max-w-sm">
-            <TabsTrigger value="opportunities" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Opportunities</TabsTrigger>
-            <TabsTrigger value="tree" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Tree</TabsTrigger>
             <TabsTrigger value="accounts" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Accounts</TabsTrigger>
+            <TabsTrigger value="opportunities" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Opps</TabsTrigger>
+            <TabsTrigger value="tree" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Tree</TabsTrigger>
             <TabsTrigger value="coverage" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Coverage</TabsTrigger>
             <TabsTrigger value="canvas" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Canvas</TabsTrigger>
             <TabsTrigger value="digest" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Digest</TabsTrigger>
-            <TabsTrigger value="sourcing" className="flex-shrink-0 text-xs px-3 min-w-[44px] min-h-[36px]">Sourcing</TabsTrigger>
           </TabsList>
 
           <TabsContent value="coverage" className="space-y-4">
