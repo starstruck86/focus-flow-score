@@ -98,6 +98,7 @@ function CopilotDialog() {
   const processedQuestionRef = useRef<string | null>(null);
   const streamingRef = useRef(false);
   const voice = useVoiceMode();
+  const { profile: territoryProfile } = useTerritoryProfile();
   const activeChainRef = useRef<ChainedWorkflow | null>(null);
   const workflowTimerRef = useRef<(() => number) | null>(null);
 
