@@ -113,10 +113,11 @@ function KICard({ ki, onDrill }: { ki: KIResult; onDrill: (ki: KIResult) => void
 
 export default function KILibrary() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const { user } = useAuth();
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
-  const [dimension, setDimension] = useState('all');
+  const [dimension, setDimension] = useState(params.get('dimension') ?? 'all');
   const [intelligenceType, setIntelligenceType] = useState('all');
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
