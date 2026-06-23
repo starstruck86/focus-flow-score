@@ -571,6 +571,90 @@ const ARTIFACT_TEMPLATES: WorkflowDef[] = [
       'Context: {{Context}}\n' +
       'Output format: {{Output format}}',
   },
+  {
+    id: 'artifact.qbr_prep',
+    family: 'artifact',
+    groupId: 'qbr_prep',
+    label: 'QBR Prep — Branch Customer',
+    description: 'Comprehensive QBR prep for a Branch.io expansion conversation.',
+    formTitle: 'QBR Prep',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'attendees', label: 'Attendees', kind: 'textarea', rows: 2, placeholder: 'Names + titles' },
+      { key: 'branch_products', label: 'Active Branch products', kind: 'text', required: true, placeholder: 'e.g. Deep Linking, Universal Ads' },
+      { key: 'results', label: 'Key results / metrics', kind: 'textarea', rows: 3, placeholder: 'Known performance data, usage metrics...' },
+      { key: 'expansion_goal', label: 'My expansion goal for this QBR', kind: 'text', placeholder: 'e.g. Get intro to Peacock team, open AIO conversation' },
+    ],
+    promptTemplate:
+      'Create a QBR prep document for {{Account}}.\n\n' +
+      'Attendees: {{Attendees}}\n' +
+      'Active Branch products: {{Active Branch products}}\n' +
+      'Known results/metrics: {{Key results / metrics}}\n' +
+      'Expansion goal: {{My expansion goal for this QBR}}\n\n' +
+      'Sections: Meeting objective · Branch ROI story (build from what we know) · Strategic priorities for their business · ' +
+      'Expansion conversation opener · The 3 questions I will ask · Objection prep · Desired next step + ask.',
+  },
+  {
+    id: 'artifact.expansion_proposal',
+    family: 'artifact',
+    groupId: 'expansion_proposal',
+    label: 'Expansion Proposal Outline',
+    description: 'Structured outline for presenting an expansion to a Branch customer.',
+    formTitle: 'Expansion Proposal',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'expansion', label: 'Proposed expansion', kind: 'text', required: true, placeholder: 'e.g. SMS-to-App + AIO for Peacock' },
+      { key: 'business_case', label: 'Business case', kind: 'textarea', rows: 3, placeholder: 'Why does this make sense for them now?' },
+      { key: 'champion', label: 'Champion / sponsor', kind: 'text', placeholder: 'Name + title' },
+      { key: 'investment', label: 'Estimated ARR', kind: 'text', placeholder: 'e.g. $250K-$400K' },
+    ],
+    promptTemplate:
+      'Create an expansion proposal outline for {{Account}}: {{Proposed expansion}}.\n\n' +
+      'Business case: {{Business case}}\n' +
+      'Champion: {{Champion / sponsor}}\n' +
+      'Estimated ARR: {{Estimated ARR}}\n\n' +
+      'Sections: Executive summary (1 page) · Current state with Branch · The opportunity · ' +
+      'Why now (urgency drivers) · Proposed solution + ROI model · Implementation timeline · ' +
+      'Commercial terms · Next steps.',
+  },
+  {
+    id: 'artifact.stakeholder_map',
+    family: 'artifact',
+    groupId: 'stakeholder_map',
+    label: 'Stakeholder Map',
+    description: 'Map the buying committee for an expansion deal.',
+    formTitle: 'Stakeholder Map',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'contacts', label: 'Contacts I know', kind: 'textarea', rows: 4, placeholder: 'Name, title, relationship (champion/friendly/neutral/blocker), engagement level' },
+      { key: 'expansion', label: 'Expansion I am pursuing', kind: 'text', required: true },
+    ],
+    promptTemplate:
+      'Build a stakeholder map for the expansion at {{Account}}: {{Expansion I am pursuing}}.\n\n' +
+      'Contacts I know: {{Contacts I know}}\n\n' +
+      'Output: (1) Stakeholder table with role/influence/stance/engagement, (2) The gaps in my coverage (who is missing), ' +
+      '(3) Influence map (who talks to who), (4) The single most important relationship to build next and why, ' +
+      '(5) The risk if a specific stakeholder is not aligned.',
+  },
+  {
+    id: 'artifact.competitive_response',
+    family: 'artifact',
+    groupId: 'competitive_response',
+    label: 'Competitive Response — Adjust',
+    description: 'Prepare a thorough response to the Adjust competitive threat.',
+    formTitle: 'Competitive Response Prep',
+    fields: [
+      { key: 'account', label: 'Account', kind: 'text', required: true },
+      { key: 'situation', label: 'What the customer said / situation', kind: 'textarea', rows: 4, required: true, placeholder: 'e.g. "Adjust does everything Branch does and they offered us 20% less"' },
+      { key: 'competitor', label: 'Competitor', kind: 'select', options: ['Adjust', 'AppsFlyer', 'Kochava', 'Singular', 'Other'] },
+    ],
+    promptTemplate:
+      'Prepare a full competitive response for {{Account}} facing a {{Competitor}} comparison.\n\n' +
+      'Situation: {{What the customer said / situation}}\n\n' +
+      'Output: (1) The reframe in 2 sentences, (2) Where Branch genuinely wins in their vertical, ' +
+      '(3) The trap questions to ask that expose {{Competitor}} gaps, (4) The anchor data point or case study to cite, ' +
+      '(5) The economic argument (total cost of ownership, not just price), (6) What I should NOT say.',
+  },
 ];
 
 // ──────────────────────────── PUBLIC API ────────────────────────────
