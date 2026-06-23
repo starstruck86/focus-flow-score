@@ -345,8 +345,9 @@ export default function KILibrary() {
         ) : (
           <>
             <p className="text-[11px] text-muted-foreground px-1">
-              {results.length} result{results.length === 1 ? '' : 's'}
-              {search.trim().length >= 2 ? ` for "${search}"` : ''}
+              {results.length >= 50
+                ? `Showing 50 of many${search.trim().length >= 2 ? ` for "${search}"` : ''} — refine your search`
+                : `${results.length} result${results.length === 1 ? '' : 's'}${search.trim().length >= 2 ? ` for "${search}"` : ''}`}
             </p>
             {results.map((ki) => (
               <KICard
