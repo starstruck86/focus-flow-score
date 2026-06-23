@@ -125,21 +125,6 @@ const ContactCountBadge = memo(function ContactCountBadge({ accountId }: { accou
 ContactCountBadge.displayName = 'ContactCountBadge';
 
 // Quick Links
-const QUICK_LINKS = {
-  leadsContacts: [
-    { label: 'My Leads', url: 'https://acoustic.lightning.force.com/lightning/o/Lead/list?filterName=Copy_of_My_Leads1' },
-    { label: 'Converted Leads', url: 'https://acoustic.lightning.force.com/lightning/o/Contact/list?filterName=Converted_Leads' },
-    { label: 'Marketing Interactions', url: 'https://acoustic.lightning.force.com/lightning/o/Contact/list?filterName=Marketing_Interactions' },
-    { label: 'Past Connects', url: 'https://acoustic.lightning.force.com/lightning/r/Report/00Oa6000001kRz7EAE/view' },
-    { label: 'Previous Users', url: 'https://acoustic.lightning.force.com/lightning/o/Contact/list?filterName=Previous_Users' },
-  ],
-  accounts: [
-    { label: 'Sourced', url: 'https://acoustic.lightning.force.com/lightning/o/Account/list?filterName=Sourced_Accounts2' },
-    { label: 'Churned', url: 'https://acoustic.lightning.force.com/lightning/o/Account/list?filterName=Churned_Customers' },
-    { label: 'Past Opps', url: 'https://acoustic.lightning.force.com/lightning/r/Report/00Oa6000001k68HEAQ/view?queryScope=userFolders' },
-    { label: 'Past Meetings', url: 'https://acoustic.lightning.force.com/lightning/r/Report/00Oa6000001k653EAA/view?queryScope=userFolders' },
-  ],
-};
 
 const ACCOUNT_STATUS_COLORS: Record<AccountStatus, string> = {
   'researching': 'bg-blue-500/20 text-blue-400',
@@ -1102,7 +1087,7 @@ export default function WeeklyOutreach() {
   // Apply search + quick filters
   // Filter to new-logo accounts first, then apply user filters
   const newLogoAccounts = useMemo(() => 
-    accounts.filter(a => a.motion === 'new-logo' || !a.motion),
+    accounts.filter(a => a.motion === 'new-logo' || a.motion === 'both' || !a.motion),
     [accounts]
   );
 
@@ -1173,51 +1158,11 @@ export default function WeeklyOutreach() {
   return (
     <Layout>
       <div className="p-4 sm:p-6 lg:p-8">
-        {/* Quick Links Bar */}
-        <div className="mb-4 sm:mb-6 space-y-2">
-          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider shrink-0 self-center mr-1">
-              Leads:
-            </span>
-            {QUICK_LINKS.leadsContacts.map((link) => (
-              <a
-                key={link.label}
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="quick-action text-[11px] py-1 px-2 shrink-0 whitespace-nowrap"
-                aria-label={`Open ${link.label} in Salesforce`}
-              >
-                {link.label}
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            ))}
-          </div>
-          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider shrink-0 self-center mr-1">
-              Accts:
-            </span>
-            {QUICK_LINKS.accounts.map((link) => (
-              <a
-                key={link.label}
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="quick-action text-[11px] py-1 px-2 shrink-0 whitespace-nowrap"
-                aria-label={`Open ${link.label} in Salesforce`}
-              >
-                {link.label}
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            ))}
-          </div>
-        </div>
-
         {/* Header + Staleness Alert */}
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="font-display text-2xl font-bold">Weekly Outreach</h1>
-            <p className="text-sm text-muted-foreground">Pipeline & Account Execution</p>
+            <h1 className="font-display text-2xl font-bold">Territory</h1>
+            <p className="text-sm text-muted-foreground">14 accounts · Expansion motion</p>
           </div>
           <StreakChip variant="full" />
         </div>
