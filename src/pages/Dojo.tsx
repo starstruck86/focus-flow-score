@@ -10,6 +10,7 @@ import { getRandomScenario } from '@/lib/dojo/scenarios';
 import { buildPatternMemory, deriveCoachingInsights } from '@/lib/dojo/patternMemory';
 import { buildSkillMemory } from '@/lib/dojo/skillMemory';
 import { useAuth } from '@/contexts/AuthContext';
+import { useKISync } from '@/hooks/useKISync';
 import { supabase } from '@/integrations/supabase/client';
 import type { PatternMemory, CoachingInsights } from '@/lib/dojo/types';
 import type { LessonContext } from '@/lib/learning/practiceMapping';
