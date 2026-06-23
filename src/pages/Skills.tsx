@@ -31,6 +31,7 @@ const DIMENSION_TO_SKILL: Record<SpiderDimensionKey, string> = {
   c_suite_engagement: 'executive_response',
   competitive: 'objection_handling',
   qualification: 'qualification',
+  product_knowledge: 'discovery',
 };
 
 export default function Skills() {

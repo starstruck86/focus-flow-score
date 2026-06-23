@@ -551,6 +551,10 @@ ${kiContext}`;
                   type: "string",
                   description: "Exact transcript quote from self-assessment that justifies this score."
                 },
+                product_knowledge_score: {
+                  type: "integer", minimum: 1, maximum: 5,
+                  description: "Did the rep demonstrate accurate, specific knowledge of what the product does and how the market works? 5 = correct technical terms, accurate product mechanics, credible market context, avoided overclaiming. 3 = generally accurate but vague. 1 = generic, technically incorrect, couldn't explain how the product works. Score 3 for calls where product knowledge wasn't explicitly tested."
+                },
 
                 // NEW: Outcome-based fields
                 call_goals_inferred: {
@@ -608,7 +612,8 @@ ${kiContext}`;
                 "narrative_arc_score", "narrative_arc_evidence",
                 "pressure_recovery_score", "pressure_recovery_evidence",
                 "multi_thread_score", "multi_thread_evidence",
-                "self_awareness_score", "self_awareness_evidence"
+                "self_awareness_score", "self_awareness_evidence",
+                "product_knowledge_score"
               ],
               additionalProperties: false,
             },
@@ -671,6 +676,7 @@ ${kiContext}`;
         presence_score: grade.presence_score,
         commercial_score: grade.commercial_score,
         next_step_score: grade.next_step_score,
+        product_knowledge_score: grade.product_knowledge_score ?? null,
         call_segments: grade.call_segments,
         cotm_signals: grade.cotm_signals,
         meddicc_signals: grade.meddicc_signals,
@@ -878,7 +884,7 @@ ${kiContext}`;
     try {
       const { data: allGrades } = await supabase
         .from('transcript_grades')
-        .select('discovery_score, cotm_score, meddicc_score, presence_score, commercial_score, next_step_score, structure_score, call_type, custom_scorecard_results')
+        .select('discovery_score, cotm_score, meddicc_score, presence_score, commercial_score, next_step_score, structure_score, product_knowledge_score, call_type, custom_scorecard_results')
         .eq('user_id', userId);
 
       if (allGrades && allGrades.length > 0) {
@@ -928,6 +934,7 @@ ${kiContext}`;
           { dimension: 'stakeholder_navigation', scores: stakeholderScores },
           { dimension: 'expansion_strategy', scores: expansionScores },
           { dimension: 'competitive', scores: competitiveScores },
+          { dimension: 'product_knowledge', scores: allGrades.map((g: any) => g.product_knowledge_score).filter(Boolean) },
         ];
 
         for (const { dimension, scores } of dimensionMap) {
