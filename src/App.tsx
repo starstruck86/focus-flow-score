@@ -80,6 +80,7 @@ const Benchmark = lazy(() => import("./pages/Benchmark"));
 const TerritorySetup = lazy(() => import("./pages/TerritorySetup"));
 const MeetingMode = lazy(() => import("./pages/MeetingMode"));
 const PostCallLog = lazy(() => import("./pages/PostCallLog"));
+const KILibrary = lazy(() => import("./pages/KILibrary"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
