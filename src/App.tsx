@@ -79,6 +79,7 @@ const Home = lazy(() => import("./pages/Home"));
 const Benchmark = lazy(() => import("./pages/Benchmark"));
 const TerritorySetup = lazy(() => import("./pages/TerritorySetup"));
 const MeetingMode = lazy(() => import("./pages/MeetingMode"));
+const PostCallLog = lazy(() => import("./pages/PostCallLog"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -279,6 +280,7 @@ const App = () => (
                   } />
                   <Route path="/brief" element={<ProtectedPage routeName="Pre-Call Brief"><Brief /></ProtectedPage>} />
                   <Route path="/meeting" element={<ProtectedPage routeName="Meeting Mode"><Suspense fallback={<LazyFallback />}><MeetingMode /></Suspense></ProtectedPage>} />
+                  <Route path="/post-call" element={<ProtectedPage routeName="Post-Call Log"><Suspense fallback={<LazyFallback />}><PostCallLog /></Suspense></ProtectedPage>} />
                    <Route path="/progress" element={<ProtectedPage routeName="Progress"><Progress /></ProtectedPage>} />
                    <Route path="/review" element={
                      <ProtectedRoute>

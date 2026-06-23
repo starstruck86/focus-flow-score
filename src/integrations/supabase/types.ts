@@ -905,6 +905,85 @@ export type Database = {
           },
         ]
       }
+      call_logs: {
+        Row: {
+          account_id: string | null
+          account_name: string
+          branch_ki_id: string | null
+          branch_ki_title: string | null
+          branch_play_used: boolean | null
+          call_date: string
+          created_at: string
+          expansion_signal_captured: boolean | null
+          expansion_signal_text: string | null
+          id: string
+          next_step: string | null
+          next_step_date: string | null
+          queue_transcript: boolean | null
+          summary: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          account_name: string
+          branch_ki_id?: string | null
+          branch_ki_title?: string | null
+          branch_play_used?: boolean | null
+          call_date?: string
+          created_at?: string
+          expansion_signal_captured?: boolean | null
+          expansion_signal_text?: string | null
+          id?: string
+          next_step?: string | null
+          next_step_date?: string | null
+          queue_transcript?: boolean | null
+          summary?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          account_name?: string
+          branch_ki_id?: string | null
+          branch_ki_title?: string | null
+          branch_play_used?: boolean | null
+          call_date?: string
+          created_at?: string
+          expansion_signal_captured?: boolean | null
+          expansion_signal_text?: string | null
+          id?: string
+          next_step?: string | null
+          next_step_date?: string | null
+          queue_transcript?: boolean | null
+          summary?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_logs_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_logs_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       call_transcripts: {
         Row: {
           account_id: string | null

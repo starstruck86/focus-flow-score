@@ -23,6 +23,7 @@ import {
   ExternalLink as LinkIcon,
   Users,
   Sparkles,
+  Phone,
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { StreakChip } from '@/components/StreakChip';
@@ -1164,7 +1165,16 @@ export default function WeeklyOutreach() {
             <h1 className="font-display text-2xl font-bold">Territory</h1>
             <p className="text-sm text-muted-foreground">14 accounts · Expansion motion</p>
           </div>
-          <StreakChip variant="full" />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate('/post-call')}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+            >
+              <Phone className="h-3.5 w-3.5" />
+              Log Call
+            </button>
+            <StreakChip variant="full" />
+          </div>
         </div>
         
         {/* Tabs */}
