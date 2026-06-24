@@ -154,6 +154,36 @@ export function auditQuality(args: {
     }
   }
 
+  // ── Branch vocabulary calibration (FLAG-ONLY, never blocks) ──────
+  // Surface diagnostics so we can tell when the model lapses into
+  // generic SaaS language instead of speaking Branch.
+  if (
+    args.askShape !== "short_form" &&
+    args.askShape !== "general" &&
+    args.mode !== "C_general" &&
+    (args.body?.trim().split(/\s+/).filter(Boolean).length ?? 0) >= 120
+  ) {
+    const mentionsBranchProduct = BRANCH_PRODUCT_RE.test(text);
+    const mentionsBranchCompetitor = BRANCH_COMPETITOR_RE.test(text);
+    const genericVagueHits = (text.match(GENERIC_VAGUE_RE) || []).length;
+
+    if (!mentionsBranchProduct) {
+      flags.push("branch_no_product_vocabulary");
+    }
+    // Heavy use of generic "analytics/attribution/engagement" without a
+    // specific Branch capability anywhere → calibration miss.
+    if (!mentionsBranchProduct && genericVagueHits >= 2) {
+      flags.push("branch_generic_over_specific");
+    }
+    // When the user is in a competitive expansion context (account
+    // language present) but no competitor named, flag it as a soft signal.
+    const competitiveContext = /\b(displace|displacement|consolidat(?:e|ion)|rip[\s-]?and[\s-]?replace|incumbent|competitive|whitespace|footprint|renewal)\b/i.test(text);
+    if (competitiveContext && !mentionsBranchCompetitor) {
+      flags.push("branch_no_competitive_dynamic");
+    }
+  }
+
+
   return {
     scores,
     flags,
