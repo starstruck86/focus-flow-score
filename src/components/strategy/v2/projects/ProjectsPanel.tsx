@@ -410,7 +410,7 @@ function ProjectDetail({
 
 function Section({
   icon: Icon, title, children,
-}: { icon: React.ComponentType<{ className?: string }>; title: string; children: React.ReactNode }) {
+}: { icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; title: string; children: React.ReactNode }) {
   return (
     <div>
       <div className="flex items-center gap-1.5 mb-2">
