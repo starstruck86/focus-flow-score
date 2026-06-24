@@ -481,10 +481,10 @@ export function SurfacePanel({
             <TemplateGrid items={ARTIFACT_TEMPLATE_DEFS} onLaunch={onLaunchWorkflow} />
           )}
           {surface === 'projects' && (
-            <ProjectsList
+            <ProjectsPanel
               threads={threads}
               activeThreadId={activeThreadId}
-              onSelect={onSelectThread}
+              onSelectThread={onSelectThread}
             />
           )}
 
