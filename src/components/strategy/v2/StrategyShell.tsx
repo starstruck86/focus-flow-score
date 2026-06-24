@@ -1843,6 +1843,65 @@ export function StrategyShell() {
         open={validationDrawerOpen}
         onOpenChange={setValidationDrawerOpen}
       />
+      {/* ST7 — /save-as-skill name entry dialog */}
+      {saveSkillDialogOpen && composerRect && createPortal(
+        <div className="strategy-v2" style={{ position: 'fixed', inset: 0, zIndex: 78, pointerEvents: 'none' }}>
+          <div
+            className="sv-e1 sv-enter-fade"
+            style={{
+              position: 'absolute',
+              top: composerRect.top - 8,
+              left: composerRect.left + 24,
+              transform: 'translateY(-100%)',
+              width: 340,
+              background: 'hsl(var(--sv-paper))',
+              border: '1px solid hsl(var(--sv-hairline))',
+              borderRadius: 'var(--sv-radius-surface)',
+              pointerEvents: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            <div className="px-4 pt-2.5 pb-1 text-[11px]" style={{ color: 'hsl(var(--sv-muted))' }}>
+              Save last response as a skill
+            </div>
+            <div className="px-4 pb-2">
+              <input
+                ref={saveSkillInputRef}
+                value={saveSkillInputName}
+                onChange={(e) => setSaveSkillInputName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (saveSkillInputName.trim()) handleSaveSkill(saveSkillInputName, saveSkillCandidateText);
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setSaveSkillDialogOpen(false);
+                    setSaveSkillCandidateText('');
+                    requestAnimationFrame(() => composerRef.current?.focus());
+                  }
+                }}
+                placeholder="Skill name…"
+                className="w-full text-[13px] bg-transparent border-0 outline-none py-1"
+                style={{
+                  color: 'hsl(var(--sv-ink))',
+                  fontFamily: 'var(--sv-sans)',
+                  borderBottom: '1px solid hsl(var(--sv-hairline))',
+                }}
+                autoComplete="off"
+              />
+            </div>
+            <div
+              className="px-4 py-1.5 text-[11px]"
+              style={{ color: 'hsl(var(--sv-muted))', borderTop: '1px solid hsl(var(--sv-hairline))' }}
+            >
+              ↵ save · esc cancel · saves to {(activeSurface ?? 'brainstorm')} workspace
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
       </div>
     </div>
   );
