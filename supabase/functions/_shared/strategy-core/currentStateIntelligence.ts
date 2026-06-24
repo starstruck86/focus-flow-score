@@ -1997,9 +1997,23 @@ ${verifiedBlock}
 
 WORKING HYPOTHESES ABOUT ${c.name.toUpperCase()} (used ONLY to extend or fill gaps where verified signals are absent — speak in "likely" voice when reflecting them):
 - Business model: ${bm}
-- Customer experience: ${cx}${mm ? `\n- Marketing current state: ${mm}` : ""}
+- App posture: ${ap.mobile_app_strategy}
+  · Deep linking maturity: ${ap.deep_linking_maturity}
+  · Web-to-App setup:      ${ap.web_to_app_setup}
+  · Deferred deep linking: ${ap.deferred_deep_linking}
+- Measurement motion:
+  · Current MMP (likely):       ${mp.current_mmp}
+  · Adjust/AppsFlyer setup:     ${mp.adjust_appsflyer_setup}
+  · Attribution gaps:           ${mp.attribution_gaps}
+  · MMP consolidation risk:     ${mp.mmp_consolidation_risk}
+- Branch expansion map (whitespace by product):
+  · Deep linking:       ${bx.deep_linking_whitespace}
+  · Universal Ads:      ${bx.universal_ads_whitespace}
+  · Web-to-App:         ${bx.web_to_app_whitespace}
+  · Email-to-App / SMS: ${bx.email_sms_whitespace}
+  · Advanced products:  ${bx.advanced_products_whitespace}
 - Strategic tension: ${t.strategic_tension}
-- Likely gap (current → future): ${t.likely_gap}
+- Likely gap (current footprint → future footprint): ${t.likely_gap}
 - Why now: ${t.why_now}
 - Future-state hypothesis: ${t.future_state_hypothesis}
 - Working thesis: ${t.summary}
