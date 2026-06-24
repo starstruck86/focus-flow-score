@@ -2326,6 +2326,8 @@ function countUnknowns(intel: CurrentStateIntelligence): number {
     (intel.business_model.unknowns?.length || 0) +
     (intel.customer_experience.unknowns?.length || 0) +
     (intel.marketing_motion.unknowns?.length || 0) +
-    (intel.strategic_priorities.unknowns?.length || 0)
+    (intel.strategic_priorities.unknowns?.length || 0) +
+    (intel.app_posture.unknowns?.length || 0) +
+    (intel.measurement_motion.unknowns?.length || 0)
   );
 }
