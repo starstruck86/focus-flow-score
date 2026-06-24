@@ -242,6 +242,7 @@ export function StrategyShell() {
     accountLinked: boolean;
     accountName: string | null;
     triggeredAt: number;
+    citations: Citation[];
   } | null>(null);
 
   // Proactive playbook detection
