@@ -489,6 +489,7 @@ export function SurfacePanel({
               threads={threads}
               activeThreadId={activeThreadId}
               onSelectThread={onSelectThread}
+              onCreateThreadForAccount={onCreateThreadForAccount}
             />
           )}
 
