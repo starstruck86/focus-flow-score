@@ -40,7 +40,10 @@ interface Props {
   strategyConfig?: StrategyGlobalInstructionsConfig;
   /** Last intelligence activation — shown as a badge while assistant is responding. */
   lastIntelActivation?: IntelActivation | null;
+  /** When set, the most recent completed assistant message renders as a SkillOutputCard. */
+  lastSkillWorkflow?: WorkflowDef | null;
 }
+
 
 function IntelActivationBadge({ activation }: { activation: IntelActivation }) {
   const HEAD_ICONS: Record<string, string> = {
