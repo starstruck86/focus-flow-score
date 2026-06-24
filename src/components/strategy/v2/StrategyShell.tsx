@@ -1609,6 +1609,9 @@ export function StrategyShell() {
         memories={memories}
         uploads={uploads}
         artifacts={artifacts}
+        userId={user?.id}
+        onInjectKI={handleInjectKI}
+        injectedKICount={manuallyInjectedKIs.length}
       />
       <LinkPicker
         open={linkPickerOpen}
