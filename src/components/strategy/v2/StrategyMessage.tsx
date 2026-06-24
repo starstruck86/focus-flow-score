@@ -259,7 +259,7 @@ function extractText(contentJson: any): string {
   return '';
 }
 
-export function StrategyMessage({ message, onQuickAction, strategyConfig }: Props) {
+export function StrategyMessage({ message, onQuickAction, strategyConfig, citations }: Props) {
   const rawText = extractText(message.content_json);
   const role = message.role;
   // Strict-mode shaping is a render override that applies to ANY assistant
