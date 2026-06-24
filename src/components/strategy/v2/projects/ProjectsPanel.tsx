@@ -203,6 +203,8 @@ function ProjectsIndex({
                     <span>{p.members.length} acct{p.members.length === 1 ? '' : 's'}</span>
                     <span aria-hidden style={{ opacity: 0.5 }}>·</span>
                     <span>{threadCount} thread{threadCount === 1 ? '' : 's'}</span>
+                    <span aria-hidden style={{ opacity: 0.5 }}>·</span>
+                    <span>{signalCount} signal{signalCount === 1 ? '' : 's'}</span>
                   </div>
                 </div>
                 <ArrowRight
