@@ -788,8 +788,8 @@ async function gatherVerifiedSignals(args: {
 
 interface GeneratedHypotheses {
   business_model_summary: string;
-  customer_experience: string;
-  marketing_motion: string;
+  app_posture: string;
+  measurement_motion: string;
   strategic_tension: string;
   future_state_hypothesis: string;
   likely_gap: string;
@@ -800,18 +800,20 @@ interface GeneratedHypotheses {
 const HYPOTHESIS_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY these string keys:
 {
   "business_model_summary": "1-2 sentences. Concrete, specific to this company. Use phrasing like 'X likely operates...' or 'In a Y model like X's...'. NEVER write '[Likely]' or scaffolding tokens — write real prose.",
-  "customer_experience": "1-2 sentences describing what it's actually like to be a customer of this company end-to-end. Be specific: discovery vs efficiency, anonymous vs logged-in, planned vs unplanned, etc.",
-  "marketing_motion": "1-2 sentences on how this company likely runs (or under-runs) lifecycle/CRM/engagement marketing today, given the business model. Name the likely shape and where it's misaligned.",
-  "strategic_tension": "1 sentence naming a non-obvious tension Corey can put on the table — the kind a smart prospect will recognize ('most lifecycle strategies optimize for X, but Y's model benefits from Z').",
-  "future_state_hypothesis": "1-2 sentences on what they're trying to become and what has to change in customer engagement to get there.",
-  "likely_gap": "1 sentence: the most plausible gap between current and future state.",
-  "why_now": "1 sentence: the market / competitive / internal pressure that makes this conversation timely.",
-  "thesis_summary": "1 crisp sentence summarizing the working thesis about where the company is today."
+  "app_posture": "1-2 sentences on this company's mobile app strategy and deep linking maturity. Where is the app in their funnel (acquisition-led, retention-led, transaction core, content/engagement)? What is the likely state of deep linking, deferred deep linking, and web-to-app today — is it instrumented, partial, or absent? Be specific.",
+  "measurement_motion": "1-2 sentences on how this company likely measures mobile attribution today. Which MMP are they most likely on — Adjust, AppsFlyer, Kochava, Singular, or self-built? Where are the obvious attribution gaps (web-to-app, post-install retargeting, sub-entity reporting, privacy/AIO impact)? Where is MMP consolidation pressure most likely to land?",
+  "strategic_tension": "1 sentence naming a non-obvious tension Corey can put on the table — the gap between their current attribution/measurement setup and where they need to be. Example shape: 'Most teams in their category assume their MMP covers X, but for this company Y is closer to true.'",
+  "future_state_hypothesis": "1-2 sentences on what their attribution / measurement / app-monetization future state looks like, and what has to change (deep linking adoption, MMP consolidation, Universal Ads, web-to-app, Advanced Privacy posture) to get there.",
+  "likely_gap": "1 sentence: the most plausible gap between their current Branch footprint and the future state — the whitespace expansion-ARR lives in.",
+  "why_now": "1 sentence: the market / competitive / internal pressure that makes this conversation timely (renewal window, QBR cadence, privacy shift, competitor displacement, new app launch, leadership change).",
+  "thesis_summary": "1 crisp sentence summarizing the working thesis about where the company sits on the Branch surface area today."
 }
 
 Hard rules:
 - Write real, concrete hypotheses. No placeholder text. No "[Likely]", "[Assume]", "describe…", "fill in…".
 - It's OK — and required — to be hypothetical. Use "likely", "in a [model] like X's", "a reasonable assumption is".
+- Use Branch vocabulary directly (deep linking, deferred deep linking, Universal Ads, Web-to-App, Email-to-App, SMS-to-App, QR, AIO, Advanced Privacy, MMP, sub-entity, attribution, footprint, whitespace, QBR, expansion-ARR). Avoid generic "analytics / engagement / personalization" when a specific Branch capability fits.
+- Name the competitive dynamic when it sharpens the point (Adjust, AppsFlyer, Kochava, Singular).
 - Do NOT cite. Do NOT pretend these are facts.
 - Do NOT include any text outside the JSON object.`;
 
