@@ -570,7 +570,7 @@ const VERIFIED_SIGNAL_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY this
   "signals": [
     {
       "signal": "Concrete, named real-world signal about this company. e.g. 'Launched a new owned-brand activewear line in March 2024 to broaden assortment beyond intimates' — not 'they invest in marketing'.",
-      "kind": "news | product_launch | campaign | leadership_change | hiring | partnership | digital_or_ai_initiative | website_or_app_change | industry_trend | financial_or_earnings",
+      "kind": "news | product_launch | campaign | leadership_change | hiring | partnership | digital_or_ai_initiative | website_or_app_change | industry_trend | financial_or_earnings | mmp_switch | attribution_gap | deep_linking_adoption | competitive_displacement | product_expansion | renewal_risk | qbr_signal",
       "confidence": "high | medium | low",
       "source_title": "Optional short label of the source if you can identify it. Empty string if unsure.",
       "source_url": "Optional URL if you can recall a specific page. Empty string if unsure."
