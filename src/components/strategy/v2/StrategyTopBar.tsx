@@ -108,6 +108,18 @@ export const StrategyTopBar = forwardRef<HTMLDivElement, Props>(function Strateg
         >
           +
         </button>
+        {onLogCall && (
+          <button
+            onClick={onLogCall}
+            className="h-7 px-2 rounded-[4px] sv-hover-bg text-[12px] font-mono inline-flex items-center gap-1"
+            style={{ color: 'hsl(var(--sv-muted))' }}
+            title="Log a call (O2)"
+            aria-label="Log call"
+          >
+            <Phone className="h-3 w-3" />
+            Log
+          </button>
+        )}
         <button
           onClick={onOpenSwitcher}
           className="h-7 px-2 rounded-[4px] sv-hover-bg text-[12px] font-mono"
