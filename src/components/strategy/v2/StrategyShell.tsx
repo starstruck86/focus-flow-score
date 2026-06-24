@@ -1526,44 +1526,9 @@ export function StrategyShell() {
         </div>
       )}
 
-      {/* Proactive playbook detection — surfaces when thread content matches a playbook */}
-      {detectedPlaybooks.length > 0 && !isSending && (
-        <div
-          className="flex items-center gap-2 px-4 py-2 shrink-0"
-          style={{
-            borderTop: '1px solid hsl(var(--sv-hairline))',
-            background: 'hsl(var(--sv-paper))',
-          }}
-        >
-          <span className="text-[11px]" style={{ color: 'hsl(var(--sv-muted))' }}>💡</span>
-          <span className="text-[11px] flex-1" style={{ color: 'hsl(var(--sv-ink))' }}>
-            <strong>{detectedPlaybooks[0].title}</strong> playbook may apply
-            {loadedPlaybookContent && (
-              <span className="ml-1.5" style={{ color: 'hsl(var(--sv-clay))' }}>· Loaded ✓</span>
-            )}
-          </span>
-          {!loadedPlaybookContent && (
-            <button
-              onClick={() => handleLoadPlaybook(detectedPlaybooks[0].id)}
-              className="text-[11px] font-medium shrink-0"
-              style={{ color: 'hsl(var(--sv-clay))' }}
-            >
-              Load into context →
-            </button>
-          )}
-          <button
-            onClick={() => {
-              const dismissId = detectedPlaybooks[0].id;
-              setDismissedPlaybookIds((prev) => new Set([...prev, dismissId]));
-              setDetectedPlaybooks((prev) => prev.slice(1));
-            }}
-            className="text-[11px] shrink-0"
-            style={{ color: 'hsl(var(--sv-muted))' }}
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
+      {/* Client-side playbook detection banner removed (task 1.2). */}
+
+
 
       {trustState === 'blocked' ? (
         <BlockedComposer
