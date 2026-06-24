@@ -112,6 +112,8 @@ export default function MeetingMode() {
 
   const loadKIs = async () => {
     if (!user || !account) return;
+    try { sessionStorage.setItem('meeting_mode_goal', goal); } catch {}
+    try { sessionStorage.setItem('meeting_mode_account_id', accountId); } catch {}
     setLoadingKis(true);
     setPhase('kis');
     const [d1, d2] = inferDimensions(account.industry, goal);
