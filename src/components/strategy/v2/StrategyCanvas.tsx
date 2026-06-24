@@ -109,20 +109,27 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
           <StrategyEmptyState onPickPrompt={onPickPrompt} />
         )}
         {messages.map((m, i) => {
+          const isLastMsg = i === messages.length - 1;
           // Quick actions render only on the most recent assistant message,
-          // and only when no response is currently streaming. Mirrors how
-          // ChatGPT/Claude scope iteration controls to the latest turn.
+          // and only when no response is currently streaming.
           const isLastAssistant =
             !isSending &&
             m.role === 'assistant' &&
-            i === messages.length - 1 &&
+            isLastMsg &&
             !!onQuickAction;
+          // Attach citation manifest to the most recent assistant message
+          // (both while streaming and after completion of that turn).
+          const citationsForMsg =
+            m.role === 'assistant' && isLastMsg && lastIntelActivation?.citations?.length
+              ? lastIntelActivation.citations
+              : null;
           return (
             <div key={m.id} style={{ marginTop: i === 0 ? 0 : 14 }}>
               <StrategyMessage
                 message={m}
                 onQuickAction={isLastAssistant ? onQuickAction : undefined}
                 strategyConfig={strategyConfig}
+                citations={citationsForMsg}
               />
             </div>
           );
