@@ -269,6 +269,11 @@ export function StrategyShell() {
   const [suggestedLinkAccount, setSuggestedLinkAccount] = useState<{ id: string; name: string } | null>(null);
   const territoryAccountsRef = useRef<Array<{ id: string; name: string }>>([]);
 
+  // Skill workflow output tracking — last assistant message from a skill run renders as a structured card
+  const [lastSkillWorkflow, setLastSkillWorkflow] = useState<WorkflowDef | null>(null);
+  const fromWorkflowRef = useRef(false);
+
+
 
   // ── Surface-switch swap (drafts + active thread) ─────────────────────────
   // When the user moves between workspaces, save the in-flight draft AND the
