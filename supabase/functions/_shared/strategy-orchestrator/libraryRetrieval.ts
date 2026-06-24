@@ -135,7 +135,28 @@ export async function retrieveLibraryContext(
     console.warn("[library-retrieval] Playbook fetch failed:", (e as Error).message);
   }
 
-  // ── Compact context string for prompt injection ──
+  const contextString = formatLibraryContext(knowledgeItems, playbooks);
+
+
+  console.log(`[library-retrieval] scopes=${opts.scopes.join(",")} → ${knowledgeItems.length} KIs, ${playbooks.length} playbooks`);
+
+  return {
+    knowledgeItems,
+    playbooks,
+    contextString,
+    counts: { kis: knowledgeItems.length, playbooks: playbooks.length },
+  };
+}
+
+// ════════════════════════════════════════════════════════════════
+// Shared formatter — also used by callers that pin a playbook
+// (situation classifier) and need to rebuild the contextString after
+// mutating the playbooks list.
+// ════════════════════════════════════════════════════════════════
+export function formatLibraryContext(
+  knowledgeItems: RetrievedKI[],
+  playbooks: RetrievedPlaybook[],
+): string {
   const kiBlock = knowledgeItems.length
     ? knowledgeItems.map((k) =>
         `KI[${k.id.slice(0, 8)}] ${k.title}` +
@@ -157,17 +178,8 @@ export async function retrieveLibraryContext(
       ).join("\n\n")
     : "";
 
-  const contextString = [
+  return [
     kiBlock ? `=== INTERNAL KNOWLEDGE ITEMS (use these — they are the company's tested intellectual property) ===\n${kiBlock}` : "",
     pbBlock ? `=== INTERNAL PLAYBOOKS (use these to ground tactics, questions, and warnings) ===\n${pbBlock}` : "",
   ].filter(Boolean).join("\n\n");
-
-  console.log(`[library-retrieval] scopes=${opts.scopes.join(",")} → ${knowledgeItems.length} KIs, ${playbooks.length} playbooks`);
-
-  return {
-    knowledgeItems,
-    playbooks,
-    contextString,
-    counts: { kis: knowledgeItems.length, playbooks: playbooks.length },
-  };
 }
