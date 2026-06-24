@@ -87,7 +87,7 @@ function IntelActivationBadge({ activation }: { activation: IntelActivation }) {
   );
 }
 
-export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState = false, onPickPrompt, onQuickAction, strategyConfig, lastIntelActivation }: Props) {
+export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState = false, onPickPrompt, onQuickAction, strategyConfig, lastIntelActivation, lastSkillWorkflow }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
