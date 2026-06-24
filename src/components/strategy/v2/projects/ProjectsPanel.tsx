@@ -55,21 +55,34 @@ export function ProjectsPanel({ threads, activeThreadId, onSelectThread, onCreat
     enabled: !!user?.id,
   });
 
-  // Count threads per family — done once, reused by index rows.
-  const threadCountByFamily = useMemo(() => {
-    const map = new Map<string, number>();
-    if (projects.length === 0) return map;
-    // Build account → family lookup.
+  const { data: signalCountByAccount } = useQuery({
+    queryKey: ['account-projects-signal-counts', user?.id],
+    queryFn: () => listSignalCountsByAccount(user!.id),
+    enabled: !!user?.id,
+  });
+
+  // Count threads + signals per family — done once, reused by index rows.
+  const { threadCountByFamily, signalCountByFamily } = useMemo(() => {
+    const threadMap = new Map<string, number>();
+    const signalMap = new Map<string, number>();
+    if (projects.length === 0) return { threadCountByFamily: threadMap, signalCountByFamily: signalMap };
     const acctFamily = new Map<string, string>();
     for (const p of projects) for (const m of p.members) acctFamily.set(m.id, p.familyKey);
     for (const t of threads) {
       if (!t.linked_account_id) continue;
       const fam = acctFamily.get(t.linked_account_id);
       if (!fam) continue;
-      map.set(fam, (map.get(fam) ?? 0) + 1);
+      threadMap.set(fam, (threadMap.get(fam) ?? 0) + 1);
     }
-    return map;
-  }, [threads, projects]);
+    if (signalCountByAccount) {
+      for (const [acctId, count] of signalCountByAccount.entries()) {
+        const fam = acctFamily.get(acctId);
+        if (!fam) continue;
+        signalMap.set(fam, (signalMap.get(fam) ?? 0) + count);
+      }
+    }
+    return { threadCountByFamily: threadMap, signalCountByFamily: signalMap };
+  }, [threads, projects, signalCountByAccount]);
 
   if (isLoading) {
     return (
