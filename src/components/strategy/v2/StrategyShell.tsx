@@ -265,6 +265,11 @@ export function StrategyShell() {
     setManuallyInjectedKIs((prev) => (prev.find((k) => k.id === ki.id) ? prev : [...prev, ki]));
   }, []);
 
+  // Cross-thread account memory: detect known account names mentioned in unlinked threads
+  const [suggestedLinkAccount, setSuggestedLinkAccount] = useState<{ id: string; name: string } | null>(null);
+  const territoryAccountsRef = useRef<Array<{ id: string; name: string }>>([]);
+
+
   // ── Surface-switch swap (drafts + active thread) ─────────────────────────
   // When the user moves between workspaces, save the in-flight draft AND the
   // currently active thread id under the previous surface, then restore both
