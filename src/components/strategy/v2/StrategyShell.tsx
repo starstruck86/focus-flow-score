@@ -88,12 +88,8 @@ import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflo
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
 import { classifyIntelHead, HEAD_LABELS, type InjectedKI } from '@/lib/strategy/headClassifier';
-import {
-  detectPlaybookTriggers,
-  fetchDetectedPlaybooks,
-  fetchPlaybookForInjection,
-  type DetectedPlaybook,
-} from '@/lib/strategy/playbookDetector';
+// Client-side playbook detection removed (task 1.2). The server's
+// situation classifier + libraryRetrieval now own playbook activation.
 import { tagThread } from '@/lib/strategy/threadTags';
 import { buildWorkspaceTitle, WORKSPACE_LABEL, displayThreadTitle } from '@/lib/strategy/threadNaming';
 import { PromoteToLibrarySheet, type PromotePayload } from './promote/PromoteToLibrarySheet';
