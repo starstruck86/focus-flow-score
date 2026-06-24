@@ -87,7 +87,7 @@ import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflo
 // /strategy/settings page (see src/pages/StrategySettings.tsx).
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
-import { classifyIntelHead, HEAD_LABELS, type InjectedKI } from '@/lib/strategy/headClassifier';
+import { type InjectedKI } from '@/lib/strategy/headClassifier';
 // Client-side playbook detection removed (task 1.2). The server's
 // situation classifier + libraryRetrieval now own playbook activation.
 import { tagThread } from '@/lib/strategy/threadTags';
