@@ -223,7 +223,7 @@ function ProjectsIndex({
 // ─────────────── Detail ───────────────
 
 function ProjectDetail({
-  project, threads, activeThreadId, onSelectThread, onBack, initialInstructions,
+  project, threads, activeThreadId, onSelectThread, onBack, initialInstructions, onCreateThreadForAccount,
 }: {
   project: ProjectSummary;
   threads: StrategyThread[];
@@ -231,6 +231,7 @@ function ProjectDetail({
   onSelectThread: (id: string) => void;
   onBack: () => void;
   initialInstructions: string;
+  onCreateThreadForAccount?: (accountId: string, title?: string) => Promise<void>;
 }) {
   const { user } = useAuth();
   const qc = useQueryClient();
