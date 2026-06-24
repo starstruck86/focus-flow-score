@@ -23,6 +23,7 @@ import {
   listProjectSettings,
   listProjectSignals,
   listProjectMemory,
+  listSignalCountsByAccount,
   upsertProjectSettings,
   UNCATEGORIZED_FAMILY,
   type ProjectSummary,
@@ -35,9 +36,10 @@ interface Props {
   threads: StrategyThread[];
   activeThreadId: string | null;
   onSelectThread: (id: string) => void;
+  onCreateThreadForAccount?: (accountId: string, title?: string) => Promise<void>;
 }
 
-export function ProjectsPanel({ threads, activeThreadId, onSelectThread }: Props) {
+export function ProjectsPanel({ threads, activeThreadId, onSelectThread, onCreateThreadForAccount }: Props) {
   const { user } = useAuth();
   const [selected, setSelected] = useState<string | null>(null);
 
