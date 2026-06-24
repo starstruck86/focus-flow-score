@@ -858,6 +858,7 @@ export function StrategyShell() {
           globalInstructions: combinedInstructions || undefined,
         });
       };
+      const accountName = linkedContext?.account?.name ?? linkedContext?.opportunity?.name ?? null;
       if (head && user?.id) {
         buildHeadKIBlock(head, user.id).then((block) => {
           const kiCount = (block.match(/^-/gm) ?? []).length;
@@ -866,7 +867,7 @@ export function StrategyShell() {
             headLabel: HEAD_LABELS[head] ?? head,
             kiCount,
             accountLinked: !!activeThread?.linked_account_id,
-            accountName: entityName,
+            accountName,
             triggeredAt: Date.now(),
           });
           dispatch(block);
@@ -877,13 +878,13 @@ export function StrategyShell() {
           headLabel: 'Sales',
           kiCount: 0,
           accountLinked: !!activeThread?.linked_account_id,
-          accountName: entityName,
+          accountName,
           triggeredAt: Date.now(),
         });
         dispatch('');
       }
     }
-  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, territoryProfile, activeThread?.linked_account_id, entityName]);
+  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, territoryProfile, activeThread?.linked_account_id, linkedContext]);
 
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {
     setLinkPickerOpen(false);
