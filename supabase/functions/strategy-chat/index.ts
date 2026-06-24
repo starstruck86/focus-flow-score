@@ -6578,7 +6578,7 @@ USE the library voice/angles for grounding, but DO NOT produce a long synthesis 
 ${shapeRule}
 If grounded vs extended distinction is material, tag each option [Grounded] or [Extended].
 Forbidden: long preambles, multi-section frameworks, "let me walk you through" openers.`;
-    effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}${preamble}`;
+    effectiveSystemPrompt = `${territoryProfileBlock}${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}${preamble}`;
   } else if (mode === "strong" || mode === "partial" || mode === "thin") {
     const preamble = `
 
@@ -6592,7 +6592,7 @@ ${
     : "THIN grounding: open with one honest line stating what was found (e.g. 'Found 1 weakly related resource and no supporting KIs'). Then proceed using general reasoning. Mark assumptions. Offer one specific clarifying question at the end if it would materially sharpen the output. NEVER refuse, NEVER produce a one-line stop."
 }
 Forbidden: canned refusals like "I don't have enough signal" without ALSO producing the best first-pass answer you can.`;
-    effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}${preamble}`;
+    effectiveSystemPrompt = `${territoryProfileBlock}${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}${preamble}`;
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -6640,7 +6640,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       const v2Identity = (v2 as any).identity ?? "";
       const v2Reasoning = (v2 as any).reasoning ?? v2.systemPrompt;
       effectiveSystemPrompt =
-        `${strategyObjectiveBlock}${v2Identity}${sopAuthorityBlock}${decisionLayerBlock}\n\n${v2Reasoning}`;
+        `${territoryProfileBlock}${strategyObjectiveBlock}${v2Identity}${sopAuthorityBlock}${decisionLayerBlock}\n\n${v2Reasoning}`;
       // Stash prior turn for wrong-question check later.
       v2EvidenceBase = {
         decision: v2.decision,
