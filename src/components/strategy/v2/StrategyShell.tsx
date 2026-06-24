@@ -86,7 +86,7 @@ import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflo
 // /strategy/settings page (see src/pages/StrategySettings.tsx).
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
-import { classifyIntelHead, buildHeadKIBlock, HEAD_LABELS, type Citation } from '@/lib/strategy/headClassifier';
+import { classifyIntelHead, buildHeadKIBlock, HEAD_LABELS, type Citation, type InjectedKI } from '@/lib/strategy/headClassifier';
 import {
   detectPlaybookTriggers,
   fetchDetectedPlaybooks,
