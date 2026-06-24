@@ -1523,6 +1523,7 @@ export function StrategyShell() {
             </button>
           )}
           <div className="flex-1 min-w-0">
+            <ProviderHealthBanner />
             <StrategyTopBar
               title={activeThread ? displayThreadTitle(activeThread) : 'New thread'}
               onTitleChange={(next) => activeThread && updateThread(activeThread.id, { title: next })}
