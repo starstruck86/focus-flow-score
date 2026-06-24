@@ -233,7 +233,15 @@ export type SignalType =
   | "external_event"
   | "competitive_pressure"
   | "leadership_or_org"
-  | "product_or_launch";
+  | "product_or_launch"
+  // ── Branch-specific signal kinds ──────────────────────────────────
+  | "mmp_switch"
+  | "attribution_gap"
+  | "deep_linking_adoption"
+  | "competitive_displacement"
+  | "product_expansion"
+  | "renewal_risk"
+  | "qbr_signal";
 
 export type SignalSourceType = "account" | "library" | "web" | "inference";
 
