@@ -161,6 +161,7 @@ export async function retrieveLibraryContext(
         .slice(0, maxKIs)
         .map(({ row, score }) => ({
           id: row.id,
+          spider_dimension: row.spider_dimension,
           title: row.title,
           chapter: row.chapter,
           knowledge_type: row.knowledge_type,
