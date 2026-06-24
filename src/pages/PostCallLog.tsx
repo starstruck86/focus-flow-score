@@ -348,6 +348,17 @@ export default function PostCallLog() {
             </>
           )}
         </div>
+
+        {/* Queue transcript */}
+        <div className="space-y-3 rounded-xl border border-border/60 p-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-sm font-semibold">Queue for transcript grading?</label>
+              <p className="text-xs text-muted-foreground mt-0.5">Grade this call in Coach after logging</p>
+            </div>
+            <Switch checked={queueTranscript} onCheckedChange={setQueueTranscript} />
+          </div>
+        </div>
       </div>
 
       {/* Sticky submit */}
