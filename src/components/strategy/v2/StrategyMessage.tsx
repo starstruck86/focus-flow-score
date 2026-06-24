@@ -28,64 +28,10 @@ const DIMENSION_ICONS: Record<string, string> = {
   internal_prospecting: '📞',
 };
 
-function CitationChip({ citation }: { citation: Citation }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [open]);
-  const icon = DIMENSION_ICONS[citation.spider_dimension] ?? '📖';
-  return (
-    <span ref={ref} className="relative inline-block">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full mx-0.5 align-middle transition-colors"
-        style={{
-          background: open ? 'hsl(var(--sv-clay) / 0.15)' : 'hsl(var(--sv-clay) / 0.08)',
-          border: '1px solid hsl(var(--sv-clay) / 0.25)',
-          color: 'hsl(var(--sv-clay))',
-          fontFamily: 'var(--sv-sans)',
-          fontWeight: 600,
-          cursor: 'pointer',
-          verticalAlign: 'middle',
-        }}
-        title={citation.title}
-      >
-        {icon} {citation.key}
-      </button>
-      {open && (
-        <span
-          className="absolute z-50 left-0 top-6 rounded-[8px] p-3 shadow-lg block"
-          style={{
-            width: 260,
-            background: 'hsl(var(--sv-paper))',
-            border: '1px solid hsl(var(--sv-hairline))',
-            boxShadow: '0 4px 20px hsl(0 0% 0% / 0.12)',
-          }}
-        >
-          <span className="block text-[11px] font-semibold mb-1" style={{ color: 'hsl(var(--sv-ink))' }}>
-            {citation.title}
-          </span>
-          <span className="block text-[11px] leading-snug" style={{ color: 'hsl(var(--sv-muted))' }}>
-            {citation.tactic_summary.slice(0, 160)}
-          </span>
-          <span
-            className="block mt-1.5 text-[10px] uppercase tracking-wider"
-            style={{ color: 'hsl(var(--sv-clay) / 0.7)' }}
-          >
-            {icon} {citation.spider_dimension.replace(/_/g, ' ')}
-          </span>
-        </span>
-      )}
-    </span>
-  );
-}
+// CitationChip removed — inline stateful chips inside ReactMarkdown caused
+// "Rendered more hooks than during the previous render". Citations are now
+// surfaced exclusively via SourcesPanel at the bottom of each assistant turn.
+
 
 function SourcesPanel({ citations }: { citations: Citation[] }) {
   const [expanded, setExpanded] = useState(false);
@@ -131,27 +77,6 @@ function SourcesPanel({ citations }: { citations: Citation[] }) {
   );
 }
 
-function escapeCitationsForMarkdown(text: string): string {
-  return text.replace(/\[K(\d+)\]/g, (_, n) => `%%K${n}%%`);
-}
-
-function renderCitationText(str: string, citations: Citation[]): React.ReactNode {
-  if (!str.includes('%%K')) return str;
-  const citationMap = new Map(citations.map((c) => [c.key, c]));
-  const parts = str.split(/(%%K\d+%%)/g);
-  return (
-    <>
-      {parts.map((part, i) => {
-        const match = part.match(/^%%K(\d+)%%$/);
-        if (!match) return <React.Fragment key={i}>{part}</React.Fragment>;
-        const key = `K${match[1]}`;
-        const citation = citationMap.get(key);
-        if (!citation) return <React.Fragment key={i}>{part}</React.Fragment>;
-        return <CitationChip key={i} citation={citation} />;
-      })}
-    </>
-  );
-}
 
 /**
  * Strict-mode response shaper. Runs AFTER the model responds to guarantee:
@@ -397,22 +322,7 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig, citati
   // Calm Claude-style minimal renderer: subtle headers, tight bullets,
   // 1.65 line-height, no decorative chrome.
 
-  const assistantText = citations && citations.length > 0
-    ? escapeCitationsForMarkdown(text)
-    : text;
-  const renderInline = (children: React.ReactNode): React.ReactNode => {
-    if (!citations || citations.length === 0) return children;
-    try {
-      const map = (node: React.ReactNode): React.ReactNode => {
-        if (typeof node === 'string') return renderCitationText(node, citations);
-        if (Array.isArray(node)) return node.map((c, i) => <span key={i}>{map(c)}</span>);
-        return node;
-      };
-      return map(children);
-    } catch {
-      return children;
-    }
-  };
+  const assistantText = text;
 
   return (
     <div
@@ -429,27 +339,28 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig, citati
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          p: ({ children }) => <p style={{ margin: '0 0 12px' }}>{renderInline(children)}</p>,
+          p: ({ children }) => <p style={{ margin: '0 0 12px' }}>{children}</p>,
           ul: ({ children }) => <ul style={{ margin: '0 0 12px', paddingLeft: '1.25rem' }}>{children}</ul>,
           ol: ({ children }) => <ol style={{ margin: '0 0 12px', paddingLeft: '1.4rem' }}>{children}</ol>,
-          li: ({ children }) => <li style={{ margin: '0 0 4px' }}>{renderInline(children)}</li>,
-          strong: ({ children }) => <strong style={{ fontWeight: 600 }}>{renderInline(children)}</strong>,
-          em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{renderInline(children)}</em>,
+          li: ({ children }) => <li style={{ margin: '0 0 4px' }}>{children}</li>,
+          strong: ({ children }) => <strong style={{ fontWeight: 600 }}>{children}</strong>,
+          em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
           h1: ({ children }) => (
             <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '16px 0 6px', fontFamily: 'var(--sv-sans)' }}>
-              {renderInline(children)}
+              {children}
             </h2>
           ),
           h2: ({ children }) => (
             <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '16px 0 6px', fontFamily: 'var(--sv-sans)' }}>
-              {renderInline(children)}
+              {children}
             </h2>
           ),
           h3: ({ children }) => (
             <h3 style={{ fontSize: '15px', fontWeight: 600, margin: '12px 0 4px', fontFamily: 'var(--sv-sans)' }}>
-              {renderInline(children)}
+              {children}
             </h3>
           ),
+
           code: ({ children, className }: any) => (
             <code
               className={className}
