@@ -179,12 +179,12 @@ export function SurfacePanel({
   const HeaderIcon = meta.icon;
   const vibe: SurfaceVibe = SURFACE_VIBE[surface] ?? DEFAULT_VIBE;
 
-  // ── Custom pills (per surface) ────────────────────────────────
-  const customPills = useMemo<CustomPill[]>(
-    () => listCustomPillsForSurface(surface),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [surface, pillsVersion],
-  );
+  const { user } = useAuth();
+  const { data: customPills = [] } = useQuery<CustomPill[]>({
+    queryKey: ['custom-pills', user?.id, surface, 'visible', pillsVersion],
+    queryFn: () => listCustomPillsForSurface(user!.id, surface),
+    enabled: !!user?.id,
+  });
 
   // ── Recent threads associated with this surface ───────────────
   const recentThreadsForSurface = useMemo(() => {
