@@ -5895,7 +5895,7 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
   const readabilityContract = buildResponseFormatContract({
     workspace: workspaceKeyRaw ?? null,
     intent,
-    userContent,
+    userContent: __effectiveUserContent,
     decision: outputModeDecision,
   });
   console.log(
