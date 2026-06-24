@@ -86,7 +86,7 @@ import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflo
 // /strategy/settings page (see src/pages/StrategySettings.tsx).
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
-import { classifyIntelHead, buildHeadKIBlock, HEAD_LABELS, type Citation } from '@/lib/strategy/headClassifier';
+import { classifyIntelHead, buildHeadKIBlock, HEAD_LABELS, type Citation, type InjectedKI } from '@/lib/strategy/headClassifier';
 import {
   detectPlaybookTriggers,
   fetchDetectedPlaybooks,
@@ -257,6 +257,12 @@ export function StrategyShell() {
     setLoadedPlaybookContent(content);
     setDismissedPlaybookIds((prev) => new Set([...prev, playbookId]));
     setDetectedPlaybooks((prev) => prev.filter((p) => p.id !== playbookId));
+  }, []);
+
+  // Manually injected KIs (from ContextInspector Intelligence tab)
+  const [manuallyInjectedKIs, setManuallyInjectedKIs] = useState<InjectedKI[]>([]);
+  const handleInjectKI = useCallback((ki: InjectedKI) => {
+    setManuallyInjectedKIs((prev) => (prev.find((k) => k.id === ki.id) ? prev : [...prev, ki]));
   }, []);
 
   // ── Surface-switch swap (drafts + active thread) ─────────────────────────
@@ -895,13 +901,19 @@ export function StrategyShell() {
         const playbookBlock = loadedPlaybookRef.current;
         loadedPlaybookRef.current = '';
         if (playbookBlock) setLoadedPlaybookContent('');
-        const combinedInstructions = [territoryBlock, playbookBlock, headKIBlock].filter(Boolean).join('\n\n');
+        const manualKIBlock = manuallyInjectedKIs.length > 0
+          ? `\n\n### Manually Injected Knowledge Items\n${manuallyInjectedKIs.map((ki) =>
+              `- ${ki.title}: ${ki.tactic_summary.slice(0, 120)}`
+            ).join('\n')}`
+          : '';
+        const combinedInstructions = [territoryBlock, playbookBlock, manualKIBlock, headKIBlock].filter(Boolean).join('\n\n');
         sendMessage(text, {
           pickedResourceIds: sidecar,
           workspace: ws,
           workspaceSource: sendingFrom ? 'selected' : (activeSurface ? 'selected' : 'none'),
           globalInstructions: combinedInstructions || undefined,
         });
+        if (manuallyInjectedKIs.length > 0) setManuallyInjectedKIs([]);
       };
       const accountName = linkedContext?.account?.name ?? linkedContext?.opportunity?.name ?? null;
       if (head && user?.id) {
@@ -942,7 +954,7 @@ export function StrategyShell() {
         dispatch('');
       }
     }
-  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, territoryProfile, activeThread?.linked_account_id, linkedContext]);
+  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, territoryProfile, activeThread?.linked_account_id, linkedContext, manuallyInjectedKIs]);
 
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {
     setLinkPickerOpen(false);
@@ -1597,6 +1609,9 @@ export function StrategyShell() {
         memories={memories}
         uploads={uploads}
         artifacts={artifacts}
+        userId={user?.id}
+        onInjectKI={handleInjectKI}
+        injectedKICount={manuallyInjectedKIs.length}
       />
       <LinkPicker
         open={linkPickerOpen}
