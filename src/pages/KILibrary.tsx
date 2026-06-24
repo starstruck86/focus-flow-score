@@ -268,7 +268,7 @@ export default function KILibrary() {
       const trimmed = search.trim();
       if (trimmed.length >= 2) {
         const safe = trimmed.replace(/[%,()]/g, ' ');
-        q = q.or(`title.ilike.%${safe}%,tactic_summary.ilike.%${safe}%`);
+        q = q.or(`title.ilike.%${safe}%,tactic_summary.ilike.%${safe}%,example_usage.ilike.%${safe}%,why_it_matters.ilike.%${safe}%`);
       }
 
       const { data, error } = await q
@@ -303,7 +303,7 @@ export default function KILibrary() {
       const trimmed = search.trim();
       if (trimmed.length >= 2) {
         const safe = trimmed.replace(/[%,()]/g, ' ');
-        q = q.or(`title.ilike.%${safe}%,tactic_summary.ilike.%${safe}%`);
+        q = q.or(`title.ilike.%${safe}%,tactic_summary.ilike.%${safe}%,example_usage.ilike.%${safe}%,why_it_matters.ilike.%${safe}%`);
       }
       const { count } = await q;
       return count ?? 0;
