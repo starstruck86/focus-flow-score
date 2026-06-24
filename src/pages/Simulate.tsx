@@ -118,7 +118,27 @@ export default function Simulate() {
       const { data } = await supabase.functions.invoke('simulate-chat', {
         body: { messages: finalMessages, isGradeMode: true, system: '' },
       });
-      if (data?.gradeResult) setGradeResult(data.gradeResult);
+      if (data?.gradeResult) {
+        setGradeResult(data.gradeResult);
+        if (data.gradeResult?.score && user) {
+          try {
+            const dims = SCENARIO_DRILLS[scenario] ?? ['discovery'];
+            const scores: Record<string, number> = {};
+            dims.forEach((d) => { scores[d] = data.gradeResult.score; });
+            await supabase
+              .from('skill_benchmarks')
+              .insert({
+                user_id: user.id,
+                run_at: new Date().toISOString(),
+                scores,
+                overall_avg: data.gradeResult.score,
+                dimension_count: dims.length,
+              });
+          } catch (e) {
+            console.warn('[Simulate] skill_benchmarks write failed (non-blocking)', e);
+          }
+        }
+      }
     } catch (e) {
       console.warn('[Simulate] grade error', e);
     } finally {
