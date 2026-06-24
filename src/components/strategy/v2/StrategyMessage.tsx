@@ -334,7 +334,7 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
       data-strategy-selectable
       data-message-id={message.id}
       data-message-role="assistant"
-      className="text-[15px] break-words"
+      className="group relative text-[15px] break-words"
       style={{
         fontFamily: 'var(--sv-serif)',
         color: 'hsl(var(--sv-ink))',
