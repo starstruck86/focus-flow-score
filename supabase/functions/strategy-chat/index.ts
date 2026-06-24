@@ -5629,17 +5629,33 @@ async function buildChatSystemPrompt(args: {
   if (pack.opportunity?.stage) __accountCtxParts.push(`Opp stage: ${pack.opportunity.stage}`);
   const __classifierAccountContext = __accountCtxParts.join(" | ");
 
+  // Easy Prompt (task 3.1) — expand terse asks into a full Branch
+  // expansion-AE instruction BEFORE the situation classifier, library
+  // retrieval, and prompt assembly see them. The original userContent
+  // is still what's stored in chat history; only the in-pipeline copy
+  // is rewritten. Non-blocking: any failure returns the original.
+  const __easyPrompt = await expandPromptIfTerse({
+    userContent,
+    userId,
+    supabase,
+    accountContext: __classifierAccountContext,
+  });
+  const __effectiveUserContent = __easyPrompt.expanded;
+  console.log(
+    `[easy-prompt] was_expanded=${__easyPrompt.wasExpanded}`,
+  );
+
   const situation = await classifySituation({
     supabase,
     userId,
-    userContent,
+    userContent: __effectiveUserContent,
     accountContext: __classifierAccountContext,
   });
 
   // derivedScopes is the situation-scoped replacement for the legacy
   // keyword soup. If the classifier returned "general" / no scopes
   // (short ask, no playbooks, gateway failure), fall back transparently.
-  const __legacyScopes = deriveLibraryScopes(pack.account, userContent);
+  const __legacyScopes = deriveLibraryScopes(pack.account, __effectiveUserContent);
   const scopes = situation.derivedScopes.length > 0
     ? situation.derivedScopes
     : __legacyScopes;
@@ -5648,7 +5664,7 @@ async function buildChatSystemPrompt(args: {
   // (only queries when scopes existed today) while enforcing `off`
   // and forcing `preferred`/`required` when a meaningful query exists.
   const __libraryDecision = decideLibraryQuery(__retrievalRules, {
-    userContent,
+    userContent: __effectiveUserContent,
     derivedScopes: scopes,
     legacyWouldQuery: scopes.length > 0,
   });
