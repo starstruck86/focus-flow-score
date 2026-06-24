@@ -84,6 +84,7 @@ const KILibrary = lazy(() => import("./pages/KILibrary"));
 const Simulate = lazy(() => import("./pages/Simulate"));
 const Competitive = lazy(() => import("./pages/Competitive"));
 const Playbooks = lazy(() => import("./pages/Playbooks"));
+const SignalInbox = lazy(() => import("./pages/SignalInbox"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
