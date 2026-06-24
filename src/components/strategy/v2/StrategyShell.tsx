@@ -1489,6 +1489,7 @@ export function StrategyShell() {
               onChipClick={() => setLinkPickerOpen(true)}
               chipRef={chipRef}
               onNewThread={() => handleNewThread()}
+              onLogCall={() => setCallLogOpen(true)}
             />
           </div>
         </div>
