@@ -173,6 +173,7 @@ function ProjectsIndex({
       <ul className="space-y-1.5">
         {sorted.map((p) => {
           const threadCount = threadCountByFamily.get(p.familyKey) ?? 0;
+          const signalCount = signalCountByFamily.get(p.familyKey) ?? 0;
           return (
             <li key={p.familyKey}>
               <button
