@@ -364,6 +364,7 @@ const PREFLIGHT_WORKSPACES = new Set([
   "artifacts",
   "library",
   "refine",
+  "strategy",
 ]);
 
 function normalizeWorkspaceKey(raw: string | null | undefined): string {
