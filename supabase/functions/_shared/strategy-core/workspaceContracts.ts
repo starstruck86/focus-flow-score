@@ -244,6 +244,7 @@ const DEEP_RESEARCH: WorkspaceContract = {
     "Treating one source as ground truth when others disagree",
     "Burying the 'so what' under exhaustive background",
     "Silent gaps — missing evidence not surfaced as unknowns",
+    "Producing generic industry research without Branch expansion implications (footprint, whitespace, competitive displacement, QBR narrative)",
   ],
   escalationRules: [
     {
