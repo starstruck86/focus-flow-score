@@ -126,10 +126,11 @@ export function ProjectsPanel({ threads, activeThreadId, onSelectThread, onCreat
 // ─────────────── Index ───────────────
 
 function ProjectsIndex({
-  projects, threadCountByFamily, pinnedFamilies, onOpen,
+  projects, threadCountByFamily, signalCountByFamily, pinnedFamilies, onOpen,
 }: {
   projects: ProjectSummary[];
   threadCountByFamily: Map<string, number>;
+  signalCountByFamily: Map<string, number>;
   pinnedFamilies: Set<string>;
   onOpen: (familyKey: string) => void;
 }) {
