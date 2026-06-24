@@ -23,6 +23,8 @@
  * Pure presentation. No backend/engine changes.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/AuthContext';
 import { Link } from 'react-router-dom';
 import {
   X, Lightbulb, Microscope, Wand2, BookOpen, FileText,
