@@ -502,6 +502,7 @@ const LIBRARY: WorkspaceContract = {
     "Cherry-picking one resource and ignoring contradicting ones",
     "Generic prose that could have been written without the library (defeats the purpose)",
     "Over-quoting — output becomes a montage instead of synthesis",
+    "Surfacing generic sales tactics when Branch product-specific KIs (deep linking, web-to-app, Universal Ads, MMP/Adjust displacement) exist for the situation",
   ],
   escalationRules: [
     {
