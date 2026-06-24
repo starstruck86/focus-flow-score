@@ -1064,8 +1064,8 @@ async function generatePrioritizedSignals(args: {
   const hypBlock = hyp
     ? `\nINFERRED HYPOTHESES (gap-fillers — use ONLY to extend verified signals or when no verified signal exists):\n` +
       `- Business model: ${hyp.business_model_summary}\n` +
-      `- Customer experience: ${hyp.customer_experience}\n` +
-      `- Marketing motion: ${hyp.marketing_motion}\n` +
+      `- App posture: ${hyp.app_posture}\n` +
+      `- Measurement motion: ${hyp.measurement_motion}\n` +
       `- Strategic tension: ${hyp.strategic_tension}\n` +
       `- Likely gap: ${hyp.likely_gap}\n` +
       `- Why now: ${hyp.why_now}\n` +
