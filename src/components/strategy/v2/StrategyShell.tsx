@@ -153,6 +153,7 @@ export function StrategyShell() {
     updateThread,
     upsertThreadLocal,
     createThread,
+    createThreadWithOpts,
   } = useStrategyThreads();
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const chipRef = useRef<HTMLButtonElement>(null);
