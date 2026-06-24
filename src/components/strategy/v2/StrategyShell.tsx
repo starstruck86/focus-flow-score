@@ -45,6 +45,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { StrategyThread } from '@/types/strategy';
 
 import { StrategyTopBar } from './StrategyTopBar';
+import { ProviderHealthBanner } from './ProviderHealthBanner';
 import { StrategyCanvas } from './StrategyCanvas';
 import { getStrategyConfig, subscribeStrategyConfig } from '@/lib/strategy/strategyConfig';
 import { StrategyComposer } from './StrategyComposer';
