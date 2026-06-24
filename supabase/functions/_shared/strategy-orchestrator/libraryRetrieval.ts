@@ -141,10 +141,59 @@ export async function retrieveLibraryContext(
     console.warn("[library-retrieval] Playbook fetch failed:", (e as Error).message);
   }
 
+  // ── Preferred-playbook pin (task 1.2) ──
+  // Situation classifier upstream picks a specific playbook by ID. If
+  // scope scoring already surfaced it, hoist it to rank 1; if it
+  // missed, fetch the row directly and insert it at position 0. Cap
+  // remains `maxPlaybooks`.
+  if (opts.preferredPlaybookId) {
+    try {
+      const preferredId = opts.preferredPlaybookId;
+      const existingIdx = playbooks.findIndex((p) => p.id === preferredId);
+      if (existingIdx > 0) {
+        const [hoisted] = playbooks.splice(existingIdx, 1);
+        playbooks.unshift(hoisted);
+        console.log(`[library-retrieval] hoisted preferred playbook id=${preferredId}`);
+      } else if (existingIdx < 0) {
+        const { data: pinnedRow } = await supabase
+          .from("playbooks")
+          .select(
+            "id, title, problem_type, when_to_use, why_it_matters, tactic_steps, talk_tracks, key_questions, traps, anti_patterns, what_great_looks_like, common_mistakes, confidence_score",
+          )
+          .eq("id", preferredId)
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (pinnedRow) {
+          const pinned: RetrievedPlaybook = {
+            id: pinnedRow.id,
+            title: pinnedRow.title,
+            problem_type: pinnedRow.problem_type,
+            when_to_use: pinnedRow.when_to_use,
+            why_it_matters: pinnedRow.why_it_matters,
+            tactic_steps: pinnedRow.tactic_steps,
+            talk_tracks: pinnedRow.talk_tracks,
+            key_questions: pinnedRow.key_questions,
+            traps: pinnedRow.traps,
+            anti_patterns: pinnedRow.anti_patterns,
+            what_great_looks_like: pinnedRow.what_great_looks_like,
+            common_mistakes: pinnedRow.common_mistakes,
+            confidence_score: pinnedRow.confidence_score,
+            score: Number.MAX_SAFE_INTEGER,
+          };
+          playbooks = [pinned, ...playbooks].slice(0, maxPlaybooks);
+          console.log(`[library-retrieval] pinned preferred playbook id=${preferredId}`);
+        } else {
+          console.warn(`[library-retrieval] preferred playbook not found id=${preferredId}`);
+        }
+      }
+    } catch (e) {
+      console.warn("[library-retrieval] preferred playbook pin failed:", (e as Error).message);
+    }
+  }
+
   const contextString = formatLibraryContext(knowledgeItems, playbooks);
 
-
-  console.log(`[library-retrieval] scopes=${opts.scopes.join(",")} → ${knowledgeItems.length} KIs, ${playbooks.length} playbooks`);
+  console.log(`[library-retrieval] scopes=${opts.scopes.join(",")} → ${knowledgeItems.length} KIs, ${playbooks.length} playbooks${opts.preferredPlaybookId ? ` preferred=${opts.preferredPlaybookId}` : ""}`);
 
   return {
     knowledgeItems,
