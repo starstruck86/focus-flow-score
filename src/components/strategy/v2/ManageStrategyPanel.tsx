@@ -19,6 +19,8 @@
  * editing here so there is exactly one source of truth for pill shape.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -28,7 +30,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  listCustomPillsForSurface,
+  listCustomPills,
   deleteCustomPill,
   duplicateCustomPill,
   upsertCustomPill,
