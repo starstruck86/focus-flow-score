@@ -52,8 +52,21 @@ export function SlashMenu({ query, anchorRect, onPick, onClose }: Props) {
     if (!query) return VERBS;
     const needle = query.replace(/^\//, '').toLowerCase().trim();
     if (!needle) return VERBS;
-    return VERBS.filter(v => v.key.includes(needle) || v.label.toLowerCase().includes(needle.replace(/\s+/g, '')));
+    return VERBS.filter(v => {
+      if (v.key === 'save-as-skill') {
+        return needle.startsWith('save') || v.label.toLowerCase().includes(needle);
+      }
+      return v.key.includes(needle) || v.label.toLowerCase().includes(needle.replace(/\s+/g, ''));
+    });
   }, [query]);
+
+  const getDisplayLabel = (v: VerbDef): string => {
+    if (v.key === 'save-as-skill' && query) {
+      const match = query.match(/^\/save-as-skill\s+(.+)/i);
+      if (match?.[1]?.trim()) return `Save as skill: "${match[1].trim()}"`;
+    }
+    return v.label;
+  };
 
   useEffect(() => { setActiveIdx(0); }, [query]);
 
