@@ -6,6 +6,7 @@
  * Phase 3: chip click is hoisted to the shell so it can also be summoned by ⌘L.
  */
 import { forwardRef, useEffect, useRef, useState } from 'react';
+import { Phone } from 'lucide-react';
 import type { TrustState } from '@/hooks/strategy/useThreadTrustState';
 import { EntityChip } from './EntityChip';
 import { useIsMobile } from '@/hooks/use-mobile';
