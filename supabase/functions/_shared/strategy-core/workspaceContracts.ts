@@ -168,9 +168,10 @@ const DEEP_RESEARCH: WorkspaceContract = {
   useCases: [
     "Build an account brief for Peacock discovery",
     "Map Adjust's pricing posture and GTM motion",
-    "Profile the CMO / VP Engineering buyer persona at a travel account",
+    "Profile the CMO or VP Engineering buyer persona at a media account",
     "Research Hilton's mobile app strategy and attribution setup",
     "Investigate streaming industry shifts that create Branch whitespace",
+    "Competitive analysis: Branch vs Adjust for a travel vertical deal",
   ],
   nonGoals: [
     "Generating creative angles or hooks (→ Brainstorm)",
