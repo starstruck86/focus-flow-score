@@ -1078,6 +1078,50 @@ export function StrategyShell() {
     }
   }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, buildTerritoryContextString, activeThread?.linked_account_id, linkedContext, manuallyInjectedKIs, projectInstructions]);
 
+  // Easy Prompt — visible/editable expansion. Calls expand-prompt with
+  // territory + account context. Returns the expanded text (or the original
+  // on any failure / no-op). The composer drops the result back in for the
+  // user to edit before sending.
+  const handleExpandPrompt = useCallback(async (draft: string): Promise<string> => {
+    if (!user?.id || !draft.trim()) return draft;
+    try {
+      const territoryBlock = buildTerritoryContextString();
+      const accountName = linkedContext?.account?.name ?? null;
+      const accountBlock = accountName
+        ? `Account: ${accountName}${linkedContext?.account?.industry ? ` | Industry: ${linkedContext.account.industry}` : ''}`
+        : '';
+      const { data: { session } } = await supabase.auth.getSession();
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/expand-prompt`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session?.access_token ?? ''}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({
+            userContent: draft,
+            territoryContext: territoryBlock || '',
+            accountContext: accountBlock,
+          }),
+        },
+      );
+      if (!resp.ok) return draft;
+      const data = await resp.json().catch(() => null);
+      const expanded = (data?.expanded ?? '').toString().trim();
+      if (!expanded) return draft;
+      if (data?.wasExpanded === false) {
+        toast('Already specific — nothing to expand');
+        return draft;
+      }
+      return expanded;
+    } catch {
+      return draft;
+    }
+  }, [user?.id, buildTerritoryContextString, linkedContext]);
+
+
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {
     setLinkPickerOpen(false);
     if (!activeThread) return;
