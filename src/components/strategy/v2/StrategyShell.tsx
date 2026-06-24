@@ -1447,7 +1447,7 @@ export function StrategyShell() {
             isLoading={isLoading}
             isSending={isSending}
             strategyConfig={strategyConfig}
-            lastIntelActivation={isSending ? lastIntelActivation : null}
+            lastIntelActivation={lastIntelActivation}
             onPickPrompt={(prompt) => {
               const ta = composerRef.current as
                 (HTMLTextAreaElement & { insertText?: (t: string) => void })
