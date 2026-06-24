@@ -5722,7 +5722,7 @@ async function buildChatSystemPrompt(args: {
     // Library posture (`libraryUse: background`) only suppresses the
     // broader library scan above, not intent-driven resource lookup.
     retrieveResourceContext(supabase, userId, {
-      userMessage: userContent,
+      userMessage: __effectiveUserContent,
       accountId,
       opportunityId,
       threadId,
