@@ -186,11 +186,16 @@ export function ContextInspector({
   const [tab, setTab] = useState<Tab>('memory');
 
   const items = useMemo(() => {
-    if (tab === 'memory') return memories.map((m) => ({ id: m.id, primary: m.content, secondary: null as string | null }));
-    if (tab === 'uploads') return uploads.map((u) => ({ id: u.id, primary: u.file_name, secondary: u.summary }));
-    if (tab === 'artifacts') return artifacts.map((a) => ({ id: a.id, primary: a.title, secondary: a.artifact_type }));
+    if (tab === 'memory') return memories.map((m) => ({
+      id: m.id,
+      primary: m.content,
+      secondary: (m.memory_type ?? null) as string | null,
+    }));
+    if (tab === 'uploads') return uploads.map((u) => ({ id: u.id, primary: u.file_name, secondary: u.summary as string | null }));
+    if (tab === 'artifacts') return artifacts.map((a) => ({ id: a.id, primary: a.title, secondary: a.artifact_type as string | null }));
     return [];
   }, [tab, memories, uploads, artifacts]);
+
 
   if (!open) return null;
 
