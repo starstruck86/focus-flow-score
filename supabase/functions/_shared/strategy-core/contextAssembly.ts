@@ -35,9 +35,6 @@ export interface AssembledStrategyContext {
     industry: string | null;
     website: string | null;
     techStack: string[];
-    ecommerce: string | null;
-    marTech: string | null;
-    marketingPlatformDetected: string | null;
     notes: string | null;
   } | null;
   contacts: Array<{
@@ -79,6 +76,14 @@ export async function assembleStrategyContext(args: {
   userId: string;
   accountId?: string | null;
   /**
+   * Pre-fetched branch_footprint row for the linked account (the spine
+   * already fetches this — we just inject it here so the assembled
+   * context block is the single canonical source of account context).
+   * Pass `null` or omit if not available; the BRANCH FOOTPRINT block is
+   * then skipped silently.
+   */
+  branchFootprint?: Record<string, any> | null;
+  /**
    * Optional W3 input. When supplied, the rendered `contextBlock`
    * orders its constituent sections per `contextMode`. Library/web
    * decisions are NOT made here — those are owned by the call site
@@ -86,7 +91,7 @@ export async function assembleStrategyContext(args: {
    */
   retrievalRules?: RetrievalRules;
 }): Promise<AssembledStrategyContext> {
-  const { supabase, userId, accountId, retrievalRules } = args;
+  const { supabase, userId, accountId, branchFootprint, retrievalRules } = args;
   if (!accountId) return EMPTY;
 
   try {
@@ -94,7 +99,7 @@ export async function assembleStrategyContext(args: {
       supabase
         .from("accounts")
         .select(
-          "id, name, industry, website, tech_stack, ecommerce, mar_tech, marketing_platform_detected, notes",
+          "id, name, industry, website, tech_stack, notes",
         )
         .eq("id", accountId)
         .maybeSingle(),
@@ -123,9 +128,6 @@ export async function assembleStrategyContext(args: {
           industry: acct.industry,
           website: acct.website,
           techStack: acct.tech_stack || [],
-          ecommerce: acct.ecommerce,
-          marTech: acct.mar_tech,
-          marketingPlatformDetected: acct.marketing_platform_detected,
           notes: acct.notes,
         }
       : null;
@@ -155,6 +157,7 @@ export async function assembleStrategyContext(args: {
       account,
       contacts,
       latestTranscript,
+      branchFootprint ?? null,
       retrievalRules,
     );
     return { account, contacts, latestTranscript, contextBlock };
@@ -168,6 +171,7 @@ function buildContextBlock(
   account: AssembledStrategyContext["account"],
   contacts: AssembledStrategyContext["contacts"],
   transcript: AssembledStrategyContext["latestTranscript"],
+  branchFootprint: Record<string, any> | null,
   retrievalRules: RetrievalRules | undefined,
 ): string {
   // Pre-W3 behavior: account → contacts → transcript, joined.
@@ -180,15 +184,53 @@ function buildContextBlock(
     if (account.industry) info.push(`Industry: ${account.industry}`);
     if (account.website) info.push(`Website: ${account.website}`);
     if (account.techStack.length) info.push(`Tech Stack: ${account.techStack.join(", ")}`);
-    if (account.marTech) info.push(`MarTech: ${account.marTech}`);
-    if (account.marketingPlatformDetected) {
-      info.push(`Marketing Platform: ${account.marketingPlatformDetected}`);
-    }
-    if (account.ecommerce) info.push(`Ecommerce: ${account.ecommerce}`);
     let text = info.join("\n");
     if (account.notes) text += `\n\nAccount Notes:\n${account.notes}`;
     // Account record is part of the project/account stream — kind: "account".
     blocks.push({ kind: "account", label: "account", text });
+  }
+
+  // BRANCH FOOTPRINT — only injected when branch_footprint row exists for
+  // the linked account. Per-product status lines, plus commercial metadata
+  // (ARR, renewal, relationship owner) and notes. Each field skipped silently
+  // when null/empty.
+  if (branchFootprint) {
+    const fp = branchFootprint;
+    const has = (v: unknown) =>
+      v !== null && v !== undefined && String(v).trim().length > 0;
+    const PRODUCTS: Array<[string, string]> = [
+      ["deep_linking", "Deep Linking"],
+      ["universal_ads", "Universal Ads"],
+      ["email_to_app", "Email-to-App"],
+      ["sms_to_app", "SMS-to-App"],
+      ["web_to_app", "Web-to-App"],
+      ["qr", "QR"],
+      ["aio", "AIO"],
+      ["advanced_privacy", "Advanced Privacy"],
+    ];
+    const productLines: string[] = [];
+    for (const [key, label] of PRODUCTS) {
+      const status = fp[`${key}_status`];
+      if (!has(status)) continue;
+      const useCase = fp[`${key}_use_case`];
+      productLines.push(
+        `${label}: ${status}${has(useCase) ? ` — ${useCase}` : ""}`,
+      );
+    }
+    const metaLines: string[] = [];
+    if (has(fp.estimated_arr)) metaLines.push(`Estimated ARR: ${fp.estimated_arr}`);
+    if (has(fp.contract_renewal_date)) metaLines.push(`Renewal: ${fp.contract_renewal_date}`);
+    if (has(fp.relationship_owner)) metaLines.push(`Relationship owner: ${fp.relationship_owner}`);
+    if (has(fp.notes)) metaLines.push(`Notes: ${fp.notes}`);
+
+    const fpLines = [...productLines, ...metaLines];
+    if (fpLines.length) {
+      blocks.push({
+        kind: "account",
+        label: "branch_footprint",
+        text: `## BRANCH FOOTPRINT\n${fpLines.join("\n")}`,
+      });
+    }
   }
 
   if (contacts.length) {
