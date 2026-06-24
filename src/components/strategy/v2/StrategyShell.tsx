@@ -1292,7 +1292,14 @@ export function StrategyShell() {
     }
 
     // Default path: send compiled prompt as a chat message (unchanged).
-    handleSend(compiledPrompt);
+    fromWorkflowRef.current = true;
+    setLastSkillWorkflow(def ?? null);
+    const isStructured = def?.family === 'artifact' || def?.outputType === 'artifact';
+    const suffix = isStructured
+      ? '\n\nStructure your response with ## section headers for each major component. Examples: ## Context, ## Strategic Priorities, ## Discovery Questions, ## Positioning, ## Next Step. Each section should be 2-5 sentences — specific, concrete, and actionable.'
+      : '';
+    handleSend(compiledPrompt + suffix);
+
     requestAnimationFrame(() => composerRef.current?.focus());
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId, startStrategyJob, user, createThread]);
