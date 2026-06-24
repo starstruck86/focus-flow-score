@@ -1906,6 +1906,12 @@ export function StrategyShell() {
         </div>,
         document.body,
       )}
+      <PostCallLogModal
+        open={callLogOpen}
+        onClose={() => setCallLogOpen(false)}
+        prefillAccountId={activeThread?.linked_account_id ?? null}
+        prefillAccountName={linkedContext?.account?.name ?? null}
+      />
       </div>
     </div>
   );
