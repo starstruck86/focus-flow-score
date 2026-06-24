@@ -1555,6 +1555,44 @@ export function StrategyShell() {
           />
         )}
 
+      {/* Account link suggestion — surfaces when thread mentions a known account */}
+      {suggestedLinkAccount && !activeThread?.linked_account_id && (
+        <div
+          className="flex items-center gap-2 px-4 py-2 shrink-0"
+          style={{
+            borderTop: '1px solid hsl(var(--sv-hairline))',
+            background: 'hsl(var(--sv-clay) / 0.04)',
+          }}
+        >
+          <span className="text-[11px]" style={{ color: 'hsl(var(--sv-clay))' }}>📍</span>
+          <span className="text-[11px] flex-1" style={{ color: 'hsl(var(--sv-ink))' }}>
+            Mentions <strong>{suggestedLinkAccount.name}</strong> — link thread to load account memory
+          </span>
+          <button
+            onClick={async () => {
+              if (!activeThread || !suggestedLinkAccount) return;
+              await updateThread(activeThread.id, {
+                linked_account_id: suggestedLinkAccount.id,
+                thread_type: 'account_linked',
+              });
+              setSuggestedLinkAccount(null);
+              runDetect().catch(() => { /* swallow */ });
+            }}
+            className="text-[11px] font-medium shrink-0"
+            style={{ color: 'hsl(var(--sv-clay))' }}
+          >
+            Link →
+          </button>
+          <button
+            onClick={() => setSuggestedLinkAccount(null)}
+            className="text-[11px] shrink-0"
+            style={{ color: 'hsl(var(--sv-muted))' }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Proactive playbook detection — surfaces when thread content matches a playbook */}
       {detectedPlaybooks.length > 0 && !isSending && (
         <div
