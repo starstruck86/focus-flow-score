@@ -87,6 +87,12 @@ import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflo
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
 import { classifyIntelHead, buildHeadKIBlock, HEAD_LABELS } from '@/lib/strategy/headClassifier';
+import {
+  detectPlaybookTriggers,
+  fetchDetectedPlaybooks,
+  fetchPlaybookForInjection,
+  type DetectedPlaybook,
+} from '@/lib/strategy/playbookDetector';
 import { tagThread } from '@/lib/strategy/threadTags';
 import { buildWorkspaceTitle, WORKSPACE_LABEL, displayThreadTitle } from '@/lib/strategy/threadNaming';
 import { PromoteToLibrarySheet, type PromotePayload } from './promote/PromoteToLibrarySheet';
@@ -238,6 +244,20 @@ export function StrategyShell() {
     triggeredAt: number;
   } | null>(null);
 
+  // Proactive playbook detection
+  const [detectedPlaybooks, setDetectedPlaybooks] = useState<DetectedPlaybook[]>([]);
+  const [loadedPlaybookContent, setLoadedPlaybookContent] = useState<string>('');
+  const [dismissedPlaybookIds, setDismissedPlaybookIds] = useState<Set<string>>(new Set());
+  const loadedPlaybookRef = useRef('');
+  useEffect(() => { loadedPlaybookRef.current = loadedPlaybookContent; }, [loadedPlaybookContent]);
+
+  const handleLoadPlaybook = useCallback(async (playbookId: string) => {
+    const content = await fetchPlaybookForInjection(playbookId);
+    setLoadedPlaybookContent(content);
+    setDismissedPlaybookIds((prev) => new Set([...prev, playbookId]));
+    setDetectedPlaybooks((prev) => prev.filter((p) => p.id !== playbookId));
+  }, []);
+
   // ── Surface-switch swap (drafts + active thread) ─────────────────────────
   // When the user moves between workspaces, save the in-flight draft AND the
   // currently active thread id under the previous surface, then restore both
@@ -322,6 +342,27 @@ export function StrategyShell() {
   useEffect(() => { activeThreadIdRef.current = threadId; }, [threadId]);
 
   const { messages, isLoading, isSending, sendMessage } = useStrategyMessages(threadId);
+
+  // Scan recent message text for playbook triggers
+  useEffect(() => {
+    if (!user?.id || messages.length === 0) return;
+    const recentText = messages
+      .slice(-10)
+      .map((m) => ((m.content_json as any)?.text ?? ''))
+      .join(' ');
+    const triggers = detectPlaybookTriggers(recentText);
+    if (triggers.length === 0) {
+      setDetectedPlaybooks([]);
+      return;
+    }
+    fetchDetectedPlaybooks(triggers, user.id)
+      .then((playbooks) => {
+        const fresh = playbooks.filter((p) => !dismissedPlaybookIds.has(p.id));
+        setDetectedPlaybooks(fresh);
+      })
+      .catch(() => { /* swallow */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, user?.id]);
 
   // Lifted strategy config — single source of truth for Strict Mode and other
   // render overrides. Subscribing once here means StrategyMessage no longer
@@ -850,7 +891,10 @@ export function StrategyShell() {
       const head = user?.id ? classifyIntelHead(text) : null;
       const dispatch = (headKIBlock: string) => {
         const territoryBlock = buildTerritoryBlock();
-        const combinedInstructions = [territoryBlock, headKIBlock].filter(Boolean).join('\n\n');
+        const playbookBlock = loadedPlaybookRef.current;
+        loadedPlaybookRef.current = '';
+        if (playbookBlock) setLoadedPlaybookContent('');
+        const combinedInstructions = [territoryBlock, playbookBlock, headKIBlock].filter(Boolean).join('\n\n');
         sendMessage(text, {
           pickedResourceIds: sidecar,
           workspace: ws,
@@ -1404,6 +1448,45 @@ export function StrategyShell() {
             }}
           />
         )}
+
+      {/* Proactive playbook detection — surfaces when thread content matches a playbook */}
+      {detectedPlaybooks.length > 0 && !isSending && (
+        <div
+          className="flex items-center gap-2 px-4 py-2 shrink-0"
+          style={{
+            borderTop: '1px solid hsl(var(--sv-hairline))',
+            background: 'hsl(var(--sv-paper))',
+          }}
+        >
+          <span className="text-[11px]" style={{ color: 'hsl(var(--sv-muted))' }}>💡</span>
+          <span className="text-[11px] flex-1" style={{ color: 'hsl(var(--sv-ink))' }}>
+            <strong>{detectedPlaybooks[0].title}</strong> playbook may apply
+            {loadedPlaybookContent && (
+              <span className="ml-1.5" style={{ color: 'hsl(var(--sv-clay))' }}>· Loaded ✓</span>
+            )}
+          </span>
+          {!loadedPlaybookContent && (
+            <button
+              onClick={() => handleLoadPlaybook(detectedPlaybooks[0].id)}
+              className="text-[11px] font-medium shrink-0"
+              style={{ color: 'hsl(var(--sv-clay))' }}
+            >
+              Load into context →
+            </button>
+          )}
+          <button
+            onClick={() => {
+              const dismissId = detectedPlaybooks[0].id;
+              setDismissedPlaybookIds((prev) => new Set([...prev, dismissId]));
+              setDetectedPlaybooks((prev) => prev.slice(1));
+            }}
+            className="text-[11px] shrink-0"
+            style={{ color: 'hsl(var(--sv-muted))' }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {trustState === 'blocked' ? (
         <BlockedComposer
