@@ -399,6 +399,37 @@ export function StrategyShell() {
   });
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
+  // Load territory accounts for cross-thread account detection
+  useEffect(() => {
+    if (!user?.id) return;
+    (supabase as any)
+      .from('accounts')
+      .select('id, name')
+      .eq('user_id', user.id)
+      .is('deleted_at', null)
+      .then(({ data }: { data: any }) => {
+        if (Array.isArray(data)) territoryAccountsRef.current = data;
+      });
+  }, [user?.id]);
+
+  // Detect known account mentions in unlinked threads
+  useEffect(() => {
+    if (activeThread?.linked_account_id || messages.length < 2) {
+      setSuggestedLinkAccount(null);
+      return;
+    }
+    const recentText = messages
+      .slice(-6)
+      .map((m) => ((m.content_json as any)?.text ?? ''))
+      .join(' ')
+      .toLowerCase();
+    const match = territoryAccountsRef.current.find(
+      (a) => a.name && a.name.length > 2 && recentText.includes(a.name.toLowerCase()),
+    );
+    setSuggestedLinkAccount(match ?? null);
+  }, [messages, activeThread?.linked_account_id]);
+
+
   // Scan recent message text for playbook triggers
   useEffect(() => {
     if (!user?.id || messages.length === 0) return;
