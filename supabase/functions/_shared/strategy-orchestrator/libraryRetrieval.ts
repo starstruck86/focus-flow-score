@@ -17,6 +17,12 @@ interface RetrieveOpts {
   scopes: string[];
   maxKIs?: number;
   maxPlaybooks?: number;
+  /**
+   * Situation-classifier pick (task 1.2). When provided and non-null,
+   * the playbook is guaranteed to appear at position 0 of the returned
+   * `playbooks` array — even if scope-based scoring missed it.
+   */
+  preferredPlaybookId?: string | null;
 }
 
 /** Score a row by counting scope keyword hits across searchable fields. */
