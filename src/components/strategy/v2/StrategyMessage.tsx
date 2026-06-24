@@ -8,11 +8,150 @@
  *
  * 32px gap to next message is owned by the parent stream.
  */
+import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { StrategyMessage as StrategyMessageT } from '@/types/strategy';
 import { MessageActions } from './MessageActions';
 import type { StrategyGlobalInstructionsConfig } from '@/lib/strategy/strategyConfig';
+import type { Citation } from '@/lib/strategy/headClassifier';
+
+const DIMENSION_ICONS: Record<string, string> = {
+  discovery: '🔍',
+  deal_control: '⚔️',
+  expansion_strategy: '📈',
+  stakeholder_navigation: '🏛️',
+  objection_handling: '🛡️',
+  messaging: '💬',
+  competitive: '🎯',
+  product_knowledge: '🌿',
+  internal_prospecting: '📞',
+};
+
+function CitationChip({ citation }: { citation: Citation }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+  const icon = DIMENSION_ICONS[citation.spider_dimension] ?? '📖';
+  return (
+    <span ref={ref} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full mx-0.5 align-middle transition-colors"
+        style={{
+          background: open ? 'hsl(var(--sv-clay) / 0.15)' : 'hsl(var(--sv-clay) / 0.08)',
+          border: '1px solid hsl(var(--sv-clay) / 0.25)',
+          color: 'hsl(var(--sv-clay))',
+          fontFamily: 'var(--sv-sans)',
+          fontWeight: 600,
+          cursor: 'pointer',
+          verticalAlign: 'middle',
+        }}
+        title={citation.title}
+      >
+        {icon} {citation.key}
+      </button>
+      {open && (
+        <span
+          className="absolute z-50 left-0 top-6 rounded-[8px] p-3 shadow-lg block"
+          style={{
+            width: 260,
+            background: 'hsl(var(--sv-paper))',
+            border: '1px solid hsl(var(--sv-hairline))',
+            boxShadow: '0 4px 20px hsl(0 0% 0% / 0.12)',
+          }}
+        >
+          <span className="block text-[11px] font-semibold mb-1" style={{ color: 'hsl(var(--sv-ink))' }}>
+            {citation.title}
+          </span>
+          <span className="block text-[11px] leading-snug" style={{ color: 'hsl(var(--sv-muted))' }}>
+            {citation.tactic_summary.slice(0, 160)}
+          </span>
+          <span
+            className="block mt-1.5 text-[10px] uppercase tracking-wider"
+            style={{ color: 'hsl(var(--sv-clay) / 0.7)' }}
+          >
+            {icon} {citation.spider_dimension.replace(/_/g, ' ')}
+          </span>
+        </span>
+      )}
+    </span>
+  );
+}
+
+function SourcesPanel({ citations }: { citations: Citation[] }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="mt-3 pt-2" style={{ borderTop: '1px solid hsl(var(--sv-hairline))' }}>
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        className="flex items-center gap-1.5 text-[11px]"
+        style={{ color: 'hsl(var(--sv-muted))' }}
+      >
+        <span>{expanded ? '▾' : '▸'}</span>
+        <span>Sources · {citations.length} knowledge items used</span>
+      </button>
+      {expanded && (
+        <ul className="mt-2 space-y-1.5">
+          {citations.map((c) => {
+            const icon = DIMENSION_ICONS[c.spider_dimension] ?? '📖';
+            return (
+              <li key={c.key} className="flex items-start gap-2 text-[12px]">
+                <span
+                  className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full mt-0.5"
+                  style={{
+                    background: 'hsl(var(--sv-clay) / 0.08)',
+                    color: 'hsl(var(--sv-clay))',
+                    fontFamily: 'var(--sv-sans)',
+                  }}
+                >
+                  {c.key}
+                </span>
+                <span style={{ color: 'hsl(var(--sv-ink) / 0.8)' }}>
+                  <span className="font-medium">{icon} {c.title}</span>
+                  <span className="ml-1" style={{ color: 'hsl(var(--sv-muted))' }}>
+                    — {c.tactic_summary.slice(0, 80)}…
+                  </span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function escapeCitationsForMarkdown(text: string): string {
+  return text.replace(/\[K(\d+)\]/g, (_, n) => `%%K${n}%%`);
+}
+
+function renderCitationText(str: string, citations: Citation[]): React.ReactNode {
+  if (!str.includes('%%K')) return str;
+  const citationMap = new Map(citations.map((c) => [c.key, c]));
+  const parts = str.split(/(%%K\d+%%)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const match = part.match(/^%%K(\d+)%%$/);
+        if (!match) return <React.Fragment key={i}>{part}</React.Fragment>;
+        const key = `K${match[1]}`;
+        const citation = citationMap.get(key);
+        if (!citation) return <React.Fragment key={i}>{part}</React.Fragment>;
+        return <CitationChip key={i} citation={citation} />;
+      })}
+    </>
+  );
+}
 
 /**
  * Strict-mode response shaper. Runs AFTER the model responds to guarantee:
