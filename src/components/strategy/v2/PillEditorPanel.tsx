@@ -93,6 +93,10 @@ function surfaceLabelOf(s: StrategySurfaceKey): string {
 }
 
 export function PillEditorPanel({ editing, surface, onSaved, onCancel }: Props) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const userId = user?.id;
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['custom-pills', userId] });
   const [pill, setPill] = useState<CustomPill>(() => editing ?? emptyPillForSurface(surface));
 
   useEffect(() => {
