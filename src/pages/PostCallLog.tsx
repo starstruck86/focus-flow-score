@@ -292,10 +292,10 @@ export default function PostCallLog() {
             <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Next Step</Label>
             <button
               onClick={suggestNextStep}
-              disabled={!summary.trim() || suggestingNextStep}
+              disabled={!summary.trim()}
               className="text-[11px] text-primary hover:text-primary/80 disabled:opacity-40 flex items-center gap-1"
             >
-              {suggestingNextStep ? <Loader2 className="h-3 w-3 animate-spin" /> : '✨'} Suggest
+              ✨ Suggest
             </button>
           </div>
           <Input
