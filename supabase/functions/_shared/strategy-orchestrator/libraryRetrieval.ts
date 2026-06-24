@@ -135,32 +135,8 @@ export async function retrieveLibraryContext(
     console.warn("[library-retrieval] Playbook fetch failed:", (e as Error).message);
   }
 
-  // ── Compact context string for prompt injection ──
-  const kiBlock = knowledgeItems.length
-    ? knowledgeItems.map((k) =>
-        `KI[${k.id.slice(0, 8)}] ${k.title}` +
-        (k.chapter ? ` — ${k.chapter}` : "") +
-        (k.tactic_summary ? `\n  Tactic: ${k.tactic_summary}` : "") +
-        (k.when_to_use ? `\n  When: ${k.when_to_use}` : "") +
-        (k.how_to_execute ? `\n  How: ${k.how_to_execute}` : "")
-      ).join("\n\n")
-    : "";
+  const contextString = formatLibraryContext(knowledgeItems, playbooks);
 
-  const pbBlock = playbooks.length
-    ? playbooks.map((p) =>
-        `PLAYBOOK[${p.id.slice(0, 8)}] ${p.title}` +
-        (p.problem_type ? ` (${p.problem_type})` : "") +
-        (p.when_to_use ? `\n  When to Use: ${p.when_to_use}` : "") +
-        (p.tactic_steps?.length ? `\n  Steps: ${p.tactic_steps.slice(0, 4).join("; ")}` : "") +
-        (p.key_questions?.length ? `\n  Key Questions: ${p.key_questions.slice(0, 4).join(" | ")}` : "") +
-        (p.anti_patterns?.length ? `\n  Anti-Patterns: ${p.anti_patterns.slice(0, 3).join("; ")}` : "")
-      ).join("\n\n")
-    : "";
-
-  const contextString = [
-    kiBlock ? `=== INTERNAL KNOWLEDGE ITEMS (use these — they are the company's tested intellectual property) ===\n${kiBlock}` : "",
-    pbBlock ? `=== INTERNAL PLAYBOOKS (use these to ground tactics, questions, and warnings) ===\n${pbBlock}` : "",
-  ].filter(Boolean).join("\n\n");
 
   console.log(`[library-retrieval] scopes=${opts.scopes.join(",")} → ${knowledgeItems.length} KIs, ${playbooks.length} playbooks`);
 
