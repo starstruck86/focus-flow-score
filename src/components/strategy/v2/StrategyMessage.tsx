@@ -397,6 +397,19 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig, citati
   // Calm Claude-style minimal renderer: subtle headers, tight bullets,
   // 1.65 line-height, no decorative chrome.
 
+  const assistantText = citations && citations.length > 0
+    ? escapeCitationsForMarkdown(text)
+    : text;
+  const renderInline = (children: React.ReactNode): React.ReactNode => {
+    if (!citations || citations.length === 0) return children;
+    const map = (node: React.ReactNode): React.ReactNode => {
+      if (typeof node === 'string') return renderCitationText(node, citations);
+      if (Array.isArray(node)) return node.map((c, i) => <React.Fragment key={i}>{map(c)}</React.Fragment>);
+      return node;
+    };
+    return map(children);
+  };
+
   return (
     <div
       data-strategy-selectable
@@ -412,25 +425,25 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig, citati
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          p: ({ children }) => <p style={{ margin: '0 0 12px' }}>{children}</p>,
+          p: ({ children }) => <p style={{ margin: '0 0 12px' }}>{renderInline(children)}</p>,
           ul: ({ children }) => <ul style={{ margin: '0 0 12px', paddingLeft: '1.25rem' }}>{children}</ul>,
           ol: ({ children }) => <ol style={{ margin: '0 0 12px', paddingLeft: '1.4rem' }}>{children}</ol>,
-          li: ({ children }) => <li style={{ margin: '0 0 4px' }}>{children}</li>,
-          strong: ({ children }) => <strong style={{ fontWeight: 600 }}>{children}</strong>,
-          em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
+          li: ({ children }) => <li style={{ margin: '0 0 4px' }}>{renderInline(children)}</li>,
+          strong: ({ children }) => <strong style={{ fontWeight: 600 }}>{renderInline(children)}</strong>,
+          em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{renderInline(children)}</em>,
           h1: ({ children }) => (
             <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '16px 0 6px', fontFamily: 'var(--sv-sans)' }}>
-              {children}
+              {renderInline(children)}
             </h2>
           ),
           h2: ({ children }) => (
             <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '16px 0 6px', fontFamily: 'var(--sv-sans)' }}>
-              {children}
+              {renderInline(children)}
             </h2>
           ),
           h3: ({ children }) => (
             <h3 style={{ fontSize: '15px', fontWeight: 600, margin: '12px 0 4px', fontFamily: 'var(--sv-sans)' }}>
-              {children}
+              {renderInline(children)}
             </h3>
           ),
           code: ({ children, className }: any) => (
@@ -461,9 +474,10 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig, citati
           ),
         }}
       >
-        {text}
+        {assistantText}
       </ReactMarkdown>
       {onQuickAction && <MessageActions onAction={onQuickAction} />}
+      {citations && citations.length > 0 && <SourcesPanel citations={citations} />}
     </div>
   );
 }
