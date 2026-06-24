@@ -927,6 +927,13 @@ export function StrategyShell() {
 
   const handleSend = useCallback((text: string) => {
     if (pendingThreadId || isCreatingThread || isSending) return;
+    // Clear skill context on manual (non-workflow) sends so the structured
+    // card only renders for the response immediately following a skill run.
+    if (!fromWorkflowRef.current) {
+      setLastSkillWorkflow(null);
+    }
+    fromWorkflowRef.current = false;
+
     // The surface we're sending from. Each workspace owns its own thread —
     // sending stays in that workspace and binds the resulting thread to it.
     const sendingFrom = lastSurfaceKeyRef.current;
