@@ -1451,6 +1451,14 @@ export function StrategyShell() {
               if (key) setSurfaceThread(key, null);
               setActiveThreadId(null);
             }}
+            onCreateThreadForAccount={async (accountId, title) => {
+              await createThreadWithOpts({
+                title: title || 'New project thread',
+                lane: 'research',
+                threadType: 'freeform',
+                linkedAccountId: accountId,
+              });
+            }}
           />
         )}
 
