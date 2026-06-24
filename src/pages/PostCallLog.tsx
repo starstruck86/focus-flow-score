@@ -246,6 +246,12 @@ export default function PostCallLog() {
           </Select>
         </div>
 
+        {meetingGoal && (
+          <div className="rounded-lg bg-muted/60 border border-border/40 px-3 py-2 text-xs text-muted-foreground">
+            <span className="font-semibold">Meeting goal:</span> {meetingGoal}
+          </div>
+        )}
+
         {/* Contact name */}
         <div className="space-y-1.5">
           <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contact Name</Label>
