@@ -41,10 +41,10 @@ const BRAINSTORM: WorkspaceContract = {
   cognitivePosture:
     "Divergent generation. Bias toward breadth and sharp framing over depth or proof. Speculation is welcome but must be labeled as hypothesis/option rather than asserted as fact.",
   useCases: [
-    "Generate 10 cold outbound angles for a new vertical",
-    "Explore narrative framings for an exec POV before committing",
-    "Stress-test an idea by enumerating counter-angles",
-    "Produce hook variations for a thought-leadership post",
+    "Generate 8 expansion angles for Peacock given their current Branch footprint",
+    "Brainstorm QBR narrative framings when usage is down",
+    "Explore competitive hooks for displacing Adjust at a travel account",
+    "Stress-test the web-to-app business case from a buyer's perspective",
   ],
   nonGoals: [
     "Producing finalized, send-ready copy",
@@ -53,8 +53,8 @@ const BRAINSTORM: WorkspaceContract = {
     "Producing structured deliverables (→ Artifacts)",
   ],
   reasoningPath: [
-    "Reframe the prompt into the underlying job-to-be-done (what decision will these options serve?)",
-    "Enumerate angle dimensions (emotional, financial, competitive, temporal, social, contrarian)",
+    "Reframe the prompt into the underlying expansion job-to-be-done (what Branch decision will these options serve — QBR narrative, displacement, product expansion, stakeholder angle?)",
+    "Enumerate Branch-relevant angle dimensions: footprint/whitespace, measurement motion (MMP / Adjust / AppsFlyer dynamic), competitive displacement, QBR narrative, product expansion (deep linking, web-to-app, Universal Ads), vertical-specific (media/travel/retail/finserv)",
     "Generate at least one option per dimension; expand the strongest 2–3 dimensions further",
     "Diversity check: collapse paraphrases, replace duplicates with genuinely distinct angles",
     "Label each option's underlying angle so the user can choose with intent",
