@@ -247,6 +247,7 @@ const DEEP_RESEARCH: WorkspaceContract = {
     "Burying the 'so what' under exhaustive background",
     "Silent gaps — missing evidence not surfaced as unknowns",
     "Producing generic industry research without Branch expansion implications (footprint, whitespace, competitive displacement, QBR narrative)",
+    "Ignoring MMP competitive context (Adjust, AppsFlyer) when researching an account",
   ],
   escalationRules: [
     {
