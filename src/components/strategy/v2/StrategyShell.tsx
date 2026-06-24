@@ -228,6 +228,16 @@ export function StrategyShell() {
       });
   }, [user?.id]);
 
+  // Last intelligence activation — shown as a badge before assistant response
+  const [lastIntelActivation, setLastIntelActivation] = useState<{
+    head: string;
+    headLabel: string;
+    kiCount: number;
+    accountLinked: boolean;
+    accountName: string | null;
+    triggeredAt: number;
+  } | null>(null);
+
   // ── Surface-switch swap (drafts + active thread) ─────────────────────────
   // When the user moves between workspaces, save the in-flight draft AND the
   // currently active thread id under the previous surface, then restore both
