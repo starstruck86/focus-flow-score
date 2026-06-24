@@ -402,12 +402,16 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig, citati
     : text;
   const renderInline = (children: React.ReactNode): React.ReactNode => {
     if (!citations || citations.length === 0) return children;
-    const map = (node: React.ReactNode): React.ReactNode => {
-      if (typeof node === 'string') return renderCitationText(node, citations);
-      if (Array.isArray(node)) return node.map((c, i) => <React.Fragment key={i}>{map(c)}</React.Fragment>);
-      return node;
-    };
-    return map(children);
+    try {
+      const map = (node: React.ReactNode): React.ReactNode => {
+        if (typeof node === 'string') return renderCitationText(node, citations);
+        if (Array.isArray(node)) return node.map((c, i) => <span key={i}>{map(c)}</span>);
+        return node;
+      };
+      return map(children);
+    } catch {
+      return children;
+    }
   };
 
   return (
