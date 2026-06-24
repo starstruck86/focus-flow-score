@@ -236,6 +236,10 @@ interface Props {
    *  for Strict Mode and other render overrides. We do NOT read
    *  getStrategyConfig() here; the parent owns the subscription. */
   strategyConfig?: StrategyGlobalInstructionsConfig;
+  /** Citation manifest — when present on assistant messages, [K1]/[K2]/…
+   *  tokens in the response render as inline citation chips and a Sources
+   *  panel appears beneath the message. */
+  citations?: Citation[] | null;
 }
 
 /** Strict text extractor — never renders raw provider/debug payloads. */
