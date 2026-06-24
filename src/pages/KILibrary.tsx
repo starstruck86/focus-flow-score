@@ -188,12 +188,13 @@ export default function KILibrary() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { user } = useAuth();
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState(params.get('q') ?? '');
+  const [search, setSearch] = useState(params.get('q') ?? '');
   const [dimension, setDimension] = useState<string>(params.get('dimension') ?? 'all');
   const [chapterFilter, setChapterFilter] = useState<string>('all');
   const [branchHead, setBranchHead] = useState<string>('all');
   const [page, setPage] = useState(0);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -204,7 +205,13 @@ export default function KILibrary() {
   const handleSearchChange = (value: string) => {
     setSearchInput(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setSearch(value), 300);
+    debounceRef.current = setTimeout(() => {
+      setSearch(value);
+      const url = new URL(window.location.href);
+      if (value.trim()) url.searchParams.set('q', value.trim());
+      else url.searchParams.delete('q');
+      window.history.replaceState({}, '', url.toString());
+    }, 300);
   };
 
   const { data: dimCounts } = useQuery({
@@ -261,7 +268,7 @@ export default function KILibrary() {
       const trimmed = search.trim();
       if (trimmed.length >= 2) {
         const safe = trimmed.replace(/[%,()]/g, ' ');
-        q = q.or(`title.ilike.%${safe}%,tactic_summary.ilike.%${safe}%`);
+        q = q.or(`title.ilike.%${safe}%,tactic_summary.ilike.%${safe}%,example_usage.ilike.%${safe}%,why_it_matters.ilike.%${safe}%`);
       }
 
       const { data, error } = await q
@@ -296,7 +303,7 @@ export default function KILibrary() {
       const trimmed = search.trim();
       if (trimmed.length >= 2) {
         const safe = trimmed.replace(/[%,()]/g, ' ');
-        q = q.or(`title.ilike.%${safe}%,tactic_summary.ilike.%${safe}%`);
+        q = q.or(`title.ilike.%${safe}%,tactic_summary.ilike.%${safe}%,example_usage.ilike.%${safe}%,why_it_matters.ilike.%${safe}%`);
       }
       const { count } = await q;
       return count ?? 0;
