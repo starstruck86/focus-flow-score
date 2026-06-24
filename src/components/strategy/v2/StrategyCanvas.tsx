@@ -120,12 +120,6 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
             !isSending &&
             m.role === 'assistant' &&
             isLastMsg;
-          // Attach citation manifest to the most recent assistant message
-          // (both while streaming and after completion of that turn).
-          const citationsForMsg =
-            m.role === 'assistant' && isLastMsg && lastIntelActivation?.citations?.length
-              ? lastIntelActivation.citations
-              : null;
           const renderAsSkill = isLastAssistant && !!lastSkillWorkflow;
           const msgText = ((m.content_json as any)?.text ?? '') as string;
           return (
@@ -134,7 +128,6 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
                 <SkillOutputCard
                   text={msgText}
                   label={lastSkillWorkflow.formTitle ?? lastSkillWorkflow.label}
-                  citations={citationsForMsg}
                   onQuickAction={onQuickAction}
                 />
               ) : (
@@ -142,7 +135,6 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
                   message={m}
                   onQuickAction={isLastAssistant && !!onQuickAction ? onQuickAction : undefined}
                   strategyConfig={strategyConfig}
-                  citations={citationsForMsg}
                 />
               )}
             </div>
