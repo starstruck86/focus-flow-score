@@ -20,6 +20,7 @@ type IntelActivation = {
   accountLinked: boolean;
   accountName: string | null;
   triggeredAt: number;
+  citations: Citation[];
 };
 
 interface Props {
