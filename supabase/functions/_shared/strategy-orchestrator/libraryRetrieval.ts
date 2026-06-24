@@ -147,3 +147,39 @@ export async function retrieveLibraryContext(
     counts: { kis: knowledgeItems.length, playbooks: playbooks.length },
   };
 }
+
+// ════════════════════════════════════════════════════════════════
+// Shared formatter — also used by callers that pin a playbook
+// (situation classifier) and need to rebuild the contextString after
+// mutating the playbooks list.
+// ════════════════════════════════════════════════════════════════
+export function formatLibraryContext(
+  knowledgeItems: RetrievedKI[],
+  playbooks: RetrievedPlaybook[],
+): string {
+  const kiBlock = knowledgeItems.length
+    ? knowledgeItems.map((k) =>
+        `KI[${k.id.slice(0, 8)}] ${k.title}` +
+        (k.chapter ? ` — ${k.chapter}` : "") +
+        (k.tactic_summary ? `\n  Tactic: ${k.tactic_summary}` : "") +
+        (k.when_to_use ? `\n  When: ${k.when_to_use}` : "") +
+        (k.how_to_execute ? `\n  How: ${k.how_to_execute}` : "")
+      ).join("\n\n")
+    : "";
+
+  const pbBlock = playbooks.length
+    ? playbooks.map((p) =>
+        `PLAYBOOK[${p.id.slice(0, 8)}] ${p.title}` +
+        (p.problem_type ? ` (${p.problem_type})` : "") +
+        (p.when_to_use ? `\n  When to Use: ${p.when_to_use}` : "") +
+        (p.tactic_steps?.length ? `\n  Steps: ${p.tactic_steps.slice(0, 4).join("; ")}` : "") +
+        (p.key_questions?.length ? `\n  Key Questions: ${p.key_questions.slice(0, 4).join(" | ")}` : "") +
+        (p.anti_patterns?.length ? `\n  Anti-Patterns: ${p.anti_patterns.slice(0, 3).join("; ")}` : "")
+      ).join("\n\n")
+    : "";
+
+  return [
+    kiBlock ? `=== INTERNAL KNOWLEDGE ITEMS (use these — they are the company's tested intellectual property) ===\n${kiBlock}` : "",
+    pbBlock ? `=== INTERNAL PLAYBOOKS (use these to ground tactics, questions, and warnings) ===\n${pbBlock}` : "",
+  ].filter(Boolean).join("\n\n");
+}
