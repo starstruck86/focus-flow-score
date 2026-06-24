@@ -284,9 +284,11 @@ export function enforceBehaviorContract(
   const LEADIN_RE = /\b(here\s+are\s+(?:a\s+few|some|several|three|3|five|5)\s+(?:ways|ideas|angles|options|approaches)|here'?s\s+a\s+few\s+(?:ways|ideas|angles|options|approaches)|a\s+few\s+ways\s+(?:to|you\s+could)|some\s+(?:ideas|angles|options)\s+(?:to|you\s+could))\b/i;
   if (LEADIN_RE.test(out)) violations.push("idea_leadin_phrase");
 
-  // 5. Category bucket labels in body
-  const CATEGORY_RE = /\b(Acquisition|Retention|Lifecycle Marketing|Personalization|Loyalty|Brand Storytelling|Awareness)\b\s*:/;
-  if (CATEGORY_RE.test(out)) violations.push("category_bucket_label");
+  // 5. (Removed) Generic martech category-bucket labels. Branch-positive
+  //    vocabulary (deep linking, Universal Ads, web-to-app, MMP, QBR,
+  //    footprint, whitespace, expansion, renewal, Adjust, AppsFlyer, etc.)
+  //    is a SIGNAL we want, not something to strip.
+
 
   // ── Depth-floor audit (FLAG-ONLY — never strips, never blocks) ───
   // Detects "shorter but weaker" — when format compression dropped
