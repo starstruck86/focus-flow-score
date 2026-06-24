@@ -6479,12 +6479,84 @@ Do NOT defer work by asking the operator what they meant before producing anythi
     );
   }
 
+  // ── TERRITORY PROFILE STANDING CONTEXT ────────────────────────
+  // Always-on, server-side. Loaded once per request, prepended to every
+  // path (V1 short-form / V1 grounded / V2 reasoning). Independent of
+  // which surface invoked the call (StrategyShell, Account Brief,
+  // Discovery Prep, runTask, etc.) and independent of any thread link.
+  let territoryProfileBlock = "";
+  try {
+    const { data: tp } = await supabase
+      .from("territory_profile")
+      .select(
+        "name, role, company, start_date, quota_amount, quota_currency, quota_type, fiscal_year_start, fiscal_year_end, motion, territory_description, company_context, ki_library_summary, se_name, csm_name, manager_name, custom_notes",
+      )
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (tp) {
+      const lines: string[] = [];
+      const has = (v: unknown) =>
+        v !== null && v !== undefined && String(v).trim().length > 0;
+      const idLine = [
+        has(tp.name) ? `Name: ${tp.name}` : null,
+        has(tp.role) ? `Role: ${tp.role}` : null,
+        has(tp.company) ? `Company: ${tp.company}` : null,
+      ].filter(Boolean).join(" | ");
+      if (idLine) lines.push(idLine);
+      const quotaParts: string[] = [];
+      if (has(tp.motion)) quotaParts.push(`Motion: ${tp.motion}`);
+      if (has(tp.quota_amount)) {
+        const q = `${tp.quota_amount}${
+          has(tp.quota_currency) ? ` ${tp.quota_currency}` : ""
+        }${has(tp.quota_type) ? ` (${tp.quota_type})` : ""}`;
+        quotaParts.push(`Quota: ${q}`);
+      }
+      if (quotaParts.length) lines.push(quotaParts.join(" | "));
+      const fyParts: string[] = [];
+      if (has(tp.fiscal_year_start) || has(tp.fiscal_year_end)) {
+        fyParts.push(
+          `FY: ${tp.fiscal_year_start ?? "?"} → ${tp.fiscal_year_end ?? "?"}`,
+        );
+      }
+      if (has(tp.start_date)) fyParts.push(`Start: ${tp.start_date}`);
+      if (fyParts.length) lines.push(fyParts.join(" | "));
+      if (has(tp.territory_description)) {
+        lines.push(`Territory: ${tp.territory_description}`);
+      }
+      if (has(tp.company_context)) {
+        lines.push(`Company context: ${tp.company_context}`);
+      }
+      if (has(tp.ki_library_summary)) {
+        lines.push(`KI library: ${tp.ki_library_summary}`);
+      }
+      const teamParts: string[] = [];
+      if (has(tp.se_name)) teamParts.push(`SE=${tp.se_name}`);
+      if (has(tp.csm_name)) teamParts.push(`CSM=${tp.csm_name}`);
+      if (has(tp.manager_name)) teamParts.push(`Manager=${tp.manager_name}`);
+      if (teamParts.length) lines.push(`Team: ${teamParts.join(", ")}`);
+      if (has(tp.custom_notes)) lines.push(`Notes: ${tp.custom_notes}`);
+      if (lines.length) {
+        territoryProfileBlock =
+          `\n\n## YOUR TERRITORY CONTEXT (always present — your standing identity as an AE)\n${
+            lines.join("\n")
+          }\n`;
+        console.log(
+          `[territory-profile] injected lines=${lines.length} chars=${territoryProfileBlock.length}`,
+        );
+      }
+    } else {
+      console.log("[territory-profile] no row for user — skipping block");
+    }
+  } catch (e) {
+    console.log(`[territory-profile] fetch failed — skipping: ${String(e)}`);
+  }
+
   // Inject a small thinking-path preamble into the system prompt for grounded
   // modes so the assistant opens with what it found and what it's extending.
   // The preamble is appended; the model must obey the original mode-lock too.
   // SOPs are prepended via sopAuthorityBlock so they sit between core identity
   // and the reasoning preamble.
-  let effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}`;
+  let effectiveSystemPrompt = `${territoryProfileBlock}${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}`;
   if (mode === "short_form") {
     // SHORT-FORM mode-lock: tight output shape, no synthesis scaffolding.
     const shapeRule = shortFormKind === "subject_lines"
@@ -6506,7 +6578,7 @@ USE the library voice/angles for grounding, but DO NOT produce a long synthesis 
 ${shapeRule}
 If grounded vs extended distinction is material, tag each option [Grounded] or [Extended].
 Forbidden: long preambles, multi-section frameworks, "let me walk you through" openers.`;
-    effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}${preamble}`;
+    effectiveSystemPrompt = `${territoryProfileBlock}${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}${preamble}`;
   } else if (mode === "strong" || mode === "partial" || mode === "thin") {
     const preamble = `
 
@@ -6520,7 +6592,7 @@ ${
     : "THIN grounding: open with one honest line stating what was found (e.g. 'Found 1 weakly related resource and no supporting KIs'). Then proceed using general reasoning. Mark assumptions. Offer one specific clarifying question at the end if it would materially sharpen the output. NEVER refuse, NEVER produce a one-line stop."
 }
 Forbidden: canned refusals like "I don't have enough signal" without ALSO producing the best first-pass answer you can.`;
-    effectiveSystemPrompt = `${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}${preamble}`;
+    effectiveSystemPrompt = `${territoryProfileBlock}${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}${preamble}`;
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -6568,7 +6640,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       const v2Identity = (v2 as any).identity ?? "";
       const v2Reasoning = (v2 as any).reasoning ?? v2.systemPrompt;
       effectiveSystemPrompt =
-        `${strategyObjectiveBlock}${v2Identity}${sopAuthorityBlock}${decisionLayerBlock}\n\n${v2Reasoning}`;
+        `${territoryProfileBlock}${strategyObjectiveBlock}${v2Identity}${sopAuthorityBlock}${decisionLayerBlock}\n\n${v2Reasoning}`;
       // Stash prior turn for wrong-question check later.
       v2EvidenceBase = {
         decision: v2.decision,
