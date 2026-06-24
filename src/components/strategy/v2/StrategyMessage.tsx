@@ -77,27 +77,6 @@ function SourcesPanel({ citations }: { citations: Citation[] }) {
   );
 }
 
-function escapeCitationsForMarkdown(text: string): string {
-  return text.replace(/\[K(\d+)\]/g, (_, n) => `%%K${n}%%`);
-}
-
-function renderCitationText(str: string, citations: Citation[]): React.ReactNode {
-  if (!str.includes('%%K')) return str;
-  const citationMap = new Map(citations.map((c) => [c.key, c]));
-  const parts = str.split(/(%%K\d+%%)/g);
-  return (
-    <>
-      {parts.map((part, i) => {
-        const match = part.match(/^%%K(\d+)%%$/);
-        if (!match) return <React.Fragment key={i}>{part}</React.Fragment>;
-        const key = `K${match[1]}`;
-        const citation = citationMap.get(key);
-        if (!citation) return <React.Fragment key={i}>{part}</React.Fragment>;
-        return <CitationChip key={i} citation={citation} />;
-      })}
-    </>
-  );
-}
 
 /**
  * Strict-mode response shaper. Runs AFTER the model responds to guarantee:
