@@ -92,6 +92,7 @@ export default function MeetingMode() {
   const [coaching, setCoaching] = useState('');
 
   const account = useMemo(() => accounts.find(a => a.id === accountId) || null, [accounts, accountId]);
+  const expansionAngle = account ? extractExpansionAngle(account.notes) : null;
 
   // Fetch Branch accounts on mount (non-blocking)
   useEffect(() => {
