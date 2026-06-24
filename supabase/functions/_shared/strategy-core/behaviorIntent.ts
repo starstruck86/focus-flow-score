@@ -381,8 +381,8 @@ export function enforceBehaviorContract(
   // Strip "Idea N:" / "Option A:" prefixes
   rewritten = rewritten.replace(/^\s*(idea|option|approach|angle|way)\s+\d+\s*:\s*/gim, "");
   rewritten = rewritten.replace(/^\s*(option|approach)\s+[A-Z]\s*:\s*/gm, "");
-  // Strip category bucket labels at start of line/segment
-  rewritten = rewritten.replace(CATEGORY_RE, "");
+  // (Removed) Acoustic category-bucket stripping — Branch vocabulary is a
+  // signal we want to keep.
   // Collapse multiple blank lines into a single paragraph break
   rewritten = rewritten.replace(/\n{3,}/g, "\n\n").trim();
 
