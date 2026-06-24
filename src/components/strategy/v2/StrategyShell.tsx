@@ -86,7 +86,7 @@ import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflo
 // /strategy/settings page (see src/pages/StrategySettings.tsx).
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
-import { classifyIntelHead, buildHeadKIBlock, HEAD_LABELS, type Citation, type InjectedKI } from '@/lib/strategy/headClassifier';
+import { classifyIntelHead, HEAD_LABELS, type InjectedKI } from '@/lib/strategy/headClassifier';
 import {
   detectPlaybookTriggers,
   fetchDetectedPlaybooks,
@@ -242,7 +242,6 @@ export function StrategyShell() {
     accountLinked: boolean;
     accountName: string | null;
     triggeredAt: number;
-    citations: Citation[];
   } | null>(null);
 
   // Proactive playbook detection
@@ -1008,43 +1007,15 @@ export function StrategyShell() {
         if (manuallyInjectedKIs.length > 0) setManuallyInjectedKIs([]);
       };
       const accountName = linkedContext?.account?.name ?? linkedContext?.opportunity?.name ?? null;
-      if (head && user?.id) {
-        buildHeadKIBlock(head, user.id).then((result) => {
-          const { block, citations } = result;
-          setLastIntelActivation({
-            head,
-            headLabel: HEAD_LABELS[head] ?? head,
-            kiCount: citations.length,
-            accountLinked: !!activeThread?.linked_account_id,
-            accountName,
-            triggeredAt: Date.now(),
-            citations,
-          });
-          dispatch(block);
-        }).catch(() => {
-          setLastIntelActivation({
-            head: 'sales',
-            headLabel: 'Sales',
-            kiCount: 0,
-            accountLinked: !!activeThread?.linked_account_id,
-            accountName,
-            triggeredAt: Date.now(),
-            citations: [],
-          });
-          dispatch('');
-        });
-      } else {
-        setLastIntelActivation({
-          head: 'sales',
-          headLabel: 'Sales',
-          kiCount: 0,
-          accountLinked: !!activeThread?.linked_account_id,
-          accountName,
-          triggeredAt: Date.now(),
-          citations: [],
-        });
-        dispatch('');
-      }
+      setLastIntelActivation({
+        head: head ?? 'sales',
+        headLabel: HEAD_LABELS[head ?? 'sales'] ?? 'Sales',
+        kiCount: 0,
+        accountLinked: !!activeThread?.linked_account_id,
+        accountName,
+        triggeredAt: Date.now(),
+      });
+      dispatch('');
     }
   }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, territoryProfile, activeThread?.linked_account_id, linkedContext, manuallyInjectedKIs]);
 

@@ -4,12 +4,10 @@ import remarkGfm from 'remark-gfm';
 import { Copy, Check } from 'lucide-react';
 import type { SkillSection } from '@/lib/strategy/parseSkillSections';
 import { parseSkillSections } from '@/lib/strategy/parseSkillSections';
-import type { Citation } from '@/lib/strategy/headClassifier';
 
 interface Props {
   text: string;
   label: string;
-  citations?: Citation[] | null;
   onQuickAction?: (prompt: string) => void;
 }
 
@@ -80,7 +78,7 @@ function SectionBlock({ section }: { section: SkillSection }) {
   );
 }
 
-export function SkillOutputCard({ text, label, citations, onQuickAction }: Props) {
+export function SkillOutputCard({ text, label, onQuickAction }: Props) {
   const sections = parseSkillSections(text);
 
   return (
@@ -113,16 +111,6 @@ export function SkillOutputCard({ text, label, citations, onQuickAction }: Props
         <SectionBlock key={i} section={section} />
       ))}
 
-      {citations && citations.length > 0 && (
-        <div
-          className="px-4 py-2.5"
-          style={{ borderTop: '1px solid hsl(var(--sv-hairline))', background: 'hsl(var(--sv-hover) / 0.3)' }}
-        >
-          <div className="text-[10.5px]" style={{ color: 'hsl(var(--sv-muted))' }}>
-            Sources: {citations.map((c) => c.key).join(' · ')}
-          </div>
-        </div>
-      )}
 
       {onQuickAction && (
         <div
