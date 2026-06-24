@@ -86,7 +86,7 @@ import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflo
 // shell. Pill creation/editing and workspace management live on the
 // /strategy/settings page (see src/pages/StrategySettings.tsx).
 import type { CustomPill } from '@/lib/strategy/customPills';
-import { listCustomPills } from '@/lib/strategy/customPills';
+import { migrateLocalPillsToSupabase } from '@/lib/strategy/customPills';
 import { type InjectedKI } from '@/lib/strategy/headClassifier';
 // Client-side playbook detection removed (task 1.2). The server's
 // situation classifier + libraryRetrieval now own playbook activation.
