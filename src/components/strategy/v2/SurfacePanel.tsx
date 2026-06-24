@@ -49,6 +49,7 @@ import { displayThreadTitle, isUntitledTitle, WORKSPACE_SHORT } from '@/lib/stra
 import { isCleanupThread } from '@/lib/strategy/threadCleanup';
 import type { StrategySurfaceKey } from './StrategyNavSidebar';
 import type { StrategyThread } from '@/types/strategy';
+import { ProjectsPanel } from './projects/ProjectsPanel';
 
 /** A thread enriched with explainability metadata for display. */
 interface AnnotatedThread {
@@ -481,10 +482,10 @@ export function SurfacePanel({
             <TemplateGrid items={ARTIFACT_TEMPLATE_DEFS} onLaunch={onLaunchWorkflow} />
           )}
           {surface === 'projects' && (
-            <ProjectsList
+            <ProjectsPanel
               threads={threads}
               activeThreadId={activeThreadId}
-              onSelect={onSelectThread}
+              onSelectThread={onSelectThread}
             />
           )}
 
@@ -1347,133 +1348,9 @@ function TemplateGrid({
   );
 }
 
-// ───────────────── Projects list ─────────────────
+// (Projects surface now rendered via ProjectsPanel — Supabase-backed.)
 
-/**
- * ProjectsList — workspace surface for promoted threads.
- *
- * Source of truth (today): `pinnedThreads.ts` (localStorage). Subscribes so
- * starring/un-starring a thread anywhere in the app updates this list
- * instantly. When a future DB column replaces the localStorage source, the
- * call sites here don't need to change — they consume the same helpers.
- *
- * Behavior:
- *   • Pinned thread IDs are matched against the live `threads` array.
- *   • Pinned IDs that no longer resolve to a real thread are silently
- *     dropped (no orphaned project rows).
- *   • Empty list → falls back to the calm "No projects yet" empty state.
- */
-function ProjectsList({
-  threads, activeThreadId, onSelect,
-}: {
-  threads: StrategyThread[];
-  activeThreadId: string | null;
-  onSelect: (id: string) => void;
-}) {
-  const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => getPinnedThreadIds());
-  useEffect(() => subscribePinnedThreads(() => setPinnedIds(getPinnedThreadIds())), []);
 
-  const projectThreads = useMemo(() => {
-    if (pinnedIds.size === 0) return [] as StrategyThread[];
-    return threads
-      .filter((t) => pinnedIds.has(t.id))
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-  }, [threads, pinnedIds]);
-
-  if (projectThreads.length === 0) {
-    return <ProjectsPlaceholder />;
-  }
-
-  return (
-    <div className="space-y-3" data-testid="projects-list">
-      <div className="flex items-baseline justify-between">
-        <h3 className="text-[11px] font-medium uppercase tracking-[0.09em]" style={{ color: 'hsl(var(--sv-muted))' }}>
-          Jump back in
-        </h3>
-        <span className="text-[10.5px] tabular-nums" style={{ color: 'hsl(var(--sv-muted) / 0.85)' }}>
-          {projectThreads.length} project{projectThreads.length === 1 ? '' : 's'}
-        </span>
-      </div>
-      <ul className="space-y-1.5">
-        {projectThreads.map((t) => {
-          const isActive = activeThreadId === t.id;
-          return (
-            <li key={t.id}>
-              <button
-                type="button"
-                onClick={() => onSelect(t.id)}
-                className="group w-full flex items-center gap-3 rounded-[8px] px-3 py-2.5 text-left transition-colors"
-                style={{
-                  background: isActive ? 'hsl(var(--sv-clay) / 0.08)' : 'hsl(var(--sv-paper))',
-                  border: '1px solid hsl(var(--sv-hairline))',
-                  borderLeft: isActive
-                    ? '2px solid hsl(var(--sv-clay))'
-                    : '2px solid hsl(var(--sv-clay) / 0.45)',
-                }}
-                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-hover) / 0.6)'; }}
-                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--sv-paper))'; }}
-                data-testid={`project-row-${t.id}`}
-                aria-current={isActive ? 'true' : undefined}
-                title={`Open ${displayThreadTitle(t)}`}
-              >
-                <FolderKanban className="h-3.5 w-3.5 shrink-0" style={{ color: 'hsl(var(--sv-clay))' }} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="truncate text-[13.5px]"
-                      style={{ color: 'hsl(var(--sv-ink))', fontWeight: isActive ? 600 : 500 }}
-                    >
-                      {displayThreadTitle(t)}
-                    </span>
-                  </div>
-                  <div
-                    className="mt-0.5 flex items-center gap-1.5 text-[11px]"
-                    style={{ color: 'hsl(var(--sv-muted))' }}
-                  >
-                    <span>Project</span>
-                    <span aria-hidden style={{ opacity: 0.5 }}>·</span>
-                    <span className="tabular-nums">{relativeTime(t.updated_at)}</span>
-                  </div>
-                </div>
-                <span
-                  className="flex items-center gap-1 text-[11.5px] opacity-70 group-hover:opacity-100 transition-opacity"
-                  style={{ color: 'hsl(var(--sv-clay))' }}
-                >
-                  Open thread
-                  <ArrowRight className="h-3 w-3" />
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-// ───────────────── Projects placeholder ─────────────────
-
-function ProjectsPlaceholder() {
-  return (
-    <div
-      className="rounded-[10px] p-5 text-center"
-      style={{
-        border: '1px dashed hsl(var(--sv-hairline))',
-        background: 'hsl(var(--sv-hover) / 0.3)',
-      }}
-    >
-      <FolderKanban className="h-5 w-5 mx-auto mb-2" style={{ color: 'hsl(var(--sv-muted))' }} />
-      <p className="text-[13px]" style={{ color: 'hsl(var(--sv-ink))' }}>
-        No projects yet
-      </p>
-      <p className="mt-1 text-[11.5px]" style={{ color: 'hsl(var(--sv-muted))' }}>
-        Star a thread in the Work rail to promote it as a Project.
-      </p>
-    </div>
-  );
-}
-
-// ───────────────── helpers ─────────────────
 
 function relativeTime(updatedAt: string): string {
   const ts = new Date(updatedAt).getTime();
