@@ -87,6 +87,12 @@ import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflo
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
 import { classifyIntelHead, buildHeadKIBlock, HEAD_LABELS } from '@/lib/strategy/headClassifier';
+import {
+  detectPlaybookTriggers,
+  fetchDetectedPlaybooks,
+  fetchPlaybookForInjection,
+  type DetectedPlaybook,
+} from '@/lib/strategy/playbookDetector';
 import { tagThread } from '@/lib/strategy/threadTags';
 import { buildWorkspaceTitle, WORKSPACE_LABEL, displayThreadTitle } from '@/lib/strategy/threadNaming';
 import { PromoteToLibrarySheet, type PromotePayload } from './promote/PromoteToLibrarySheet';
