@@ -369,7 +369,7 @@ function ProjectDetail({
             })}
           </ul>
         )}
-      </Section>
+      </div>
 
       {/* Signals */}
       <Section icon={Radio} title={`Recent signals (${signals.length})`}>
