@@ -7511,6 +7511,71 @@ export type Database = {
           },
         ]
       }
+      strategy_custom_pills: {
+        Row: {
+          ask_clarifying: boolean | null
+          attachments: Json | null
+          created_at: string | null
+          description: string | null
+          fields: Json | null
+          id: string
+          instruction: string | null
+          is_active: boolean | null
+          name: string
+          order_index: number | null
+          output_type: string | null
+          prompt_template: string | null
+          run_mode: string | null
+          surface: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          ask_clarifying?: boolean | null
+          attachments?: Json | null
+          created_at?: string | null
+          description?: string | null
+          fields?: Json | null
+          id?: string
+          instruction?: string | null
+          is_active?: boolean | null
+          name: string
+          order_index?: number | null
+          output_type?: string | null
+          prompt_template?: string | null
+          run_mode?: string | null
+          surface: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          ask_clarifying?: boolean | null
+          attachments?: Json | null
+          created_at?: string | null
+          description?: string | null
+          fields?: Json | null
+          id?: string
+          instruction?: string | null
+          is_active?: boolean | null
+          name?: string
+          order_index?: number | null
+          output_type?: string | null
+          prompt_template?: string | null
+          run_mode?: string | null
+          surface?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_custom_pills_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       strategy_messages: {
         Row: {
           citations_json: Json | null
