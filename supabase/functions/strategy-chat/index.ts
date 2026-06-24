@@ -5679,6 +5679,7 @@ async function buildChatSystemPrompt(args: {
         scopes,
         maxKIs: 8,
         maxPlaybooks: 4,
+        preferredPlaybookId: situation.playbookId,
       }).catch(
         (e) => {
           console.warn(
