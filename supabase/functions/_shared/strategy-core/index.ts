@@ -34,11 +34,6 @@ export {
   type RetrievedPlaybook,
 } from "./library.ts";
 
-export {
-  classifySituation,
-  type SituationClassification,
-  type ClassifySituationArgs,
-} from "./situationClassifier.ts";
 
 export {
   assembleStrategyContext,
