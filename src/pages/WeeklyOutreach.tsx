@@ -1211,6 +1211,12 @@ export default function WeeklyOutreach() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={() => navigate('/org-tree')}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+            >
+              Org Tree
+            </button>
+            <button
               onClick={() => navigate('/post-call')}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
             >
