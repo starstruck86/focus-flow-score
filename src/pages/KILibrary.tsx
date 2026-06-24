@@ -205,7 +205,13 @@ export default function KILibrary() {
   const handleSearchChange = (value: string) => {
     setSearchInput(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setSearch(value), 300);
+    debounceRef.current = setTimeout(() => {
+      setSearch(value);
+      const url = new URL(window.location.href);
+      if (value.trim()) url.searchParams.set('q', value.trim());
+      else url.searchParams.delete('q');
+      window.history.replaceState({}, '', url.toString());
+    }, 300);
   };
 
   const { data: dimCounts } = useQuery({
