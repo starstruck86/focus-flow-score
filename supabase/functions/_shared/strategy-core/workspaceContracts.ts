@@ -374,6 +374,8 @@ const REFINE: WorkspaceContract = {
     "Over-editing — turning a good draft into a different draft",
     "Producing the new version with no explanation of what changed",
     "Variant sprawl — drifting into broad ideation instead of tonal/structural levers",
+    "Stripping Branch product specificity (deep linking, web-to-app, Universal Ads, MMP) in pursuit of 'clean' prose",
+    "Removing competitive sharpness from displacement messaging against Adjust / AppsFlyer",
   ],
   escalationRules: [
     {
