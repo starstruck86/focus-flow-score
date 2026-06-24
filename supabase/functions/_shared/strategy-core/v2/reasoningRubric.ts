@@ -116,11 +116,20 @@ export interface RubricScores {
 }
 
 const COMMERCIAL_TERMS = [
+  // Generic commercial outcomes
   "pipeline", "velocity", "win rate", "win-rate", "acv", "arr", "churn",
   "expansion", "payback", "cost of inaction", "deal stalls", "deal slips",
   "deal dies", "deal-slip", "time-to-revenue", "forecast", "conversion rate",
   "quota", "attainment", "renewal risk", "net retention", "no-decision",
   "ramp", "time-to-first-deal", "no decision", "stalls",
+  // Branch-specific expansion/renewal vocabulary
+  "expansion-arr", "expansion arr", "footprint", "footprint coverage",
+  "branch_footprint", "whitespace", "sub-entity", "sub entity",
+  "deep linking adoption", "web-to-app conversion", "web to app conversion",
+  "attribution accuracy", "mmp consolidation", "mmp displacement",
+  "qbr usage", "qbr cadence", "usage trends", "renewal", "renewal value",
+  "displacement", "competitive displacement", "branch products",
+  "product adoption", "ndr", "gross retention",
 ];
 
 const POV_PHRASES = [
