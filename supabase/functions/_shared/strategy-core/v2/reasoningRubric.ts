@@ -337,10 +337,10 @@ export function scoreRubric(args: ScoreRubricInput): RubricScores {
     libraryLeverageStrict = libraryLeverage;
   }
 
-  // audienceFit
+  // audienceFit — Branch verticals + buyer roles + champion language
   const audienceFit = args.audienceMentioned
     ? clamp01(
-      (lower.match(/\b(cfo|ceo|coo|cto|vp|director|champion|healthcare|fintech|retail|saas|manufacturing)\b/gi)?.length || 0) / 1,
+      (lower.match(/\b(cfo|ceo|coo|cto|cmo|cpo|vp|svp|director|head of|champion|economic buyer|mobile|product|growth|marketing|media|entertainment|streaming|ott|travel|hospitality|retail|ecommerce|e-commerce|financial services|fintech|banking|insurance|qsr|airlines|hotels)\b/gi)?.length || 0) / 1,
     )
     : 0.7;
 
