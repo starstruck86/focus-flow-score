@@ -25,6 +25,7 @@ import type { StrategySurfaceKey } from '@/components/strategy/v2/StrategyNavSid
 import '@/styles/strategy-v2.css';
 
 export default function StrategySettings() {
+  const { user } = useAuth();
   const { pillId } = useParams<{ pillId?: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -34,18 +35,22 @@ export default function StrategySettings() {
   const isEditing = !!pillId;
   const surfaceParam = (searchParams.get('surface') as StrategySurfaceKey) || 'brainstorm';
 
-  const editingPill = useMemo<CustomPill | null>(() => {
-    if (!pillId || isNew) return null;
-    return listCustomPills().find((p) => p.id === pillId) ?? null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pillId, isNew, version]);
+  const { data: allPills = [], isLoading: pillsLoading } = useQuery<CustomPill[]>({
+    queryKey: ['custom-pills', user?.id, 'all', version],
+    queryFn: () => listCustomPills(user!.id),
+    enabled: !!user?.id,
+  });
+
+  const editingPill: CustomPill | null = (!pillId || isNew)
+    ? null
+    : (allPills.find((p) => p.id === pillId) ?? null);
 
   // If a pillId was passed but doesn't exist, bounce back to the list.
   useEffect(() => {
-    if (pillId && !isNew && !editingPill) {
+    if (pillId && !isNew && !pillsLoading && !editingPill) {
       navigate('/strategy/settings', { replace: true });
     }
-  }, [pillId, isNew, editingPill, navigate]);
+  }, [pillId, isNew, editingPill, pillsLoading, navigate]);
 
   return (
     <Layout>
