@@ -28,6 +28,7 @@ export interface RetrievedKI {
   title: string;
   chapter?: string | null;
   knowledge_type?: string | null;
+  spider_dimension?: string | null;
   tactic_summary?: string | null;
   why_it_matters?: string | null;
   when_to_use?: string | null;

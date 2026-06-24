@@ -40,6 +40,78 @@ function scoreRow(searchText: string, scopes: string[]): number {
   return s;
 }
 
+// ── Scope → spider_dimension pre-filter ──────────────────────────
+// Maps situation-classifier scopes (topic keywords) to the
+// spider_dimension values used in knowledge_items. When scopes match
+// known dimensions, Postgres filters to those dimensions first so
+// keyword scoring works over a relevant, ranked candidate set instead
+// of a random 500-row slice of 33K+ KIs.
+
+const CANDIDATE_LIMIT = 800;
+
+const SCOPE_TO_DIMENSION: Readonly<Record<string, string>> = {
+  // Competitive
+  competitive: "competitive",
+  adjust: "competitive",
+  appsflyer: "competitive",
+  kochava: "competitive",
+  singular: "competitive",
+  displacement: "competitive",
+  mmp_switch: "competitive",
+  // Deal control
+  deal_control: "deal_control",
+  closing: "deal_control",
+  negotiation: "deal_control",
+  discount: "deal_control",
+  renewal: "deal_control",
+  qbr: "deal_control",
+  usage: "deal_control",
+  consolidation: "deal_control",
+  vendor: "deal_control",
+  // Expansion
+  expansion: "expansion_strategy",
+  expansion_strategy: "expansion_strategy",
+  whitespace: "expansion_strategy",
+  upsell: "expansion_strategy",
+  new_bu: "expansion_strategy",
+  sub_entity: "expansion_strategy",
+  // Discovery
+  discovery: "discovery",
+  // Stakeholder
+  stakeholder: "stakeholder_navigation",
+  stakeholder_navigation: "stakeholder_navigation",
+  champion: "stakeholder_navigation",
+  executive: "stakeholder_navigation",
+  c_suite: "c_suite_engagement",
+  // Product / Branch knowledge
+  product: "product_knowledge",
+  product_knowledge: "product_knowledge",
+  deep_linking: "product_knowledge",
+  attribution: "product_knowledge",
+  web_to_app: "product_knowledge",
+  mmp: "product_knowledge",
+  measurement: "product_knowledge",
+  branch: "product_knowledge",
+  // Objection handling
+  objection: "objection_handling",
+  objection_handling: "objection_handling",
+  build_internally: "objection_handling",
+  // Messaging
+  messaging: "messaging",
+  // Qualification
+  qualification: "qualification",
+};
+
+function mapScopesToDimensions(scopes: string[]): string[] {
+  const dims = new Set<string>();
+  for (const scope of scopes) {
+    const key = scope.toLowerCase().replace(/[-\s]/g, "_");
+    const dim = SCOPE_TO_DIMENSION[key];
+    if (dim) dims.add(dim);
+  }
+  return Array.from(dims);
+}
+
 export async function retrieveLibraryContext(
   supabase: any,
   userId: string,
@@ -52,20 +124,31 @@ export async function retrieveLibraryContext(
   // ── Knowledge Items ──
   let knowledgeItems: RetrievedKI[] = [];
   try {
-    const { data: kiRows } = await supabase
+    // Stage A: Postgres-side pre-filter
+    // Map scopes → spider_dimension values. If any match, restrict to
+    // those dimensions so keyword scoring sees relevant KIs, not a
+    // random slice. Always ORDER BY confidence_score DESC so the
+    // highest-quality KIs enter the scoring pool first.
+    const scopedDimensions = mapScopesToDimensions(opts.scopes);
+    let kiQuery = supabase
       .from("knowledge_items")
       .select(
-        "id, title, chapter, knowledge_type, tactic_summary, why_it_matters, when_to_use, how_to_execute, framework, confidence_score, applies_to_contexts, tags, active",
+        "id, title, chapter, knowledge_type, spider_dimension, tactic_summary, why_it_matters, when_to_use, how_to_execute, framework, confidence_score, applies_to_contexts, tags, active",
       )
       .eq("user_id", userId)
       .eq("active", true)
-      .limit(500);
+      .order("confidence_score", { ascending: false });
+    if (scopedDimensions.length > 0) {
+      kiQuery = kiQuery.in("spider_dimension", scopedDimensions);
+    }
+    const { data: kiRows } = await kiQuery.limit(CANDIDATE_LIMIT);
 
     if (kiRows?.length) {
       knowledgeItems = (kiRows as any[])
         .map((r) => {
           const searchText = [
             r.title, r.chapter, r.knowledge_type, r.framework,
+            r.spider_dimension,
             r.tactic_summary, r.why_it_matters, r.when_to_use,
             (r.applies_to_contexts || []).join(" "),
             (r.tags || []).join(" "),
@@ -78,6 +161,7 @@ export async function retrieveLibraryContext(
         .slice(0, maxKIs)
         .map(({ row, score }) => ({
           id: row.id,
+          spider_dimension: row.spider_dimension,
           title: row.title,
           chapter: row.chapter,
           knowledge_type: row.knowledge_type,
@@ -193,7 +277,7 @@ export async function retrieveLibraryContext(
 
   const contextString = formatLibraryContext(knowledgeItems, playbooks);
 
-  console.log(`[library-retrieval] scopes=${opts.scopes.join(",")} → ${knowledgeItems.length} KIs, ${playbooks.length} playbooks${opts.preferredPlaybookId ? ` preferred=${opts.preferredPlaybookId}` : ""}`);
+  console.log(`[library-retrieval] scopes=[${opts.scopes.join(",")}] dims=[${scopedDimensions.join(",")}] → ${knowledgeItems.length} KIs, ${playbooks.length} playbooks${opts.preferredPlaybookId ? ` preferred=${opts.preferredPlaybookId}` : ""}`);
 
   return {
     knowledgeItems,
