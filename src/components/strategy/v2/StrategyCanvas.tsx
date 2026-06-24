@@ -9,7 +9,7 @@
 import { useEffect, useRef } from 'react';
 import type { StrategyMessage as StrategyMessageT } from '@/types/strategy';
 import type { StrategyGlobalInstructionsConfig } from '@/lib/strategy/strategyConfig';
-import type { Citation } from '@/lib/strategy/headClassifier';
+
 import { StrategyMessage } from './StrategyMessage';
 import { StrategyEmptyState } from './StrategyEmptyState';
 import { SkillOutputCard } from './SkillOutputCard';
