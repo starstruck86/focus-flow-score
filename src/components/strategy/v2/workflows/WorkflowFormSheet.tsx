@@ -24,6 +24,65 @@ import {
   compileWorkflowPrompt,
 } from './workflowRegistry';
 
+interface KnowledgeSource {
+  icon: string;
+  label: string;
+  count: string;
+}
+
+function getWorkflowKnowledgeSources(workflow: WorkflowDef): KnowledgeSource[] {
+  const id = workflow.id;
+  const family = workflow.family;
+
+  if (id.includes('expansion') || id.includes('qbr') || id.includes('footprint') || id.includes('expansion_readiness')) {
+    return [
+      { icon: '📈', label: 'Expansion Strategy KIs', count: '331' },
+      { icon: '🌿', label: 'Branch Product KIs', count: '233' },
+      { icon: '🔍', label: 'Discovery KIs', count: '5,046' },
+    ];
+  }
+  if (id.includes('competitive') || id.includes('branch_vs')) {
+    return [
+      { icon: '🎯', label: 'Competitive KIs', count: '177' },
+      { icon: '🌿', label: 'Branch Product KIs', count: '233' },
+    ];
+  }
+  if (id.includes('discovery') || id.includes('account_brief') || id.includes('research')) {
+    return [
+      { icon: '🔍', label: 'Discovery KIs', count: '5,046' },
+      { icon: '🏛️', label: 'Stakeholder KIs', count: '3,943' },
+      { icon: '📊', label: 'Sales Intelligence KIs', count: '3,346' },
+    ];
+  }
+  if (id.includes('multithread') || id.includes('stakeholder')) {
+    return [
+      { icon: '🏛️', label: 'Stakeholder Nav KIs', count: '3,943' },
+      { icon: '🔍', label: 'Discovery KIs', count: '5,046' },
+    ];
+  }
+  if (id.includes('email') || id.includes('followup') || id.includes('outreach') || id.includes('hooks') || id.includes('messaging')) {
+    return [
+      { icon: '💬', label: 'Messaging KIs', count: '3,835' },
+      { icon: '📞', label: 'Prospecting KIs', count: '4,101' },
+    ];
+  }
+  if (id.includes('deal') || id.includes('negotiate') || id.includes('close')) {
+    return [
+      { icon: '⚔️', label: 'Deal Control KIs', count: '3,346' },
+      { icon: '🛑', label: 'Objection Handling KIs', count: '1,033' },
+    ];
+  }
+  if (family === 'mode' || family === 'library') {
+    return [
+      { icon: '🔍', label: 'Sales Intelligence KIs', count: '16,282' },
+      { icon: '🌿', label: 'Branch Product KIs', count: '233' },
+    ];
+  }
+  return [
+    { icon: '🧠', label: 'Full Intelligence Library', count: '27,117' },
+  ];
+}
+
 interface Props {
   workflow: WorkflowDef | null;
   onClose: () => void;
@@ -37,9 +96,11 @@ interface Props {
   onRun: (compiledPrompt: string, def: WorkflowDef, values: Record<string, string>) => void;
   /** When provided, custom pills show an Edit button that calls this. */
   onEditCustom?: (customPillId: string) => void;
+  /** Linked thread account name — auto-prefills account/company fields. */
+  linkedAccountName?: string | null;
 }
 
-export function WorkflowFormSheet({ workflow, onClose, onRun, onEditCustom }: Props) {
+export function WorkflowFormSheet({ workflow, onClose, onRun, onEditCustom, linkedAccountName }: Props) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [showErrors, setShowErrors] = useState(false);
 
@@ -49,11 +110,14 @@ export function WorkflowFormSheet({ workflow, onClose, onRun, onEditCustom }: Pr
       const seed: Record<string, string> = {};
       for (const f of workflow.fields) {
         seed[f.key] = f.kind === 'select' && f.options?.[0] ? f.options[0] : '';
+        if (linkedAccountName && ['account', 'company', 'account_name'].includes(f.key)) {
+          seed[f.key] = linkedAccountName;
+        }
       }
       setValues(seed);
       setShowErrors(false);
     }
-  }, [workflow?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workflow?.id, linkedAccountName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!workflow) return null;
 
@@ -163,6 +227,59 @@ export function WorkflowFormSheet({ workflow, onClose, onRun, onEditCustom }: Pr
               </div>
             );
           })}
+
+          {/* Knowledge preview — shows what this skill will use */}
+          <div
+            className="rounded-[8px] px-3 py-2.5 space-y-2"
+            style={{
+              border: '1px solid hsl(var(--sv-hairline))',
+              background: 'hsl(var(--sv-hover) / 0.4)',
+            }}
+          >
+            <p
+              className="text-[10.5px] font-semibold uppercase tracking-[0.08em]"
+              style={{ color: 'hsl(var(--sv-muted))' }}
+            >
+              Knowledge this will draw from
+            </p>
+            <div className="space-y-1">
+              {getWorkflowKnowledgeSources(workflow).map((source) => (
+                <div
+                  key={source.label}
+                  className="flex items-center justify-between text-[12px]"
+                  style={{ color: 'hsl(var(--sv-ink) / 0.8)' }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span>{source.icon}</span>
+                    <span>{source.label}</span>
+                  </span>
+                  <span style={{ color: 'hsl(var(--sv-muted))' }}>{source.count}</span>
+                </div>
+              ))}
+              {linkedAccountName && (
+                <div
+                  className="flex items-center justify-between text-[12px]"
+                  style={{ color: 'hsl(var(--sv-clay))' }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span>📍</span>
+                    <span>{linkedAccountName} context</span>
+                  </span>
+                  <span>loaded</span>
+                </div>
+              )}
+              <div
+                className="flex items-center justify-between text-[12px]"
+                style={{ color: 'hsl(var(--sv-clay) / 0.8)' }}
+              >
+                <span className="flex items-center gap-1.5">
+                  <span>🗓</span>
+                  <span>Territory profile</span>
+                </span>
+                <span>always loaded</span>
+              </div>
+            </div>
+          </div>
 
           {/* Instruction (hidden by default; expand to view/preview) */}
           {workflow.instruction && (
