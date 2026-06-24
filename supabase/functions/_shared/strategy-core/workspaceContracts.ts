@@ -546,8 +546,11 @@ const ARTIFACTS: WorkspaceContract = {
   cognitivePosture:
     "Structured assembly. Structure first, prose second. Optimize for re-use, glanceability, and operational fit.",
   useCases: [
-    "Generate any artifact whose shape is defined by a pill task config (briefs, plans, decks, frameworks)",
-    "Convert raw inputs into a structured, copy-pasteable deliverable",
+    "Generate a QBR Prep brief for Peacock",
+    "Build an Expansion Proposal for web-to-app at a retail account",
+    "Create a Competitive Response Prep — Adjust displacement",
+    "Generate a Stakeholder Map for a media account",
+    "Build a Discovery Prep brief for an account with Usage Down",
     "Re-generate or update an existing artifact with new inputs",
   ],
   nonGoals: [
