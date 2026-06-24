@@ -1734,6 +1734,7 @@ export function StrategyShell() {
           onSend={handleSend}
           onSlashChange={setSlashQuery}
           onRectChange={setComposerRect}
+          onExpandPrompt={handleExpandPrompt}
           onAttachFiles={() => slashFileInputRef.current?.click()}
           momentumHint={
             // Context-aware "what's next?" line under the composer.
