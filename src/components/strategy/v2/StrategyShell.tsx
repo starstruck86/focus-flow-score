@@ -988,7 +988,10 @@ export function StrategyShell() {
         : '';
       // Server's situation classifier (strategy-chat) now owns head/playbook
       // detection and KI retrieval. No client-side head KI block.
-      const combinedInstructions = [territoryBlock, manualKIBlock].filter(Boolean).join('\n\n');
+      const projectInstructionsBlock = projectInstructions?.trim()
+        ? `### Project Instructions\n${projectInstructions.trim()}`
+        : '';
+      const combinedInstructions = [territoryBlock, manualKIBlock, projectInstructionsBlock].filter(Boolean).join('\n\n');
       const accountName = linkedContext?.account?.name ?? linkedContext?.opportunity?.name ?? null;
       setLastIntelActivation({
         head: 'sales',
