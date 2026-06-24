@@ -148,6 +148,7 @@ export async function retrieveLibraryContext(
         .map((r) => {
           const searchText = [
             r.title, r.chapter, r.knowledge_type, r.framework,
+            r.spider_dimension,
             r.tactic_summary, r.why_it_matters, r.when_to_use,
             (r.applies_to_contexts || []).join(" "),
             (r.tags || []).join(" "),
