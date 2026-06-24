@@ -17,7 +17,8 @@ export type SlashVerb =
   | 'upload'
   | 'branch'
   | 'link'
-  | 'promote-last';
+  | 'promote-last'
+  | 'save-as-skill';
 
 interface VerbDef {
   key: SlashVerb;
