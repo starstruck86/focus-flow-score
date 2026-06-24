@@ -934,15 +934,12 @@ export function StrategyShell() {
       const head = user?.id ? classifyIntelHead(text) : null;
       const dispatch = (headKIBlock: string) => {
         const territoryBlock = buildTerritoryBlock();
-        const playbookBlock = loadedPlaybookRef.current;
-        loadedPlaybookRef.current = '';
-        if (playbookBlock) setLoadedPlaybookContent('');
         const manualKIBlock = manuallyInjectedKIs.length > 0
           ? `\n\n### Manually Injected Knowledge Items\n${manuallyInjectedKIs.map((ki) =>
               `- ${ki.title}: ${ki.tactic_summary.slice(0, 120)}`
             ).join('\n')}`
           : '';
-        const combinedInstructions = [territoryBlock, playbookBlock, manualKIBlock, headKIBlock].filter(Boolean).join('\n\n');
+        const combinedInstructions = [territoryBlock, manualKIBlock, headKIBlock].filter(Boolean).join('\n\n');
         sendMessage(text, {
           pickedResourceIds: sidecar,
           workspace: ws,
