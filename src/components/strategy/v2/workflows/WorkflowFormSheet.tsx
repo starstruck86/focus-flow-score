@@ -110,11 +110,14 @@ export function WorkflowFormSheet({ workflow, onClose, onRun, onEditCustom, link
       const seed: Record<string, string> = {};
       for (const f of workflow.fields) {
         seed[f.key] = f.kind === 'select' && f.options?.[0] ? f.options[0] : '';
+        if (linkedAccountName && ['account', 'company', 'account_name'].includes(f.key)) {
+          seed[f.key] = linkedAccountName;
+        }
       }
       setValues(seed);
       setShowErrors(false);
     }
-  }, [workflow?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workflow?.id, linkedAccountName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!workflow) return null;
 
