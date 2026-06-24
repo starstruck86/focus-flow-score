@@ -221,19 +221,9 @@ export function StrategyShell() {
     triggeredAt: number;
   } | null>(null);
 
-  // Proactive playbook detection
-  const [detectedPlaybooks, setDetectedPlaybooks] = useState<DetectedPlaybook[]>([]);
-  const [loadedPlaybookContent, setLoadedPlaybookContent] = useState<string>('');
-  const [dismissedPlaybookIds, setDismissedPlaybookIds] = useState<Set<string>>(new Set());
-  const loadedPlaybookRef = useRef('');
-  useEffect(() => { loadedPlaybookRef.current = loadedPlaybookContent; }, [loadedPlaybookContent]);
+  // Client-side playbook detection removed (task 1.2). Server owns activation.
 
-  const handleLoadPlaybook = useCallback(async (playbookId: string) => {
-    const content = await fetchPlaybookForInjection(playbookId);
-    setLoadedPlaybookContent(content);
-    setDismissedPlaybookIds((prev) => new Set([...prev, playbookId]));
-    setDetectedPlaybooks((prev) => prev.filter((p) => p.id !== playbookId));
-  }, []);
+
 
   // Manually injected KIs (from ContextInspector Intelligence tab)
   const [manuallyInjectedKIs, setManuallyInjectedKIs] = useState<InjectedKI[]>([]);
