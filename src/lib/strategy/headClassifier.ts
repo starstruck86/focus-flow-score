@@ -61,6 +61,13 @@ export type HeadKIResult = {
   citations: Citation[];
 };
 
+export type InjectedKI = {
+  id: string;
+  title: string;
+  tactic_summary: string;
+  spider_dimension: string;
+};
+
 /**
  * Fetches top KIs from the full knowledge_items library (all chapters)
  * filtered by spider_dimension. Applies quality gate (>80 chars).
