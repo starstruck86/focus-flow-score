@@ -213,7 +213,7 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
         data-message-id={message.id}
         data-message-role="assistant"
         data-strict-mode="true"
-        className="strategy-strict-message text-[15px] break-words"
+        className="strategy-strict-message group relative text-[15px] break-words"
         style={{
           fontFamily: 'var(--sv-serif)',
           color: 'hsl(var(--sv-ink))',
@@ -235,10 +235,14 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
         >
           {nextMove}
         </div>
+        <div className="mt-2 flex items-center gap-1 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+          <CopyButton getText={() => `${bullets.map((b) => `• ${b}`).join('\n')}\n\n${nextMove}`} />
+        </div>
         {onQuickAction && <MessageActions onAction={onQuickAction} />}
       </div>
     );
   }
+
 
   if (!text.trim()) {
     // Streaming placeholder — calm "Thinking…" label, no flashy animation.
