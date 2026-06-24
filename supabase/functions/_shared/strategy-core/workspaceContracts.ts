@@ -42,9 +42,10 @@ const BRAINSTORM: WorkspaceContract = {
     "Divergent generation. Bias toward breadth and sharp framing over depth or proof. Speculation is welcome but must be labeled as hypothesis/option rather than asserted as fact.",
   useCases: [
     "Generate 8 expansion angles for Peacock given their current Branch footprint",
-    "Brainstorm QBR narrative framings when usage is down",
+    "Brainstorm QBR narrative framings when usage is down 30%",
     "Explore competitive hooks for displacing Adjust at a travel account",
-    "Stress-test the web-to-app business case from a buyer's perspective",
+    "Stress-test the web-to-app business case from a skeptical buyer's perspective",
+    "Generate discovery question angles for a new sub-entity at an existing account",
   ],
   nonGoals: [
     "Producing finalized, send-ready copy",
@@ -167,9 +168,10 @@ const DEEP_RESEARCH: WorkspaceContract = {
   useCases: [
     "Build an account brief for Peacock discovery",
     "Map Adjust's pricing posture and GTM motion",
-    "Profile the CMO / VP Engineering buyer persona at a travel account",
+    "Profile the CMO or VP Engineering buyer persona at a media account",
     "Research Hilton's mobile app strategy and attribution setup",
     "Investigate streaming industry shifts that create Branch whitespace",
+    "Competitive analysis: Branch vs Adjust for a travel vertical deal",
   ],
   nonGoals: [
     "Generating creative angles or hooks (→ Brainstorm)",
@@ -245,6 +247,7 @@ const DEEP_RESEARCH: WorkspaceContract = {
     "Burying the 'so what' under exhaustive background",
     "Silent gaps — missing evidence not surfaced as unknowns",
     "Producing generic industry research without Branch expansion implications (footprint, whitespace, competitive displacement, QBR narrative)",
+    "Ignoring MMP competitive context (Adjust, AppsFlyer) when researching an account",
   ],
   escalationRules: [
     {
@@ -295,10 +298,11 @@ const REFINE: WorkspaceContract = {
   cognitivePosture:
     "Editorial precision. Edit, don't replace. Default action is reduction, not expansion. Variants are tonal/structural levers on the same underlying intent — never broad ideation.",
   useCases: [
-    "Tighten a QBR narrative that's too long",
+    "Tighten a QBR narrative that buries the lede",
     "Sharpen the open of a discovery call script",
-    "Tighten a web-to-app business case email",
-    "Elevate a LinkedIn post about mobile attribution",
+    "Tighten a web-to-app business case for an exec audience",
+    "Make a LinkedIn post about mobile attribution more memorable",
+    "Sharpen a competitive displacement email without losing the edge",
     "Produce a tonal variant (Shorter, Sharper, Warmer, More executive, More direct) of the same draft",
   ],
   nonGoals: [
@@ -425,9 +429,9 @@ const LIBRARY: WorkspaceContract = {
   useCases: [
     "Find what I've saved about web-to-app case studies in retail",
     "Surface Branch KIs relevant to Adjust displacement",
-    "Apply the QBR Usage Down playbook to Peacock",
+    "Apply the QBR Usage Down playbook to a specific account",
     "Synthesize case study evidence for a web-to-app business case",
-    "Find forgotten KIs on mobile attribution gaps",
+    "Find KIs on MMP consolidation and attribution gaps for fintech",
   ],
   nonGoals: [
     "Open-web research when the library has coverage (→ Deep Research)",
@@ -546,11 +550,11 @@ const ARTIFACTS: WorkspaceContract = {
   cognitivePosture:
     "Structured assembly. Structure first, prose second. Optimize for re-use, glanceability, and operational fit.",
   useCases: [
-    "Generate a QBR Prep brief for Peacock",
-    "Build an Expansion Proposal for web-to-app at a retail account",
-    "Create a Competitive Response Prep — Adjust displacement",
-    "Generate a Stakeholder Map for a media account",
-    "Build a Discovery Prep brief for an account with Usage Down",
+    "Generate a QBR Prep brief for a usage-down account",
+    "Build a Web-to-App Expansion Proposal for a retail account",
+    "Create a Competitive Response Prep for Adjust displacement",
+    "Generate a Stakeholder Map for a media/entertainment account",
+    "Build a 90-Day Expansion Plan for a new sub-entity entry",
     "Re-generate or update an existing artifact with new inputs",
   ],
   nonGoals: [
@@ -660,10 +664,10 @@ const PROJECTS: WorkspaceContract = {
   cognitivePosture:
     "Continuity orientation. Treat the project as the unit of work; respond with awareness of what already exists in the project's scope.",
   useCases: [
-    "NBCUniversal account-family plan across Peacock, NBC News, Bravo",
-    "Multi-stakeholder expansion deal at Hilton across mobile + attribution",
-    "Ongoing Adjust displacement effort at a travel account",
-    "Quarter-long QBR recovery plan at a usage-down account",
+    "NBCUniversal account-family plan across Peacock, NBC News, Bravo, E!",
+    "Multi-stakeholder expansion deal at Hilton across mobile measurement + web-to-app",
+    "Ongoing Adjust displacement effort at a travel account over a quarter",
+    "Quarter-long QBR recovery plan at a media account with declining usage",
   ],
   nonGoals: [
     "One-off tasks (→ any other workspace)",
@@ -672,11 +676,11 @@ const PROJECTS: WorkspaceContract = {
     "Acting as a generic chat history viewer",
   ],
   reasoningPath: [
-    "Load whatever project context is available (linked threads, artifacts, resources, latest rollup, account-family context, branch_footprint state, prior call logs)",
+    "Load whatever project context is available (linked threads, artifacts, resources, latest rollup, account-family context, Branch footprint state per sub-entity, prior call log signals, open next steps per account)",
     "Place the user's request in that context — is this new, refining, or contradicting prior work on this account / expansion play / displacement effort?",
-    "Respond to the immediate request grounded in available project context only — reference specific prior artifacts, calls, or footprint signals when present",
-    "If meaningful new decisions or commitments emerge (stakeholder moves, expansion angles tried, competitive intel surfaced), surface them with 'Decision:' or 'Commit:' markers",
-    "Recommend a next move grounded in project context (next QBR beat, next stakeholder, next product expansion angle) — not a generic best practice",
+    "Respond to the immediate request grounded in available project context only — reference specific prior artifacts, calls, footprint signals, or open next steps when present",
+    "If meaningful new decisions or commitments emerge (stakeholder moves, expansion angles tried, competitive intel surfaced, open next steps closed/added), surface them with 'Decision:' or 'Commit:' markers",
+    "Recommend a next move grounded in project context (next QBR beat, next stakeholder, next product expansion angle, next sub-entity to enter) — not a generic best practice",
   ],
   retrievalRules: {
     libraryUse: "primary",
@@ -762,24 +766,22 @@ const WORK: WorkspaceContract = {
   workspace: "work",
   version: CONTRACT_VERSION,
   mission:
-    "The fast Branch expansion AE execution lane — produce immediate, usable output for live sales moments: QBR prep, call openers, objection handling, quick expansion angles, competitive responses.",
+    "The fast Branch expansion AE execution lane — immediate, usable output for live sales moments: QBR prep, call openers, Adjust displacement responses, expansion angles, quick competitive handles.",
   cognitivePosture:
-    "Operator mode for a Branch expansion AE. Right-sized, action-oriented, time-to-useful-answer above all. Answer first; route only when it would materially improve the result. Default frame: existing Branch customers, expansion (not new logo), specific Branch products (deep linking, web-to-app, Universal Ads, Journeys), and the competitive dynamic with Adjust / AppsFlyer when implied.",
+    "Operator mode for a Branch expansion AE. Right-sized, action-oriented, time-to-useful-answer above all. Answer first; route only when it would materially improve the result. Default frame: existing Branch customers, expansion (not new logo), specific Branch products (deep linking, deferred deep linking, Universal Ads, Email-to-App, SMS-to-App, Web-to-App, QR, AIO, Advanced Privacy), and the competitive dynamic with Adjust / AppsFlyer when implied.",
   useCases: [
     "Quick follow-up email after a Peacock call",
-    "Fast competitive response when Adjust comes up",
-    "One-pager prep 10 minutes before a call",
-    "Expansion angle for a specific account",
-    "Objection handler for 'engineering can build this'",
-    "Rapid one-line clarification or rewrite",
+    "Fast Adjust objection response in a live call",
+    "One-pager prep 10 minutes before a Discovery call",
+    "Expansion angle for a specific account and Branch product",
+    "Objection handler for 'engineering can build deep linking in-house'",
+    "QBR narrative opener when usage is down",
   ],
   nonGoals: [
-    "Generating a full QBR deck (→ Artifacts)",
-    "Deep account research (→ Deep Research)",
-    "Branch product comparison analysis (→ Deep Research)",
-    "Sustained multi-session account work (→ Projects)",
-    "Library-grounded synthesis across many KIs (→ Library)",
-    "Acting as a generalist that competes with specialized workspaces by doing everything mediocrely",
+    "Full QBR deck (→ Artifacts)",
+    "Deep account or competitive research (→ Deep Research)",
+    "Branch KI synthesis across multiple resources (→ Library)",
+    "Sustained multi-session account strategy (→ Projects)",
   ],
   reasoningPath: [
     "Classify the request — is this a fast Branch expansion operator task (QBR beat, call opener, objection, quick angle, competitive response), or does it warrant a specialized workspace?",
