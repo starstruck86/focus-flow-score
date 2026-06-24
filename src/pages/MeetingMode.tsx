@@ -99,7 +99,7 @@ export default function MeetingMode() {
     if (!user) return;
     (async () => {
       const { data } = await fromActiveAccounts()
-        .select('id, name, industry, account_status, tier, last_touch_date, next_step')
+        .select('id, name, industry, account_status, tier, last_touch_date, next_step, notes')
         .eq('user_id', user.id)
         .limit(50);
       const list = ((data ?? []) as Account[]).sort((a, b) => {
