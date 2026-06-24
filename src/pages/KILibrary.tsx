@@ -188,12 +188,13 @@ export default function KILibrary() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { user } = useAuth();
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState(params.get('q') ?? '');
+  const [search, setSearch] = useState(params.get('q') ?? '');
   const [dimension, setDimension] = useState<string>(params.get('dimension') ?? 'all');
   const [chapterFilter, setChapterFilter] = useState<string>('all');
   const [branchHead, setBranchHead] = useState<string>('all');
   const [page, setPage] = useState(0);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
