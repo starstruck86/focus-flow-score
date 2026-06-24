@@ -123,6 +123,18 @@ export function StrategyShell() {
     });
   }, []);
 
+  // One-time migration of legacy localStorage pills → Supabase. Fire-and-forget.
+  const pillsMigratedRef = useRef(false);
+  useEffect(() => {
+    if (!user?.id || pillsMigratedRef.current) return;
+    pillsMigratedRef.current = true;
+    migrateLocalPillsToSupabase(user.id)
+      .then((count) => {
+        if (count > 0) console.log(`[customPills] migrated ${count} legacy pill(s) to Supabase`);
+      })
+      .catch((e) => console.warn('[customPills] migration failed', e));
+  }, [user?.id]);
+
   // Artifact workspace (right) — opened via inline card or completion event
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
 
