@@ -124,14 +124,24 @@ export async function retrieveLibraryContext(
   // ── Knowledge Items ──
   let knowledgeItems: RetrievedKI[] = [];
   try {
-    const { data: kiRows } = await supabase
+    // Stage A: Postgres-side pre-filter
+    // Map scopes → spider_dimension values. If any match, restrict to
+    // those dimensions so keyword scoring sees relevant KIs, not a
+    // random slice. Always ORDER BY confidence_score DESC so the
+    // highest-quality KIs enter the scoring pool first.
+    const scopedDimensions = mapScopesToDimensions(opts.scopes);
+    let kiQuery = supabase
       .from("knowledge_items")
       .select(
-        "id, title, chapter, knowledge_type, tactic_summary, why_it_matters, when_to_use, how_to_execute, framework, confidence_score, applies_to_contexts, tags, active",
+        "id, title, chapter, knowledge_type, spider_dimension, tactic_summary, why_it_matters, when_to_use, how_to_execute, framework, confidence_score, applies_to_contexts, tags, active",
       )
       .eq("user_id", userId)
       .eq("active", true)
-      .limit(500);
+      .order("confidence_score", { ascending: false });
+    if (scopedDimensions.length > 0) {
+      kiQuery = kiQuery.in("spider_dimension", scopedDimensions);
+    }
+    const { data: kiRows } = await kiQuery.limit(CANDIDATE_LIMIT);
 
     if (kiRows?.length) {
       knowledgeItems = (kiRows as any[])
