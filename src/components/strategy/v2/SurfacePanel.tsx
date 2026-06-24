@@ -49,6 +49,7 @@ import { displayThreadTitle, isUntitledTitle, WORKSPACE_SHORT } from '@/lib/stra
 import { isCleanupThread } from '@/lib/strategy/threadCleanup';
 import type { StrategySurfaceKey } from './StrategyNavSidebar';
 import type { StrategyThread } from '@/types/strategy';
+import { ProjectsPanel } from './projects/ProjectsPanel';
 
 /** A thread enriched with explainability metadata for display. */
 interface AnnotatedThread {
