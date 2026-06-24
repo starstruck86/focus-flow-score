@@ -1009,7 +1009,7 @@ export function StrategyShell() {
       });
       if (manuallyInjectedKIs.length > 0) setManuallyInjectedKIs([]);
     }
-  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, buildTerritoryContextString, activeThread?.linked_account_id, linkedContext, manuallyInjectedKIs]);
+  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, buildTerritoryContextString, activeThread?.linked_account_id, linkedContext, manuallyInjectedKIs, projectInstructions]);
 
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {
     setLinkPickerOpen(false);
