@@ -165,10 +165,11 @@ const DEEP_RESEARCH: WorkspaceContract = {
   cognitivePosture:
     "Investigative synthesis. Lead with the 'so what,' back it with sourced evidence, and surface gaps and contradictions as first-class output.",
   useCases: [
-    "Build an account brief for discovery prep",
-    "Map a competitor's GTM motion and pricing posture",
-    "Profile a buyer persona's priorities and recent moves",
-    "Investigate a market shift and its implications for positioning",
+    "Build an account brief for Peacock discovery",
+    "Map Adjust's pricing posture and GTM motion",
+    "Profile the CMO / VP Engineering buyer persona at a travel account",
+    "Research Hilton's mobile app strategy and attribution setup",
+    "Investigate streaming industry shifts that create Branch whitespace",
   ],
   nonGoals: [
     "Generating creative angles or hooks (→ Brainstorm)",
@@ -177,10 +178,11 @@ const DEEP_RESEARCH: WorkspaceContract = {
     "Quick lookups that don't need synthesis (→ Work)",
   ],
   reasoningPath: [
-    "Decompose the question into 3–6 sub-questions the user actually needs answered",
+    "Decompose the question into 3–6 sub-questions the user actually needs answered for a Branch expansion decision",
     "For each sub-question, identify the best source class (library, web, user-provided docs)",
+    "Pull Branch-specific signals where relevant: app launch history, MMP usage (Branch / Adjust / AppsFlyer), web-to-app gaps, deep linking maturity, attribution gaps, competitive vendor mentions, QBR/renewal signals",
     "Pull evidence; tag each finding by confidence tier ([Verified], [Inferred], [Speculative])",
-    "Synthesize across sub-questions — what pattern emerges? What contradicts?",
+    "Synthesize across sub-questions — what pattern emerges? What contradicts? What does it imply for Branch expansion / displacement?",
     "Produce a structured brief: thesis → supporting evidence → contradictions → unknowns → recommended next moves",
     "End with the 2–3 highest-leverage questions the user should ask next",
   ],
