@@ -87,7 +87,7 @@ import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflo
 // /strategy/settings page (see src/pages/StrategySettings.tsx).
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
-import { classifyIntelHead, HEAD_LABELS, type InjectedKI } from '@/lib/strategy/headClassifier';
+import { type InjectedKI } from '@/lib/strategy/headClassifier';
 // Client-side playbook detection removed (task 1.2). The server's
 // situation classifier + libraryRetrieval now own playbook activation.
 import { tagThread } from '@/lib/strategy/threadTags';
@@ -928,36 +928,32 @@ export function StrategyShell() {
     {
       const ws = sendingFrom ?? activeSurface ?? null;
       // Always-on territory context block — shared formatter from useTerritoryProfile.
-      const buildTerritoryBlock = (): string => buildTerritoryContextString();
-      // S-I3: auto-inject KI context block by detected intelligence head.
-      // Classify synchronously; fetch async and dispatch sendMessage after.
-      const head = user?.id ? classifyIntelHead(text) : null;
-      const dispatch = (headKIBlock: string) => {
-        const territoryBlock = buildTerritoryBlock();
-        const manualKIBlock = manuallyInjectedKIs.length > 0
-          ? `\n\n### Manually Injected Knowledge Items\n${manuallyInjectedKIs.map((ki) =>
-              `- ${ki.title}: ${ki.tactic_summary.slice(0, 120)}`
-            ).join('\n')}`
-          : '';
-        const combinedInstructions = [territoryBlock, manualKIBlock, headKIBlock].filter(Boolean).join('\n\n');
-        sendMessage(text, {
-          pickedResourceIds: sidecar,
-          workspace: ws,
-          workspaceSource: sendingFrom ? 'selected' : (activeSurface ? 'selected' : 'none'),
-          globalInstructions: combinedInstructions || undefined,
-        });
-        if (manuallyInjectedKIs.length > 0) setManuallyInjectedKIs([]);
-      };
+      const territoryBlock = buildTerritoryContextString();
+      // Manually injected KIs from ContextInspector (user-driven, intentional).
+      const manualKIBlock = manuallyInjectedKIs.length > 0
+        ? `\n\n### Manually Injected Knowledge Items\n${manuallyInjectedKIs.map((ki) =>
+            `- ${ki.title}: ${ki.tactic_summary.slice(0, 120)}`
+          ).join('\n')}`
+        : '';
+      // Server's situation classifier (strategy-chat) now owns head/playbook
+      // detection and KI retrieval. No client-side head KI block.
+      const combinedInstructions = [territoryBlock, manualKIBlock].filter(Boolean).join('\n\n');
       const accountName = linkedContext?.account?.name ?? linkedContext?.opportunity?.name ?? null;
       setLastIntelActivation({
-        head: head ?? 'sales',
-        headLabel: HEAD_LABELS[head ?? 'sales'] ?? 'Sales',
+        head: 'sales',
+        headLabel: 'Sales',
         kiCount: 0,
         accountLinked: !!activeThread?.linked_account_id,
         accountName,
         triggeredAt: Date.now(),
       });
-      dispatch('');
+      sendMessage(text, {
+        pickedResourceIds: sidecar,
+        workspace: ws,
+        workspaceSource: sendingFrom ? 'selected' : (activeSurface ? 'selected' : 'none'),
+        globalInstructions: combinedInstructions || undefined,
+      });
+      if (manuallyInjectedKIs.length > 0) setManuallyInjectedKIs([]);
     }
   }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, buildTerritoryContextString, activeThread?.linked_account_id, linkedContext, manuallyInjectedKIs]);
 
