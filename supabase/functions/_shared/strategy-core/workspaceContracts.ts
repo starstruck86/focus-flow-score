@@ -429,9 +429,9 @@ const LIBRARY: WorkspaceContract = {
   useCases: [
     "Find what I've saved about web-to-app case studies in retail",
     "Surface Branch KIs relevant to Adjust displacement",
-    "Apply the QBR Usage Down playbook to Peacock",
+    "Apply the QBR Usage Down playbook to a specific account",
     "Synthesize case study evidence for a web-to-app business case",
-    "Find forgotten KIs on mobile attribution gaps",
+    "Find KIs on MMP consolidation and attribution gaps for fintech",
   ],
   nonGoals: [
     "Open-web research when the library has coverage (→ Deep Research)",
