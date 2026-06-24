@@ -308,7 +308,30 @@ function ProjectDetail({
       </Section>
 
       {/* Threads */}
-      <Section icon={FolderKanban} title={`Threads (${projectThreads.length})`}>
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
+            <FolderKanban className="h-3 w-3" style={{ color: 'hsl(var(--sv-clay))' }} />
+            <h3 className="text-[11px] font-medium uppercase tracking-[0.09em]" style={{ color: 'hsl(var(--sv-muted))' }}>
+              Threads ({projectThreads.length})
+            </h3>
+          </div>
+          {onCreateThreadForAccount && project.roots[0] && (
+            <button
+              type="button"
+              onClick={() => {
+                const root = project.roots[0];
+                void onCreateThreadForAccount(root.id, `${project.label} — new thread`);
+              }}
+              className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-[4px] sv-hover-bg"
+              style={{ color: 'hsl(var(--sv-clay))' }}
+              data-testid={`project-new-thread-${project.familyKey}`}
+              title={`New thread linked to ${project.roots[0].name}`}
+            >
+              <Plus className="h-3 w-3" /> New thread
+            </button>
+          )}
+        </div>
         {projectThreads.length === 0 ? (
           <EmptyHint text="No Strategy threads linked to these accounts yet." />
         ) : (
