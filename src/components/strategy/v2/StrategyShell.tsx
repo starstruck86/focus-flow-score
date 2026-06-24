@@ -1661,6 +1661,7 @@ export function StrategyShell() {
         onClose={() => setActiveWorkflow(null)}
         onRun={handleRunWorkflow}
         onEditCustom={handleEditCustomPillById}
+        linkedAccountName={linkedContext?.account?.name ?? null}
       />
       {/* Pill editor + Manage Strategy now live on /strategy/settings.
           Add/Edit Pill and "Manage Strategy" call navigate(...) instead of
