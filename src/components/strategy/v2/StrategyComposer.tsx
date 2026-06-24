@@ -14,7 +14,7 @@
  *   - clearSlash() public method to wipe the slash query after a verb commits
  */
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp, Sparkles } from 'lucide-react';
 
 interface Props {
   disabled?: boolean;
@@ -33,6 +33,8 @@ interface Props {
    * Examples: "Ask a follow-up · / to revise · ⌘S save"
    */
   momentumHint?: string | null;
+  /** Easy Prompt: called when the user taps the Expand affordance. Receives current draft, returns expanded text (or original). */
+  onExpandPrompt?: (draft: string) => Promise<string>;
 }
 
 export interface StrategyComposerHandle {
@@ -46,11 +48,13 @@ export interface StrategyComposerHandle {
 }
 
 export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function StrategyComposer(
-  { disabled, placeholder = 'Message…', serifPlaceholder = false, onSend, onSlashChange, onRectChange, onAttachFiles, momentumHint }, ref
+  { disabled, placeholder = 'Message…', serifPlaceholder = false, onSend, onSlashChange, onRectChange, onAttachFiles, momentumHint, onExpandPrompt }, ref
 ) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [value, setValue] = useState('');
+  const [expanding, setExpanding] = useState(false);
+  const [preExpandValue, setPreExpandValue] = useState<string | null>(null);
 
   useImperativeHandle(ref, () => {
     const ta = taRef.current as HTMLTextAreaElement & {
@@ -64,14 +68,10 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
         setValue('');
         onSlashChange?.(null);
       };
-      // Replace any in-progress slash query with `text` and refocus.
-      // Normalize trailing whitespace so library insertion leaves exactly
-      // one trailing space — never zero, never two.
       ta.insertText = (text: string) => {
         const normalized = text.replace(/\s+$/, '') + ' ';
         setValue(normalized);
         onSlashChange?.(null);
-        // Focus + place caret at end after React commits the new value.
         requestAnimationFrame(() => {
           const el = taRef.current;
           if (!el) return;
@@ -80,22 +80,15 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
           try { el.setSelectionRange(end, end); } catch { /* ignore */ }
         });
       };
-      // Per-surface draft persistence — read the live value without forcing
-      // a re-render, and replace it silently when switching surfaces.
       ta.getValue = () => value;
       ta.setValue = (text: string) => {
         setValue(text);
-        // Don't trigger slash mode for restored drafts.
         if (!text.startsWith('/')) onSlashChange?.(null);
       };
     }
     return ta;
   });
 
-  // Auto-resize the textarea up to a soft cap.
-  // When empty, lock to a single compact line (24px) so the composer never
-  // balloons before the user types — this is what the mobile bug report flags
-  // as the "huge empty vertical box" before any input.
   useEffect(() => {
     const el = taRef.current;
     if (!el) return;
@@ -107,18 +100,14 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
     el.style.height = Math.min(Math.max(el.scrollHeight, 24), 120) + 'px';
   }, [value, serifPlaceholder]);
 
-  // Detect slash-mode (must start with "/", no embedded newlines, no inner spaces past slash word)
   useEffect(() => {
     if (value.startsWith('/') && !value.includes('\n')) {
-      // The query is the first whitespace-bounded word (so "/upload extra" still treats "upload" as the query
-      // but we keep the menu open until the user types Enter or Esc)
       onSlashChange?.(value);
     } else {
       onSlashChange?.(null);
     }
   }, [value, onSlashChange]);
 
-  // Publish rect for anchoring
   const publishRect = useCallback(() => {
     if (!onRectChange) return;
     onRectChange(wrapRef.current?.getBoundingClientRect() ?? null);
@@ -136,25 +125,49 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
     const v = value.trim();
     if (!v || disabled) return;
     setValue('');
+    setPreExpandValue(null);
     onSlashChange?.(null);
     onSend(v);
   };
 
-  // Phase 1.6 — discoverability hints
-  // Context hint (e.g. "Ask a follow-up · / to revise") wins over the
-  // generic empty/typing copy when the parent supplies one.
+  const handleExpand = useCallback(async () => {
+    const draft = value.trim();
+    if (!draft || expanding || disabled || !onExpandPrompt) return;
+    setExpanding(true);
+    const snapshot = value;
+    try {
+      const expanded = await onExpandPrompt(draft);
+      if (expanded && expanded.trim() && expanded.trim() !== draft) {
+        setPreExpandValue(snapshot);
+        setValue(expanded);
+        requestAnimationFrame(() => {
+          const el = taRef.current;
+          if (el) { el.focus(); const end = el.value.length; try { el.setSelectionRange(end, end); } catch { /* ignore */ } }
+        });
+      }
+    } finally {
+      setExpanding(false);
+    }
+  }, [value, expanding, disabled, onExpandPrompt]);
+
+  const handleUndoExpand = useCallback(() => {
+    if (preExpandValue === null) return;
+    setValue(preExpandValue);
+    setPreExpandValue(null);
+    requestAnimationFrame(() => taRef.current?.focus());
+  }, [preExpandValue]);
+
   const hasContextHint = typeof momentumHint === 'string' && momentumHint.length > 0;
   const showEmptyHint = !hasContextHint && serifPlaceholder && !value;
   const showTypingHint = !hasContextHint && value.length > 0 && !value.startsWith('/');
+
+  const showExpand = !!onExpandPrompt && value.trim().split(/\s+/).filter(Boolean).length >= 3 && !value.startsWith('/');
 
   return (
     <div
       className="w-full px-4 sm:px-6 pt-1 pb-[calc(env(safe-area-inset-bottom)+8px)] sm:pb-3 sticky bottom-0 z-30 sm:static shrink-0"
       style={{
         background: 'hsl(var(--sv-paper))',
-        // iOS Safari: when the keyboard opens, the visual viewport shrinks
-        // and `bottom-0` inside a 100dvh column keeps the composer pinned to
-        // the visible bottom edge — never tucked under the keyboard.
         borderTop: '1px solid hsl(var(--sv-hairline))',
       }}
     >
@@ -175,7 +188,6 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
           value={value}
           onChange={e => setValue(e.target.value)}
           onKeyDown={e => {
-            // Don't intercept Enter while slash-menu is open — SlashMenu handles it.
             if (e.key === 'Enter' && !e.shiftKey && !value.startsWith('/')) {
               e.preventDefault();
               handleSend();
@@ -184,14 +196,6 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
           rows={1}
           placeholder={placeholder}
           disabled={disabled}
-          // Suppress the iOS Safari AutoFill accessory bar (Passwords /
-          // Credit Cards / Addresses / Done icons) that otherwise floats
-          // above the keyboard and makes the composer look detached.
-          // iOS AutoFill heuristics inspect `name`, `id`, `autocomplete`,
-          // and surrounding form context — we strip all of them and tag
-          // the field as a one-time-code style chat input that AutoFill
-          // intentionally ignores. This is the strongest reliable
-          // suppression short of using a contentEditable div.
           autoComplete="off"
           autoCorrect="on"
           autoCapitalize="sentences"
@@ -206,14 +210,12 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
             color: 'hsl(var(--sv-ink))',
             fontFamily: serifPlaceholder && !value ? 'var(--sv-serif)' : 'var(--sv-sans)',
             paddingLeft: onAttachFiles ? 32 : 0,
-            paddingRight: 40,
+            paddingRight: showExpand ? 130 : 40,
             maxHeight: 120,
             overflowY: 'auto',
-            transition: 'padding-left 120ms ease',
+            transition: 'padding-left 120ms ease, padding-right 120ms ease',
           }}
         />
-        {/* Attach affordance — ALWAYS visible while composing so users can add
-            files mid-thought. Compact icon button (no text) once typing begins. */}
         {onAttachFiles && (
           <button
             type="button"
@@ -233,6 +235,29 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
             data-testid="composer-attach"
           >
             <span style={{ fontSize: 16, lineHeight: 1, fontWeight: 400 }}>+</span>
+          </button>
+        )}
+        {showExpand && (
+          <button
+            type="button"
+            onClick={handleExpand}
+            disabled={expanding || disabled}
+            className="absolute sv-hover-bg rounded-[4px] flex items-center justify-center gap-1 px-1.5"
+            style={{
+              right: 44,
+              bottom: 10,
+              height: 22,
+              color: 'hsl(var(--sv-clay))',
+              opacity: expanding ? 0.5 : 0.85,
+              fontSize: 11,
+              fontFamily: 'var(--sv-sans)',
+            }}
+            aria-label="Expand prompt"
+            title="Expand into a full Branch instruction"
+            data-testid="composer-expand"
+          >
+            <Sparkles size={13} strokeWidth={1.75} className={expanding ? 'animate-pulse' : ''} />
+            {expanding ? 'Expanding…' : 'Expand'}
           </button>
         )}
         <button
@@ -258,7 +283,6 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
           <ArrowUp size={16} strokeWidth={1.75} />
         </button>
       </div>
-      {/* Phase 1.6 — discoverability hint line. Three states: context | empty | typing. */}
       <div
         className="mx-auto px-[14px] text-[12px] leading-none"
         style={{
@@ -266,14 +290,31 @@ export const StrategyComposer = forwardRef<HTMLTextAreaElement, Props>(function 
           color: 'hsl(var(--sv-muted))',
           minHeight: 14,
           marginTop: 6,
-          opacity: hasContextHint || showEmptyHint || showTypingHint ? 0.75 : 0,
+          opacity: (preExpandValue !== null || hasContextHint || showEmptyHint || showTypingHint) ? 0.75 : 0,
           fontFamily: 'var(--sv-sans)',
         }}
-        aria-hidden={!(hasContextHint || showEmptyHint || showTypingHint)}
+        aria-hidden={!(preExpandValue !== null || hasContextHint || showEmptyHint || showTypingHint)}
       >
-        {hasContextHint && <>{momentumHint}</>}
-        {showEmptyHint && <>Type to start · / for actions · ⌘K to switch</>}
-        {showTypingHint && <>⌘S save · / actions · ⌘K switch</>}
+        {preExpandValue !== null ? (
+          <span>
+            Expanded ·{' '}
+            <button
+              type="button"
+              onClick={handleUndoExpand}
+              className="underline"
+              style={{ color: 'hsl(var(--sv-clay))' }}
+            >
+              Undo
+            </button>
+            {' '}· edit freely, then Enter to send
+          </span>
+        ) : (
+          <>
+            {hasContextHint && <>{momentumHint}</>}
+            {showEmptyHint && <>Type to start · / for actions · ⌘K to switch</>}
+            {showTypingHint && <>⌘S save · / actions · ⌘K switch</>}
+          </>
+        )}
       </div>
     </div>
   );
