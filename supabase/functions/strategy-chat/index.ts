@@ -33,9 +33,6 @@ import {
   renderWorkingThesisStateBlock,
   resolveServerWorkspaceContract,
   retrieveLibraryContext,
-  formatLibraryContext,
-  classifySituation,
-  type SituationClassification,
   retrieveResourceContext,
   buildEscalationPersistenceBlock,
   buildGatePersistenceBlock,
@@ -77,6 +74,7 @@ import {
 } from "../_shared/strategy-core/v2/index.ts";
 import { routeRequest, type RoutingDecision } from "../_shared/strategy-router/index.ts";
 import { logRoutingDecision } from "../_shared/strategy-router/log.ts";
+import { classifySituation } from "../_shared/strategy-router/situationClassifier.ts";
 import {
   runCurrentStatePreflight,
   type CurrentStateResult,
@@ -5612,33 +5610,37 @@ async function buildChatSystemPrompt(args: {
   // retrieval AND the working thesis state for this account AND the
   // newly-added resource retrieval (exact / near-exact title + entity
   // links + category backstop).
-  // Situation classifier (task 1.1) — one LLM call that triages the
-  // rep's question, picks a specific playbook by ID, and emits
-  // situation-scoped retrieval keywords. Falls back to the legacy
-  // keyword-soup scopes on any failure so chat never blocks.
-  const __recentTurnsForClassifier = (pack.recentMessages || [])
-    .map((m: any) => ({
-      role: m.role === "assistant" ? "assistant" : "user",
-      content: String(m.text || m.content || ""),
-    }))
-    .filter((t) => t.content.trim().length > 0)
-    .slice(-2);
-  const situation: SituationClassification | null = await classifySituation(supabase, {
+  // Situation classifier (task 1.1) — one LLM call picks a specific
+  // playbook from the user's actual library and emits situation-scoped
+  // retrieval keywords. Non-blocking: any failure returns the
+  // "general" fallback and the call site degrades to the legacy
+  // keyword-soup deriveLibraryScopes path. Playbook wiring lives in
+  // task 1.2.
+  const __accountCtxParts: string[] = [];
+  if (pack.account?.name) __accountCtxParts.push(`Account: ${pack.account.name}`);
+  if (pack.account?.industry) __accountCtxParts.push(`Industry: ${pack.account.industry}`);
+  if (Array.isArray(pack.account?.tech_stack) && pack.account.tech_stack.length) {
+    __accountCtxParts.push(`Tech: ${pack.account.tech_stack.slice(0, 8).join(", ")}`);
+  }
+  if (Array.isArray(pack.account?.tags) && pack.account.tags.length) {
+    __accountCtxParts.push(`Tags: ${pack.account.tags.slice(0, 8).join(", ")}`);
+  }
+  if (pack.opportunity?.stage) __accountCtxParts.push(`Opp stage: ${pack.opportunity.stage}`);
+  const __classifierAccountContext = __accountCtxParts.join(" | ");
+
+  const situation = await classifySituation({
+    supabase,
     userId,
     userContent,
-    account: pack.account ?? null,
-    opportunity: pack.opportunity
-      ? {
-          stage: pack.opportunity.stage ?? null,
-          close_date: pack.opportunity.close_date ?? null,
-          amount: pack.opportunity.amount ?? null,
-        }
-      : null,
-    recentTurns: __recentTurnsForClassifier,
+    accountContext: __classifierAccountContext,
   });
+
+  // derivedScopes is the situation-scoped replacement for the legacy
+  // keyword soup. If the classifier returned "general" / no scopes
+  // (short ask, no playbooks, gateway failure), fall back transparently.
   const __legacyScopes = deriveLibraryScopes(pack.account, userContent);
-  const scopes = (situation?.scopes?.length ?? 0) > 0
-    ? situation!.scopes
+  const scopes = situation.derivedScopes.length > 0
+    ? situation.derivedScopes
     : __legacyScopes;
 
   // Library gate — preserves legacy behavior for `opportunistic`
@@ -5728,49 +5730,15 @@ async function buildChatSystemPrompt(args: {
     }),
   ]);
 
-  // Pin the classifier-picked playbook if it isn't already in the
-  // retrieved set. Guarantees the situation-matched playbook appears
-  // rank-1 in the context block even if keyword scoring missed it.
-  if (situation?.playbook_id && library) {
-    try {
-      const alreadyPresent = (library.playbooks || []).some(
-        (p: any) => p?.id === situation.playbook_id,
-      );
-      if (!alreadyPresent) {
-        const { data: pinnedRow } = await supabase
-          .from("playbooks")
-          .select(
-            "id, title, problem_type, when_to_use, why_it_matters, tactic_steps, talk_tracks, key_questions, traps, anti_patterns, what_great_looks_like, common_mistakes, confidence_score",
-          )
-          .eq("id", situation.playbook_id)
-          .eq("user_id", userId)
-          .maybeSingle();
-        if (pinnedRow) {
-          const maxPlaybooks = 4;
-          library.playbooks = [
-            { ...pinnedRow, score: 999 } as any,
-            ...(library.playbooks || []).filter((p: any) => p?.id !== pinnedRow.id),
-          ].slice(0, maxPlaybooks);
-          library.counts = {
-            ...library.counts,
-            playbooks: library.playbooks.length,
-          };
-          library.contextString = formatLibraryContext(
-            library.knowledgeItems || [],
-            library.playbooks || [],
-          );
-          console.log(
-            `[situation-classifier] pinned playbook=${pinnedRow.title} id=${pinnedRow.id}`,
-          );
-        }
-      }
-    } catch (e) {
-      console.warn(
-        "[situation-classifier] playbook pin failed:",
-        (e as Error).message,
-      );
-    }
+  // NOTE (task 1.2): situation.playbookId is captured but not yet pinned
+  // into library.playbooks — playbook wiring lands in 1.2.
+  if (situation.playbookId) {
+    console.log(
+      `[situation-classifier] playbook_match id=${situation.playbookId} title=${situation.playbookTitle ?? ""} (wiring deferred to 1.2)`,
+    );
   }
+
+
 
   // Coverage state evaluation + structured retrieval-decision telemetry.
   const __libraryHitCount = (library?.knowledgeItems?.length ?? 0) +
