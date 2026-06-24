@@ -100,6 +100,7 @@ import { ArtifactInlineCard } from './ArtifactInlineCard';
 import { ArtifactWorkspace } from './ArtifactWorkspace';
 import { useThreadTaskRuns } from '@/hooks/strategy/useThreadTaskRuns';
 import { useStrategyJob } from '@/lib/strategy/useStrategyJob';
+import { PostCallLogModal } from '@/components/strategy/PostCallLogModal';
 
 import '@/styles/strategy-v2.css';
 
