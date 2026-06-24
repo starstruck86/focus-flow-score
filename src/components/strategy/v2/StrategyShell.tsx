@@ -244,6 +244,20 @@ export function StrategyShell() {
     triggeredAt: number;
   } | null>(null);
 
+  // Proactive playbook detection
+  const [detectedPlaybooks, setDetectedPlaybooks] = useState<DetectedPlaybook[]>([]);
+  const [loadedPlaybookContent, setLoadedPlaybookContent] = useState<string>('');
+  const [dismissedPlaybookIds, setDismissedPlaybookIds] = useState<Set<string>>(new Set());
+  const loadedPlaybookRef = useRef('');
+  useEffect(() => { loadedPlaybookRef.current = loadedPlaybookContent; }, [loadedPlaybookContent]);
+
+  const handleLoadPlaybook = useCallback(async (playbookId: string) => {
+    const content = await fetchPlaybookForInjection(playbookId);
+    setLoadedPlaybookContent(content);
+    setDismissedPlaybookIds((prev) => new Set([...prev, playbookId]));
+    setDetectedPlaybooks((prev) => prev.filter((p) => p.id !== playbookId));
+  }, []);
+
   // ── Surface-switch swap (drafts + active thread) ─────────────────────────
   // When the user moves between workspaces, save the in-flight draft AND the
   // currently active thread id under the previous surface, then restore both
