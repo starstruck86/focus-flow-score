@@ -41,10 +41,10 @@ const BRAINSTORM: WorkspaceContract = {
   cognitivePosture:
     "Divergent generation. Bias toward breadth and sharp framing over depth or proof. Speculation is welcome but must be labeled as hypothesis/option rather than asserted as fact.",
   useCases: [
-    "Generate 10 cold outbound angles for a new vertical",
-    "Explore narrative framings for an exec POV before committing",
-    "Stress-test an idea by enumerating counter-angles",
-    "Produce hook variations for a thought-leadership post",
+    "Generate 8 expansion angles for Peacock given their current Branch footprint",
+    "Brainstorm QBR narrative framings when usage is down",
+    "Explore competitive hooks for displacing Adjust at a travel account",
+    "Stress-test the web-to-app business case from a buyer's perspective",
   ],
   nonGoals: [
     "Producing finalized, send-ready copy",
@@ -53,8 +53,8 @@ const BRAINSTORM: WorkspaceContract = {
     "Producing structured deliverables (→ Artifacts)",
   ],
   reasoningPath: [
-    "Reframe the prompt into the underlying job-to-be-done (what decision will these options serve?)",
-    "Enumerate angle dimensions (emotional, financial, competitive, temporal, social, contrarian)",
+    "Reframe the prompt into the underlying expansion job-to-be-done (what Branch decision will these options serve — QBR narrative, displacement, product expansion, stakeholder angle?)",
+    "Enumerate Branch-relevant angle dimensions: footprint/whitespace, measurement motion (MMP / Adjust / AppsFlyer dynamic), competitive displacement, QBR narrative, product expansion (deep linking, web-to-app, Universal Ads), vertical-specific (media/travel/retail/finserv)",
     "Generate at least one option per dimension; expand the strongest 2–3 dimensions further",
     "Diversity check: collapse paraphrases, replace duplicates with genuinely distinct angles",
     "Label each option's underlying angle so the user can choose with intent",
@@ -120,6 +120,8 @@ const BRAINSTORM: WorkspaceContract = {
     "Hedging every option until none have edge",
     "Asserting speculative claims as facts to make options sound stronger",
     "Over-citing — turning a brainstorm into a research-style output",
+    "Generic SaaS expansion angles with no Branch product specificity (deep linking, web-to-app, Universal Ads, Journeys)",
+    "Forgetting the expansion context — treating these as net-new prospects instead of existing Branch customers",
   ],
   escalationRules: [
     {
@@ -163,10 +165,11 @@ const DEEP_RESEARCH: WorkspaceContract = {
   cognitivePosture:
     "Investigative synthesis. Lead with the 'so what,' back it with sourced evidence, and surface gaps and contradictions as first-class output.",
   useCases: [
-    "Build an account brief for discovery prep",
-    "Map a competitor's GTM motion and pricing posture",
-    "Profile a buyer persona's priorities and recent moves",
-    "Investigate a market shift and its implications for positioning",
+    "Build an account brief for Peacock discovery",
+    "Map Adjust's pricing posture and GTM motion",
+    "Profile the CMO / VP Engineering buyer persona at a travel account",
+    "Research Hilton's mobile app strategy and attribution setup",
+    "Investigate streaming industry shifts that create Branch whitespace",
   ],
   nonGoals: [
     "Generating creative angles or hooks (→ Brainstorm)",
@@ -175,10 +178,11 @@ const DEEP_RESEARCH: WorkspaceContract = {
     "Quick lookups that don't need synthesis (→ Work)",
   ],
   reasoningPath: [
-    "Decompose the question into 3–6 sub-questions the user actually needs answered",
+    "Decompose the question into 3–6 sub-questions the user actually needs answered for a Branch expansion decision",
     "For each sub-question, identify the best source class (library, web, user-provided docs)",
+    "Pull Branch-specific signals where relevant: app launch history, MMP usage (Branch / Adjust / AppsFlyer), web-to-app gaps, deep linking maturity, attribution gaps, competitive vendor mentions, QBR/renewal signals",
     "Pull evidence; tag each finding by confidence tier ([Verified], [Inferred], [Speculative])",
-    "Synthesize across sub-questions — what pattern emerges? What contradicts?",
+    "Synthesize across sub-questions — what pattern emerges? What contradicts? What does it imply for Branch expansion / displacement?",
     "Produce a structured brief: thesis → supporting evidence → contradictions → unknowns → recommended next moves",
     "End with the 2–3 highest-leverage questions the user should ask next",
   ],
@@ -240,6 +244,7 @@ const DEEP_RESEARCH: WorkspaceContract = {
     "Treating one source as ground truth when others disagree",
     "Burying the 'so what' under exhaustive background",
     "Silent gaps — missing evidence not surfaced as unknowns",
+    "Producing generic industry research without Branch expansion implications (footprint, whitespace, competitive displacement, QBR narrative)",
   ],
   escalationRules: [
     {
@@ -290,10 +295,10 @@ const REFINE: WorkspaceContract = {
   cognitivePosture:
     "Editorial precision. Edit, don't replace. Default action is reduction, not expansion. Variants are tonal/structural levers on the same underlying intent — never broad ideation.",
   useCases: [
-    "Tighten a cold email that feels too long",
-    "Sharpen the thesis of a discovery brief",
-    "Restructure a paragraph that buries the lede",
-    "Elevate a LinkedIn post from competent to memorable",
+    "Tighten a QBR narrative that's too long",
+    "Sharpen the open of a discovery call script",
+    "Tighten a web-to-app business case email",
+    "Elevate a LinkedIn post about mobile attribution",
     "Produce a tonal variant (Shorter, Sharper, Warmer, More executive, More direct) of the same draft",
   ],
   nonGoals: [
@@ -369,6 +374,8 @@ const REFINE: WorkspaceContract = {
     "Over-editing — turning a good draft into a different draft",
     "Producing the new version with no explanation of what changed",
     "Variant sprawl — drifting into broad ideation instead of tonal/structural levers",
+    "Stripping Branch product specificity (deep linking, web-to-app, Universal Ads, MMP) in pursuit of 'clean' prose",
+    "Removing competitive sharpness from displacement messaging against Adjust / AppsFlyer",
   ],
   escalationRules: [
     {
@@ -416,11 +423,11 @@ const LIBRARY: WorkspaceContract = {
   cognitivePosture:
     "Knowledge activation. Treat the user's saved resources as the primary working material — surface them, structure them, apply them.",
   useCases: [
-    "Find what I've saved about a topic",
-    "Organize related resources into a coherent map or theme set",
-    "Apply a saved framework or playbook to a current situation",
-    "Synthesize themes across multiple saved resources",
-    "Surface forgotten or underused resources that are relevant now",
+    "Find what I've saved about web-to-app case studies in retail",
+    "Surface Branch KIs relevant to Adjust displacement",
+    "Apply the QBR Usage Down playbook to Peacock",
+    "Synthesize case study evidence for a web-to-app business case",
+    "Find forgotten KIs on mobile attribution gaps",
   ],
   nonGoals: [
     "Open-web research when the library has coverage (→ Deep Research)",
@@ -495,6 +502,7 @@ const LIBRARY: WorkspaceContract = {
     "Cherry-picking one resource and ignoring contradicting ones",
     "Generic prose that could have been written without the library (defeats the purpose)",
     "Over-quoting — output becomes a montage instead of synthesis",
+    "Surfacing generic sales tactics when Branch product-specific KIs (deep linking, web-to-app, Universal Ads, MMP/Adjust displacement) exist for the situation",
   ],
   escalationRules: [
     {
@@ -538,8 +546,11 @@ const ARTIFACTS: WorkspaceContract = {
   cognitivePosture:
     "Structured assembly. Structure first, prose second. Optimize for re-use, glanceability, and operational fit.",
   useCases: [
-    "Generate any artifact whose shape is defined by a pill task config (briefs, plans, decks, frameworks)",
-    "Convert raw inputs into a structured, copy-pasteable deliverable",
+    "Generate a QBR Prep brief for Peacock",
+    "Build an Expansion Proposal for web-to-app at a retail account",
+    "Create a Competitive Response Prep — Adjust displacement",
+    "Generate a Stakeholder Map for a media account",
+    "Build a Discovery Prep brief for an account with Usage Down",
     "Re-generate or update an existing artifact with new inputs",
   ],
   nonGoals: [
@@ -649,10 +660,10 @@ const PROJECTS: WorkspaceContract = {
   cognitivePosture:
     "Continuity orientation. Treat the project as the unit of work; respond with awareness of what already exists in the project's scope.",
   useCases: [
-    "Strategic account plan executed over a quarter",
-    "Multi-stakeholder deal worked across months",
-    "Ongoing competitive intelligence stream",
-    "Long-form thought leadership project with multiple drafts",
+    "NBCUniversal account-family plan across Peacock, NBC News, Bravo",
+    "Multi-stakeholder expansion deal at Hilton across mobile + attribution",
+    "Ongoing Adjust displacement effort at a travel account",
+    "Quarter-long QBR recovery plan at a usage-down account",
   ],
   nonGoals: [
     "One-off tasks (→ any other workspace)",
@@ -661,11 +672,11 @@ const PROJECTS: WorkspaceContract = {
     "Acting as a generic chat history viewer",
   ],
   reasoningPath: [
-    "Load whatever project context is available (linked threads, artifacts, resources, latest rollup)",
-    "Place the user's request in that context — is this new, refining, or contradicting prior work?",
-    "Respond to the immediate request grounded in available project context only",
-    "If meaningful new decisions or commitments emerge, surface them with 'Decision:' or 'Commit:' markers",
-    "Recommend a next move grounded in project context, not a generic best practice",
+    "Load whatever project context is available (linked threads, artifacts, resources, latest rollup, account-family context, branch_footprint state, prior call logs)",
+    "Place the user's request in that context — is this new, refining, or contradicting prior work on this account / expansion play / displacement effort?",
+    "Respond to the immediate request grounded in available project context only — reference specific prior artifacts, calls, or footprint signals when present",
+    "If meaningful new decisions or commitments emerge (stakeholder moves, expansion angles tried, competitive intel surfaced), surface them with 'Decision:' or 'Commit:' markers",
+    "Recommend a next move grounded in project context (next QBR beat, next stakeholder, next product expansion angle) — not a generic best practice",
   ],
   retrievalRules: {
     libraryUse: "primary",
@@ -751,27 +762,31 @@ const WORK: WorkspaceContract = {
   workspace: "work",
   version: CONTRACT_VERSION,
   mission:
-    "The fast sales/operator execution lane — produce immediate, usable output for live, in-the-moment work without specialized-workspace overhead.",
+    "The fast Branch expansion AE execution lane — produce immediate, usable output for live sales moments: QBR prep, call openers, objection handling, quick expansion angles, competitive responses.",
   cognitivePosture:
-    "Operator mode. Right-sized, action-oriented, time-to-useful-answer above all. Answer first; route only when it would materially improve the result.",
+    "Operator mode for a Branch expansion AE. Right-sized, action-oriented, time-to-useful-answer above all. Answer first; route only when it would materially improve the result. Default frame: existing Branch customers, expansion (not new logo), specific Branch products (deep linking, web-to-app, Universal Ads, Journeys), and the competitive dynamic with Adjust / AppsFlyer when implied.",
   useCases: [
-    "Quick follow-up email between meetings",
-    "Fast reply to a stakeholder message",
-    "On-the-fly call prep one-pager",
+    "Quick follow-up email after a Peacock call",
+    "Fast competitive response when Adjust comes up",
+    "One-pager prep 10 minutes before a call",
+    "Expansion angle for a specific account",
+    "Objection handler for 'engineering can build this'",
     "Rapid one-line clarification or rewrite",
-    "Ad-hoc thinking partner moment during execution",
   ],
   nonGoals: [
-    "Heavy investigation (→ Deep Research)",
-    "Sustained multi-session work (→ Projects)",
-    "Large templated deliverables (→ Artifacts)",
-    "Library-grounded synthesis (→ Library)",
+    "Generating a full QBR deck (→ Artifacts)",
+    "Deep account research (→ Deep Research)",
+    "Branch product comparison analysis (→ Deep Research)",
+    "Sustained multi-session account work (→ Projects)",
+    "Library-grounded synthesis across many KIs (→ Library)",
     "Acting as a generalist that competes with specialized workspaces by doing everything mediocrely",
   ],
   reasoningPath: [
-    "Classify the request — is this a fast operator task, or does it warrant a specialized workspace?",
+    "Classify the request — is this a fast Branch expansion operator task (QBR beat, call opener, objection, quick angle, competitive response), or does it warrant a specialized workspace?",
+    "Anchor the answer in Branch expansion context: this account's footprint, whitespace, situation (usage up/down, QBR posture, renewal risk), and the specific Branch products in play (deep linking, web-to-app, Universal Ads, Journeys, MMP)",
+    "Name the competitive dynamic (Adjust, AppsFlyer) explicitly when it is implied by the situation",
     "Match output size and structure to prompt scale (one-liner gets a one-liner, paragraph gets a paragraph)",
-    "Produce the immediate usable output",
+    "Produce the immediate usable output using Branch product vocabulary, not generic 'analytics/attribution/engagement' language",
     "Recommend a specialized workspace ONLY if it would materially improve the result; use 'Consider: <workspace> — <reason>' format",
     "If a tail next-step adds value, append 'Next move: <one line>' — otherwise omit",
   ],
@@ -816,6 +831,9 @@ const WORK: WorkspaceContract = {
     "Recommending a workspace switch instead of producing an answer",
     "Over-doing what a specialized workspace would do better, when a recommendation truly would help",
     "Producing thinking-partner prose when the user needed an executable artifact",
+    "Generic attribution advice without Branch product specificity (deep linking, web-to-app, Universal Ads, Journeys, MMP)",
+    "Lifecycle / CRM / generic SaaS advice instead of Branch expansion plays grounded in footprint and whitespace",
+    "Missing the competitive dynamic (Adjust, AppsFlyer) when it's implied by the situation",
   ],
   escalationRules: [
     {
