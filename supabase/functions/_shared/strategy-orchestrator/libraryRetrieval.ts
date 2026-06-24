@@ -123,13 +123,15 @@ export async function retrieveLibraryContext(
 
   // ── Knowledge Items ──
   let knowledgeItems: RetrievedKI[] = [];
+  let scopedDimensions: string[] = [];
   try {
     // Stage A: Postgres-side pre-filter
     // Map scopes → spider_dimension values. If any match, restrict to
     // those dimensions so keyword scoring sees relevant KIs, not a
     // random slice. Always ORDER BY confidence_score DESC so the
     // highest-quality KIs enter the scoring pool first.
-    const scopedDimensions = mapScopesToDimensions(opts.scopes);
+    scopedDimensions = mapScopesToDimensions(opts.scopes);
+
     let kiQuery = supabase
       .from("knowledge_items")
       .select(
