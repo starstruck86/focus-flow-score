@@ -215,6 +215,8 @@ export function StrategyShell() {
   const [composerRect, setComposerRect] = useState<DOMRect | null>(null);
   const [pendingThreadId, setPendingThreadId] = useState<string | null>(null);
   const [isCreatingThread, setIsCreatingThread] = useState(false);
+  // O2 — Post-Call Log modal
+  const [callLogOpen, setCallLogOpen] = useState(false);
   // Sidecar: resource IDs the user picked from /library this turn. Sent
   // out-of-band on the next sendMessage and cleared after. Never visible
   // in the composer (the composer only ever shows the human title).
