@@ -100,6 +100,7 @@ import { ArtifactInlineCard } from './ArtifactInlineCard';
 import { ArtifactWorkspace } from './ArtifactWorkspace';
 import { useThreadTaskRuns } from '@/hooks/strategy/useThreadTaskRuns';
 import { useStrategyJob } from '@/lib/strategy/useStrategyJob';
+import { PostCallLogModal } from '@/components/strategy/PostCallLogModal';
 
 import '@/styles/strategy-v2.css';
 
@@ -214,6 +215,8 @@ export function StrategyShell() {
   const [composerRect, setComposerRect] = useState<DOMRect | null>(null);
   const [pendingThreadId, setPendingThreadId] = useState<string | null>(null);
   const [isCreatingThread, setIsCreatingThread] = useState(false);
+  // O2 — Post-Call Log modal
+  const [callLogOpen, setCallLogOpen] = useState(false);
   // Sidecar: resource IDs the user picked from /library this turn. Sent
   // out-of-band on the next sendMessage and cleared after. Never visible
   // in the composer (the composer only ever shows the human title).
@@ -1486,6 +1489,7 @@ export function StrategyShell() {
               onChipClick={() => setLinkPickerOpen(true)}
               chipRef={chipRef}
               onNewThread={() => handleNewThread()}
+              onLogCall={() => setCallLogOpen(true)}
             />
           </div>
         </div>
@@ -1902,6 +1906,12 @@ export function StrategyShell() {
         </div>,
         document.body,
       )}
+      <PostCallLogModal
+        open={callLogOpen}
+        onClose={() => setCallLogOpen(false)}
+        prefillAccountId={activeThread?.linked_account_id ?? null}
+        prefillAccountName={linkedContext?.account?.name ?? null}
+      />
       </div>
     </div>
   );

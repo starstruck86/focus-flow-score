@@ -6,6 +6,7 @@
  * Phase 3: chip click is hoisted to the shell so it can also be summoned by ⌘L.
  */
 import { forwardRef, useEffect, useRef, useState } from 'react';
+import { Phone } from 'lucide-react';
 import type { TrustState } from '@/hooks/strategy/useThreadTrustState';
 import { EntityChip } from './EntityChip';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -24,12 +25,14 @@ interface Props {
   chipRef?: React.RefObject<HTMLButtonElement>;
   /** Phase 1.5: create a new thread immediately (no modal). */
   onNewThread: () => void;
+  /** O2: open Post-Call Log modal. */
+  onLogCall?: () => void;
 }
 
 export const StrategyTopBar = forwardRef<HTMLDivElement, Props>(function StrategyTopBar({
   title, onTitleChange, entityName, trustState,
   unresolvedProposalCount, onOpenSwitcher, onOpenInspector, onChipClick, chipRef,
-  onNewThread,
+  onNewThread, onLogCall,
 }, _ref) {
   const isMobile = useIsMobile();
   const [editing, setEditing] = useState(false);
@@ -105,6 +108,18 @@ export const StrategyTopBar = forwardRef<HTMLDivElement, Props>(function Strateg
         >
           +
         </button>
+        {onLogCall && (
+          <button
+            onClick={onLogCall}
+            className="h-7 px-2 rounded-[4px] sv-hover-bg text-[12px] font-mono inline-flex items-center gap-1"
+            style={{ color: 'hsl(var(--sv-muted))' }}
+            title="Log a call (O2)"
+            aria-label="Log call"
+          >
+            <Phone className="h-3 w-3" />
+            Log
+          </button>
+        )}
         <button
           onClick={onOpenSwitcher}
           className="h-7 px-2 rounded-[4px] sv-hover-bg text-[12px] font-mono"
