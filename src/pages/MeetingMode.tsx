@@ -431,8 +431,18 @@ export default function MeetingMode() {
               >
                 Run another warm-up rep
               </Button>
-              <Button onClick={() => navigate('/outreach')} className="w-full h-12 text-base">
-                Done — back to territory
+              <Button
+                onClick={() => navigate(`/post-call?accountId=${accountId}`)}
+                className="w-full h-12 text-base"
+              >
+                Log This Call →
+              </Button>
+              <Button
+                onClick={() => navigate('/outreach')}
+                variant="outline"
+                className="w-full h-12 text-base"
+              >
+                Back to Territory
               </Button>
             </div>
           </div>
