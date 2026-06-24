@@ -10,7 +10,7 @@
 // libraryRetrieval.ts.
 // ════════════════════════════════════════════════════════════════
 
-export { retrieveLibraryContext } from "../strategy-orchestrator/libraryRetrieval.ts";
+export { retrieveLibraryContext, formatLibraryContext } from "../strategy-orchestrator/libraryRetrieval.ts";
 export type {
   LibraryRetrievalResult,
   RetrievedKI,
