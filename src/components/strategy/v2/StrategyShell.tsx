@@ -343,6 +343,27 @@ export function StrategyShell() {
 
   const { messages, isLoading, isSending, sendMessage } = useStrategyMessages(threadId);
 
+  // Scan recent message text for playbook triggers
+  useEffect(() => {
+    if (!user?.id || messages.length === 0) return;
+    const recentText = messages
+      .slice(-10)
+      .map((m) => ((m.content_json as any)?.text ?? ''))
+      .join(' ');
+    const triggers = detectPlaybookTriggers(recentText);
+    if (triggers.length === 0) {
+      setDetectedPlaybooks([]);
+      return;
+    }
+    fetchDetectedPlaybooks(triggers, user.id)
+      .then((playbooks) => {
+        const fresh = playbooks.filter((p) => !dismissedPlaybookIds.has(p.id));
+        setDetectedPlaybooks(fresh);
+      })
+      .catch(() => { /* swallow */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, user?.id]);
+
   // Lifted strategy config — single source of truth for Strict Mode and other
   // render overrides. Subscribing once here means StrategyMessage no longer
   // reads localStorage directly (which caused stale-config bugs across mounts).
