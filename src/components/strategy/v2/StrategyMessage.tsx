@@ -28,64 +28,10 @@ const DIMENSION_ICONS: Record<string, string> = {
   internal_prospecting: '📞',
 };
 
-function CitationChip({ citation }: { citation: Citation }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [open]);
-  const icon = DIMENSION_ICONS[citation.spider_dimension] ?? '📖';
-  return (
-    <span ref={ref} className="relative inline-block">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full mx-0.5 align-middle transition-colors"
-        style={{
-          background: open ? 'hsl(var(--sv-clay) / 0.15)' : 'hsl(var(--sv-clay) / 0.08)',
-          border: '1px solid hsl(var(--sv-clay) / 0.25)',
-          color: 'hsl(var(--sv-clay))',
-          fontFamily: 'var(--sv-sans)',
-          fontWeight: 600,
-          cursor: 'pointer',
-          verticalAlign: 'middle',
-        }}
-        title={citation.title}
-      >
-        {icon} {citation.key}
-      </button>
-      {open && (
-        <span
-          className="absolute z-50 left-0 top-6 rounded-[8px] p-3 shadow-lg block"
-          style={{
-            width: 260,
-            background: 'hsl(var(--sv-paper))',
-            border: '1px solid hsl(var(--sv-hairline))',
-            boxShadow: '0 4px 20px hsl(0 0% 0% / 0.12)',
-          }}
-        >
-          <span className="block text-[11px] font-semibold mb-1" style={{ color: 'hsl(var(--sv-ink))' }}>
-            {citation.title}
-          </span>
-          <span className="block text-[11px] leading-snug" style={{ color: 'hsl(var(--sv-muted))' }}>
-            {citation.tactic_summary.slice(0, 160)}
-          </span>
-          <span
-            className="block mt-1.5 text-[10px] uppercase tracking-wider"
-            style={{ color: 'hsl(var(--sv-clay) / 0.7)' }}
-          >
-            {icon} {citation.spider_dimension.replace(/_/g, ' ')}
-          </span>
-        </span>
-      )}
-    </span>
-  );
-}
+// CitationChip removed — inline stateful chips inside ReactMarkdown caused
+// "Rendered more hooks than during the previous render". Citations are now
+// surfaced exclusively via SourcesPanel at the bottom of each assistant turn.
+
 
 function SourcesPanel({ citations }: { citations: Citation[] }) {
   const [expanded, setExpanded] = useState(false);
