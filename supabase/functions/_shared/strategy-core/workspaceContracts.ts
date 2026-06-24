@@ -664,10 +664,10 @@ const PROJECTS: WorkspaceContract = {
   cognitivePosture:
     "Continuity orientation. Treat the project as the unit of work; respond with awareness of what already exists in the project's scope.",
   useCases: [
-    "NBCUniversal account-family plan across Peacock, NBC News, Bravo",
-    "Multi-stakeholder expansion deal at Hilton across mobile + attribution",
-    "Ongoing Adjust displacement effort at a travel account",
-    "Quarter-long QBR recovery plan at a usage-down account",
+    "NBCUniversal account-family plan across Peacock, NBC News, Bravo, E!",
+    "Multi-stakeholder expansion deal at Hilton across mobile measurement + web-to-app",
+    "Ongoing Adjust displacement effort at a travel account over a quarter",
+    "Quarter-long QBR recovery plan at a media account with declining usage",
   ],
   nonGoals: [
     "One-off tasks (→ any other workspace)",
@@ -676,11 +676,11 @@ const PROJECTS: WorkspaceContract = {
     "Acting as a generic chat history viewer",
   ],
   reasoningPath: [
-    "Load whatever project context is available (linked threads, artifacts, resources, latest rollup, account-family context, branch_footprint state, prior call logs)",
+    "Load whatever project context is available (linked threads, artifacts, resources, latest rollup, account-family context, Branch footprint state per sub-entity, prior call log signals, open next steps per account)",
     "Place the user's request in that context — is this new, refining, or contradicting prior work on this account / expansion play / displacement effort?",
-    "Respond to the immediate request grounded in available project context only — reference specific prior artifacts, calls, or footprint signals when present",
-    "If meaningful new decisions or commitments emerge (stakeholder moves, expansion angles tried, competitive intel surfaced), surface them with 'Decision:' or 'Commit:' markers",
-    "Recommend a next move grounded in project context (next QBR beat, next stakeholder, next product expansion angle) — not a generic best practice",
+    "Respond to the immediate request grounded in available project context only — reference specific prior artifacts, calls, footprint signals, or open next steps when present",
+    "If meaningful new decisions or commitments emerge (stakeholder moves, expansion angles tried, competitive intel surfaced, open next steps closed/added), surface them with 'Decision:' or 'Commit:' markers",
+    "Recommend a next move grounded in project context (next QBR beat, next stakeholder, next product expansion angle, next sub-entity to enter) — not a generic best practice",
   ],
   retrievalRules: {
     libraryUse: "primary",
