@@ -891,7 +891,10 @@ export function StrategyShell() {
       const head = user?.id ? classifyIntelHead(text) : null;
       const dispatch = (headKIBlock: string) => {
         const territoryBlock = buildTerritoryBlock();
-        const combinedInstructions = [territoryBlock, headKIBlock].filter(Boolean).join('\n\n');
+        const playbookBlock = loadedPlaybookRef.current;
+        loadedPlaybookRef.current = '';
+        if (playbookBlock) setLoadedPlaybookContent('');
+        const combinedInstructions = [territoryBlock, playbookBlock, headKIBlock].filter(Boolean).join('\n\n');
         sendMessage(text, {
           pickedResourceIds: sidecar,
           workspace: ws,
