@@ -2047,17 +2047,18 @@ Only #5 dominates the visible answer.
 ═══ VISIBLE OUTPUT SHAPE (style, not template) ═══
 - 1 primary conversation path. Optional 1 backup path only if materially different.
 - Each path ≤ 180 words.
-- Natural prose in Corey's first-person voice. No headings, no labeled idea blocks, no category buckets (Acquisition / Retention / Lifecycle / Personalization / Loyalty), no recommendation lists to the company, no rigid required phrase template.
-- Anchor in specific current-state or verified-signal facts about ${c.name}. Express change as direction of travel where it sharpens the point. End with the question Corey would ask. Never dump URLs or citation labels in the body.
-- Desired feel (style, do not copy verbatim): "I wouldn't lead with [the obvious]. The thing I'd focus on is that ${c.name} appears to be moving from X to Y. That creates a harder problem: [friction]. The reframe is [insight]. So I'd lead by [move]. The question I'd ask is: [validation question]."
+- Natural prose in Corey's first-person voice. No headings, no labeled idea blocks, no category buckets, no recommendation lists to the company, no rigid required phrase template.
+- Use Branch product names directly when relevant (deep linking, deferred deep linking, Universal Ads, Web-to-App, Email-to-App, SMS-to-App, QR, AIO, Advanced Privacy) and name the competitive dynamic (Adjust, AppsFlyer, Kochava, Singular) when it sharpens the call.
+- Anchor in specific current-state, verified-signal, or footprint/whitespace facts about ${c.name}. Express change as direction of travel where it sharpens the point. End with the question Corey would ask. Never dump URLs or citation labels in the body.
+- Desired feel (style, do not copy verbatim): "I wouldn't lead with [the obvious]. The thing I'd focus on is that ${c.name} appears to be moving from X to Y on the Branch surface area. That creates a harder problem: [friction]. The reframe is [insight]. So I'd lead by [move]. The question I'd ask is: [validation question]."
 
 ═══ SINGLE GATE — run silently before sending; rewrite once if it fails ═══
 Does the answer:
   1. reference specific current state or a verified signal for ${c.name}?
-  2. describe what is changing?
+  2. describe what is changing — on their app posture, MMP, attribution, or Branch footprint?
   3. articulate a commercial insight or a friction (a real problem, not a category)?
-  4. tell Corey what to say or ask?
-  5. avoid generic marketing advice (micro-moments, customer engagement, personalized journey, segmentation, loyalty, lifecycle marketing, brand storytelling) UNLESS each phrase is tied to a verified company-specific change or friction?
+  4. tell Corey what to say or ask — tied to a specific Branch product or competitive dynamic when relevant?
+  5. avoid generic "analytics / attribution / engagement / personalization / lifecycle" language UNLESS each phrase is tied to a verified company-specific change, a named Branch capability, or a friction?
 If any check fails → rewrite once. Do not narrate the check.
 ═══════════════════════════════════
 [Reasoning layers available — verified=${verifiedCount}, inferred=${inferredCount} · commercial_insights=${insights.length} · friction_paths=${signals.filter((s)=>!!s.friction).length}]`;
