@@ -1150,6 +1150,9 @@ export type Database = {
           expansion_signal_captured: boolean | null
           expansion_signal_text: string | null
           id: string
+          nba_ki_titles: string[] | null
+          nba_situation: string | null
+          nba_text: string | null
           next_step: string | null
           next_step_date: string | null
           queue_transcript: boolean | null
@@ -1169,6 +1172,9 @@ export type Database = {
           expansion_signal_captured?: boolean | null
           expansion_signal_text?: string | null
           id?: string
+          nba_ki_titles?: string[] | null
+          nba_situation?: string | null
+          nba_text?: string | null
           next_step?: string | null
           next_step_date?: string | null
           queue_transcript?: boolean | null
@@ -1188,6 +1194,9 @@ export type Database = {
           expansion_signal_captured?: boolean | null
           expansion_signal_text?: string | null
           id?: string
+          nba_ki_titles?: string[] | null
+          nba_situation?: string | null
+          nba_text?: string | null
           next_step?: string | null
           next_step_date?: string | null
           queue_transcript?: boolean | null
