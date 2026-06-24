@@ -5634,16 +5634,12 @@ async function buildChatSystemPrompt(args: {
   // retrieval, and prompt assembly see them. The original userContent
   // is still what's stored in chat history; only the in-pipeline copy
   // is rewritten. Non-blocking: any failure returns the original.
-  const __easyPrompt = await expandPromptIfTerse({
-    userContent,
-    userId,
-    supabase,
-    accountContext: __classifierAccountContext,
-  });
-  const __effectiveUserContent = __easyPrompt.expanded;
-  console.log(
-    `[easy-prompt] was_expanded=${__easyPrompt.wasExpanded}`,
-  );
+  // Easy Prompt is now a VISIBLE, client-triggered step (see the
+  // expand-prompt edge function + composer "Expand" affordance). The
+  // silent server-side expansion is intentionally disabled here so the
+  // prompt is never rewritten behind the user's back / double-expanded.
+  // __effectiveUserContent stays as the literal user content.
+  const __effectiveUserContent = userContent;
 
   const situation = await classifySituation({
     supabase,
