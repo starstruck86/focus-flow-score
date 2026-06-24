@@ -141,6 +141,7 @@ export function useActiveTabColor(): NavColor {
  */
 export function BottomNav({ variant = 'default' }: { variant?: 'default' | 'condensed' | 'hidden' } = {}) {
   const navRef = useRef<HTMLElement | null>(null);
+  const { mode, toggleMode } = useAppMode();
   // ─── Mobile keyboard detection ────────────────────────────────────────
   // When the on-screen keyboard opens on iOS / Android, `visualViewport.height`
   // shrinks below `window.innerHeight`. We hide the BottomNav in that state
@@ -205,7 +206,6 @@ export function BottomNav({ variant = 'default' }: { variant?: 'default' | 'cond
   if (variant === 'hidden') return null;
   if (keyboardOpen) return null;
 
-  const { mode, toggleMode } = useAppMode();
   const activeItems = mode === 'train' ? trainNavItems : workNavItems;
   const condensed = variant === 'condensed';
 
