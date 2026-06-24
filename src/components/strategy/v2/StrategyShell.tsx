@@ -829,15 +829,23 @@ export function StrategyShell() {
     }
     {
       const ws = sendingFrom ?? activeSurface ?? null;
+      // Always-on territory context block (independent of head classification)
+      const buildTerritoryBlock = (): string => {
+        if (!territoryProfile) return '';
+        const quotaM = (territoryProfile.quota_amount / 1_000_000).toFixed(1);
+        return `## YOUR SALES CONTEXT (always present — do not ask for this info)\nAE: ${territoryProfile.name} | Role: ${territoryProfile.role} at ${territoryProfile.company}\nQuota: $${quotaM}M | Motion: ${territoryProfile.motion}\nTerritory: ${territoryProfile.territory_description}\n\nBranch.io context: ${territoryProfile.company_context}\n`;
+      };
       // S-I3: auto-inject KI context block by detected intelligence head.
       // Classify synchronously; fetch async and dispatch sendMessage after.
       const head = user?.id ? classifyIntelHead(text) : null;
       const dispatch = (headKIBlock: string) => {
+        const territoryBlock = buildTerritoryBlock();
+        const combinedInstructions = [territoryBlock, headKIBlock].filter(Boolean).join('\n\n');
         sendMessage(text, {
           pickedResourceIds: sidecar,
           workspace: ws,
           workspaceSource: sendingFrom ? 'selected' : (activeSurface ? 'selected' : 'none'),
-          globalInstructions: headKIBlock || undefined,
+          globalInstructions: combinedInstructions || undefined,
         });
       };
       if (head && user?.id) {
@@ -846,7 +854,7 @@ export function StrategyShell() {
         dispatch('');
       }
     }
-  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread]);
+  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, territoryProfile]);
 
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {
     setLinkPickerOpen(false);
