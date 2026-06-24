@@ -789,8 +789,28 @@ export function StrategyShell() {
         // pushes through useStrategyUploads.uploadFile().
         slashFileInputRef.current?.click();
         break;
+      case 'save-as-skill': {
+        const nameFromQuery = slashQuery
+          ? slashQuery.replace(/^\/save-as-skill\s*/i, '').trim()
+          : '';
+        const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+        if (!lastAssistant) {
+          toast('No assistant response to save yet');
+          break;
+        }
+        const responseText = ((lastAssistant.content_json as any)?.text ?? '') as string;
+        if (nameFromQuery) {
+          handleSaveSkill(nameFromQuery, responseText);
+        } else {
+          setSaveSkillCandidateText(responseText);
+          setSaveSkillDialogOpen(true);
+          setSaveSkillInputName('');
+          requestAnimationFrame(() => saveSkillInputRef.current?.focus());
+        }
+        break;
+      }
     }
-  }, [handleBranch, messages, activeThread, save, showSaveToast]);
+  }, [handleBranch, messages, activeThread, save, showSaveToast, slashQuery, handleSaveSkill]);
 
   // ---------- /library slash command ----------
   // Active whenever the slash query starts with `/library`. While active,
