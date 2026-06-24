@@ -5730,49 +5730,15 @@ async function buildChatSystemPrompt(args: {
     }),
   ]);
 
-  // Pin the classifier-picked playbook if it isn't already in the
-  // retrieved set. Guarantees the situation-matched playbook appears
-  // rank-1 in the context block even if keyword scoring missed it.
-  if (situation?.playbook_id && library) {
-    try {
-      const alreadyPresent = (library.playbooks || []).some(
-        (p: any) => p?.id === situation.playbook_id,
-      );
-      if (!alreadyPresent) {
-        const { data: pinnedRow } = await supabase
-          .from("playbooks")
-          .select(
-            "id, title, problem_type, when_to_use, why_it_matters, tactic_steps, talk_tracks, key_questions, traps, anti_patterns, what_great_looks_like, common_mistakes, confidence_score",
-          )
-          .eq("id", situation.playbook_id)
-          .eq("user_id", userId)
-          .maybeSingle();
-        if (pinnedRow) {
-          const maxPlaybooks = 4;
-          library.playbooks = [
-            { ...pinnedRow, score: 999 } as any,
-            ...(library.playbooks || []).filter((p: any) => p?.id !== pinnedRow.id),
-          ].slice(0, maxPlaybooks);
-          library.counts = {
-            ...library.counts,
-            playbooks: library.playbooks.length,
-          };
-          library.contextString = formatLibraryContext(
-            library.knowledgeItems || [],
-            library.playbooks || [],
-          );
-          console.log(
-            `[situation-classifier] pinned playbook=${pinnedRow.title} id=${pinnedRow.id}`,
-          );
-        }
-      }
-    } catch (e) {
-      console.warn(
-        "[situation-classifier] playbook pin failed:",
-        (e as Error).message,
-      );
-    }
+  // NOTE (task 1.2): situation.playbookId is captured but not yet pinned
+  // into library.playbooks — playbook wiring lands in 1.2.
+  if (situation.playbookId) {
+    console.log(
+      `[situation-classifier] playbook_match id=${situation.playbookId} title=${situation.playbookTitle ?? ""} (wiring deferred to 1.2)`,
+    );
   }
+
+
 
   // Coverage state evaluation + structured retrieval-decision telemetry.
   const __libraryHitCount = (library?.knowledgeItems?.length ?? 0) +
