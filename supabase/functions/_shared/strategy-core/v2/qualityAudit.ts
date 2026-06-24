@@ -28,7 +28,10 @@ const LITERAL_RESOURCE_RE = /RESOURCE\[\s*"?[^\]"]+"?\s*\]/;
 const LITERAL_KI_RE = /KI\[\s*[a-f0-9]{6,}\s*\]/i;
 const POV_QUICK_RE = /\b(the (?:dominant|real|core|key|single biggest|highest-leverage)|what (?:actually|really) matters|i'?d (?:lead|weight|prioritize)|the call is|commit to|matters more than)\b/i;
 const TRADEOFF_RE = /\b(ignore|table stakes|deprioriti[sz]e|skip|noise|overrated|overweight|correlation,?\s*not\s*cause|doesn't move (?:the )?(?:number|deal|needle))\b/i;
-const COMMERCIAL_RE = /\b(pipeline|velocity|win[\s-]rate|acv|arr|churn|payback|cost of inaction|deal[\s-]?slip|no[\s-]decision|cycle time|forecast|conversion rate|quota|attainment)\b/i;
+const COMMERCIAL_RE = /\b(pipeline|velocity|win[\s-]rate|acv|arr|churn|payback|cost of inaction|deal[\s-]?slip|no[\s-]decision|cycle time|forecast|conversion rate|quota|attainment|expansion[\s-]?arr|footprint|whitespace|sub-?entity|qbr|usage trends|renewal risk|mmp consolidation|attribution accuracy|displacement)\b/i;
+const BRANCH_PRODUCT_RE = /\b(deep[\s-]?link(?:ing)?|deferred deep link(?:ing)?|universal ads|web[\s-]?to[\s-]?app|email[\s-]?to[\s-]?app|sms[\s-]?to[\s-]?app|\bqr\b|\baio\b|advanced privacy|branch[_\s-]?footprint|mmp|sub-?entity)\b/i;
+const BRANCH_COMPETITOR_RE = /\b(adjust|appsflyer|kochava|singular|airbridge|tenjin)\b/i;
+const GENERIC_VAGUE_RE = /\b(analytics|attribution|engagement)\b/gi;
 const SURVEY_RE = /\b(operators? (?:converge|diverge) on|multiple (?:themes|patterns) emerge|both approaches have merit|on (?:the )?one hand[^.]{0,200}on the other hand|there are (?:several|many|multiple) (?:patterns|themes|approaches))\b/i;
 
 export function auditQuality(args: {
@@ -150,6 +153,36 @@ export function auditQuality(args: {
       }
     }
   }
+
+  // ── Branch vocabulary calibration (FLAG-ONLY, never blocks) ──────
+  // Surface diagnostics so we can tell when the model lapses into
+  // generic SaaS language instead of speaking Branch.
+  if (
+    args.askShape !== "short_form" &&
+    args.askShape !== "general" &&
+    args.mode !== "C_general" &&
+    (args.body?.trim().split(/\s+/).filter(Boolean).length ?? 0) >= 120
+  ) {
+    const mentionsBranchProduct = BRANCH_PRODUCT_RE.test(text);
+    const mentionsBranchCompetitor = BRANCH_COMPETITOR_RE.test(text);
+    const genericVagueHits = (text.match(GENERIC_VAGUE_RE) || []).length;
+
+    if (!mentionsBranchProduct) {
+      flags.push("branch_no_product_vocabulary");
+    }
+    // Heavy use of generic "analytics/attribution/engagement" without a
+    // specific Branch capability anywhere → calibration miss.
+    if (!mentionsBranchProduct && genericVagueHits >= 2) {
+      flags.push("branch_generic_over_specific");
+    }
+    // When the user is in a competitive expansion context (account
+    // language present) but no competitor named, flag it as a soft signal.
+    const competitiveContext = /\b(displace|displacement|consolidat(?:e|ion)|rip[\s-]?and[\s-]?replace|incumbent|competitive|whitespace|footprint|renewal)\b/i.test(text);
+    if (competitiveContext && !mentionsBranchCompetitor) {
+      flags.push("branch_no_competitive_dynamic");
+    }
+  }
+
 
   return {
     scores,

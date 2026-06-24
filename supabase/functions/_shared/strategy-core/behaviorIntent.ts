@@ -181,11 +181,14 @@ Format rules (delivery only — these never override depth):
   • 1 primary path. Optional 1 backup path only if materially different. Hard cap: 2.
   • Each path 90–180 words. Tight, but long enough to carry all 5 substance elements.
   • Natural prose in Corey's first-person voice. No headings. No bullet lists.
-    No numbered lists. No category buckets (Acquisition / Retention / Lifecycle /
-    Personalization / Loyalty / Awareness). No "Option A / Option B".
+    No numbered lists. No category buckets. No "Option A / Option B".
     No "Here are a few ways…". No "Idea 1 / Idea 2".
+  • Use Branch product names directly when relevant (deep linking, deferred deep linking, Universal Ads,
+    Web-to-App, Email-to-App, SMS-to-App, QR, AIO, Advanced Privacy) and name the competitive dynamic
+    (Adjust, AppsFlyer, Kochava, Singular) when it sharpens the call. Avoid generic
+    "analytics / attribution / engagement" when a specific Branch capability fits.
   • Specificity test before sending: would this paragraph still make sense if
-    you swapped the company name for any other company? If yes, it's too
+    you swapped the company name for any other Branch account? If yes, it's too
     generic — rewrite with the verified signal / current-state fact made load-bearing.
   • Suppressed behaviors: idea_generation (no idea lists), research_analysis
     (no facts dump as separate section), artifact_creation (no email/doc/plan).
@@ -281,9 +284,11 @@ export function enforceBehaviorContract(
   const LEADIN_RE = /\b(here\s+are\s+(?:a\s+few|some|several|three|3|five|5)\s+(?:ways|ideas|angles|options|approaches)|here'?s\s+a\s+few\s+(?:ways|ideas|angles|options|approaches)|a\s+few\s+ways\s+(?:to|you\s+could)|some\s+(?:ideas|angles|options)\s+(?:to|you\s+could))\b/i;
   if (LEADIN_RE.test(out)) violations.push("idea_leadin_phrase");
 
-  // 5. Category bucket labels in body
-  const CATEGORY_RE = /\b(Acquisition|Retention|Lifecycle Marketing|Personalization|Loyalty|Brand Storytelling|Awareness)\b\s*:/;
-  if (CATEGORY_RE.test(out)) violations.push("category_bucket_label");
+  // 5. (Removed) Generic martech category-bucket labels. Branch-positive
+  //    vocabulary (deep linking, Universal Ads, web-to-app, MMP, QBR,
+  //    footprint, whitespace, expansion, renewal, Adjust, AppsFlyer, etc.)
+  //    is a SIGNAL we want, not something to strip.
+
 
   // ── Depth-floor audit (FLAG-ONLY — never strips, never blocks) ───
   // Detects "shorter but weaker" — when format compression dropped
@@ -301,11 +306,18 @@ export function enforceBehaviorContract(
     // that isn't a generic marketing term. We flag absence, not presence.
     const properNounMatches = sample.match(/\b[A-Z][a-zA-Z0-9]{2,}(?:\s+[A-Z][a-zA-Z0-9]+)?\b/g) || [];
     const has_specific_anchor = properNounMatches.length >= 2 || /\b(\d{1,3}%|\$\d|Q[1-4]|FY\d{2,4}|H[12])\b/.test(sample);
+    // Generic-LLM/SaaS fluff phrases that signal a non-Branch, non-operator
+    // response. Branch-positive vocabulary (deep linking, deferred deep
+    // linking, Universal Ads, Web-to-App, Email-to-App, SMS-to-App, QR,
+    // AIO, Advanced Privacy, MMP, QBR, footprint, whitespace, expansion,
+    // renewal, Adjust, AppsFlyer, Kochava, Singular, attribution,
+    // sub-entity) is a SIGNAL — never penalize it.
     const GENERIC = [
-      "lifecycle marketing", "customer engagement", "personalized journey",
-      "personalization at scale", "micro-moments", "segmentation strategy",
-      "loyalty program", "brand storytelling", "data-driven", "best practice",
-      "best-in-class", "thought leadership", "omnichannel", "single source of truth",
+      "data-driven", "best practice", "best-in-class", "thought leadership",
+      "single source of truth", "synergy", "synergies", "holistic",
+      "leverage our platform", "drive engagement", "drive value",
+      "unlock value", "move the needle", "north star metric",
+      "customer-centric", "world-class",
     ];
     const generic_phrase_hits = GENERIC.filter((g) => lower.includes(g));
     return {
@@ -369,8 +381,8 @@ export function enforceBehaviorContract(
   // Strip "Idea N:" / "Option A:" prefixes
   rewritten = rewritten.replace(/^\s*(idea|option|approach|angle|way)\s+\d+\s*:\s*/gim, "");
   rewritten = rewritten.replace(/^\s*(option|approach)\s+[A-Z]\s*:\s*/gm, "");
-  // Strip category bucket labels at start of line/segment
-  rewritten = rewritten.replace(CATEGORY_RE, "");
+  // (Removed) Acoustic category-bucket stripping — Branch vocabulary is a
+  // signal we want to keep.
   // Collapse multiple blank lines into a single paragraph break
   rewritten = rewritten.replace(/\n{3,}/g, "\n\n").trim();
 

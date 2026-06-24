@@ -116,11 +116,20 @@ export interface RubricScores {
 }
 
 const COMMERCIAL_TERMS = [
+  // Generic commercial outcomes
   "pipeline", "velocity", "win rate", "win-rate", "acv", "arr", "churn",
   "expansion", "payback", "cost of inaction", "deal stalls", "deal slips",
   "deal dies", "deal-slip", "time-to-revenue", "forecast", "conversion rate",
   "quota", "attainment", "renewal risk", "net retention", "no-decision",
   "ramp", "time-to-first-deal", "no decision", "stalls",
+  // Branch-specific expansion/renewal vocabulary
+  "expansion-arr", "expansion arr", "footprint", "footprint coverage",
+  "branch_footprint", "whitespace", "sub-entity", "sub entity",
+  "deep linking adoption", "web-to-app conversion", "web to app conversion",
+  "attribution accuracy", "mmp consolidation", "mmp displacement",
+  "qbr usage", "qbr cadence", "usage trends", "renewal", "renewal value",
+  "displacement", "competitive displacement", "branch products",
+  "product adoption", "ndr", "gross retention",
 ];
 
 const POV_PHRASES = [
@@ -328,10 +337,10 @@ export function scoreRubric(args: ScoreRubricInput): RubricScores {
     libraryLeverageStrict = libraryLeverage;
   }
 
-  // audienceFit
+  // audienceFit — Branch verticals + buyer roles + champion language
   const audienceFit = args.audienceMentioned
     ? clamp01(
-      (lower.match(/\b(cfo|ceo|coo|cto|vp|director|champion|healthcare|fintech|retail|saas|manufacturing)\b/gi)?.length || 0) / 1,
+      (lower.match(/\b(cfo|ceo|coo|cto|cmo|cpo|vp|svp|director|head of|champion|economic buyer|mobile|product|growth|marketing|media|entertainment|streaming|ott|travel|hospitality|retail|ecommerce|e-commerce|financial services|fintech|banking|insurance|qsr|airlines|hotels)\b/gi)?.length || 0) / 1,
     )
     : 0.7;
 
