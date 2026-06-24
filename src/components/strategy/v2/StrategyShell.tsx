@@ -901,13 +901,19 @@ export function StrategyShell() {
         const playbookBlock = loadedPlaybookRef.current;
         loadedPlaybookRef.current = '';
         if (playbookBlock) setLoadedPlaybookContent('');
-        const combinedInstructions = [territoryBlock, playbookBlock, headKIBlock].filter(Boolean).join('\n\n');
+        const manualKIBlock = manuallyInjectedKIs.length > 0
+          ? `\n\n### Manually Injected Knowledge Items\n${manuallyInjectedKIs.map((ki) =>
+              `- ${ki.title}: ${ki.tactic_summary.slice(0, 120)}`
+            ).join('\n')}`
+          : '';
+        const combinedInstructions = [territoryBlock, playbookBlock, manualKIBlock, headKIBlock].filter(Boolean).join('\n\n');
         sendMessage(text, {
           pickedResourceIds: sidecar,
           workspace: ws,
           workspaceSource: sendingFrom ? 'selected' : (activeSurface ? 'selected' : 'none'),
           globalInstructions: combinedInstructions || undefined,
         });
+        if (manuallyInjectedKIs.length > 0) setManuallyInjectedKIs([]);
       };
       const accountName = linkedContext?.account?.name ?? linkedContext?.opportunity?.name ?? null;
       if (head && user?.id) {
