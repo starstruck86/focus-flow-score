@@ -831,6 +831,9 @@ const WORK: WorkspaceContract = {
     "Recommending a workspace switch instead of producing an answer",
     "Over-doing what a specialized workspace would do better, when a recommendation truly would help",
     "Producing thinking-partner prose when the user needed an executable artifact",
+    "Generic attribution advice without Branch product specificity (deep linking, web-to-app, Universal Ads, Journeys, MMP)",
+    "Lifecycle / CRM / generic SaaS advice instead of Branch expansion plays grounded in footprint and whitespace",
+    "Missing the competitive dynamic (Adjust, AppsFlyer) when it's implied by the situation",
   ],
   escalationRules: [
     {
