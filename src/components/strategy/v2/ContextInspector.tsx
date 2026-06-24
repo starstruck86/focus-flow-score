@@ -186,11 +186,16 @@ export function ContextInspector({
   const [tab, setTab] = useState<Tab>('memory');
 
   const items = useMemo(() => {
-    if (tab === 'memory') return memories.map((m) => ({ id: m.id, primary: m.content, secondary: null as string | null }));
-    if (tab === 'uploads') return uploads.map((u) => ({ id: u.id, primary: u.file_name, secondary: u.summary }));
-    if (tab === 'artifacts') return artifacts.map((a) => ({ id: a.id, primary: a.title, secondary: a.artifact_type }));
+    if (tab === 'memory') return memories.map((m) => ({
+      id: m.id,
+      primary: m.content,
+      secondary: (m.memory_type ?? null) as string | null,
+    }));
+    if (tab === 'uploads') return uploads.map((u) => ({ id: u.id, primary: u.file_name, secondary: u.summary as string | null }));
+    if (tab === 'artifacts') return artifacts.map((a) => ({ id: a.id, primary: a.title, secondary: a.artifact_type as string | null }));
     return [];
   }, [tab, memories, uploads, artifacts]);
+
 
   if (!open) return null;
 
@@ -278,30 +283,64 @@ export function ContextInspector({
           <IntelligenceBrowser userId={userId ?? ''} onInjectKI={onInjectKI} />
         ) : items.length === 0 ? (
           <div className="text-[13px]" style={{ color: 'hsl(var(--sv-muted))' }}>
-            {tab === 'memory' ? 'No memory yet.'
+            {tab === 'memory'
+              ? (entityName
+                  ? `No memories for ${entityName} yet. They'll capture automatically as you work.`
+                  : 'Link a thread to an account to see and capture memories.')
               : tab === 'uploads' ? 'No uploads yet.'
               : 'No artifacts yet.'}
           </div>
         ) : (
-          <ul style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {items.map((it) => (
-              <li
-                key={it.id}
-                className="text-[14px]"
-                style={{ color: 'hsl(var(--sv-ink))', lineHeight: 1.5 }}
+          <>
+            {tab === 'memory' && entityName && (
+              <div
+                className="text-[11px] mb-3 pb-2"
+                style={{ borderBottom: '1px solid hsl(var(--sv-hairline))', color: 'hsl(var(--sv-muted))' }}
               >
-                <div>{it.primary}</div>
-                {it.secondary && (
-                  <div className="text-[11px] mt-0.5" style={{ color: 'hsl(var(--sv-muted))' }}>
-                    {it.secondary.replace(/_/g, ' ')}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
+                {memories.length} {memories.length === 1 ? 'memory' : 'memories'} for {entityName}
+              </div>
+            )}
+            <ul style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {items.map((it) => (
+                <li
+                  key={it.id}
+                  className="text-[14px]"
+                  style={{ color: 'hsl(var(--sv-ink))', lineHeight: 1.5 }}
+                >
+                  {tab === 'memory' ? (
+                    <div className="flex items-start gap-2">
+                      {it.secondary && (
+                        <span
+                          className="shrink-0 text-[9.5px] px-1.5 py-0.5 rounded-full mt-0.5 uppercase tracking-wide"
+                          style={{
+                            background: 'hsl(var(--sv-clay) / 0.08)',
+                            color: 'hsl(var(--sv-clay))',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {it.secondary.replace(/_/g, ' ')}
+                        </span>
+                      )}
+                      <span>{it.primary}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div>{it.primary}</div>
+                      {it.secondary && (
+                        <div className="text-[11px] mt-0.5" style={{ color: 'hsl(var(--sv-muted))' }}>
+                          {it.secondary.replace(/_/g, ' ')}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
     </aside>,
     document.body,
   );
 }
+

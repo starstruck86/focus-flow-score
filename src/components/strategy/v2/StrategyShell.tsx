@@ -265,6 +265,11 @@ export function StrategyShell() {
     setManuallyInjectedKIs((prev) => (prev.find((k) => k.id === ki.id) ? prev : [...prev, ki]));
   }, []);
 
+  // Cross-thread account memory: detect known account names mentioned in unlinked threads
+  const [suggestedLinkAccount, setSuggestedLinkAccount] = useState<{ id: string; name: string } | null>(null);
+  const territoryAccountsRef = useRef<Array<{ id: string; name: string }>>([]);
+
+
   // ── Surface-switch swap (drafts + active thread) ─────────────────────────
   // When the user moves between workspaces, save the in-flight draft AND the
   // currently active thread id under the previous surface, then restore both
@@ -393,6 +398,37 @@ export function StrategyShell() {
     onAssistantComplete: triggerMemoryExtraction,
   });
   useEffect(() => { messagesRef.current = messages; }, [messages]);
+
+  // Load territory accounts for cross-thread account detection
+  useEffect(() => {
+    if (!user?.id) return;
+    (supabase as any)
+      .from('accounts')
+      .select('id, name')
+      .eq('user_id', user.id)
+      .is('deleted_at', null)
+      .then(({ data }: { data: any }) => {
+        if (Array.isArray(data)) territoryAccountsRef.current = data;
+      });
+  }, [user?.id]);
+
+  // Detect known account mentions in unlinked threads
+  useEffect(() => {
+    if (activeThread?.linked_account_id || messages.length < 2) {
+      setSuggestedLinkAccount(null);
+      return;
+    }
+    const recentText = messages
+      .slice(-6)
+      .map((m) => ((m.content_json as any)?.text ?? ''))
+      .join(' ')
+      .toLowerCase();
+    const match = territoryAccountsRef.current.find(
+      (a) => a.name && a.name.length > 2 && recentText.includes(a.name.toLowerCase()),
+    );
+    setSuggestedLinkAccount(match ?? null);
+  }, [messages, activeThread?.linked_account_id]);
+
 
   // Scan recent message text for playbook triggers
   useEffect(() => {
@@ -1518,6 +1554,44 @@ export function StrategyShell() {
             }}
           />
         )}
+
+      {/* Account link suggestion — surfaces when thread mentions a known account */}
+      {suggestedLinkAccount && !activeThread?.linked_account_id && (
+        <div
+          className="flex items-center gap-2 px-4 py-2 shrink-0"
+          style={{
+            borderTop: '1px solid hsl(var(--sv-hairline))',
+            background: 'hsl(var(--sv-clay) / 0.04)',
+          }}
+        >
+          <span className="text-[11px]" style={{ color: 'hsl(var(--sv-clay))' }}>📍</span>
+          <span className="text-[11px] flex-1" style={{ color: 'hsl(var(--sv-ink))' }}>
+            Mentions <strong>{suggestedLinkAccount.name}</strong> — link thread to load account memory
+          </span>
+          <button
+            onClick={async () => {
+              if (!activeThread || !suggestedLinkAccount) return;
+              await updateThread(activeThread.id, {
+                linked_account_id: suggestedLinkAccount.id,
+                thread_type: 'account_linked',
+              });
+              setSuggestedLinkAccount(null);
+              runDetect().catch(() => { /* swallow */ });
+            }}
+            className="text-[11px] font-medium shrink-0"
+            style={{ color: 'hsl(var(--sv-clay))' }}
+          >
+            Link →
+          </button>
+          <button
+            onClick={() => setSuggestedLinkAccount(null)}
+            className="text-[11px] shrink-0"
+            style={{ color: 'hsl(var(--sv-muted))' }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Proactive playbook detection — surfaces when thread content matches a playbook */}
       {detectedPlaybooks.length > 0 && !isSending && (
