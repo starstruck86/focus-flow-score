@@ -223,18 +223,53 @@ export function formatLibraryContext(
     : "";
 
   const pbBlock = playbooks.length
-    ? playbooks.map((p) =>
-        `PLAYBOOK[${p.id.slice(0, 8)}] ${p.title}` +
-        (p.problem_type ? ` (${p.problem_type})` : "") +
-        (p.when_to_use ? `\n  When to Use: ${p.when_to_use}` : "") +
-        (p.tactic_steps?.length ? `\n  Steps: ${p.tactic_steps.slice(0, 4).join("; ")}` : "") +
-        (p.key_questions?.length ? `\n  Key Questions: ${p.key_questions.slice(0, 4).join(" | ")}` : "") +
-        (p.anti_patterns?.length ? `\n  Anti-Patterns: ${p.anti_patterns.slice(0, 3).join("; ")}` : "")
-      ).join("\n\n")
+    ? playbooks.map((p, idx) => {
+        const isPrimary = idx === 0;
+        const lines: string[] = [
+          `PLAYBOOK[${p.id.slice(0, 8)}] ${p.title}` +
+            (p.problem_type ? ` (${p.problem_type})` : ""),
+        ];
+        if (p.when_to_use) {
+          lines.push(`  When to Use: ${p.when_to_use}`);
+        }
+        if (p.why_it_matters) {
+          lines.push(`  Why It Matters: ${p.why_it_matters}`);
+        }
+        if (p.tactic_steps?.length) {
+          const steps = isPrimary ? p.tactic_steps : p.tactic_steps.slice(0, 4);
+          lines.push(`  Steps:\n${steps.map((s, i) => `    ${i + 1}. ${s}`).join("\n")}`);
+        }
+        if (p.key_questions?.length) {
+          const qs = isPrimary ? p.key_questions : p.key_questions.slice(0, 4);
+          lines.push(`  Key Questions:\n${qs.map((q) => `    • ${q}`).join("\n")}`);
+        }
+        if (p.talk_tracks?.length) {
+          const tracks = isPrimary ? p.talk_tracks : p.talk_tracks.slice(0, 2);
+          lines.push(`  Talk Tracks:\n${tracks.map((t) => `    → ${t}`).join("\n")}`);
+        }
+        if (p.traps?.length) {
+          const traps = isPrimary ? p.traps : p.traps.slice(0, 2);
+          lines.push(`  Traps to Avoid:\n${traps.map((t) => `    ⚠ ${t}`).join("\n")}`);
+        }
+        if (p.anti_patterns?.length) {
+          const aps = isPrimary ? p.anti_patterns : p.anti_patterns.slice(0, 3);
+          lines.push(`  Anti-Patterns:\n${aps.map((a) => `    ✗ ${a}`).join("\n")}`);
+        }
+        if (isPrimary && p.what_great_looks_like) {
+          const wgll = Array.isArray(p.what_great_looks_like)
+            ? p.what_great_looks_like.join("; ")
+            : p.what_great_looks_like;
+          if (wgll) lines.push(`  What Great Looks Like: ${wgll}`);
+        }
+        if (isPrimary && p.common_mistakes?.length) {
+          lines.push(`  Common Mistakes:\n${p.common_mistakes.map((m) => `    • ${m}`).join("\n")}`);
+        }
+        return lines.join("\n");
+      }).join("\n\n")
     : "";
 
   return [
     kiBlock ? `=== INTERNAL KNOWLEDGE ITEMS (use these — they are the company's tested intellectual property) ===\n${kiBlock}` : "",
-    pbBlock ? `=== INTERNAL PLAYBOOKS (use these to ground tactics, questions, and warnings) ===\n${pbBlock}` : "",
+    pbBlock ? `=== PLAYBOOK ACTIVATION — run every step and question from the PRIMARY playbook; use supporting playbooks for additional context ===\n${pbBlock}` : "",
   ].filter(Boolean).join("\n\n");
 }
