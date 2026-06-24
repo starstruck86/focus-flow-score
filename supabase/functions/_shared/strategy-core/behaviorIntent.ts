@@ -306,11 +306,18 @@ export function enforceBehaviorContract(
     // that isn't a generic marketing term. We flag absence, not presence.
     const properNounMatches = sample.match(/\b[A-Z][a-zA-Z0-9]{2,}(?:\s+[A-Z][a-zA-Z0-9]+)?\b/g) || [];
     const has_specific_anchor = properNounMatches.length >= 2 || /\b(\d{1,3}%|\$\d|Q[1-4]|FY\d{2,4}|H[12])\b/.test(sample);
+    // Generic-LLM/SaaS fluff phrases that signal a non-Branch, non-operator
+    // response. Branch-positive vocabulary (deep linking, deferred deep
+    // linking, Universal Ads, Web-to-App, Email-to-App, SMS-to-App, QR,
+    // AIO, Advanced Privacy, MMP, QBR, footprint, whitespace, expansion,
+    // renewal, Adjust, AppsFlyer, Kochava, Singular, attribution,
+    // sub-entity) is a SIGNAL — never penalize it.
     const GENERIC = [
-      "lifecycle marketing", "customer engagement", "personalized journey",
-      "personalization at scale", "micro-moments", "segmentation strategy",
-      "loyalty program", "brand storytelling", "data-driven", "best practice",
-      "best-in-class", "thought leadership", "omnichannel", "single source of truth",
+      "data-driven", "best practice", "best-in-class", "thought leadership",
+      "single source of truth", "synergy", "synergies", "holistic",
+      "leverage our platform", "drive engagement", "drive value",
+      "unlock value", "move the needle", "north star metric",
+      "customer-centric", "world-class",
     ];
     const generic_phrase_hits = GENERIC.filter((g) => lower.includes(g));
     return {
