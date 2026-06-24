@@ -1883,8 +1883,9 @@ function renderPromptBlock(
     : "MISSING";
 
   const bm = intelligence.business_model.summary;
-  const cx = intelligence.customer_experience.what_it_is_like_to_be_a_customer;
-  const mm = intelligence.marketing_motion.likely_new_customer_motion;
+  const ap = intelligence.app_posture;
+  const mp = intelligence.measurement_motion;
+  const bx = intelligence.branch_expansion_map;
 
   const signals = intelligence.prioritized_signals || [];
   const signalsBlock = signals.length
