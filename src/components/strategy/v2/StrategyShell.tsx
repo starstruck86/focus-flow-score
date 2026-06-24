@@ -400,27 +400,9 @@ export function StrategyShell() {
     setSuggestedLinkAccount(match ?? null);
   }, [messages, activeThread?.linked_account_id]);
 
+  // Playbook-trigger scan removed (task 1.2) — server's situation
+  // classifier handles activation.
 
-  // Scan recent message text for playbook triggers
-  useEffect(() => {
-    if (!user?.id || messages.length === 0) return;
-    const recentText = messages
-      .slice(-10)
-      .map((m) => ((m.content_json as any)?.text ?? ''))
-      .join(' ');
-    const triggers = detectPlaybookTriggers(recentText);
-    if (triggers.length === 0) {
-      setDetectedPlaybooks([]);
-      return;
-    }
-    fetchDetectedPlaybooks(triggers, user.id)
-      .then((playbooks) => {
-        const fresh = playbooks.filter((p) => !dismissedPlaybookIds.has(p.id));
-        setDetectedPlaybooks(fresh);
-      })
-      .catch(() => { /* swallow */ });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, user?.id]);
 
   // Lifted strategy config — single source of truth for Strict Mode and other
   // render overrides. Subscribing once here means StrategyMessage no longer
