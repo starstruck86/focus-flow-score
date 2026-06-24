@@ -202,6 +202,32 @@ export function StrategyShell() {
   // in the composer (the composer only ever shows the human title).
   const [pendingResourceIds, setPendingResourceIds] = useState<string[]>([]);
 
+  // Territory profile — always-on base context for every Strategy send.
+  // Loaded once per session; injected into globalInstructions so the model
+  // always knows who the AE is, their quota, motion, and territory.
+  const [territoryProfile, setTerritoryProfile] = useState<{
+    name: string;
+    role: string;
+    company: string;
+    quota_amount: number;
+    motion: string;
+    territory_description: string;
+    company_context: string;
+    ki_library_summary: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    (supabase as any)
+      .from('territory_profile')
+      .select('name, role, company, quota_amount, motion, territory_description, company_context, ki_library_summary')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data }: { data: any }) => {
+        if (data) setTerritoryProfile(data);
+      });
+  }, [user?.id]);
+
   // ── Surface-switch swap (drafts + active thread) ─────────────────────────
   // When the user moves between workspaces, save the in-flight draft AND the
   // currently active thread id under the previous surface, then restore both
