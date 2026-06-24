@@ -954,7 +954,7 @@ export function StrategyShell() {
         dispatch('');
       }
     }
-  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, territoryProfile, activeThread?.linked_account_id, linkedContext]);
+  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, territoryProfile, activeThread?.linked_account_id, linkedContext, manuallyInjectedKIs]);
 
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {
     setLinkPickerOpen(false);
