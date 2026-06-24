@@ -107,6 +107,7 @@ export function ProjectsPanel({ threads, activeThreadId, onSelectThread, onCreat
         onSelectThread={onSelectThread}
         onBack={() => setSelected(null)}
         initialInstructions={settingsMap?.get(selected)?.custom_instructions ?? ''}
+        onCreateThreadForAccount={onCreateThreadForAccount}
       />
     );
   }
@@ -115,6 +116,7 @@ export function ProjectsPanel({ threads, activeThreadId, onSelectThread, onCreat
     <ProjectsIndex
       projects={projects}
       threadCountByFamily={threadCountByFamily}
+      signalCountByFamily={signalCountByFamily}
       pinnedFamilies={new Set(Array.from(settingsMap?.values() ?? []).filter((s) => s.pinned).map((s) => s.account_family))}
       onOpen={setSelected}
     />
