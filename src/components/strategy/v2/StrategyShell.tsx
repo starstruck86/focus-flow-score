@@ -88,12 +88,8 @@ import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflo
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
 import { classifyIntelHead, HEAD_LABELS, type InjectedKI } from '@/lib/strategy/headClassifier';
-import {
-  detectPlaybookTriggers,
-  fetchDetectedPlaybooks,
-  fetchPlaybookForInjection,
-  type DetectedPlaybook,
-} from '@/lib/strategy/playbookDetector';
+// Client-side playbook detection removed (task 1.2). The server's
+// situation classifier + libraryRetrieval now own playbook activation.
 import { tagThread } from '@/lib/strategy/threadTags';
 import { buildWorkspaceTitle, WORKSPACE_LABEL, displayThreadTitle } from '@/lib/strategy/threadNaming';
 import { PromoteToLibrarySheet, type PromotePayload } from './promote/PromoteToLibrarySheet';
@@ -225,19 +221,9 @@ export function StrategyShell() {
     triggeredAt: number;
   } | null>(null);
 
-  // Proactive playbook detection
-  const [detectedPlaybooks, setDetectedPlaybooks] = useState<DetectedPlaybook[]>([]);
-  const [loadedPlaybookContent, setLoadedPlaybookContent] = useState<string>('');
-  const [dismissedPlaybookIds, setDismissedPlaybookIds] = useState<Set<string>>(new Set());
-  const loadedPlaybookRef = useRef('');
-  useEffect(() => { loadedPlaybookRef.current = loadedPlaybookContent; }, [loadedPlaybookContent]);
+  // Client-side playbook detection removed (task 1.2). Server owns activation.
 
-  const handleLoadPlaybook = useCallback(async (playbookId: string) => {
-    const content = await fetchPlaybookForInjection(playbookId);
-    setLoadedPlaybookContent(content);
-    setDismissedPlaybookIds((prev) => new Set([...prev, playbookId]));
-    setDetectedPlaybooks((prev) => prev.filter((p) => p.id !== playbookId));
-  }, []);
+
 
   // Manually injected KIs (from ContextInspector Intelligence tab)
   const [manuallyInjectedKIs, setManuallyInjectedKIs] = useState<InjectedKI[]>([]);
@@ -414,27 +400,9 @@ export function StrategyShell() {
     setSuggestedLinkAccount(match ?? null);
   }, [messages, activeThread?.linked_account_id]);
 
+  // Playbook-trigger scan removed (task 1.2) — server's situation
+  // classifier handles activation.
 
-  // Scan recent message text for playbook triggers
-  useEffect(() => {
-    if (!user?.id || messages.length === 0) return;
-    const recentText = messages
-      .slice(-10)
-      .map((m) => ((m.content_json as any)?.text ?? ''))
-      .join(' ');
-    const triggers = detectPlaybookTriggers(recentText);
-    if (triggers.length === 0) {
-      setDetectedPlaybooks([]);
-      return;
-    }
-    fetchDetectedPlaybooks(triggers, user.id)
-      .then((playbooks) => {
-        const fresh = playbooks.filter((p) => !dismissedPlaybookIds.has(p.id));
-        setDetectedPlaybooks(fresh);
-      })
-      .catch(() => { /* swallow */ });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, user?.id]);
 
   // Lifted strategy config — single source of truth for Strict Mode and other
   // render overrides. Subscribing once here means StrategyMessage no longer
@@ -966,15 +934,12 @@ export function StrategyShell() {
       const head = user?.id ? classifyIntelHead(text) : null;
       const dispatch = (headKIBlock: string) => {
         const territoryBlock = buildTerritoryBlock();
-        const playbookBlock = loadedPlaybookRef.current;
-        loadedPlaybookRef.current = '';
-        if (playbookBlock) setLoadedPlaybookContent('');
         const manualKIBlock = manuallyInjectedKIs.length > 0
           ? `\n\n### Manually Injected Knowledge Items\n${manuallyInjectedKIs.map((ki) =>
               `- ${ki.title}: ${ki.tactic_summary.slice(0, 120)}`
             ).join('\n')}`
           : '';
-        const combinedInstructions = [territoryBlock, playbookBlock, manualKIBlock, headKIBlock].filter(Boolean).join('\n\n');
+        const combinedInstructions = [territoryBlock, manualKIBlock, headKIBlock].filter(Boolean).join('\n\n');
         sendMessage(text, {
           pickedResourceIds: sidecar,
           workspace: ws,
@@ -1561,44 +1526,9 @@ export function StrategyShell() {
         </div>
       )}
 
-      {/* Proactive playbook detection — surfaces when thread content matches a playbook */}
-      {detectedPlaybooks.length > 0 && !isSending && (
-        <div
-          className="flex items-center gap-2 px-4 py-2 shrink-0"
-          style={{
-            borderTop: '1px solid hsl(var(--sv-hairline))',
-            background: 'hsl(var(--sv-paper))',
-          }}
-        >
-          <span className="text-[11px]" style={{ color: 'hsl(var(--sv-muted))' }}>💡</span>
-          <span className="text-[11px] flex-1" style={{ color: 'hsl(var(--sv-ink))' }}>
-            <strong>{detectedPlaybooks[0].title}</strong> playbook may apply
-            {loadedPlaybookContent && (
-              <span className="ml-1.5" style={{ color: 'hsl(var(--sv-clay))' }}>· Loaded ✓</span>
-            )}
-          </span>
-          {!loadedPlaybookContent && (
-            <button
-              onClick={() => handleLoadPlaybook(detectedPlaybooks[0].id)}
-              className="text-[11px] font-medium shrink-0"
-              style={{ color: 'hsl(var(--sv-clay))' }}
-            >
-              Load into context →
-            </button>
-          )}
-          <button
-            onClick={() => {
-              const dismissId = detectedPlaybooks[0].id;
-              setDismissedPlaybookIds((prev) => new Set([...prev, dismissId]));
-              setDetectedPlaybooks((prev) => prev.slice(1));
-            }}
-            className="text-[11px] shrink-0"
-            style={{ color: 'hsl(var(--sv-muted))' }}
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
+      {/* Client-side playbook detection banner removed (task 1.2). */}
+
+
 
       {trustState === 'blocked' ? (
         <BlockedComposer

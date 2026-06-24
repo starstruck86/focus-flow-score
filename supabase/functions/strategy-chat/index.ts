@@ -5674,11 +5674,12 @@ async function buildChatSystemPrompt(args: {
           return null;
         })
       : Promise.resolve(null),
-    __libraryDecision.shouldQuery && scopes.length
+    __libraryDecision.shouldQuery && (scopes.length > 0 || !!situation.playbookId)
       ? retrieveLibraryContext(supabase, userId, {} as any, {
         scopes,
         maxKIs: 8,
         maxPlaybooks: 4,
+        preferredPlaybookId: situation.playbookId,
       }).catch(
         (e) => {
           console.warn(
@@ -5730,13 +5731,7 @@ async function buildChatSystemPrompt(args: {
     }),
   ]);
 
-  // NOTE (task 1.2): situation.playbookId is captured but not yet pinned
-  // into library.playbooks — playbook wiring lands in 1.2.
-  if (situation.playbookId) {
-    console.log(
-      `[situation-classifier] playbook_match id=${situation.playbookId} title=${situation.playbookTitle ?? ""} (wiring deferred to 1.2)`,
-    );
-  }
+
 
 
 
