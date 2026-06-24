@@ -396,6 +396,9 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
       >
         {assistantText}
       </ReactMarkdown>
+      <div className="mt-2 flex items-center gap-1 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+        <CopyButton getText={() => assistantText} />
+      </div>
       {onQuickAction && <MessageActions onAction={onQuickAction} />}
     </div>
   );
