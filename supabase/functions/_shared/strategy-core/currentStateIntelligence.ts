@@ -1152,6 +1152,13 @@ async function generatePrioritizedSignals(args: {
       "competitive_pressure",
       "leadership_or_org",
       "product_or_launch",
+      "mmp_switch",
+      "attribution_gap",
+      "deep_linking_adoption",
+      "competitive_displacement",
+      "product_expansion",
+      "renewal_risk",
+      "qbr_signal",
     ];
     const allowedSources: SignalSourceType[] = [
       "account",
