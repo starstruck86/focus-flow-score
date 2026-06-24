@@ -5674,7 +5674,7 @@ async function buildChatSystemPrompt(args: {
           return null;
         })
       : Promise.resolve(null),
-    __libraryDecision.shouldQuery && scopes.length
+    __libraryDecision.shouldQuery && (scopes.length > 0 || !!situation.playbookId)
       ? retrieveLibraryContext(supabase, userId, {} as any, {
         scopes,
         maxKIs: 8,
