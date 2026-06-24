@@ -95,8 +95,6 @@ export interface CurrentStateIntelligence {
     browse_or_research_experience?: string;
     purchase_or_conversion_experience?: string;
     post_purchase_experience?: string;
-    loyalty_or_membership_experience?: string;
-    subscription_or_replenishment_model?: string;
     mobile_app_or_logged_in_experience?: string;
     confidence: ConfidenceLevel;
     unknowns: string[];
@@ -104,11 +102,8 @@ export interface CurrentStateIntelligence {
   marketing_motion: {
     likely_new_customer_motion?: string;
     likely_repeat_customer_motion?: string;
-    likely_churn_or_lapsed_customer_motion?: string;
     promotional_strategy?: string;
-    lifecycle_triggers?: string[];
     channels_likely_used?: string[];
-    personalization_maturity?: string;
     confidence: ConfidenceLevel;
     unknowns: string[];
   };
@@ -121,15 +116,34 @@ export interface CurrentStateIntelligence {
     confidence: ConfidenceLevel;
     unknowns: string[];
   };
-  lifecycle_opportunity_map: {
-    acquisition?: string[];
-    activation?: string[];
-    repeat_purchase?: string[];
-    cross_sell?: string[];
-    loyalty?: string[];
-    winback?: string[];
-    churn_prevention?: string[];
-    customer_data?: string[];
+  /**
+   * Branch-specific posture sections. These replace the legacy
+   * lifecycle/CX opportunity map with a mobile-app + attribution
+   * frame: where the account stands on Branch's product surface area
+   * and where the expansion whitespace is.
+   */
+  app_posture: {
+    mobile_app_strategy: string;
+    deep_linking_maturity: string;
+    web_to_app_setup: string;
+    deferred_deep_linking: string;
+    confidence: ConfidenceLevel;
+    unknowns: string[];
+  };
+  measurement_motion: {
+    current_mmp: string;
+    adjust_appsflyer_setup: string;
+    attribution_gaps: string;
+    mmp_consolidation_risk: string;
+    confidence: ConfidenceLevel;
+    unknowns: string[];
+  };
+  branch_expansion_map: {
+    deep_linking_whitespace: string;
+    universal_ads_whitespace: string;
+    web_to_app_whitespace: string;
+    email_sms_whitespace: string;
+    advanced_products_whitespace: string;
   };
   current_state_thesis: {
     summary: string;
@@ -364,6 +378,7 @@ const PREFLIGHT_WORKSPACES = new Set([
   "artifacts",
   "library",
   "refine",
+  "strategy",
 ]);
 
 function normalizeWorkspaceKey(raw: string | null | undefined): string {
@@ -400,10 +415,10 @@ const ENTITY_STOPWORDS = new Set([
   "How", "What", "Why", "Who", "Where", "Which", "This", "That", "These",
   "Those", "It", "Its", "They", "Them", "There", "Here", "Today", "Tomorrow",
   "Yesterday", "Now", "Then", "Strategy", "Brainstorm", "Research", "Refine",
-  "Work", "Artifact", "Artifacts", "Library", "Lifecycle", "Marketing",
-  "Customer", "Engagement", "Acoustic", "Corey", "Dave", "Email", "Brief",
-  "Plan", "Account", "Opportunity", "Conversation", "Approach", "Give",
-  "Make", "Build", "Need", "Want", "Like", "Help", "Find", "Show",
+  "Work", "Artifact", "Artifacts", "Library", "Acoustic", "Corey", "Dave",
+  "Email", "Brief", "Plan", "Account", "Opportunity", "Conversation",
+  "Approach", "Give", "Make", "Build", "Need", "Want", "Like", "Help",
+  "Find", "Show",
   "January", "February", "March", "April", "May", "June", "July", "August",
   "September", "October", "November", "December",
 ]);
@@ -773,8 +788,8 @@ async function gatherVerifiedSignals(args: {
 
 interface GeneratedHypotheses {
   business_model_summary: string;
-  customer_experience: string;
-  marketing_motion: string;
+  app_posture: string;
+  measurement_motion: string;
   strategic_tension: string;
   future_state_hypothesis: string;
   likely_gap: string;
@@ -785,18 +800,20 @@ interface GeneratedHypotheses {
 const HYPOTHESIS_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY these string keys:
 {
   "business_model_summary": "1-2 sentences. Concrete, specific to this company. Use phrasing like 'X likely operates...' or 'In a Y model like X's...'. NEVER write '[Likely]' or scaffolding tokens — write real prose.",
-  "customer_experience": "1-2 sentences describing what it's actually like to be a customer of this company end-to-end. Be specific: discovery vs efficiency, anonymous vs logged-in, planned vs unplanned, etc.",
-  "marketing_motion": "1-2 sentences on how this company likely runs (or under-runs) lifecycle/CRM/engagement marketing today, given the business model. Name the likely shape and where it's misaligned.",
-  "strategic_tension": "1 sentence naming a non-obvious tension Corey can put on the table — the kind a smart prospect will recognize ('most lifecycle strategies optimize for X, but Y's model benefits from Z').",
-  "future_state_hypothesis": "1-2 sentences on what they're trying to become and what has to change in customer engagement to get there.",
-  "likely_gap": "1 sentence: the most plausible gap between current and future state.",
-  "why_now": "1 sentence: the market / competitive / internal pressure that makes this conversation timely.",
-  "thesis_summary": "1 crisp sentence summarizing the working thesis about where the company is today."
+  "app_posture": "1-2 sentences on this company's mobile app strategy and deep linking maturity. Where is the app in their funnel (acquisition-led, retention-led, transaction core, content/engagement)? What is the likely state of deep linking, deferred deep linking, and web-to-app today — is it instrumented, partial, or absent? Be specific.",
+  "measurement_motion": "1-2 sentences on how this company likely measures mobile attribution today. Which MMP are they most likely on — Adjust, AppsFlyer, Kochava, Singular, or self-built? Where are the obvious attribution gaps (web-to-app, post-install retargeting, sub-entity reporting, privacy/AIO impact)? Where is MMP consolidation pressure most likely to land?",
+  "strategic_tension": "1 sentence naming a non-obvious tension Corey can put on the table — the gap between their current attribution/measurement setup and where they need to be. Example shape: 'Most teams in their category assume their MMP covers X, but for this company Y is closer to true.'",
+  "future_state_hypothesis": "1-2 sentences on what their attribution / measurement / app-monetization future state looks like, and what has to change (deep linking adoption, MMP consolidation, Universal Ads, web-to-app, Advanced Privacy posture) to get there.",
+  "likely_gap": "1 sentence: the most plausible gap between their current Branch footprint and the future state — the whitespace expansion-ARR lives in.",
+  "why_now": "1 sentence: the market / competitive / internal pressure that makes this conversation timely (renewal window, QBR cadence, privacy shift, competitor displacement, new app launch, leadership change).",
+  "thesis_summary": "1 crisp sentence summarizing the working thesis about where the company sits on the Branch surface area today."
 }
 
 Hard rules:
 - Write real, concrete hypotheses. No placeholder text. No "[Likely]", "[Assume]", "describe…", "fill in…".
 - It's OK — and required — to be hypothetical. Use "likely", "in a [model] like X's", "a reasonable assumption is".
+- Use Branch vocabulary directly (deep linking, deferred deep linking, Universal Ads, Web-to-App, Email-to-App, SMS-to-App, QR, AIO, Advanced Privacy, MMP, sub-entity, attribution, footprint, whitespace, QBR, expansion-ARR). Avoid generic "analytics / engagement / personalization" when a specific Branch capability fits.
+- Name the competitive dynamic when it sharpens the point (Adjust, AppsFlyer, Kochava, Singular).
 - Do NOT cite. Do NOT pretend these are facts.
 - Do NOT include any text outside the JSON object.`;
 
@@ -888,8 +905,8 @@ async function generateRealHypotheses(args: {
     const parsed = JSON.parse(raw);
     const required: (keyof GeneratedHypotheses)[] = [
       "business_model_summary",
-      "customer_experience",
-      "marketing_motion",
+      "app_posture",
+      "measurement_motion",
       "strategic_tension",
       "future_state_hypothesis",
       "likely_gap",
@@ -1047,8 +1064,8 @@ async function generatePrioritizedSignals(args: {
   const hypBlock = hyp
     ? `\nINFERRED HYPOTHESES (gap-fillers — use ONLY to extend verified signals or when no verified signal exists):\n` +
       `- Business model: ${hyp.business_model_summary}\n` +
-      `- Customer experience: ${hyp.customer_experience}\n` +
-      `- Marketing motion: ${hyp.marketing_motion}\n` +
+      `- App posture: ${hyp.app_posture}\n` +
+      `- Measurement motion: ${hyp.measurement_motion}\n` +
       `- Strategic tension: ${hyp.strategic_tension}\n` +
       `- Likely gap: ${hyp.likely_gap}\n` +
       `- Why now: ${hyp.why_now}\n` +
@@ -1459,8 +1476,8 @@ async function generateCommercialInsights(args: {
   const hypBlock = hyp
     ? `\nWORKING HYPOTHESES (business-model / customer / motion):\n` +
       `- Business model: ${hyp.business_model_summary}\n` +
-      `- Customer experience: ${hyp.customer_experience}\n` +
-      `- Marketing motion: ${hyp.marketing_motion}\n`
+      `- App posture: ${hyp.app_posture}\n` +
+      `- Measurement motion: ${hyp.measurement_motion}\n`
     : "";
 
   const sys =
@@ -1713,62 +1730,118 @@ function buildSkeletonIntelligence(args: {
         || fb(`${entityName} operates a business model that should be confirmed in discovery; reason from public knowledge of the company and its category.`),
       confidence: sectionConfidence,
       unknowns: [
-        "Exact revenue mix (DTC vs wholesale vs marketplace)",
-        "Subscription / replenishment share",
-        "Seasonality and peak windows",
+        "Exact revenue mix (DTC vs app vs partner channels)",
+        "Mobile app's role in revenue (acquisition / retention / transaction core)",
+        "Sub-entity / business-unit structure that drives Branch footprint",
       ],
     },
     customer_experience: {
-      what_it_is_like_to_be_a_customer: hypotheses?.customer_experience
-        || fb(`the end-to-end customer journey for ${entityName} skews toward what its category typically rewards; the specifics of discovery, conversion, and repeat should be confirmed.`),
+      what_it_is_like_to_be_a_customer: fb(
+        `the end-to-end customer journey for ${entityName} crosses web → app → re-engagement surfaces; the specifics of how deep linking, deferred deep linking, and post-install attribution actually work should be confirmed.`,
+      ),
       confidence: sectionConfidence,
       unknowns: [
         "Logged-in / app vs anonymous browsing share",
-        "Loyalty or membership penetration",
-        "Post-purchase comms cadence",
+        "Web-to-app handoff quality (deferred deep linking on/off)",
+        "Post-install / post-purchase comms cadence on app surfaces",
       ],
     },
     marketing_motion: {
-      likely_new_customer_motion: hypotheses?.marketing_motion,
       confidence: sectionConfidence,
       unknowns: [
-        "Lifecycle triggers currently wired up",
-        "Personalization maturity (segment vs 1:1)",
-        "Channel mix (email / SMS / app / mail)",
-        "Winback / lapsed playbook (if any)",
+        "Paid acquisition channel mix (Universal Ads candidate?)",
+        "Email-to-App / SMS-to-App instrumentation today",
+        "QR / out-of-home routing to the app",
       ],
     },
     strategic_priorities: {
       confidence: sectionConfidence,
       unknowns: [
-        "Public investment signals (earnings, hires, launches)",
-        "Marketing leadership changes",
-        "Stated digital / loyalty / data investments",
+        "Public investment signals (earnings, hires, app launches, M&A)",
+        "Mobile / growth / measurement leadership changes",
+        "Stated investments in attribution, privacy posture (AIO), or app monetization",
       ],
     },
-    lifecycle_opportunity_map: {},
+    app_posture: {
+      mobile_app_strategy: hypotheses?.app_posture
+        || fb(`${entityName}'s mobile app sits inside their growth motion in a way that should be confirmed — its role in acquisition, retention, and transaction is the first thing to pin down.`),
+      deep_linking_maturity: fb(
+        `deep linking coverage is partial — owned surfaces (email, SMS, web) likely route inconsistently into the app; deferred deep linking on first-install paths should be confirmed.`,
+      ),
+      web_to_app_setup: fb(
+        `web-to-app is either un-instrumented or relies on a default store handoff; Branch Web-to-App is a likely whitespace.`,
+      ),
+      deferred_deep_linking: fb(
+        `deferred deep linking on paid + owned install paths should be confirmed — common gap that compounds attribution loss and post-install drop-off.`,
+      ),
+      confidence: sectionConfidence,
+      unknowns: [
+        "Which Branch products are live today vs not",
+        "Deep linking coverage across email / SMS / web / paid",
+        "Deferred deep linking on first-install funnels",
+        "Universal Ads / Email-to-App / SMS-to-App adoption",
+      ],
+    },
+    measurement_motion: {
+      current_mmp: fb(
+        `their MMP today is most likely Adjust or AppsFlyer; Kochava or Singular are less likely but possible. Confirm in discovery.`,
+      ),
+      adjust_appsflyer_setup: fb(
+        `the install + post-install attribution setup is standard MMP shape — paid network postbacks, organic install split, basic in-app event tracking; the gaps usually show up on web-to-app, sub-entity reporting, and Advanced Privacy / AIO posture.`,
+      ),
+      attribution_gaps: hypotheses?.measurement_motion
+        || fb(`attribution gaps most likely concentrate on web-to-app, post-install retargeting, sub-entity rollups, and the AIO / privacy boundary.`),
+      mmp_consolidation_risk: fb(
+        `with renewal cycles tightening and Branch's MMP capability maturing, there is real consolidation pressure on Adjust / AppsFlyer where Branch already owns the deep linking layer.`,
+      ),
+      confidence: sectionConfidence,
+      unknowns: [
+        "Which MMP is on contract today (Adjust, AppsFlyer, Kochava, Singular, self-built)",
+        "Renewal window and incumbent satisfaction",
+        "Where attribution accuracy is being questioned internally",
+        "Sub-entity / business-unit attribution requirements",
+      ],
+    },
+    branch_expansion_map: {
+      deep_linking_whitespace: fb(
+        `deep linking is the wedge — every Branch product downstream (Universal Ads, Web-to-App, Email-to-App, SMS-to-App, AIO) depends on it being instrumented properly.`,
+      ),
+      universal_ads_whitespace: fb(
+        `Universal Ads is whitespace for accounts with material paid mobile spend that aren't already routing through Branch's ad network coverage.`,
+      ),
+      web_to_app_whitespace: fb(
+        `Web-to-App is whitespace when their owned web traffic is sizable but the app handoff is the default store flow — material conversion-funnel uplift sits here.`,
+      ),
+      email_sms_whitespace: fb(
+        `Email-to-App / SMS-to-App is whitespace when they run owned CRM but their deep links into the app are unreliable across iOS/Android updates.`,
+      ),
+      advanced_products_whitespace: fb(
+        `Advanced Privacy / AIO and QR-driven journeys are whitespace as iOS/Android privacy posture tightens and offline-to-app becomes a measurable surface.`,
+      ),
+    },
     current_state_thesis: {
       summary: hypotheses?.thesis_summary
-        || fb(`${entityName} is operating where its category and stage suggest it should be; the working thesis should be sharpened in discovery.`),
+        || fb(`${entityName} sits in the middle of the Branch surface area — some products live, real whitespace on the rest; the working thesis should be sharpened against the QBR usage signal.`),
       likely_gap: hypotheses?.likely_gap
-        || fb(`there is a gap between current customer engagement maturity and what the future state requires.`),
+        || fb(`there is a gap between current Branch footprint and the products their peers in this vertical have already adopted — expansion-ARR lives in that gap.`),
       why_now: hypotheses?.why_now
-        || fb(`market and competitive pressure make this conversation timely.`),
+        || fb(`renewal cadence, QBR rhythm, and competitive pressure from Adjust / AppsFlyer make this conversation timely.`),
       strategic_tension: hypotheses?.strategic_tension
-        || fb(`the standard playbook may be misaligned with how this company actually wins with customers.`),
+        || fb(`their current measurement setup most likely covers the basics but misses the surfaces (web-to-app, sub-entity, AIO) where revenue actually leaks.`),
       future_state_hypothesis: hypotheses?.future_state_hypothesis
-        || fb(`the company is trying to deepen customer engagement; getting there will require changes in data, motion, or experience.`),
+        || fb(`the company is moving toward a consolidated measurement + deep linking stack where Branch can own more of the surface area as MMPs get re-evaluated.`),
     },
     discovery_questions: {
       must_confirm: [
-        "Is the business primarily store-led, ecommerce-led, subscription-led, or hybrid today?",
-        "Where is customer data most fragmented across the experience?",
-        "Which lifecycle moments are currently most under-served?",
+        "Which Branch products are currently live at this account — deep linking, Universal Ads, Web-to-App, Email-to-App?",
+        "Who is their current MMP — Adjust, AppsFlyer, Kochava, or Singular?",
+        "What does their mobile measurement setup look like today — app installs, retargeting, deferred deep linking?",
       ],
       high_leverage: [
-        "What's the current motion for repeat vs lapsed customers?",
-        "What's the personalization ceiling you're hitting today?",
-        "Where are you investing for the next 12 months in customer engagement?",
+        "Where are they seeing attribution gaps or inaccuracies today?",
+        "What's driving the QBR conversation — usage up, down, or flat?",
+        "Where is the whitespace — which Branch products aren't live that their peers are using?",
+        "Is there any internal build-vs-buy discussion on attribution or deep linking?",
       ],
     },
     evidence: {
@@ -1776,8 +1849,8 @@ function buildSkeletonIntelligence(args: {
       inferred_claims: hypotheses
         ? [
           { claim: hypotheses.business_model_summary, basis: "model reasoning from public knowledge", confidence: "low" },
-          { claim: hypotheses.customer_experience, basis: "model reasoning from public knowledge", confidence: "low" },
-          { claim: hypotheses.marketing_motion, basis: "model reasoning from public knowledge", confidence: "low" },
+          { claim: hypotheses.app_posture, basis: "model reasoning about mobile app + deep linking posture", confidence: "low" },
+          { claim: hypotheses.measurement_motion, basis: "model reasoning about MMP / attribution setup", confidence: "low" },
         ]
         : [],
     },
@@ -1810,8 +1883,9 @@ function renderPromptBlock(
     : "MISSING";
 
   const bm = intelligence.business_model.summary;
-  const cx = intelligence.customer_experience.what_it_is_like_to_be_a_customer;
-  const mm = intelligence.marketing_motion.likely_new_customer_motion;
+  const ap = intelligence.app_posture;
+  const mp = intelligence.measurement_motion;
+  const bx = intelligence.branch_expansion_map;
 
   const signals = intelligence.prioritized_signals || [];
   const signalsBlock = signals.length
@@ -1923,9 +1997,23 @@ ${verifiedBlock}
 
 WORKING HYPOTHESES ABOUT ${c.name.toUpperCase()} (used ONLY to extend or fill gaps where verified signals are absent — speak in "likely" voice when reflecting them):
 - Business model: ${bm}
-- Customer experience: ${cx}${mm ? `\n- Marketing current state: ${mm}` : ""}
+- App posture: ${ap.mobile_app_strategy}
+  · Deep linking maturity: ${ap.deep_linking_maturity}
+  · Web-to-App setup:      ${ap.web_to_app_setup}
+  · Deferred deep linking: ${ap.deferred_deep_linking}
+- Measurement motion:
+  · Current MMP (likely):       ${mp.current_mmp}
+  · Adjust/AppsFlyer setup:     ${mp.adjust_appsflyer_setup}
+  · Attribution gaps:           ${mp.attribution_gaps}
+  · MMP consolidation risk:     ${mp.mmp_consolidation_risk}
+- Branch expansion map (whitespace by product):
+  · Deep linking:       ${bx.deep_linking_whitespace}
+  · Universal Ads:      ${bx.universal_ads_whitespace}
+  · Web-to-App:         ${bx.web_to_app_whitespace}
+  · Email-to-App / SMS: ${bx.email_sms_whitespace}
+  · Advanced products:  ${bx.advanced_products_whitespace}
 - Strategic tension: ${t.strategic_tension}
-- Likely gap (current → future): ${t.likely_gap}
+- Likely gap (current footprint → future footprint): ${t.likely_gap}
 - Why now: ${t.why_now}
 - Future-state hypothesis: ${t.future_state_hypothesis}
 - Working thesis: ${t.summary}
@@ -1959,17 +2047,18 @@ Only #5 dominates the visible answer.
 ═══ VISIBLE OUTPUT SHAPE (style, not template) ═══
 - 1 primary conversation path. Optional 1 backup path only if materially different.
 - Each path ≤ 180 words.
-- Natural prose in Corey's first-person voice. No headings, no labeled idea blocks, no category buckets (Acquisition / Retention / Lifecycle / Personalization / Loyalty), no recommendation lists to the company, no rigid required phrase template.
-- Anchor in specific current-state or verified-signal facts about ${c.name}. Express change as direction of travel where it sharpens the point. End with the question Corey would ask. Never dump URLs or citation labels in the body.
-- Desired feel (style, do not copy verbatim): "I wouldn't lead with [the obvious]. The thing I'd focus on is that ${c.name} appears to be moving from X to Y. That creates a harder problem: [friction]. The reframe is [insight]. So I'd lead by [move]. The question I'd ask is: [validation question]."
+- Natural prose in Corey's first-person voice. No headings, no labeled idea blocks, no category buckets, no recommendation lists to the company, no rigid required phrase template.
+- Use Branch product names directly when relevant (deep linking, deferred deep linking, Universal Ads, Web-to-App, Email-to-App, SMS-to-App, QR, AIO, Advanced Privacy) and name the competitive dynamic (Adjust, AppsFlyer, Kochava, Singular) when it sharpens the call.
+- Anchor in specific current-state, verified-signal, or footprint/whitespace facts about ${c.name}. Express change as direction of travel where it sharpens the point. End with the question Corey would ask. Never dump URLs or citation labels in the body.
+- Desired feel (style, do not copy verbatim): "I wouldn't lead with [the obvious]. The thing I'd focus on is that ${c.name} appears to be moving from X to Y on the Branch surface area. That creates a harder problem: [friction]. The reframe is [insight]. So I'd lead by [move]. The question I'd ask is: [validation question]."
 
 ═══ SINGLE GATE — run silently before sending; rewrite once if it fails ═══
 Does the answer:
   1. reference specific current state or a verified signal for ${c.name}?
-  2. describe what is changing?
+  2. describe what is changing — on their app posture, MMP, attribution, or Branch footprint?
   3. articulate a commercial insight or a friction (a real problem, not a category)?
-  4. tell Corey what to say or ask?
-  5. avoid generic marketing advice (micro-moments, customer engagement, personalized journey, segmentation, loyalty, lifecycle marketing, brand storytelling) UNLESS each phrase is tied to a verified company-specific change or friction?
+  4. tell Corey what to say or ask — tied to a specific Branch product or competitive dynamic when relevant?
+  5. avoid generic "analytics / attribution / engagement / personalization / lifecycle" language UNLESS each phrase is tied to a verified company-specific change, a named Branch capability, or a friction?
 If any check fails → rewrite once. Do not narrate the check.
 ═══════════════════════════════════
 [Reasoning layers available — verified=${verifiedCount}, inferred=${inferredCount} · commercial_insights=${insights.length} · friction_paths=${signals.filter((s)=>!!s.friction).length}]`;
@@ -2237,6 +2326,8 @@ function countUnknowns(intel: CurrentStateIntelligence): number {
     (intel.business_model.unknowns?.length || 0) +
     (intel.customer_experience.unknowns?.length || 0) +
     (intel.marketing_motion.unknowns?.length || 0) +
-    (intel.strategic_priorities.unknowns?.length || 0)
+    (intel.strategic_priorities.unknowns?.length || 0) +
+    (intel.app_posture.unknowns?.length || 0) +
+    (intel.measurement_motion.unknowns?.length || 0)
   );
 }
