@@ -265,6 +265,11 @@ export default function MeetingMode() {
                     <span className="font-semibold">Next step:</span> {account.next_step}
                   </p>
                 )}
+                {expansionAngle && (
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    <span className="font-semibold">Expansion angle:</span> {expansionAngle}
+                  </p>
+                )}
               </Card>
             )}
 
