@@ -423,11 +423,11 @@ const LIBRARY: WorkspaceContract = {
   cognitivePosture:
     "Knowledge activation. Treat the user's saved resources as the primary working material — surface them, structure them, apply them.",
   useCases: [
-    "Find what I've saved about a topic",
-    "Organize related resources into a coherent map or theme set",
-    "Apply a saved framework or playbook to a current situation",
-    "Synthesize themes across multiple saved resources",
-    "Surface forgotten or underused resources that are relevant now",
+    "Find what I've saved about web-to-app case studies in retail",
+    "Surface Branch KIs relevant to Adjust displacement",
+    "Apply the QBR Usage Down playbook to Peacock",
+    "Synthesize case study evidence for a web-to-app business case",
+    "Find forgotten KIs on mobile attribution gaps",
   ],
   nonGoals: [
     "Open-web research when the library has coverage (→ Deep Research)",
