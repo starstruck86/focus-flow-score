@@ -132,6 +132,7 @@ export default function PostCallLog() {
       next_step_date: nextStep.trim() ? nextStepDate : null,
       branch_play_used: playOn,
       branch_ki_title: finalPlayTitle,
+      queue_transcript: queueTranscript,
     };
 
     try {
