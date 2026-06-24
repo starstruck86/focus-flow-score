@@ -277,7 +277,7 @@ export async function retrieveLibraryContext(
 
   const contextString = formatLibraryContext(knowledgeItems, playbooks);
 
-  console.log(`[library-retrieval] scopes=${opts.scopes.join(",")} → ${knowledgeItems.length} KIs, ${playbooks.length} playbooks${opts.preferredPlaybookId ? ` preferred=${opts.preferredPlaybookId}` : ""}`);
+  console.log(`[library-retrieval] scopes=[${opts.scopes.join(",")}] dims=[${scopedDimensions.join(",")}] → ${knowledgeItems.length} KIs, ${playbooks.length} playbooks${opts.preferredPlaybookId ? ` preferred=${opts.preferredPlaybookId}` : ""}`);
 
   return {
     knowledgeItems,
