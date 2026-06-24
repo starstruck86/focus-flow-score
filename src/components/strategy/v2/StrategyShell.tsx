@@ -1559,6 +1559,7 @@ export function StrategyShell() {
             isSending={isSending}
             strategyConfig={strategyConfig}
             lastIntelActivation={lastIntelActivation}
+            lastSkillWorkflow={isSending ? null : lastSkillWorkflow}
             onPickPrompt={(prompt) => {
               const ta = composerRef.current as
                 (HTMLTextAreaElement & { insertText?: (t: string) => void })
