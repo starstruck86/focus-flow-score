@@ -49,13 +49,25 @@ export function classifyIntelHead(text: string): IntelHead {
   return 'sales'; // always return something useful — never null
 }
 
+export type Citation = {
+  key: string;       // 'K1', 'K2', etc.
+  title: string;
+  tactic_summary: string;
+  spider_dimension: string;
+};
+
+export type HeadKIResult = {
+  block: string;
+  citations: Citation[];
+};
+
 /**
  * Fetches top KIs from the full knowledge_items library (all chapters)
  * filtered by spider_dimension. Applies quality gate (>80 chars).
- * Returns a compact injection block for globalInstructions.
+ * Returns an injection block + a citation manifest for client-side rendering.
  */
-export async function buildHeadKIBlock(head: IntelHead, userId: string): Promise<string> {
-  if (!userId) return '';
+export async function buildHeadKIBlock(head: IntelHead, userId: string): Promise<HeadKIResult> {
+  if (!userId) return { block: '', citations: [] };
 
   const dimensions = HEAD_TO_DIMENSIONS[head];
 
@@ -63,32 +75,41 @@ export async function buildHeadKIBlock(head: IntelHead, userId: string): Promise
     const { data, error } = await (supabase as any)
       .from('knowledge_items')
       .select('title, tactic_summary, spider_dimension, chapter, intelligence_type')
-      .eq('user_id', userId)          // FIXED: was _userId (unused)
+      .eq('user_id', userId)
       .eq('active', true)
       .in('spider_dimension', dimensions)
       .order('confidence_score', { ascending: false, nullsFirst: false })
-      .limit(40); // fetch more, filter client-side
+      .limit(40);
 
-    if (error || !data || data.length === 0) return '';
+    if (error || !data || data.length === 0) return { block: '', citations: [] };
 
-    // Quality gate: skip fragment KIs (extraction artifacts)
     const quality = (data as any[]).filter(
       (ki) => ki.tactic_summary && ki.tactic_summary.length > 80
     );
 
-    if (quality.length === 0) return '';
+    if (quality.length === 0) return { block: '', citations: [] };
 
-    // Take top 6 quality KIs
     const top = quality.slice(0, 6);
 
-    const lines = top.map((ki: any) =>
-      `- [${ki.spider_dimension}] ${ki.title}: ${(ki.tactic_summary as string).slice(0, 120)}`
+    const citationLines = top.map((ki: any, i: number) =>
+      `[K${i + 1}] (${ki.spider_dimension}) ${ki.title}: ${(ki.tactic_summary as string).slice(0, 120)}`
     );
 
-    return `\n\n### ${HEAD_LABELS[head]} Intelligence (${top.length} KIs from your 27K library)\n${lines.join('\n')}`;
+    const citationInstruction = `\nWhen you use a concept from the knowledge base above, cite it inline as [K1], [K2], etc. at the end of the sentence that uses it. Only cite when the connection is direct and clear. Do not cite every sentence — only where knowledge items genuinely informed the answer.`;
+
+    const block = `\n\n### Your Knowledge Base — cite by tag when you use these\n${citationLines.join('\n')}${citationInstruction}`;
+
+    const citations: Citation[] = top.map((ki: any, i: number) => ({
+      key: `K${i + 1}`,
+      title: ki.title,
+      tactic_summary: ki.tactic_summary as string,
+      spider_dimension: ki.spider_dimension as string,
+    }));
+
+    return { block, citations };
 
   } catch {
-    return '';
+    return { block: '', citations: [] };
   }
 }
 

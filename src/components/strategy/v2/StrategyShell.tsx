@@ -86,7 +86,7 @@ import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflo
 // /strategy/settings page (see src/pages/StrategySettings.tsx).
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
-import { classifyIntelHead, buildHeadKIBlock, HEAD_LABELS } from '@/lib/strategy/headClassifier';
+import { classifyIntelHead, buildHeadKIBlock, HEAD_LABELS, type Citation } from '@/lib/strategy/headClassifier';
 import {
   detectPlaybookTriggers,
   fetchDetectedPlaybooks,
@@ -242,6 +242,7 @@ export function StrategyShell() {
     accountLinked: boolean;
     accountName: string | null;
     triggeredAt: number;
+    citations: Citation[];
   } | null>(null);
 
   // Proactive playbook detection
@@ -904,18 +905,30 @@ export function StrategyShell() {
       };
       const accountName = linkedContext?.account?.name ?? linkedContext?.opportunity?.name ?? null;
       if (head && user?.id) {
-        buildHeadKIBlock(head, user.id).then((block) => {
-          const kiCount = (block.match(/^-/gm) ?? []).length;
+        buildHeadKIBlock(head, user.id).then((result) => {
+          const { block, citations } = result;
           setLastIntelActivation({
             head,
             headLabel: HEAD_LABELS[head] ?? head,
-            kiCount,
+            kiCount: citations.length,
             accountLinked: !!activeThread?.linked_account_id,
             accountName,
             triggeredAt: Date.now(),
+            citations,
           });
           dispatch(block);
-        }).catch(() => dispatch(''));
+        }).catch(() => {
+          setLastIntelActivation({
+            head: 'sales',
+            headLabel: 'Sales',
+            kiCount: 0,
+            accountLinked: !!activeThread?.linked_account_id,
+            accountName,
+            triggeredAt: Date.now(),
+            citations: [],
+          });
+          dispatch('');
+        });
       } else {
         setLastIntelActivation({
           head: 'sales',
@@ -924,6 +937,7 @@ export function StrategyShell() {
           accountLinked: !!activeThread?.linked_account_id,
           accountName,
           triggeredAt: Date.now(),
+          citations: [],
         });
         dispatch('');
       }
@@ -1433,7 +1447,7 @@ export function StrategyShell() {
             isLoading={isLoading}
             isSending={isSending}
             strategyConfig={strategyConfig}
-            lastIntelActivation={isSending ? lastIntelActivation : null}
+            lastIntelActivation={lastIntelActivation}
             onPickPrompt={(prompt) => {
               const ta = composerRef.current as
                 (HTMLTextAreaElement & { insertText?: (t: string) => void })
