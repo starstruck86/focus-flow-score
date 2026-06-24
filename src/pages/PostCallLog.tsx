@@ -39,7 +39,17 @@ export default function PostCallLog() {
   const [expansionText, setExpansionText] = useState('');
   const [nextStep, setNextStep] = useState('');
   const [nextStepDate, setNextStepDate] = useState(plusDays(7));
-  const [suggestingNextStep, setSuggestingNextStep] = useState(false);
+  const [queueTranscript, setQueueTranscript] = useState(false);
+  const [meetingGoal] = useState<string | null>(() => {
+    try {
+      const savedAccountId = sessionStorage.getItem('meeting_mode_account_id');
+      const urlAccountId = new URLSearchParams(window.location.search).get('accountId');
+      if (savedAccountId && urlAccountId && savedAccountId === urlAccountId) {
+        return sessionStorage.getItem('meeting_mode_goal');
+      }
+      return null;
+    } catch { return null; }
+  });
   const [playOn, setPlayOn] = useState(false);
   const [playTitle, setPlayTitle] = useState('');
   const [playOther, setPlayOther] = useState('');
