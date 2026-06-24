@@ -905,8 +905,8 @@ async function generateRealHypotheses(args: {
     const parsed = JSON.parse(raw);
     const required: (keyof GeneratedHypotheses)[] = [
       "business_model_summary",
-      "customer_experience",
-      "marketing_motion",
+      "app_posture",
+      "measurement_motion",
       "strategic_tension",
       "future_state_hypothesis",
       "likely_gap",
