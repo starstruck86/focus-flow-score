@@ -9,8 +9,10 @@
  * No modals. The page replaces the previous dark sheet experience so users
  * can configure workspaces and pills like custom GPTs.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/AuthContext';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Settings } from 'lucide-react';
