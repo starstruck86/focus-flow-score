@@ -233,7 +233,15 @@ export type SignalType =
   | "external_event"
   | "competitive_pressure"
   | "leadership_or_org"
-  | "product_or_launch";
+  | "product_or_launch"
+  // ── Branch-specific signal kinds ──────────────────────────────────
+  | "mmp_switch"
+  | "attribution_gap"
+  | "deep_linking_adoption"
+  | "competitive_displacement"
+  | "product_expansion"
+  | "renewal_risk"
+  | "qbr_signal";
 
 export type SignalSourceType = "account" | "library" | "web" | "inference";
 
@@ -562,7 +570,7 @@ const VERIFIED_SIGNAL_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY this
   "signals": [
     {
       "signal": "Concrete, named real-world signal about this company. e.g. 'Launched a new owned-brand activewear line in March 2024 to broaden assortment beyond intimates' — not 'they invest in marketing'.",
-      "kind": "news | product_launch | campaign | leadership_change | hiring | partnership | digital_or_ai_initiative | website_or_app_change | industry_trend | financial_or_earnings",
+      "kind": "news | product_launch | campaign | leadership_change | hiring | partnership | digital_or_ai_initiative | website_or_app_change | industry_trend | financial_or_earnings | mmp_switch | attribution_gap | deep_linking_adoption | competitive_displacement | product_expansion | renewal_risk | qbr_signal",
       "confidence": "high | medium | low",
       "source_title": "Optional short label of the source if you can identify it. Empty string if unsure.",
       "source_url": "Optional URL if you can recall a specific page. Empty string if unsure."
@@ -943,7 +951,7 @@ const SIGNAL_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY this shape:
     {
       "rank": 1,
       "signal": "Concrete, named signal (not a category). e.g. 'TJX's treasure-hunt model means inventory turns weekly and creates real-time scarcity that lifecycle programs almost never exploit', not 'opportunity in retention'.",
-      "signal_type": "tension | revenue_or_growth | change_in_motion | blind_spot | external_event | competitive_pressure | leadership_or_org | product_or_launch",
+      "signal_type": "tension | revenue_or_growth | change_in_motion | blind_spot | external_event | competitive_pressure | leadership_or_org | product_or_launch | mmp_switch | attribution_gap | deep_linking_adoption | competitive_displacement | product_expansion | renewal_risk | qbr_signal",
       "source_type": "account | library | web | inference",
       "confidence": "high | medium | low",
 
@@ -1144,6 +1152,13 @@ async function generatePrioritizedSignals(args: {
       "competitive_pressure",
       "leadership_or_org",
       "product_or_launch",
+      "mmp_switch",
+      "attribution_gap",
+      "deep_linking_adoption",
+      "competitive_displacement",
+      "product_expansion",
+      "renewal_risk",
+      "qbr_signal",
     ];
     const allowedSources: SignalSourceType[] = [
       "account",
