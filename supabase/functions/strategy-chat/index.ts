@@ -5612,7 +5612,34 @@ async function buildChatSystemPrompt(args: {
   // retrieval AND the working thesis state for this account AND the
   // newly-added resource retrieval (exact / near-exact title + entity
   // links + category backstop).
-  const scopes = deriveLibraryScopes(pack.account, userContent);
+  // Situation classifier (task 1.1) — one LLM call that triages the
+  // rep's question, picks a specific playbook by ID, and emits
+  // situation-scoped retrieval keywords. Falls back to the legacy
+  // keyword-soup scopes on any failure so chat never blocks.
+  const __recentTurnsForClassifier = (pack.recentMessages || [])
+    .map((m: any) => ({
+      role: m.role === "assistant" ? "assistant" : "user",
+      content: String(m.text || m.content || ""),
+    }))
+    .filter((t) => t.content.trim().length > 0)
+    .slice(-2);
+  const situation: SituationClassification | null = await classifySituation(supabase, {
+    userId,
+    userContent,
+    account: pack.account ?? null,
+    opportunity: pack.opportunity
+      ? {
+          stage: pack.opportunity.stage ?? null,
+          close_date: pack.opportunity.close_date ?? null,
+          amount: pack.opportunity.amount ?? null,
+        }
+      : null,
+    recentTurns: __recentTurnsForClassifier,
+  });
+  const __legacyScopes = deriveLibraryScopes(pack.account, userContent);
+  const scopes = (situation?.scopes?.length ?? 0) > 0
+    ? situation!.scopes
+    : __legacyScopes;
 
   // Library gate — preserves legacy behavior for `opportunistic`
   // (only queries when scopes existed today) while enforcing `off`
