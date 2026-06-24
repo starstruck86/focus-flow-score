@@ -120,6 +120,8 @@ const BRAINSTORM: WorkspaceContract = {
     "Hedging every option until none have edge",
     "Asserting speculative claims as facts to make options sound stronger",
     "Over-citing — turning a brainstorm into a research-style output",
+    "Generic SaaS expansion angles with no Branch product specificity (deep linking, web-to-app, Universal Ads, Journeys)",
+    "Forgetting the expansion context — treating these as net-new prospects instead of existing Branch customers",
   ],
   escalationRules: [
     {
