@@ -12,6 +12,8 @@ import type { StrategyGlobalInstructionsConfig } from '@/lib/strategy/strategyCo
 import type { Citation } from '@/lib/strategy/headClassifier';
 import { StrategyMessage } from './StrategyMessage';
 import { StrategyEmptyState } from './StrategyEmptyState';
+import { SkillOutputCard } from './SkillOutputCard';
+import type { WorkflowDef } from './workflows/workflowRegistry';
 
 type IntelActivation = {
   head: string;
