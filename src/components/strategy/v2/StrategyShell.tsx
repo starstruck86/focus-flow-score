@@ -153,6 +153,7 @@ export function StrategyShell() {
     updateThread,
     upsertThreadLocal,
     createThread,
+    createThreadWithOpts,
   } = useStrategyThreads();
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const chipRef = useRef<HTMLButtonElement>(null);
@@ -1449,6 +1450,14 @@ export function StrategyShell() {
               const key = lastSurfaceKeyRef.current;
               if (key) setSurfaceThread(key, null);
               setActiveThreadId(null);
+            }}
+            onCreateThreadForAccount={async (accountId, title) => {
+              await createThreadWithOpts({
+                title: title || 'New project thread',
+                lane: 'research',
+                threadType: 'freeform',
+                linkedAccountId: accountId,
+              });
             }}
           />
         )}

@@ -23,6 +23,7 @@ import {
   listProjectSettings,
   listProjectSignals,
   listProjectMemory,
+  listSignalCountsByAccount,
   upsertProjectSettings,
   UNCATEGORIZED_FAMILY,
   type ProjectSummary,
@@ -35,9 +36,10 @@ interface Props {
   threads: StrategyThread[];
   activeThreadId: string | null;
   onSelectThread: (id: string) => void;
+  onCreateThreadForAccount?: (accountId: string, title?: string) => Promise<void>;
 }
 
-export function ProjectsPanel({ threads, activeThreadId, onSelectThread }: Props) {
+export function ProjectsPanel({ threads, activeThreadId, onSelectThread, onCreateThreadForAccount }: Props) {
   const { user } = useAuth();
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -53,21 +55,34 @@ export function ProjectsPanel({ threads, activeThreadId, onSelectThread }: Props
     enabled: !!user?.id,
   });
 
-  // Count threads per family — done once, reused by index rows.
-  const threadCountByFamily = useMemo(() => {
-    const map = new Map<string, number>();
-    if (projects.length === 0) return map;
-    // Build account → family lookup.
+  const { data: signalCountByAccount } = useQuery({
+    queryKey: ['account-projects-signal-counts', user?.id],
+    queryFn: () => listSignalCountsByAccount(user!.id),
+    enabled: !!user?.id,
+  });
+
+  // Count threads + signals per family — done once, reused by index rows.
+  const { threadCountByFamily, signalCountByFamily } = useMemo(() => {
+    const threadMap = new Map<string, number>();
+    const signalMap = new Map<string, number>();
+    if (projects.length === 0) return { threadCountByFamily: threadMap, signalCountByFamily: signalMap };
     const acctFamily = new Map<string, string>();
     for (const p of projects) for (const m of p.members) acctFamily.set(m.id, p.familyKey);
     for (const t of threads) {
       if (!t.linked_account_id) continue;
       const fam = acctFamily.get(t.linked_account_id);
       if (!fam) continue;
-      map.set(fam, (map.get(fam) ?? 0) + 1);
+      threadMap.set(fam, (threadMap.get(fam) ?? 0) + 1);
     }
-    return map;
-  }, [threads, projects]);
+    if (signalCountByAccount) {
+      for (const [acctId, count] of signalCountByAccount.entries()) {
+        const fam = acctFamily.get(acctId);
+        if (!fam) continue;
+        signalMap.set(fam, (signalMap.get(fam) ?? 0) + count);
+      }
+    }
+    return { threadCountByFamily: threadMap, signalCountByFamily: signalMap };
+  }, [threads, projects, signalCountByAccount]);
 
   if (isLoading) {
     return (
@@ -92,6 +107,7 @@ export function ProjectsPanel({ threads, activeThreadId, onSelectThread }: Props
         onSelectThread={onSelectThread}
         onBack={() => setSelected(null)}
         initialInstructions={settingsMap?.get(selected)?.custom_instructions ?? ''}
+        onCreateThreadForAccount={onCreateThreadForAccount}
       />
     );
   }
@@ -100,6 +116,7 @@ export function ProjectsPanel({ threads, activeThreadId, onSelectThread }: Props
     <ProjectsIndex
       projects={projects}
       threadCountByFamily={threadCountByFamily}
+      signalCountByFamily={signalCountByFamily}
       pinnedFamilies={new Set(Array.from(settingsMap?.values() ?? []).filter((s) => s.pinned).map((s) => s.account_family))}
       onOpen={setSelected}
     />
@@ -109,10 +126,11 @@ export function ProjectsPanel({ threads, activeThreadId, onSelectThread }: Props
 // ─────────────── Index ───────────────
 
 function ProjectsIndex({
-  projects, threadCountByFamily, pinnedFamilies, onOpen,
+  projects, threadCountByFamily, signalCountByFamily, pinnedFamilies, onOpen,
 }: {
   projects: ProjectSummary[];
   threadCountByFamily: Map<string, number>;
+  signalCountByFamily: Map<string, number>;
   pinnedFamilies: Set<string>;
   onOpen: (familyKey: string) => void;
 }) {
@@ -155,6 +173,7 @@ function ProjectsIndex({
       <ul className="space-y-1.5">
         {sorted.map((p) => {
           const threadCount = threadCountByFamily.get(p.familyKey) ?? 0;
+          const signalCount = signalCountByFamily.get(p.familyKey) ?? 0;
           return (
             <li key={p.familyKey}>
               <button
@@ -184,6 +203,8 @@ function ProjectsIndex({
                     <span>{p.members.length} acct{p.members.length === 1 ? '' : 's'}</span>
                     <span aria-hidden style={{ opacity: 0.5 }}>·</span>
                     <span>{threadCount} thread{threadCount === 1 ? '' : 's'}</span>
+                    <span aria-hidden style={{ opacity: 0.5 }}>·</span>
+                    <span>{signalCount} signal{signalCount === 1 ? '' : 's'}</span>
                   </div>
                 </div>
                 <ArrowRight
@@ -202,7 +223,7 @@ function ProjectsIndex({
 // ─────────────── Detail ───────────────
 
 function ProjectDetail({
-  project, threads, activeThreadId, onSelectThread, onBack, initialInstructions,
+  project, threads, activeThreadId, onSelectThread, onBack, initialInstructions, onCreateThreadForAccount,
 }: {
   project: ProjectSummary;
   threads: StrategyThread[];
@@ -210,6 +231,7 @@ function ProjectDetail({
   onSelectThread: (id: string) => void;
   onBack: () => void;
   initialInstructions: string;
+  onCreateThreadForAccount?: (accountId: string, title?: string) => Promise<void>;
 }) {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -286,7 +308,30 @@ function ProjectDetail({
       </Section>
 
       {/* Threads */}
-      <Section icon={FolderKanban} title={`Threads (${projectThreads.length})`}>
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
+            <FolderKanban className="h-3 w-3" style={{ color: 'hsl(var(--sv-clay))' }} />
+            <h3 className="text-[11px] font-medium uppercase tracking-[0.09em]" style={{ color: 'hsl(var(--sv-muted))' }}>
+              Threads ({projectThreads.length})
+            </h3>
+          </div>
+          {onCreateThreadForAccount && project.roots[0] && (
+            <button
+              type="button"
+              onClick={() => {
+                const root = project.roots[0];
+                void onCreateThreadForAccount(root.id, `${project.label} — new thread`);
+              }}
+              className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-[4px] sv-hover-bg"
+              style={{ color: 'hsl(var(--sv-clay))' }}
+              data-testid={`project-new-thread-${project.familyKey}`}
+              title={`New thread linked to ${project.roots[0].name}`}
+            >
+              <Plus className="h-3 w-3" /> New thread
+            </button>
+          )}
+        </div>
         {projectThreads.length === 0 ? (
           <EmptyHint text="No Strategy threads linked to these accounts yet." />
         ) : (
@@ -324,7 +369,7 @@ function ProjectDetail({
             })}
           </ul>
         )}
-      </Section>
+      </div>
 
       {/* Signals */}
       <Section icon={Radio} title={`Recent signals (${signals.length})`}>

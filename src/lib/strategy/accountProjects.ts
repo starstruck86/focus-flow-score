@@ -90,6 +90,48 @@ export async function listProjects(userId: string): Promise<ProjectSummary[]> {
   return projects;
 }
 
+/** Members of a given family (active accounts only). */
+export async function getProjectMembers(
+  userId: string,
+  familyKey: string,
+): Promise<ProjectMemberAccount[]> {
+  const all = await listProjects(userId);
+  const p = all.find((x) => x.familyKey === familyKey);
+  return p ? p.members : [];
+}
+
+/** Settings for a single project (or null if none persisted yet). */
+export async function getProjectSettings(
+  userId: string,
+  familyKey: string,
+): Promise<ProjectSettings | null> {
+  const { data, error } = await supabase
+    .from('account_project_settings')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('account_family', familyKey)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as ProjectSettings | null) ?? null;
+}
+
+/** Signal counts grouped by linked_account_id — used by the index. */
+export async function listSignalCountsByAccount(
+  userId: string,
+): Promise<Map<string, number>> {
+  const { data, error } = await supabase
+    .from('account_signals')
+    .select('linked_account_id')
+    .eq('user_id', userId);
+  if (error) throw error;
+  const map = new Map<string, number>();
+  for (const row of (data ?? []) as { linked_account_id: string | null }[]) {
+    if (!row.linked_account_id) continue;
+    map.set(row.linked_account_id, (map.get(row.linked_account_id) ?? 0) + 1);
+  }
+  return map;
+}
+
 /** Fetch settings rows for the user; map keyed by family. */
 export async function listProjectSettings(
   userId: string,

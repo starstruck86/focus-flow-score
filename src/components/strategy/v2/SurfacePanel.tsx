@@ -126,6 +126,8 @@ interface Props {
   hasActiveThread?: boolean;
   /** Clear this surface's active thread (back to the empty/launch state). */
   onNewThreadInSurface?: () => void;
+  /** Create a new thread pre-linked to an account (used by Projects surface). */
+  onCreateThreadForAccount?: (accountId: string, title?: string) => Promise<void>;
 }
 
 const SURFACE_HEADER: Record<StrategySurfaceKey, {
@@ -175,6 +177,7 @@ export function SurfacePanel({
   pillsVersion, onAddPill, onEditPill,
   runningThreadIds, artifactThreadIds,
   hasActiveThread, onNewThreadInSurface,
+  onCreateThreadForAccount,
 }: Props) {
   const meta = SURFACE_HEADER[surface];
   const HeaderIcon = meta.icon;
@@ -486,6 +489,7 @@ export function SurfacePanel({
               threads={threads}
               activeThreadId={activeThreadId}
               onSelectThread={onSelectThread}
+              onCreateThreadForAccount={onCreateThreadForAccount}
             />
           )}
 
