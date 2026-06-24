@@ -177,6 +177,7 @@ export function SurfacePanel({
   pillsVersion, onAddPill, onEditPill,
   runningThreadIds, artifactThreadIds,
   hasActiveThread, onNewThreadInSurface,
+  onCreateThreadForAccount,
 }: Props) {
   const meta = SURFACE_HEADER[surface];
   const HeaderIcon = meta.icon;
