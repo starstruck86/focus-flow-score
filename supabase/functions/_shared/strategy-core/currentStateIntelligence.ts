@@ -95,8 +95,6 @@ export interface CurrentStateIntelligence {
     browse_or_research_experience?: string;
     purchase_or_conversion_experience?: string;
     post_purchase_experience?: string;
-    loyalty_or_membership_experience?: string;
-    subscription_or_replenishment_model?: string;
     mobile_app_or_logged_in_experience?: string;
     confidence: ConfidenceLevel;
     unknowns: string[];
@@ -104,11 +102,8 @@ export interface CurrentStateIntelligence {
   marketing_motion: {
     likely_new_customer_motion?: string;
     likely_repeat_customer_motion?: string;
-    likely_churn_or_lapsed_customer_motion?: string;
     promotional_strategy?: string;
-    lifecycle_triggers?: string[];
     channels_likely_used?: string[];
-    personalization_maturity?: string;
     confidence: ConfidenceLevel;
     unknowns: string[];
   };
@@ -121,15 +116,34 @@ export interface CurrentStateIntelligence {
     confidence: ConfidenceLevel;
     unknowns: string[];
   };
-  lifecycle_opportunity_map: {
-    acquisition?: string[];
-    activation?: string[];
-    repeat_purchase?: string[];
-    cross_sell?: string[];
-    loyalty?: string[];
-    winback?: string[];
-    churn_prevention?: string[];
-    customer_data?: string[];
+  /**
+   * Branch-specific posture sections. These replace the legacy
+   * lifecycle/CX opportunity map with a mobile-app + attribution
+   * frame: where the account stands on Branch's product surface area
+   * and where the expansion whitespace is.
+   */
+  app_posture: {
+    mobile_app_strategy: string;
+    deep_linking_maturity: string;
+    web_to_app_setup: string;
+    deferred_deep_linking: string;
+    confidence: ConfidenceLevel;
+    unknowns: string[];
+  };
+  measurement_motion: {
+    current_mmp: string;
+    adjust_appsflyer_setup: string;
+    attribution_gaps: string;
+    mmp_consolidation_risk: string;
+    confidence: ConfidenceLevel;
+    unknowns: string[];
+  };
+  branch_expansion_map: {
+    deep_linking_whitespace: string;
+    universal_ads_whitespace: string;
+    web_to_app_whitespace: string;
+    email_sms_whitespace: string;
+    advanced_products_whitespace: string;
   };
   current_state_thesis: {
     summary: string;
