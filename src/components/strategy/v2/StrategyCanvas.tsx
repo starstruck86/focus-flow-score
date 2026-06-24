@@ -134,7 +134,7 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
             </div>
           );
         })}
-        {lastIntelActivation && (
+        {isSending && lastIntelActivation && (
           <IntelActivationBadge activation={lastIntelActivation} />
         )}
         {isSending && (
