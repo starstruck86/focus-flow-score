@@ -298,10 +298,11 @@ const REFINE: WorkspaceContract = {
   cognitivePosture:
     "Editorial precision. Edit, don't replace. Default action is reduction, not expansion. Variants are tonal/structural levers on the same underlying intent — never broad ideation.",
   useCases: [
-    "Tighten a QBR narrative that's too long",
+    "Tighten a QBR narrative that buries the lede",
     "Sharpen the open of a discovery call script",
-    "Tighten a web-to-app business case email",
-    "Elevate a LinkedIn post about mobile attribution",
+    "Tighten a web-to-app business case for an exec audience",
+    "Make a LinkedIn post about mobile attribution more memorable",
+    "Sharpen a competitive displacement email without losing the edge",
     "Produce a tonal variant (Shorter, Sharper, Warmer, More executive, More direct) of the same draft",
   ],
   nonGoals: [
