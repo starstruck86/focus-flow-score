@@ -26,6 +26,14 @@ interface Account {
   tier: string | null;
   last_touch_date: string | null;
   next_step: string | null;
+  notes: string | null;
+}
+
+function extractExpansionAngle(notes: string | null): string | null {
+  if (!notes) return null;
+  const sentences = notes.split(/(?<=[.!?])\s+/);
+  const hit = sentences.find(s => /expan/i.test(s));
+  return hit ? hit.slice(0, 120).replace(/^[^:]+:\s*/, '').trim() : null;
 }
 
 function inferDimensions(industry: string | null, goal: string): [string, string] {
@@ -84,13 +92,14 @@ export default function MeetingMode() {
   const [coaching, setCoaching] = useState('');
 
   const account = useMemo(() => accounts.find(a => a.id === accountId) || null, [accounts, accountId]);
+  const expansionAngle = account ? extractExpansionAngle(account.notes) : null;
 
   // Fetch Branch accounts on mount (non-blocking)
   useEffect(() => {
     if (!user) return;
     (async () => {
       const { data } = await fromActiveAccounts()
-        .select('id, name, industry, account_status, tier, last_touch_date, next_step')
+        .select('id, name, industry, account_status, tier, last_touch_date, next_step, notes')
         .eq('user_id', user.id)
         .limit(50);
       const list = ((data ?? []) as Account[]).sort((a, b) => {
@@ -103,6 +112,8 @@ export default function MeetingMode() {
 
   const loadKIs = async () => {
     if (!user || !account) return;
+    try { sessionStorage.setItem('meeting_mode_goal', goal); } catch {}
+    try { sessionStorage.setItem('meeting_mode_account_id', accountId); } catch {}
     setLoadingKis(true);
     setPhase('kis');
     const [d1, d2] = inferDimensions(account.industry, goal);
@@ -252,6 +263,11 @@ export default function MeetingMode() {
                 {account.next_step && (
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     <span className="font-semibold">Next step:</span> {account.next_step}
+                  </p>
+                )}
+                {expansionAngle && (
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    <span className="font-semibold">Expansion angle:</span> {expansionAngle}
                   </p>
                 )}
               </Card>
@@ -415,8 +431,18 @@ export default function MeetingMode() {
               >
                 Run another warm-up rep
               </Button>
-              <Button onClick={() => navigate('/outreach')} className="w-full h-12 text-base">
-                Done — back to territory
+              <Button
+                onClick={() => navigate(`/post-call?accountId=${accountId}`)}
+                className="w-full h-12 text-base"
+              >
+                Log This Call →
+              </Button>
+              <Button
+                onClick={() => navigate('/outreach')}
+                variant="outline"
+                className="w-full h-12 text-base"
+              >
+                Back to Territory
               </Button>
             </div>
           </div>

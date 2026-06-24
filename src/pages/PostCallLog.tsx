@@ -39,7 +39,17 @@ export default function PostCallLog() {
   const [expansionText, setExpansionText] = useState('');
   const [nextStep, setNextStep] = useState('');
   const [nextStepDate, setNextStepDate] = useState(plusDays(7));
-  const [suggestingNextStep, setSuggestingNextStep] = useState(false);
+  const [queueTranscript, setQueueTranscript] = useState(false);
+  const [meetingGoal] = useState<string | null>(() => {
+    try {
+      const savedAccountId = sessionStorage.getItem('meeting_mode_account_id');
+      const urlAccountId = new URLSearchParams(window.location.search).get('accountId');
+      if (savedAccountId && urlAccountId && savedAccountId === urlAccountId) {
+        return sessionStorage.getItem('meeting_mode_goal');
+      }
+      return null;
+    } catch { return null; }
+  });
   const [playOn, setPlayOn] = useState(false);
   const [playTitle, setPlayTitle] = useState('');
   const [playOther, setPlayOther] = useState('');
@@ -79,35 +89,26 @@ export default function PostCallLog() {
 
   const canSubmit = accountId && summary.trim().length > 0 && !submitting;
 
-  const suggestNextStep = async () => {
+  const suggestNextStep = () => {
     if (!summary.trim()) return;
-    setSuggestingNextStep(true);
-    try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 150,
-          messages: [{
-            role: 'user',
-            content: `Based on this sales call summary, suggest ONE specific next step (10-15 words max, action + deadline):
-
-Call summary: "${summary}"
-Account: ${account?.name ?? 'unknown'}
-
-Respond with ONLY the next step text, nothing else.`,
-          }],
-        }),
-      });
-      const data = await res.json();
-      const suggestion = data.content?.[0]?.text?.trim();
-      if (suggestion) setNextStep(suggestion);
-    } catch (e) {
-      console.error('Next step suggestion failed', e);
-    } finally {
-      setSuggestingNextStep(false);
+    const s = summary.toLowerCase();
+    let suggestion = '';
+    if (/send|email|deck|proposal|follow.?up/.test(s)) {
+      suggestion = `Send follow-up email to ${contactName.trim() || account?.name || 'contact'} by ${plusDays(3)}`;
+    } else if (/intro|meeting|connect|schedule|calendar/.test(s)) {
+      suggestion = `Schedule next meeting with ${contactName.trim() || account?.name || 'contact'} — confirm agenda`;
+    } else if (/champion|stakeholder|exec|vp|cmo|cfo/.test(s)) {
+      suggestion = `Map stakeholder landscape — identify exec sponsor and build multi-thread plan`;
+    } else if (/expand|whitespace|product|new use|opportunity/.test(s)) {
+      suggestion = `Draft expansion proposal for ${account?.name || 'account'} — include business case`;
+    } else if (/adjust|appsflyer|compet|switch|mmp/.test(s)) {
+      suggestion = `Prepare competitive displacement brief for ${account?.name || 'account'} — Branch vs incumbent`;
+    } else if (/qbr|review|usage|down|metric/.test(s)) {
+      suggestion = `Prep QBR narrative for ${account?.name || 'account'} — pull usage data and draft recovery plan`;
+    } else {
+      suggestion = `Follow up with ${contactName.trim() || account?.name || 'contact'} — confirm next step and timeline`;
     }
+    setNextStep(suggestion);
   };
 
   const handleSubmit = async () => {
@@ -131,6 +132,7 @@ Respond with ONLY the next step text, nothing else.`,
       next_step_date: nextStep.trim() ? nextStepDate : null,
       branch_play_used: playOn,
       branch_ki_title: finalPlayTitle,
+      queue_transcript: queueTranscript,
     };
 
     try {
@@ -245,6 +247,12 @@ Respond with ONLY the next step text, nothing else.`,
           </Select>
         </div>
 
+        {meetingGoal && (
+          <div className="rounded-lg bg-muted/60 border border-border/40 px-3 py-2 text-xs text-muted-foreground">
+            <span className="font-semibold">Meeting goal:</span> {meetingGoal}
+          </div>
+        )}
+
         {/* Contact name */}
         <div className="space-y-1.5">
           <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contact Name</Label>
@@ -291,10 +299,10 @@ Respond with ONLY the next step text, nothing else.`,
             <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Next Step</Label>
             <button
               onClick={suggestNextStep}
-              disabled={!summary.trim() || suggestingNextStep}
+              disabled={!summary.trim()}
               className="text-[11px] text-primary hover:text-primary/80 disabled:opacity-40 flex items-center gap-1"
             >
-              {suggestingNextStep ? <Loader2 className="h-3 w-3 animate-spin" /> : '✨'} Suggest
+              ✨ Suggest
             </button>
           </div>
           <Input
@@ -340,6 +348,17 @@ Respond with ONLY the next step text, nothing else.`,
               )}
             </>
           )}
+        </div>
+
+        {/* Queue transcript */}
+        <div className="space-y-3 rounded-xl border border-border/60 p-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-sm font-semibold">Queue for transcript grading?</label>
+              <p className="text-xs text-muted-foreground mt-0.5">Grade this call in Coach after logging</p>
+            </div>
+            <Switch checked={queueTranscript} onCheckedChange={setQueueTranscript} />
+          </div>
         </div>
       </div>
 
