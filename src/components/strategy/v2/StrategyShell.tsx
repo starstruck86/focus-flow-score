@@ -28,6 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useStrategyThreads } from '@/hooks/strategy/useStrategyThreads';
+import { useTerritoryProfile } from '@/hooks/useTerritoryProfile';
 import { useStrategyMessages } from '@/hooks/strategy/useStrategyMessages';
 import { useStrategyMemory } from '@/hooks/strategy/useStrategyMemory';
 import { useStrategyUploads } from '@/hooks/strategy/useStrategyUploads';
@@ -209,30 +210,10 @@ export function StrategyShell() {
   const [pendingResourceIds, setPendingResourceIds] = useState<string[]>([]);
 
   // Territory profile — always-on base context for every Strategy send.
-  // Loaded once per session; injected into globalInstructions so the model
-  // always knows who the AE is, their quota, motion, and territory.
-  const [territoryProfile, setTerritoryProfile] = useState<{
-    name: string;
-    role: string;
-    company: string;
-    quota_amount: number;
-    motion: string;
-    territory_description: string;
-    company_context: string;
-    ki_library_summary: string;
-  } | null>(null);
+  // Single formatter lives in useTerritoryProfile.buildContextString() and
+  // is shared with Territory Copilot so both surfaces stay consistent.
+  const { buildContextString: buildTerritoryContextString } = useTerritoryProfile();
 
-  useEffect(() => {
-    if (!user?.id) return;
-    (supabase as any)
-      .from('territory_profile')
-      .select('name, role, company, quota_amount, motion, territory_description, company_context, ki_library_summary')
-      .eq('user_id', user.id)
-      .maybeSingle()
-      .then(({ data }: { data: any }) => {
-        if (data) setTerritoryProfile(data);
-      });
-  }, [user?.id]);
 
   // Last intelligence activation — shown as a badge before assistant response
   const [lastIntelActivation, setLastIntelActivation] = useState<{
