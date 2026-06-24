@@ -228,6 +228,59 @@ export function WorkflowFormSheet({ workflow, onClose, onRun, onEditCustom, link
             );
           })}
 
+          {/* Knowledge preview — shows what this skill will use */}
+          <div
+            className="rounded-[8px] px-3 py-2.5 space-y-2"
+            style={{
+              border: '1px solid hsl(var(--sv-hairline))',
+              background: 'hsl(var(--sv-hover) / 0.4)',
+            }}
+          >
+            <p
+              className="text-[10.5px] font-semibold uppercase tracking-[0.08em]"
+              style={{ color: 'hsl(var(--sv-muted))' }}
+            >
+              Knowledge this will draw from
+            </p>
+            <div className="space-y-1">
+              {getWorkflowKnowledgeSources(workflow).map((source) => (
+                <div
+                  key={source.label}
+                  className="flex items-center justify-between text-[12px]"
+                  style={{ color: 'hsl(var(--sv-ink) / 0.8)' }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span>{source.icon}</span>
+                    <span>{source.label}</span>
+                  </span>
+                  <span style={{ color: 'hsl(var(--sv-muted))' }}>{source.count}</span>
+                </div>
+              ))}
+              {linkedAccountName && (
+                <div
+                  className="flex items-center justify-between text-[12px]"
+                  style={{ color: 'hsl(var(--sv-clay))' }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span>📍</span>
+                    <span>{linkedAccountName} context</span>
+                  </span>
+                  <span>loaded</span>
+                </div>
+              )}
+              <div
+                className="flex items-center justify-between text-[12px]"
+                style={{ color: 'hsl(var(--sv-clay) / 0.8)' }}
+              >
+                <span className="flex items-center gap-1.5">
+                  <span>🗓</span>
+                  <span>Territory profile</span>
+                </span>
+                <span>always loaded</span>
+              </div>
+            </div>
+          </div>
+
           {/* Instruction (hidden by default; expand to view/preview) */}
           {workflow.instruction && (
             <details className="rounded-[8px]" style={{ border: '1px dashed hsl(var(--sv-hairline))' }}>
