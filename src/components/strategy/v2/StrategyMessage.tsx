@@ -14,7 +14,7 @@ import remarkGfm from 'remark-gfm';
 import type { StrategyMessage as StrategyMessageT } from '@/types/strategy';
 import { MessageActions } from './MessageActions';
 import type { StrategyGlobalInstructionsConfig } from '@/lib/strategy/strategyConfig';
-import type { Citation } from '@/lib/strategy/headClassifier';
+
 
 const DIMENSION_ICONS: Record<string, string> = {
   discovery: '🔍',
@@ -28,54 +28,10 @@ const DIMENSION_ICONS: Record<string, string> = {
   internal_prospecting: '📞',
 };
 
-// CitationChip removed — inline stateful chips inside ReactMarkdown caused
-// "Rendered more hooks than during the previous render". Citations are now
-// surfaced exclusively via SourcesPanel at the bottom of each assistant turn.
+// Citation rendering removed — server uses RESOURCE["title"] / KI["title"|id] format
+// natively in message text; no separate sources panel needed.
 
 
-function SourcesPanel({ citations }: { citations: Citation[] }) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <div className="mt-3 pt-2" style={{ borderTop: '1px solid hsl(var(--sv-hairline))' }}>
-      <button
-        type="button"
-        onClick={() => setExpanded((e) => !e)}
-        className="flex items-center gap-1.5 text-[11px]"
-        style={{ color: 'hsl(var(--sv-muted))' }}
-      >
-        <span>{expanded ? '▾' : '▸'}</span>
-        <span>Sources · {citations.length} knowledge items used</span>
-      </button>
-      {expanded && (
-        <ul className="mt-2 space-y-1.5">
-          {citations.map((c) => {
-            const icon = DIMENSION_ICONS[c.spider_dimension] ?? '📖';
-            return (
-              <li key={c.key} className="flex items-start gap-2 text-[12px]">
-                <span
-                  className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full mt-0.5"
-                  style={{
-                    background: 'hsl(var(--sv-clay) / 0.08)',
-                    color: 'hsl(var(--sv-clay))',
-                    fontFamily: 'var(--sv-sans)',
-                  }}
-                >
-                  {c.key}
-                </span>
-                <span style={{ color: 'hsl(var(--sv-ink) / 0.8)' }}>
-                  <span className="font-medium">{icon} {c.title}</span>
-                  <span className="ml-1" style={{ color: 'hsl(var(--sv-muted))' }}>
-                    — {c.tactic_summary.slice(0, 80)}…
-                  </span>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 
 /**
@@ -161,11 +117,8 @@ interface Props {
    *  for Strict Mode and other render overrides. We do NOT read
    *  getStrategyConfig() here; the parent owns the subscription. */
   strategyConfig?: StrategyGlobalInstructionsConfig;
-  /** Citation manifest — when present on assistant messages, [K1]/[K2]/…
-   *  tokens in the response render as inline citation chips and a Sources
-   *  panel appears beneath the message. */
-  citations?: Citation[] | null;
 }
+
 
 /** Strict text extractor — never renders raw provider/debug payloads. */
 function extractText(contentJson: any): string {
