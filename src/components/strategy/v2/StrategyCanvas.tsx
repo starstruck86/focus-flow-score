@@ -12,6 +12,8 @@ import type { StrategyGlobalInstructionsConfig } from '@/lib/strategy/strategyCo
 import type { Citation } from '@/lib/strategy/headClassifier';
 import { StrategyMessage } from './StrategyMessage';
 import { StrategyEmptyState } from './StrategyEmptyState';
+import { SkillOutputCard } from './SkillOutputCard';
+import type { WorkflowDef } from './workflows/workflowRegistry';
 
 type IntelActivation = {
   head: string;
@@ -38,7 +40,10 @@ interface Props {
   strategyConfig?: StrategyGlobalInstructionsConfig;
   /** Last intelligence activation — shown as a badge while assistant is responding. */
   lastIntelActivation?: IntelActivation | null;
+  /** When set, the most recent completed assistant message renders as a SkillOutputCard. */
+  lastSkillWorkflow?: WorkflowDef | null;
 }
+
 
 function IntelActivationBadge({ activation }: { activation: IntelActivation }) {
   const HEAD_ICONS: Record<string, string> = {
@@ -82,7 +87,7 @@ function IntelActivationBadge({ activation }: { activation: IntelActivation }) {
   );
 }
 
-export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState = false, onPickPrompt, onQuickAction, strategyConfig, lastIntelActivation }: Props) {
+export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState = false, onPickPrompt, onQuickAction, strategyConfig, lastIntelActivation, lastSkillWorkflow }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -115,25 +120,36 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
           const isLastAssistant =
             !isSending &&
             m.role === 'assistant' &&
-            isLastMsg &&
-            !!onQuickAction;
+            isLastMsg;
           // Attach citation manifest to the most recent assistant message
           // (both while streaming and after completion of that turn).
           const citationsForMsg =
             m.role === 'assistant' && isLastMsg && lastIntelActivation?.citations?.length
               ? lastIntelActivation.citations
               : null;
+          const renderAsSkill = isLastAssistant && !!lastSkillWorkflow;
+          const msgText = ((m.content_json as any)?.text ?? '') as string;
           return (
             <div key={m.id} style={{ marginTop: i === 0 ? 0 : 14 }}>
-              <StrategyMessage
-                message={m}
-                onQuickAction={isLastAssistant ? onQuickAction : undefined}
-                strategyConfig={strategyConfig}
-                citations={citationsForMsg}
-              />
+              {renderAsSkill && lastSkillWorkflow ? (
+                <SkillOutputCard
+                  text={msgText}
+                  label={lastSkillWorkflow.formTitle ?? lastSkillWorkflow.label}
+                  citations={citationsForMsg}
+                  onQuickAction={onQuickAction}
+                />
+              ) : (
+                <StrategyMessage
+                  message={m}
+                  onQuickAction={isLastAssistant && !!onQuickAction ? onQuickAction : undefined}
+                  strategyConfig={strategyConfig}
+                  citations={citationsForMsg}
+                />
+              )}
             </div>
           );
         })}
+
         {isSending && lastIntelActivation && (
           <IntelActivationBadge activation={lastIntelActivation} />
         )}

@@ -269,6 +269,11 @@ export function StrategyShell() {
   const [suggestedLinkAccount, setSuggestedLinkAccount] = useState<{ id: string; name: string } | null>(null);
   const territoryAccountsRef = useRef<Array<{ id: string; name: string }>>([]);
 
+  // Skill workflow output tracking — last assistant message from a skill run renders as a structured card
+  const [lastSkillWorkflow, setLastSkillWorkflow] = useState<WorkflowDef | null>(null);
+  const fromWorkflowRef = useRef(false);
+
+
 
   // ── Surface-switch swap (drafts + active thread) ─────────────────────────
   // When the user moves between workspaces, save the in-flight draft AND the
@@ -922,6 +927,13 @@ export function StrategyShell() {
 
   const handleSend = useCallback((text: string) => {
     if (pendingThreadId || isCreatingThread || isSending) return;
+    // Clear skill context on manual (non-workflow) sends so the structured
+    // card only renders for the response immediately following a skill run.
+    if (!fromWorkflowRef.current) {
+      setLastSkillWorkflow(null);
+    }
+    fromWorkflowRef.current = false;
+
     // The surface we're sending from. Each workspace owns its own thread —
     // sending stays in that workspace and binds the resulting thread to it.
     const sendingFrom = lastSurfaceKeyRef.current;
@@ -1280,7 +1292,14 @@ export function StrategyShell() {
     }
 
     // Default path: send compiled prompt as a chat message (unchanged).
-    handleSend(compiledPrompt);
+    fromWorkflowRef.current = true;
+    setLastSkillWorkflow(def ?? null);
+    const isStructured = def?.family === 'artifact' || def?.outputType === 'artifact';
+    const suffix = isStructured
+      ? '\n\nStructure your response with ## section headers for each major component. Examples: ## Context, ## Strategic Priorities, ## Discovery Questions, ## Positioning, ## Next Step. Each section should be 2-5 sentences — specific, concrete, and actionable.'
+      : '';
+    handleSend(compiledPrompt + suffix);
+
     requestAnimationFrame(() => composerRef.current?.focus());
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId, startStrategyJob, user, createThread]);
@@ -1540,6 +1559,7 @@ export function StrategyShell() {
             isSending={isSending}
             strategyConfig={strategyConfig}
             lastIntelActivation={lastIntelActivation}
+            lastSkillWorkflow={isSending ? null : lastSkillWorkflow}
             onPickPrompt={(prompt) => {
               const ta = composerRef.current as
                 (HTMLTextAreaElement & { insertText?: (t: string) => void })
