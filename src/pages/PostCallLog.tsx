@@ -89,35 +89,26 @@ export default function PostCallLog() {
 
   const canSubmit = accountId && summary.trim().length > 0 && !submitting;
 
-  const suggestNextStep = async () => {
+  const suggestNextStep = () => {
     if (!summary.trim()) return;
-    setSuggestingNextStep(true);
-    try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 150,
-          messages: [{
-            role: 'user',
-            content: `Based on this sales call summary, suggest ONE specific next step (10-15 words max, action + deadline):
-
-Call summary: "${summary}"
-Account: ${account?.name ?? 'unknown'}
-
-Respond with ONLY the next step text, nothing else.`,
-          }],
-        }),
-      });
-      const data = await res.json();
-      const suggestion = data.content?.[0]?.text?.trim();
-      if (suggestion) setNextStep(suggestion);
-    } catch (e) {
-      console.error('Next step suggestion failed', e);
-    } finally {
-      setSuggestingNextStep(false);
+    const s = summary.toLowerCase();
+    let suggestion = '';
+    if (/send|email|deck|proposal|follow.?up/.test(s)) {
+      suggestion = `Send follow-up email to ${contactName.trim() || account?.name || 'contact'} by ${plusDays(3)}`;
+    } else if (/intro|meeting|connect|schedule|calendar/.test(s)) {
+      suggestion = `Schedule next meeting with ${contactName.trim() || account?.name || 'contact'} — confirm agenda`;
+    } else if (/champion|stakeholder|exec|vp|cmo|cfo/.test(s)) {
+      suggestion = `Map stakeholder landscape — identify exec sponsor and build multi-thread plan`;
+    } else if (/expand|whitespace|product|new use|opportunity/.test(s)) {
+      suggestion = `Draft expansion proposal for ${account?.name || 'account'} — include business case`;
+    } else if (/adjust|appsflyer|compet|switch|mmp/.test(s)) {
+      suggestion = `Prepare competitive displacement brief for ${account?.name || 'account'} — Branch vs incumbent`;
+    } else if (/qbr|review|usage|down|metric/.test(s)) {
+      suggestion = `Prep QBR narrative for ${account?.name || 'account'} — pull usage data and draft recovery plan`;
+    } else {
+      suggestion = `Follow up with ${contactName.trim() || account?.name || 'contact'} — confirm next step and timeline`;
     }
+    setNextStep(suggestion);
   };
 
   const handleSubmit = async () => {
