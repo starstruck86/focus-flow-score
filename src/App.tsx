@@ -261,6 +261,7 @@ const App = () => (
                 <Route path="/competitive" element={<ProtectedPage routeName="Competitive Intel"><Suspense fallback={<LazyFallback />}><Competitive /></Suspense></ProtectedPage>} />
                 <Route path="/playbooks" element={<ProtectedPage routeName="Playbooks"><Suspense fallback={<LazyFallback />}><Playbooks /></Suspense></ProtectedPage>} />
                 <Route path="/signals" element={<ProtectedPage routeName="Signal Inbox"><Suspense fallback={<LazyFallback />}><SignalInbox /></Suspense></ProtectedPage>} />
+                <Route path="/org-tree" element={<ProtectedPage routeName="Account Org Tree"><Suspense fallback={<LazyFallback />}><OrgTree /></Suspense></ProtectedPage>} />
                 <Route path="/grind" element={
                   <ProtectedRoute>
                     <Suspense fallback={<LazyFallback />}>
