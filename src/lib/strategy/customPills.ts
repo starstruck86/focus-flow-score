@@ -151,9 +151,10 @@ export async function listCustomPillsForSurface(
 
 export async function upsertCustomPill(userId: string, pill: CustomPill): Promise<void> {
   if (!userId) throw new Error('upsertCustomPill: userId required');
+  const row = pillToRow(userId, pill) as never;
   const { error } = await supabase
     .from(TABLE)
-    .upsert(pillToRow(userId, pill), { onConflict: 'id' });
+    .upsert(row, { onConflict: 'id' });
   if (error) {
     console.error('[customPills] upsert failed', error);
     throw error;
