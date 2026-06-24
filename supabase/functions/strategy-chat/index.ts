@@ -5731,13 +5731,7 @@ async function buildChatSystemPrompt(args: {
     }),
   ]);
 
-  // NOTE (task 1.2): situation.playbookId is captured but not yet pinned
-  // into library.playbooks — playbook wiring lands in 1.2.
-  if (situation.playbookId) {
-    console.log(
-      `[situation-classifier] playbook_match id=${situation.playbookId} title=${situation.playbookTitle ?? ""} (wiring deferred to 1.2)`,
-    );
-  }
+
 
 
 
