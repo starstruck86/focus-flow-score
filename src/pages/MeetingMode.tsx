@@ -26,6 +26,14 @@ interface Account {
   tier: string | null;
   last_touch_date: string | null;
   next_step: string | null;
+  notes: string | null;
+}
+
+function extractExpansionAngle(notes: string | null): string | null {
+  if (!notes) return null;
+  const sentences = notes.split(/(?<=[.!?])\s+/);
+  const hit = sentences.find(s => /expan/i.test(s));
+  return hit ? hit.slice(0, 120).replace(/^[^:]+:\s*/, '').trim() : null;
 }
 
 function inferDimensions(industry: string | null, goal: string): [string, string] {
