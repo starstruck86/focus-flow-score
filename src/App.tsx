@@ -84,6 +84,7 @@ const KILibrary = lazy(() => import("./pages/KILibrary"));
 const Simulate = lazy(() => import("./pages/Simulate"));
 const Competitive = lazy(() => import("./pages/Competitive"));
 const Playbooks = lazy(() => import("./pages/Playbooks"));
+const SignalInbox = lazy(() => import("./pages/SignalInbox"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -258,6 +259,7 @@ const App = () => (
                 <Route path="/simulate" element={<ProtectedPage routeName="Conversation Simulator"><Suspense fallback={<LazyFallback />}><Simulate /></Suspense></ProtectedPage>} />
                 <Route path="/competitive" element={<ProtectedPage routeName="Competitive Intel"><Suspense fallback={<LazyFallback />}><Competitive /></Suspense></ProtectedPage>} />
                 <Route path="/playbooks" element={<ProtectedPage routeName="Playbooks"><Suspense fallback={<LazyFallback />}><Playbooks /></Suspense></ProtectedPage>} />
+                <Route path="/signals" element={<ProtectedPage routeName="Signal Inbox"><Suspense fallback={<LazyFallback />}><SignalInbox /></Suspense></ProtectedPage>} />
                 <Route path="/grind" element={
                   <ProtectedRoute>
                     <Suspense fallback={<LazyFallback />}>
