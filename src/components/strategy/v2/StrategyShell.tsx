@@ -695,6 +695,43 @@ export function StrategyShell() {
     navigate(`/opportunities/${id}`);
   }, [activeThread, navigate]);
 
+  // ST7 — Save the last assistant response as a custom skill pill.
+  const handleSaveSkill = useCallback(async (name: string, responseText: string) => {
+    setSaveSkillDialogOpen(false);
+    setSaveSkillCandidateText('');
+    const trimmedName = name.trim();
+    if (!user?.id || !trimmedName || !responseText) return;
+
+    const surface: StrategySurfaceKey = activeSurface ?? 'brainstorm';
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    const userPrompt = ((lastUserMsg?.content_json as any)?.text ?? '') as string;
+
+    const pill = emptyPillForSurface(surface);
+    pill.name = trimmedName;
+    pill.description = `Saved from chat · ${new Date().toLocaleDateString()}`;
+    pill.instruction = responseText.slice(0, 4000);
+    pill.promptTemplate = userPrompt.slice(0, 2000) || '[Describe your situation]';
+    pill.runMode = 'insert';
+    pill.outputType = 'chat';
+
+    try {
+      await upsertCustomPill(user.id, pill);
+      const surfaceLabel: Record<StrategySurfaceKey, string> = {
+        brainstorm: 'Brainstorm',
+        deep_research: 'Deep Research',
+        refine: 'Refine',
+        library: 'Library',
+        artifacts: 'Artifacts',
+        projects: 'Projects',
+        work: 'Work',
+      };
+      toast.success(`Skill "${trimmedName}" saved to ${surfaceLabel[surface]}`);
+      setPillsVersion((v) => v + 1);
+    } catch {
+      toast.error('Failed to save skill');
+    }
+  }, [user?.id, messages, activeSurface]);
+
   // Slash verb routing
   const handleSlashPick = useCallback((verb: SlashVerb) => {
     if (verb === 'library') {
