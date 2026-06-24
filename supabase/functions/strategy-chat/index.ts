@@ -6996,8 +6996,9 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
      const giLen = (() => {
        try {
          if (!globalInstructions) return 0;
-         if (typeof globalInstructions === "string") return globalInstructions.length;
+         if (typeof globalInstructions === "string") return (globalInstructions as string).length;
          return JSON.stringify(globalInstructions).length;
+
        } catch { return 0; }
      })();
      // Best-effort detection of "global SOP" presence in the assembled prompt.
