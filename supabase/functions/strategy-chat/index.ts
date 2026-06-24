@@ -75,7 +75,7 @@ import {
 import { routeRequest, type RoutingDecision } from "../_shared/strategy-router/index.ts";
 import { logRoutingDecision } from "../_shared/strategy-router/log.ts";
 import { classifySituation } from "../_shared/strategy-router/situationClassifier.ts";
-import { expandPromptIfTerse } from "../_shared/strategy-core/easyPrompt.ts";
+
 import {
   runCurrentStatePreflight,
   type CurrentStateResult,
