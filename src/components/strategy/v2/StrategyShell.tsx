@@ -348,7 +348,51 @@ export function StrategyShell() {
   const activeThreadIdRef = useRef<string | null>(threadId);
   useEffect(() => { activeThreadIdRef.current = threadId; }, [threadId]);
 
-  const { messages, isLoading, isSending, sendMessage } = useStrategyMessages(threadId);
+  // Auto memory capture — extract+save concrete facts after substantive
+  // assistant responses on account-linked threads. Silent, rate-limited.
+  const lastExtractionRef = useRef<Map<string, number>>(new Map());
+  const messagesRef = useRef<any[]>([]);
+  const triggerMemoryExtraction = useCallback(async (assistantText: string) => {
+    const accountId = activeThread?.linked_account_id;
+    const tid = activeThreadIdRef.current;
+    if (!user?.id || !accountId || !tid) return;
+    const now = Date.now();
+    const lastTime = lastExtractionRef.current.get(tid) ?? 0;
+    if (now - lastTime < 3 * 60 * 1000) return;
+    lastExtractionRef.current.set(tid, now);
+
+    const lastUserMsg = [...messagesRef.current].reverse().find((m) => m.role === 'user');
+    const userText = (lastUserMsg?.content_json as any)?.text ?? '';
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-strategy-memory`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session?.access_token ?? ''}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            accountId,
+            threadId: tid,
+            userMessage: userText,
+            assistantMessage: assistantText,
+          }),
+        },
+      );
+    } catch {
+      /* silent */
+    }
+  }, [user?.id, activeThread?.linked_account_id]);
+
+  const { messages, isLoading, isSending, sendMessage } = useStrategyMessages(threadId, {
+    onAssistantComplete: triggerMemoryExtraction,
+  });
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
 
   // Scan recent message text for playbook triggers
   useEffect(() => {
