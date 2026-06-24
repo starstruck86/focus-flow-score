@@ -150,7 +150,7 @@ export function SlashMenu({ query, anchorRect, onPick, onClose }: Props) {
                 }}
               >
                 <span className="text-[13px]" style={{ color: 'hsl(var(--sv-ink))', fontFamily: 'var(--sv-sans)' }}>
-                  {v.label}
+                  {getDisplayLabel(v)}
                 </span>
                 <span className="text-[11px] font-mono ml-3" style={{ color: 'hsl(var(--sv-muted))' }}>
                   {v.shortcut}
