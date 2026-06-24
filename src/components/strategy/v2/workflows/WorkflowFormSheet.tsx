@@ -24,6 +24,65 @@ import {
   compileWorkflowPrompt,
 } from './workflowRegistry';
 
+interface KnowledgeSource {
+  icon: string;
+  label: string;
+  count: string;
+}
+
+function getWorkflowKnowledgeSources(workflow: WorkflowDef): KnowledgeSource[] {
+  const id = workflow.id;
+  const family = workflow.family;
+
+  if (id.includes('expansion') || id.includes('qbr') || id.includes('footprint') || id.includes('expansion_readiness')) {
+    return [
+      { icon: '📈', label: 'Expansion Strategy KIs', count: '331' },
+      { icon: '🌿', label: 'Branch Product KIs', count: '233' },
+      { icon: '🔍', label: 'Discovery KIs', count: '5,046' },
+    ];
+  }
+  if (id.includes('competitive') || id.includes('branch_vs')) {
+    return [
+      { icon: '🎯', label: 'Competitive KIs', count: '177' },
+      { icon: '🌿', label: 'Branch Product KIs', count: '233' },
+    ];
+  }
+  if (id.includes('discovery') || id.includes('account_brief') || id.includes('research')) {
+    return [
+      { icon: '🔍', label: 'Discovery KIs', count: '5,046' },
+      { icon: '🏛️', label: 'Stakeholder KIs', count: '3,943' },
+      { icon: '📊', label: 'Sales Intelligence KIs', count: '3,346' },
+    ];
+  }
+  if (id.includes('multithread') || id.includes('stakeholder')) {
+    return [
+      { icon: '🏛️', label: 'Stakeholder Nav KIs', count: '3,943' },
+      { icon: '🔍', label: 'Discovery KIs', count: '5,046' },
+    ];
+  }
+  if (id.includes('email') || id.includes('followup') || id.includes('outreach') || id.includes('hooks') || id.includes('messaging')) {
+    return [
+      { icon: '💬', label: 'Messaging KIs', count: '3,835' },
+      { icon: '📞', label: 'Prospecting KIs', count: '4,101' },
+    ];
+  }
+  if (id.includes('deal') || id.includes('negotiate') || id.includes('close')) {
+    return [
+      { icon: '⚔️', label: 'Deal Control KIs', count: '3,346' },
+      { icon: '🛑', label: 'Objection Handling KIs', count: '1,033' },
+    ];
+  }
+  if (family === 'mode' || family === 'library') {
+    return [
+      { icon: '🔍', label: 'Sales Intelligence KIs', count: '16,282' },
+      { icon: '🌿', label: 'Branch Product KIs', count: '233' },
+    ];
+  }
+  return [
+    { icon: '🧠', label: 'Full Intelligence Library', count: '27,117' },
+  ];
+}
+
 interface Props {
   workflow: WorkflowDef | null;
   onClose: () => void;
@@ -37,9 +96,11 @@ interface Props {
   onRun: (compiledPrompt: string, def: WorkflowDef, values: Record<string, string>) => void;
   /** When provided, custom pills show an Edit button that calls this. */
   onEditCustom?: (customPillId: string) => void;
+  /** Linked thread account name — auto-prefills account/company fields. */
+  linkedAccountName?: string | null;
 }
 
-export function WorkflowFormSheet({ workflow, onClose, onRun, onEditCustom }: Props) {
+export function WorkflowFormSheet({ workflow, onClose, onRun, onEditCustom, linkedAccountName }: Props) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [showErrors, setShowErrors] = useState(false);
 
