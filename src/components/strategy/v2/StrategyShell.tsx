@@ -25,6 +25,7 @@
  * cannot drive) while still proving the post-upload product behavior.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useStrategyThreads } from '@/hooks/strategy/useStrategyThreads';
