@@ -98,6 +98,47 @@ export type Database = {
           },
         ]
       }
+      account_project_settings: {
+        Row: {
+          account_family: string
+          created_at: string
+          custom_instructions: string
+          id: string
+          order_index: number | null
+          pinned: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_family: string
+          created_at?: string
+          custom_instructions?: string
+          id?: string
+          order_index?: number | null
+          pinned?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_family?: string
+          created_at?: string
+          custom_instructions?: string
+          id?: string
+          order_index?: number | null
+          pinned?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_project_settings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       account_signals: {
         Row: {
           created_at: string | null

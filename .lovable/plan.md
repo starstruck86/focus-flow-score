@@ -1,185 +1,134 @@
 
-# Situation Classifier — Architecture Proposal (task 1.1)
+# ST5 — Real Account Projects (plan)
 
-## Findings from reading the code
+## 1. What "Projects" looks like today
 
-### 1. `supabase/functions/_shared/strategy-router/` (244 lines, 3 files)
-This is the **lane router** (direct / assisted / deep_work), not a retrieval router. It is unrelated to KI/playbook selection and should not be touched for this task.
+**Nav** (`StrategyNavSidebar.tsx`): `projects` is one of seven flat surfaces, icon `FolderKanban`, label "Projects".
 
-- **`signals.ts`** — pure `extractSignals()`: regex detection of `deep_intent`, `account_attached`, `length_long`, `strategic_keywords`, `is_utility`, `explicit_task`. No I/O.
-- **`index.ts`** — pure `routeRequest(signals, override)` → `{ lane, auto_promoted, promotion_offered, downgrade_warning, task_type, signals }`.
-- **`log.ts`** — best-effort insert into `routing_decisions`.
+**Shell** (`StrategyShell.tsx`): `activeSurface === 'projects'` only affects the composer placeholder ("Describe the project — Strategy will scope it…"). Per-surface drafts, pending-thread binding, threads sidebar etc. treat it like any other surface.
 
-### 2. `libraryRetrieval.ts` — `scopes` shape and scoring
-Signature: `retrieveLibraryContext(supabase, userId, inputs, { scopes: string[], maxKIs?, maxPlaybooks? })`.
+**SurfacePanel** (`SurfacePanel.tsx` lines 483-489, 1366-1474): when `surface === 'projects'`, renders `<ProjectsList>` which:
+- Reads `getPinnedThreadIds()` from `src/lib/strategy/pinnedThreads.ts` (localStorage key `sv-pinned-threads`).
+- Filters the in-memory `threads` array by pinned IDs.
+- Empty state: "Star a thread in the Work rail to promote it as a Project."
 
-For every active KI row and every playbook row, it builds `searchText` (concatenation of title, chapter, type, framework, summary, when_to_use, tags, etc.) and runs `scoreRow(searchText, scopes)`:
+So "Project" today literally means "a starred thread." There is no aggregation, no account family, no cross-thread memory, no custom instructions. It's a glorified bookmark folder.
 
-- For each scope keyword: whole-word regex hits × 2, plus +1 if substring-present but no whole-word hit.
-- Rows with `score > 0` are sorted by `score` desc, then `confidence_score` desc, then sliced to `maxKIs` / `maxPlaybooks`.
-- Returns `{ knowledgeItems, playbooks, contextString, counts }`. `contextString` is the formatted block injected into the prompt.
+**Data already in place** (confirmed in DB):
+- 7 accounts populated with `account_family` (Comcast/NBCUniversal: 4 rows; Disney: 2 rows; A&E Networks: 1 row standalone).
+- `parent_account_id` gives the hierarchy inside a family.
+- `strategy_threads.linked_account_id`, `account_signals.linked_account_id`, `account_strategy_memory` (per account) all exist.
 
-**Implication:** whatever the classifier emits must end up as a `string[]` to feed `scopes` unchanged — or we add a sidecar "pin playbook by ID" step after retrieval. No change to `libraryRetrieval.ts` itself is required for v1.
+## 2. Schema recommendation — do NOT create a new "projects" table
 
-### 3. Real `playbooks` table shape (your message used names that don't exist)
-There is no `name`, `description`, or `trigger_conditions` column. Actual fields used for classification:
-- `id (uuid)`, `title`, `problem_type` (`objection|competitive|usage|negotiation|champion|executive|…`), `when_to_use` (free text including "Signals: …"), `confidence_score`.
+Per Rule 2 (architecture before optimization): a `projects` table would duplicate what `account_family` already does. Every account already has a family string; a family IS the project. Adding a parallel table means:
+- Sync drift risk (a project row out of step with `accounts.account_family`).
+- Extra join on every read.
+- Manual step to "create a project" — friction with no upside, since the family is implicit.
 
-Today there are **7 playbooks** for user `9f11e308-…`: Adjust, AppsFlyer Incumbent, Engineering-can-build, QBR Usage Down 30%+, Champion Went Quiet, 30% Discount, Vendor Consolidation. Small enough to embed every playbook in full inside the classifier prompt.
+**Recommended:** treat each distinct `accounts.account_family` value (where `deleted_at IS NULL`) as a Project. Project id = the family string (or the root account's id — see Q1 below).
 
-### 4. `deriveLibraryScopes` (strategy-chat/index.ts:2871)
-```ts
-function deriveLibraryScopes(account, userContent): string[] {
-  scopes.push(account.industry, ...account.tags, ...account.tech_stack)
-  scopes.push(...first 8 words ≥4 chars from userContent)
-  return dedupe(non-empty)
-}
-```
-Exactly the "keyword soup" described.
+**One small new table is justified** — for per-project state that doesn't belong on `accounts`:
 
-### 5. Call chain (single insertion point)
-- `strategy-chat/index.ts:5612` — `const scopes = deriveLibraryScopes(pack.account, userContent);`
-- `5617` — `decideLibraryQuery(...)` (workspace contract gate)
-- `5645–5658` — `retrieveLibraryContext(supabase, userId, {}, { scopes, maxKIs: 8, maxPlaybooks: 4 })` inside the `Promise.all`.
-
-One call site, one swap.
-
----
-
-## Proposed Architecture
-
-### New file
-`supabase/functions/_shared/strategy-core/situationClassifier.ts`
-
-Lives in `strategy-core/` next to the other reasoning helpers — **not** under `strategy-router/`, which owns lane routing. The classifier is a retrieval-prep concern.
-
-### Function signature
-```ts
-export interface SituationClassification {
-  situation: string;                 // short label, e.g. "champion_went_quiet"
-  situation_summary: string;         // 1-sentence paraphrase of the rep's ask
-  playbook_id: string | null;        // exact UUID from embedded list, or null
-  playbook_title: string | null;
-  confidence: "high" | "medium" | "low";
-  scopes: string[];                  // 3–6 retrieval keywords for libraryRetrieval
-  reasoning: string;                 // 1–2 sentences (telemetry/debug)
-}
-
-export async function classifySituation(
-  supabase: any,
-  args: {
-    userId: string;
-    userContent: string;
-    account?: { name?; industry?; tech_stack?; tags? } | null;
-    opportunity?: { stage?; close_date?; amount? } | null;
-    recentTurns?: Array<{ role: string; content: string }>;
-  }
-): Promise<SituationClassification | null>;
-```
-Returns `null` on any failure (LLM error, bad JSON, hallucinated playbook id) so the caller can fall back.
-
-### DB query
-One read, top of the function:
 ```sql
-select id, title, problem_type, when_to_use, why_it_matters, confidence_score
-from playbooks
-where user_id = $1
-order by confidence_score desc nulls last
-limit 50;
+create table public.account_project_settings (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  account_family text not null,           -- the join key
+  custom_instructions text default '',    -- per-project guidance for Strategy
+  pinned boolean default false,           -- show in sidebar Projects list
+  order_index bigint,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique (user_id, account_family)
+);
 ```
-Cap of 50 future-proofs the prompt as the library grows; today returns 7.
+Plus the standard GRANT + RLS-by-user_id block we used for `strategy_custom_pills` in ST3. This holds *only* user-scoped settings; the project's *identity* lives on `accounts`.
 
-### Classifier prompt shape
-One LLM call via Lovable AI gateway (`google/gemini-2.5-flash`, JSON mode).
+## 3. How a Project resolves its member accounts
 
+Use **both** — but `account_family` is authoritative:
+
+- Primary: `WHERE account_family = $1 AND deleted_at IS NULL`. Simple, fast, indexed (add index if missing).
+- Secondary (display only): `parent_account_id` to render the tree inside the project (Comcast → NBCUniversal → Peacock/NBC News), reusing the M1 OrgTree component.
+
+Walking the parent tree at query time is unnecessary because the seed/import already normalizes `account_family` across the tree. If a future account is added without `account_family`, fall back to walking `parent_account_id` to the root and reading its family — done in one helper, not in every query.
+
+Project member account ids → fan out to:
+- Threads: `strategy_threads WHERE linked_account_id IN (...)`
+- Signals: `account_signals WHERE linked_account_id IN (...)`
+- Memory: `account_strategy_memory WHERE account_id IN (...)`
+
+## 4. UI shape
+
+Two-level: Projects index → Project detail, both inside the existing `SurfacePanel` `surface === 'projects'` slot. No new top-level routes.
+
+```text
+┌─ Projects (index) ─────────────────────────────────┐
+│  Comcast/NBCUniversal       4 accts · 12 threads   │
+│  Disney                     2 accts ·  3 threads   │
+│  A&E Networks               1 acct  ·  0 threads   │
+│  [+ uncategorized: 7 accounts without a family]   │
+└────────────────────────────────────────────────────┘
+
+Click a row →
+
+┌─ Project: Comcast/NBCUniversal ────────────────────┐
+│  ⟵ All projects                                    │
+│                                                     │
+│  Family tree (OrgTree mini)                         │
+│    Comcast → NBC Universal → Peacock, NBC News      │
+│                                                     │
+│  Threads (12)                  [+ New thread]       │
+│    • Peacock Q3 expansion · 2h                      │
+│    • NBC News deep link audit · yesterday           │
+│    …                                                │
+│                                                     │
+│  Recent signals (5)                                 │
+│    • NBCU earnings: streaming +18% · 3d             │
+│                                                     │
+│  Cross-account memory (3)                           │
+│    • Champion: Sarah K (NBCU) · last verified 1w    │
+│                                                     │
+│  Project instructions ▾  (editable, persisted)      │
+└────────────────────────────────────────────────────┘
 ```
-SYSTEM:
-You are a sales-situation triage classifier. Given a rep's question plus
-optional account/opportunity context, identify (a) the situation they
-are in, (b) which of the listed playbooks (if any) best matches, and
-(c) 3–6 high-signal retrieval keywords for knowledge lookup.
 
-Rules:
-- playbook_id MUST be one of the IDs in AVAILABLE PLAYBOOKS, or null.
-  Never invent an ID.
-- Prefer null over a weak match. confidence="low" requires playbook_id=null.
-- scopes are concepts / tactics / objection types, not the rep's literal
-  words. No account names, no stopwords.
+"+ New thread" creates a `strategy_thread` and pre-links it to the **root** account of the family (Comcast for Comcast/NBCUniversal). User can re-link to a child via the existing chip picker. Tagged with the existing per-surface `threadTags` mechanism so it falls back into the project's thread list.
 
-AVAILABLE PLAYBOOKS:
-- id: 9141ed29-0d01-47c8-b25d-a4dd0562cc4d
-  title: Adjust Comes Up
-  problem_type: competitive
-  when_to_use: Prospect mentions Adjust as current vendor or during
-    comparison. Signals: "we use Adjust", "how do you compare to Adjust", …
-- id: 300a7450-…
-  title: AppsFlyer Incumbent
-  …
-(every playbook rendered the same way)
+Per-project custom instructions are loaded with the project view and injected into the system prompt for any thread opened from inside that project (same pattern as ST3 pill `instruction` field).
 
-USER:
-REP QUESTION: "<userContent>"
-ACCOUNT: {name, industry, tech_stack}     ← only if present
-OPPORTUNITY: {stage, close_date, amount}  ← only if present
-RECENT TURNS: <last 2–3, truncated>       ← only if present
+## 5. Files touched & blast radius
 
-Respond as JSON matching SituationClassification.
-```
+**New (low risk):**
+- `supabase/migrations/<ts>_account_project_settings.sql` — single table per §2.
+- `src/lib/strategy/accountProjects.ts` — query helpers (`listProjects`, `getProjectMembers`, `getProjectSettings`, `upsertProjectSettings`). Mirrors `customPills.ts` pattern.
+- `src/components/strategy/v2/projects/ProjectsIndex.tsx` — index list.
+- `src/components/strategy/v2/projects/ProjectView.tsx` — detail panel (threads + signals + memory + instructions).
 
-### Returned JSON (concrete example)
-```json
-{
-  "situation": "champion_went_quiet",
-  "situation_summary": "Rep's champion at Headspace has not responded in 12 days during an active renewal.",
-  "playbook_id": "8dba0b4f-b6d4-455c-aa9e-d8c0cebd5394",
-  "playbook_title": "Champion Went Quiet (10+ Days)",
-  "confidence": "high",
-  "scopes": ["champion re-engagement", "ghosting", "renewal at risk", "multi-thread", "executive escalation"],
-  "reasoning": "Question explicitly describes a non-responsive champion past 10 days during a renewal — exact match for the Champion Went Quiet playbook."
-}
-```
+**Edited (contained risk):**
+- `src/components/strategy/v2/SurfacePanel.tsx` — replace the `surface === 'projects'` branch (lines 483-489) so it routes to ProjectsIndex / ProjectView based on a local `selectedFamily` state. The legacy `ProjectsList` + `ProjectsPlaceholder` (lines 1366-1474) get deleted.
+- `src/lib/strategy/pinnedThreads.ts` — leave it. It's still used for Work-rail starring; not coupled to Projects anymore.
 
-### How it replaces `deriveLibraryScopes`
-At `strategy-chat/index.ts:5612`:
-```ts
-// BEFORE
-const scopes = deriveLibraryScopes(pack.account, userContent);
+**Out of scope (do NOT touch this build):**
+- `StrategyShell.tsx` per-surface draft logic, pending-thread binding, threads-sidebar, trust state. The Projects surface is a pure read-mostly panel that sits inside the existing `SurfacePanel` slot. The composer placeholder line for `'projects'` (Shell:1565-1566) stays as-is. New-thread-from-project uses the existing `createThread` path with a pre-set `linked_account_id`.
+- `account_strategy_memory` schema. Read-only consumption.
+- `strategy_threads` schema. Read-only consumption.
 
-// AFTER
-const situation = await classifySituation(supabase, {
-  userId, userContent,
-  account: pack.account, opportunity: pack.opportunity,
-  recentTurns,
-}).catch(e => { console.warn("[situation-classifier] failed:", e.message); return null; });
+**Real blast radius:** confined to one branch in SurfacePanel + one new lib + one new table. The intricate Shell state machine is untouched because Projects already gets its own surface slot and we're not changing its lifecycle.
 
-const scopes = (situation?.scopes?.length ?? 0) > 0
-  ? situation!.scopes
-  : deriveLibraryScopes(pack.account, userContent); // fallback
-```
-`deriveLibraryScopes` stays in the file as the fallback — do not delete.
+## 6. Time recommendation (~2 build days before July 13)
 
-### How the result feeds `libraryRetrieval`
-Two effects, both surgical:
+**Yes, ship it — but in two phases:**
 
-1. **Scopes path (no signature change):** the classifier's `scopes` array is already a `string[]` and slots directly into the existing `retrieveLibraryContext({ scopes, … })` call. `libraryRetrieval.ts` is unchanged.
+**Phase A (1 day, before July 13):** table + index list + detail view (threads + family tree + signals). Cuts straight to the demo value — Corey can open NBCU and see everything Branch-adjacent in one view.
 
-2. **Playbook pin (additive, after retrieval returns):** when `situation.playbook_id` is non-null, fetch that playbook row directly and unshift it onto `library.playbooks`, de-duped, capped to `maxPlaybooks`. Then rebuild `library.contextString` so the pinned playbook appears first in the prompt block. Requires extracting a tiny `formatLibraryContext(kis, playbooks)` helper from `libraryRetrieval.ts` so the pin step can re-render without copy-pasting the template. This guarantees the classifier's chosen playbook is always present even if keyword scoring would have ranked it below the cap.
+**Phase B (post-ramp, 0.5 day):** custom instructions injection into the thread system prompt, cross-account memory rollup, "+ New thread pre-linked to family root." These touch the send path and deserve their own audit per Rule 1.
 
-### Telemetry
-One log line per call: `[situation-classifier] situation=<label> playbook=<title|null> confidence=<h/m/l> scopes=[…] latency_ms=<n>`. Persistence to a table is out of scope for 1.1.
+Phase A is safe in 2 days because the existing surface slot already exists and no Shell state machine code is modified. Phase B touches the strategy-chat pipeline and that area gets a separate audit pass.
 
-### Failure / cost guards
-- Skip classifier when `userContent.trim().length < 12` or when `__libraryDecision.shouldQuery === false` (workspace contract already suppressed retrieval).
-- If LLM errors, returns malformed JSON, or returns a `playbook_id` not in the embedded set → return `null` → caller falls back to `deriveLibraryScopes`. Chat never blocks.
-- Single LLM call, capped input (~2k tokens with 7 playbooks).
+## Open questions before code
 
----
-
-## Open questions before I build
-
-1. **Model:** default `google/gemini-2.5-flash` (cheap, fast, JSON mode). Confirm or override.
-2. **Recent turns:** include last 2–3 turns for continuity, or classify on the latest message only? I'd default to last 2.
-3. **KI pinning:** v1 stays scopes-only for KIs (the 27k-row KI library is too large to embed). Confirm we are *not* asking the classifier to pick KI IDs.
-4. **Logging surface:** stdout-only for v1, or also persist to a new column on `strategy_messages` for later analysis? I'd default to stdout-only.
-
-Approve or correct the architecture and I'll implement.
+1. **Project identity key**: `account_family` (text) or the root account id (uuid)? Text is simpler and matches existing data; uuid is more refactor-safe if you rename a family. Lean text for v1.
+2. **Accounts without an `account_family`** (currently 50+ rows): show them under "Uncategorized" or hide entirely? Lean show-uncategorized so nothing disappears.
+3. **Phase A scope confirmation**: ship without custom instructions and without "+ New thread" wiring into the system prompt — those wait for Phase B?
