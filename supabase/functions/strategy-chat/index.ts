@@ -5609,33 +5609,37 @@ async function buildChatSystemPrompt(args: {
   // retrieval AND the working thesis state for this account AND the
   // newly-added resource retrieval (exact / near-exact title + entity
   // links + category backstop).
-  // Situation classifier (task 1.1) — one LLM call that triages the
-  // rep's question, picks a specific playbook by ID, and emits
-  // situation-scoped retrieval keywords. Falls back to the legacy
-  // keyword-soup scopes on any failure so chat never blocks.
-  const __recentTurnsForClassifier = (pack.recentMessages || [])
-    .map((m: any) => ({
-      role: m.role === "assistant" ? "assistant" : "user",
-      content: String(m.text || m.content || ""),
-    }))
-    .filter((t) => t.content.trim().length > 0)
-    .slice(-2);
-  const situation: SituationClassification | null = await classifySituation(supabase, {
+  // Situation classifier (task 1.1) — one LLM call picks a specific
+  // playbook from the user's actual library and emits situation-scoped
+  // retrieval keywords. Non-blocking: any failure returns the
+  // "general" fallback and the call site degrades to the legacy
+  // keyword-soup deriveLibraryScopes path. Playbook wiring lives in
+  // task 1.2.
+  const __accountCtxParts: string[] = [];
+  if (pack.account?.name) __accountCtxParts.push(`Account: ${pack.account.name}`);
+  if (pack.account?.industry) __accountCtxParts.push(`Industry: ${pack.account.industry}`);
+  if (Array.isArray(pack.account?.tech_stack) && pack.account.tech_stack.length) {
+    __accountCtxParts.push(`Tech: ${pack.account.tech_stack.slice(0, 8).join(", ")}`);
+  }
+  if (Array.isArray(pack.account?.tags) && pack.account.tags.length) {
+    __accountCtxParts.push(`Tags: ${pack.account.tags.slice(0, 8).join(", ")}`);
+  }
+  if (pack.opportunity?.stage) __accountCtxParts.push(`Opp stage: ${pack.opportunity.stage}`);
+  const __classifierAccountContext = __accountCtxParts.join(" | ");
+
+  const situation = await classifySituation({
+    supabase,
     userId,
     userContent,
-    account: pack.account ?? null,
-    opportunity: pack.opportunity
-      ? {
-          stage: pack.opportunity.stage ?? null,
-          close_date: pack.opportunity.close_date ?? null,
-          amount: pack.opportunity.amount ?? null,
-        }
-      : null,
-    recentTurns: __recentTurnsForClassifier,
+    accountContext: __classifierAccountContext,
   });
+
+  // derivedScopes is the situation-scoped replacement for the legacy
+  // keyword soup. If the classifier returned "general" / no scopes
+  // (short ask, no playbooks, gateway failure), fall back transparently.
   const __legacyScopes = deriveLibraryScopes(pack.account, userContent);
-  const scopes = (situation?.scopes?.length ?? 0) > 0
-    ? situation!.scopes
+  const scopes = situation.derivedScopes.length > 0
+    ? situation.derivedScopes
     : __legacyScopes;
 
   // Library gate — preserves legacy behavior for `opportunistic`
