@@ -28,6 +28,7 @@ interface VerbDef {
 
 const VERBS: VerbDef[] = [
   { key: 'library',      label: 'Browse library',    shortcut: '/library' },
+  { key: 'save-as-skill', label: 'Save as skill',    shortcut: '/save-as-skill' },
   { key: 'upload',       label: 'Upload file',       shortcut: '⌘U' },
   { key: 'branch',       label: 'Branch thought',    shortcut: '⌘B' },
   { key: 'link',         label: 'Link to account',   shortcut: '⌘L' },
