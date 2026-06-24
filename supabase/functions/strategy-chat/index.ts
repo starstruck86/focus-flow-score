@@ -5773,7 +5773,7 @@ async function buildChatSystemPrompt(args: {
   );
 
   const retrievalDiagnostics = buildRetrievalDiagnostics({
-    userContent,
+    userContent: __effectiveUserContent,
     resources,
     retrievalError,
     intent,
