@@ -859,12 +859,31 @@ export function StrategyShell() {
         });
       };
       if (head && user?.id) {
-        buildHeadKIBlock(head, user.id).then(dispatch).catch(() => dispatch(''));
+        buildHeadKIBlock(head, user.id).then((block) => {
+          const kiCount = (block.match(/^-/gm) ?? []).length;
+          setLastIntelActivation({
+            head,
+            headLabel: HEAD_LABELS[head] ?? head,
+            kiCount,
+            accountLinked: !!activeThread?.linked_account_id,
+            accountName: entityName,
+            triggeredAt: Date.now(),
+          });
+          dispatch(block);
+        }).catch(() => dispatch(''));
       } else {
+        setLastIntelActivation({
+          head: 'sales',
+          headLabel: 'Sales',
+          kiCount: 0,
+          accountLinked: !!activeThread?.linked_account_id,
+          accountName: entityName,
+          triggeredAt: Date.now(),
+        });
         dispatch('');
       }
     }
-  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, territoryProfile]);
+  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, territoryProfile, activeThread?.linked_account_id, entityName]);
 
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {
     setLinkPickerOpen(false);
