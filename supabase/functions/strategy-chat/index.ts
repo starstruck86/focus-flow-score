@@ -5632,6 +5632,7 @@ async function buildChatSystemPrompt(args: {
           supabase,
           userId,
           accountId,
+          branchFootprint: (pack.branchFootprint ?? null) as any,
           retrievalRules: __retrievalRules,
         }).catch((e) => {
           console.warn(
