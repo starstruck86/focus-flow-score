@@ -11,9 +11,57 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Copy, Check } from 'lucide-react';
 import type { StrategyMessage as StrategyMessageT } from '@/types/strategy';
 import { MessageActions } from './MessageActions';
 import type { StrategyGlobalInstructionsConfig } from '@/lib/strategy/strategyConfig';
+
+function CopyButton({ getText }: { getText: () => string }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
+  const onClick = async () => {
+    const text = getText();
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* silent */
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={copied ? 'Copied' : 'Copy message'}
+      title={copied ? 'Copied' : 'Copy'}
+      className="strategy-copy-btn inline-flex items-center justify-center rounded-md p-1 transition-opacity"
+      style={{
+        color: 'hsl(var(--sv-muted))',
+        background: 'transparent',
+        border: 'none',
+        cursor: 'pointer',
+      }}
+    >
+      {copied ? <Check size={14} /> : <Copy size={14} />}
+    </button>
+  );
+}
 
 
 const DIMENSION_ICONS: Record<string, string> = {
@@ -165,7 +213,7 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
         data-message-id={message.id}
         data-message-role="assistant"
         data-strict-mode="true"
-        className="strategy-strict-message text-[15px] break-words"
+        className="strategy-strict-message group relative text-[15px] break-words"
         style={{
           fontFamily: 'var(--sv-serif)',
           color: 'hsl(var(--sv-ink))',
@@ -187,10 +235,14 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
         >
           {nextMove}
         </div>
+        <div className="mt-2 flex items-center gap-1 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+          <CopyButton getText={() => `${bullets.map((b) => `• ${b}`).join('\n')}\n\n${nextMove}`} />
+        </div>
         {onQuickAction && <MessageActions onAction={onQuickAction} />}
       </div>
     );
   }
+
 
   if (!text.trim()) {
     // Streaming placeholder — calm "Thinking…" label, no flashy animation.
@@ -282,7 +334,7 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
       data-strategy-selectable
       data-message-id={message.id}
       data-message-role="assistant"
-      className="text-[15px] break-words"
+      className="group relative text-[15px] break-words"
       style={{
         fontFamily: 'var(--sv-serif)',
         color: 'hsl(var(--sv-ink))',
@@ -344,6 +396,9 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
       >
         {assistantText}
       </ReactMarkdown>
+      <div className="mt-2 flex items-center gap-1 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+        <CopyButton getText={() => assistantText} />
+      </div>
       {onQuickAction && <MessageActions onAction={onQuickAction} />}
     </div>
   );
