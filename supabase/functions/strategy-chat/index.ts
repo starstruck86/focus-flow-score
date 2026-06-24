@@ -2622,10 +2622,43 @@ serve(async (req) => {
       })}`,
     );
 
+    // ── Provider health surface (fail-loud) ──────────────────
+    // Returns the cold-start PROVIDER_HEALTH object so the client can
+    // warn the user when the brain is degraded (e.g. a key didn't carry
+    // over after the Supabase migration). No thread required. Cheap:
+    // reads the already-computed const, makes no LLM call.
+    if (action === "health_check") {
+      const degraded =
+        !PROVIDER_HEALTH.anthropicDirect ||
+        !PROVIDER_HEALTH.openaiDirect ||
+        !PROVIDER_HEALTH.lovableGateway;
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          degraded,
+          providers: {
+            anthropic: PROVIDER_HEALTH.anthropicDirect,
+            openai: PROVIDER_HEALTH.openaiDirect,
+            openai_reason: PROVIDER_HEALTH.openaiDirectReason,
+            perplexity: PROVIDER_HEALTH.perplexityDirect,
+            lovable_gateway: PROVIDER_HEALTH.lovableGateway,
+          },
+          impact: {
+            situation_classifier: PROVIDER_HEALTH.lovableGateway ? "ok" : "degraded — falls back to keyword retrieval",
+            easy_prompt: PROVIDER_HEALTH.lovableGateway ? "ok" : "disabled — terse prompts not expanded",
+            chat_synthesis: PROVIDER_HEALTH.anthropicDirect ? "ok" : "degraded — Claude path unavailable",
+            chat_general: PROVIDER_HEALTH.openaiDirect ? "ok" : "degraded — OpenAI path unavailable",
+          },
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // ── Debug: OpenAI key health check ──────────────────────
     // Phase 0 acceptance gate. Returns 200 only when the key is shaped
     // correctly AND a real round-trip to api.openai.com succeeds.
     if (action === "debug_openai_test") {
+
       const v = validateOpenAIKey(Deno.env.get("OPENAI_API_KEY"));
       if (!v.ok) {
         return new Response(
