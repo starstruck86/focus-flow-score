@@ -16,6 +16,8 @@
  * Persists to localStorage via lib/strategy/customPills.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -91,6 +93,10 @@ function surfaceLabelOf(s: StrategySurfaceKey): string {
 }
 
 export function PillEditorPanel({ editing, surface, onSaved, onCancel }: Props) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const userId = user?.id;
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['custom-pills', userId] });
   const [pill, setPill] = useState<CustomPill>(() => editing ?? emptyPillForSurface(surface));
 
   useEffect(() => {
@@ -131,9 +137,13 @@ export function PillEditorPanel({ editing, surface, onSaved, onCancel }: Props) 
     updateAttach({ contextTokens: next });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!canSave) {
       toast.error('Pill needs a name.');
+      return;
+    }
+    if (!userId) {
+      toast.error('Sign in to save pills.');
       return;
     }
     const cleaned: CustomPill = {
@@ -149,49 +159,61 @@ export function PillEditorPanel({ editing, surface, onSaved, onCancel }: Props) 
       promptTemplate: pill.promptTemplate?.trim() ?? '',
       updatedAt: new Date().toISOString(),
     };
-    upsertCustomPill(cleaned);
-    toast.success(isEdit ? 'Pill updated' : 'Pill created', {
-      description: `${cleaned.name} is now in ${currentSurfaceLabel}.`,
-    });
-    onSaved();
+    try {
+      await upsertCustomPill(userId, cleaned);
+      invalidate();
+      toast.success(isEdit ? 'Pill updated' : 'Pill created', {
+        description: `${cleaned.name} is now in ${currentSurfaceLabel}.`,
+      });
+      onSaved();
+    } catch (e) {
+      toast.error('Failed to save pill', { description: (e as Error).message });
+    }
   };
 
-  const handleDelete = () => {
-    if (!isEdit) return;
+  const handleDelete = async () => {
+    if (!isEdit || !userId) return;
     if (!confirm(`Delete pill "${pill.name}"? This cannot be undone.`)) return;
-    deleteCustomPill(pill.id);
+    await deleteCustomPill(userId, pill.id);
+    invalidate();
     toast.success('Pill deleted');
     onSaved();
   };
 
-  const handleDuplicate = () => {
+  const handleDuplicate = async () => {
     if (!isEdit) {
       toast.message('Save the pill first, then duplicate it.');
       return;
     }
-    const copy = duplicateCustomPill(pill.id);
+    if (!userId) return;
+    const copy = await duplicateCustomPill(userId, pill.id);
     if (copy) {
+      invalidate();
       toast.success('Pill duplicated', { description: `${copy.name} created in ${surfaceLabelOf(copy.surface)}.` });
       onSaved();
     }
   };
 
-  const moveOrder = (direction: 'up' | 'down') => {
+  const moveOrder = async (direction: 'up' | 'down') => {
     if (!isEdit) {
       toast.message('Save the pill first to set its order.');
       return;
     }
-    const siblings = listCustomPillsForSurface(pill.surface, { includeHidden: true });
+    if (!userId) return;
+    const siblings = await listCustomPillsForSurface(userId, pill.surface, { includeHidden: true });
     const ids = siblings.map((p) => p.id);
     const idx = ids.indexOf(pill.id);
     if (idx < 0) return;
     const swapWith = direction === 'up' ? idx - 1 : idx + 1;
     if (swapWith < 0 || swapWith >= ids.length) return;
     [ids[idx], ids[swapWith]] = [ids[swapWith], ids[idx]];
-    reorderCustomPills(pill.surface, ids);
+    await reorderCustomPills(userId, pill.surface, ids);
+    invalidate();
     toast.success(`Moved ${direction}`);
     onSaved();
   };
+
+
 
   const updateField = (idx: number, patch: Partial<WorkflowField>) => {
     setPill((p) => ({

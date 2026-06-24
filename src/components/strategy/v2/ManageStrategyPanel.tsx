@@ -19,6 +19,8 @@
  * editing here so there is exactly one source of truth for pill shape.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -28,7 +30,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  listCustomPillsForSurface,
+  listCustomPills,
   deleteCustomPill,
   duplicateCustomPill,
   upsertCustomPill,
@@ -70,6 +72,9 @@ interface Props {
 }
 
 export function ManageStrategyPanel({ onEditPill, onAddPill, pillsVersion = 0 }: Props) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const userId = user?.id;
   const [refresh, setRefresh] = useState(0);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -82,47 +87,63 @@ export function ManageStrategyPanel({ onEditPill, onAddPill, pillsVersion = 0 }:
     [refresh],
   );
 
+  const { data: allPills = [] } = useQuery<CustomPill[]>({
+    queryKey: ['custom-pills', userId, 'all'],
+    queryFn: () => listCustomPills(userId!),
+    enabled: !!userId,
+  });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['custom-pills', userId] });
+  };
+
   const pillsByWorkspace = useMemo<Record<string, CustomPill[]>>(() => {
     const map: Record<string, CustomPill[]> = {};
-    for (const ws of workspaces) {
-      map[ws.id] = listCustomPillsForSurface(ws.id as StrategySurfaceKey, { includeHidden: true });
+    for (const ws of workspaces) map[ws.id] = [];
+    for (const p of allPills) {
+      if (!map[p.surface]) map[p.surface] = [];
+      map[p.surface].push(p);
     }
     return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaces, refresh]);
+  }, [workspaces, allPills]);
 
-  const bump = () => setRefresh((r) => r + 1);
-
-  const handleDeletePill = (pill: CustomPill) => {
+  const handleDeletePill = async (pill: CustomPill) => {
+    if (!userId) return;
     if (!confirm(`Delete pill "${pill.name}"? This cannot be undone.`)) return;
-    deleteCustomPill(pill.id);
+    await deleteCustomPill(userId, pill.id);
     toast.success('Pill deleted');
-    bump();
+    invalidate();
   };
 
-  const handleDuplicate = (pill: CustomPill) => {
-    const copy = duplicateCustomPill(pill.id);
+  const handleDuplicate = async (pill: CustomPill) => {
+    if (!userId) return;
+    const copy = await duplicateCustomPill(userId, pill.id);
     if (copy) {
       toast.success('Pill duplicated', { description: `${copy.name} created.` });
-      bump();
+      invalidate();
     }
   };
 
-  const handleToggleVisible = (pill: CustomPill) => {
-    upsertCustomPill({ ...pill, isActive: pill.isActive === false ? true : false, updatedAt: new Date().toISOString() });
-    bump();
+  const handleToggleVisible = async (pill: CustomPill) => {
+    if (!userId) return;
+    await upsertCustomPill(userId, { ...pill, isActive: pill.isActive === false ? true : false, updatedAt: new Date().toISOString() });
+    invalidate();
   };
 
-  const handleMove = (pill: CustomPill, direction: 'up' | 'down') => {
+  const handleMove = async (pill: CustomPill, direction: 'up' | 'down') => {
+    if (!userId) return;
     const ids = pillsByWorkspace[pill.surface]?.map((p) => p.id) ?? [];
     const idx = ids.indexOf(pill.id);
     if (idx < 0) return;
     const swap = direction === 'up' ? idx - 1 : idx + 1;
     if (swap < 0 || swap >= ids.length) return;
     [ids[idx], ids[swap]] = [ids[swap], ids[idx]];
-    reorderCustomPills(pill.surface, ids);
-    bump();
+    await reorderCustomPills(userId, pill.surface, ids);
+    invalidate();
   };
+
+  const bump = () => setRefresh((r) => r + 1);
+
 
   const handleAddWorkspace = () => {
     const ws = createCustomWorkspace({ label: 'New workspace', description: 'A custom Strategy workspace.' });

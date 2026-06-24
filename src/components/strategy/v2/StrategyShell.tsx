@@ -86,7 +86,7 @@ import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflo
 // shell. Pill creation/editing and workspace management live on the
 // /strategy/settings page (see src/pages/StrategySettings.tsx).
 import type { CustomPill } from '@/lib/strategy/customPills';
-import { listCustomPills } from '@/lib/strategy/customPills';
+import { migrateLocalPillsToSupabase } from '@/lib/strategy/customPills';
 import { type InjectedKI } from '@/lib/strategy/headClassifier';
 // Client-side playbook detection removed (task 1.2). The server's
 // situation classifier + libraryRetrieval now own playbook activation.
@@ -122,6 +122,18 @@ export function StrategyShell() {
       return next;
     });
   }, []);
+
+  // One-time migration of legacy localStorage pills → Supabase. Fire-and-forget.
+  const pillsMigratedRef = useRef(false);
+  useEffect(() => {
+    if (!user?.id || pillsMigratedRef.current) return;
+    pillsMigratedRef.current = true;
+    migrateLocalPillsToSupabase(user.id)
+      .then((count) => {
+        if (count > 0) console.log(`[customPills] migrated ${count} legacy pill(s) to Supabase`);
+      })
+      .catch((e) => console.warn('[customPills] migration failed', e));
+  }, [user?.id]);
 
   // Artifact workspace (right) — opened via inline card or completion event
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);

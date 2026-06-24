@@ -23,6 +23,8 @@
  * Pure presentation. No backend/engine changes.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/AuthContext';
 import { Link } from 'react-router-dom';
 import {
   X, Lightbulb, Microscope, Wand2, BookOpen, FileText,
@@ -177,12 +179,12 @@ export function SurfacePanel({
   const HeaderIcon = meta.icon;
   const vibe: SurfaceVibe = SURFACE_VIBE[surface] ?? DEFAULT_VIBE;
 
-  // ── Custom pills (per surface) ────────────────────────────────
-  const customPills = useMemo<CustomPill[]>(
-    () => listCustomPillsForSurface(surface),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [surface, pillsVersion],
-  );
+  const { user } = useAuth();
+  const { data: customPills = [] } = useQuery<CustomPill[]>({
+    queryKey: ['custom-pills', user?.id, surface, 'visible', pillsVersion],
+    queryFn: () => listCustomPillsForSurface(user!.id, surface),
+    enabled: !!user?.id,
+  });
 
   // ── Recent threads associated with this surface ───────────────
   const recentThreadsForSurface = useMemo(() => {
