@@ -1476,8 +1476,8 @@ async function generateCommercialInsights(args: {
   const hypBlock = hyp
     ? `\nWORKING HYPOTHESES (business-model / customer / motion):\n` +
       `- Business model: ${hyp.business_model_summary}\n` +
-      `- Customer experience: ${hyp.customer_experience}\n` +
-      `- Marketing motion: ${hyp.marketing_motion}\n`
+      `- App posture: ${hyp.app_posture}\n` +
+      `- Measurement motion: ${hyp.measurement_motion}\n`
     : "";
 
   const sys =
