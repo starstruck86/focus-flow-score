@@ -951,7 +951,7 @@ const SIGNAL_SCHEMA_HINT = `Return ONLY a JSON object with EXACTLY this shape:
     {
       "rank": 1,
       "signal": "Concrete, named signal (not a category). e.g. 'TJX's treasure-hunt model means inventory turns weekly and creates real-time scarcity that lifecycle programs almost never exploit', not 'opportunity in retention'.",
-      "signal_type": "tension | revenue_or_growth | change_in_motion | blind_spot | external_event | competitive_pressure | leadership_or_org | product_or_launch",
+      "signal_type": "tension | revenue_or_growth | change_in_motion | blind_spot | external_event | competitive_pressure | leadership_or_org | product_or_launch | mmp_switch | attribution_gap | deep_linking_adoption | competitive_displacement | product_expansion | renewal_risk | qbr_signal",
       "source_type": "account | library | web | inference",
       "confidence": "high | medium | low",
 
