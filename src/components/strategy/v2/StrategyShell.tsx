@@ -86,7 +86,7 @@ import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflo
 // /strategy/settings page (see src/pages/StrategySettings.tsx).
 import type { CustomPill } from '@/lib/strategy/customPills';
 import { listCustomPills } from '@/lib/strategy/customPills';
-import { classifyIntelHead, buildHeadKIBlock } from '@/lib/strategy/headClassifier';
+import { classifyIntelHead, buildHeadKIBlock, HEAD_LABELS } from '@/lib/strategy/headClassifier';
 import { tagThread } from '@/lib/strategy/threadTags';
 import { buildWorkspaceTitle, WORKSPACE_LABEL, displayThreadTitle } from '@/lib/strategy/threadNaming';
 import { PromoteToLibrarySheet, type PromotePayload } from './promote/PromoteToLibrarySheet';
@@ -227,6 +227,16 @@ export function StrategyShell() {
         if (data) setTerritoryProfile(data);
       });
   }, [user?.id]);
+
+  // Last intelligence activation — shown as a badge before assistant response
+  const [lastIntelActivation, setLastIntelActivation] = useState<{
+    head: string;
+    headLabel: string;
+    kiCount: number;
+    accountLinked: boolean;
+    accountName: string | null;
+    triggeredAt: number;
+  } | null>(null);
 
   // ── Surface-switch swap (drafts + active thread) ─────────────────────────
   // When the user moves between workspaces, save the in-flight draft AND the
@@ -848,13 +858,33 @@ export function StrategyShell() {
           globalInstructions: combinedInstructions || undefined,
         });
       };
+      const accountName = linkedContext?.account?.name ?? linkedContext?.opportunity?.name ?? null;
       if (head && user?.id) {
-        buildHeadKIBlock(head, user.id).then(dispatch).catch(() => dispatch(''));
+        buildHeadKIBlock(head, user.id).then((block) => {
+          const kiCount = (block.match(/^-/gm) ?? []).length;
+          setLastIntelActivation({
+            head,
+            headLabel: HEAD_LABELS[head] ?? head,
+            kiCount,
+            accountLinked: !!activeThread?.linked_account_id,
+            accountName,
+            triggeredAt: Date.now(),
+          });
+          dispatch(block);
+        }).catch(() => dispatch(''));
       } else {
+        setLastIntelActivation({
+          head: 'sales',
+          headLabel: 'Sales',
+          kiCount: 0,
+          accountLinked: !!activeThread?.linked_account_id,
+          accountName,
+          triggeredAt: Date.now(),
+        });
         dispatch('');
       }
     }
-  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, territoryProfile]);
+  }, [pendingThreadId, isCreatingThread, isSending, threadId, sendMessage, user, createThread, pendingResourceIds, setSurfaceThread, territoryProfile, activeThread?.linked_account_id, linkedContext]);
 
   const handlePickEntity = useCallback(async (sel: LinkPickerSelection) => {
     setLinkPickerOpen(false);
@@ -1359,6 +1389,7 @@ export function StrategyShell() {
             isLoading={isLoading}
             isSending={isSending}
             strategyConfig={strategyConfig}
+            lastIntelActivation={isSending ? lastIntelActivation : null}
             onPickPrompt={(prompt) => {
               const ta = composerRef.current as
                 (HTMLTextAreaElement & { insertText?: (t: string) => void })

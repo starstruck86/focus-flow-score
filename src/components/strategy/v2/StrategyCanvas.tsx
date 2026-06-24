@@ -12,6 +12,15 @@ import type { StrategyGlobalInstructionsConfig } from '@/lib/strategy/strategyCo
 import { StrategyMessage } from './StrategyMessage';
 import { StrategyEmptyState } from './StrategyEmptyState';
 
+type IntelActivation = {
+  head: string;
+  headLabel: string;
+  kiCount: number;
+  accountLinked: boolean;
+  accountName: string | null;
+  triggeredAt: number;
+};
+
 interface Props {
   messages: StrategyMessageT[];
   isLoading: boolean;
@@ -25,9 +34,53 @@ interface Props {
   /** Lifted strategy config (Strict Mode etc.) — passed down to messages
    *  so they all observe the same single source of truth from StrategyShell. */
   strategyConfig?: StrategyGlobalInstructionsConfig;
+  /** Last intelligence activation — shown as a badge while assistant is responding. */
+  lastIntelActivation?: IntelActivation | null;
 }
 
-export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState = false, onPickPrompt, onQuickAction, strategyConfig }: Props) {
+function IntelActivationBadge({ activation }: { activation: IntelActivation }) {
+  const HEAD_ICONS: Record<string, string> = {
+    product: '🌿',
+    competitive: '🎯',
+    sales: '🔍',
+    market: '📊',
+  };
+  const icon = HEAD_ICONS[activation.head] ?? '🧠';
+
+  return (
+    <div className="flex justify-center py-2">
+      <div
+        className="inline-flex items-center gap-2 text-[11px] px-3 py-1.5 rounded-full"
+        style={{
+          border: '1px solid hsl(var(--sv-hairline))',
+          background: 'hsl(var(--sv-paper))',
+          color: 'hsl(var(--sv-muted))',
+        }}
+      >
+        <span>{icon}</span>
+        <span style={{ color: 'hsl(var(--sv-ink))', fontWeight: 500 }}>
+          {activation.headLabel} Intelligence
+        </span>
+        {activation.kiCount > 0 && (
+          <>
+            <span>·</span>
+            <span>{activation.kiCount} KIs</span>
+          </>
+        )}
+        <span>·</span>
+        <span style={{ color: 'hsl(var(--sv-clay) / 0.7)' }}>Territory loaded</span>
+        {activation.accountLinked && activation.accountName && (
+          <>
+            <span>·</span>
+            <span style={{ color: 'hsl(var(--sv-clay))' }}>📍 {activation.accountName}</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState = false, onPickPrompt, onQuickAction, strategyConfig, lastIntelActivation }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -72,6 +125,9 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
             </div>
           );
         })}
+        {lastIntelActivation && (
+          <IntelActivationBadge activation={lastIntelActivation} />
+        )}
         {isSending && (
           <div style={{ marginTop: messages.length === 0 ? 0 : 14 }}>
             <StrategyMessage
