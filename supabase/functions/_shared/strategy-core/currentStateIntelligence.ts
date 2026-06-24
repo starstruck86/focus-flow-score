@@ -1730,62 +1730,118 @@ function buildSkeletonIntelligence(args: {
         || fb(`${entityName} operates a business model that should be confirmed in discovery; reason from public knowledge of the company and its category.`),
       confidence: sectionConfidence,
       unknowns: [
-        "Exact revenue mix (DTC vs wholesale vs marketplace)",
-        "Subscription / replenishment share",
-        "Seasonality and peak windows",
+        "Exact revenue mix (DTC vs app vs partner channels)",
+        "Mobile app's role in revenue (acquisition / retention / transaction core)",
+        "Sub-entity / business-unit structure that drives Branch footprint",
       ],
     },
     customer_experience: {
-      what_it_is_like_to_be_a_customer: hypotheses?.customer_experience
-        || fb(`the end-to-end customer journey for ${entityName} skews toward what its category typically rewards; the specifics of discovery, conversion, and repeat should be confirmed.`),
+      what_it_is_like_to_be_a_customer: fb(
+        `the end-to-end customer journey for ${entityName} crosses web → app → re-engagement surfaces; the specifics of how deep linking, deferred deep linking, and post-install attribution actually work should be confirmed.`,
+      ),
       confidence: sectionConfidence,
       unknowns: [
         "Logged-in / app vs anonymous browsing share",
-        "Loyalty or membership penetration",
-        "Post-purchase comms cadence",
+        "Web-to-app handoff quality (deferred deep linking on/off)",
+        "Post-install / post-purchase comms cadence on app surfaces",
       ],
     },
     marketing_motion: {
-      likely_new_customer_motion: hypotheses?.marketing_motion,
       confidence: sectionConfidence,
       unknowns: [
-        "Lifecycle triggers currently wired up",
-        "Personalization maturity (segment vs 1:1)",
-        "Channel mix (email / SMS / app / mail)",
-        "Winback / lapsed playbook (if any)",
+        "Paid acquisition channel mix (Universal Ads candidate?)",
+        "Email-to-App / SMS-to-App instrumentation today",
+        "QR / out-of-home routing to the app",
       ],
     },
     strategic_priorities: {
       confidence: sectionConfidence,
       unknowns: [
-        "Public investment signals (earnings, hires, launches)",
-        "Marketing leadership changes",
-        "Stated digital / loyalty / data investments",
+        "Public investment signals (earnings, hires, app launches, M&A)",
+        "Mobile / growth / measurement leadership changes",
+        "Stated investments in attribution, privacy posture (AIO), or app monetization",
       ],
     },
-    lifecycle_opportunity_map: {},
+    app_posture: {
+      mobile_app_strategy: hypotheses?.app_posture
+        || fb(`${entityName}'s mobile app sits inside their growth motion in a way that should be confirmed — its role in acquisition, retention, and transaction is the first thing to pin down.`),
+      deep_linking_maturity: fb(
+        `deep linking coverage is partial — owned surfaces (email, SMS, web) likely route inconsistently into the app; deferred deep linking on first-install paths should be confirmed.`,
+      ),
+      web_to_app_setup: fb(
+        `web-to-app is either un-instrumented or relies on a default store handoff; Branch Web-to-App is a likely whitespace.`,
+      ),
+      deferred_deep_linking: fb(
+        `deferred deep linking on paid + owned install paths should be confirmed — common gap that compounds attribution loss and post-install drop-off.`,
+      ),
+      confidence: sectionConfidence,
+      unknowns: [
+        "Which Branch products are live today vs not",
+        "Deep linking coverage across email / SMS / web / paid",
+        "Deferred deep linking on first-install funnels",
+        "Universal Ads / Email-to-App / SMS-to-App adoption",
+      ],
+    },
+    measurement_motion: {
+      current_mmp: fb(
+        `their MMP today is most likely Adjust or AppsFlyer; Kochava or Singular are less likely but possible. Confirm in discovery.`,
+      ),
+      adjust_appsflyer_setup: fb(
+        `the install + post-install attribution setup is standard MMP shape — paid network postbacks, organic install split, basic in-app event tracking; the gaps usually show up on web-to-app, sub-entity reporting, and Advanced Privacy / AIO posture.`,
+      ),
+      attribution_gaps: hypotheses?.measurement_motion
+        || fb(`attribution gaps most likely concentrate on web-to-app, post-install retargeting, sub-entity rollups, and the AIO / privacy boundary.`),
+      mmp_consolidation_risk: fb(
+        `with renewal cycles tightening and Branch's MMP capability maturing, there is real consolidation pressure on Adjust / AppsFlyer where Branch already owns the deep linking layer.`,
+      ),
+      confidence: sectionConfidence,
+      unknowns: [
+        "Which MMP is on contract today (Adjust, AppsFlyer, Kochava, Singular, self-built)",
+        "Renewal window and incumbent satisfaction",
+        "Where attribution accuracy is being questioned internally",
+        "Sub-entity / business-unit attribution requirements",
+      ],
+    },
+    branch_expansion_map: {
+      deep_linking_whitespace: fb(
+        `deep linking is the wedge — every Branch product downstream (Universal Ads, Web-to-App, Email-to-App, SMS-to-App, AIO) depends on it being instrumented properly.`,
+      ),
+      universal_ads_whitespace: fb(
+        `Universal Ads is whitespace for accounts with material paid mobile spend that aren't already routing through Branch's ad network coverage.`,
+      ),
+      web_to_app_whitespace: fb(
+        `Web-to-App is whitespace when their owned web traffic is sizable but the app handoff is the default store flow — material conversion-funnel uplift sits here.`,
+      ),
+      email_sms_whitespace: fb(
+        `Email-to-App / SMS-to-App is whitespace when they run owned CRM but their deep links into the app are unreliable across iOS/Android updates.`,
+      ),
+      advanced_products_whitespace: fb(
+        `Advanced Privacy / AIO and QR-driven journeys are whitespace as iOS/Android privacy posture tightens and offline-to-app becomes a measurable surface.`,
+      ),
+    },
     current_state_thesis: {
       summary: hypotheses?.thesis_summary
-        || fb(`${entityName} is operating where its category and stage suggest it should be; the working thesis should be sharpened in discovery.`),
+        || fb(`${entityName} sits in the middle of the Branch surface area — some products live, real whitespace on the rest; the working thesis should be sharpened against the QBR usage signal.`),
       likely_gap: hypotheses?.likely_gap
-        || fb(`there is a gap between current customer engagement maturity and what the future state requires.`),
+        || fb(`there is a gap between current Branch footprint and the products their peers in this vertical have already adopted — expansion-ARR lives in that gap.`),
       why_now: hypotheses?.why_now
-        || fb(`market and competitive pressure make this conversation timely.`),
+        || fb(`renewal cadence, QBR rhythm, and competitive pressure from Adjust / AppsFlyer make this conversation timely.`),
       strategic_tension: hypotheses?.strategic_tension
-        || fb(`the standard playbook may be misaligned with how this company actually wins with customers.`),
+        || fb(`their current measurement setup most likely covers the basics but misses the surfaces (web-to-app, sub-entity, AIO) where revenue actually leaks.`),
       future_state_hypothesis: hypotheses?.future_state_hypothesis
-        || fb(`the company is trying to deepen customer engagement; getting there will require changes in data, motion, or experience.`),
+        || fb(`the company is moving toward a consolidated measurement + deep linking stack where Branch can own more of the surface area as MMPs get re-evaluated.`),
     },
     discovery_questions: {
       must_confirm: [
-        "Is the business primarily store-led, ecommerce-led, subscription-led, or hybrid today?",
-        "Where is customer data most fragmented across the experience?",
-        "Which lifecycle moments are currently most under-served?",
+        "Which Branch products are currently live at this account — deep linking, Universal Ads, Web-to-App, Email-to-App?",
+        "Who is their current MMP — Adjust, AppsFlyer, Kochava, or Singular?",
+        "What does their mobile measurement setup look like today — app installs, retargeting, deferred deep linking?",
       ],
       high_leverage: [
-        "What's the current motion for repeat vs lapsed customers?",
-        "What's the personalization ceiling you're hitting today?",
-        "Where are you investing for the next 12 months in customer engagement?",
+        "Where are they seeing attribution gaps or inaccuracies today?",
+        "What's driving the QBR conversation — usage up, down, or flat?",
+        "Where is the whitespace — which Branch products aren't live that their peers are using?",
+        "Is there any internal build-vs-buy discussion on attribution or deep linking?",
       ],
     },
     evidence: {
@@ -1793,8 +1849,8 @@ function buildSkeletonIntelligence(args: {
       inferred_claims: hypotheses
         ? [
           { claim: hypotheses.business_model_summary, basis: "model reasoning from public knowledge", confidence: "low" },
-          { claim: hypotheses.customer_experience, basis: "model reasoning from public knowledge", confidence: "low" },
-          { claim: hypotheses.marketing_motion, basis: "model reasoning from public knowledge", confidence: "low" },
+          { claim: hypotheses.app_posture, basis: "model reasoning about mobile app + deep linking posture", confidence: "low" },
+          { claim: hypotheses.measurement_motion, basis: "model reasoning about MMP / attribution setup", confidence: "low" },
         ]
         : [],
     },
