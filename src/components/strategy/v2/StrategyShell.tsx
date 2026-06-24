@@ -219,6 +219,12 @@ export function StrategyShell() {
   // in the composer (the composer only ever shows the human title).
   const [pendingResourceIds, setPendingResourceIds] = useState<string[]>([]);
 
+  // ST7 — save-as-skill name dialog (shown when user picks verb with no inline name)
+  const [saveSkillDialogOpen, setSaveSkillDialogOpen] = useState(false);
+  const [saveSkillCandidateText, setSaveSkillCandidateText] = useState<string>('');
+  const [saveSkillInputName, setSaveSkillInputName] = useState('');
+  const saveSkillInputRef = useRef<HTMLInputElement>(null);
+
   // Territory profile — always-on base context for every Strategy send.
   // Single formatter lives in useTerritoryProfile.buildContextString() and
   // is shared with Territory Copilot so both surfaces stay consistent.
