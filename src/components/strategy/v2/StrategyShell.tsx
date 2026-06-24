@@ -25,6 +25,7 @@
  * cannot drive) while still proving the post-upload product behavior.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useStrategyThreads } from '@/hooks/strategy/useStrategyThreads';
@@ -86,7 +87,7 @@ import { compileTemplateForComposer, hasUnresolvedPlaceholders } from './workflo
 // shell. Pill creation/editing and workspace management live on the
 // /strategy/settings page (see src/pages/StrategySettings.tsx).
 import type { CustomPill } from '@/lib/strategy/customPills';
-import { migrateLocalPillsToSupabase } from '@/lib/strategy/customPills';
+import { migrateLocalPillsToSupabase, upsertCustomPill, emptyPillForSurface } from '@/lib/strategy/customPills';
 import { type InjectedKI } from '@/lib/strategy/headClassifier';
 // Client-side playbook detection removed (task 1.2). The server's
 // situation classifier + libraryRetrieval now own playbook activation.
@@ -217,6 +218,12 @@ export function StrategyShell() {
   // out-of-band on the next sendMessage and cleared after. Never visible
   // in the composer (the composer only ever shows the human title).
   const [pendingResourceIds, setPendingResourceIds] = useState<string[]>([]);
+
+  // ST7 — save-as-skill name dialog (shown when user picks verb with no inline name)
+  const [saveSkillDialogOpen, setSaveSkillDialogOpen] = useState(false);
+  const [saveSkillCandidateText, setSaveSkillCandidateText] = useState<string>('');
+  const [saveSkillInputName, setSaveSkillInputName] = useState('');
+  const saveSkillInputRef = useRef<HTMLInputElement>(null);
 
   // Territory profile — always-on base context for every Strategy send.
   // Single formatter lives in useTerritoryProfile.buildContextString() and
@@ -688,6 +695,43 @@ export function StrategyShell() {
     navigate(`/opportunities/${id}`);
   }, [activeThread, navigate]);
 
+  // ST7 — Save the last assistant response as a custom skill pill.
+  const handleSaveSkill = useCallback(async (name: string, responseText: string) => {
+    setSaveSkillDialogOpen(false);
+    setSaveSkillCandidateText('');
+    const trimmedName = name.trim();
+    if (!user?.id || !trimmedName || !responseText) return;
+
+    const surface: StrategySurfaceKey = activeSurface ?? 'brainstorm';
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    const userPrompt = ((lastUserMsg?.content_json as any)?.text ?? '') as string;
+
+    const pill = emptyPillForSurface(surface);
+    pill.name = trimmedName;
+    pill.description = `Saved from chat · ${new Date().toLocaleDateString()}`;
+    pill.instruction = responseText.slice(0, 4000);
+    pill.promptTemplate = userPrompt.slice(0, 2000) || '[Describe your situation]';
+    pill.runMode = 'insert';
+    pill.outputType = 'chat';
+
+    try {
+      await upsertCustomPill(user.id, pill);
+      const surfaceLabel: Record<StrategySurfaceKey, string> = {
+        brainstorm: 'Brainstorm',
+        deep_research: 'Deep Research',
+        refine: 'Refine',
+        library: 'Library',
+        artifacts: 'Artifacts',
+        projects: 'Projects',
+        work: 'Work',
+      };
+      toast.success(`Skill "${trimmedName}" saved to ${surfaceLabel[surface]}`);
+      setPillsVersion((v) => v + 1);
+    } catch {
+      toast.error('Failed to save skill');
+    }
+  }, [user?.id, messages, activeSurface]);
+
   // Slash verb routing
   const handleSlashPick = useCallback((verb: SlashVerb) => {
     if (verb === 'library') {
@@ -745,8 +789,28 @@ export function StrategyShell() {
         // pushes through useStrategyUploads.uploadFile().
         slashFileInputRef.current?.click();
         break;
+      case 'save-as-skill': {
+        const nameFromQuery = slashQuery
+          ? slashQuery.replace(/^\/save-as-skill\s*/i, '').trim()
+          : '';
+        const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+        if (!lastAssistant) {
+          toast('No assistant response to save yet');
+          break;
+        }
+        const responseText = ((lastAssistant.content_json as any)?.text ?? '') as string;
+        if (nameFromQuery) {
+          handleSaveSkill(nameFromQuery, responseText);
+        } else {
+          setSaveSkillCandidateText(responseText);
+          setSaveSkillDialogOpen(true);
+          setSaveSkillInputName('');
+          requestAnimationFrame(() => saveSkillInputRef.current?.focus());
+        }
+        break;
+      }
     }
-  }, [handleBranch, messages, activeThread, save, showSaveToast]);
+  }, [handleBranch, messages, activeThread, save, showSaveToast, slashQuery, handleSaveSkill]);
 
   // ---------- /library slash command ----------
   // Active whenever the slash query starts with `/library`. While active,
@@ -1779,6 +1843,65 @@ export function StrategyShell() {
         open={validationDrawerOpen}
         onOpenChange={setValidationDrawerOpen}
       />
+      {/* ST7 — /save-as-skill name entry dialog */}
+      {saveSkillDialogOpen && composerRect && createPortal(
+        <div className="strategy-v2" style={{ position: 'fixed', inset: 0, zIndex: 78, pointerEvents: 'none' }}>
+          <div
+            className="sv-e1 sv-enter-fade"
+            style={{
+              position: 'absolute',
+              top: composerRect.top - 8,
+              left: composerRect.left + 24,
+              transform: 'translateY(-100%)',
+              width: 340,
+              background: 'hsl(var(--sv-paper))',
+              border: '1px solid hsl(var(--sv-hairline))',
+              borderRadius: 'var(--sv-radius-surface)',
+              pointerEvents: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            <div className="px-4 pt-2.5 pb-1 text-[11px]" style={{ color: 'hsl(var(--sv-muted))' }}>
+              Save last response as a skill
+            </div>
+            <div className="px-4 pb-2">
+              <input
+                ref={saveSkillInputRef}
+                value={saveSkillInputName}
+                onChange={(e) => setSaveSkillInputName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (saveSkillInputName.trim()) handleSaveSkill(saveSkillInputName, saveSkillCandidateText);
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setSaveSkillDialogOpen(false);
+                    setSaveSkillCandidateText('');
+                    requestAnimationFrame(() => composerRef.current?.focus());
+                  }
+                }}
+                placeholder="Skill name…"
+                className="w-full text-[13px] bg-transparent border-0 outline-none py-1"
+                style={{
+                  color: 'hsl(var(--sv-ink))',
+                  fontFamily: 'var(--sv-sans)',
+                  borderBottom: '1px solid hsl(var(--sv-hairline))',
+                }}
+                autoComplete="off"
+              />
+            </div>
+            <div
+              className="px-4 py-1.5 text-[11px]"
+              style={{ color: 'hsl(var(--sv-muted))', borderTop: '1px solid hsl(var(--sv-hairline))' }}
+            >
+              ↵ save · esc cancel · saves to {(activeSurface ?? 'brainstorm')} workspace
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
       </div>
     </div>
   );

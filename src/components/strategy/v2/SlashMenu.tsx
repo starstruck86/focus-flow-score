@@ -17,7 +17,8 @@ export type SlashVerb =
   | 'upload'
   | 'branch'
   | 'link'
-  | 'promote-last';
+  | 'promote-last'
+  | 'save-as-skill';
 
 interface VerbDef {
   key: SlashVerb;
@@ -27,6 +28,7 @@ interface VerbDef {
 
 const VERBS: VerbDef[] = [
   { key: 'library',      label: 'Browse library',    shortcut: '/library' },
+  { key: 'save-as-skill', label: 'Save as skill',    shortcut: '/save-as-skill' },
   { key: 'upload',       label: 'Upload file',       shortcut: '⌘U' },
   { key: 'branch',       label: 'Branch thought',    shortcut: '⌘B' },
   { key: 'link',         label: 'Link to account',   shortcut: '⌘L' },
@@ -50,8 +52,21 @@ export function SlashMenu({ query, anchorRect, onPick, onClose }: Props) {
     if (!query) return VERBS;
     const needle = query.replace(/^\//, '').toLowerCase().trim();
     if (!needle) return VERBS;
-    return VERBS.filter(v => v.key.includes(needle) || v.label.toLowerCase().includes(needle.replace(/\s+/g, '')));
+    return VERBS.filter(v => {
+      if (v.key === 'save-as-skill') {
+        return needle.startsWith('save') || v.label.toLowerCase().includes(needle);
+      }
+      return v.key.includes(needle) || v.label.toLowerCase().includes(needle.replace(/\s+/g, ''));
+    });
   }, [query]);
+
+  const getDisplayLabel = (v: VerbDef): string => {
+    if (v.key === 'save-as-skill' && query) {
+      const match = query.match(/^\/save-as-skill\s+(.+)/i);
+      if (match?.[1]?.trim()) return `Save as skill: "${match[1].trim()}"`;
+    }
+    return v.label;
+  };
 
   useEffect(() => { setActiveIdx(0); }, [query]);
 
@@ -135,7 +150,7 @@ export function SlashMenu({ query, anchorRect, onPick, onClose }: Props) {
                 }}
               >
                 <span className="text-[13px]" style={{ color: 'hsl(var(--sv-ink))', fontFamily: 'var(--sv-sans)' }}>
-                  {v.label}
+                  {getDisplayLabel(v)}
                 </span>
                 <span className="text-[11px] font-mono ml-3" style={{ color: 'hsl(var(--sv-muted))' }}>
                   {v.shortcut}
