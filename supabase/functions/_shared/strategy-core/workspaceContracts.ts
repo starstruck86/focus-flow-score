@@ -42,9 +42,10 @@ const BRAINSTORM: WorkspaceContract = {
     "Divergent generation. Bias toward breadth and sharp framing over depth or proof. Speculation is welcome but must be labeled as hypothesis/option rather than asserted as fact.",
   useCases: [
     "Generate 8 expansion angles for Peacock given their current Branch footprint",
-    "Brainstorm QBR narrative framings when usage is down",
+    "Brainstorm QBR narrative framings when usage is down 30%",
     "Explore competitive hooks for displacing Adjust at a travel account",
-    "Stress-test the web-to-app business case from a buyer's perspective",
+    "Stress-test the web-to-app business case from a skeptical buyer's perspective",
+    "Generate discovery question angles for a new sub-entity at an existing account",
   ],
   nonGoals: [
     "Producing finalized, send-ready copy",
