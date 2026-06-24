@@ -259,6 +259,12 @@ export function StrategyShell() {
     setDetectedPlaybooks((prev) => prev.filter((p) => p.id !== playbookId));
   }, []);
 
+  // Manually injected KIs (from ContextInspector Intelligence tab)
+  const [manuallyInjectedKIs, setManuallyInjectedKIs] = useState<InjectedKI[]>([]);
+  const handleInjectKI = useCallback((ki: InjectedKI) => {
+    setManuallyInjectedKIs((prev) => (prev.find((k) => k.id === ki.id) ? prev : [...prev, ki]));
+  }, []);
+
   // ── Surface-switch swap (drafts + active thread) ─────────────────────────
   // When the user moves between workspaces, save the in-flight draft AND the
   // currently active thread id under the previous surface, then restore both
