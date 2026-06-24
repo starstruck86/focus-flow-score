@@ -46,12 +46,16 @@ export interface ProjectSettings {
   updated_at?: string;
 }
 
-/** Fetch all active accounts for the user and group by family. */
+/** Fetch all active accounts for the user and group by family.
+ *  Uses `accounts` directly with `deleted_at IS NULL` because the
+ *  `active_accounts` view does not expose `parent_account_id` /
+ *  `account_family`. */
 export async function listProjects(userId: string): Promise<ProjectSummary[]> {
   const { data, error } = await supabase
-    .from('active_accounts')
+    .from('accounts')
     .select('id,name,tier,parent_account_id,account_family')
     .eq('user_id', userId)
+    .is('deleted_at', null)
     .order('name', { ascending: true });
 
   if (error) throw error;
