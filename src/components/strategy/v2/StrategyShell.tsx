@@ -383,6 +383,44 @@ export function StrategyShell() {
   });
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
+  // ST5 Phase B — Project (account_family) custom instructions injection.
+  // When the active thread is linked to an account that belongs to a project
+  // family, fetch the user's per-project custom_instructions and inject them
+  // into globalInstructions on send. Cleared when the thread isn't account-linked.
+  const [projectInstructions, setProjectInstructions] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const accountId = activeThread?.linked_account_id;
+    if (!user?.id || !accountId) {
+      setProjectInstructions(null);
+      return;
+    }
+    (async () => {
+      try {
+        const { data: acct } = await supabase
+          .from('accounts')
+          .select('account_family')
+          .eq('id', accountId)
+          .maybeSingle();
+        const family = (acct?.account_family ?? '').trim();
+        if (!family) {
+          if (!cancelled) setProjectInstructions(null);
+          return;
+        }
+        const { getProjectSettings } = await import('@/lib/strategy/accountProjects');
+        const settings = await getProjectSettings(user.id, family);
+        if (cancelled) return;
+        const txt = settings?.custom_instructions?.trim() ?? '';
+        setProjectInstructions(txt || null);
+      } catch {
+        if (!cancelled) setProjectInstructions(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, activeThread?.linked_account_id]);
+
+
+
   // Load territory accounts for cross-thread account detection
   useEffect(() => {
     if (!user?.id) return;
