@@ -74,6 +74,7 @@ import {
 } from "../_shared/strategy-core/v2/index.ts";
 import { routeRequest, type RoutingDecision } from "../_shared/strategy-router/index.ts";
 import { logRoutingDecision } from "../_shared/strategy-router/log.ts";
+import { classifySituation, type SituationResult } from "../_shared/strategy-router/situationClassifier.ts";
 import {
   runCurrentStatePreflight,
   type CurrentStateResult,
