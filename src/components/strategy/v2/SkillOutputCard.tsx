@@ -4,12 +4,10 @@ import remarkGfm from 'remark-gfm';
 import { Copy, Check } from 'lucide-react';
 import type { SkillSection } from '@/lib/strategy/parseSkillSections';
 import { parseSkillSections } from '@/lib/strategy/parseSkillSections';
-import type { Citation } from '@/lib/strategy/headClassifier';
 
 interface Props {
   text: string;
   label: string;
-  citations?: Citation[] | null;
   onQuickAction?: (prompt: string) => void;
 }
 

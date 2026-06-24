@@ -137,7 +137,7 @@ function extractText(contentJson: any): string {
   return '';
 }
 
-export function StrategyMessage({ message, onQuickAction, strategyConfig, citations }: Props) {
+export function StrategyMessage({ message, onQuickAction, strategyConfig }: Props) {
   const rawText = extractText(message.content_json);
   const role = message.role;
   // Strict-mode shaping is a render override that applies to ANY assistant
@@ -345,7 +345,6 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig, citati
         {assistantText}
       </ReactMarkdown>
       {onQuickAction && <MessageActions onAction={onQuickAction} />}
-      {citations && citations.length > 0 && <SourcesPanel citations={citations} />}
     </div>
   );
 }
