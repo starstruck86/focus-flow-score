@@ -905,18 +905,30 @@ export function StrategyShell() {
       };
       const accountName = linkedContext?.account?.name ?? linkedContext?.opportunity?.name ?? null;
       if (head && user?.id) {
-        buildHeadKIBlock(head, user.id).then((block) => {
-          const kiCount = (block.match(/^-/gm) ?? []).length;
+        buildHeadKIBlock(head, user.id).then((result) => {
+          const { block, citations } = result;
           setLastIntelActivation({
             head,
             headLabel: HEAD_LABELS[head] ?? head,
-            kiCount,
+            kiCount: citations.length,
             accountLinked: !!activeThread?.linked_account_id,
             accountName,
             triggeredAt: Date.now(),
+            citations,
           });
           dispatch(block);
-        }).catch(() => dispatch(''));
+        }).catch(() => {
+          setLastIntelActivation({
+            head: 'sales',
+            headLabel: 'Sales',
+            kiCount: 0,
+            accountLinked: !!activeThread?.linked_account_id,
+            accountName,
+            triggeredAt: Date.now(),
+            citations: [],
+          });
+          dispatch('');
+        });
       } else {
         setLastIntelActivation({
           head: 'sales',
@@ -925,6 +937,7 @@ export function StrategyShell() {
           accountLinked: !!activeThread?.linked_account_id,
           accountName,
           triggeredAt: Date.now(),
+          citations: [],
         });
         dispatch('');
       }
