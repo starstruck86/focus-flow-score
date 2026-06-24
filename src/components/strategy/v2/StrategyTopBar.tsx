@@ -25,12 +25,14 @@ interface Props {
   chipRef?: React.RefObject<HTMLButtonElement>;
   /** Phase 1.5: create a new thread immediately (no modal). */
   onNewThread: () => void;
+  /** O2: open Post-Call Log modal. */
+  onLogCall?: () => void;
 }
 
 export const StrategyTopBar = forwardRef<HTMLDivElement, Props>(function StrategyTopBar({
   title, onTitleChange, entityName, trustState,
   unresolvedProposalCount, onOpenSwitcher, onOpenInspector, onChipClick, chipRef,
-  onNewThread,
+  onNewThread, onLogCall,
 }, _ref) {
   const isMobile = useIsMobile();
   const [editing, setEditing] = useState(false);
