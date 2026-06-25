@@ -414,11 +414,27 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { scenario, userResponse, retryCount, focusReminder, ki } = await req.json();
+    const { scenario, userResponse, retryCount, focusReminder, ki: rawKi } = await req.json();
     if (!scenario || !userResponse) {
       return new Response(JSON.stringify({ error: "Missing scenario or userResponse" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // ── SCORE-POISONING REGRESSION GUARD ────────────────────────
+    // Callers MUST NOT pass the gold answer (ki.example_usage) as the buyer
+    // objection. If detected, log and strip the leak so the test stays cold.
+    let ki = rawKi;
+    if (ki && typeof scenario.objection === "string" && scenario.objection.trim().length > 0) {
+      const eu = typeof ki.example_usage === "string" ? ki.example_usage.trim() : "";
+      const ts = typeof ki.tactic_summary === "string" ? ki.tactic_summary.trim() : "";
+      const obj = scenario.objection.trim();
+      if ((eu && obj === eu) || (ts && obj === ts)) {
+        console.warn("dojo-score: SCORE_POISONING_BLOCKED — objection matched ki gold content; stripping leak", {
+          matched: obj === eu ? "example_usage" : "tactic_summary",
+        });
+        scenario.objection = "Respond to this buyer situation.";
+      }
     }
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
