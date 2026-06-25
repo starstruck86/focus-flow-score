@@ -261,7 +261,7 @@ export async function getBandGate(spoke: string, topic: string, band: Band): Pro
   };
 }
 
-/** Cold item pool for a band gate (exemplar KIs of every concept in the band). */
+/** Cold item pool for a band gate: exemplar KIs + prompt-only authored concepts. */
 export async function getBandExemplarPool(
   spoke: string,
   topic: string,
@@ -269,45 +269,81 @@ export async function getBandExemplarPool(
 ): Promise<CurriculumKi[]> {
   const { data: concepts, error: cErr } = await (supabase as any)
     .from('curriculum_concepts')
-    .select('concept_id, exemplar_ki_id')
+    .select('concept_id, exemplar_ki_id, teach_kind, drill_prompt, title, order_in_sublevel')
     .eq('spoke', spoke)
     .eq('topic', topic)
-    .eq('band', band);
+    .eq('band', band)
+    .order('order_in_sublevel', { ascending: true });
   if (cErr) throw cErr;
 
-  const conceptIds = ((concepts as AnyRow[]) ?? []).map((c) => String(c.concept_id));
-  if (!conceptIds.length) return [];
+  const conceptRows = (concepts as AnyRow[]) ?? [];
+  const conceptIds = conceptRows.map((c) => String(c.concept_id));
 
-  const { data: links, error: lErr } = await (supabase as any)
-    .from('ki_curriculum')
-    .select('ki_id, role, is_exemplar, order_in_concept, active, concept_id')
-    .in('concept_id', conceptIds)
-    .eq('is_exemplar', true)
-    .eq('active', true);
-  if (lErr) throw lErr;
+  // Pool A — real exemplar KIs (hydrated from ki_curriculum_full so scenario flows through)
+  const exemplarItems: CurriculumKi[] = [];
+  if (conceptIds.length) {
+    const { data: links, error: lErr } = await (supabase as any)
+      .from('ki_curriculum_full')
+      .select('ki_id, role, is_exemplar, order_in_concept, active, concept_id, drill_scenario')
+      .in('concept_id', conceptIds)
+      .eq('is_exemplar', true)
+      .eq('active', true);
+    if (lErr) throw lErr;
 
-  const kiIds = ((links as AnyRow[]) ?? []).map((l) => String(l.ki_id));
-  if (!kiIds.length) return [];
+    const linkRows = (links as AnyRow[]) ?? [];
+    const kiIds = linkRows.map((l) => String(l.ki_id));
+    if (kiIds.length) {
+      const { data: kiRows, error: kErr } = await (supabase as any)
+        .from('knowledge_items')
+        .select(KI_COLS)
+        .in('id', kiIds);
+      if (kErr) throw kErr;
+      const kiMap = new Map(((kiRows as AnyRow[]) ?? []).map((r) => [String(r.id), r]));
+      for (const l of linkRows) {
+        const hk = hydrateKi(
+          {
+            ki_id: String(l.ki_id),
+            role: String(l.role ?? 'teach'),
+            is_exemplar: true,
+            order_in_concept: Number(l.order_in_concept) || 0,
+            active: true,
+            scenario: (l.drill_scenario as string | null) ?? null,
+          },
+          kiMap.get(String(l.ki_id)),
+        );
+        if (hk) exemplarItems.push(hk);
+      }
+    }
+  }
 
-  const { data: kiRows, error: kErr } = await (supabase as any)
-    .from('knowledge_items')
-    .select(KI_COLS)
-    .in('id', kiIds);
-  if (kErr) throw kErr;
+  // Pool B — authored concepts with a drill_prompt: synthesize prompt-only cold items
+  const promptOnlyItems: CurriculumKi[] = conceptRows
+    .filter((c) => c.teach_kind === 'authored' && typeof c.drill_prompt === 'string' && (c.drill_prompt as string).trim().length > 0)
+    .map((c) => ({
+      ki_id: '',
+      role: 'drill' as const,
+      is_exemplar: false,
+      order_in_concept: Number(c.order_in_sublevel) || 0,
+      active: true,
+      title: String(c.title ?? ''),
+      tactic_summary: null,
+      example_usage: null,
+      when_to_use: null,
+      when_not_to_use: null,
+      why_it_matters: null,
+      spider_dimension: null,
+      chapter: null,
+      promptOnly: true,
+      scenario: String(c.drill_prompt),
+    }));
 
-  const kiMap = new Map(((kiRows as AnyRow[]) ?? []).map((r) => [String(r.id), r]));
-  return ((links as AnyRow[]) ?? [])
-    .map((l) =>
-      hydrateKi(
-        {
-          ki_id: String(l.ki_id),
-          role: String(l.role ?? 'teach'),
-          is_exemplar: true,
-          order_in_concept: Number(l.order_in_concept) || 0,
-          active: true,
-        },
-        kiMap.get(String(l.ki_id)),
-      ),
-    )
-    .filter((x): x is CurriculumKi => !!x);
+  // Merge in concept order (order_in_sublevel) for a stable pool sequence.
+  const orderByConcept = new Map(conceptRows.map((c, i) => [String(c.concept_id), Number(c.order_in_sublevel) || i]));
+  // exemplarItems don't carry concept_id post-hydrate; we re-derive via a parallel index map.
+  return [...promptOnlyItems, ...exemplarItems].sort((a, b) => {
+    const ao = orderByConcept.get(String(a.ki_id)) ?? a.order_in_concept;
+    const bo = orderByConcept.get(String(b.ki_id)) ?? b.order_in_concept;
+    return ao - bo;
+  });
 }
+
