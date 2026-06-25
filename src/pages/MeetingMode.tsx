@@ -146,7 +146,7 @@ export default function MeetingMode() {
           scenario: {
             skillFocus: warmupKi.spider_dimension || 'deal_control',
             context: warmupKi.when_to_use || 'Pre-call warm-up',
-            objection: warmupKi.example_usage || warmupKi.tactic_summary || 'Respond.',
+            objection: warmupKi.when_to_use || 'Respond to this buyer situation.',
           },
           userResponse: response,
           ki: {

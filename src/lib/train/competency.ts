@@ -86,15 +86,14 @@ interface BandGateInput {
   promotesTo: Band | null;
 }
 
-function retestDays(avgScore: number, passed: boolean): number | null {
-  if (!passed) return 0; // immediate retake
-  if (avgScore < TRAIN_TUNABLES.bandGatePassThreshold) return TRAIN_TUNABLES.retestWarningDays;
-  if (avgScore < TRAIN_TUNABLES.bandGatePassThreshold + 10) {
-    return avgScore < TRAIN_TUNABLES.bandGatePassThreshold + 0
-      ? TRAIN_TUNABLES.retestWarningDays
-      : TRAIN_TUNABLES.retestPassDays;
-  }
-  return TRAIN_TUNABLES.retestPassDays;
+/**
+ * Retest interval (Plan §D ruling 4 — simplified):
+ *   pass (avg ≥ bandGatePassThreshold) → retestPassDays (30d)
+ *   fail (avg < bandGatePassThreshold) → 0 (immediate retake)
+ * No intermediate tier — a pass is always ≥ threshold by definition.
+ */
+function retestDays(passed: boolean): number {
+  return passed ? TRAIN_TUNABLES.retestPassDays : 0;
 }
 
 /**
@@ -118,11 +117,8 @@ export async function recordBandGateAttempt(input: BandGateInput): Promise<UserB
   const prevBest = Number(existing?.best_score ?? 0);
   const nextBest = Math.max(prevBest, attempt.avgScore);
   const passed = attempt.passed;
-  const days = retestDays(attempt.avgScore, passed);
-  const nextRetestDue =
-    days == null
-      ? null
-      : new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+  const days = retestDays(passed);
+  const nextRetestDue = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
 
   const payload = {
     user_id: userId,

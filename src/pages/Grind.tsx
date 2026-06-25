@@ -86,7 +86,7 @@ export default function Grind() {
           scenario: {
             skillFocus: selectedDimension,
             context: ki.when_to_use || 'Enterprise sales scenario',
-            objection: ki.example_usage || ki.tactic_summary || 'Apply this play.',
+            objection: ki.when_to_use || 'Respond to this buyer situation.',
           },
           userResponse: response,
           ki: {

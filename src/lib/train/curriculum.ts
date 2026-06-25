@@ -74,6 +74,7 @@ export async function getSubLevels(spoke: string, topic: string): Promise<SubLev
       exemplar_ki_id: (raw.exemplar_ki_id as string | null) ?? null,
       teach_beat_status: (raw.teach_beat_status as ConceptRow['teach_beat_status']) ?? 'pending',
       teach_beat_ref: (raw.teach_beat_ref as string | null) ?? null,
+      teach_beat_md: (raw.teach_beat_md as string | null) ?? null,
       notes: (raw.notes as string | null) ?? null,
     };
     const key = `${c.band}::${c.sub_level}`;
@@ -117,6 +118,7 @@ export async function getConceptWithItems(
     exemplar_ki_id: (conceptData.exemplar_ki_id as string | null) ?? null,
     teach_beat_status: (conceptData.teach_beat_status as ConceptRow['teach_beat_status']) ?? 'pending',
     teach_beat_ref: (conceptData.teach_beat_ref as string | null) ?? null,
+    teach_beat_md: (conceptData.teach_beat_md as string | null) ?? null,
     notes: (conceptData.notes as string | null) ?? null,
   };
 
@@ -152,13 +154,22 @@ export async function getConceptWithItems(
   const drillsAll = hydrated.filter((k) => !k.is_exemplar);
   const drills = drillsAll.slice(0, cap);
 
+  // Teach-opener resolution (Plan §D ruling + correction):
+  //   pending status         → provisional first-drill (never hard-skip)
+  //   authored + teach_beat_md → render inline markdown (PREFERRED for authored)
+  //   authored + teach_beat_ref → external ref handle (legacy)
+  //   ki_exemplar            → exemplar KI
+  //   fallback               → provisional first-drill
   let teach: ConceptWithItems['teach'];
-  if (concept.teach_kind === 'authored' && concept.teach_beat_status === 'ready' && concept.teach_beat_ref) {
+  if (concept.teach_beat_status === 'pending') {
+    teach = { kind: 'pending', provisional: drillsAll[0] };
+  } else if (concept.teach_kind === 'authored' && concept.teach_beat_md) {
+    teach = { kind: 'authored_md', markdown: concept.teach_beat_md };
+  } else if (concept.teach_kind === 'authored' && concept.teach_beat_ref) {
     teach = { kind: 'authored', ref: concept.teach_beat_ref };
   } else if (concept.teach_kind === 'ki_exemplar' && exemplarKi) {
     teach = { kind: 'ki_exemplar', exemplar: exemplarKi };
   } else {
-    // Pending beat or missing exemplar — provisional fallback per Plan §D.7
     teach = { kind: 'pending', provisional: drillsAll[0] };
   }
 

@@ -82,7 +82,7 @@ export default function Benchmark() {
           scenario: {
             skillFocus: dim,
             context: ki?.when_to_use || ki?.tactic_summary || '',
-            objection: ki?.example_usage || ki?.tactic_summary || '',
+            objection: ki?.when_to_use || 'Respond to this buyer situation.',
           },
           ki: {
             title: ki?.title ?? '',

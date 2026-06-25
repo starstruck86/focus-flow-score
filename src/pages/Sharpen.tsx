@@ -290,7 +290,7 @@ export default function Sharpen() {
           scenario: {
             skillFocus: dimension,
             context: currentKI.when_to_use || 'Enterprise sales scenario',
-            objection: currentKI.example_usage || currentKI.tactic_summary || 'Respond to this situation.',
+            objection: currentKI.when_to_use || 'Respond to this buyer situation.',
           },
           userResponse: response,
           ki: {
