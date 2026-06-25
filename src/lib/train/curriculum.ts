@@ -269,7 +269,7 @@ export async function getBandExemplarPool(
 ): Promise<CurriculumKi[]> {
   const { data: concepts, error: cErr } = await (supabase as any)
     .from('curriculum_concepts')
-    .select('concept_id, exemplar_ki_id, teach_kind, drill_prompt, title, order_in_sublevel')
+    .select('concept_id, exemplar_ki_id, teach_kind, drill_prompt, title, order_in_sublevel, model_line_plain')
     .eq('spoke', spoke)
     .eq('topic', topic)
     .eq('band', band)
@@ -278,6 +278,7 @@ export async function getBandExemplarPool(
 
   const conceptRows = (concepts as AnyRow[]) ?? [];
   const conceptIds = conceptRows.map((c) => String(c.concept_id));
+  const conceptById = new Map(conceptRows.map((c) => [String(c.concept_id), c]));
 
   // Pool A — real exemplar KIs (hydrated from ki_curriculum_full so scenario flows through)
   const exemplarItems: CurriculumKi[] = [];
@@ -311,7 +312,11 @@ export async function getBandExemplarPool(
           },
           kiMap.get(String(l.ki_id)),
         );
-        if (hk) exemplarItems.push(hk);
+        if (hk) {
+          const concept = conceptById.get(String(l.concept_id));
+          hk.modelLinePlain = (concept?.model_line_plain as string | null) ?? null;
+          exemplarItems.push(hk);
+        }
       }
     }
   }
@@ -335,6 +340,7 @@ export async function getBandExemplarPool(
       chapter: null,
       promptOnly: true,
       scenario: String(c.drill_prompt),
+      modelLinePlain: null,
     }));
 
   // Prompt-only authored items lead (they're typically early-concept value-story prompts),
