@@ -32,7 +32,7 @@ export default function TrainBandGate() {
   const items = useMemo(() => {
     if (!data) return [];
     return (data.pool ?? []).slice(0, 5).map((ki) => ({
-      objection: ki.when_to_use || 'Respond to this buyer situation.',
+      objection: ki.scenario ?? ki.when_to_use ?? 'Respond to this buyer situation.',
       sourceKiId: ki.ki_id,
       sourceTitle: ki.title,
     }));
