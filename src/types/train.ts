@@ -61,6 +61,7 @@ export interface ConceptWithItems {
   concept: ConceptRow;
   teach:
     | { kind: 'ki_exemplar'; exemplar: CurriculumKi }
+    | { kind: 'authored_md'; markdown: string }
     | { kind: 'authored'; ref: string }
     | { kind: 'pending'; provisional?: CurriculumKi };
   drills: CurriculumKi[];      // capped (default 5)
