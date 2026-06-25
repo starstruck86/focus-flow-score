@@ -231,12 +231,13 @@ function TeachOpener({
               <p>{t.exemplar.tactic_summary}</p>
             </div>
           )}
-          {t.exemplar.example_usage && (
+          {(t.modelLine ?? t.exemplar.example_usage) && (
             <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
               <div className="text-[11px] uppercase text-primary mb-1">Model line</div>
-              <p className="italic">{t.exemplar.example_usage}</p>
+              <p className="italic">{t.modelLine ?? t.exemplar.example_usage}</p>
             </div>
           )}
+
         </div>
       )}
 
