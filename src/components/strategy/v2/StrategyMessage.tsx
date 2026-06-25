@@ -14,6 +14,7 @@ import remarkGfm from 'remark-gfm';
 import { Copy, Check } from 'lucide-react';
 import type { StrategyMessage as StrategyMessageT } from '@/types/strategy';
 import { MessageActions } from './MessageActions';
+import { CalibrationChip } from './CalibrationChip';
 import type { StrategyGlobalInstructionsConfig } from '@/lib/strategy/strategyConfig';
 
 function CopyButton({ getText }: { getText: () => string }) {
@@ -396,6 +397,7 @@ export function StrategyMessage({ message, onQuickAction, strategyConfig }: Prop
       >
         {assistantText}
       </ReactMarkdown>
+      <CalibrationChip calibration={(message.content_json as any)?.calibration} />
       <div className="mt-2 flex items-center gap-1 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
         <CopyButton getText={() => assistantText} />
       </div>
