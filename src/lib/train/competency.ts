@@ -117,11 +117,8 @@ export async function recordBandGateAttempt(input: BandGateInput): Promise<UserB
   const prevBest = Number(existing?.best_score ?? 0);
   const nextBest = Math.max(prevBest, attempt.avgScore);
   const passed = attempt.passed;
-  const days = retestDays(attempt.avgScore, passed);
-  const nextRetestDue =
-    days == null
-      ? null
-      : new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+  const days = retestDays(passed);
+  const nextRetestDue = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
 
   const payload = {
     user_id: userId,
