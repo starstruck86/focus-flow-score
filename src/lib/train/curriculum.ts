@@ -269,7 +269,7 @@ export async function getBandExemplarPool(
 ): Promise<CurriculumKi[]> {
   const { data: concepts, error: cErr } = await (supabase as any)
     .from('curriculum_concepts')
-    .select('concept_id, exemplar_ki_id, teach_kind, drill_prompt, title, order_in_sublevel, model_line_plain')
+    .select('concept_id, exemplar_ki_id, teach_kind, drill_prompt, title, order_in_sublevel, model_line_plain, gate_elite')
     .eq('spoke', spoke)
     .eq('topic', topic)
     .eq('band', band)
