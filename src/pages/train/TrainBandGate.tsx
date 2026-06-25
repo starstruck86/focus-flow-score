@@ -165,7 +165,9 @@ export default function TrainBandGate() {
               <div className="rounded-md border border-green-500/40 bg-green-500/5 p-3 mb-3 text-sm">
                 <div className="flex items-center gap-2 font-semibold mb-1">
                   <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  You're now {BAND_NAMES[Math.min(5, band + 1) as Band]}
+                  {data?.gate?.promotes_to
+                    ? `You're now ${BAND_NAMES[data.gate.promotes_to]}`
+                    : 'Top band cleared — fully certified'}
                 </div>
                 {result.nextRetestDue && (
                   <div className="text-xs text-muted-foreground">
