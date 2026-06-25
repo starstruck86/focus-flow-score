@@ -1,5 +1,5 @@
 # DYNAMIC — TRAIN: DEEP LINKING TEACH BEATS
-Version: 2026-06-25 | Stage B — verified, ratified
+Version: 2026-06-25 | Stage B — ALL 8 TEACH BEATS DRAFTED
 Verification: docs.branch.io live run 2026-06-25
 
 These are the 5 verified teach beats for the Deep Linking spoke (Stage B).
