@@ -2089,6 +2089,7 @@ export type Database = {
           band: number
           concept_id: string
           created_at: string
+          drill_prompt: string | null
           exemplar_ki_id: string | null
           notes: string | null
           order_in_sublevel: number
@@ -2106,6 +2107,7 @@ export type Database = {
           band: number
           concept_id: string
           created_at?: string
+          drill_prompt?: string | null
           exemplar_ki_id?: string | null
           notes?: string | null
           order_in_sublevel: number
@@ -2123,6 +2125,7 @@ export type Database = {
           band?: number
           concept_id?: string
           created_at?: string
+          drill_prompt?: string | null
           exemplar_ki_id?: string | null
           notes?: string | null
           order_in_sublevel?: number
