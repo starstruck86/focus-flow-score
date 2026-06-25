@@ -62,14 +62,17 @@ export function MicroDrillSession({ userId, dimension, onExit }: MicroDrillSessi
         body: JSON.stringify({
           userResponse: response,
           scenario: {
-            prompt: ki.example_usage || ki.tactic_summary || '',
+            context: ki.when_to_use || 'Quick drill — apply the play.',
+            objection: ki.when_to_use || 'Respond to this buyer situation.',
             skillFocus: dimension,
             title: ki.title || '',
           },
           ki: {
+            title: ki.title || '',
             tactic_summary: ki.tactic_summary,
             why_it_matters: ki.why_it_matters,
             when_to_use: ki.when_to_use,
+            when_not_to_use: ki.when_not_to_use,
           },
           microMode: true,
         }),
