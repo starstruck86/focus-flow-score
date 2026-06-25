@@ -337,13 +337,9 @@ export async function getBandExemplarPool(
       scenario: String(c.drill_prompt),
     }));
 
-  // Merge in concept order (order_in_sublevel) for a stable pool sequence.
-  const orderByConcept = new Map(conceptRows.map((c, i) => [String(c.concept_id), Number(c.order_in_sublevel) || i]));
-  // exemplarItems don't carry concept_id post-hydrate; we re-derive via a parallel index map.
-  return [...promptOnlyItems, ...exemplarItems].sort((a, b) => {
-    const ao = orderByConcept.get(String(a.ki_id)) ?? a.order_in_concept;
-    const bo = orderByConcept.get(String(b.ki_id)) ?? b.order_in_concept;
-    return ao - bo;
-  });
+  // Prompt-only authored items lead (they're typically early-concept value-story prompts),
+  // followed by exemplar KIs in their natural ki_curriculum order.
+  return [...promptOnlyItems, ...exemplarItems];
 }
+
 
