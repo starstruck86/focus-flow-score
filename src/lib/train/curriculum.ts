@@ -84,7 +84,9 @@ export async function getSubLevels(spoke: string, topic: string): Promise<SubLev
       teach_beat_ref: (raw.teach_beat_ref as string | null) ?? null,
       teach_beat_md: (raw.teach_beat_md as string | null) ?? null,
       drill_prompt: (raw.drill_prompt as string | null) ?? null,
+      model_line_plain: (raw.model_line_plain as string | null) ?? null,
       notes: (raw.notes as string | null) ?? null,
+
     };
     const key = `${c.band}::${c.sub_level}`;
     if (!groups.has(key)) {
@@ -129,7 +131,9 @@ export async function getConceptWithItems(
     teach_beat_ref: (conceptData.teach_beat_ref as string | null) ?? null,
     teach_beat_md: (conceptData.teach_beat_md as string | null) ?? null,
     drill_prompt: (conceptData.drill_prompt as string | null) ?? null,
+    model_line_plain: (conceptData.model_line_plain as string | null) ?? null,
     notes: (conceptData.notes as string | null) ?? null,
+
   };
 
   const links = (linkData as AnyRow[]) ?? [];
@@ -221,7 +225,12 @@ export async function getConceptWithItems(
   } else if (concept.teach_kind === 'authored' && concept.teach_beat_ref) {
     teach = { kind: 'authored', ref: concept.teach_beat_ref };
   } else if (concept.teach_kind === 'ki_exemplar' && exemplarKi) {
-    teach = { kind: 'ki_exemplar', exemplar: exemplarKi };
+    teach = {
+      kind: 'ki_exemplar',
+      exemplar: exemplarKi,
+      modelLine: concept.model_line_plain ?? exemplarKi.example_usage,
+    };
+
   } else {
     teach = { kind: 'pending', provisional: drills[0] };
   }

@@ -2091,6 +2091,7 @@ export type Database = {
           created_at: string
           drill_prompt: string | null
           exemplar_ki_id: string | null
+          model_line_plain: string | null
           notes: string | null
           order_in_sublevel: number
           spoke: string
@@ -2109,6 +2110,7 @@ export type Database = {
           created_at?: string
           drill_prompt?: string | null
           exemplar_ki_id?: string | null
+          model_line_plain?: string | null
           notes?: string | null
           order_in_sublevel: number
           spoke: string
@@ -2127,6 +2129,7 @@ export type Database = {
           created_at?: string
           drill_prompt?: string | null
           exemplar_ki_id?: string | null
+          model_line_plain?: string | null
           notes?: string | null
           order_in_sublevel?: number
           spoke?: string
@@ -10324,6 +10327,7 @@ export type Database = {
       }
       ki_curriculum_full: {
         Row: {
+          active: boolean | null
           band: number | null
           concept_id: string | null
           drill_scenario: string | null

@@ -36,7 +36,10 @@ export interface ConceptRow {
   teach_beat_md: string | null;
   /** Cold/warm practice prompt for teach-only concepts. */
   drill_prompt: string | null;
+  /** AE-facing plain-English version of the exemplar's model line. */
+  model_line_plain: string | null;
   notes: string | null;
+
 }
 
 export interface CurriculumKiRef {
@@ -67,7 +70,7 @@ export interface CurriculumKi extends CurriculumKiRef {
 export interface ConceptWithItems {
   concept: ConceptRow;
   teach:
-    | { kind: 'ki_exemplar'; exemplar: CurriculumKi }
+    | { kind: 'ki_exemplar'; exemplar: CurriculumKi; modelLine?: string | null }
     | { kind: 'authored_md'; markdown: string }
     | { kind: 'authored'; ref: string }
     | { kind: 'pending'; provisional?: CurriculumKi };
