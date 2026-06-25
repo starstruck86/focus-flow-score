@@ -583,24 +583,27 @@ Keep coachingNote short and concrete. Anchor judgment to internal deal movement,
       stakeholderBlock = `\n\nSTAKEHOLDER CONTEXT:${tensionLabel}\n${lines.join('\n')}`;
     }
 
-    // Build KI context block when a specific play is being practiced
-    const kiBlock = (ki?.tactic_summary || ki?.example_usage) ? `
+    // Build KI context block when a specific play is being practiced.
+    // INTENTIONAL: example_usage is the gold answer — it MUST NOT appear in the
+    // scoring prompt or the model double-reads the correct response and inflates
+    // the score (the "Sharpen score-poisoning" bug). Keep only the play intent
+    // fields (tactic_summary, when_to_use, when_not_to_use, why_it_matters).
+    const kiBlock = (ki?.tactic_summary || ki?.when_to_use || ki?.why_it_matters) ? `
 
 THE SPECIFIC PLAY BEING PRACTICED:
 ${ki.title ? `Play: ${ki.title}` : ''}
 What this play does: ${ki.tactic_summary ?? ''}
-${ki.example_usage ? `World-class execution — real call example: "${ki.example_usage}"` : ''}
 ${ki.when_to_use ? `When to use: ${ki.when_to_use}` : ''}
 ${ki.when_not_to_use ? `When NOT to use (the trap): ${ki.when_not_to_use}` : ''}
 ${ki.why_it_matters ? `Why this matters: ${ki.why_it_matters}` : ''}
 
 KI-SPECIFIC GRADING — THREE DIMENSIONS (return alongside overall score):
 1. recognitionScore (0-33): Did the rep recognize this situation calls for THIS specific play? 0 = wrong play entirely, 33 = immediately and correctly applied it.
-2. executionScore (0-34): How closely does their response match the INTENT and STRUCTURE of the real call example? Grade on commercial precision, key moves, and framing — NOT verbatim matching. 0 = didn't attempt the play, 34 = matched elite execution.
+2. executionScore (0-34): How closely does their response match the INTENT and STRUCTURE of the play (tactic_summary + when_to_use)? Grade on commercial precision, key moves, and framing. 0 = didn't attempt the play, 34 = elite execution of the described intent.
 3. awarenessScore (0-33): Did they avoid the "when NOT to use" traps listed above? 0 = fell into a clear trap, 33 = cleanly avoided all pitfalls.
 Total score = recognitionScore + executionScore + awarenessScore.
 
-CRITICAL: When ki context is provided, the "worldClassResponse" in your output MUST be based on the real call example above — adapt it lightly to this specific scenario's context and numbers, but preserve the structure, moves, and commercial precision of the original. Do NOT generate a completely new response. You are showing the rep how that actual play was executed in a real call.` : '';
+CRITICAL: When ki context is provided, "worldClassResponse" must be your independent rendering of what an elite rep would say to execute the described play (tactic_summary + when_to_use) in this scenario. Do NOT echo a canned example — generate the response from the play's intent.` : '';
 
     const userPrompt = `SCENARIO:
 Skill being tested: ${skill}
