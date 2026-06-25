@@ -75,6 +75,7 @@ export async function getSubLevels(spoke: string, topic: string): Promise<SubLev
       teach_beat_status: (raw.teach_beat_status as ConceptRow['teach_beat_status']) ?? 'pending',
       teach_beat_ref: (raw.teach_beat_ref as string | null) ?? null,
       teach_beat_md: (raw.teach_beat_md as string | null) ?? null,
+      drill_prompt: (raw.drill_prompt as string | null) ?? null,
       notes: (raw.notes as string | null) ?? null,
     };
     const key = `${c.band}::${c.sub_level}`;
@@ -119,6 +120,7 @@ export async function getConceptWithItems(
     teach_beat_status: (conceptData.teach_beat_status as ConceptRow['teach_beat_status']) ?? 'pending',
     teach_beat_ref: (conceptData.teach_beat_ref as string | null) ?? null,
     teach_beat_md: (conceptData.teach_beat_md as string | null) ?? null,
+    drill_prompt: (conceptData.drill_prompt as string | null) ?? null,
     notes: (conceptData.notes as string | null) ?? null,
   };
 
@@ -152,7 +154,45 @@ export async function getConceptWithItems(
 
   const exemplarKi = hydrated.find((k) => k.is_exemplar) ?? null;
   const drillsAll = hydrated.filter((k) => !k.is_exemplar);
-  const drills = drillsAll.slice(0, cap);
+  let drills = drillsAll.slice(0, cap);
+  let drillsAvailable = drillsAll.length;
+
+  // Synthesize a single practice drill for teach-only concepts so the
+  // ladder never dead-ends. Order: warm (off exemplar) → cold (prompt only).
+  if (drillsAvailable === 0) {
+    if (exemplarKi) {
+      const situation =
+        (concept.drill_prompt && concept.drill_prompt.trim()) ||
+        exemplarKi.when_to_use ||
+        'Respond to this buyer situation.';
+      drills = [{
+        ...exemplarKi,
+        role: 'drill',
+        is_exemplar: false,
+        order_in_concept: 0,
+        when_to_use: situation,
+      }];
+      drillsAvailable = 1;
+    } else if (concept.drill_prompt && concept.drill_prompt.trim()) {
+      drills = [{
+        ki_id: '',
+        role: 'drill',
+        is_exemplar: false,
+        order_in_concept: 0,
+        active: true,
+        title: concept.title,
+        tactic_summary: null,
+        example_usage: null,
+        when_to_use: concept.drill_prompt,
+        when_not_to_use: null,
+        why_it_matters: null,
+        spider_dimension: null,
+        chapter: null,
+        promptOnly: true,
+      }];
+      drillsAvailable = 1;
+    }
+  }
 
   // Teach-opener resolution (Plan §D ruling + correction):
   //   pending status         → provisional first-drill (never hard-skip)
@@ -162,7 +202,7 @@ export async function getConceptWithItems(
   //   fallback               → provisional first-drill
   let teach: ConceptWithItems['teach'];
   if (concept.teach_beat_status === 'pending') {
-    teach = { kind: 'pending', provisional: drillsAll[0] };
+    teach = { kind: 'pending', provisional: drills[0] };
   } else if (concept.teach_kind === 'authored' && concept.teach_beat_md) {
     teach = { kind: 'authored_md', markdown: concept.teach_beat_md };
   } else if (concept.teach_kind === 'authored' && concept.teach_beat_ref) {
@@ -170,10 +210,10 @@ export async function getConceptWithItems(
   } else if (concept.teach_kind === 'ki_exemplar' && exemplarKi) {
     teach = { kind: 'ki_exemplar', exemplar: exemplarKi };
   } else {
-    teach = { kind: 'pending', provisional: drillsAll[0] };
+    teach = { kind: 'pending', provisional: drills[0] };
   }
 
-  return { concept, teach, drills, drillsAvailable: drillsAll.length };
+  return { concept, teach, drills, drillsAvailable };
 }
 
 /** Gate metadata for a band. */
