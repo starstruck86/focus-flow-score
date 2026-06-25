@@ -41,7 +41,8 @@ export async function incrementSubLevelRep(input: RepInput): Promise<UserCompete
 
   const prevReps = Number(existing?.reps ?? 0);
   const prevProgress = Number(existing?.progress ?? 0);
-  const required = Math.max(TRAIN_TUNABLES.subLevelRequiredPasses, drillCountInSubLevel || 0);
+  // Required = designed constant (e.g. 3). drillCountInSubLevel is AVAILABLE reps, not REQUIRED.
+  const required = TRAIN_TUNABLES.subLevelRequiredPasses;
 
   const passed = score >= TRAIN_TUNABLES.subLevelPassThreshold ? 1 : 0;
   const passingRepsApprox = Math.round(prevProgress * required) + passed;
