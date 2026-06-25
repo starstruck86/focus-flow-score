@@ -74,6 +74,7 @@ export async function getSubLevels(spoke: string, topic: string): Promise<SubLev
       exemplar_ki_id: (raw.exemplar_ki_id as string | null) ?? null,
       teach_beat_status: (raw.teach_beat_status as ConceptRow['teach_beat_status']) ?? 'pending',
       teach_beat_ref: (raw.teach_beat_ref as string | null) ?? null,
+      teach_beat_md: (raw.teach_beat_md as string | null) ?? null,
       notes: (raw.notes as string | null) ?? null,
     };
     const key = `${c.band}::${c.sub_level}`;
