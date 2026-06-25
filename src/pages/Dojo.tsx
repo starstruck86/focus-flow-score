@@ -744,6 +744,24 @@ export default function Dojo() {
 
               {isMature && <MasteryLanes todayAnchor={todayAnchor} />}
 
+              <Card className="p-3 border-primary/30 bg-primary/5">
+                <button
+                  onClick={() => navigate('/train/product/deep_linking')}
+                  className="w-full flex items-center justify-between text-left"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <BookMarked className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-semibold">Train · Deep Linking</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Curriculum ladder · Foundation → Expert · cold band gates
+                    </p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </Card>
+
               {isMature && (
                 <TrainingModes
                   skillStats={skillStats}
