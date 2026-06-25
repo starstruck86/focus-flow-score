@@ -111,9 +111,11 @@ export default function TrainTopic() {
                   return (
                     <Card key={g.sub_level} className={cn('p-3', !unlocked && 'opacity-50')}>
                       <div className="flex items-center gap-3">
-                        <Ring progress={progress} label={`${g.sub_level}`} />
+                        <Ring progress={progress} />
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs text-muted-foreground">{reps} reps</div>
+                          <div className="text-xs text-muted-foreground">
+                            <span className="font-mono">{g.sub_level}</span> · {reps} reps
+                          </div>
                           <div className="mt-1 space-y-1">
                             {g.concepts.map((c) => (
                               <button
