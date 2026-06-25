@@ -2335,6 +2335,37 @@ serve(async (req) => {
       });
     }
 
+    // ── Provider health surface (fail-loud) — early short-circuit ──
+    // Must run BEFORE any preprocessing that requires threadId/content so
+    // the banner ping can't 400 on missing fields. No LLM call.
+    if (body?.action === "health_check") {
+      const degraded =
+        !PROVIDER_HEALTH.anthropicDirect ||
+        !PROVIDER_HEALTH.openaiDirect ||
+        !PROVIDER_HEALTH.lovableGateway;
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          degraded,
+          providers: {
+            anthropic: PROVIDER_HEALTH.anthropicDirect,
+            openai: PROVIDER_HEALTH.openaiDirect,
+            openai_reason: PROVIDER_HEALTH.openaiDirectReason,
+            perplexity: PROVIDER_HEALTH.perplexityDirect,
+            lovable_gateway: PROVIDER_HEALTH.lovableGateway,
+          },
+          impact: {
+            situation_classifier: PROVIDER_HEALTH.lovableGateway ? "ok" : "degraded — falls back to keyword retrieval",
+            easy_prompt: PROVIDER_HEALTH.lovableGateway ? "ok" : "disabled — terse prompts not expanded",
+            chat_synthesis: PROVIDER_HEALTH.anthropicDirect ? "ok" : "degraded — Claude path unavailable",
+            chat_general: PROVIDER_HEALTH.openaiDirect ? "ok" : "degraded — OpenAI path unavailable",
+          },
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+
     // ── Phase 3 — Strategy Skills passthrough (inert by default) ──
     // Triple-gated early return:
     //   1. STRATEGY_SKILLS_ENABLED env flag must be "true"
