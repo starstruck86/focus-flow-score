@@ -238,25 +238,12 @@ function TeachOpener({
       {t.kind === 'ki_exemplar' && (
         <div className="space-y-3 text-sm">
           <h3 className="text-base font-semibold">{t.exemplar.title}</h3>
-          {t.exemplar.why_it_matters && (
-            <div>
-              <div className="text-[11px] uppercase text-muted-foreground mb-1">Why this is elite</div>
-              <p>{t.exemplar.why_it_matters}</p>
+          {(t.modelLine ?? t.exemplar.example_usage ?? t.exemplar.tactic_summary) && (
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-4">
+              <div className="text-[11px] uppercase tracking-wider text-primary mb-2">How an elite AE explains this</div>
+              <p className="leading-relaxed">{t.modelLine ?? t.exemplar.example_usage ?? t.exemplar.tactic_summary}</p>
             </div>
           )}
-          {t.exemplar.tactic_summary && (
-            <div>
-              <div className="text-[11px] uppercase text-muted-foreground mb-1">The play</div>
-              <p>{t.exemplar.tactic_summary}</p>
-            </div>
-          )}
-          {(t.modelLine ?? t.exemplar.example_usage) && (
-            <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
-              <div className="text-[11px] uppercase text-primary mb-1">Model line</div>
-              <p className="italic">{t.modelLine ?? t.exemplar.example_usage}</p>
-            </div>
-          )}
-
         </div>
       )}
 
