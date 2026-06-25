@@ -168,7 +168,7 @@ export default function TrainTopic() {
                             ? `Passed · best ${gate.best_score}`
                             : !unlocked
                               ? `Pass Band ${band - 1} to unlock`
-                              : 'Cold capstone · 5 items'}
+                              : 'Cold capstone'}
                         </div>
                       </div>
                     </div>
