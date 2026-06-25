@@ -10,8 +10,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConceptAtom } from '@/hooks/train/useConceptAtom';
 import { runPracticeRep, writeTrainSession } from '@/lib/train/engine';
-import type { CurriculumKi } from '@/types/train';
-import { Sparkles, BookOpen, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { TRAIN_TUNABLES, type CurriculumKi } from '@/types/train';
+import { Sparkles, BookOpen, RotateCcw, CheckCircle2, ArrowLeft } from 'lucide-react';
 
 type Phase = 'teach' | 'try' | 'scored';
 
