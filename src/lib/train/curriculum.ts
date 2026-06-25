@@ -131,7 +131,9 @@ export async function getConceptWithItems(
     teach_beat_ref: (conceptData.teach_beat_ref as string | null) ?? null,
     teach_beat_md: (conceptData.teach_beat_md as string | null) ?? null,
     drill_prompt: (conceptData.drill_prompt as string | null) ?? null,
+    model_line_plain: (conceptData.model_line_plain as string | null) ?? null,
     notes: (conceptData.notes as string | null) ?? null,
+
   };
 
   const links = (linkData as AnyRow[]) ?? [];
