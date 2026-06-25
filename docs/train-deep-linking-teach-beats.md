@@ -1,5 +1,5 @@
 # DYNAMIC — TRAIN: DEEP LINKING TEACH BEATS
-Version: 2026-06-25 | Stage B — ALL 8 TEACH BEATS DRAFTED
+Version: 2026-06-25 | Stage B — ALL 9 TEACH BEATS DRAFTED — EXEMPLAR GAPS = ZERO
 Verification: docs.branch.io live run 2026-06-25
 
 These are the 5 verified teach beats for the Deep Linking spoke (Stage B).
@@ -285,11 +285,56 @@ One Branch key for both produces a silent failure that's hard to diagnose. Apple
 
 ---
 
+## C5b — HTML Deep-Link Schema / Hosted Deep Link Data (Level 3.2)
+### Situation
+A retail brand has 50,000 product pages. Their marketing team needs Branch deep links for every product — for email campaigns, Journeys banners, and social sharing. They ask: "Does a developer have to manually create a Branch link for each product page?" The answer is no — but only if the web team instruments the pages correctly upfront.
+
+### Elite Exemplar
+A large e-commerce brand adds three metatags to every product page template:
+```html
+<meta name="branch:deeplink:product_id" content="SKU-98234" />
+<meta name="branch:deeplink:category" content="shoes" />
+<meta name="branch:deeplink:$canonical_url" content="https://shop.com/shoes/brown-loafers" />
+```
+Now any marketer creating a Branch Quick Link, any email tool using Branch Universal Email, or any Journeys banner targeting that URL automatically inherits the correct deep link data — `product_id`, `category`, and canonical URL — without engineering involvement. The web page carries the routing intelligence. The link creator just provides the URL; Branch scrapes the rest.
+
+### Why Elite
+Without hosted data, every link needing precise in-app routing requires a developer to manually populate the data dictionary. At scale — thousands of product pages, email campaigns, Journeys — this is a bottleneck that kills the Web-to-App motion. Hosted metatags flip the model: web engineers instrument the template once, and every downstream link creation gets correct routing automatically. One-time investment, unlimited leverage.
+
+### Anatomy
+**Metatag syntax (confirmed current):**
+```html
+<meta name="branch:deeplink:[key]" content="[value]" />
+```
+Each tag becomes a key-value pair in Branch deep link data.
+
+**Four mapping methods:**
+| Method | Best for |
+|---|---|
+| **Hosted metatags** *(recommended)* | Sites with unique per-page content |
+| **Query parameters** | Sites already carrying data in URL params |
+| **URL path** | Apps routing on URL path |
+| **Full URL** | Simplest setup, less precise |
+
+**Critical constraints:**
+- Tags must be in **static HTML** — Branch scraper does NOT execute JavaScript. GTM injection is not scraped.
+- Branch scrapes **on link creation**, not on click.
+- Facebook App Links tags also accepted — Branch reads them automatically.
+- `$canonical_url` metatag → becomes `$deeplink_path` in Branch by default.
+
+**What it enables:** Marketers create Quick Links by pasting a URL (Branch auto-populates from metatags). Journeys banners auto-inherit correct deep link data. Branch Universal Email converts web links at send time. Chrome Extension reads metatags for one-click creation.
+
+> **Source:** docs.branch.io/pages/web/hosted-data/
+
+---
+
 ## DONE-WHEN STATUS
 
 | Teach Beat | Verified | Drafted | Shippable |
 |---|---|---|---|
 | C4 getShortUrl (1.2) | ✅ | ✅ | ✅ pending Corey voice layer |
 | C6 Platform primitives (2.1) | ✅ | ✅ | ✅ pending Corey voice layer |
+| C5b Hosted deep link data (3.2) | ✅ | ✅ | ✅ |
 | C16 iMessage surfaces (5.2) | ✅ | ✅ | ✅ pending Corey voice layer |
 | C17 TikTok | ⬜ BLANK | — | Fill post-Day-1 |
+
