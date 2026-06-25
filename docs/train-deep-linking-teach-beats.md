@@ -163,3 +163,133 @@ Journeys closes the web-to-app conversion gap in-app tools can't address. A user
 - Journeys = **mobile web** surface (users NOT yet in app)
 - Braze/Iterable = **in-app** surface (users already in app)
 - AE pitch: "Journeys handles the acquisition layer Braze can't touch."
+
+---
+
+## C4 — getShortUrl Call Flow (Level 1.2)
+### Situation
+A developer needs to generate Branch short links inside the app — for share sheets, referral programs, or dynamic content linking. They find the Android example, copy the pattern, apply it to iOS. It compiles. But on iOS, `getShortUrl` is async — there is no synchronous return value. The link is nil. The share sheet shows nothing. The pattern is not portable across platforms.
+
+### Elite Exemplar
+A social app generates a per-content Branch short link whenever a user taps "Share." The developer knows the call flow differs by SDK:
+
+**Android (Kotlin):**
+```kotlin
+val buo = BranchUniversalObject()
+    .setCanonicalIdentifier("content/12345")
+    .setTitle("Check this out")
+val lp = LinkProperties()
+    .setChannel("social").setFeature("sharing")
+    .addControlParameter("$desktop_url", "https://example.com/content/12345")
+val url = buo.getShortUrl(applicationContext, lp) // synchronous
+shareContent(url)
+```
+
+**iOS (Swift) — async required:**
+```swift
+let buo = BranchUniversalObject(canonicalIdentifier: "content/12345")
+let lp = BranchLinkProperties()
+lp.channel = "social"; lp.feature = "sharing"
+lp.addControlParam("$desktop_url", withValue: "https://example.com/content/12345")
+buo.getShortUrl(with: lp) { url, error in
+    guard error == nil, let url = url else { return }
+    self.shareContent(url) // Must be called inside callback
+}
+```
+
+**Web SDK — entirely different pattern (no BUO/LinkProperties):**
+```javascript
+branch.link({
+    channel: 'social', feature: 'sharing',
+    data: { '$desktop_url': 'https://example.com/content/12345', 'content_id': '12345' }
+}, function(err, link) { console.log(link); });
+```
+
+### Why Elite
+Three patterns look similar enough to invite copy-paste failures that fail silently. iOS returning `nil` without error when called synchronously is a common integration bug. Web SDK using a plain data dictionary instead of BUO is often missed entirely by mobile-first developers.
+
+### Anatomy
+1. Build a `BranchUniversalObject` — canonical identifier (required), title, description, image URL.
+2. Build `LinkProperties` — channel, feature, campaign, control params (`$desktop_url`, `$fallback_url`), custom params.
+3. Call `getShortUrl`:
+   - Android: synchronous return OR async `BranchLinkCreateListener` callback.
+   - iOS: **always async** — callback required; do not attempt synchronous use.
+   - Web SDK: `branch.link(data, callback)` — no BUO, plain data dictionary.
+4. Use the URL **inside the callback** on iOS/Web. Share sheet or clipboard must happen inside callback scope.
+5. Custom data passes through — readable via `getLatestReferringParams()` on the receiving end.
+
+> **Source:** docs.branch.io/viral/content-sharing, iOS/Android Full Reference guides
+
+---
+
+## C6 — Platform Primitives Unified Matrix (Level 2.1)
+### Situation
+A developer asks: "Do I need to set up Universal Links, or does Branch handle that?" An AE is asked: "We already have Universal Links — why do we need Branch?" Without understanding what each mechanism does and how Branch layers on top, both give wrong or incomplete answers.
+
+### Elite Exemplar
+A Branch SE does technical discovery with a prospect's mobile team that already has iOS Universal Links and Android App Links configured on their own domain. SE: "You've done the platform work. Branch wraps all four mechanisms — Universal Links, App Links, URI scheme, and NativeLink — into a single link that auto-selects the highest-confidence method for each user. Your existing UL/AL config still works; Branch co-registers on the domain and adds deferred deep linking, probabilistic matching, and the NativeLink DDL guarantee on top."
+
+### Why Elite
+The four mechanisms are not interchangeable — they solve different problems, apply on different platforms, and have different reliability profiles. Universal Links and App Links are the highest-confidence direct-open methods. URI schemes are fallback. NativeLink solves a specific iOS 15+ problem Universal Links don't address. Treating them as alternatives rather than a layered stack leads to misconfigurations and gaps.
+
+### Anatomy
+
+| Mechanism | Platform | What it is | Reliability | When Branch applies it |
+|---|---|---|---|---|
+| **Universal Links** | iOS 9+ | Native HTTPS-based app open. iOS validates app against AASA file. Branch provisions/hosts AASA on app.link domain. No redirect — direct tap-to-app. | Highest on iOS. Deterministic when configured. | When app is installed + UL configured. Branch auto co-registers on app.link. |
+| **Android App Links** | Android 6+ | Same concept as Universal Links on Android. SHA256 cert fingerprint required. Branch provisions `assetlinks.json`. | Highest on Android. Deterministic when configured. | When app is installed + App Links configured. |
+| **URI Scheme** | iOS + Android | Custom scheme (`myapp://`). Fallback when UL/AL unavailable or fail. Three modes: Conservative / Intelligent (default) / Aggressive. | Lower. Can trigger error dialogs if app uninstalled. Intelligent mode mitigates with Branch data. | Fallback when UL/AL fail or not configured. |
+| **NativeLink™** | iOS only | Branch's pasteboard-based DDL. Addresses iOS 15+ iCloud+ Private Relay degradation. User sees Deepview → tapping CTA guarantees `+match_guaranteed=true`. 100% DDL accuracy. | 100% when enabled. Requires user interaction. | Opt-in per app. Options: All iOS Traffic / iOS 15+ Only / Private Relay Only. |
+
+**Branch's unification principle:** One Branch link → Branch detects device, OS, browser, install state and applies the right mechanism automatically. NativeLink is the opt-in layer for guaranteed DDL where iCloud+ Private Relay would otherwise degrade accuracy.
+
+**AE frame:** "You configure the primitives once. Branch handles which one fires and when — including edge cases that would break a hand-rolled implementation."
+
+> **Source:** docs.branch.io/links/default-link-behavior, docs.branch.io/resources/matching
+
+---
+
+## C16 — iMessage and Special Surfaces (Level 5.2)
+### Situation
+A developer builds an iMessage extension. Adds Branch to the extension project using the same Branch key as the main app. Tests. Opening a Branch link from a message opens the main app, not the messages extension. The architecture they assumed doesn't exist — Apple didn't build it.
+
+### Elite Exemplar
+A messaging-adjacent app builds two separate Branch integrations: Branch key A for the main iOS app; Branch key B for the iMessage extension. Links created with Key B point to the iMessage App Store (`?app=messages` appended to the iTunes URL). New user taps a Branch link → routed to iMessage App Store to install the extension. Branch tracks the install and first-open in the iMessage context. Key A handles all other deep linking. The two are entirely separate and do not share a Branch key.
+
+### Why Elite
+One Branch key for both produces a silent failure that's hard to diagnose. Apple has not built a mechanism for a link click to open an already-installed iMessage extension directly. Developers who assume Branch can bridge the core app and the messages app build something that routes incorrectly. Understanding the constraint upfront eliminates a category of architecture mistake.
+
+### Anatomy
+**What `?app=messages` does:**
+- `itunes.apple.com/us/app/[name]/[id]` → main App Store
+- `itunes.apple.com/us/app/[name]/[id]?app=messages` → iMessage App Store (extension listing)
+
+**What Branch CAN do:**
+- Track installs of the iMessage extension.
+- Deferred deep link through install (DDL into the extension on first open).
+- Personalize the first-time experience inside the extension.
+
+**What Branch CANNOT do:**
+- Open an already-installed iMessage extension from a link click. Apple does not support this.
+- Share routing context between the core app and the messages extension.
+
+**Required architecture:**
+1. Create a **second Branch app** in the dashboard (separate from main app).
+2. Configure that second app's iOS settings to point to the iMessage App Store (with `?app=messages`).
+3. Integrate the Branch SDK into the iMessage extension using the **second Branch key**.
+4. Do not share keys. Routing between core app and messages extension is not possible through Branch.
+
+**Scope:** Keep narrow — iMessage install tracking + DDL only. App Clips, widgets, and stickers = separate surfaces, not covered by this verification run.
+
+> **Source:** docs.branch.io/app-to-app/imessage-apps/
+
+---
+
+## DONE-WHEN STATUS
+
+| Teach Beat | Verified | Drafted | Shippable |
+|---|---|---|---|
+| C4 getShortUrl (1.2) | ✅ | ✅ | ✅ pending Corey voice layer |
+| C6 Platform primitives (2.1) | ✅ | ✅ | ✅ pending Corey voice layer |
+| C16 iMessage surfaces (5.2) | ✅ | ✅ | ✅ pending Corey voice layer |
+| C17 TikTok | ⬜ BLANK | — | Fill post-Day-1 |
