@@ -2091,6 +2091,7 @@ export type Database = {
           created_at: string
           drill_prompt: string | null
           exemplar_ki_id: string | null
+          gate_elite: string | null
           model_line_plain: string | null
           notes: string | null
           order_in_sublevel: number
@@ -2110,6 +2111,7 @@ export type Database = {
           created_at?: string
           drill_prompt?: string | null
           exemplar_ki_id?: string | null
+          gate_elite?: string | null
           model_line_plain?: string | null
           notes?: string | null
           order_in_sublevel: number
@@ -2129,6 +2131,7 @@ export type Database = {
           created_at?: string
           drill_prompt?: string | null
           exemplar_ki_id?: string | null
+          gate_elite?: string | null
           model_line_plain?: string | null
           notes?: string | null
           order_in_sublevel?: number
