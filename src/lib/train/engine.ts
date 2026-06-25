@@ -133,26 +133,29 @@ export interface PracticeRepResult {
 }
 
 export async function runPracticeRep(input: PracticeRepInput): Promise<PracticeRepResult> {
+  const isPromptOnly = !!input.ki.promptOnly || !input.ki.ki_id;
   const objection = input.objection ?? input.ki.when_to_use ?? 'Respond to this buyer situation.';
   const scored = await scoreRep({
     skillFocus: input.skillFocus,
     userResponse: input.userResponse,
     objection,
     context: input.ki.when_to_use ?? undefined,
-    ki: input.ki,
+    ki: isPromptOnly ? null : input.ki,
   });
 
-  // Per-KI SRS — unchanged. Fire-and-forget.
-  writeKIMastery({
-    userId: input.userId,
-    kiId: input.ki.ki_id,
-    chapter: input.ki.chapter,
-    spiderDimension: input.ki.spider_dimension ?? null,
-    score: scored.score,
-    recognitionScore: scored.raw?.recognitionScore ?? null,
-    executionScore: scored.raw?.executionScore ?? null,
-    awarenessScore: scored.raw?.awarenessScore ?? null,
-  }).catch(() => {});
+  // Per-KI SRS — only when there is a real KI behind this rep.
+  if (!isPromptOnly) {
+    writeKIMastery({
+      userId: input.userId,
+      kiId: input.ki.ki_id,
+      chapter: input.ki.chapter,
+      spiderDimension: input.ki.spider_dimension ?? null,
+      score: scored.score,
+      recognitionScore: scored.raw?.recognitionScore ?? null,
+      executionScore: scored.raw?.executionScore ?? null,
+      awarenessScore: scored.raw?.awarenessScore ?? null,
+    }).catch(() => {});
+  }
 
   const comp = await incrementSubLevelRep({
     userId: input.userId,
