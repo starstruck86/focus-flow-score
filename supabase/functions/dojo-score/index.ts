@@ -642,8 +642,42 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
 
     const aiData = await aiResp.json();
     let content = aiData.content?.[0]?.text || "";
-    content = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    const parsed = JSON.parse(content);
+    content = content.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+    // Robust JSON extraction: Claude sometimes appends prose after the JSON object.
+    // Walk the string to find the first balanced top-level {...} block.
+    function extractFirstJsonObject(s: string): string {
+      const start = s.indexOf("{");
+      if (start === -1) return s;
+      let depth = 0;
+      let inStr = false;
+      let esc = false;
+      for (let i = start; i < s.length; i++) {
+        const ch = s[i];
+        if (inStr) {
+          if (esc) esc = false;
+          else if (ch === "\\") esc = true;
+          else if (ch === '"') inStr = false;
+        } else {
+          if (ch === '"') inStr = true;
+          else if (ch === "{") depth++;
+          else if (ch === "}") {
+            depth--;
+            if (depth === 0) return s.slice(start, i + 1);
+          }
+        }
+      }
+      return s.slice(start);
+    }
+    let parsed: any;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      const extracted = extractFirstJsonObject(content)
+        .replace(/,\s*}/g, "}")
+        .replace(/,\s*]/g, "]")
+        .replace(/[\x00-\x1F\x7F]/g, (c) => (c === "\n" || c === "\t" || c === "\r" ? c : ""));
+      parsed = JSON.parse(extracted);
+    }
 
     // ── Server-side enforcement ─────────────────────────────────
     if (typeof parsed.score === "number") parsed.score = Math.max(0, Math.min(100, Math.round(parsed.score)));
