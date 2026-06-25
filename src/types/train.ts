@@ -70,7 +70,7 @@ export interface CurriculumKi extends CurriculumKiRef {
 export interface ConceptWithItems {
   concept: ConceptRow;
   teach:
-    | { kind: 'ki_exemplar'; exemplar: CurriculumKi }
+    | { kind: 'ki_exemplar'; exemplar: CurriculumKi; modelLine?: string | null }
     | { kind: 'authored_md'; markdown: string }
     | { kind: 'authored'; ref: string }
     | { kind: 'pending'; provisional?: CurriculumKi };
