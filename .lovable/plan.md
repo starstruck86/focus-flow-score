@@ -1,134 +1,129 @@
 
-# ST5 — Real Account Projects (plan)
+# TRAIN v2 — Stage D Plan (Deep Linking proof topic)
 
-## 1. What "Projects" looks like today
+No code edits this turn. Audit + phased plan only.
 
-**Nav** (`StrategyNavSidebar.tsx`): `projects` is one of seven flat surfaces, icon `FolderKanban`, label "Projects".
+---
 
-**Shell** (`StrategyShell.tsx`): `activeSurface === 'projects'` only affects the composer placeholder ("Describe the project — Strategy will scope it…"). Per-surface drafts, pending-thread binding, threads sidebar etc. treat it like any other surface.
+## A. INVENTORY — existing Dojo engine to REUSE
 
-**SurfacePanel** (`SurfacePanel.tsx` lines 483-489, 1366-1474): when `surface === 'projects'`, renders `<ProjectsList>` which:
-- Reads `getPinnedThreadIds()` from `src/lib/strategy/pinnedThreads.ts` (localStorage key `sv-pinned-threads`).
-- Filters the in-memory `threads` array by pinned IDs.
-- Empty state: "Star a thread in the Work rail to promote it as a Project."
+**Session loop / orchestrator (the "one engine"):**
+- `src/pages/Sharpen.tsx` (620 LOC) — the actual rep loop: load KI → input → POST /dojo-score → feedback → next. This is the loop Stage D layers MODES onto. Writes `dojo_sessions` + `ki_mastery`.
+- `src/pages/Dojo.tsx` (839 LOC) — hub/dashboard (block mgmt, anchors, lanes). Not the rep loop; entry surface.
+- `src/components/dojo/DojoRoleplay.tsx`, `DojoReview.tsx`, `MicroDrillSession.tsx`, `TrainingModes.tsx` — alternate rep surfaces; relevant for understanding entry points but Sharpen is the canonical drill loop to extend.
 
-So "Project" today literally means "a starred thread." There is no aggregation, no account family, no cross-thread memory, no custom instructions. It's a glorified bookmark folder.
+**Scorer (the "one scorer"):**
+- `supabase/functions/dojo-score/index.ts` (908 LOC) — the scorer. Accepts `{ scenario:{skillFocus,context,objection}, userResponse, ki:{title,tactic_summary,example_usage,when_to_use,when_not_to_use,why_it_matters} }`. Returns score + rubric subscores + focusPattern + retry-aware deltas. **Reuse as-is** for roleplay/drill AND band gate (gate just calls it with `ki` omitted = cold).
+- Sibling scorers to leave alone: `dojo-roleplay-score`, `dojo-review-score`, `score-micro-drill`, `score-original-response`. Do NOT fork another.
 
-**Data already in place** (confirmed in DB):
-- 7 accounts populated with `account_family` (Comcast/NBCUniversal: 4 rows; Disney: 2 rows; A&E Networks: 1 row standalone).
-- `parent_account_id` gives the hierarchy inside a family.
-- `strategy_threads.linked_account_id`, `account_signals.linked_account_id`, `account_strategy_memory` (per account) all exist.
+**KI selection / writes:**
+- `src/lib/dojo/selectNextKI.ts`, `selectNextBranchKI.ts`, `selectNextKIFromCategory.ts` — current dimension/chapter pickers. **Stage D adds a 4th picker keyed off `ki_curriculum_full` (sub_level)**, does not replace them.
+- `src/lib/dojo/kiMasteryWriter.ts` — per-KI SRS write. **Keep firing per drill** (mandated).
+- `src/lib/dojo/types.ts` (171 LOC) — `DojoScoreResult`, `normalizeScoreResult`. Extend, don't replace.
+- `src/hooks/useScoreOriginalResponse.ts` — pattern for invoking score fn with normalization.
 
-## 2. Schema recommendation — do NOT create a new "projects" table
+**Audio/voice path (reuse for "teach opener" if we ever go audio):**
+- `src/lib/dojo/dojoVoiceAdapter.ts`, `src/lib/daveVoiceRuntime.ts` — teach-by-exemplar can read the exemplar through these later; Phase 3 only.
 
-Per Rule 2 (architecture before optimization): a `projects` table would duplicate what `account_family` already does. Every account already has a family string; a family IS the project. Adding a parallel table means:
-- Sync drift risk (a project row out of step with `accounts.account_family`).
-- Extra join on every read.
-- Manual step to "create a project" — friction with no upside, since the family is implicit.
+**Stage C live data (confirmed via read_query):**
+- `curriculum_concepts` = 24 rows (deep_linking), `ki_curriculum` = 148, `ki_curriculum_full` view = 148 ordered rows (deep_linking), `curriculum_gates` = 5, `user_competency` = 0, `user_band_gate` = 0. ✅ All 6 objects exist and are readable.
 
-**Recommended:** treat each distinct `accounts.account_family` value (where `deleted_at IS NULL`) as a Project. Project id = the family string (or the root account's id — see Q1 below).
+---
 
-**One small new table is justified** — for per-project state that doesn't belong on `accounts`:
+## B. SHARPEN SCORE-POISONING — root cause + fix
 
-```sql
-create table public.account_project_settings (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  account_family text not null,           -- the join key
-  custom_instructions text default '',    -- per-project guidance for Strategy
-  pinned boolean default false,           -- show in sidebar Projects list
-  order_index bigint,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now(),
-  unique (user_id, account_family)
-);
-```
-Plus the standard GRANT + RLS-by-user_id block we used for `strategy_custom_pills` in ST3. This holds *only* user-scoped settings; the project's *identity* lives on `accounts`.
+**File:** `src/pages/Sharpen.tsx` lines 289–304 (call site) + `supabase/functions/dojo-score/index.ts` lines 571–592 (prompt assembly).
 
-## 3. How a Project resolves its member accounts
+**Root cause (two compounding bugs):**
 
-Use **both** — but `account_family` is authoritative:
+1. **Sharpen feeds the gold answer as the buyer's objection.** Line 293:
+   ```ts
+   objection: currentKI.example_usage || currentKI.tactic_summary || 'Respond to this situation.'
+   ```
+   `example_usage` is the world-class rep line. So the prompt becomes "Buyer says: '<elite rep line>'". Rep then mirrors it → looks elite. Wrong field entirely; `example_usage` is a rep utterance, not a buyer utterance.
 
-- Primary: `WHERE account_family = $1 AND deleted_at IS NULL`. Simple, fast, indexed (add index if missing).
-- Secondary (display only): `parent_account_id` to render the tree inside the project (Comcast → NBCUniversal → Peacock/NBC News), reusing the M1 OrgTree component.
+2. **The KI block leaks the same exemplar to the grader in the same prompt.** dojo-score line 576 emits `World-class execution — real call example: "${ki.example_usage}"`. So the grader sees the gold answer labeled as the buyer line AND as the world-class line, and the rep's score collapses toward "matches the model" rather than "handles the objection".
 
-Walking the parent tree at query time is unnecessary because the seed/import already normalizes `account_family` across the tree. If a future account is added without `account_family`, fall back to walking `parent_account_id` to the root and reading its family — done in one helper, not in every query.
+**Fix (clean, minimal, ships in Phase 2):**
 
-Project member account ids → fan out to:
-- Threads: `strategy_threads WHERE linked_account_id IN (...)`
-- Signals: `account_signals WHERE linked_account_id IN (...)`
-- Memory: `account_strategy_memory WHERE account_id IN (...)`
+- Sharpen call site: stop using `example_usage` as the objection. Source the buyer line from a real scenario field. Three acceptable sources in priority order:
+  1. New `curriculum_concepts.teach_beat_ref` payload (objection text authored per concept) when present,
+  2. `currentKI.when_to_use` framed as a situation (already a buyer/scenario field) + a generic stem,
+  3. Curated `scenarios.ts` fallback for that `spider_dimension`.
+  Never `example_usage` and never `tactic_summary` (those are rep/play content).
+- dojo-score: keep `kiBlock` for teach-mode coaching, but **omit `example_usage` from the prompt during scoring** (only include `tactic_summary` + `when_to_use` + `why_it_matters` so the grader knows the play without seeing the gold line). Gate-mode calls pass no `ki` at all → cold.
+- Add a unit assertion: `objection` must not equal `ki.example_usage` (cheap guard against regression).
 
-## 4. UI shape
+This is the consolidation: one scorer, one loop, no leak.
 
-Two-level: Projects index → Project detail, both inside the existing `SurfacePanel` `surface === 'projects'` slot. No new top-level routes.
+---
 
-```text
-┌─ Projects (index) ─────────────────────────────────┐
-│  Comcast/NBCUniversal       4 accts · 12 threads   │
-│  Disney                     2 accts ·  3 threads   │
-│  A&E Networks               1 acct  ·  0 threads   │
-│  [+ uncategorized: 7 accounts without a family]   │
-└────────────────────────────────────────────────────┘
+## C. PHASED BUILD PLAN (each phase independently shippable / deno-checkable)
 
-Click a row →
+### Phase 1 — Data layer (read curriculum, write competency)
 
-┌─ Project: Comcast/NBCUniversal ────────────────────┐
-│  ⟵ All projects                                    │
-│                                                     │
-│  Family tree (OrgTree mini)                         │
-│    Comcast → NBC Universal → Peacock, NBC News      │
-│                                                     │
-│  Threads (12)                  [+ New thread]       │
-│    • Peacock Q3 expansion · 2h                      │
-│    • NBC News deep link audit · yesterday           │
-│    …                                                │
-│                                                     │
-│  Recent signals (5)                                 │
-│    • NBCU earnings: streaming +18% · 3d             │
-│                                                     │
-│  Cross-account memory (3)                           │
-│    • Champion: Sarah K (NBCU) · last verified 1w    │
-│                                                     │
-│  Project instructions ▾  (editable, persisted)      │
-└────────────────────────────────────────────────────┘
-```
+New files (frontend):
+- `src/lib/train/curriculum.ts` — typed reads against `ki_curriculum_full`, `curriculum_concepts`, `curriculum_gates`. Exposes:
+  - `getSubLevels(spoke, topic)` → ordered `[{ sub_level, band, concepts[] }]`
+  - `getConceptWithItems(concept_id)` → `{ concept, teach:{kind, exemplarKi|teachBeatRef|pending}, drills[] (ordered by order_in_concept, capped) }`
+  - `getBandGate(spoke, topic, band)` + `getBandExemplarPool(band)` for cold items.
+- `src/lib/train/competency.ts` — typed writes:
+  - `incrementSubLevelRep(user, spoke, topic, sub_level, scoreOut)` upserts `user_competency` (reps++, progress recompute, sub-level `gate_passed_at` when threshold met).
+  - `recordBandGateAttempt(user, …, score)` upserts `user_band_gate` (status, best_score, attempts, `passed_at`, `next_retest_due = now()+30d` on pass).
+- `src/types/train.ts` — `Band`, `SubLevel`, `Concept`, `TrainAtomPlan`, `BandGateAttempt`.
+- `src/hooks/train/useSubLevelLadder.ts`, `useConceptAtom.ts`, `useBandGate.ts` — React Query wrappers.
 
-"+ New thread" creates a `strategy_thread` and pre-links it to the **root** account of the family (Comcast for Comcast/NBCUniversal). User can re-link to a child via the existing chip picker. Tagged with the existing per-surface `threadTags` mechanism so it falls back into the project's thread list.
+No engine wiring yet. Deliverable: read paths render a placeholder list page; write helpers covered by a smoke test.
 
-Per-project custom instructions are loaded with the project view and injected into the system prompt for any thread opened from inside that project (same pattern as ST3 pill `instruction` field).
+DB: none required (Stage C is live). Optional later: a `next_retest_due` index — defer.
 
-## 5. Files touched & blast radius
+### Phase 2 — Engine modes on the Dojo loop (+ Sharpen fix)
 
-**New (low risk):**
-- `supabase/migrations/<ts>_account_project_settings.sql` — single table per §2.
-- `src/lib/strategy/accountProjects.ts` — query helpers (`listProjects`, `getProjectMembers`, `getProjectSettings`, `upsertProjectSettings`). Mirrors `customPills.ts` pattern.
-- `src/components/strategy/v2/projects/ProjectsIndex.tsx` — index list.
-- `src/components/strategy/v2/projects/ProjectView.tsx` — detail panel (threads + signals + memory + instructions).
+Refactor `Sharpen.tsx` into a thin shell + a `useTrainAtomSession` hook so Stage D modes are configurations, not new loops:
+- New: `src/lib/dojo/trainAtomEngine.ts` — state machine `teach → roleplay → refine → owned`, parameterized by `mode: 'practice' | 'band_gate'`.
+- New: `src/pages/TrainAtom.tsx` — route `/train/:spoke/:topic/:sub_level` (and `/train/:spoke/:topic/gate/:band`) consuming the engine.
+- Reuses: `dojo-score` edge fn, `kiMasteryWriter`, `dojo_sessions` insert (add `mode: 'train_atom' | 'band_gate'`).
+- Calls Phase 1 writers on every rep / gate attempt.
 
-**Edited (contained risk):**
-- `src/components/strategy/v2/SurfacePanel.tsx` — replace the `surface === 'projects'` branch (lines 483-489) so it routes to ProjectsIndex / ProjectView based on a local `selectedFamily` state. The legacy `ProjectsList` + `ProjectsPlaceholder` (lines 1366-1474) get deleted.
-- `src/lib/strategy/pinnedThreads.ts` — leave it. It's still used for Work-rail starring; not coupled to Projects anymore.
+Teach-opener:
+- `ki_exemplar` → render the exemplar KI card (no scoring).
+- `authored` → render `teach_beat_ref` content.
+- `teach_beat_status='pending'` (e.g. C5b) → render "Beat pending — opening with the first drill as a provisional teach" banner, then proceed with `order_in_concept = 1` as the opener. Engine never crashes on missing beats.
 
-**Out of scope (do NOT touch this build):**
-- `StrategyShell.tsx` per-surface draft logic, pending-thread binding, threads-sidebar, trust state. The Projects surface is a pure read-mostly panel that sits inside the existing `SurfacePanel` slot. The composer placeholder line for `'projects'` (Shell:1565-1566) stays as-is. New-thread-from-project uses the existing `createThread` path with a pre-set `linked_account_id`.
-- `account_strategy_memory` schema. Read-only consumption.
-- `strategy_threads` schema. Read-only consumption.
+Band gate:
+- Cold mode (`ki` omitted in scorer call, no teach surface, no retry assist).
+- Item pool = exemplar KIs of every concept in that band (`item_strategy='band_exemplars'`).
+- N items (default 5), aggregate avg vs `pass_threshold` (80).
+- On pass: write `user_band_gate`, set `passed_at`, `next_retest_due = now()+30d`, mark next band `available`.
+- On fail: write attempt, surface targeted sub-levels to revisit.
 
-**Real blast radius:** confined to one branch in SurfacePanel + one new lib + one new table. The intricate Shell state machine is untouched because Projects already gets its own surface slot and we're not changing its lifecycle.
+Sharpen fix lands in this phase (call-site change + scorer prompt change). Single migration of behavior: old `/sharpen` route keeps working but routed through the patched call site.
 
-## 6. Time recommendation (~2 build days before July 13)
+Sub-skill drill cap: `min(drills.length, 5)` per rep, ordered by `order_in_concept`, rotated by user history (use existing `ki_mastery.last_drilled_at`).
 
-**Yes, ship it — but in two phases:**
+### Phase 3 — UI (ladder, atom flow, gate ceremony)
 
-**Phase A (1 day, before July 13):** table + index list + detail view (threads + family tree + signals). Cuts straight to the demo value — Corey can open NBCU and see everything Branch-adjacent in one view.
+- `src/pages/TrainTopic.tsx` (`/train/product/deep_linking`) — the Duolingo-style sub-level ladder driven by `user_competency` + `user_band_gate`. Band rows collapse, sub-levels chip out, locked/available/passed states from `user_band_gate.status`.
+- Atom flow polish on `TrainAtom.tsx`: teach card → "Try it" → roleplay → score + refine → owned check.
+- Band gate ceremony: pre-gate cold-prep warning, in-gate "no coaching" UI, post-gate result with promotion animation and "Retest due <date>" chip.
+- Anti-decay surfacing: when `next_retest_due <= now()`, show a "Retest <band>" CTA at the top of the ladder.
 
-**Phase B (post-ramp, 0.5 day):** custom instructions injection into the thread system prompt, cross-account memory rollup, "+ New thread pre-linked to family root." These touch the send path and deserve their own audit per Rule 1.
+Each phase passes `tsgo --noEmit` for frontend and `deno check` for any touched edge fn (Phase 2 only touches one). RLS already in place; no migrations required.
 
-Phase A is safe in 2 days because the existing surface slot already exists and no Shell state machine code is modified. Phase B touches the strategy-chat pipeline and that area gets a separate audit pass.
+---
 
-## Open questions before code
+## D. CONFLICTS + DECISIONS NEEDED
 
-1. **Project identity key**: `account_family` (text) or the root account id (uuid)? Text is simpler and matches existing data; uuid is more refactor-safe if you rename a family. Lean text for v1.
-2. **Accounts without an `account_family`** (currently 50+ rows): show them under "Uncategorized" or hide entirely? Lean show-uncategorized so nothing disappears.
-3. **Phase A scope confirmation**: ship without custom instructions and without "+ New thread" wiring into the system prompt — those wait for Phase B?
+1. **Two routes or one?** Existing `/sharpen` already covers freeform dimension drills and is wired into Dojo/Branch modes. Stage D introduces `/train/...`. Recommendation: keep `/sharpen` as the open-ended drill (still useful), make `/train` the curriculum-gated path. Confirm.
+2. **Sub-level "progress" formula.** `user_competency.progress` is 0..1. Proposal: `progress = min(1, reps_passing(≥70) / required_passes)` where `required_passes = max(3, num_drills_in_sublevel)`. `gate_passed_at` (sub-level) set when `progress >= 1`. OK?
+3. **Band gate item count + threshold.** Schema says `pass_threshold=80`. Proposal: 5 cold items from band exemplars, aggregate average vs 80. OK or want a per-item floor too (e.g. no item < 60)?
+4. **`next_retest_due` interval.** Proposal: 30 days on pass, 14 days if average between 70–79 (warning), immediate on fail. OK?
+5. **dojo_sessions schema additions.** I'll write `mode='train_atom'|'band_gate'` into the existing `mode` text column (no migration). Confirm no enum constraint blocks that — I'll verify before writing.
+6. **Exemplar leak fix scope.** OK to also strip `example_usage` from the scoring prompt in non-Sharpen callers (DojoRoleplay etc.)? They have the same leak.
+7. **C5b pending-beat handling.** Provisional fallback = "open with first drill" — acceptable for ship, or do you want the engine to hard-skip pending concepts until a beat is authored?
+
+---
+
+## E. Stage C existence check
+
+Live DB confirms: `curriculum_concepts`=24, `ki_curriculum`=148, `ki_curriculum_full`=148 (deep_linking), `curriculum_gates`=5, `user_competency`=0, `user_band_gate`=0. All six readable, no writes performed.
