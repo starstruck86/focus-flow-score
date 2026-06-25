@@ -65,6 +65,8 @@ export interface CurriculumKi extends CurriculumKiRef {
   /** Authored buyer situation for this drill (from ki_curriculum.drill_scenario).
    * Kept SEPARATE from when_to_use so the grader's play description stays clean. */
   scenario?: string | null;
+  /** AE-facing plain-English model line from the concept (optional). */
+  modelLinePlain?: string | null;
 }
 
 export interface ConceptWithItems {
