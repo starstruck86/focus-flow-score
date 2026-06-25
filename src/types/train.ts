@@ -143,7 +143,7 @@ export interface TrainAtomPlan {
 export const TRAIN_TUNABLES = {
   drillsPerRepCap: 5,
   subLevelRequiredPasses: 3,        // floor; effective = max(3, drillCount)
-  subLevelPassThreshold: 70,        // per-rep score considered "passing"
+  subLevelPassThreshold: 85,        // per-rep score considered "passing"
   bandGateItemCount: 5,
   bandGatePassThreshold: 80,        // overridden by curriculum_gates row if present
   bandGateWarningFloor: 70,         // 70-79 = warning interval
