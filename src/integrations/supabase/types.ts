@@ -2084,6 +2084,101 @@ export type Database = {
           },
         ]
       }
+      curriculum_concepts: {
+        Row: {
+          band: number
+          concept_id: string
+          created_at: string
+          exemplar_ki_id: string | null
+          notes: string | null
+          order_in_sublevel: number
+          spoke: string
+          sub_level: string
+          teach_beat_ref: string | null
+          teach_beat_status: string
+          teach_kind: string
+          title: string
+          topic: string
+          updated_at: string
+        }
+        Insert: {
+          band: number
+          concept_id: string
+          created_at?: string
+          exemplar_ki_id?: string | null
+          notes?: string | null
+          order_in_sublevel: number
+          spoke: string
+          sub_level: string
+          teach_beat_ref?: string | null
+          teach_beat_status?: string
+          teach_kind: string
+          title: string
+          topic: string
+          updated_at?: string
+        }
+        Update: {
+          band?: number
+          concept_id?: string
+          created_at?: string
+          exemplar_ki_id?: string | null
+          notes?: string | null
+          order_in_sublevel?: number
+          spoke?: string
+          sub_level?: string
+          teach_beat_ref?: string | null
+          teach_beat_status?: string
+          teach_kind?: string
+          title?: string
+          topic?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "curriculum_concepts_exemplar_ki_id_fkey"
+            columns: ["exemplar_ki_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      curriculum_gates: {
+        Row: {
+          band: number
+          created_at: string
+          gate_prompt: string
+          id: string
+          item_strategy: string
+          pass_threshold: number
+          promotes_to: number | null
+          spoke: string
+          topic: string
+        }
+        Insert: {
+          band: number
+          created_at?: string
+          gate_prompt: string
+          id?: string
+          item_strategy?: string
+          pass_threshold?: number
+          promotes_to?: number | null
+          spoke: string
+          topic: string
+        }
+        Update: {
+          band?: number
+          created_at?: string
+          gate_prompt?: string
+          id?: string
+          item_strategy?: string
+          pass_threshold?: number
+          promotes_to?: number | null
+          spoke?: string
+          topic?: string
+        }
+        Relationships: []
+      }
       custom_prompts: {
         Row: {
           content_type: string | null
@@ -3733,6 +3828,61 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "branch_readiness"
             referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      ki_curriculum: {
+        Row: {
+          active: boolean
+          concept_id: string
+          created_at: string
+          id: string
+          is_exemplar: boolean
+          ki_id: string
+          order_in_concept: number
+          role: string
+        }
+        Insert: {
+          active?: boolean
+          concept_id: string
+          created_at?: string
+          id?: string
+          is_exemplar?: boolean
+          ki_id: string
+          order_in_concept?: number
+          role: string
+        }
+        Update: {
+          active?: boolean
+          concept_id?: string
+          created_at?: string
+          id?: string
+          is_exemplar?: boolean
+          ki_id?: string
+          order_in_concept?: number
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ki_curriculum_concept_id_fkey"
+            columns: ["concept_id"]
+            isOneToOne: false
+            referencedRelation: "curriculum_concepts"
+            referencedColumns: ["concept_id"]
+          },
+          {
+            foreignKeyName: "ki_curriculum_concept_id_fkey"
+            columns: ["concept_id"]
+            isOneToOne: false
+            referencedRelation: "ki_curriculum_full"
+            referencedColumns: ["concept_id"]
+          },
+          {
+            foreignKeyName: "ki_curriculum_ki_id_fkey"
+            columns: ["ki_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_items"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -9364,6 +9514,106 @@ export type Database = {
           },
         ]
       }
+      user_band_gate: {
+        Row: {
+          attempts: number
+          band: number
+          best_score: number | null
+          id: string
+          last_attempt_at: string | null
+          next_retest_due: string | null
+          passed_at: string | null
+          spoke: string
+          status: string
+          topic: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          band: number
+          best_score?: number | null
+          id?: string
+          last_attempt_at?: string | null
+          next_retest_due?: string | null
+          passed_at?: string | null
+          spoke: string
+          status?: string
+          topic: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          band?: number
+          best_score?: number | null
+          id?: string
+          last_attempt_at?: string | null
+          next_retest_due?: string | null
+          passed_at?: string | null
+          spoke?: string
+          status?: string
+          topic?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_band_gate_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      user_competency: {
+        Row: {
+          band: number
+          gate_passed_at: string | null
+          id: string
+          progress: number
+          reps: number
+          spoke: string
+          sub_level: string
+          topic: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          band: number
+          gate_passed_at?: string | null
+          id?: string
+          progress?: number
+          reps?: number
+          spoke: string
+          sub_level: string
+          topic: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          band?: number
+          gate_passed_at?: string | null
+          id?: string
+          progress?: number
+          reps?: number
+          spoke?: string
+          sub_level?: string
+          topic?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_competency_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       user_lesson_progress: {
         Row: {
           attempts: number | null
@@ -10062,6 +10312,29 @@ export type Database = {
           user_id: string | null
         }
         Relationships: []
+      }
+      ki_curriculum_full: {
+        Row: {
+          band: number | null
+          concept_id: string | null
+          is_exemplar: boolean | null
+          ki_id: string | null
+          order_in_concept: number | null
+          order_in_sublevel: number | null
+          role: string | null
+          spoke: string | null
+          sub_level: string | null
+          topic: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ki_curriculum_ki_id_fkey"
+            columns: ["ki_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_items"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ki_mastery_weekly: {
         Row: {
