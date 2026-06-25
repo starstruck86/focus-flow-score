@@ -131,12 +131,24 @@ export default function TrainAtom() {
 
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {error && <p className="text-sm text-destructive">{(error as Error).message}</p>}
-        {data && !activeDrills.length && (
-          <Card className="p-4 text-sm text-muted-foreground">No drills available for this concept yet.</Card>
-        )}
 
         {data && phase === 'teach' && (
-          <TeachOpener data={data} onContinue={() => setPhase('try')} />
+          <TeachOpener data={data} onContinue={() => setPhase('try')} hasDrills={activeDrills.length > 0} />
+        )}
+
+        {/* Genuinely drill-less (no drills, no exemplar, no drill_prompt) →
+            teach + "Got it" finish, never a dead-end Try-it. */}
+        {data && phase === 'teach' && activeDrills.length === 0 && (
+          <Card className="mt-3 p-4">
+            <p className="text-sm text-muted-foreground mb-3">
+              No practice drill for this concept yet — mark it learned and continue.
+            </p>
+            <div className="flex justify-end">
+              <Button onClick={() => navigate(`/train/${spoke}/${topic}`)}>
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Got it
+              </Button>
+            </div>
+          </Card>
         )}
 
         {data && phase === 'try' && currentDrill && (
@@ -191,9 +203,11 @@ export default function TrainAtom() {
 function TeachOpener({
   data,
   onContinue,
+  hasDrills,
 }: {
   data: NonNullable<ReturnType<typeof useConceptAtom>['data']>;
   onContinue: () => void;
+  hasDrills: boolean;
 }) {
   const t = data.teach;
   return (
@@ -244,9 +258,11 @@ function TeachOpener({
         </div>
       )}
 
-      <div className="flex justify-end mt-4">
-        <Button onClick={onContinue}>Try it →</Button>
-      </div>
+      {hasDrills && (
+        <div className="flex justify-end mt-4">
+          <Button onClick={onContinue}>Try it →</Button>
+        </div>
+      )}
     </Card>
   );
 }

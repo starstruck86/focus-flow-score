@@ -34,6 +34,8 @@ export interface ConceptRow {
   /** Inline authored teach beat markdown. Backfill is loaded into a new
    * curriculum_concepts.teach_beat_md column — may be undefined until then. */
   teach_beat_md: string | null;
+  /** Cold/warm practice prompt for teach-only concepts. */
+  drill_prompt: string | null;
   notes: string | null;
 }
 
@@ -55,6 +57,8 @@ export interface CurriculumKi extends CurriculumKiRef {
   why_it_matters: string | null;
   spider_dimension: string | null;
   chapter: string | null;
+  /** Synthesized prompt-only drill (no real KI behind it). */
+  promptOnly?: boolean;
 }
 
 export interface ConceptWithItems {
