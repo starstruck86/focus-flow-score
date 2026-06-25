@@ -906,7 +906,7 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
     }
 
     // Normalize KI sub-scores when present
-    if (ki?.tactic_summary || ki?.example_usage) {
+    if (ki?.tactic_summary || ki?.when_to_use || ki?.why_it_matters) {
       parsed.recognitionScore = typeof parsed.recognitionScore === 'number'
         ? Math.max(0, Math.min(33, Math.round(parsed.recognitionScore))) : null;
       parsed.executionScore = typeof parsed.executionScore === 'number'
