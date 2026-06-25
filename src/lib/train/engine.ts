@@ -134,7 +134,11 @@ export interface PracticeRepResult {
 
 export async function runPracticeRep(input: PracticeRepInput): Promise<PracticeRepResult> {
   const isPromptOnly = !!input.ki.promptOnly || !input.ki.ki_id;
-  const objection = input.objection ?? input.ki.when_to_use ?? 'Respond to this buyer situation.';
+  const objection =
+    input.objection ??
+    input.ki.scenario ??
+    input.ki.when_to_use ??
+    'Respond to this buyer situation.';
   const scored = await scoreRep({
     skillFocus: input.skillFocus,
     userResponse: input.userResponse,

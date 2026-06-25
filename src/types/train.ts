@@ -59,6 +59,9 @@ export interface CurriculumKi extends CurriculumKiRef {
   chapter: string | null;
   /** Synthesized prompt-only drill (no real KI behind it). */
   promptOnly?: boolean;
+  /** Authored buyer situation for this drill (from ki_curriculum.drill_scenario).
+   * Kept SEPARATE from when_to_use so the grader's play description stays clean. */
+  scenario?: string | null;
 }
 
 export interface ConceptWithItems {

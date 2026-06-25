@@ -26,7 +26,14 @@ function asBand(n: unknown): Band {
 }
 
 function hydrateKi(
-  ref: { ki_id: string; role: string; is_exemplar: boolean; order_in_concept: number; active?: boolean },
+  ref: {
+    ki_id: string;
+    role: string;
+    is_exemplar: boolean;
+    order_in_concept: number;
+    active?: boolean;
+    scenario?: string | null;
+  },
   ki: AnyRow | undefined,
 ): CurriculumKi | null {
   if (!ki) return null;
@@ -44,6 +51,7 @@ function hydrateKi(
     why_it_matters: (ki.why_it_matters as string | null) ?? null,
     spider_dimension: (ki.spider_dimension as string | null) ?? null,
     chapter: (ki.chapter as string | null) ?? null,
+    scenario: ref.scenario ?? null,
   };
 }
 
@@ -97,8 +105,8 @@ export async function getConceptWithItems(
   const [{ data: conceptData, error: cErr }, { data: linkData, error: lErr }] = await Promise.all([
     (supabase as any).from('curriculum_concepts').select('*').eq('concept_id', conceptId).maybeSingle(),
     (supabase as any)
-      .from('ki_curriculum')
-      .select('ki_id, role, is_exemplar, order_in_concept, active')
+      .from('ki_curriculum_full')
+      .select('ki_id, role, is_exemplar, order_in_concept, active, drill_scenario')
       .eq('concept_id', conceptId)
       .eq('active', true)
       .order('order_in_concept', { ascending: true }),
@@ -146,6 +154,7 @@ export async function getConceptWithItems(
           is_exemplar: !!l.is_exemplar,
           order_in_concept: Number(l.order_in_concept) || 0,
           active: l.active !== false,
+          scenario: (l.drill_scenario as string | null) ?? null,
         },
         kiMap.get(String(l.ki_id)),
       ),
@@ -161,6 +170,8 @@ export async function getConceptWithItems(
   // ladder never dead-ends. Order: warm (off exemplar) → cold (prompt only).
   if (drillsAvailable === 0) {
     if (exemplarKi) {
+      // WARM: clone exemplar as drill, keep its real when_to_use untouched.
+      // Situation lives only on `scenario`.
       const situation =
         (concept.drill_prompt && concept.drill_prompt.trim()) ||
         exemplarKi.when_to_use ||
@@ -170,10 +181,11 @@ export async function getConceptWithItems(
         role: 'drill',
         is_exemplar: false,
         order_in_concept: 0,
-        when_to_use: situation,
+        scenario: situation,
       }];
       drillsAvailable = 1;
     } else if (concept.drill_prompt && concept.drill_prompt.trim()) {
+      // COLD prompt-only: no real KI behind it.
       drills = [{
         ki_id: '',
         role: 'drill',
@@ -183,12 +195,13 @@ export async function getConceptWithItems(
         title: concept.title,
         tactic_summary: null,
         example_usage: null,
-        when_to_use: concept.drill_prompt,
+        when_to_use: null,
         when_not_to_use: null,
         why_it_matters: null,
         spider_dimension: null,
         chapter: null,
         promptOnly: true,
+        scenario: concept.drill_prompt,
       }];
       drillsAvailable = 1;
     }

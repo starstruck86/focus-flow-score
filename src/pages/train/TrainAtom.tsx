@@ -158,7 +158,7 @@ export default function TrainAtom() {
             </div>
             <div className="text-sm font-medium mb-1">Buyer situation</div>
             <p className="text-sm bg-muted/40 rounded p-3 mb-3">
-              {currentDrill.when_to_use || 'Respond to this buyer situation.'}
+              {currentDrill.scenario || currentDrill.when_to_use || 'Respond to this buyer situation.'}
             </p>
             <Textarea
               value={response}

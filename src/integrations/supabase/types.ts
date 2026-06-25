@@ -3842,6 +3842,7 @@ export type Database = {
           active: boolean
           concept_id: string
           created_at: string
+          drill_scenario: string | null
           id: string
           is_exemplar: boolean
           ki_id: string
@@ -3852,6 +3853,7 @@ export type Database = {
           active?: boolean
           concept_id: string
           created_at?: string
+          drill_scenario?: string | null
           id?: string
           is_exemplar?: boolean
           ki_id: string
@@ -3862,6 +3864,7 @@ export type Database = {
           active?: boolean
           concept_id?: string
           created_at?: string
+          drill_scenario?: string | null
           id?: string
           is_exemplar?: boolean
           ki_id?: string
@@ -10323,6 +10326,7 @@ export type Database = {
         Row: {
           band: number | null
           concept_id: string | null
+          drill_scenario: string | null
           is_exemplar: boolean | null
           ki_id: string | null
           order_in_concept: number | null
