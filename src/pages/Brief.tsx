@@ -181,7 +181,7 @@ export default function Brief() {
           scenario: {
             skillFocus: CALL_TYPE_TO_DIMENSION[selectedType?.id ?? 'discovery'] ?? 'discovery',
             context: warmupKI.when_to_use || 'Pre-call scenario',
-            objection: warmupKI.example_usage || warmupKI.tactic_summary || 'Apply this play.',
+            objection: warmupKI.when_to_use || 'Respond to this buyer situation.',
           },
           userResponse: warmupResponse,
           ki: {
