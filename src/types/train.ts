@@ -31,6 +31,9 @@ export interface ConceptRow {
   exemplar_ki_id: string | null;
   teach_beat_status: TeachBeatStatus;
   teach_beat_ref: string | null;
+  /** Inline authored teach beat markdown. Backfill is loaded into a new
+   * curriculum_concepts.teach_beat_md column — may be undefined until then. */
+  teach_beat_md: string | null;
   notes: string | null;
 }
 
