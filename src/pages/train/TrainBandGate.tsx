@@ -266,38 +266,37 @@ export default function TrainBandGate() {
 
         {phase === 'summary' && finalSummary && (
           <Card className="p-4">
-            <ScrollArea className="max-h-[60vh] pr-3">
-              <div className="space-y-3">
-                {records.map((r, i) => (
-                  <div key={i} className="rounded-md border border-border p-3 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                        Item {i + 1} · <span className="font-mono normal-case">{r.sourceTitle}</span>
-                      </div>
-                      <div className={cn('rounded border px-2 py-0.5 text-xs font-semibold', scoreColor(r.score))}>
-                        {r.score}
-                      </div>
+            <div className="space-y-3">
+              {records.map((r, i) => (
+                <div key={i} className="rounded-md border border-border p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Item {i + 1} · <span className="font-mono normal-case">{r.sourceTitle}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">{truncate(r.objection, 80)}</p>
-                    <p className="text-xs">
-                      <span className="text-muted-foreground">You: </span>
-                      {truncate(r.userResponse, 120)}
-                    </p>
-                    {r.eliteAnswer && (
-                      <div className="rounded border border-green-500/30 bg-green-500/5 p-2">
-                        <div className="text-[10px] uppercase tracking-wider text-green-600 font-semibold mb-0.5">
-                          {r.eliteLabel}
-                        </div>
-                        <p className="text-xs whitespace-pre-wrap">{r.eliteAnswer}</p>
-                      </div>
-                    )}
-                    {r.feedback && (
-                      <p className="text-xs text-muted-foreground whitespace-pre-wrap">{r.feedback}</p>
-                    )}
+                    <div className={cn('rounded border px-2 py-0.5 text-xs font-semibold', scoreColor(r.score))}>
+                      {r.score}
+                    </div>
                   </div>
-                ))}
-              </div>
-            </ScrollArea>
+                  <p className="text-xs text-muted-foreground">{truncate(r.objection, 80)}</p>
+                  <p className="text-xs">
+                    <span className="text-muted-foreground">You: </span>
+                    {truncate(r.userResponse, 120)}
+                  </p>
+                  {r.eliteAnswer && (
+                    <div className="rounded border border-green-500/30 bg-green-500/5 p-2">
+                      <div className="text-[10px] uppercase tracking-wider text-green-600 font-semibold mb-0.5">
+                        {r.eliteLabel}
+                      </div>
+                      <p className="text-xs whitespace-pre-wrap">{r.eliteAnswer}</p>
+                    </div>
+                  )}
+                  {r.feedback && (
+                    <p className="text-xs text-muted-foreground whitespace-pre-wrap">{r.feedback}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+
 
             <div className="mt-4 pt-4 border-t border-border">
               <div className="flex items-center gap-3 mb-3">
