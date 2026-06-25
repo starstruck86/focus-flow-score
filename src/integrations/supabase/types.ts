@@ -2094,6 +2094,7 @@ export type Database = {
           order_in_sublevel: number
           spoke: string
           sub_level: string
+          teach_beat_md: string | null
           teach_beat_ref: string | null
           teach_beat_status: string
           teach_kind: string
@@ -2110,6 +2111,7 @@ export type Database = {
           order_in_sublevel: number
           spoke: string
           sub_level: string
+          teach_beat_md?: string | null
           teach_beat_ref?: string | null
           teach_beat_status?: string
           teach_kind: string
@@ -2126,6 +2128,7 @@ export type Database = {
           order_in_sublevel?: number
           spoke?: string
           sub_level?: string
+          teach_beat_md?: string | null
           teach_beat_ref?: string | null
           teach_beat_status?: string
           teach_kind?: string
