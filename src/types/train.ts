@@ -36,7 +36,10 @@ export interface ConceptRow {
   teach_beat_md: string | null;
   /** Cold/warm practice prompt for teach-only concepts. */
   drill_prompt: string | null;
+  /** AE-facing plain-English version of the exemplar's model line. */
+  model_line_plain: string | null;
   notes: string | null;
+
 }
 
 export interface CurriculumKiRef {
