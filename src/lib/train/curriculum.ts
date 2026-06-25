@@ -331,7 +331,7 @@ export async function getBandExemplarPool(
       order_in_concept: Number(c.order_in_sublevel) || 0,
       active: true,
       title: String(c.title ?? ''),
-      tactic_summary: null,
+      tactic_summary: (c.gate_elite as string | null) ?? null,
       example_usage: null,
       when_to_use: null,
       when_not_to_use: null,
