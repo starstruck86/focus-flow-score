@@ -84,7 +84,9 @@ export async function getSubLevels(spoke: string, topic: string): Promise<SubLev
       teach_beat_ref: (raw.teach_beat_ref as string | null) ?? null,
       teach_beat_md: (raw.teach_beat_md as string | null) ?? null,
       drill_prompt: (raw.drill_prompt as string | null) ?? null,
+      model_line_plain: (raw.model_line_plain as string | null) ?? null,
       notes: (raw.notes as string | null) ?? null,
+
     };
     const key = `${c.band}::${c.sub_level}`;
     if (!groups.has(key)) {
