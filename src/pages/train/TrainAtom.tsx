@@ -133,7 +133,7 @@ export default function TrainAtom() {
         {error && <p className="text-sm text-destructive">{(error as Error).message}</p>}
 
         {data && phase === 'teach' && (
-          <TeachOpener data={data} onContinue={() => setPhase('try')} />
+          <TeachOpener data={data} onContinue={() => setPhase('try')} hasDrills={activeDrills.length > 0} />
         )}
 
         {/* Genuinely drill-less (no drills, no exemplar, no drill_prompt) →
@@ -203,9 +203,11 @@ export default function TrainAtom() {
 function TeachOpener({
   data,
   onContinue,
+  hasDrills,
 }: {
   data: NonNullable<ReturnType<typeof useConceptAtom>['data']>;
   onContinue: () => void;
+  hasDrills: boolean;
 }) {
   const t = data.teach;
   return (
@@ -256,9 +258,11 @@ function TeachOpener({
         </div>
       )}
 
-      <div className="flex justify-end mt-4">
-        <Button onClick={onContinue}>Try it →</Button>
-      </div>
+      {hasDrills && (
+        <div className="flex justify-end mt-4">
+          <Button onClick={onContinue}>Try it →</Button>
+        </div>
+      )}
     </Card>
   );
 }
