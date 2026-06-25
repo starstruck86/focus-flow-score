@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { useAuth } from '@/contexts/AuthContext';
 import { useBandGate } from '@/hooks/train/useBandGate';
 import { scoreRep, writeTrainSession } from '@/lib/train/engine';
