@@ -225,7 +225,12 @@ export async function getConceptWithItems(
   } else if (concept.teach_kind === 'authored' && concept.teach_beat_ref) {
     teach = { kind: 'authored', ref: concept.teach_beat_ref };
   } else if (concept.teach_kind === 'ki_exemplar' && exemplarKi) {
-    teach = { kind: 'ki_exemplar', exemplar: exemplarKi };
+    teach = {
+      kind: 'ki_exemplar',
+      exemplar: exemplarKi,
+      modelLine: concept.model_line_plain ?? exemplarKi.example_usage,
+    };
+
   } else {
     teach = { kind: 'pending', provisional: drills[0] };
   }
