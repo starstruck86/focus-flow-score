@@ -10,8 +10,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConceptAtom } from '@/hooks/train/useConceptAtom';
 import { runPracticeRep, writeTrainSession } from '@/lib/train/engine';
-import type { CurriculumKi } from '@/types/train';
-import { Sparkles, BookOpen, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { TRAIN_TUNABLES, type CurriculumKi } from '@/types/train';
+import { Sparkles, BookOpen, RotateCcw, CheckCircle2, ArrowLeft } from 'lucide-react';
 
 type Phase = 'teach' | 'try' | 'scored';
 
@@ -184,15 +184,34 @@ export default function TrainAtom() {
               </div>
             </div>
             <div className="text-sm whitespace-pre-wrap mb-4">{result.feedback || '—'}</div>
-            <div className="flex justify-between gap-2">
-              <Button variant="outline" onClick={handleRefine}>
-                <RotateCcw className="h-3.5 w-3.5 mr-1" /> Refine
-              </Button>
-              <Button onClick={handleAdvance}>
-                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                {drillIdx + 1 >= activeDrills.length ? 'Owned · finish' : 'Got it · next drill'}
-              </Button>
-            </div>
+            {(() => {
+              const passed = result.score >= TRAIN_TUNABLES.subLevelPassThreshold;
+              const advanceLabel = drillIdx + 1 >= activeDrills.length ? 'Owned · finish' : 'Got it · next drill';
+              return (
+                <div className="flex items-center justify-between gap-2">
+                  <Button
+                    variant={passed ? 'ghost' : 'default'}
+                    size={passed ? 'sm' : 'default'}
+                    onClick={() => setPhase('teach')}
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Back to teach
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={handleRefine}>
+                      <RotateCcw className="h-3.5 w-3.5 mr-1" /> Refine
+                    </Button>
+                    <Button
+                      variant={passed ? 'default' : 'ghost'}
+                      size={passed ? 'default' : 'sm'}
+                      onClick={handleAdvance}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                      {advanceLabel}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
           </Card>
         )}
       </main>
