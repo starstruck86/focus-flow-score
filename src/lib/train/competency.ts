@@ -86,15 +86,14 @@ interface BandGateInput {
   promotesTo: Band | null;
 }
 
-function retestDays(avgScore: number, passed: boolean): number | null {
-  if (!passed) return 0; // immediate retake
-  if (avgScore < TRAIN_TUNABLES.bandGatePassThreshold) return TRAIN_TUNABLES.retestWarningDays;
-  if (avgScore < TRAIN_TUNABLES.bandGatePassThreshold + 10) {
-    return avgScore < TRAIN_TUNABLES.bandGatePassThreshold + 0
-      ? TRAIN_TUNABLES.retestWarningDays
-      : TRAIN_TUNABLES.retestPassDays;
-  }
-  return TRAIN_TUNABLES.retestPassDays;
+/**
+ * Retest interval (Plan §D ruling 4 — simplified):
+ *   pass (avg ≥ bandGatePassThreshold) → retestPassDays (30d)
+ *   fail (avg < bandGatePassThreshold) → 0 (immediate retake)
+ * No intermediate tier — a pass is always ≥ threshold by definition.
+ */
+function retestDays(passed: boolean): number {
+  return passed ? TRAIN_TUNABLES.retestPassDays : 0;
 }
 
 /**
