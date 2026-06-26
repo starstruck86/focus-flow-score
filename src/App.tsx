@@ -86,6 +86,8 @@ const Competitive = lazy(() => import("./pages/Competitive"));
 const Playbooks = lazy(() => import("./pages/Playbooks"));
 const SignalInbox = lazy(() => import("./pages/SignalInbox"));
 const OrgTree = lazy(() => import("./pages/OrgTree"));
+const TrainHome = lazy(() => import("./pages/train/TrainHome"));
+const TrainSpoke = lazy(() => import("./pages/train/TrainSpoke"));
 const TrainTopic = lazy(() => import("./pages/train/TrainTopic"));
 const TrainAtom = lazy(() => import("./pages/train/TrainAtom"));
 const TrainBandGate = lazy(() => import("./pages/train/TrainBandGate"));
@@ -265,9 +267,12 @@ const App = () => (
                 <Route path="/playbooks" element={<ProtectedPage routeName="Playbooks"><Suspense fallback={<LazyFallback />}><Playbooks /></Suspense></ProtectedPage>} />
                 <Route path="/signals" element={<ProtectedPage routeName="Signal Inbox"><Suspense fallback={<LazyFallback />}><SignalInbox /></Suspense></ProtectedPage>} />
                 <Route path="/org-tree" element={<ProtectedPage routeName="Account Org Tree"><Suspense fallback={<LazyFallback />}><OrgTree /></Suspense></ProtectedPage>} />
+                <Route path="/train" element={<ProtectedPage routeName="Train · Home"><Suspense fallback={<LazyFallback />}><TrainHome /></Suspense></ProtectedPage>} />
+                <Route path="/train/:spoke" element={<ProtectedPage routeName="Train · Spoke"><Suspense fallback={<LazyFallback />}><TrainSpoke /></Suspense></ProtectedPage>} />
                 <Route path="/train/:spoke/:topic" element={<ProtectedPage routeName="Train · Topic"><Suspense fallback={<LazyFallback />}><TrainTopic /></Suspense></ProtectedPage>} />
                 <Route path="/train/:spoke/:topic/atom/:conceptId" element={<ProtectedPage routeName="Train · Atom"><Suspense fallback={<LazyFallback />}><TrainAtom /></Suspense></ProtectedPage>} />
                 <Route path="/train/:spoke/:topic/gate/:band" element={<ProtectedPage routeName="Train · Band Gate"><Suspense fallback={<LazyFallback />}><TrainBandGate /></Suspense></ProtectedPage>} />
+
                 <Route path="/grind" element={
                   <ProtectedRoute>
                     <Suspense fallback={<LazyFallback />}>

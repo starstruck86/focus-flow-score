@@ -27,7 +27,7 @@ import { getBlockSnapshots, compareSnapshots } from '@/lib/dojo/v3/snapshotManag
 import { BlockHeader } from '@/components/dojo/BlockHeader';
 import { DailyAssignmentCard } from '@/components/dojo/DailyAssignmentCard';
 import { KiProficiencyStrip } from '@/components/dojo/KiProficiencyStrip';
-import { ProactiveDaveCard } from '@/components/dojo/ProactiveDaveCard';
+
 import { TodaysFocus } from '@/components/dojo/TodaysFocus';
 import { TrainingModes } from '@/components/dojo/TrainingModes';
 import { PerformanceSignals } from '@/components/dojo/PerformanceSignals';
@@ -446,19 +446,32 @@ export default function Dojo() {
             )}
           </div>
 
-          {/* 3. Intelligence category buttons */}
+          {/* 3. TRAIN v2 — full curriculum entry + per-type shortcuts */}
           <div className="space-y-2">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 px-1">Train by Type</p>
+            <button
+              onClick={() => navigate('/train')}
+              className="w-full text-left p-2.5 rounded-lg border border-primary/40 bg-primary/5 hover:bg-primary/10 transition-all"
+            >
+              <div className="flex items-center gap-2">
+                <BookMarked className="h-4 w-4 text-primary shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-primary">Open Training Curriculum</p>
+                  <p className="text-[11px] text-muted-foreground">10 spokes · 100+ topics · Foundation → Expert</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-primary ml-auto shrink-0" />
+              </div>
+            </button>
             {[
-              { emoji: '📞', label: 'Prospecting', desc: 'Cold calling, messaging, follow-up', chapters: ['cold_calling', 'messaging', 'follow_up'] },
-              { emoji: '🔍', label: 'Discovery', desc: 'Questions, frameworks, demo technique', chapters: ['discovery', 'demo', 'qualification'] },
-              { emoji: '⚔️', label: 'Deal Control', desc: 'Negotiation, closing, objection handling', chapters: ['closing', 'negotiation', 'objection_handling'] },
-              { emoji: '🏛️', label: 'Stakeholder', desc: 'Executive engagement, champion building', chapters: ['stakeholder_navigation', 'personas'] },
-              { emoji: '🎯', label: 'Competitive', desc: 'Competitive intel and positioning', chapters: ['competitive', 'competitors'] },
+              { emoji: '📞', label: 'Prospecting', desc: 'Messaging, outreach, follow-up', spoke: 'messaging' },
+              { emoji: '🔍', label: 'Discovery', desc: 'Questions, frameworks, demo technique', spoke: 'discovery' },
+              { emoji: '⚔️', label: 'Deal Control', desc: 'Negotiation, closing, deal mechanics', spoke: 'deal_control' },
+              { emoji: '🏛️', label: 'Stakeholder', desc: 'Executive engagement, champion building', spoke: 'stakeholder_navigation' },
+              { emoji: '🎯', label: 'Competitive', desc: 'Competitive intel and positioning', spoke: 'competitive' },
             ].map(cat => (
               <button
                 key={cat.label}
-                onClick={() => navigate('/sharpen', { state: { chapters: cat.chapters } })}
+                onClick={() => navigate(`/train/${cat.spoke}`)}
                 className="w-full text-left p-2.5 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
               >
                 <div className="flex items-center gap-2">
@@ -746,52 +759,22 @@ export default function Dojo() {
 
               <Card className="p-3 border-primary/30 bg-primary/5">
                 <button
-                  onClick={() => navigate('/train/product/deep_linking')}
+                  onClick={() => navigate('/train')}
                   className="w-full flex items-center justify-between text-left"
                 >
                   <div>
                     <div className="flex items-center gap-2">
                       <BookMarked className="h-4 w-4 text-primary" />
-                      <span className="text-sm font-semibold">Train · Deep Linking</span>
+                      <span className="text-sm font-semibold">Open Training Curriculum</span>
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Curriculum ladder · Foundation → Expert · cold band gates
+                      All 10 spokes · Foundation → Expert · cold band gates
                     </p>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 </button>
               </Card>
 
-              {[
-                { slug: 'attribution', label: 'Attribution & Measurement' },
-                { slug: 'sdk_setup', label: 'SDK Setup & Configuration' },
-                { slug: 'integrations', label: 'Third-Party Integrations' },
-                { slug: 'analytics', label: 'Analytics, Events & Reporting' },
-                { slug: 'data_strategy', label: 'Data Strategy & Governance' },
-                { slug: 'privacy_security', label: 'Privacy, Security & Compliance' },
-                { slug: 'identity', label: 'Identity, Users & Access' },
-                { slug: 'personalization', label: 'Personalization, Journeys & UX' },
-                { slug: 'channels', label: 'Channels & Paid Media' },
-                { slug: 'tech_discovery', label: 'Technical Discovery & Architecture' },
-              ].map((t) => (
-                <Card key={t.slug} className="p-3 border-primary/30 bg-primary/5">
-                  <button
-                    onClick={() => navigate(`/train/product/${t.slug}`)}
-                    className="w-full flex items-center justify-between text-left"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <BookMarked className="h-4 w-4 text-primary" />
-                        <span className="text-sm font-semibold">Train · {t.label}</span>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Curriculum ladder · Foundation → Expert · cold band gates
-                      </p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  </button>
-                </Card>
-              ))}
 
               {isMature && (
                 <TrainingModes
