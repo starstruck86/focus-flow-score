@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { SPOKE_TO_SPIDER_DIMENSION } from '@/lib/train/competencyRead';
 
 export const SPIDER_DIMENSIONS = [
   { key: 'discovery',              label: 'Discovery',            color: '#3b82f6' },
