@@ -161,14 +161,13 @@ export async function runPracticeRep(input: PracticeRepInput): Promise<PracticeR
     }).catch(() => {});
   }
 
-  const comp = await incrementSubLevelRep({
+  const comp = await recordCompetencyRep({
     userId: input.userId,
     spoke: input.spoke,
     topic: input.topic,
     band: input.band,
     subLevel: input.subLevel,
     score: scored.score,
-    drillCountInSubLevel: input.drillCountInSubLevel,
   });
 
   return {
