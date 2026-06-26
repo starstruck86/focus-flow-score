@@ -78,13 +78,16 @@ export function useKiProficiency() {
         libMap[key] = count;
       }
 
-      const { data: masteryRows } = await supabase
-        .from('ki_mastery')
-        .select('spider_dimension, times_drilled, avg_score, best_score, decay_risk, last_drilled_at')
-        .eq('user_id', user.id)
-        .not('spider_dimension', 'is', null);
+      // Phase 1: practice proficiency comes from user_competency (the
+      // curriculum ladder) — the single source of truth. We aggregate
+      // user_competency rows per curriculum spoke and project them onto the
+      // spider_dimension axes used by the radar via SPOKE_TO_SPIDER_DIMENSION.
+      const { data: compRows } = await (supabase as any)
+        .from('user_competency')
+        .select('spoke, reps, progress, gate_passed_at, updated_at')
+        .eq('user_id', user.id);
 
-      // Real call performance per dimension (from graded transcripts)
+      // Real call performance per dimension (from graded transcripts) — unchanged.
       const { data: dimScores } = await (supabase as any)
         .from('dimension_scores')
         .select('spider_dimension, avg_score_100, call_count')
@@ -99,28 +102,13 @@ export function useKiProficiency() {
         callCountMap[row.spider_dimension] = Number(row.call_count) || 0;
       });
 
-      // Fetch ki_mastery weekly data for trend calculation
-      const { data: weeklyData } = await (supabase as any)
-        .from('ki_mastery_weekly')
-        .select('spider_dimension, week_start, weekly_avg')
-        .eq('user_id', user.id)
-        .gte('week_start', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
-        .order('week_start', { ascending: true });
-
+      // Phase 1: no trend / decay yet from user_competency. Trends will be
+      // computed off updated_at history once the ladder accumulates data.
       const trendMap: Record<string, 'up' | 'down' | 'flat' | null> = {};
       const stagnantMap: Record<string, boolean> = {};
       SPIDER_DIMENSIONS.forEach(dim => {
-        const dimWeeks = (weeklyData ?? []).filter((r: any) => r.spider_dimension === dim.key);
-        if (dimWeeks.length < 2) {
-          trendMap[dim.key] = null;
-          stagnantMap[dim.key] = false;
-          return;
-        }
-        const earliest = Number((dimWeeks[0] as any).weekly_avg) || 0;
-        const latest = Number((dimWeeks[dimWeeks.length - 1] as any).weekly_avg) || 0;
-        const delta = latest - earliest;
-        trendMap[dim.key] = delta > 2 ? 'up' : delta < -2 ? 'down' : 'flat';
-        stagnantMap[dim.key] = Math.abs(delta) <= 2;
+        trendMap[dim.key] = null;
+        stagnantMap[dim.key] = false;
       });
 
       const masteryMap: Record<string, {
@@ -132,19 +120,30 @@ export function useKiProficiency() {
         last_drilled_at: string | null;
       }> = {};
 
-      for (const row of masteryRows ?? []) {
-        const dim = row.spider_dimension as string;
+      for (const row of (compRows as any[]) ?? []) {
+        const dim = SPOKE_TO_SPIDER_DIMENSION[row.spoke as string];
+        if (!dim) continue;
         if (!masteryMap[dim]) {
-          masteryMap[dim] = { drilled_count: 0, total_reps: 0, scores: [], best_scores: [], decay_risk_count: 0, last_drilled_at: null };
+          masteryMap[dim] = {
+            drilled_count: 0,
+            total_reps: 0,
+            scores: [],
+            best_scores: [],
+            decay_risk_count: 0,
+            last_drilled_at: null,
+          };
         }
         const m = masteryMap[dim];
-        m.drilled_count += 1;
-        m.total_reps += row.times_drilled ?? 0;
-        if (row.avg_score != null) m.scores.push(Number(row.avg_score));
-        if (row.best_score != null) m.best_scores.push(Number(row.best_score));
-        if (row.decay_risk) m.decay_risk_count += 1;
-        if (row.last_drilled_at && (!m.last_drilled_at || row.last_drilled_at > m.last_drilled_at)) {
-          m.last_drilled_at = row.last_drilled_at;
+        const reps = Number(row.reps) || 0;
+        const progressPct = Math.round((Number(row.progress) || 0) * 100);
+        if (reps > 0) m.drilled_count += 1;
+        m.total_reps += reps;
+        if (reps > 0) {
+          m.scores.push(progressPct);
+          m.best_scores.push(progressPct);
+        }
+        if (row.updated_at && (!m.last_drilled_at || row.updated_at > m.last_drilled_at)) {
+          m.last_drilled_at = row.updated_at;
         }
       }
 
