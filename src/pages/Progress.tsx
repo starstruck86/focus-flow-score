@@ -178,9 +178,9 @@ export default function Progress() {
         {weekSummary && (weekSummary.sessions > 0 || weekSummary.reps > 0) && (
           <div className="grid grid-cols-3 gap-2">
             {[
-              { label: 'Sessions', value: weekSummary.sessions },
+              { label: 'Sub-levels', value: weekSummary.sessions },
               { label: 'Reps', value: weekSummary.reps },
-              { label: 'Avg Score', value: weekSummary.avgScore != null ? `${weekSummary.avgScore}` : '—' },
+              { label: 'Avg Progress', value: weekSummary.avgScore != null ? `${weekSummary.avgScore}%` : '—' },
             ].map(s => (
               <Card key={s.label}>
                 <CardContent className="p-3 text-center">
