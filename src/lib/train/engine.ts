@@ -27,10 +27,10 @@
 import { supabase } from '@/integrations/supabase/client';
 import { writeKIMastery } from '@/lib/dojo/kiMasteryWriter';
 import {
-  incrementSubLevelRep,
   recordBandGateAttempt,
   summarizeBandGate,
 } from './competency';
+import { recordCompetencyRep } from './recordCompetencyRep';
 import type {
   Band,
   BandGateRow,
