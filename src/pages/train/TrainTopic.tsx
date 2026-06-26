@@ -64,8 +64,8 @@ export default function TrainTopic() {
     <Layout>
       <main className={cn('mx-auto max-w-2xl px-4 pt-4', SHELL.main.bottomPad)}>
         <header className="mb-4">
-          <button onClick={() => navigate('/dojo')} className="text-xs text-muted-foreground hover:text-foreground">
-            ← Dojo
+          <button onClick={() => navigate(`/train/${spoke}`)} className="text-xs text-muted-foreground hover:text-foreground">
+            ← {spoke.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
           </button>
           <h1 className="text-2xl font-bold mt-2">{topic.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</h1>
           <p className="text-sm text-muted-foreground">Train the curriculum from Foundation to Expert.</p>
