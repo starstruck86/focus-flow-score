@@ -78,20 +78,21 @@ export default function Progress() {
     },
   });
 
+  // Phase 1: practice volume comes from user_competency (curriculum ladder).
   const { data: sessions } = useQuery({
-    queryKey: ['sessions-history'],
+    queryKey: ['competency-history'],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
       const eightWeeksAgo = new Date(Date.now() - 56 * 24 * 60 * 60 * 1000).toISOString();
       const { data } = await (supabase as any)
-        .from('dojo_sessions')
-        .select('created_at')
+        .from('user_competency')
+        .select('updated_at, reps, progress')
         .eq('user_id', user.id)
-        .eq('status', 'completed')
-        .gte('created_at', eightWeeksAgo)
-        .order('created_at', { ascending: true });
-      return data ?? [];
+        .gte('updated_at', eightWeeksAgo)
+        .order('updated_at', { ascending: true });
+      // Normalise to the shape groupByWeek expects (created_at + value=1 per touch).
+      return (data ?? []).map((r: any) => ({ created_at: r.updated_at }));
     },
   });
 
@@ -109,19 +110,26 @@ export default function Progress() {
     },
   });
 
+  // Phase 1: weekly summary derives from user_competency, not dojo_sessions.
   const { data: weekSummary } = useQuery({
-    queryKey: ['progress-week-summary'],
+    queryKey: ['progress-week-summary-competency'],
     queryFn: async () => {
       const { data: { user: u } } = await supabase.auth.getUser();
       if (!u) return null;
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const [{ count: sessions }, { data: turns }] = await Promise.all([
-        (supabase as any).from('dojo_sessions').select('id', { count: 'exact', head: true }).eq('user_id', u.id).eq('status', 'completed').gte('completed_at', weekAgo),
-        (supabase as any).from('dojo_session_turns').select('score').eq('user_id', u.id).gte('created_at', weekAgo),
-      ]);
-      const scores = (turns ?? []).map((t: any) => Number(t.score)).filter(Boolean);
-      const avgScore = scores.length > 0 ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : null;
-      return { sessions: sessions ?? 0, reps: scores.length, avgScore };
+      const { data: rows } = await (supabase as any)
+        .from('user_competency')
+        .select('sub_level, reps, progress, gate_passed_at, updated_at')
+        .eq('user_id', u.id)
+        .gte('updated_at', weekAgo);
+      const list = (rows ?? []) as Array<{ reps: number; progress: number; gate_passed_at: string | null }>;
+      const sessions = list.length;                                  // distinct sub-levels advanced this week
+      const reps = list.reduce((a, r) => a + (Number(r.reps) || 0), 0);
+      const progresses = list.map((r) => Number(r.progress) || 0);
+      const avgScore = progresses.length
+        ? Math.round((progresses.reduce((a, b) => a + b, 0) / progresses.length) * 100)
+        : null;
+      return { sessions, reps, avgScore };
     },
   });
 
