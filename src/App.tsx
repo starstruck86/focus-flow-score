@@ -31,6 +31,7 @@ import Settings from "./pages/Settings";
 import AccountDetail from "./pages/AccountDetail";
 import OpportunityDetail from "./pages/OpportunityDetail";
 import Auth from "./pages/Auth";
+import AuthCallback from "./pages/AuthCallback";
 import Coach from "./pages/Coach";
 import PrepHub from "./pages/PrepHub";
 import Brief from "./pages/Brief";
@@ -138,6 +139,7 @@ const App = () => (
               <BrowserRouter>
                 <Routes>
                   <Route path="/auth" element={<Auth />} />
+                  <Route path="/auth/callback" element={<AuthCallback />} />
                   <Route path="/" element={<Navigate to="/dojo" replace />} />
                   <Route path="/today" element={<ProtectedPage routeName="Dashboard"><Dashboard /></ProtectedPage>} />
                   <Route path="/dashboard" element={<ProtectedPage routeName="Dashboard"><Dashboard /></ProtectedPage>} />
