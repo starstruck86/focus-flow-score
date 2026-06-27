@@ -26,6 +26,7 @@ import { getBlockSnapshots, compareSnapshots } from '@/lib/dojo/v3/snapshotManag
 
 import { BlockHeader } from '@/components/dojo/BlockHeader';
 import { DailyAssignmentCard } from '@/components/dojo/DailyAssignmentCard';
+import { DailyLadderCard } from '@/components/train/DailyLadderCard';
 import { KiProficiencyStrip } from '@/components/dojo/KiProficiencyStrip';
 
 import { TodaysFocus } from '@/components/dojo/TodaysFocus';
