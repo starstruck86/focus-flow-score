@@ -27,6 +27,7 @@ import { getBlockSnapshots, compareSnapshots } from '@/lib/dojo/v3/snapshotManag
 import { BlockHeader } from '@/components/dojo/BlockHeader';
 import { DailyAssignmentCard } from '@/components/dojo/DailyAssignmentCard';
 import { DailyLadderCard } from '@/components/train/DailyLadderCard';
+import { AccomplishmentDashboard } from '@/components/train/AccomplishmentDashboard';
 import { KiProficiencyStrip } from '@/components/dojo/KiProficiencyStrip';
 
 import { TodaysFocus } from '@/components/dojo/TodaysFocus';
@@ -401,22 +402,20 @@ export default function Dojo() {
       <div className={cn('flex-1 overflow-y-auto', SHELL.main.bottomPad)}>
         <PWAInstallBanner />
 
-        {/* 1. Streak + daily progress — compact one-row */}
-        <div className="px-4 pt-4 pb-3 flex items-center justify-between border-b border-border/30">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">🔥</span>
-            <div>
-              <p className="text-sm font-bold">{streak} day streak</p>
-              <p className="text-[11px] text-muted-foreground">{repsToday} reps today</p>
-            </div>
-          </div>
+        {/* 1. Accomplishment dashboard + lifted daily ladder (Phase 2a) */}
+        <div className="px-4 pt-4 pb-3 space-y-3 border-b border-border/30">
           {daysUntilDay1 > 0 && (
-            <div className="text-right">
-              <p className="text-xs font-semibold text-primary">{daysUntilDay1}d to Day 1</p>
-              <p className="text-[10px] text-muted-foreground">July 13</p>
+            <div className="flex items-center justify-end">
+              <div className="text-right">
+                <p className="text-xs font-semibold text-primary">{daysUntilDay1}d to Day 1</p>
+                <p className="text-[10px] text-muted-foreground">July 13</p>
+              </div>
             </div>
           )}
+          <AccomplishmentDashboard />
+          <DailyLadderCard />
         </div>
+
 
         <div className="px-4 py-4 space-y-4">
           {/* 2. Branch Prep Mode — primary entry point */}
@@ -729,8 +728,9 @@ export default function Dojo() {
                 </button>
               )}
               {/* Phase 1.5 A1: V3 daily retired — curriculum ladder is the daily.
-                  DailyAssignmentCard import kept for reversibility. */}
-              {isMature && <DailyLadderCard />}
+                  DailyAssignmentCard import kept for reversibility.
+                  Phase 2a: DailyLadderCard lifted to top of Dojo; not rendered here. */}
+
 
               {isMature && snapshotComparison && activeBlock && (
                 <BlockComparisonView comparison={snapshotComparison} blockNumber={activeBlock.blockNumber} />
