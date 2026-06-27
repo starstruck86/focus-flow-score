@@ -728,8 +728,9 @@ export default function Dojo() {
                 </button>
               )}
               {/* Phase 1.5 A1: V3 daily retired — curriculum ladder is the daily.
-                  DailyAssignmentCard import kept for reversibility. */}
-              {isMature && <DailyLadderCard />}
+                  DailyAssignmentCard import kept for reversibility.
+                  Phase 2a: DailyLadderCard lifted to top of Dojo; not rendered here. */}
+
 
               {isMature && snapshotComparison && activeBlock && (
                 <BlockComparisonView comparison={snapshotComparison} blockNumber={activeBlock.blockNumber} />
