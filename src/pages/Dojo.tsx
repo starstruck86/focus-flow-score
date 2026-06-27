@@ -26,6 +26,7 @@ import { getBlockSnapshots, compareSnapshots } from '@/lib/dojo/v3/snapshotManag
 
 import { BlockHeader } from '@/components/dojo/BlockHeader';
 import { DailyAssignmentCard } from '@/components/dojo/DailyAssignmentCard';
+import { DailyLadderCard } from '@/components/train/DailyLadderCard';
 import { KiProficiencyStrip } from '@/components/dojo/KiProficiencyStrip';
 
 import { TodaysFocus } from '@/components/dojo/TodaysFocus';
@@ -727,10 +728,9 @@ export default function Dojo() {
                   </div>
                 </button>
               )}
-
-              {isMature && dailyAssignment && (
-                <DailyAssignmentCard assignment={dailyAssignment} />
-              )}
+              {/* Phase 1.5 A1: V3 daily retired — curriculum ladder is the daily.
+                  DailyAssignmentCard import kept for reversibility. */}
+              {isMature && <DailyLadderCard />}
 
               {isMature && snapshotComparison && activeBlock && (
                 <BlockComparisonView comparison={snapshotComparison} blockNumber={activeBlock.blockNumber} />
