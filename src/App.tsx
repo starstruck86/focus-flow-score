@@ -31,6 +31,7 @@ import Settings from "./pages/Settings";
 import AccountDetail from "./pages/AccountDetail";
 import OpportunityDetail from "./pages/OpportunityDetail";
 import Auth from "./pages/Auth";
+import AuthCallback from "./pages/AuthCallback";
 import Coach from "./pages/Coach";
 import PrepHub from "./pages/PrepHub";
 import Brief from "./pages/Brief";
