@@ -68,13 +68,5 @@ try {
   renderFatalFallback(err);
 }
 
-// Register service worker for PWA push notifications
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try {
-      await navigator.serviceWorker.register('/sw.js');
-    } catch (e) {
-      // Service worker registration failed — non-critical, app still works
-    }
-  });
-}
+// Register the auto-updating PWA service worker. Skipped in dev / preview.
+import('./pwa-register').then(m => m.registerPwa()).catch(() => {});
