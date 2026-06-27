@@ -729,7 +729,8 @@ export default function Dojo() {
                 </button>
               )}
 
-              {isMature && dailyAssignment && (
+              {isMature && <DailyLadderCard />}
+              {false && isMature && dailyAssignment && (
                 <DailyAssignmentCard assignment={dailyAssignment} />
               )}
 
