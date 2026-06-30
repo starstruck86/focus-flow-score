@@ -414,6 +414,16 @@ export default function Dojo() {
           )}
           <AccomplishmentDashboard />
           <DailyLadderCard />
+          <button
+            onClick={() => navigate('/car-mode')}
+            className="w-full rounded-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-600/15 to-blue-600/15 hover:from-emerald-600/25 hover:to-blue-600/25 px-4 py-3 flex items-center justify-between transition"
+          >
+            <div className="text-left">
+              <p className="text-sm font-semibold flex items-center gap-2">🚗 Car Mode <span className="text-[10px] uppercase tracking-widest text-emerald-400">hands-free</span></p>
+              <p className="text-[11px] text-muted-foreground">Practice out loud while you drive — spoken scenarios, spoken coaching.</p>
+            </div>
+            <ChevronRight className="h-5 w-5 text-emerald-400" />
+          </button>
         </div>
 
 
