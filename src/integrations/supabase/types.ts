@@ -3848,7 +3848,12 @@ export type Database = {
           active: boolean
           concept_id: string
           created_at: string
+          drill_model_answer: string | null
+          drill_ready: boolean | null
+          drill_response_shape: string | null
+          drill_rubric: Json | null
           drill_scenario: string | null
+          drill_spoken_task: string | null
           id: string
           is_exemplar: boolean
           ki_id: string
@@ -3859,7 +3864,12 @@ export type Database = {
           active?: boolean
           concept_id: string
           created_at?: string
+          drill_model_answer?: string | null
+          drill_ready?: boolean | null
+          drill_response_shape?: string | null
+          drill_rubric?: Json | null
           drill_scenario?: string | null
+          drill_spoken_task?: string | null
           id?: string
           is_exemplar?: boolean
           ki_id: string
@@ -3870,7 +3880,12 @@ export type Database = {
           active?: boolean
           concept_id?: string
           created_at?: string
+          drill_model_answer?: string | null
+          drill_ready?: boolean | null
+          drill_response_shape?: string | null
+          drill_rubric?: Json | null
           drill_scenario?: string | null
+          drill_spoken_task?: string | null
           id?: string
           is_exemplar?: boolean
           ki_id?: string
@@ -3997,6 +4012,7 @@ export type Database = {
           intelligence_type: string | null
           is_core_ae: boolean | null
           ki_fingerprint: string | null
+          ki_type: string | null
           knowledge_type: string
           library_role: string | null
           macro_situation: string | null
@@ -4043,6 +4059,7 @@ export type Database = {
           intelligence_type?: string | null
           is_core_ae?: boolean | null
           ki_fingerprint?: string | null
+          ki_type?: string | null
           knowledge_type?: string
           library_role?: string | null
           macro_situation?: string | null
@@ -4089,6 +4106,7 @@ export type Database = {
           intelligence_type?: string | null
           is_core_ae?: boolean | null
           ki_fingerprint?: string | null
+          ki_type?: string | null
           knowledge_type?: string
           library_role?: string | null
           macro_situation?: string | null
