@@ -1,14 +1,19 @@
 /**
- * Car Mode — hands-free, audio-first practice.
+ * Car Mode — fully hands-free, audio-first practice.
  *
- * Two capture paths:
- *  - Chrome (desktop/Android): Web Speech API live STT, scored via `car-mode-score`.
- *  - iOS / Safari / unreliable STT: MediaRecorder captures the rep's voice;
- *    the recording is sent to `car-mode-audio-score`, which transcribes AND
- *    grades in one Gemini call via the Lovable AI Gateway (no extra API key).
+ * Flow after a single "Start" tap:
+ *   TTS speaks scenario + task → AUTO-records on the persistent mic stream →
+ *   VAD auto-stops ~2.5s after speech ends (60s hard cap) → server transcribes
+ *   (audio-only) then grades → TTS speaks feedback → AUTO-advances.
  *
- * TTS, voice commands, and persistence to ki_mastery + dojo_sessions/turns are
- * shared across both paths.
+ * Persistent mic stream: getUserMedia is called ONCE on Start. The same stream
+ * powers MediaRecorder segments and the Web Audio VAD analyser for the whole
+ * session, so no further user gesture is needed on iOS Safari.
+ *
+ * Two capture paths still exist:
+ *   - Chrome desktop/Android: Web Speech live STT, scored via `car-mode-score`.
+ *   - iOS / Safari / no STT: MediaRecorder → `car-mode-audio-score`
+ *     (transcribe-then-grade pipeline; never confabulates).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -63,10 +68,14 @@ const isSafari = typeof navigator !== 'undefined' &&
   /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
 const mediaRecorderSupported = typeof window !== 'undefined' && typeof (window as unknown as { MediaRecorder?: unknown }).MediaRecorder !== 'undefined';
 
-// iOS Safari's SpeechRecognition is unreliable for continuous dictation — always
-// use the server-transcribe (MediaRecorder) path on iOS/Safari when MediaRecorder works.
 const useRecorderPath = mediaRecorderSupported && (isIOS || isSafari || !SpeechRecognitionCtor);
 const sttSupported = !!SpeechRecognitionCtor && !useRecorderPath;
+
+// VAD tuning
+const VAD_SILENCE_MS = 2500;        // stop ~2.5s after speech ends
+const VAD_MAX_MS = 60_000;          // hard cap on a single answer
+const VAD_NO_SPEECH_MS = 5000;      // if nothing heard within 5s, "didn't catch"
+const VAD_RMS_THRESHOLD = 0.025;    // ~ -32 dBFS; above this counts as speech
 
 function speak(text: string, onDone?: () => void) {
   if (!ttsSupported || !text) { onDone?.(); return () => {}; }
@@ -90,14 +99,13 @@ function spokeToSkillFocus(spoke: string): string {
   return 'objection_handling';
 }
 
-// Pick a MediaRecorder mimeType the browser supports.
 function pickRecorderMime(): string | undefined {
   if (typeof MediaRecorder === 'undefined') return undefined;
   const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/aac', 'audio/mpeg'];
   for (const c of candidates) {
     try { if ((MediaRecorder as unknown as { isTypeSupported?: (s: string) => boolean }).isTypeSupported?.(c)) return c; } catch { /* noop */ }
   }
-  return undefined; // let the browser choose
+  return undefined;
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {
@@ -128,13 +136,23 @@ export default function CarMode() {
   const recogRef = useRef<SR | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
   const cancelSpeakRef = useRef<() => void>(() => {});
-  // MediaRecorder refs
-  const mediaRecRef = useRef<MediaRecorder | null>(null);
+
+  // Persistent stream + audio graph for VAD
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const vadRafRef = useRef<number | null>(null);
+  const vadMaxTimerRef = useRef<number | null>(null);
+
+  // Current MediaRecorder segment
+  const mediaRecRef = useRef<MediaRecorder | null>(null);
   const recChunksRef = useRef<Blob[]>([]);
   const recMimeRef = useRef<string>('audio/webm');
 
   const drill = drills[idx];
+  const drillRef = useRef<Drill | undefined>(drill);
+  useEffect(() => { drillRef.current = drill; }, [drill]);
 
   // ── Load ready drills ─────────────────────────────────────────────
   useEffect(() => {
@@ -173,18 +191,13 @@ export default function CarMode() {
         const k = kMap.get(x.ki_id);
         const rub = Array.isArray(x.drill_rubric) ? (x.drill_rubric as Array<{ c: string; must?: boolean }>) : [];
         return {
-          ki_id: x.ki_id,
-          concept_id: x.concept_id,
-          spoke: c?.spoke ?? 'general',
-          concept_title: c?.title ?? 'Drill',
+          ki_id: x.ki_id, concept_id: x.concept_id,
+          spoke: c?.spoke ?? 'general', concept_title: c?.title ?? 'Drill',
           ki_title: k?.title ?? '',
-          scenario: x.drill_scenario ?? '',
-          spoken_task: x.drill_spoken_task ?? '',
+          scenario: x.drill_scenario ?? '', spoken_task: x.drill_spoken_task ?? '',
           response_shape: (x.drill_response_shape === 'quick_reply' ? 'quick_reply' : 'talk_track'),
-          model_answer: x.drill_model_answer ?? '',
-          rubric: rub,
-          spider_dimension: k?.spider_dimension ?? null,
-          chapter: k?.chapter ?? null,
+          model_answer: x.drill_model_answer ?? '', rubric: rub,
+          spider_dimension: k?.spider_dimension ?? null, chapter: k?.chapter ?? null,
         };
       });
       for (let i = list.length - 1; i > 0; i--) {
@@ -196,15 +209,62 @@ export default function CarMode() {
     return () => { cancelled = true; };
   }, []);
 
-  // Cleanup on unmount
+  // Teardown on unmount
   useEffect(() => {
-    return () => {
-      try { window.speechSynthesis?.cancel(); } catch { /* noop */ }
-      try { recogRef.current?.stop(); } catch { /* noop */ }
-      try { mediaRecRef.current?.stop(); } catch { /* noop */ }
-      mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
-      if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current);
-    };
+    return () => { tearDownMicGraph(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function clearVadTimers() {
+    if (vadRafRef.current != null) { cancelAnimationFrame(vadRafRef.current); vadRafRef.current = null; }
+    if (vadMaxTimerRef.current != null) { window.clearTimeout(vadMaxTimerRef.current); vadMaxTimerRef.current = null; }
+    if (silenceTimerRef.current != null) { window.clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+  }
+
+  function tearDownMicGraph() {
+    try { window.speechSynthesis?.cancel(); } catch { /* noop */ }
+    try { recogRef.current?.stop(); } catch { /* noop */ }
+    try { mediaRecRef.current?.stop(); } catch { /* noop */ }
+    clearVadTimers();
+    try { sourceRef.current?.disconnect(); } catch { /* noop */ }
+    try { analyserRef.current?.disconnect(); } catch { /* noop */ }
+    try { audioCtxRef.current?.close(); } catch { /* noop */ }
+    mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+    sourceRef.current = null;
+    analyserRef.current = null;
+    audioCtxRef.current = null;
+    mediaStreamRef.current = null;
+    mediaRecRef.current = null;
+  }
+
+  // Acquire mic + audio graph ONCE on Start. iOS Safari requires this inside the gesture.
+  const acquireMicGraph = useCallback(async (): Promise<boolean> => {
+    if (mediaStreamRef.current && audioCtxRef.current) return true;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      mediaStreamRef.current = stream;
+      const Ctor = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+        ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (Ctor) {
+        const ctx = new Ctor();
+        try { await ctx.resume(); } catch { /* noop */ }
+        const src = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 1024;
+        src.connect(analyser);
+        audioCtxRef.current = ctx;
+        sourceRef.current = src;
+        analyserRef.current = analyser;
+      }
+      return true;
+    } catch (err) {
+      setErrMsg(`Microphone blocked: ${(err as Error).message || 'permission denied'}`);
+      cancelSpeakRef.current = speak('I need microphone access. Please enable it and tap Start again.');
+      setPhase('error');
+      return false;
+    }
   }, []);
 
   // ── Session ───────────────────────────────────────────────────────
@@ -213,58 +273,54 @@ export default function CarMode() {
     const { data } = await (supabase as any)
       .from('dojo_sessions')
       .insert({
-        user_id: user.id,
-        mode: 'autopilot',
-        session_type: 'drill',
-        skill_focus: spokeToSkillFocus(d.spoke),
-        difficulty: 'standard',
-        status: 'active',
+        user_id: user.id, mode: 'autopilot', session_type: 'drill',
+        skill_focus: spokeToSkillFocus(d.spoke), difficulty: 'standard', status: 'active',
         scenario_title: `Car Mode · ${d.concept_title}`,
-        scenario_context: d.scenario,
-        scenario_objection: d.spoken_task,
-        ki_source_id: d.ki_id,
-        ki_chapter: d.chapter,
-        ki_spider_dimension: d.spider_dimension,
-        ki_ideal_response: d.model_answer,
-        audio_metrics: { car_mode: true, capture: useRecorderPath ? 'recorder' : 'webspeech' },
+        scenario_context: d.scenario, scenario_objection: d.spoken_task,
+        ki_source_id: d.ki_id, ki_chapter: d.chapter,
+        ki_spider_dimension: d.spider_dimension, ki_ideal_response: d.model_answer,
+        audio_metrics: { car_mode: true, capture: useRecorderPath ? 'recorder' : 'webspeech', hands_free: true },
       })
-      .select('id')
-      .single();
+      .select('id').single();
     sessionIdRef.current = (data as { id?: string } | null)?.id ?? null;
   }, [user?.id]);
 
-  // ── Shared post-grade handler (persistence + spoken feedback) ────
+  // ── Shared post-grade handler ────────────────────────────────────
+  const advance = useCallback(() => {
+    setIdx((i) => {
+      if (i + 1 >= drills.length) {
+        setPhase('idle');
+        speak('That was the last drill. Great work.');
+        return i;
+      }
+      return i + 1;
+    });
+  }, [drills.length]);
+
   const applyGrade = useCallback(async (d: Drill, finalTranscript: string, g: GradeResult) => {
     setTranscript(finalTranscript);
     setGrade(g);
     if (user?.id) {
       try {
         await writeKIMastery({
-          userId: user.id,
-          kiId: d.ki_id,
-          chapter: d.chapter ?? d.spoke,
-          spiderDimension: d.spider_dimension,
-          score: g.score,
-          executionScore: g.score,
+          userId: user.id, kiId: d.ki_id,
+          chapter: d.chapter ?? d.spoke, spiderDimension: d.spider_dimension,
+          score: g.score, executionScore: g.score,
         });
       } catch (e) { console.error('ki_mastery write failed', e); }
       if (sessionIdRef.current) {
         try {
           await (supabase as any).from('dojo_session_turns').insert({
-            session_id: sessionIdRef.current,
-            user_id: user.id,
+            session_id: sessionIdRef.current, user_id: user.id,
             turn_index: turnIndexRef.current++,
             prompt_text: `${d.scenario}\n\n${d.spoken_task}`,
-            user_response: finalTranscript,
-            score: g.score,
-            feedback: g.summary,
-            top_mistake: g.top_fix,
+            user_response: finalTranscript, score: g.score,
+            feedback: g.summary, top_mistake: g.top_fix,
             improved_version: g.elite_line || d.model_answer,
             score_json: g as unknown as Record<string, unknown>,
           });
           await (supabase as any).from('dojo_sessions').update({
-            latest_score: g.score,
-            best_score: g.score,
+            latest_score: g.score, best_score: g.score,
             updated_at: new Date().toISOString(),
           }).eq('id', sessionIdRef.current);
         } catch (e) { console.error('dojo_sessions write failed', e); }
@@ -272,15 +328,11 @@ export default function CarMode() {
     }
     setPhase('feedback');
     const verbal = `${g.score} out of 100. ${g.top_fix} Elite sounded like: ${g.elite_line}`;
-    cancelSpeakRef.current = speak(verbal, () => {
-      cancelSpeakRef.current = speak('Say next, again, or show me.', () => {
-        if (SpeechRecognitionCtor && !useRecorderPath) listenForCommand();
-      });
-    });
+    cancelSpeakRef.current = speak(verbal, () => { advance(); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.id, advance]);
 
-  // ── PATH A: browser Web Speech STT (Chrome) ──────────────────────
+  // ── PATH A: Chrome Web Speech STT ────────────────────────────────
   const stopListening = useCallback(() => {
     try { recogRef.current?.stop(); } catch { /* noop */ }
     if (silenceTimerRef.current) { window.clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
@@ -291,24 +343,18 @@ export default function CarMode() {
     let finalText = '';
     setTranscript(''); setInterim('');
     const recog: SR = new SpeechRecognitionCtor();
-    recog.continuous = true;
-    recog.interimResults = true;
-    recog.lang = 'en-US';
+    recog.continuous = true; recog.interimResults = true; recog.lang = 'en-US';
     const resetSilence = () => {
       if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = window.setTimeout(() => {
-        try { recog.stop(); } catch { /* noop */ }
-      }, 2500);
+      silenceTimerRef.current = window.setTimeout(() => { try { recog.stop(); } catch { /* noop */ } }, VAD_SILENCE_MS);
     };
     recog.onresult = (e: { results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean; length: number }>; resultIndex: number }) => {
       let intr = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) finalText += r[0].transcript + ' ';
-        else intr += r[0].transcript;
+        if (r.isFinal) finalText += r[0].transcript + ' '; else intr += r[0].transcript;
       }
-      setTranscript(finalText.trim());
-      setInterim(intr);
+      setTranscript(finalText.trim()); setInterim(intr);
       resetSilence();
     };
     recog.onerror = (e: { error?: string }) => {
@@ -326,20 +372,15 @@ export default function CarMode() {
 
   const gradeTextPath = useCallback(async (d: Drill, finalTranscript: string) => {
     if (!finalTranscript) {
-      setPhase('listening'); setErrMsg("Didn't catch that. Tap Done to try again.");
+      cancelSpeakRef.current = speak("I didn't catch anything — give it another go.", () => { runDrill(d); });
       return;
     }
     setPhase('grading');
-    cancelSpeakRef.current = speak('Scoring.', () => {});
     try {
       const { data, error } = await supabase.functions.invoke('car-mode-score', {
         body: {
-          transcript: finalTranscript,
-          scenario: d.scenario,
-          spokenTask: d.spoken_task,
-          modelAnswer: d.model_answer,
-          rubric: d.rubric,
-          responseShape: d.response_shape,
+          transcript: finalTranscript, scenario: d.scenario, spokenTask: d.spoken_task,
+          modelAnswer: d.model_answer, rubric: d.rubric, responseShape: d.response_shape,
         },
       });
       if (error) throw error;
@@ -347,101 +388,145 @@ export default function CarMode() {
     } catch (e) {
       setPhase('error');
       setErrMsg(`Couldn't grade: ${(e as Error).message}`);
-      cancelSpeakRef.current = speak('Could not grade that one. Tap retry.');
+      cancelSpeakRef.current = speak('Could not grade that one. Moving on.', () => advance());
     }
-  }, [applyGrade]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyGrade, advance]);
 
-  // ── PATH B: MediaRecorder → server transcribe+grade (iOS/Safari) ─
-  const startRecording = useCallback(async (): Promise<boolean> => {
-    setTranscript(''); setInterim(''); setErrMsg(null);
-    recChunksRef.current = [];
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      mediaStreamRef.current = stream;
-      const mime = pickRecorderMime();
-      recMimeRef.current = mime ?? 'audio/webm';
-      const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
-      // Capture actual mimeType chosen by the browser (may include codecs param)
-      if (rec.mimeType) recMimeRef.current = rec.mimeType;
-      rec.ondataavailable = (ev) => { if (ev.data && ev.data.size > 0) recChunksRef.current.push(ev.data); };
-      mediaRecRef.current = rec;
-      rec.start();
-      return true;
-    } catch (err) {
-      const msg = (err as Error).message || 'mic blocked';
-      setErrMsg(`Microphone blocked: ${msg}`);
-      cancelSpeakRef.current = speak('I need microphone access. Please enable it and tap retry.');
-      setPhase('error');
-      return false;
-    }
-  }, []);
-
-  const stopRecordingAndGrade = useCallback(async (d: Drill) => {
-    const rec = mediaRecRef.current;
+  // ── PATH B: MediaRecorder segment on persistent stream + VAD ─────
+  const startRecorderSegment = useCallback((d: Drill) => {
     const stream = mediaStreamRef.current;
-    if (!rec) return;
-    setPhase('grading');
-    cancelSpeakRef.current = speak('Scoring.', () => {});
-    await new Promise<void>((resolve) => {
-      rec.onstop = () => resolve();
-      try { rec.stop(); } catch { resolve(); }
-    });
-    stream?.getTracks().forEach((t) => t.stop());
-    mediaRecRef.current = null;
-    mediaStreamRef.current = null;
-    const blob = new Blob(recChunksRef.current, { type: recMimeRef.current });
-    recChunksRef.current = [];
-    if (blob.size < 1500) {
+    const analyser = analyserRef.current;
+    if (!stream) {
+      setErrMsg('Mic not initialized — tap Start.');
       setPhase('error');
-      setErrMsg("That recording was empty — try again.");
-      cancelSpeakRef.current = speak("I didn't hear anything. Tap retry.");
       return;
     }
+    setTranscript(''); setInterim(''); setErrMsg(null);
+    recChunksRef.current = [];
+
+    const mime = pickRecorderMime();
+    recMimeRef.current = mime ?? 'audio/webm';
+    let rec: MediaRecorder;
     try {
-      const audioBase64 = await blobToBase64(blob);
-      const { data, error } = await supabase.functions.invoke('car-mode-audio-score', {
-        body: {
-          audioBase64,
-          mimeType: recMimeRef.current,
-          scenario: d.scenario,
-          spokenTask: d.spoken_task,
-          modelAnswer: d.model_answer,
-          rubric: d.rubric,
-          responseShape: d.response_shape,
-        },
-      });
-      if (error) throw error;
-      const resp = data as GradeResult & { transcript?: string };
-      const tx = (resp.transcript ?? '').trim();
-      if (!tx) {
-        setPhase('error');
-        setErrMsg("Couldn't hear that clearly — try again.");
-        cancelSpeakRef.current = speak("I couldn't hear that clearly. Tap retry.");
+      rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+    } catch (err) {
+      setErrMsg(`Recorder failed: ${(err as Error).message}`);
+      setPhase('error');
+      return;
+    }
+    if (rec.mimeType) recMimeRef.current = rec.mimeType;
+
+    let stopped = false;
+    let speechDetected = false;
+    let lastSpeechAt = performance.now();
+    const startedAt = performance.now();
+
+    const finalize = async () => {
+      if (stopped) return; stopped = true;
+      clearVadTimers();
+      const blob = new Blob(recChunksRef.current, { type: recMimeRef.current });
+      recChunksRef.current = [];
+
+      if (!speechDetected || blob.size < 1500) {
+        // No real speech — re-arm without grading.
+        cancelSpeakRef.current = speak("I didn't catch anything — give it another go.", () => {
+          if (drillRef.current && drillRef.current.ki_id === d.ki_id) startRecorderSegment(d);
+        });
         return;
       }
-      await applyGrade(d, tx, resp);
-    } catch (e) {
+
+      setPhase('grading');
+      try {
+        const audioBase64 = await blobToBase64(blob);
+        const { data, error } = await supabase.functions.invoke('car-mode-audio-score', {
+          body: {
+            audioBase64, mimeType: recMimeRef.current,
+            scenario: d.scenario, spokenTask: d.spoken_task,
+            modelAnswer: d.model_answer, rubric: d.rubric, responseShape: d.response_shape,
+          },
+        });
+        if (error) throw error;
+        const resp = data as GradeResult & { transcript?: string };
+        const tx = (resp.transcript ?? '').trim();
+        if (!tx || resp.score === 0) {
+          // Server said no answer — re-arm.
+          cancelSpeakRef.current = speak("I didn't catch a clear answer — give it another go.", () => {
+            if (drillRef.current && drillRef.current.ki_id === d.ki_id) startRecorderSegment(d);
+          });
+          return;
+        }
+        await applyGrade(d, tx, resp);
+      } catch (e) {
+        setPhase('error');
+        setErrMsg(`Couldn't grade: ${(e as Error).message}`);
+        cancelSpeakRef.current = speak('Could not grade that one. Moving on.', () => advance());
+      }
+    };
+
+    rec.ondataavailable = (ev) => { if (ev.data && ev.data.size > 0) recChunksRef.current.push(ev.data); };
+    rec.onstop = () => { void finalize(); };
+    mediaRecRef.current = rec;
+
+    try { rec.start(); } catch (err) {
+      setErrMsg(`Recorder start failed: ${(err as Error).message}`);
       setPhase('error');
-      setErrMsg(`Couldn't grade: ${(e as Error).message}`);
-      cancelSpeakRef.current = speak('Could not grade that one. Tap retry.');
+      return;
     }
-  }, [applyGrade]);
+
+    // Hard cap
+    vadMaxTimerRef.current = window.setTimeout(() => {
+      try { rec.state !== 'inactive' && rec.stop(); } catch { /* noop */ }
+    }, VAD_MAX_MS);
+
+    // VAD loop
+    if (analyser) {
+      const buf = new Float32Array(analyser.fftSize);
+      const loop = () => {
+        if (stopped) return;
+        analyser.getFloatTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+        const rms = Math.sqrt(sum / buf.length);
+        const now = performance.now();
+        if (rms > VAD_RMS_THRESHOLD) {
+          speechDetected = true;
+          lastSpeechAt = now;
+        } else if (speechDetected && (now - lastSpeechAt) > VAD_SILENCE_MS) {
+          try { rec.state !== 'inactive' && rec.stop(); } catch { /* noop */ }
+          return;
+        } else if (!speechDetected && (now - startedAt) > VAD_NO_SPEECH_MS) {
+          try { rec.state !== 'inactive' && rec.stop(); } catch { /* noop */ }
+          return;
+        }
+        vadRafRef.current = requestAnimationFrame(loop);
+      };
+      vadRafRef.current = requestAnimationFrame(loop);
+    } else {
+      // No analyser — fall back to fixed-window record
+      silenceTimerRef.current = window.setTimeout(() => {
+        speechDetected = true; // can't tell, assume content
+        try { rec.state !== 'inactive' && rec.stop(); } catch { /* noop */ }
+      }, 8000);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyGrade, advance]);
 
   // ── Phase runner ─────────────────────────────────────────────────
   const runDrill = useCallback(async (d: Drill) => {
     setGrade(null); setErrMsg(null); setTranscript(''); setInterim('');
     await ensureSession(d);
+    // Try to keep AudioContext alive across drills
+    try { await audioCtxRef.current?.resume(); } catch { /* noop */ }
     setPhase('intro');
     cancelSpeakRef.current = speak(`Skill: ${d.concept_title}.`, () => {
       setPhase('scenario');
       cancelSpeakRef.current = speak(d.scenario, () => {
         setPhase('task');
-        cancelSpeakRef.current = speak(`${d.spoken_task} Go.`, async () => {
+        cancelSpeakRef.current = speak(`${d.spoken_task} Go.`, () => {
           setPhase('listening');
           if (useRecorderPath) {
-            await startRecording();
+            startRecorderSegment(d);
           } else {
             if (!startListening((finalText) => gradeTextPath(d, finalText))) {
               setPhase('listening');
@@ -450,47 +535,24 @@ export default function CarMode() {
         });
       });
     });
-  }, [ensureSession, startListening, gradeTextPath, startRecording]);
+  }, [ensureSession, startListening, gradeTextPath, startRecorderSegment]);
 
-  // ── Voice command listener (Chrome-only after feedback) ──────────
-  const listenForCommand = useCallback(() => {
-    if (!SpeechRecognitionCtor || useRecorderPath) return;
-    let final = '';
-    const r: SR = new SpeechRecognitionCtor();
-    r.continuous = false; r.interimResults = false; r.lang = 'en-US';
-    r.onresult = (e: { results: ArrayLike<{ 0: { transcript: string } }>; }) => {
-      final = e.results[0]?.[0]?.transcript?.toLowerCase().trim() ?? '';
-    };
-    r.onend = () => {
-      if (!final) return;
-      if (/(next|forward|skip)/.test(final)) handleNext();
-      else if (/(again|retry|repeat that)/.test(final)) handleAgain();
-      else if (/(show|reveal|elite|gold)/.test(final)) handleReveal();
-      else if (/(repeat|say it again|play back)/.test(final)) handleRepeatFeedback();
-    };
-    recogRef.current = r;
-    try { r.start(); } catch { /* noop */ }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const runDrillRef = useRef(runDrill);
+  useEffect(() => { runDrillRef.current = runDrill; }, [runDrill]);
 
   // ── Controls ─────────────────────────────────────────────────────
   const handleNext = useCallback(() => {
     stopListening();
+    try { mediaRecRef.current?.state !== 'inactive' && mediaRecRef.current?.stop(); } catch { /* noop */ }
+    clearVadTimers();
     try { window.speechSynthesis?.cancel(); } catch { /* noop */ }
-    if (idx + 1 >= drills.length) {
-      setPhase('idle');
-      speak('That was the last drill. Great work.');
-      return;
-    }
-    setIdx((i) => i + 1);
-  }, [idx, drills.length, stopListening]);
+    advance();
+  }, [stopListening, advance]);
 
   const handleAgain = useCallback(() => {
     stopListening();
-    try { mediaRecRef.current?.stop(); } catch { /* noop */ }
-    mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
-    mediaRecRef.current = null;
-    mediaStreamRef.current = null;
+    try { mediaRecRef.current?.state !== 'inactive' && mediaRecRef.current?.stop(); } catch { /* noop */ }
+    clearVadTimers();
     try { window.speechSynthesis?.cancel(); } catch { /* noop */ }
     if (drill) runDrill(drill);
   }, [drill, runDrill, stopListening]);
@@ -498,40 +560,35 @@ export default function CarMode() {
   const handleReveal = useCallback(() => {
     if (!drill) return;
     setPhase('reveal');
-    cancelSpeakRef.current = speak(`Elite answer: ${drill.model_answer}`, () => {
-      if (SpeechRecognitionCtor && !useRecorderPath) listenForCommand();
-    });
-  }, [drill, listenForCommand]);
+    cancelSpeakRef.current = speak(`Elite answer: ${drill.model_answer}`, () => {});
+  }, [drill]);
 
-  const handleRepeatFeedback = useCallback(() => {
-    if (!grade) return;
-    cancelSpeakRef.current = speak(`${grade.score} out of 100. ${grade.top_fix} Elite sounded like: ${grade.elite_line}`, () => {
-      if (SpeechRecognitionCtor && !useRecorderPath) listenForCommand();
-    });
-  }, [grade]);
-
-  const handleStart = useCallback(() => {
+  const handleStart = useCallback(async () => {
     if (drills.length === 0) return;
+    if (useRecorderPath) {
+      const ok = await acquireMicGraph();
+      if (!ok) return;
+    }
     runDrill(drills[idx]);
-  }, [drills, idx, runDrill]);
+  }, [drills, idx, runDrill, acquireMicGraph]);
 
-  // "Done" button — finishes listening and triggers grading
+  // Optional manual "done" fallback
   const handleDone = useCallback(() => {
     if (useRecorderPath) {
-      if (drill) stopRecordingAndGrade(drill);
+      try { mediaRecRef.current?.state !== 'inactive' && mediaRecRef.current?.stop(); } catch { /* noop */ }
     } else {
       stopListening();
     }
-  }, [drill, stopListening, stopRecordingAndGrade]);
+  }, [stopListening]);
 
   const startedRef = useRef(false);
   useEffect(() => {
     if (!startedRef.current) return;
-    if (drill) runDrill(drill);
+    if (drill) runDrillRef.current(drill);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx]);
 
-  const onPressStart = () => { startedRef.current = true; handleStart(); };
+  const onPressStart = () => { startedRef.current = true; void handleStart(); };
 
   // ── Render ───────────────────────────────────────────────────────
   const bigText = useMemo(() => {
@@ -539,7 +596,7 @@ export default function CarMode() {
     if (phase === 'intro') return `Skill: ${drill.concept_title}`;
     if (phase === 'scenario') return drill.scenario;
     if (phase === 'task') return drill.spoken_task;
-    if (phase === 'listening') return transcript || interim || (useRecorderPath ? '🎙 Recording — tap Done when finished' : '🎙 Speak your answer…');
+    if (phase === 'listening') return transcript || interim || (useRecorderPath ? '🎙 Listening — just speak, I\'ll stop on my own' : '🎙 Speak your answer…');
     if (phase === 'grading') return 'Scoring your answer…';
     if (phase === 'reveal') return drill.model_answer;
     return drill.concept_title;
@@ -559,11 +616,7 @@ export default function CarMode() {
 
       <div className="flex-1 flex flex-col px-6 py-8">
         {loading && <p className="text-2xl text-white/60 m-auto">Loading drills…</p>}
-
-        {!loading && loadError && (
-          <p className="text-xl text-red-400 m-auto">Could not load drills: {loadError}</p>
-        )}
-
+        {!loading && loadError && (<p className="text-xl text-red-400 m-auto">Could not load drills: {loadError}</p>)}
         {!loading && !loadError && drills.length === 0 && (
           <p className="text-2xl text-white/70 m-auto text-center">No car-ready drills yet. Check back soon.</p>
         )}
@@ -575,7 +628,7 @@ export default function CarMode() {
               {phase === 'intro' && 'Setting up'}
               {phase === 'scenario' && 'Scenario'}
               {phase === 'task' && 'Your task'}
-              {phase === 'listening' && (useRecorderPath ? 'Recording' : (sttSupported ? 'Listening' : 'Speak — manual mode'))}
+              {phase === 'listening' && (useRecorderPath ? 'Listening' : (sttSupported ? 'Listening' : 'Speak — manual mode'))}
               {phase === 'grading' && 'Grading'}
               {phase === 'feedback' && grade && (grade.passed ? '✓ Pass' : '✗ Try again')}
               {phase === 'reveal' && 'Elite answer'}
@@ -584,9 +637,7 @@ export default function CarMode() {
 
             <div className="flex-1 flex items-center justify-center">
               <Card className="bg-white/5 border-white/10 p-6 sm:p-10 w-full">
-                <p className="text-2xl sm:text-4xl leading-tight text-center font-medium text-white">
-                  {bigText}
-                </p>
+                <p className="text-2xl sm:text-4xl leading-tight text-center font-medium text-white">{bigText}</p>
                 {phase === 'listening' && interim && (
                   <p className="text-base text-white/40 italic text-center mt-4">{interim}</p>
                 )}
@@ -598,9 +649,7 @@ export default function CarMode() {
                     </div>
                     <p className="text-xl"><span className="text-white/50">Fix: </span>{grade.top_fix}</p>
                     <p className="text-lg text-white/70"><span className="text-white/40">Elite: </span>{grade.elite_line}</p>
-                    {transcript && (
-                      <p className="text-sm text-white/50 italic mt-2">You said: "{transcript}"</p>
-                    )}
+                    {transcript && (<p className="text-sm text-white/50 italic mt-2">You said: "{transcript}"</p>)}
                     {grade.criteria?.length > 0 && (
                       <ul className="text-sm space-y-1 mt-2">
                         {grade.criteria.map((c, i) => (
@@ -615,9 +664,7 @@ export default function CarMode() {
               </Card>
             </div>
 
-            {errMsg && (
-              <p className="text-center text-red-400 text-sm mt-3">{errMsg}</p>
-            )}
+            {errMsg && (<p className="text-center text-red-400 text-sm mt-3">{errMsg}</p>)}
 
             <div className="mt-6 grid gap-3">
               {phase === 'idle' && (
@@ -627,8 +674,8 @@ export default function CarMode() {
               )}
 
               {phase === 'listening' && (
-                <Button onClick={handleDone} className="h-20 text-2xl rounded-2xl bg-blue-600 hover:bg-blue-500">
-                  <MicOff className="h-7 w-7 mr-2" /> Done
+                <Button onClick={handleDone} className="h-20 text-xl rounded-2xl bg-white/10 hover:bg-white/20" variant="outline">
+                  <MicOff className="h-6 w-6 mr-2" /> Done (optional — auto-stops on silence)
                 </Button>
               )}
 
@@ -646,28 +693,12 @@ export default function CarMode() {
                 </div>
               )}
 
-              {phase === 'grading' && (
-                <div className="h-20 flex items-center justify-center text-white/60">Scoring…</div>
-              )}
-
-              {(phase === 'intro' || phase === 'scenario' || phase === 'task') && (
-                <Button onClick={async () => {
-                  try { window.speechSynthesis?.cancel(); } catch { /* noop */ }
-                  setPhase('listening');
-                  if (useRecorderPath) {
-                    await startRecording();
-                  } else {
-                    startListening((t) => gradeTextPath(drill, t));
-                  }
-                }} className="h-20 text-xl rounded-2xl bg-blue-600 hover:bg-blue-500">
-                  <Mic className="h-6 w-6 mr-2" /> I'm ready — listen now
-                </Button>
-              )}
+              {phase === 'grading' && (<div className="h-20 flex items-center justify-center text-white/60">Scoring…</div>)}
             </div>
 
             {useRecorderPath && (
               <p className="text-center text-white/40 text-xs mt-3">
-                iOS / Safari mode · recording + server transcription
+                Hands-free · auto-records after the prompt · auto-stops on silence
               </p>
             )}
             {!useRecorderPath && !sttSupported && (
