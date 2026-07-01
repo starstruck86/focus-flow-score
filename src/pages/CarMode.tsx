@@ -660,7 +660,7 @@ export default function CarMode() {
     stopListening();
     try { mediaRecRef.current?.state !== 'inactive' && mediaRecRef.current?.stop(); } catch { /* noop */ }
     clearVadTimers();
-    try { window.speechSynthesis?.cancel(); } catch { /* noop */ }
+    ttsPlayback = interruptSpeech(ttsPlayback);
     if (drill) runDrill(drill);
   }, [drill, runDrill, stopListening]);
 
