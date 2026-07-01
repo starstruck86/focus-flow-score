@@ -192,6 +192,7 @@ export default function CarMode() {
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const turnIndexRef = useRef(0);
+  const bestScoreRef = useRef(0);
   const recogRef = useRef<SR | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
   const cancelSpeakRef = useRef<() => void>(() => {});
@@ -390,8 +391,9 @@ export default function CarMode() {
             improved_version: g.elite_line || d.model_answer,
             score_json: g as unknown as Record<string, unknown>,
           });
+          bestScoreRef.current = Math.max(bestScoreRef.current, g.score);
           await (supabase as any).from('dojo_sessions').update({
-            latest_score: g.score, best_score: g.score,
+            latest_score: g.score, best_score: bestScoreRef.current,
             updated_at: new Date().toISOString(),
           }).eq('id', sessionIdRef.current);
         } catch (e) { console.error('dojo_sessions write failed', e); }
