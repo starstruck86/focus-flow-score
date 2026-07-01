@@ -281,6 +281,7 @@ export default function CarMode() {
   }
 
   function tearDownMicGraph() {
+    try { ttsPlayback = interruptSpeech(ttsPlayback); } catch { /* noop */ }
     try { window.speechSynthesis?.cancel(); } catch { /* noop */ }
     try { recogRef.current?.stop(); } catch { /* noop */ }
     try { mediaRecRef.current?.stop(); } catch { /* noop */ }
