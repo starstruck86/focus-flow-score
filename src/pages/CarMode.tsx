@@ -537,15 +537,16 @@ export default function CarMode() {
           if (timeoutId !== undefined) clearTimeout(timeoutId);
         }
         if (error) throw error;
-        const resp = data as GradeResult & { transcript?: string };
+        const resp = data as GradeResult & { transcript?: string; has_clear_speech?: boolean };
         const tx = (resp.transcript ?? '').trim();
-        if (!tx || resp.score === 0) {
-          // Server said no answer — re-arm.
-          cancelSpeakRef.current = speak("I didn't catch a clear answer — give it another go.", () => {
+        if (resp.has_clear_speech === false) {
+          // Server confirmed no real speech — re-arm without grading.
+          cancelSpeakRef.current = speak("I didn't catch anything — give it another go.", () => {
             if (drillRef.current && drillRef.current.ki_id === d.ki_id) startRecorderSegment(d);
           });
           return;
         }
+        // Real speech — always grade and coach, even if score is 0/low.
         await applyGrade(d, tx, resp);
       } catch (e) {
         const msg = (e as Error)?.message ?? String(e);
