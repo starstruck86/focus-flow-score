@@ -446,7 +446,12 @@ export default function CarMode() {
   }, [applyGrade, advance]);
 
   // ── PATH B: MediaRecorder segment on persistent stream + VAD ─────
-  const startRecorderSegment = useCallback((d: Drill) => {
+  const startRecorderSegment = useCallback(async (d: Drill) => {
+    // Mic acquisition may still be pending from the Start tap — await it here.
+    if (!mediaStreamRef.current || !analyserRef.current) {
+      const ok = await acquireMicGraph();
+      if (!ok) return;
+    }
     const stream = mediaStreamRef.current;
     const analyser = analyserRef.current;
     if (!stream) {
