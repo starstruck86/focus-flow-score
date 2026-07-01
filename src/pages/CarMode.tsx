@@ -75,7 +75,8 @@ const sttSupported = !!SpeechRecognitionCtor && !useRecorderPath;
 const VAD_SILENCE_MS = 2500;        // stop ~2.5s after speech ends
 const VAD_MAX_MS = 60_000;          // hard cap on a single answer
 const VAD_NO_SPEECH_MS = 5000;      // if nothing heard within 5s, "didn't catch"
-const VAD_RMS_THRESHOLD = 0.025;    // ~ -32 dBFS; above this counts as speech
+const VAD_RMS_THRESHOLD = 0.04;     // ~ -28 dBFS; above this counts as likely speech
+const VAD_MIN_SPEECH_MS = 500;      // require sustained above-threshold audio, not one noise spike
 
 function speak(text: string, onDone?: () => void) {
   if (!ttsSupported || !text) { onDone?.(); return () => {}; }
@@ -476,6 +477,8 @@ export default function CarMode() {
 
     let stopped = false;
     let speechDetected = false;
+    let speechMs = 0;
+    let lastVadAt = performance.now();
     let lastSpeechAt = performance.now();
     const startedAt = performance.now();
 
@@ -485,7 +488,7 @@ export default function CarMode() {
       const blob = new Blob(recChunksRef.current, { type: recMimeRef.current });
       recChunksRef.current = [];
 
-      if (!speechDetected || blob.size < 1500) {
+      if (!speechDetected || speechMs < VAD_MIN_SPEECH_MS || blob.size < 1500) {
         // No real speech — re-arm without grading.
         cancelSpeakRef.current = speak("I didn't catch anything — give it another go.", () => {
           if (drillRef.current && drillRef.current.ki_id === d.ki_id) startRecorderSegment(d);
@@ -570,8 +573,11 @@ export default function CarMode() {
         for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
         const rms = Math.sqrt(sum / buf.length);
         const now = performance.now();
+        const deltaMs = Math.min(100, Math.max(0, now - lastVadAt));
+        lastVadAt = now;
         if (rms > VAD_RMS_THRESHOLD) {
-          speechDetected = true;
+          speechMs += deltaMs;
+          if (speechMs >= VAD_MIN_SPEECH_MS) speechDetected = true;
           lastSpeechAt = now;
         } else if (speechDetected && (now - lastSpeechAt) > VAD_SILENCE_MS) {
           try { rec.state !== 'inactive' && rec.stop(); } catch { /* noop */ }

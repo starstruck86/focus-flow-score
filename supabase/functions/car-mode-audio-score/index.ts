@@ -2,7 +2,7 @@
 //   Step A (TRANSCRIBE-ONLY): send audio + a transcription-only prompt (no
 //     scenario / task / model answer / rubric). This prevents Gemini from
 //     confabulating a "transcript" from the model answer when audio is silent.
-//   Step B (GRADE): only when Step A returns a non-empty real transcript, grade
+//   Step B (GRADE): only when Step A confirms clear human speech and returns a real transcript, grade
 //     it against the model answer + rubric.
 //
 // Input:  { audioBase64, mimeType, scenario, spokenTask, modelAnswer, rubric, responseShape? }
@@ -37,6 +37,7 @@ function audioFormatFromMime(mime: string): string {
 }
 
 const NO_ANSWER = {
+  has_clear_speech: false,
   transcript: "",
   score: 0,
   passed: false,
@@ -48,6 +49,25 @@ const NO_ANSWER = {
 function looksLikeNoAnswer(tx: string): boolean {
   const t = (tx || "").trim();
   if (!t) return true;
+  const normalized = t.toLowerCase().replace(/[“”"']/g, "").replace(/\s+/g, " ").trim();
+  const compact = normalized.replace(/[\s.,!?]+/g, "");
+  const commonHallucinations = new Set([
+    "thank you",
+    "thank you.",
+    "thank you for watching",
+    "thanks for watching",
+    "thanks",
+    "bye",
+    "you",
+    "okay",
+    "ok",
+    "so",
+    "please subscribe",
+    "subscribe",
+    ".",
+  ]);
+  if (commonHallucinations.has(normalized) || commonHallucinations.has(t.toLowerCase()) || compact === "") return true;
+  if (["thankyou", "thankyouforwatching", "thanksforwatching", "pleasesubscribe", "subscribe"].includes(compact)) return true;
   // Strip punctuation, count word tokens with letters
   const words = t.replace(/[^\p{L}\p{N}\s']/gu, " ").split(/\s+/).filter((w) => /\p{L}/u.test(w));
   if (words.length < 2) return true;
@@ -93,8 +113,8 @@ serve(async (req) => {
 
     // ── STEP A: TRANSCRIBE ONLY ──────────────────────────────────────
     // CRITICAL: do NOT include scenario/task/modelAnswer/rubric here.
-    const transcribeSys = "You are a strict speech transcriber. Transcribe ONLY what is actually spoken in the audio, verbatim. If there is no clear human speech (silence, breathing, noise, music, or nothing audible), return an empty string for transcript. NEVER invent, infer, paraphrase, complete, or guess content. NEVER add words that were not spoken.";
-    const transcribeUser = "Transcribe the speech in this audio. Return JSON: {\"transcript\": \"<verbatim words or empty string>\"}";
+    const transcribeSys = "You are a strict speech-presence detector and transcriber. Transcribe ONLY what is actually spoken in the audio, verbatim. Set has_clear_speech=false if the audio is silence, background/ambient/road noise, music, breathing, or does NOT contain a person clearly speaking words. Only set true and transcribe when a human is actually speaking. Never invent, infer, or complete words. NEVER add words that were not spoken.";
+    const transcribeUser = "Decide whether this audio contains clear human speech, then transcribe only if it does. Return JSON exactly: {\"has_clear_speech\": boolean, \"transcript\": \"<verbatim words or empty string>\"}";
 
     let txRes: Response;
     try {
@@ -133,10 +153,11 @@ serve(async (req) => {
     const txJson = await txRes.json();
     let txParsed: Record<string, unknown> = {};
     try { txParsed = JSON.parse(txJson.choices?.[0]?.message?.content ?? "{}"); } catch { txParsed = {}; }
+    const hasClearSpeech = txParsed.has_clear_speech === true;
     const transcript = String(txParsed.transcript ?? "").trim();
 
     // ── Empty / no-answer guard ──────────────────────────────────────
-    if (looksLikeNoAnswer(transcript)) {
+    if (!hasClearSpeech || looksLikeNoAnswer(transcript)) {
       return new Response(
         JSON.stringify({ ...NO_ANSWER, transcript: "", criteria: rubric.map((r) => ({ c: r.c, met: false })) }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -145,7 +166,7 @@ serve(async (req) => {
 
     // ── STEP B: GRADE the real transcript ────────────────────────────
     const rubricList = rubric.map((r, i) => `${i + 1}. ${r.c}${r.must ? " (REQUIRED)" : ""}`).join("\n");
-    const gradeSys = "You are an elite enterprise sales coach grading a salesperson's SPOKEN response. Grade ONLY what is in the transcript — never invent or assume what the rep said. If the transcript is empty, fragmentary, or does not actually address the task, return score 0 and say no answer was detected. Allow filler and natural delivery; reward substance over polish. Be terse.";
+    const gradeSys = "You are an elite enterprise sales coach grading a salesperson's SPOKEN response. Grade ONLY what is in the transcript — never invent or assume what the rep said. If the transcript is empty, fragmentary, generic, unrelated, or does not clearly address the task, return score 0 and say no answer was detected. Allow filler and natural delivery; reward substance over polish. Be terse.";
     const gradeUser = `SCENARIO:\n${body.scenario}\n\nTASK SPOKEN TO REP:\n${body.spokenTask}\n\nEXPECTED SHAPE: ${body.responseShape ?? "talk_track"}\n\nELITE MODEL ANSWER:\n${body.modelAnswer}\n\nRUBRIC CRITERIA:\n${rubricList || "(no rubric — judge against model answer)"}\n\nREP'S ACTUAL SPOKEN RESPONSE (verbatim transcript — grade ONLY this, nothing else):\n"""${transcript}"""\n\nReturn JSON only:
 {
   "score": <0-100 integer>,
@@ -199,6 +220,7 @@ Required criteria must be met=true to pass. If a required criterion is missed, t
 
     return new Response(
       JSON.stringify({
+        has_clear_speech: true,
         transcript,
         score,
         passed,
