@@ -622,12 +622,13 @@ export default function CarMode() {
     cancelSpeakRef.current = speak(`Elite answer: ${drill.model_answer}`, () => {});
   }, [drill]);
 
-  const handleStart = useCallback(async () => {
+  // handleStart is intentionally NOT async before the first speak(). Audio priming
+  // and TTS kick-off must run synchronously from the click handler on iOS Safari.
+  const handleStart = useCallback(() => {
     if (drills.length === 0) return;
-    if (useRecorderPath) {
-      const ok = await acquireMicGraph();
-      if (!ok) return;
-    }
+    // Kick off mic acquisition in the background (permission prompt still shows
+    // and the stream is ready by the time we hit the listening phase).
+    if (useRecorderPath) void acquireMicGraph();
     runDrill(drills[idx]);
   }, [drills, idx, runDrill, acquireMicGraph]);
 
@@ -647,7 +648,14 @@ export default function CarMode() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx]);
 
-  const onPressStart = () => { startedRef.current = true; void handleStart(); };
+  // MUST stay a plain sync handler — do NOT make this async or add awaits before
+  // primeAudioInGesture / handleStart, or iOS Safari will drop the gesture context
+  // and refuse to speak (leaving the flow stuck at the intro card).
+  const onPressStart = () => {
+    startedRef.current = true;
+    primeAudioInGesture(audioCtxRef);
+    handleStart();
+  };
 
   // ── Render ───────────────────────────────────────────────────────
   const bigText = useMemo(() => {
