@@ -83,10 +83,51 @@ function speak(text: string, onDone?: () => void) {
   const u = new SpeechSynthesisUtterance(text);
   u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
   let done = false;
-  const finish = () => { if (done) return; done = true; onDone?.(); };
+  let timer: number | null = null;
+  const finish = () => {
+    if (done) return; done = true;
+    if (timer != null) { window.clearTimeout(timer); timer = null; }
+    onDone?.();
+  };
   u.onend = finish; u.onerror = finish;
   try { window.speechSynthesis.speak(u); } catch { finish(); }
-  return () => { try { window.speechSynthesis.cancel(); } catch { /* noop */ } finish(); };
+  // iOS Safari's onend is unreliable — force-advance on a duration estimate.
+  // ~160 wpm ⇒ ms per word ≈ 375; add 800ms buffer; floor 2500ms.
+  const words = Math.max(1, text.trim().split(/\s+/).length);
+  const estMs = Math.max(2500, Math.round((words / 160) * 60000) + 800);
+  timer = window.setTimeout(finish, estMs);
+  return () => {
+    try { window.speechSynthesis.cancel(); } catch { /* noop */ }
+    finish();
+  };
+}
+
+/**
+ * MUST be called synchronously from inside a user-gesture handler (e.g. click).
+ * Authorises speechSynthesis and AudioContext for the rest of the iOS Safari session.
+ */
+function primeAudioInGesture(audioCtxRef: React.MutableRefObject<AudioContext | null>) {
+  if (ttsSupported) {
+    try {
+      window.speechSynthesis.cancel();
+      const warm = new SpeechSynthesisUtterance(' ');
+      warm.volume = 0;
+      window.speechSynthesis.speak(warm);
+    } catch { /* noop */ }
+  }
+  if (!audioCtxRef.current) {
+    const Ctor = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+      ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (Ctor) {
+      try {
+        const ctx = new Ctor();
+        audioCtxRef.current = ctx;
+        void ctx.resume().catch(() => {});
+      } catch { /* noop */ }
+    }
+  } else {
+    try { void audioCtxRef.current.resume().catch(() => {}); } catch { /* noop */ }
+  }
 }
 
 function spokeToSkillFocus(spoke: string): string {
