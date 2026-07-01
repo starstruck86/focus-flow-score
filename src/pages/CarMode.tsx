@@ -15,7 +15,7 @@
  *   - iOS / Safari / no STT: MediaRecorder → `car-mode-audio-score`
  *     (transcribe-then-grade pipeline; never confabulates).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -83,10 +83,51 @@ function speak(text: string, onDone?: () => void) {
   const u = new SpeechSynthesisUtterance(text);
   u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
   let done = false;
-  const finish = () => { if (done) return; done = true; onDone?.(); };
+  let timer: number | null = null;
+  const finish = () => {
+    if (done) return; done = true;
+    if (timer != null) { window.clearTimeout(timer); timer = null; }
+    onDone?.();
+  };
   u.onend = finish; u.onerror = finish;
   try { window.speechSynthesis.speak(u); } catch { finish(); }
-  return () => { try { window.speechSynthesis.cancel(); } catch { /* noop */ } finish(); };
+  // iOS Safari's onend is unreliable — force-advance on a duration estimate.
+  // ~160 wpm ⇒ ms per word ≈ 375; add 800ms buffer; floor 2500ms.
+  const words = Math.max(1, text.trim().split(/\s+/).length);
+  const estMs = Math.max(2500, Math.round((words / 160) * 60000) + 800);
+  timer = window.setTimeout(finish, estMs);
+  return () => {
+    try { window.speechSynthesis.cancel(); } catch { /* noop */ }
+    finish();
+  };
+}
+
+/**
+ * MUST be called synchronously from inside a user-gesture handler (e.g. click).
+ * Authorises speechSynthesis and AudioContext for the rest of the iOS Safari session.
+ */
+function primeAudioInGesture(audioCtxRef: React.MutableRefObject<AudioContext | null>) {
+  if (ttsSupported) {
+    try {
+      window.speechSynthesis.cancel();
+      const warm = new SpeechSynthesisUtterance(' ');
+      warm.volume = 0;
+      window.speechSynthesis.speak(warm);
+    } catch { /* noop */ }
+  }
+  if (!audioCtxRef.current) {
+    const Ctor = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+      ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (Ctor) {
+      try {
+        const ctx = new Ctor();
+        audioCtxRef.current = ctx;
+        void ctx.resume().catch(() => {});
+      } catch { /* noop */ }
+    }
+  } else {
+    try { void audioCtxRef.current.resume().catch(() => {}); } catch { /* noop */ }
+  }
 }
 
 function spokeToSkillFocus(spoke: string): string {
@@ -237,24 +278,35 @@ export default function CarMode() {
     mediaRecRef.current = null;
   }
 
-  // Acquire mic + audio graph ONCE on Start. iOS Safari requires this inside the gesture.
+  // Acquire mic + attach analyser to the (already-created) AudioContext.
+  // AudioContext is created synchronously in the Start gesture via primeAudioInGesture,
+  // so we only need to await getUserMedia here. Safe to call from a non-gesture context
+  // because permission was granted by the earlier Start tap.
   const acquireMicGraph = useCallback(async (): Promise<boolean> => {
-    if (mediaStreamRef.current && audioCtxRef.current) return true;
+    if (mediaStreamRef.current && analyserRef.current) return true;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      mediaStreamRef.current = stream;
-      const Ctor = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
-        ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (Ctor) {
-        const ctx = new Ctor();
+      if (!mediaStreamRef.current) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+        mediaStreamRef.current = stream;
+      }
+      const stream = mediaStreamRef.current;
+      let ctx = audioCtxRef.current;
+      if (!ctx) {
+        const Ctor = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+          ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (Ctor) {
+          ctx = new Ctor();
+          audioCtxRef.current = ctx;
+        }
+      }
+      if (ctx && stream && !analyserRef.current) {
         try { await ctx.resume(); } catch { /* noop */ }
         const src = ctx.createMediaStreamSource(stream);
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 1024;
         src.connect(analyser);
-        audioCtxRef.current = ctx;
         sourceRef.current = src;
         analyserRef.current = analyser;
       }
@@ -394,7 +446,12 @@ export default function CarMode() {
   }, [applyGrade, advance]);
 
   // ── PATH B: MediaRecorder segment on persistent stream + VAD ─────
-  const startRecorderSegment = useCallback((d: Drill) => {
+  const startRecorderSegment = useCallback(async (d: Drill) => {
+    // Mic acquisition may still be pending from the Start tap — await it here.
+    if (!mediaStreamRef.current || !analyserRef.current) {
+      const ok = await acquireMicGraph();
+      if (!ok) return;
+    }
     const stream = mediaStreamRef.current;
     const analyser = analyserRef.current;
     if (!stream) {
@@ -513,11 +570,13 @@ export default function CarMode() {
   }, [applyGrade, advance]);
 
   // ── Phase runner ─────────────────────────────────────────────────
-  const runDrill = useCallback(async (d: Drill) => {
+  const runDrill = useCallback((d: Drill) => {
     setGrade(null); setErrMsg(null); setTranscript(''); setInterim('');
-    await ensureSession(d);
-    // Try to keep AudioContext alive across drills
-    try { await audioCtxRef.current?.resume(); } catch { /* noop */ }
+    // Session insert and AudioContext resume run in the background so we do NOT
+    // block the first spoken line — on iOS, awaiting here loses the gesture
+    // context and speechSynthesis silently no-ops.
+    void ensureSession(d);
+    try { void audioCtxRef.current?.resume().catch(() => {}); } catch { /* noop */ }
     setPhase('intro');
     cancelSpeakRef.current = speak(`Skill: ${d.concept_title}.`, () => {
       setPhase('scenario');
@@ -526,7 +585,7 @@ export default function CarMode() {
         cancelSpeakRef.current = speak(`${d.spoken_task} Go.`, () => {
           setPhase('listening');
           if (useRecorderPath) {
-            startRecorderSegment(d);
+            void startRecorderSegment(d);
           } else {
             if (!startListening((finalText) => gradeTextPath(d, finalText))) {
               setPhase('listening');
@@ -563,12 +622,13 @@ export default function CarMode() {
     cancelSpeakRef.current = speak(`Elite answer: ${drill.model_answer}`, () => {});
   }, [drill]);
 
-  const handleStart = useCallback(async () => {
+  // handleStart is intentionally NOT async before the first speak(). Audio priming
+  // and TTS kick-off must run synchronously from the click handler on iOS Safari.
+  const handleStart = useCallback(() => {
     if (drills.length === 0) return;
-    if (useRecorderPath) {
-      const ok = await acquireMicGraph();
-      if (!ok) return;
-    }
+    // Kick off mic acquisition in the background (permission prompt still shows
+    // and the stream is ready by the time we hit the listening phase).
+    if (useRecorderPath) void acquireMicGraph();
     runDrill(drills[idx]);
   }, [drills, idx, runDrill, acquireMicGraph]);
 
@@ -588,7 +648,14 @@ export default function CarMode() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx]);
 
-  const onPressStart = () => { startedRef.current = true; void handleStart(); };
+  // MUST stay a plain sync handler — do NOT make this async or add awaits before
+  // primeAudioInGesture / handleStart, or iOS Safari will drop the gesture context
+  // and refuse to speak (leaving the flow stuck at the intro card).
+  const onPressStart = () => {
+    startedRef.current = true;
+    primeAudioInGesture(audioCtxRef);
+    handleStart();
+  };
 
   // ── Render ───────────────────────────────────────────────────────
   const bigText = useMemo(() => {
