@@ -99,44 +99,40 @@ const VAD_NO_SPEECH_MS = 5000;      // if nothing heard within 5s, "didn't catch
 const VAD_RMS_THRESHOLD = 0.04;     // ~ -28 dBFS; above this counts as likely speech
 const VAD_MIN_SPEECH_MS = 500;      // require sustained above-threshold audio, not one noise spike
 
-function speak(text: string, onDone?: () => void) {
-  if (!ttsSupported || !text) { onDone?.(); return () => {}; }
-  try { window.speechSynthesis.cancel(); } catch { /* noop */ }
-  const u = new SpeechSynthesisUtterance(text);
-  u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
-  let done = false;
-  let timer: number | null = null;
-  const finish = () => {
-    if (done) return; done = true;
-    if (timer != null) { window.clearTimeout(timer); timer = null; }
-    onDone?.();
-  };
-  u.onend = finish; u.onerror = finish;
-  try { window.speechSynthesis.speak(u); } catch { finish(); }
-  // iOS Safari's onend is unreliable — force-advance on a duration estimate.
-  // ~160 wpm ⇒ ms per word ≈ 375; add 800ms buffer; floor 2500ms.
-  const words = Math.max(1, text.trim().split(/\s+/).length);
-  const estMs = Math.max(2500, Math.round((words / 160) * 60000) + 800);
-  timer = window.setTimeout(finish, estMs);
+// Module-level playback ref: one CarMode instance at a time, and this lets the
+// existing `speak(text, onDone?) => cancelFn` call-sites stay unchanged while
+// swapping in the Dave ElevenLabs TTS runtime (which handles the iOS-safe
+// audio unlock, ttsCache lookup, voiceCostController model routing, and the
+// stall/retry/interrupt lifecycle we'd otherwise be hand-rolling here).
+let ttsPlayback: ActivePlayback = {
+  audio: null, objectUrl: null, abortController: null, _cleaned: true,
+};
+
+function speak(text: string, onDone?: () => void): () => void {
+  if (!text) { onDone?.(); return () => {}; }
+  let cancelled = false;
+  daveSpeak(text, TTS_CONFIG, ttsPlayback)
+    .then((p) => { ttsPlayback = p; if (!cancelled) onDone?.(); })
+    .catch(() => { if (!cancelled) onDone?.(); });
   return () => {
-    try { window.speechSynthesis.cancel(); } catch { /* noop */ }
-    finish();
+    cancelled = true;
+    ttsPlayback = interruptSpeech(ttsPlayback);
   };
 }
 
 /**
  * MUST be called synchronously from inside a user-gesture handler (e.g. click).
- * Authorises speechSynthesis and AudioContext for the rest of the iOS Safari session.
+ * Unlocks HTMLAudioElement playback (so ElevenLabs TTS blobs play later without
+ * a fresh gesture on iOS Safari) and warms the AudioContext used by VAD.
  */
 function primeAudioInGesture(audioCtxRef: React.MutableRefObject<AudioContext | null>) {
-  if (ttsSupported) {
-    try {
-      window.speechSynthesis.cancel();
-      const warm = new SpeechSynthesisUtterance(' ');
-      warm.volume = 0;
-      window.speechSynthesis.speak(warm);
-    } catch { /* noop */ }
-  }
+  // 1. Unlock <audio> on iOS by playing a silent WAV synchronously in the gesture.
+  try {
+    const a = new Audio(SILENT_WAV);
+    a.volume = 0;
+    void a.play().catch(() => {});
+  } catch { /* noop */ }
+  // 2. Create + resume the AudioContext used by the VAD analyser.
   if (!audioCtxRef.current) {
     const Ctor = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
       ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
