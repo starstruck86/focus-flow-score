@@ -652,7 +652,7 @@ export default function CarMode() {
     stopListening();
     try { mediaRecRef.current?.state !== 'inactive' && mediaRecRef.current?.stop(); } catch { /* noop */ }
     clearVadTimers();
-    try { window.speechSynthesis?.cancel(); } catch { /* noop */ }
+    ttsPlayback = interruptSpeech(ttsPlayback);
     advance();
   }, [stopListening, advance]);
 
