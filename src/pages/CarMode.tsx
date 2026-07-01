@@ -74,8 +74,23 @@ const isSafari = typeof navigator !== 'undefined' &&
   /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
 const mediaRecorderSupported = typeof window !== 'undefined' && typeof (window as unknown as { MediaRecorder?: unknown }).MediaRecorder !== 'undefined';
 
+// Voice I/O is unified on ElevenLabs via daveVoiceRuntime for TTS and
+// car-mode-audio-score (ElevenLabs Scribe) for STT. Web Speech is only
+// used opportunistically on Chrome/Android where it's reliable.
 const useRecorderPath = mediaRecorderSupported && (isIOS || isSafari || !SpeechRecognitionCtor);
 const sttSupported = !!SpeechRecognitionCtor && !useRecorderPath;
+
+// TTS config sourced from public env (used inside daveVoiceRuntime.speak).
+const TTS_CONFIG: TtsConfig = {
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? '',
+  supabaseAnonKey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '',
+};
+
+// A ~1 sample silent WAV. Playing this inside the Start gesture unlocks
+// HTMLAudioElement playback for the rest of the iOS Safari session, so
+// the ElevenLabs blob audio produced later by daveSpeak plays without
+// requiring a fresh user gesture.
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
 
 // VAD tuning
 const VAD_SILENCE_MS = 2500;        // stop ~2.5s after speech ends
