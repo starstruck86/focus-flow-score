@@ -65,7 +65,7 @@ const SpeechRecognitionCtor: { new (): SR } | undefined =
     ? ((window as unknown as { SpeechRecognition?: { new (): SR }; webkitSpeechRecognition?: { new (): SR } }).SpeechRecognition ??
        (window as unknown as { webkitSpeechRecognition?: { new (): SR } }).webkitSpeechRecognition)
     : undefined;
-const ttsSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+// (SpeechSynthesis is no longer used — TTS routes through daveSpeak / ElevenLabs.)
 
 const isIOS = typeof navigator !== 'undefined' &&
   (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
