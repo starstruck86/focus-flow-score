@@ -1,57 +1,35 @@
 # DYNAMIC — MASTER INDEX & SESSION PROTOCOL
 
-Canonical registry of every Dynamic planning doc + the session ritual. Single source of truth for "where is everything," so we never again rely on a memorized or stale pointer.
+Pointer + registry for the Dynamic roadmap. The full roadmap is the versioned Google Drive doc named below; this index's job is to ALWAYS name the CURRENT master + its Drive file ID (so the pointer never goes stale) plus the session ritual. Anchored in the permanent Lovable project (id `2750cde7-6277-4433-9311-204bcc16e1d1`).
 
-**STABLE ANCHOR:** the permanent Lovable project (id `2750cde7-6277-4433-9311-204bcc16e1d1`). This file, committed in the repo, is the canonical home. A Google Drive mirror may be added later. Re-orient from this file every session.
+Last reconciled: 2026-07-01 — Claude read the live v9 master end-to-end.
 
-Last reconciled: 2026-07-01, from Corey's Drive "Recent" screenshots. Drive file IDs marked **[TBD]** get backfilled via Drive search — no manual pasting.
+## CURRENT MASTER — confirmed
+- **Dynamic — Master State & Roadmap (v9)** — Drive ID `1SqNUmqQCXZfTspvepC_3mBPQ5nChbuz_HujRGXMd41k` — dated Jun 26–27 2026; self-certified "single source of truth for the entire app"; supersedes v8. Read end-to-end by Claude 2026-07-01.
+- PENDING v10 update: v9 predates the Jun 30–Jul 1 work. Next master version must capture Car Mode (/car-mode) built on ElevenLabs = Dave's STT/TTS (elevenlabs-stt scribe_v2 + elevenlabs-tts-stream); ELEVENLABS_API_KEY confirmed SET (v9 lists it "?"); 8 voice-native gradeable drills; server-verified silence gate + scoring.
 
-## CURRENT MASTER
-- **Dynamic — Master State & Roadmap** (Jun 26) — designated current master (supersedes MASTER ROADMAP v10); Corey to confirm. ⚠️ Multiple Jun-26 copies exist — collapse to ONE canonical. [ID TBD]
+## LINKED DOCS (Drive IDs, from v9 §9)
+- Evidence Appendix (raw SQL/code/diff receipts) — `1lOSWg5e1MH7x159CMf_S1hek7GlMpLHW9ssJNYuh0fc`
+- craft build-log v3 — `19VstaLXTJx0701mgLGfRR76JAyQP72ZAEpP2aV7U15c`
+- Master v8 (superseded) — `16JeILdo3ST0BoYP-1yX9bkMD9boWfsRTi3FwqEWRrp4`
+- Master v7 (superseded) — `1dT91RJMcLu2Y5OUj4gRQ7mrOb6nHgiF61KbKCWif--M`
+- Dynamic-Roadmap-v2.md (very old, Strategy-only, STALE) — `1O2tRf9am98X_3BCn1wiQslEZhwPq8BUO`
 
-## ROADMAP LINEAGE (newest → oldest)
-- Master State & Roadmap — Jun 26 (multiple copies) ← current line
-- MASTER ROADMAP v10 — Jun 25 [TBD]
-- MASTER ROADMAP v5–v9 — Jun 25 (superseded)
-- MASTER ROADMAP v4 — Jun 24 (superseded)
-- Roadmap v3 Addendum (Branch) — Jun 24
-- Strategy Rebuild Roadmap — Jun 24 (multiple copies)
-- Dynamic-Roadmap-v2.md — Jun 24 — ID `1O2tRf9am98X_3BCn1wiQslEZhwPq8BUO` (Strategy-only, STALE, historical)
-
-## TRAIN / EDUCATION TRACK
-- TRAIN Product Roadmap — Jun 26  ← the Learn/education roadmap
-- TRAIN Consolidation Plan — Jun 26
-- TRAIN Learning Architecture — Jun 25 (3 copies)
-- TRAIN Curriculum Authoring — Jun 25
-- TRAIN Curriculum: Deep Linking / Product — Jun 24–25
-- TRAIN Deep Linking: KI Assignment / KI Manifest / Teach-beats — Jun 25
-- TRAIN v2: Stage C Schema — Jun 25
-- TRAIN v2: Stage B Ratification / Stage E Execution / Stage E Playbook — Jun 25
-- TRAIN v2 Complete Teardown / Drill Subsystem Teardown — Jun 24–25
-- TRAIN v2 — Craft Curriculum — Jun 25–26 (multiple)
-- Craft Curriculum BUILD Log / Craft Curriculum Audit — Jun 25
-- Stage B Ratification Plan / Stage B Plan: 10 Craft Spokes — Jun 25
-- TRAIN Verification Run — Jun 25
-
-## STRATEGY TRACK
-- Strategy: The Path to A+ — Jun 24
-- Strategy Rebuild Roadmap — Jun 24 (multiple)
-- Strategy Baseline (Pre-Rebuild) — Jun 24
-- Strategy vs GC.ai — Deep Architecture — Jun 24
-- Territory Profile Prefill Draft — Jun 24
-
-## AUDITS & EVIDENCE
-- Drill Audit #4 (drill-by-drill) — Jun 30
-- Audit Addendum + Golden set — Jun 30
-- Full Drill Library Audit (deep) — Jun 30
-- Drill Audit: BIZ01 before/after — Jun 30
-- KI Classification: Template — Jun 30
-- Audit Evidence Appendix — Jun 26
-- Audit 2 Report + Beyond — Jun 25
-- Stage E Audit Report — Jun 25
+## ONE-SCREEN ORIENTATION (open v9 for full detail)
+- Solo sales-performance OS. ~10 subsystems / 152 tables / 118 edge fns. Active+valuable: TRAIN (curriculum), LIBRARY (34.8K KIs), STRATEGY, MAP/OPERATE (14 accts / $6.07M), LOOP (journal), COACH (+Dave).
+- TRAIN = the education spine: 10 spokes / 478 concepts / 3,186 curriculum items / 253 gates; 5 bands (Foundation→Expert); curriculum-as-daily shipped (Phase 0/1/1.5). NEXT build = Phase 2 dashboard.
+- LEARN (the 54 lessons) = unused/dormant. DECISION: DO NOT INVEST. (The education being built is TRAIN, not Learn.)
+- 6 tracks: (1) TRAIN loop Phase 2→3→4 · (2) Migration Jul 8–12 (own Supabase + de-gateway ~54 fns) · (3) Strategy (fix KI-injection + live crash) · (4) Map/Operate (de-Acoustic ICP) · (5) Loop (2 runaway-insert bug fixes) · (6) KI corpus ★ high-leverage (real confidence_score + spider_dimension backfill).
+- Landmines: constant confidence_score=0.75 + 32% NULL spider_dimension poison retrieval; live /strategy React #310 hooks crash; 2 runaway-insert bugs; 6 pg_cron jobs pinned to OLD Supabase.
 
 ## SESSION PROTOCOL
-**START** — 1) Open this index. 2) Open the CURRENT MASTER; re-orient before acting. 3) If a link is stale/broken, SEARCH Drive for the current version — never assume it's gone.
-**END** — 1) Update this index (new docs, status changes, new current master). 2) Note what changed. 3) Never leave it stale.
-**RECOVERY** — Stable anchor = the Lovable project (permanent id), not any single Drive doc.
-**BACKFILL** — Resolve [TBD] Drive IDs via Drive search when available; no manual pasting.
+START: open this index -> open the CURRENT MASTER (v9) -> re-orient before acting. If a Drive link is stale, the master's §9 lists current IDs.
+END: update the master doc (a NEW versioned Drive file per its maintenance rule) AND update this index's CURRENT MASTER pointer + Todoist 6gwh7jGXpJRJXhpg. Never leave stale.
+RECOVERY: anchor = the Lovable project (permanent id), never a single Drive doc. This index always names the current master's ID.
+
+## DOC LINEAGE (archive, by name — from Recent screenshots)
+- "Master State & Roadmap" v1–v9 (Jun 26–27) — current line; v9 is live.
+- "MASTER ROADMAP" v4–v10 (Jun 24–25) — earlier naming, superseded.
+- Strategy Rebuild Roadmap / Roadmap v3 Addendum / Strategy Baseline (Jun 24) — historical.
+- TRAIN track docs: Product Roadmap, Consolidation Plan, Learning Architecture, Deep Linking (KI Assignment/Manifest/Teach-beats), Stage B/C/E, Craft Curriculum — Jun 24–26.
+- Audits: Drill Audit #1–4, Full Drill Library Audit, KI Classification, Audit Evidence Appendix — Jun 25–30.
