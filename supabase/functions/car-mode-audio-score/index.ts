@@ -156,18 +156,26 @@ serve(async (req) => {
 }
 Required criteria must be met=true to pass. If a required criterion is missed, top_fix MUST address it.`;
 
-    const grRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: gradeSys },
-          { role: "user", content: gradeUser },
-        ],
-        response_format: { type: "json_object" },
-      }),
-    });
+    let grRes: Response;
+    try {
+      grRes = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: gradeSys },
+            { role: "user", content: gradeUser },
+          ],
+          response_format: { type: "json_object" },
+        }),
+      }, "grading");
+    } catch (e) {
+      return new Response(
+        JSON.stringify({ error: "grading timed out", detail: String((e as Error).message ?? e) }),
+        { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     if (!grRes.ok) {
       const text = await grRes.text().catch(() => "");
