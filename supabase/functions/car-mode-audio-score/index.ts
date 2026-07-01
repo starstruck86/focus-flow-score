@@ -96,24 +96,32 @@ serve(async (req) => {
     const transcribeSys = "You are a strict speech transcriber. Transcribe ONLY what is actually spoken in the audio, verbatim. If there is no clear human speech (silence, breathing, noise, music, or nothing audible), return an empty string for transcript. NEVER invent, infer, paraphrase, complete, or guess content. NEVER add words that were not spoken.";
     const transcribeUser = "Transcribe the speech in this audio. Return JSON: {\"transcript\": \"<verbatim words or empty string>\"}";
 
-    const txRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: transcribeSys },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: transcribeUser },
-              { type: "input_audio", input_audio: { data: body.audioBase64, format: fmt } },
-            ],
-          },
-        ],
-        response_format: { type: "json_object" },
-      }),
-    });
+    let txRes: Response;
+    try {
+      txRes = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: transcribeSys },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: transcribeUser },
+                { type: "input_audio", input_audio: { data: body.audioBase64, format: fmt } },
+              ],
+            },
+          ],
+          response_format: { type: "json_object" },
+        }),
+      }, "transcription");
+    } catch (e) {
+      return new Response(
+        JSON.stringify({ error: "transcription timed out", detail: String((e as Error).message ?? e) }),
+        { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     if (!txRes.ok) {
       const text = await txRes.text().catch(() => "");
