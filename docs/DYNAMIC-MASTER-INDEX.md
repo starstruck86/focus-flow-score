@@ -2,13 +2,13 @@
 
 Pointer + registry for the Dynamic roadmap. The full roadmap is the versioned Google Drive doc named below; this index's job is to ALWAYS name the CURRENT master + its Drive file ID (so the pointer never goes stale) plus the session ritual. Anchored in the permanent Lovable project (id `2750cde7-6277-4433-9311-204bcc16e1d1`).
 
-Last reconciled: 2026-07-01 — Claude read the live v9 master end-to-end.
+Last reconciled: 2026-07-01 — v10 cut, verified, and set as current master.
 
 ## CURRENT MASTER — confirmed
-- **Dynamic — Master State & Roadmap (v9)** — Drive ID `1SqNUmqQCXZfTspvepC_3mBPQ5nChbuz_HujRGXMd41k` — dated Jun 26–27 2026; self-certified "single source of truth for the entire app"; supersedes v8. Read end-to-end by Claude 2026-07-01.
-- PENDING v10 update: v9 predates the Jun 30–Jul 1 work. Next master version must capture Car Mode (/car-mode) built on ElevenLabs = Dave's STT/TTS (elevenlabs-stt scribe_v2 + elevenlabs-tts-stream); ELEVENLABS_API_KEY confirmed SET (v9 lists it "?"); 8 voice-native gradeable drills; server-verified silence gate + scoring.
+- **DYNAMIC — MASTER STATE & ROADMAP (v10)** — Drive ID `16ezm7r_riRT_AhqrHi0pjoY-QeuinQgzlQiINgCeJ5s` — cut July 1 2026 by Claude after a 12-flag re-verification audit; supersedes v9. Contains the Car Mode voice arc (ElevenLabs), corrected root-defect value (confidence constant = 0.7, not 0.75), V3-not-orphaned correction, and full current-state numbers. Content verified in-place after creation.
 
-## LINKED DOCS (Drive IDs, from v9 §9)
+## LINKED DOCS (Drive IDs)
+- Master v9 (superseded Jul 1 2026) — `1SqNUmqQCXZfTspvepC_3mBPQ5nChbuz_HujRGXMd41k`
 - Evidence Appendix (raw SQL/code/diff receipts) — `1lOSWg5e1MH7x159CMf_S1hek7GlMpLHW9ssJNYuh0fc`
 - craft build-log v3 — `19VstaLXTJx0701mgLGfRR76JAyQP72ZAEpP2aV7U15c`
 - Master v8 (superseded) — `16JeILdo3ST0BoYP-1yX9bkMD9boWfsRTi3FwqEWRrp4`
