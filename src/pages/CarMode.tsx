@@ -570,11 +570,13 @@ export default function CarMode() {
   }, [applyGrade, advance]);
 
   // ── Phase runner ─────────────────────────────────────────────────
-  const runDrill = useCallback(async (d: Drill) => {
+  const runDrill = useCallback((d: Drill) => {
     setGrade(null); setErrMsg(null); setTranscript(''); setInterim('');
-    await ensureSession(d);
-    // Try to keep AudioContext alive across drills
-    try { await audioCtxRef.current?.resume(); } catch { /* noop */ }
+    // Session insert and AudioContext resume run in the background so we do NOT
+    // block the first spoken line — on iOS, awaiting here loses the gesture
+    // context and speechSynthesis silently no-ops.
+    void ensureSession(d);
+    try { void audioCtxRef.current?.resume().catch(() => {}); } catch { /* noop */ }
     setPhase('intro');
     cancelSpeakRef.current = speak(`Skill: ${d.concept_title}.`, () => {
       setPhase('scenario');
@@ -583,7 +585,7 @@ export default function CarMode() {
         cancelSpeakRef.current = speak(`${d.spoken_task} Go.`, () => {
           setPhase('listening');
           if (useRecorderPath) {
-            startRecorderSegment(d);
+            void startRecorderSegment(d);
           } else {
             if (!startListening((finalText) => gradeTextPath(d, finalText))) {
               setPhase('listening');
