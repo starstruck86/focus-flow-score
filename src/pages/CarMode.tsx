@@ -496,13 +496,25 @@ export default function CarMode() {
       setPhase('grading');
       try {
         const audioBase64 = await blobToBase64(blob);
-        const { data, error } = await supabase.functions.invoke('car-mode-audio-score', {
+        const CLIENT_TIMEOUT_MS = 65_000;
+        const invokePromise = supabase.functions.invoke('car-mode-audio-score', {
           body: {
             audioBase64, mimeType: recMimeRef.current,
             scenario: d.scenario, spokenTask: d.spoken_task,
             modelAnswer: d.model_answer, rubric: d.rubric, responseShape: d.response_shape,
           },
         });
+        let timeoutId: number | undefined;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutId = window.setTimeout(() => reject(new Error('client_timeout')), CLIENT_TIMEOUT_MS);
+        });
+        let data: unknown, error: unknown;
+        try {
+          const result = await Promise.race([invokePromise, timeoutPromise]) as { data: unknown; error: unknown };
+          data = result.data; error = result.error;
+        } finally {
+          if (timeoutId !== undefined) clearTimeout(timeoutId);
+        }
         if (error) throw error;
         const resp = data as GradeResult & { transcript?: string };
         const tx = (resp.transcript ?? '').trim();
@@ -515,8 +527,20 @@ export default function CarMode() {
         }
         await applyGrade(d, tx, resp);
       } catch (e) {
+        const msg = (e as Error)?.message ?? String(e);
+        if (msg === 'client_timeout') {
+          cancelSpeakRef.current = speak("Scoring is taking too long — let's try that again.", () => {
+            if (drillRef.current && drillRef.current.ki_id === d.ki_id) {
+              setPhase('task');
+              startRecorderSegment(d);
+            } else {
+              advance();
+            }
+          });
+          return;
+        }
         setPhase('error');
-        setErrMsg(`Couldn't grade: ${(e as Error).message}`);
+        setErrMsg(`Couldn't grade: ${msg}`);
         cancelSpeakRef.current = speak('Could not grade that one. Moving on.', () => advance());
       }
     };
