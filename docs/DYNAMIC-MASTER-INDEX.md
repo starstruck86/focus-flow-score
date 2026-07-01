@@ -6,8 +6,8 @@ Canonical registry of every Dynamic planning doc + the session ritual. Single so
 
 Last reconciled: 2026-07-01, from Corey's Drive "Recent" screenshots. Drive file IDs marked **[TBD]** get backfilled via Drive search — no manual pasting.
 
-## CURRENT MASTER (confirm)
-- **Dynamic — Master State & Roadmap** (Jun 26) — CANDIDATE current master; appears to supersede MASTER ROADMAP v10. ⚠️ Multiple Jun-26 copies exist — collapse to ONE canonical. [ID TBD]
+## CURRENT MASTER
+- **Dynamic — Master State & Roadmap** (Jun 26) — designated current master (supersedes MASTER ROADMAP v10); Corey to confirm. ⚠️ Multiple Jun-26 copies exist — collapse to ONE canonical. [ID TBD]
 
 ## ROADMAP LINEAGE (newest → oldest)
 - Master State & Roadmap — Jun 26 (multiple copies) ← current line
