@@ -54,6 +54,7 @@ function looksLikeNoAnswer(tx: string): boolean {
   const commonHallucinations = new Set([
     "thank you",
     "thank you.",
+    "thank you for watching",
     "thanks for watching",
     "thanks",
     "bye",
@@ -62,10 +63,11 @@ function looksLikeNoAnswer(tx: string): boolean {
     "ok",
     "so",
     "please subscribe",
+    "subscribe",
     ".",
   ]);
   if (commonHallucinations.has(normalized) || commonHallucinations.has(t.toLowerCase()) || compact === "") return true;
-  if (["thankyou", "thanksforwatching", "pleasesubscribe"].includes(compact)) return true;
+  if (["thankyou", "thankyouforwatching", "thanksforwatching", "pleasesubscribe", "subscribe"].includes(compact)) return true;
   // Strip punctuation, count word tokens with letters
   const words = t.replace(/[^\p{L}\p{N}\s']/gu, " ").split(/\s+/).filter((w) => /\p{L}/u.test(w));
   if (words.length < 2) return true;
