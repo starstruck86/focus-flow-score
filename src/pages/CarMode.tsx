@@ -23,6 +23,12 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { writeKIMastery } from '@/lib/dojo/kiMasteryWriter';
 import { ArrowLeft, Mic, MicOff, SkipForward, RotateCcw, Eye, Volume2 } from 'lucide-react';
+import {
+  speak as daveSpeak,
+  interruptSpeech,
+  type ActivePlayback,
+  type TtsConfig,
+} from '@/lib/daveVoiceRuntime';
 
 type Shape = 'quick_reply' | 'talk_track';
 
