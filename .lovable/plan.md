@@ -1,81 +1,76 @@
-## Audit findings (reference only — no fixes)
+## Read-only roadmap audit — findings
 
-### 1) /skills (Skills.tsx, 487 lines)
-- Renders a 9-axis SPIDER radar via `useKiProficiency`.
-- Tables read: `knowledge_items`, `ki_mastery`, view `ki_mastery_weekly`. **Does NOT read `user_competency`.**
-- Real data, not stubbed — but sourced from legacy `/sharpen` mastery store, so blind to TRAIN v2 progress.
-- Reachable in nav: yes — `BottomNav` trainNavItems (`/skills`, Target icon).
+No code changes proposed. This is the full inventory.
 
-### 2) /progress (Progress.tsx, 368 lines)
-- Shows per-dimension proficiency chart, weekly dojo session counts, learning lesson completion counts, 7-day rollups.
-- Tables read: `dojo_sessions`, `learning_lessons`, plus `SPIDER_DIMENSIONS` constants. **Does NOT read `user_competency` or `streak_summary`.**
-- Real data, not placeholder.
-- Reachable in nav: NO — route exists, not in BottomNav. Deep-link only.
+### 1) Search coverage
+Ran filename + content searches across the whole repo (excluding `node_modules`, `.git`, `dist`) for: `roadmap`, `Roadmap`, `Master Roadmap`, `pillar` / `six-pillar` / `6-pillar`, `Dynamic-Roadmap`, `product plan`, `backlog`, `Learn pillar`. Also enumerated every `.md` / `.txt` / `.doc*` file and dumped the full `.lovable/` and `docs/` trees.
 
-### 3) /brief (Brief.tsx, 451) and /meeting (MeetingMode.tsx, 453)
-- Brief: pre-call ritual — pulls calendar event, account context, top KIs for the meeting type, warm-up rep prompt. Wired (auth + supabase calls).
-- Meeting: in-call companion view (similar context surface). Wired.
-- Both functional, not stubs.
-- Neither in BottomNav — reachable via `ProactiveDaveCard` CTAs and direct URL.
+Note: git history is not available in this sandbox (`git log` unavailable), so per-file "last commit date" cannot be reported — filesystem mtimes are all identical (`Jul 1 15:00`, the sandbox checkout time) and are not meaningful.
 
-### 4) Settings
-- Route `/settings` → `Settings.tsx` (1235 lines). Yes, exists.
-- Persists across many tables: `user_settings`, `work_schedule_config`, `daily_plan_preferences`, plus others touched by individual sub-panels.
-- `user_settings` empty (0 rows) because writes only happen on opt-in toggles (e.g. `useIntensiveMode` upserts only when user flips Deal-Control Intensive). Nothing has been toggled.
-- `WhoopIntegration` mounted ONLY here (`Settings.tsx` line 1153, imported line 40). No other surface.
-- Confirmed runaway-insert bug: `AuthContext.tsx` does `maybeSingle` on `work_schedule_config` (no unique constraint) → on duplicate rows returns error → falls through to `insert` → loops every session refresh. Same pattern on `streak_summary` init in same function.
+### 2) All markdown / doc files in the repo
 
-### 5) DB views
-- **`branch_readiness`**: appears ONLY in `src/integrations/supabase/types.ts` as a `referencedRelation` FK target (~20 hits). **Zero app code queries it.** Dead from the client; useful only for DB joins/admin.
-- **`resource_truth_drift`**: same — only in `types.ts` (~2 hits). **Zero app code queries it.** Dead client-side.
+| Path | Bytes | Scope (1–2 sentences) |
+|---|---|---|
+| `README.md` | 2,971 | Product blurb + tech stack + setup. No roadmap. |
+| `.workspace/AGENTS.md` | 2,325 | "5 Hard Build Rules" + Branch AE context. Operating rules, not a roadmap. |
+| `.lovable/plan.md` | 5,225 | Read-only **audit findings** from an earlier UX sweep (Skills/Progress/Settings/etc). Not a roadmap. |
+| `.lovable/memory/features/strategy/discovery-prep-async-execution.md` | 2,606 | Strategy pillar — async job pattern. |
+| `.lovable/memory/features/strategy/operator-reasoning-contract.md` | 4,035 | Strategy pillar — reasoning contract. |
+| `.lovable/memory/features/strategy/phase35b-scorer-hardening.md` | 1,435 | Strategy pillar — scorer gates. |
+| `.lovable/memory/features/strategy/phase35c-artifact-gate.md` | 3,555 | Strategy pillar — artifact gate. |
+| `.lovable/memory/features/strategy/synthesis-mode.md` | 4,901 | Strategy pillar — synthesis mode contract. |
+| `.lovable/memory/features/strategy/trust-gate-doctrine.md` | 2,385 | Strategy pillar — trust gate doctrine. |
+| `docs/phase1-verification-checklist.md` | 2,094 | TRAIN v2 Phase 1 verification checklist. |
+| `docs/phase2-verification-checklist.md` | 1,085 | TRAIN v2 Phase 2 verification checklist. |
+| `docs/phase2-function-inventory.json` | 17,059 | Edge-function inventory snapshot. |
+| `docs/phase37-production-evidence-report.md` | 9,516 | Strategy Phase 4 production evidence report. |
+| `docs/runbook-stuck-background-jobs.md` | 1,928 | Ops runbook. |
+| `docs/train-deep-linking-teach-beats.md` | 22,394 | TRAIN — Deep Linking spoke, Stage B teach beats (curriculum content, not a roadmap). |
+| `docs/trust-model-and-hardening-summary.md` | 10,083 | Auth/RLS trust model summary (Phases 1–3, B–E). |
+| `docs/voice-cost-validation.md` | 5,906 | Voice cost validation notes. |
+| `supabase/FUNCTION_GROUPS.md` | 1,831 | Edge function grouping. |
+| `supabase/functions/_shared/strategy-core/v2/_locked/synthesisStrongContract.lock.md` | 3,210 | Locked contract for strategy synthesis. |
 
-### 6) Recommenders — LIVE vs DEAD
-- LIVE (rendered as JSX):
-  - `TodaysFocus` — Dojo.tsx line 731
-  - `PerformanceSignals` — Dojo.tsx line 805
-  - `MasteryLanes` — Dojo.tsx
-  - `DailyAssignmentCard` — Dojo.tsx
-  - `ResumeLaneBanner` — Dojo.tsx
-  - `PrimaryActionCard` — Learn.tsx
-- DEAD (imported, never rendered):
-  - `ProactiveDaveCard` — imported in Dojo.tsx line 30, no JSX usage. Orphan.
+The only in-code hits for "roadmap" are `src/components/prep/enrichment/RoadmapPanel.tsx` and `src/lib/systemGapRoadmap.ts` — these are the **Enrichment "Product Roadmap" panel** (system-gap drilldown feature inside `/prep`), not a product plan.
 
-### 7) Pages in src/pages/ NOT in your list
-- `BatchRegrade.tsx` — admin: bulk re-grade transcripts
-- `Benchmark.tsx` — `/benchmark` 10-scenario baseline seeder
-- `BulkExtractRunner.tsx` — admin: bulk KI extraction trigger
-- `Cockpit.tsx` — alternate daily-ops view (parallel to Dashboard/Home)
-- `Competitive.tsx` — `/competitive` competitive intel
-- `CourseImportDetail.tsx`, `CourseImports.tsx` — Thinkific/course import UI
-- `Diagnostics.tsx` — system diagnostics surface
-- `DojoQA.tsx`, `DojoV6QA.tsx` — internal QA harnesses for Dojo flows
-- `EnrichmentVerification.tsx` — KI canary review queue
-- `ExecuteWorkspace.tsx` — strategy execution workspace
-- `ExtractionAdmin.tsx` — extraction ops console
-- `Home.tsx`, `Index.tsx` — landing routes (alongside Dashboard)
-- `LearnLesson.tsx` — lesson player (deep route under Learn)
-- `LifecycleReconciliation.tsx` — library reconciliation UI
-- `ObservabilityDashboard.tsx` — telemetry dashboard
-- `PhaseEvidenceRunner.tsx` — strategy phase evidence tool
-- `PostCallLog.tsx` — `/post-call` post-call capture
-- `ReliabilityQA.tsx` — reliability test harness
-- `Settings.tsx` — settings (covered in Q4)
-- `SignalInbox.tsx` — `/signals` triaged signal queue
-- `Simulate.tsx` — `/simulate` conversation simulator
-- `SkillBuilderAudit.tsx`, `SkillBuilderSession.tsx` — third practice surface, parallel to TRAIN v2 and `/sharpen`
-- `SmokeTest.tsx` — smoke test runner
-- `StrategyControlPanel.tsx`, `StrategyDebug.tsx`, `StrategyOpsPanel.tsx`, `StrategySettings.tsx` — strategy admin/ops
-- `TerritorySetup.tsx` — territory profile setup
-- `Trends.tsx` — `/trends` analytics over time
-- `WeeklyReview.tsx` — `/weekly-review` retro
-- `Auth.tsx`, `AccessDenied.tsx`, `NotFound.tsx` — boilerplate auth/error
+### 3) `.lovable/` tree (full)
 
-### Cross-cutting surprises
-- Three competing practice surfaces: TRAIN v2 (`/train/*`), legacy `/sharpen`, and `SkillBuilderSession`.
-- Three daily-landing candidates: `Home.tsx`, `Dashboard.tsx`, `Cockpit.tsx`.
-- Skills + Progress both blind to TRAIN v2's `user_competency`.
-- 10+ routed pages (`/progress`, `/brief`, `/meeting`, `/benchmark`, `/post-call`, `/trends`, `/weekly-review`, `/simulate`, `/competitive`, `/signals`) are absent from BottomNav.
-- `branch_readiness` and `resource_truth_drift` views are dead client-side.
-- `ProactiveDaveCard` is imported but unmounted in Dojo.
+```
+.lovable/
+├── plan.md
+└── memory/
+    └── features/
+        └── strategy/
+            ├── discovery-prep-async-execution.md
+            ├── operator-reasoning-contract.md
+            ├── phase35b-scorer-hardening.md
+            ├── phase35c-artifact-gate.md
+            ├── synthesis-mode.md
+            └── trust-gate-doctrine.md
+```
+Only the Strategy pillar has memory files. No `features/train/`, `features/learn/`, `features/coach/`, `features/operate/`, etc.
 
-Audit-only — no edits proposed.
+### 4) Canonical / master product roadmap
+
+**None exists in the repo.** No file titled or containing "Master Roadmap", "Dynamic-Roadmap", "Product Roadmap", "Master Plan", or equivalent. The closest artifacts are:
+- `.workspace/AGENTS.md` — build rules + context, not a plan.
+- `.lovable/plan.md` — a past **audit output**, not a forward plan.
+- `docs/phase*` files — pillar/phase-specific checklists (TRAIN Phase 1/2, Strategy Phase 3.7/4), each scoped to one workstream.
+
+How I can tell: (a) no file's title, headings, or opening lines frame it as an app-wide plan; (b) the only cross-cutting doc (`AGENTS.md`) is explicitly a rules doc; (c) no doc enumerates pillars or cross-pillar sequencing; (d) no doc references a "Master Roadmap v4" or "Dynamic-Roadmap-v2".
+
+### 5) Six-pillar (or N-pillar) framing
+
+**No pillar framing is documented in the repo.** Zero hits for `pillar` / `six pillar` / `6 pillar` / `N-pillar` in any `.md`/`.txt` file. The pillar language used in prior audits (TRAIN / OPERATE / MAP / INTEL / LOOP / STRATEGY / COACH / LEARN / SKILLS) exists only in this chat's audit summaries and in the persisted memory index — **not** in any committed roadmap file.
+
+### 6) LEARN pillar plan
+
+**No Learn-pillar plan, roadmap, backlog, or spec exists in the repo.** No file under `docs/`, `.lovable/`, or elsewhere mentions "Learn pillar" or documents the courses/lessons/quizzes system as a roadmap. The only Learn-adjacent content is source code (`src/pages/Learn.tsx`, `LearnLesson.tsx`, `src/hooks/useLearnLoop.ts`, `src/lib/learning/*`). Nothing to paste verbatim — it genuinely does not exist as a written plan.
+
+### 7) External roadmap references
+
+**No repo file references any external roadmap Google Drive doc.** All `drive.google.com` / `docs.google.com` hits are in the enrichment pipeline (`enrich-resource-content/index.ts`, tests, resource-link helpers) — generic URL handlers, not roadmap links. There is no mention of "Strategy Rebuild Roadmap v2", "Master Roadmap v4", or any Drive file ID that maps to a roadmap.
+
+### Bottom line
+
+The canonical product roadmap is **not stored in this repo**. If it exists, it lives entirely outside the codebase (Google Drive / Notion / elsewhere). You'll need to bring it in — paste it, drop a copy into `docs/`, or share the Drive link — before any planning work can be grounded in it.
