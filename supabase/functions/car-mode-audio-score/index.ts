@@ -75,6 +75,22 @@ serve(async (req) => {
     const rubric = Array.isArray(body.rubric) ? body.rubric : [];
     const fmt = audioFormatFromMime(body.mimeType);
 
+    const GATEWAY_TIMEOUT_MS = 30_000;
+    const fetchWithTimeout = async (url: string, init: RequestInit, label: string) => {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), GATEWAY_TIMEOUT_MS);
+      try {
+        return await fetch(url, { ...init, signal: ctrl.signal });
+      } catch (e) {
+        if ((e as Error)?.name === "AbortError") {
+          throw new Error(`${label} timed out after ${GATEWAY_TIMEOUT_MS}ms`);
+        }
+        throw e;
+      } finally {
+        clearTimeout(t);
+      }
+    };
+
     // ── STEP A: TRANSCRIBE ONLY ──────────────────────────────────────
     // CRITICAL: do NOT include scenario/task/modelAnswer/rubric here.
     const transcribeSys = "You are a strict speech transcriber. Transcribe ONLY what is actually spoken in the audio, verbatim. If there is no clear human speech (silence, breathing, noise, music, or nothing audible), return an empty string for transcript. NEVER invent, infer, paraphrase, complete, or guess content. NEVER add words that were not spoken.";
