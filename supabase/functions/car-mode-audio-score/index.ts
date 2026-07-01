@@ -1,12 +1,17 @@
-// Car Mode AUDIO scorer — two-pass pipeline:
-//   Step A (TRANSCRIBE-ONLY): send audio + a transcription-only prompt (no
-//     scenario / task / model answer / rubric). This prevents Gemini from
-//     confabulating a "transcript" from the model answer when audio is silent.
-//   Step B (GRADE): only when Step A confirms clear human speech and returns a real transcript, grade
-//     it against the model answer + rubric.
+// Car Mode AUDIO scorer — ElevenLabs Scribe (STT) + Gemini Flash (grader).
+//
+// Pipeline:
+//   Step A (TRANSCRIBE): ElevenLabs Scribe v2 speech-to-text on the raw audio,
+//     using ONLY the audio (no scenario / task / model answer / rubric). This
+//     prevents the transcriber from confabulating the model answer on silence.
+//   Silence / hallucination gate: word-count AND cumulative speech-duration
+//     computed from Scribe's per-word timestamps, PLUS a phrase blacklist for
+//     the classic phantom outputs ("thank you", "you", etc.).
+//   Step B (GRADE): only when the gate passes, Gemini Flash grades the real
+//     transcript against the model answer + rubric.
 //
 // Input:  { audioBase64, mimeType, scenario, spokenTask, modelAnswer, rubric, responseShape? }
-// Output: { transcript, score, passed, criteria, top_fix, elite_line, summary }
+// Output: { has_clear_speech, transcript, score, passed, criteria, top_fix, elite_line, summary }
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -25,7 +30,12 @@ interface Body {
   responseShape?: "quick_reply" | "talk_track";
 }
 
-function audioFormatFromMime(mime: string): string {
+// ── Silence / hallucination gate thresholds ──────────────────────────
+const MIN_REAL_WORDS = 3;          // fewer than this → treat as no answer
+const MIN_SPEECH_DURATION_MS = 700; // cumulative word-span duration
+const GATEWAY_TIMEOUT_MS = 30_000;
+
+function extFromMime(mime: string): string {
   const m = (mime || "").toLowerCase().split(";")[0].trim();
   if (m.includes("webm")) return "webm";
   if (m.includes("mp4") || m.includes("m4a") || m.includes("aac")) return "m4a";
@@ -46,35 +56,66 @@ const NO_ANSWER = {
   summary: "We didn't hear a spoken answer. Try again.",
 };
 
-function looksLikeNoAnswer(tx: string): boolean {
+function looksLikePhantom(tx: string): boolean {
   const t = (tx || "").trim();
   if (!t) return true;
   const normalized = t.toLowerCase().replace(/[“”"']/g, "").replace(/\s+/g, " ").trim();
   const compact = normalized.replace(/[\s.,!?]+/g, "");
-  const commonHallucinations = new Set([
-    "thank you",
-    "thank you.",
-    "thank you for watching",
-    "thanks for watching",
-    "thanks",
-    "bye",
-    "you",
-    "okay",
-    "ok",
-    "so",
-    "please subscribe",
-    "subscribe",
-    ".",
+  const hallucinations = new Set([
+    "thank you", "thank you.", "thank you for watching",
+    "thanks for watching", "thanks", "bye", "you", "okay", "ok",
+    "so", "please subscribe", "subscribe", ".",
   ]);
-  if (commonHallucinations.has(normalized) || commonHallucinations.has(t.toLowerCase()) || compact === "") return true;
+  if (hallucinations.has(normalized) || hallucinations.has(t.toLowerCase()) || compact === "") return true;
   if (["thankyou", "thankyouforwatching", "thanksforwatching", "pleasesubscribe", "subscribe"].includes(compact)) return true;
-  // Strip punctuation, count word tokens with letters
-  const words = t.replace(/[^\p{L}\p{N}\s']/gu, " ").split(/\s+/).filter((w) => /\p{L}/u.test(w));
-  if (words.length < 2) return true;
-  // Common transcription fillers when there's nothing to say
   const fillerOnly = /^(uh+|um+|hmm+|mm+|ah+|er+|oh+|yeah|ok|okay)([\s.,!?]+(uh+|um+|hmm+|mm+|ah+|er+|oh+|yeah|ok|okay))*[\s.,!?]*$/i;
   if (fillerOnly.test(t)) return true;
   return false;
+}
+
+interface ScribeWord { text: string; start?: number; end?: number; type?: string }
+interface ScribeResponse { text?: string; language_code?: string; words?: ScribeWord[] }
+
+/**
+ * Word-count AND cumulative speech-duration gate over Scribe's words[].
+ * A phantom transcript like "thank you" fails min-words (2 < 3) AND
+ * min-duration (word spans typically <500ms), so both gates must pass
+ * before we treat the audio as a real answer.
+ */
+function passesSpeechGate(scribe: ScribeResponse): boolean {
+  const words = Array.isArray(scribe.words) ? scribe.words : [];
+  const real = words.filter((w) => (w.type ?? "word") === "word" && /\p{L}/u.test(w.text ?? ""));
+  if (real.length < MIN_REAL_WORDS) return false;
+  let totalSec = 0;
+  for (const w of real) {
+    const s = typeof w.start === "number" ? w.start : 0;
+    const e = typeof w.end === "number" ? w.end : s;
+    if (e > s) totalSec += (e - s);
+  }
+  if (totalSec * 1000 < MIN_SPEECH_DURATION_MS) return false;
+  return true;
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, label: string): Promise<Response> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), GATEWAY_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } catch (e) {
+    if ((e as Error)?.name === "AbortError") {
+      throw new Error(`${label} timed out after ${GATEWAY_TIMEOUT_MS}ms`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 serve(async (req) => {
@@ -86,56 +127,35 @@ serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) {
+    const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+    const elKey = Deno.env.get("ELEVENLABS_API_KEY");
+    if (!elKey) {
+      return new Response(JSON.stringify({ error: "ELEVENLABS_API_KEY missing" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!lovableKey) {
       return new Response(JSON.stringify({ error: "LOVABLE_API_KEY missing" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     const rubric = Array.isArray(body.rubric) ? body.rubric : [];
-    const fmt = audioFormatFromMime(body.mimeType);
+    const ext = extFromMime(body.mimeType);
 
-    const GATEWAY_TIMEOUT_MS = 30_000;
-    const fetchWithTimeout = async (url: string, init: RequestInit, label: string) => {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), GATEWAY_TIMEOUT_MS);
-      try {
-        return await fetch(url, { ...init, signal: ctrl.signal });
-      } catch (e) {
-        if ((e as Error)?.name === "AbortError") {
-          throw new Error(`${label} timed out after ${GATEWAY_TIMEOUT_MS}ms`);
-        }
-        throw e;
-      } finally {
-        clearTimeout(t);
-      }
-    };
-
-    // ── STEP A: TRANSCRIBE ONLY ──────────────────────────────────────
-    // CRITICAL: do NOT include scenario/task/modelAnswer/rubric here.
-    const transcribeSys = "You are a strict speech-presence detector and transcriber. Transcribe ONLY what is actually spoken in the audio, verbatim. Set has_clear_speech=false if the audio is silence, background/ambient/road noise, music, breathing, or does NOT contain a person clearly speaking words. Only set true and transcribe when a human is actually speaking. Never invent, infer, or complete words. NEVER add words that were not spoken.";
-    const transcribeUser = "Decide whether this audio contains clear human speech, then transcribe only if it does. Return JSON exactly: {\"has_clear_speech\": boolean, \"transcript\": \"<verbatim words or empty string>\"}";
+    // ── STEP A: TRANSCRIBE via ElevenLabs Scribe v2 ──────────────────
+    const audioBytes = base64ToBytes(body.audioBase64);
+    const fd = new FormData();
+    fd.append("file", new File([audioBytes], `audio.${ext}`, { type: body.mimeType || `audio/${ext}` }));
+    fd.append("model_id", "scribe_v2");
+    fd.append("language_code", "eng");
 
     let txRes: Response;
     try {
-      txRes = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      txRes = await fetchWithTimeout("https://api.elevenlabs.io/v1/speech-to-text", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            { role: "system", content: transcribeSys },
-            {
-              role: "user",
-              content: [
-                { type: "text", text: transcribeUser },
-                { type: "input_audio", input_audio: { data: body.audioBase64, format: fmt } },
-              ],
-            },
-          ],
-          response_format: { type: "json_object" },
-        }),
-      }, "transcription");
+        headers: { "xi-api-key": elKey },
+        body: fd,
+      }, "elevenlabs-stt");
     } catch (e) {
       return new Response(
         JSON.stringify({ error: "transcription timed out", detail: String((e as Error).message ?? e) }),
@@ -144,22 +164,23 @@ serve(async (req) => {
     }
 
     if (!txRes.ok) {
-      const text = await txRes.text().catch(() => "");
+      const detail = await txRes.text().catch(() => "");
       return new Response(
-        JSON.stringify({ error: `gateway ${txRes.status}`, detail: text.slice(0, 800) }),
-        { status: txRes.status === 429 || txRes.status === 402 ? txRes.status : 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({ error: `elevenlabs-stt ${txRes.status}`, detail: detail.slice(0, 800) }),
+        { status: txRes.status === 429 || txRes.status === 402 || txRes.status === 401 ? txRes.status : 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
-    const txJson = await txRes.json();
-    let txParsed: Record<string, unknown> = {};
-    try { txParsed = JSON.parse(txJson.choices?.[0]?.message?.content ?? "{}"); } catch { txParsed = {}; }
-    const hasClearSpeech = txParsed.has_clear_speech === true;
-    const transcript = String(txParsed.transcript ?? "").trim();
+    const scribe = (await txRes.json()) as ScribeResponse;
+    const transcript = String(scribe.text ?? "").trim();
 
-    // ── Empty / no-answer guard ──────────────────────────────────────
-    if (!hasClearSpeech || looksLikeNoAnswer(transcript)) {
+    // ── Silence / hallucination gate ─────────────────────────────────
+    // Words[] duration + count gate FIRST (catches phantom "thank you" clips
+    // with just 2 tokens and <500ms duration), then blacklist for the rare
+    // case a phantom still slips through.
+    if (!transcript || !passesSpeechGate(scribe) || looksLikePhantom(transcript)) {
       return new Response(
-        JSON.stringify({ ...NO_ANSWER, transcript: "", criteria: rubric.map((r) => ({ c: r.c, met: false })) }),
+        JSON.stringify({ ...NO_ANSWER, criteria: rubric.map((r) => ({ c: r.c, met: false })) }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -181,7 +202,7 @@ Required criteria must be met=true to pass. If a required criterion is missed, t
     try {
       grRes = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${lovableKey}` },
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
           messages: [

@@ -23,6 +23,12 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { writeKIMastery } from '@/lib/dojo/kiMasteryWriter';
 import { ArrowLeft, Mic, MicOff, SkipForward, RotateCcw, Eye, Volume2 } from 'lucide-react';
+import {
+  speak as daveSpeak,
+  interruptSpeech,
+  type ActivePlayback,
+  type TtsConfig,
+} from '@/lib/daveVoiceRuntime';
 
 type Shape = 'quick_reply' | 'talk_track';
 
@@ -59,7 +65,7 @@ const SpeechRecognitionCtor: { new (): SR } | undefined =
     ? ((window as unknown as { SpeechRecognition?: { new (): SR }; webkitSpeechRecognition?: { new (): SR } }).SpeechRecognition ??
        (window as unknown as { webkitSpeechRecognition?: { new (): SR } }).webkitSpeechRecognition)
     : undefined;
-const ttsSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+// (SpeechSynthesis is no longer used — TTS routes through daveSpeak / ElevenLabs.)
 
 const isIOS = typeof navigator !== 'undefined' &&
   (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -68,8 +74,23 @@ const isSafari = typeof navigator !== 'undefined' &&
   /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
 const mediaRecorderSupported = typeof window !== 'undefined' && typeof (window as unknown as { MediaRecorder?: unknown }).MediaRecorder !== 'undefined';
 
+// Voice I/O is unified on ElevenLabs via daveVoiceRuntime for TTS and
+// car-mode-audio-score (ElevenLabs Scribe) for STT. Web Speech is only
+// used opportunistically on Chrome/Android where it's reliable.
 const useRecorderPath = mediaRecorderSupported && (isIOS || isSafari || !SpeechRecognitionCtor);
 const sttSupported = !!SpeechRecognitionCtor && !useRecorderPath;
+
+// TTS config sourced from public env (used inside daveVoiceRuntime.speak).
+const TTS_CONFIG: TtsConfig = {
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? '',
+  supabaseAnonKey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '',
+};
+
+// A ~1 sample silent WAV. Playing this inside the Start gesture unlocks
+// HTMLAudioElement playback for the rest of the iOS Safari session, so
+// the ElevenLabs blob audio produced later by daveSpeak plays without
+// requiring a fresh user gesture.
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
 
 // VAD tuning
 const VAD_SILENCE_MS = 2500;        // stop ~2.5s after speech ends
@@ -78,44 +99,40 @@ const VAD_NO_SPEECH_MS = 5000;      // if nothing heard within 5s, "didn't catch
 const VAD_RMS_THRESHOLD = 0.04;     // ~ -28 dBFS; above this counts as likely speech
 const VAD_MIN_SPEECH_MS = 500;      // require sustained above-threshold audio, not one noise spike
 
-function speak(text: string, onDone?: () => void) {
-  if (!ttsSupported || !text) { onDone?.(); return () => {}; }
-  try { window.speechSynthesis.cancel(); } catch { /* noop */ }
-  const u = new SpeechSynthesisUtterance(text);
-  u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
-  let done = false;
-  let timer: number | null = null;
-  const finish = () => {
-    if (done) return; done = true;
-    if (timer != null) { window.clearTimeout(timer); timer = null; }
-    onDone?.();
-  };
-  u.onend = finish; u.onerror = finish;
-  try { window.speechSynthesis.speak(u); } catch { finish(); }
-  // iOS Safari's onend is unreliable — force-advance on a duration estimate.
-  // ~160 wpm ⇒ ms per word ≈ 375; add 800ms buffer; floor 2500ms.
-  const words = Math.max(1, text.trim().split(/\s+/).length);
-  const estMs = Math.max(2500, Math.round((words / 160) * 60000) + 800);
-  timer = window.setTimeout(finish, estMs);
+// Module-level playback ref: one CarMode instance at a time, and this lets the
+// existing `speak(text, onDone?) => cancelFn` call-sites stay unchanged while
+// swapping in the Dave ElevenLabs TTS runtime (which handles the iOS-safe
+// audio unlock, ttsCache lookup, voiceCostController model routing, and the
+// stall/retry/interrupt lifecycle we'd otherwise be hand-rolling here).
+let ttsPlayback: ActivePlayback = {
+  audio: null, objectUrl: null, abortController: null, _cleaned: true,
+};
+
+function speak(text: string, onDone?: () => void): () => void {
+  if (!text) { onDone?.(); return () => {}; }
+  let cancelled = false;
+  daveSpeak(text, TTS_CONFIG, ttsPlayback)
+    .then((p) => { ttsPlayback = p; if (!cancelled) onDone?.(); })
+    .catch(() => { if (!cancelled) onDone?.(); });
   return () => {
-    try { window.speechSynthesis.cancel(); } catch { /* noop */ }
-    finish();
+    cancelled = true;
+    ttsPlayback = interruptSpeech(ttsPlayback);
   };
 }
 
 /**
  * MUST be called synchronously from inside a user-gesture handler (e.g. click).
- * Authorises speechSynthesis and AudioContext for the rest of the iOS Safari session.
+ * Unlocks HTMLAudioElement playback (so ElevenLabs TTS blobs play later without
+ * a fresh gesture on iOS Safari) and warms the AudioContext used by VAD.
  */
 function primeAudioInGesture(audioCtxRef: React.MutableRefObject<AudioContext | null>) {
-  if (ttsSupported) {
-    try {
-      window.speechSynthesis.cancel();
-      const warm = new SpeechSynthesisUtterance(' ');
-      warm.volume = 0;
-      window.speechSynthesis.speak(warm);
-    } catch { /* noop */ }
-  }
+  // 1. Unlock <audio> on iOS by playing a silent WAV synchronously in the gesture.
+  try {
+    const a = new Audio(SILENT_WAV);
+    a.volume = 0;
+    void a.play().catch(() => {});
+  } catch { /* noop */ }
+  // 2. Create + resume the AudioContext used by the VAD analyser.
   if (!audioCtxRef.current) {
     const Ctor = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
       ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -264,6 +281,7 @@ export default function CarMode() {
   }
 
   function tearDownMicGraph() {
+    try { ttsPlayback = interruptSpeech(ttsPlayback); } catch { /* noop */ }
     try { window.speechSynthesis?.cancel(); } catch { /* noop */ }
     try { recogRef.current?.stop(); } catch { /* noop */ }
     try { mediaRecRef.current?.stop(); } catch { /* noop */ }
@@ -634,7 +652,7 @@ export default function CarMode() {
     stopListening();
     try { mediaRecRef.current?.state !== 'inactive' && mediaRecRef.current?.stop(); } catch { /* noop */ }
     clearVadTimers();
-    try { window.speechSynthesis?.cancel(); } catch { /* noop */ }
+    ttsPlayback = interruptSpeech(ttsPlayback);
     advance();
   }, [stopListening, advance]);
 
@@ -642,7 +660,7 @@ export default function CarMode() {
     stopListening();
     try { mediaRecRef.current?.state !== 'inactive' && mediaRecRef.current?.stop(); } catch { /* noop */ }
     clearVadTimers();
-    try { window.speechSynthesis?.cancel(); } catch { /* noop */ }
+    ttsPlayback = interruptSpeech(ttsPlayback);
     if (drill) runDrill(drill);
   }, [drill, runDrill, stopListening]);
 
