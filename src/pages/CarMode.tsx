@@ -278,24 +278,35 @@ export default function CarMode() {
     mediaRecRef.current = null;
   }
 
-  // Acquire mic + audio graph ONCE on Start. iOS Safari requires this inside the gesture.
+  // Acquire mic + attach analyser to the (already-created) AudioContext.
+  // AudioContext is created synchronously in the Start gesture via primeAudioInGesture,
+  // so we only need to await getUserMedia here. Safe to call from a non-gesture context
+  // because permission was granted by the earlier Start tap.
   const acquireMicGraph = useCallback(async (): Promise<boolean> => {
-    if (mediaStreamRef.current && audioCtxRef.current) return true;
+    if (mediaStreamRef.current && analyserRef.current) return true;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      mediaStreamRef.current = stream;
-      const Ctor = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
-        ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (Ctor) {
-        const ctx = new Ctor();
+      if (!mediaStreamRef.current) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+        mediaStreamRef.current = stream;
+      }
+      const stream = mediaStreamRef.current;
+      let ctx = audioCtxRef.current;
+      if (!ctx) {
+        const Ctor = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+          ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (Ctor) {
+          ctx = new Ctor();
+          audioCtxRef.current = ctx;
+        }
+      }
+      if (ctx && stream && !analyserRef.current) {
         try { await ctx.resume(); } catch { /* noop */ }
         const src = ctx.createMediaStreamSource(stream);
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 1024;
         src.connect(analyser);
-        audioCtxRef.current = ctx;
         sourceRef.current = src;
         analyserRef.current = analyser;
       }
