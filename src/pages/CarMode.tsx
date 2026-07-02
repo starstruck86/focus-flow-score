@@ -234,7 +234,7 @@ export default function CarMode() {
       setLoading(true); setLoadError(null);
       const { data: rows, error } = await (supabase as any)
         .from('ki_curriculum')
-        .select('ki_id, concept_id, drill_scenario, drill_spoken_task, drill_response_shape, drill_model_answer, drill_rubric')
+        .select('ki_id, concept_id, drill_scenario, drill_spoken_task, drill_response_shape, drill_model_answer, drill_rubric, drill_teach_script')
         .eq('drill_ready', true);
       if (cancelled) return;
       if (error) { setLoadError(error.message); setLoading(false); return; }
@@ -243,6 +243,7 @@ export default function CarMode() {
         drill_scenario: string; drill_spoken_task: string;
         drill_response_shape: string; drill_model_answer: string;
         drill_rubric: unknown;
+        drill_teach_script: string | null;
       }>;
       if (r.length === 0) { setDrills([]); setLoading(false); return; }
       const conceptIds = Array.from(new Set(r.map((x) => x.concept_id)));
@@ -265,13 +266,16 @@ export default function CarMode() {
         const rub = Array.isArray(x.drill_rubric) ? (x.drill_rubric as Array<{ c: string; must?: boolean }>) : [];
         const conceptTitle = c?.title ?? 'Drill';
         const modelLine = c?.model_line_plain ?? null;
-        const teachScript = composeTeachScript({
-          conceptTitle,
-          teachBeatMd: c?.teach_beat_md ?? null,
-          whyItMatters: k?.why_it_matters ?? null,
-          whenToUse: k?.when_to_use ?? null,
-          modelLinePlain: modelLine,
-        });
+        const authored = (x.drill_teach_script ?? '').trim();
+        const teachScript = authored.length > 0
+          ? authored
+          : composeTeachScript({
+              conceptTitle,
+              teachBeatMd: c?.teach_beat_md ?? null,
+              whyItMatters: k?.why_it_matters ?? null,
+              whenToUse: k?.when_to_use ?? null,
+              modelLinePlain: modelLine,
+            });
         return {
           ki_id: x.ki_id, concept_id: x.concept_id,
           spoke: c?.spoke ?? 'general',

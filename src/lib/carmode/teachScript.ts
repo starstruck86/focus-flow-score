@@ -67,16 +67,16 @@ export function composeTeachScript(inp: TeachScriptInputs): string {
 
   // Degenerate: only model line present
   if (!whyRaw && !whenRaw && model) {
-    return `Tactic: ${title}. The elite line sounds like this: ${ensurePeriod(model)}`;
+    return `The tactic: ${title}. Now listen to elite: ${ensurePeriod(model)}`;
   }
 
-  const parts: string[] = [`Tactic: ${title}.`];
-  if (whyRaw) parts.push(ensurePeriod(whyRaw));
-  if (whenRaw) {
-    const w = whenRaw.replace(/^when\s+/i, '').replace(/[.!?]+$/, '');
-    parts.push(`Use it when ${w}.`);
-  }
-  if (model) parts.push(`Here's what elite sounds like: ${ensurePeriod(model)}`);
+  // Four-beat fallback shape (mirrors the authored-script spec):
+  // 1) tactic, 2) when, 3) why, 4) elite. Signposted labels avoid the fused
+  // "Use it when apply this framework..." grammar bug of the prior version.
+  const parts: string[] = [`The tactic: ${title}.`];
+  if (whenRaw) parts.push(`When to use: ${ensurePeriod(whenRaw)}`);
+  if (whyRaw) parts.push(`Why it matters: ${ensurePeriod(whyRaw)}`);
+  if (model) parts.push(`Now listen to elite: ${ensurePeriod(model)}`);
 
   return capWords(parts.join(' '), MAX_WORDS);
 }
