@@ -3517,6 +3517,124 @@ export type Database = {
         }
         Relationships: []
       }
+      flashcard_decks: {
+        Row: {
+          card_count: number
+          created_at: string
+          description: string | null
+          generation_status: string
+          id: string
+          source_ref: string
+          source_type: string
+          spoke: string | null
+          title: string | null
+        }
+        Insert: {
+          card_count?: number
+          created_at?: string
+          description?: string | null
+          generation_status?: string
+          id?: string
+          source_ref: string
+          source_type: string
+          spoke?: string | null
+          title?: string | null
+        }
+        Update: {
+          card_count?: number
+          created_at?: string
+          description?: string | null
+          generation_status?: string
+          id?: string
+          source_ref?: string
+          source_type?: string
+          spoke?: string | null
+          title?: string | null
+        }
+        Relationships: []
+      }
+      flashcard_state: {
+        Row: {
+          card_id: string
+          confidence: number | null
+          due_at: string
+          last_seen_at: string | null
+          times_seen: number
+          user_id: string
+        }
+        Insert: {
+          card_id: string
+          confidence?: number | null
+          due_at?: string
+          last_seen_at?: string | null
+          times_seen?: number
+          user_id: string
+        }
+        Update: {
+          card_id?: string
+          confidence?: number | null
+          due_at?: string
+          last_seen_at?: string | null
+          times_seen?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flashcard_state_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "flashcards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      flashcards: {
+        Row: {
+          active: boolean
+          back: string
+          card_type: string
+          concept_id: string | null
+          created_at: string
+          deck_id: string
+          front: string
+          generation_model: string | null
+          id: string
+          ki_id: string
+        }
+        Insert: {
+          active?: boolean
+          back: string
+          card_type: string
+          concept_id?: string | null
+          created_at?: string
+          deck_id: string
+          front: string
+          generation_model?: string | null
+          id?: string
+          ki_id: string
+        }
+        Update: {
+          active?: boolean
+          back?: string
+          card_type?: string
+          concept_id?: string | null
+          created_at?: string
+          deck_id?: string
+          front?: string
+          generation_model?: string | null
+          id?: string
+          ki_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flashcards_deck_id_fkey"
+            columns: ["deck_id"]
+            isOneToOne: false
+            referencedRelation: "flashcard_decks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       holidays: {
         Row: {
           created_at: string
