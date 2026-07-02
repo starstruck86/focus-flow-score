@@ -3972,6 +3972,7 @@ export type Database = {
           drill_rubric: Json | null
           drill_scenario: string | null
           drill_spoken_task: string | null
+          drill_teach_script: string | null
           id: string
           is_exemplar: boolean
           ki_id: string
@@ -3988,6 +3989,7 @@ export type Database = {
           drill_rubric?: Json | null
           drill_scenario?: string | null
           drill_spoken_task?: string | null
+          drill_teach_script?: string | null
           id?: string
           is_exemplar?: boolean
           ki_id: string
@@ -4004,6 +4006,7 @@ export type Database = {
           drill_rubric?: Json | null
           drill_scenario?: string | null
           drill_spoken_task?: string | null
+          drill_teach_script?: string | null
           id?: string
           is_exemplar?: boolean
           ki_id?: string
