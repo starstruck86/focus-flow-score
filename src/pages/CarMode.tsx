@@ -22,6 +22,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { writeKIMastery } from '@/lib/dojo/kiMasteryWriter';
+import { recordCompetencyRep } from '@/lib/train/recordCompetencyRep';
+import type { Band } from '@/types/train';
 import { ArrowLeft, Mic, MicOff, SkipForward, RotateCcw, Eye, Volume2 } from 'lucide-react';
 import {
   speak as daveSpeak,
