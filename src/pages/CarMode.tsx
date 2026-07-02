@@ -801,10 +801,32 @@ export default function CarMode() {
     handleStart();
   };
 
+  // Tap-anywhere handler:
+  //  - during TEACH: cancel the teach TTS and jump straight to the scenario prompt
+  //  - during FEEDBACK: cancel any remaining coach TTS / 3s beat and advance early
+  // Any other phase: no-op (grading/listening must run to completion).
+  const onCardTap = useCallback(() => {
+    if (phase === 'teach' && drill) {
+      cancelSpeakRef.current();
+      ttsPlayback = interruptSpeech(ttsPlayback);
+      runScenarioThenTaskRef.current(drill);
+      return;
+    }
+    if (phase === 'feedback') {
+      cancelSpeakRef.current();
+      ttsPlayback = interruptSpeech(ttsPlayback);
+      if (feedbackBeatTimerRef.current != null) {
+        window.clearTimeout(feedbackBeatTimerRef.current);
+        feedbackBeatTimerRef.current = null;
+      }
+      advance();
+    }
+  }, [phase, drill, advance]);
+
   // ── Render ───────────────────────────────────────────────────────
   const bigText = useMemo(() => {
     if (!drill) return '';
-    if (phase === 'intro') return `Skill: ${drill.concept_title}`;
+    if (phase === 'teach') return drill.teach_script;
     if (phase === 'scenario') return drill.scenario;
     if (phase === 'task') return drill.spoken_task;
     if (phase === 'listening') return transcript || interim || (useRecorderPath ? '🎙 Listening — just speak, I\'ll stop on my own' : '🎙 Speak your answer…');
@@ -812,6 +834,7 @@ export default function CarMode() {
     if (phase === 'reveal') return drill.model_answer;
     return drill.concept_title;
   }, [phase, drill, transcript, interim]);
+
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
