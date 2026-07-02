@@ -90,11 +90,18 @@ export default function TrainBandGate() {
     setScoring(true);
     try {
       const it = items[idx];
+      // Gate items are band exemplars — pass the concept's model_line_plain as
+      // gold so the grader evaluates AGAINST it (not just calibrated priors).
+      const modelLine = it.sourceKi?.modelLinePlain ?? it.eliteAnswer ?? null;
+      const gold = modelLine && modelLine.trim().length > 0
+        ? { model_line: modelLine }
+        : null;
       const scored = await scoreRep({
         skillFocus: topic,
         userResponse: current,
         objection: it.objection,
         ki: null, // gate = cold
+        gold,
       });
       const rec: ItemRecord = {
         objection: it.objection,
