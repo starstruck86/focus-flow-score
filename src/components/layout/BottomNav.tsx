@@ -17,6 +17,7 @@ import {
   Dumbbell,
   BookOpen,
   Mic,
+  Compass,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -52,10 +53,10 @@ export const COLOR_VAR: Record<NavColor, string> = {
 
 // ── Train mode items ──────────────────────────────────────────────────
 export const trainNavItems: NavItemDef[] = [
-  { to: '/dojo',   label: 'Train',   icon: Swords,      color: 'dojo' },
+  { to: '/study',  label: 'Study',   icon: Compass,     color: 'dojo' },
+  { to: '/dojo',   label: 'Dojo',    icon: Swords,      color: 'dojo' },
   { to: '/skills', label: 'Skills',  icon: Target,      color: 'skills' },
   { to: '/coach',  label: 'Coach',   icon: Mic,         color: 'coach' },
-  { to: '/learn',  label: 'Learn',   icon: BookOpen,    color: 'prep' },
   { to: '/prep',   label: 'Library', icon: Brain,       color: 'prep' },
 ];
 

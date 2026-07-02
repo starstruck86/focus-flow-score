@@ -16,7 +16,7 @@
  *     (transcribe-then-grade pipeline; never confabulates).
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -217,6 +217,13 @@ async function blobToBase64(blob: Blob): Promise<string> {
 
 export default function CarMode() {
   const navigate = useNavigate();
+  // Additive scope filter — optional `?spoke=&topic=` from the Study hub. If
+  // both are present we narrow the drill pool via one extra concept-id lookup
+  // and an `.in()` on the existing ki_curriculum query. Everything downstream
+  // (shuffle, VAD, mic, grading, mastery writes) is untouched.
+  const [searchParams] = useSearchParams();
+  const scopeSpoke = searchParams.get('spoke');
+  const scopeTopic = searchParams.get('topic');
   const { user } = useAuth();
   const [drills, setDrills] = useState<Drill[]>([]);
   const [loading, setLoading] = useState(true);
@@ -261,10 +268,29 @@ export default function CarMode() {
     let cancelled = false;
     (async () => {
       setLoading(true); setLoadError(null);
-      const { data: rows, error } = await (supabase as any)
+
+      // Optional scope: resolve spoke/topic → concept_ids for an additive filter.
+      let scopedConceptIds: string[] | null = null;
+      if (scopeSpoke && scopeTopic) {
+        const { data: cc, error: ccErr } = await (supabase as any)
+          .from('curriculum_concepts')
+          .select('concept_id')
+          .eq('spoke', scopeSpoke)
+          .eq('topic', scopeTopic);
+        if (!cancelled && ccErr) { setLoadError(ccErr.message); setLoading(false); return; }
+        scopedConceptIds = ((cc ?? []) as Array<{ concept_id: string }>).map((c) => c.concept_id);
+        if (scopedConceptIds.length === 0) {
+          if (!cancelled) { setDrills([]); setLoading(false); }
+          return;
+        }
+      }
+
+      let q = (supabase as any)
         .from('ki_curriculum')
         .select('ki_id, concept_id, drill_scenario, drill_spoken_task, drill_response_shape, drill_model_answer, drill_rubric, drill_teach_script')
         .eq('drill_ready', true);
+      if (scopedConceptIds) q = q.in('concept_id', scopedConceptIds);
+      const { data: rows, error } = await q;
       if (cancelled) return;
       if (error) { setLoadError(error.message); setLoading(false); return; }
       const r = (rows ?? []) as Array<{
