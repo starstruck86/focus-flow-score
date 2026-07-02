@@ -480,18 +480,20 @@ YOUR DEFAULT SCORE IS 58-63. If you're about to give above 70, ask yourself: "Wo
 
 ${retryBlock}
 
-RESPONSE RULES:
-- "feedback": Exactly 2 sentences. Sentence 1: quote or paraphrase the rep's actual words to show what went right or wrong — be specific. Sentence 2: the ONE structural fix that would make this significantly better.${skill === 'executive_response' ? ` Example: "You opened with 'So our platform helps companies...' — that's a setup sentence the exec didn't ask for. Lead with the dollar figure: their cost of inaction."` : ''}
-- "improvedVersion": Exact words a better rep would say OUT LOUD. ${skill === 'executive_response' ? '≤2 sentences. First sentence must contain a number. Zero setup.' : '3-5 sentences. Must fix the specific mistake identified.'} Achievable upgrade.
-- "worldClassResponse": What a top 1% rep would ACTUALLY SAY from scratch. MATERIALLY STRONGER than improvedVersion. For ${skill}: ${wcTone}
-- "whyItWorks": 2-3 bullets explaining UNDERLYING PATTERNS of worldClassResponse. Reusable principles.
-- "moveSequence": 2-4 verb-first steps showing the STRUCTURE of worldClassResponse. Scenario-specific.
+RESPONSE RULES (STRICT WORD CAPS — exceeding these truncates the JSON; stay under every cap):
+- "feedback": Exactly 2 sentences, ≤ 60 words TOTAL. Sentence 1: quote or paraphrase the rep's actual words to show what went right or wrong — be specific. Sentence 2: the ONE structural fix that would make this significantly better.${skill === 'executive_response' ? ` Example: "You opened with 'So our platform helps companies...' — that's a setup sentence the exec didn't ask for. Lead with the dollar figure: their cost of inaction."` : ''}
+- "improvedVersion": ≤ 70 words. Exact words a better rep would say OUT LOUD. ${skill === 'executive_response' ? '≤2 sentences. First sentence must contain a number. Zero setup.' : '3-5 sentences. Must fix the specific mistake identified.'} Achievable upgrade.
+- "worldClassResponse": ≤ 80 words. What a top 1% rep would ACTUALLY SAY from scratch. MATERIALLY STRONGER than improvedVersion. For ${skill}: ${wcTone}
+- "whyItWorks": 2-3 bullets, each ≤ 20 words. UNDERLYING PATTERNS of worldClassResponse. Reusable principles.
+- "moveSequence": 2-4 verb-first steps, each ≤ 12 words. STRUCTURE of worldClassResponse. Scenario-specific.
 - "patternTags": 2-4 snake_case REUSABLE selling behaviors. Portable across scenarios.
 - "focusPattern": Single pattern from the FOCUS PATTERNS list above. MUST be from that exact list.
-- "focusReason": One sentence starting with "Because" explaining why this is highest-leverage.
-- "practiceCue": One concrete, constraint-based behavioral instruction for the retry. Must be a single rule the rep can immediately apply. Good: "Your first sentence must acknowledge using their exact words." Bad: "Be more confident."
-- "teachingNote": One sentence generalizing the lesson beyond this scenario.
-- "deltaNote": One sentence explaining the BIGGEST DIFFERENCE between improvedVersion and worldClassResponse.
+- "focusReason": ONE sentence ≤ 25 words starting with "Because" explaining why this is highest-leverage.
+- "practiceCue": ONE sentence ≤ 25 words. Concrete constraint-based instruction. Good: "Your first sentence must acknowledge using their exact words." Bad: "Be more confident."
+- "teachingNote": ONE sentence ≤ 25 words generalizing the lesson beyond this scenario.
+- "deltaNote": ONE sentence ≤ 25 words on the BIGGEST DIFFERENCE between improvedVersion and worldClassResponse.
+- Dimension fields ("reason", "evidence", "improvementAction", "targetFor7", "targetFor9"): each ≤ 20 words.
+- "gold_criteria[].note": ≤ 10 words each.
 - "topMistake": REQUIRED. Pick exactly ONE from the COMMON MISTAKES list above. You MUST always return a valid mistake code — never leave this empty or invent a new one.
 
 COHERENCE RULE (CRITICAL):
@@ -644,7 +646,7 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5",
-        max_tokens: hasGold ? 3000 : 2000,
+        max_tokens: 3000,
         system: systemPrompt,
         messages: [
           { role: "user", content: userPrompt },
@@ -688,6 +690,52 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       }
       return s.slice(start);
     }
+    // Repair path (Option A — chosen for simplicity, no extra API round-trip):
+    // if parse fails, trim to the last complete top-level "key": value pair
+    // and close outstanding braces/brackets. Handles the max_tokens truncation
+    // that surfaced in P0-1 verification on verbose scenarios.
+    function repairTruncatedJson(s: string): string {
+      // Find last complete top-level field by walking depth. A "complete field"
+      // ends at a comma at depth 1 (inside the root object) that is NOT inside
+      // a string. We then close all still-open braces/brackets.
+      let depth = 0, inStr = false, esc = false;
+      let lastCommaAtDepth1 = -1;
+      const openStack: string[] = [];
+      for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (inStr) {
+          if (esc) esc = false;
+          else if (ch === "\\") esc = true;
+          else if (ch === '"') inStr = false;
+          continue;
+        }
+        if (ch === '"') { inStr = true; continue; }
+        if (ch === "{" || ch === "[") { openStack.push(ch); depth++; }
+        else if (ch === "}" || ch === "]") { openStack.pop(); depth--; }
+        else if (ch === "," && depth === 1) lastCommaAtDepth1 = i;
+      }
+      if (lastCommaAtDepth1 === -1) return s;
+      let out = s.slice(0, lastCommaAtDepth1); // drop trailing partial field + comma
+      // Close remaining open containers in reverse order
+      // Recompute stack up to lastCommaAtDepth1
+      const stack: string[] = [];
+      let inS = false, es = false;
+      for (let i = 0; i < out.length; i++) {
+        const ch = out[i];
+        if (inS) {
+          if (es) es = false;
+          else if (ch === "\\") es = true;
+          else if (ch === '"') inS = false;
+          continue;
+        }
+        if (ch === '"') inS = true;
+        else if (ch === "{") stack.push("}");
+        else if (ch === "[") stack.push("]");
+        else if (ch === "}" || ch === "]") stack.pop();
+      }
+      while (stack.length) out += stack.pop();
+      return out;
+    }
     let parsed: any;
     try {
       parsed = JSON.parse(content);
@@ -696,7 +744,14 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
         .replace(/,\s*}/g, "}")
         .replace(/,\s*]/g, "]")
         .replace(/[\x00-\x1F\x7F]/g, (c) => (c === "\n" || c === "\t" || c === "\r" ? c : ""));
-      parsed = JSON.parse(extracted);
+      try {
+        parsed = JSON.parse(extracted);
+      } catch {
+        // Final fallback: repair truncated JSON from max_tokens cutoff.
+        const repaired = repairTruncatedJson(extracted);
+        parsed = JSON.parse(repaired);
+        console.warn("dojo-score: recovered from truncated JSON via repair path");
+      }
     }
 
     // ── Server-side enforcement ─────────────────────────────────
