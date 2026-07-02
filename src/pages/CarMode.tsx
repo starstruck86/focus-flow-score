@@ -463,11 +463,28 @@ export default function CarMode() {
         } catch (e) { console.error('recordCompetencyRep failed', e); }
       }
     }
+    // ── FEEDBACK PHASE (uniform for pass/fail) ──────────────────────
+    // Score card stays visible for the entire phase (no flash). We ALWAYS
+    // speak a result line; if score < 70 we also speak the elite version.
+    // Auto-advance ONLY after speech ends + a 3s beat. Tap-anywhere on the
+    // card advances early. This is the sole advancement path after grading.
     setPhase('feedback');
-    const verbal = `${g.score} out of 100. ${g.top_fix} Elite sounded like: ${g.elite_line}`;
-    cancelSpeakRef.current = speak(verbal, () => { advance(); });
+    const coach = (g.top_fix || g.summary || '').trim();
+    let verbal = `${g.score} out of 100. ${coach}`.trim();
+    if (g.score < 70) {
+      const elite = (g.elite_line || d.model_answer || '').trim();
+      if (elite) verbal += ` Here's the elite version: ${elite}`;
+    }
+    cancelSpeakRef.current = speak(verbal, () => {
+      if (feedbackBeatTimerRef.current != null) window.clearTimeout(feedbackBeatTimerRef.current);
+      feedbackBeatTimerRef.current = window.setTimeout(() => {
+        feedbackBeatTimerRef.current = null;
+        advance();
+      }, 3000);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, advance]);
+
 
   // ── PATH A: Chrome Web Speech STT ────────────────────────────────
   const stopListening = useCallback(() => {
