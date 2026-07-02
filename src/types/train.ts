@@ -67,6 +67,8 @@ export interface CurriculumKi extends CurriculumKiRef {
   scenario?: string | null;
   /** AE-facing plain-English model line from the concept (optional). */
   modelLinePlain?: string | null;
+  /** Optional per-drill rubric from ki_curriculum.drill_rubric. */
+  drillRubric?: Array<{ c: string; must?: boolean }> | null;
 }
 
 export interface ConceptWithItems {
