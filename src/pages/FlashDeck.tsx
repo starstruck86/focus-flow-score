@@ -313,6 +313,19 @@ export default function FlashDeck() {
                 </div>
               </button>
 
+              {flipped && (() => {
+                const kiTitle = kiTitles.get(currentCard.ki_id);
+                const conceptTitle = currentCard.concept_id ? conceptTitles.get(currentCard.concept_id) : null;
+                if (!kiTitle && !conceptTitle) return null;
+                return (
+                  <p className="px-2 text-[11px] leading-snug text-muted-foreground break-words">
+                    {conceptTitle
+                      ? <>📌 {conceptTitle}{kiTitle ? <> · KI: {kiTitle}</> : null}</>
+                      : <>📌 KI: {kiTitle}</>}
+                  </p>
+                );
+              })()}
+
               {flipped && drillHref && (
                 <button
                   onClick={() => navigate(drillHref)}
