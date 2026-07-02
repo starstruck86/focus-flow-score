@@ -414,7 +414,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { scenario, userResponse, retryCount, focusReminder, ki: rawKi } = await req.json();
+    const { scenario, userResponse, retryCount, focusReminder, ki: rawKi, gold: rawGold } = await req.json();
     if (!scenario || !userResponse) {
       return new Response(JSON.stringify({ error: "Missing scenario or userResponse" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
