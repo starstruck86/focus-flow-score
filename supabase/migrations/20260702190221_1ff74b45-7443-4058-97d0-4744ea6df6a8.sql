@@ -1,0 +1,1 @@
+DELETE FROM flashcards WHERE deck_id='11f8a969-b9a3-401e-9239-bbfa3f6bf76f'; DELETE FROM flashcard_decks WHERE id='11f8a969-b9a3-401e-9239-bbfa3f6bf76f';
