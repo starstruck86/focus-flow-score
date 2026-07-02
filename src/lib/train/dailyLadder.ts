@@ -52,25 +52,38 @@ export async function getNextDueCurriculum(
   userId: string,
   limit = 5,
 ): Promise<DailyLadderPick[]> {
-  const [{ data: concepts, error: cErr }, { data: compRows }, { data: gateRows }] =
-    await Promise.all([
-      (supabase as any)
-        .from('curriculum_concepts')
-        .select('concept_id, spoke, topic, band, sub_level, order_in_sublevel, title')
-        .order('spoke', { ascending: true })
-        .order('topic', { ascending: true })
-        .order('band', { ascending: true })
-        .order('sub_level', { ascending: true })
-        .order('order_in_sublevel', { ascending: true }),
-      (supabase as any)
-        .from('user_competency')
-        .select('*')
-        .eq('user_id', userId),
-      (supabase as any)
-        .from('user_band_gate')
-        .select('*')
-        .eq('user_id', userId),
-    ]);
+  const [
+    { data: concepts, error: cErr },
+    { data: compRows },
+    { data: gateRows },
+    { data: prefsRow },
+  ] = await Promise.all([
+    (supabase as any)
+      .from('curriculum_concepts')
+      .select('concept_id, spoke, topic, band, sub_level, order_in_sublevel, title')
+      .order('spoke', { ascending: true })
+      .order('topic', { ascending: true })
+      .order('band', { ascending: true })
+      .order('sub_level', { ascending: true })
+      .order('order_in_sublevel', { ascending: true }),
+    (supabase as any)
+      .from('user_competency')
+      .select('*')
+      .eq('user_id', userId),
+    (supabase as any)
+      .from('user_band_gate')
+      .select('*')
+      .eq('user_id', userId),
+    (supabase as any)
+      .from('user_train_prefs')
+      .select('focus_spokes')
+      .eq('user_id', userId)
+      .maybeSingle(),
+  ]);
+
+  const focusSpokes = new Set<string>(
+    Array.isArray(prefsRow?.focus_spokes) ? (prefsRow.focus_spokes as string[]) : [],
+  );
 
   if (cErr) throw cErr;
 
