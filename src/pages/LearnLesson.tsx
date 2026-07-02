@@ -113,7 +113,7 @@ export default function LearnLesson() {
     const masteryPct = Math.round(overallMastery * 100);
     upsertProgress.mutate({
       lessonId: lesson.id,
-      status: masteryPct >= 70 ? 'passed' : 'completed',
+      status: masteryPct >= 85 ? 'passed' : 'completed', // §7.33 — 85 is the pass bar everywhere
       mastery_score: masteryPct,
     });
     setPhase('results');
