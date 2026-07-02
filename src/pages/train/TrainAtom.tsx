@@ -183,6 +183,7 @@ export default function TrainAtom() {
         {data && beat === 'concept' && (
           <ConceptBeat
             data={data}
+            authoredScript={activeDrills.find((d) => isNonEmpty(d.drillTeachScript))?.drillTeachScript ?? null}
             onContinue={() => {
               if (hasEliteBeat) setBeat('elite');
               else if (activeDrills.length > 0) startDrilling();
