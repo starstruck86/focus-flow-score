@@ -34,6 +34,7 @@ function hydrateKi(
     active?: boolean;
     scenario?: string | null;
     drillRubric?: Array<{ c: string; must?: boolean }> | null;
+    drillTeachScript?: string | null;
   },
   ki: AnyRow | undefined,
 ): CurriculumKi | null {
@@ -54,6 +55,7 @@ function hydrateKi(
     chapter: (ki.chapter as string | null) ?? null,
     scenario: ref.scenario ?? null,
     drillRubric: ref.drillRubric ?? null,
+    drillTeachScript: ref.drillTeachScript ?? null,
   };
 }
 
