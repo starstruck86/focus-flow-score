@@ -1031,6 +1031,34 @@ export default function CarMode() {
               )}
 
               {phase === 'grading' && (<div className="h-20 flex items-center justify-center text-white/60">Scoring…</div>)}
+
+              {phase === 'done' && (() => {
+                // Item 3 — recap card: drills done, avg + best score, Go again.
+                const n = sessionScores.length;
+                const best = n ? Math.max(...sessionScores) : 0;
+                const avg = n ? Math.round(sessionScores.reduce((a, b) => a + b, 0) / n) : 0;
+                return (
+                  <div className="grid gap-3">
+                    <div className="grid grid-cols-3 gap-3 text-center">
+                      <div className="rounded-2xl bg-white/5 border border-white/10 py-4">
+                        <div className="text-3xl font-bold font-mono">{n}</div>
+                        <div className="text-xs uppercase tracking-widest text-white/50 mt-1">Drills</div>
+                      </div>
+                      <div className="rounded-2xl bg-white/5 border border-white/10 py-4">
+                        <div className="text-3xl font-bold font-mono">{avg}</div>
+                        <div className="text-xs uppercase tracking-widest text-white/50 mt-1">Avg</div>
+                      </div>
+                      <div className="rounded-2xl bg-white/5 border border-white/10 py-4">
+                        <div className="text-3xl font-bold font-mono">{best}</div>
+                        <div className="text-xs uppercase tracking-widest text-white/50 mt-1">Best</div>
+                      </div>
+                    </div>
+                    <Button onClick={handleGoAgain} className="h-20 text-2xl rounded-2xl bg-emerald-600 hover:bg-emerald-500">
+                      <RotateCcw className="h-7 w-7 mr-2" /> Go again
+                    </Button>
+                  </div>
+                );
+              })()}
             </div>
 
             {useRecorderPath && (
