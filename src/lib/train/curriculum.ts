@@ -161,11 +161,19 @@ export async function getConceptWithItems(
           order_in_concept: Number(l.order_in_concept) || 0,
           active: l.active !== false,
           scenario: (l.drill_scenario as string | null) ?? null,
+          drillRubric: Array.isArray(l.drill_rubric)
+            ? (l.drill_rubric as Array<{ c: string; must?: boolean }>)
+            : null,
         },
         kiMap.get(String(l.ki_id)),
       ),
     )
     .filter((x): x is CurriculumKi => !!x);
+  // Attach concept's model_line_plain to every hydrated KI (drills + exemplar)
+  // so the grader can receive it as gold.
+  for (const h of hydrated) {
+    h.modelLinePlain = concept.model_line_plain ?? null;
+  }
 
   const exemplarKi = hydrated.find((k) => k.is_exemplar) ?? null;
   const drillsAll = hydrated.filter((k) => !k.is_exemplar);
