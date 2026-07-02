@@ -39,6 +39,8 @@ export default function FlashDeck() {
   const [statesByCard, setStatesByCard] = useState<Map<string, StateRow>>(new Map());
   const [conceptMeta, setConceptMeta] = useState<Map<string, ConceptMeta>>(new Map());
   const [conceptMetaResolved, setConceptMetaResolved] = useState(true);
+  const [kiTitles, setKiTitles] = useState<Map<string, string>>(new Map());
+  const [conceptTitles, setConceptTitles] = useState<Map<string, string>>(new Map());
   const [pos, setPos] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [requeued, setRequeued] = useState<Set<string>>(new Set());
