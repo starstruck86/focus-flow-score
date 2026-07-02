@@ -34,6 +34,7 @@ import { TodaysFocus } from '@/components/dojo/TodaysFocus';
 import { TrainingModes } from '@/components/dojo/TrainingModes';
 import { PerformanceSignals } from '@/components/dojo/PerformanceSignals';
 import { WeeklySummaryCard } from '@/components/dojo/WeeklySummaryCard';
+import { FieldVsTrainingCard } from '@/components/dojo/FieldVsTrainingCard';
 import { BlockComparisonView } from '@/components/dojo/BlockComparisonView';
 import { MasteryLanes } from '@/components/dojo/MasteryLanes';
 import { ResumeLaneBanner } from '@/components/dojo/ResumeLaneBanner';
