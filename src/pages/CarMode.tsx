@@ -704,31 +704,41 @@ export default function CarMode() {
   }, [applyGrade, advance]);
 
   // ── Phase runner ─────────────────────────────────────────────────
-  const runDrill = useCallback((d: Drill) => {
-    setGrade(null); setErrMsg(null); setTranscript(''); setInterim('');
-    // Session insert and AudioContext resume run in the background so we do NOT
-    // block the first spoken line — on iOS, awaiting here loses the gesture
-    // context and speechSynthesis silently no-ops.
-    void ensureSession(d);
-    try { void audioCtxRef.current?.resume().catch(() => {}); } catch { /* noop */ }
-    setPhase('intro');
-    cancelSpeakRef.current = speak(`Skill: ${d.concept_title}.`, () => {
-      setPhase('scenario');
-      cancelSpeakRef.current = speak(d.scenario, () => {
-        setPhase('task');
-        cancelSpeakRef.current = speak(`${d.spoken_task} Go.`, () => {
-          setPhase('listening');
-          if (useRecorderPath) {
-            void startRecorderSegment(d);
-          } else {
-            if (!startListening((finalText) => gradeTextPath(d, finalText))) {
-              setPhase('listening');
-            }
+  // Every drill begins with a TEACH phase (Pimsleur): the rep must understand
+  // the tactic before attempting it. Teach script is composed client-side
+  // from fields loaded with the drill — no extra AI calls. Tap-anywhere on
+  // the card during TEACH skips ahead to the scenario prompt (see onCardTap).
+  const runScenarioThenTask = useCallback((d: Drill) => {
+    setPhase('scenario');
+    cancelSpeakRef.current = speak(d.scenario, () => {
+      setPhase('task');
+      cancelSpeakRef.current = speak(`${d.spoken_task} Go.`, () => {
+        setPhase('listening');
+        if (useRecorderPath) {
+          void startRecorderSegment(d);
+        } else {
+          if (!startListening((finalText) => gradeTextPath(d, finalText))) {
+            setPhase('listening');
           }
-        });
+        }
       });
     });
-  }, [ensureSession, startListening, gradeTextPath, startRecorderSegment]);
+  }, [startListening, gradeTextPath, startRecorderSegment]);
+
+  const runScenarioThenTaskRef = useRef(runScenarioThenTask);
+  useEffect(() => { runScenarioThenTaskRef.current = runScenarioThenTask; }, [runScenarioThenTask]);
+
+  const runDrill = useCallback((d: Drill) => {
+    setGrade(null); setErrMsg(null); setTranscript(''); setInterim('');
+    if (feedbackBeatTimerRef.current != null) { window.clearTimeout(feedbackBeatTimerRef.current); feedbackBeatTimerRef.current = null; }
+    void ensureSession(d);
+    try { void audioCtxRef.current?.resume().catch(() => {}); } catch { /* noop */ }
+    setPhase('teach');
+    cancelSpeakRef.current = speak(d.teach_script, () => {
+      runScenarioThenTaskRef.current(d);
+    });
+  }, [ensureSession, runScenarioThenTask]);
+
 
   const runDrillRef = useRef(runDrill);
   useEffect(() => { runDrillRef.current = runDrill; }, [runDrill]);
