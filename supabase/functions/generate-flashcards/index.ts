@@ -141,23 +141,29 @@ serve(async (req) => {
 
       const conceptIds = (concepts ?? []).map((c: any) => c.concept_id);
       const { data: ki } = await admin.from("ki_curriculum")
-        .select("concept_id, ki_id, is_exemplar, role, order_in_concept, active")
+        .select("concept_id, ki_id, is_exemplar, role, order_in_concept, active, drill_scenario")
         .in("concept_id", conceptIds).eq("active", true);
 
-      const byConcept = new Map<string, { ki_id: string }[]>();
+      const byConcept = new Map<string, any[]>();
       for (const r of (ki ?? []) as any[]) {
         if (!byConcept.has(r.concept_id)) byConcept.set(r.concept_id, []);
         byConcept.get(r.concept_id)!.push(r);
       }
-      // pick one exemplar/teach KI per concept
+      // pick one exemplar/teach KI per concept, and collect up to 3 drill scenarios
       const kiIds = new Set<string>();
       const conceptToKi = new Map<string, string>();
+      const conceptToScenarios = new Map<string, string[]>();
       for (const c of (concepts ?? []) as any[]) {
         const rows = (byConcept.get(c.concept_id) ?? []).sort((a: any, b: any) =>
           (b.is_exemplar ? 1 : 0) - (a.is_exemplar ? 1 : 0) ||
           (a.order_in_concept ?? 0) - (b.order_in_concept ?? 0)
         );
         if (rows[0]) { conceptToKi.set(c.concept_id, rows[0].ki_id); kiIds.add(rows[0].ki_id); }
+        const scenarios = rows
+          .map((r) => (typeof r.drill_scenario === "string" ? r.drill_scenario.trim() : ""))
+          .filter((s) => s.length > 0)
+          .slice(0, 3);
+        if (scenarios.length) conceptToScenarios.set(c.concept_id, scenarios);
       }
       const { data: kiRows } = await admin.from("knowledge_items")
         .select("id, title, tactic_summary, why_it_matters, when_to_use, example_usage")
@@ -169,6 +175,10 @@ serve(async (req) => {
         const kid = conceptToKi.get(c.concept_id);
         if (!kid) continue;
         const k = kiMap.get(kid) || {};
+        const scenarios = conceptToScenarios.get(c.concept_id) ?? [];
+        const scenariosBlock = scenarios.length
+          ? scenarios.map((s, i) => `  ${i + 1}. ${s.slice(0, 400)}`).join("\n")
+          : "  (none)";
         items.push({
           ki_id: kid,
           concept_id: c.concept_id,
@@ -182,7 +192,9 @@ ki_title: ${k.title ?? ""}
 ki_summary: ${k.tactic_summary ?? ""}
 ki_why: ${k.why_it_matters ?? ""}
 ki_when: ${k.when_to_use ?? ""}
-ki_example: ${(k.example_usage ?? "").slice(0, 300)}`,
+ki_example: ${(k.example_usage ?? "").slice(0, 300)}
+drill_scenarios:
+${scenariosBlock}`,
         });
       }
     } else if (source_type === "resource" || source_type === "chapter") {
