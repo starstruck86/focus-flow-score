@@ -33,6 +33,7 @@ function hydrateKi(
     order_in_concept: number;
     active?: boolean;
     scenario?: string | null;
+    drillRubric?: Array<{ c: string; must?: boolean }> | null;
   },
   ki: AnyRow | undefined,
 ): CurriculumKi | null {
@@ -52,6 +53,7 @@ function hydrateKi(
     spider_dimension: (ki.spider_dimension as string | null) ?? null,
     chapter: (ki.chapter as string | null) ?? null,
     scenario: ref.scenario ?? null,
+    drillRubric: ref.drillRubric ?? null,
   };
 }
 
