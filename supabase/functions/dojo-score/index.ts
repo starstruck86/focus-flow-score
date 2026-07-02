@@ -690,6 +690,52 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       }
       return s.slice(start);
     }
+    // Repair path (Option A — chosen for simplicity, no extra API round-trip):
+    // if parse fails, trim to the last complete top-level "key": value pair
+    // and close outstanding braces/brackets. Handles the max_tokens truncation
+    // that surfaced in P0-1 verification on verbose scenarios.
+    function repairTruncatedJson(s: string): string {
+      // Find last complete top-level field by walking depth. A "complete field"
+      // ends at a comma at depth 1 (inside the root object) that is NOT inside
+      // a string. We then close all still-open braces/brackets.
+      let depth = 0, inStr = false, esc = false;
+      let lastCommaAtDepth1 = -1;
+      const openStack: string[] = [];
+      for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (inStr) {
+          if (esc) esc = false;
+          else if (ch === "\\") esc = true;
+          else if (ch === '"') inStr = false;
+          continue;
+        }
+        if (ch === '"') { inStr = true; continue; }
+        if (ch === "{" || ch === "[") { openStack.push(ch); depth++; }
+        else if (ch === "}" || ch === "]") { openStack.pop(); depth--; }
+        else if (ch === "," && depth === 1) lastCommaAtDepth1 = i;
+      }
+      if (lastCommaAtDepth1 === -1) return s;
+      let out = s.slice(0, lastCommaAtDepth1); // drop trailing partial field + comma
+      // Close remaining open containers in reverse order
+      // Recompute stack up to lastCommaAtDepth1
+      const stack: string[] = [];
+      let inS = false, es = false;
+      for (let i = 0; i < out.length; i++) {
+        const ch = out[i];
+        if (inS) {
+          if (es) es = false;
+          else if (ch === "\\") es = true;
+          else if (ch === '"') inS = false;
+          continue;
+        }
+        if (ch === '"') inS = true;
+        else if (ch === "{") stack.push("}");
+        else if (ch === "[") stack.push("]");
+        else if (ch === "}" || ch === "]") stack.pop();
+      }
+      while (stack.length) out += stack.pop();
+      return out;
+    }
     let parsed: any;
     try {
       parsed = JSON.parse(content);
@@ -698,7 +744,14 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
         .replace(/,\s*}/g, "}")
         .replace(/,\s*]/g, "]")
         .replace(/[\x00-\x1F\x7F]/g, (c) => (c === "\n" || c === "\t" || c === "\r" ? c : ""));
-      parsed = JSON.parse(extracted);
+      try {
+        parsed = JSON.parse(extracted);
+      } catch {
+        // Final fallback: repair truncated JSON from max_tokens cutoff.
+        const repaired = repairTruncatedJson(extracted);
+        parsed = JSON.parse(repaired);
+        console.warn("dojo-score: recovered from truncated JSON via repair path");
+      }
     }
 
     // ── Server-side enforcement ─────────────────────────────────
