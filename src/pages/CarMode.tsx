@@ -859,7 +859,7 @@ export default function CarMode() {
           <>
             <div className="text-center text-xs uppercase tracking-widest text-white/40 mb-4">
               {phase === 'idle' && 'Ready'}
-              {phase === 'intro' && 'Setting up'}
+              {phase === 'teach' && 'Learn the tactic'}
               {phase === 'scenario' && 'Scenario'}
               {phase === 'task' && 'Your task'}
               {phase === 'listening' && (useRecorderPath ? 'Listening' : (sttSupported ? 'Listening' : 'Speak — manual mode'))}
