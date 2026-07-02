@@ -10576,6 +10576,7 @@ export type Database = {
       }
     }
     Functions: {
+      calib_drills_export: { Args: never; Returns: Json }
       claim_podcast_queue_items: {
         Args: { p_max_items?: number; p_max_processing?: number }
         Returns: {
