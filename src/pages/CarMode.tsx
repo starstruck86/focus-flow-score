@@ -916,6 +916,7 @@ export default function CarMode() {
 
   // ── Render ───────────────────────────────────────────────────────
   const bigText = useMemo(() => {
+    if (phase === 'done') return 'Nice work — session complete.';
     if (!drill) return '';
     if (phase === 'teach') return drill.teach_script;
     if (phase === 'scenario') return drill.scenario;
