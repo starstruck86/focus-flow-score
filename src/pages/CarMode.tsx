@@ -32,6 +32,8 @@ import {
   type TtsConfig,
 } from '@/lib/daveVoiceRuntime';
 
+import { composeTeachScript } from '@/lib/carmode/teachScript';
+
 type Shape = 'quick_reply' | 'talk_track';
 
 interface Drill {
@@ -50,6 +52,9 @@ interface Drill {
   rubric: Array<{ c: string; must?: boolean }>;
   spider_dimension: string | null;
   chapter: string | null;
+  // Teach-phase source fields (loaded with the drill; no runtime queries)
+  teach_script: string;
+  model_line_plain: string | null;
 }
 
 interface GradeResult {
@@ -61,7 +66,8 @@ interface GradeResult {
   summary: string;
 }
 
-type Phase = 'idle' | 'intro' | 'scenario' | 'task' | 'listening' | 'grading' | 'feedback' | 'reveal' | 'error';
+type Phase = 'idle' | 'teach' | 'scenario' | 'task' | 'listening' | 'grading' | 'feedback' | 'reveal' | 'error';
+
 
 // ── Capability detection ────────────────────────────────────────────
 type SR = any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -201,6 +207,8 @@ export default function CarMode() {
   const recogRef = useRef<SR | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
   const cancelSpeakRef = useRef<() => void>(() => {});
+  const feedbackBeatTimerRef = useRef<number | null>(null);
+
 
   // Persistent stream + audio graph for VAD
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -240,33 +248,44 @@ export default function CarMode() {
       const conceptIds = Array.from(new Set(r.map((x) => x.concept_id)));
       const kiIds = Array.from(new Set(r.map((x) => x.ki_id)));
       const [{ data: cc }, { data: ki }] = await Promise.all([
-        (supabase as any).from('curriculum_concepts').select('concept_id, spoke, topic, band, sub_level, title').in('concept_id', conceptIds),
-        supabase.from('knowledge_items').select('id, title, spider_dimension, chapter').in('id', kiIds),
+        (supabase as any).from('curriculum_concepts').select('concept_id, spoke, topic, band, sub_level, title, teach_beat_md, model_line_plain').in('concept_id', conceptIds),
+        (supabase as any).from('knowledge_items').select('id, title, spider_dimension, chapter, why_it_matters, when_to_use').in('id', kiIds),
       ]);
-      const cMap = new Map<string, { spoke: string; topic: string; band: number; sub_level: string; title: string }>();
-      for (const c of (cc ?? []) as Array<{ concept_id: string; spoke: string; topic: string; band: number; sub_level: string; title: string }>) {
-        cMap.set(c.concept_id, { spoke: c.spoke, topic: c.topic, band: c.band, sub_level: c.sub_level, title: c.title });
+      const cMap = new Map<string, { spoke: string; topic: string; band: number; sub_level: string; title: string; teach_beat_md: string | null; model_line_plain: string | null }>();
+      for (const c of (cc ?? []) as Array<{ concept_id: string; spoke: string; topic: string; band: number; sub_level: string; title: string; teach_beat_md: string | null; model_line_plain: string | null }>) {
+        cMap.set(c.concept_id, { spoke: c.spoke, topic: c.topic, band: c.band, sub_level: c.sub_level, title: c.title, teach_beat_md: c.teach_beat_md, model_line_plain: c.model_line_plain });
       }
-      const kMap = new Map<string, { title: string; spider_dimension: string | null; chapter: string | null }>();
-      for (const k of (ki ?? []) as Array<{ id: string; title: string; spider_dimension: string | null; chapter: string | null }>) {
-        kMap.set(k.id, { title: k.title, spider_dimension: k.spider_dimension, chapter: k.chapter });
+      const kMap = new Map<string, { title: string; spider_dimension: string | null; chapter: string | null; why_it_matters: string | null; when_to_use: string | null }>();
+      for (const k of (ki ?? []) as Array<{ id: string; title: string; spider_dimension: string | null; chapter: string | null; why_it_matters: string | null; when_to_use: string | null }>) {
+        kMap.set(k.id, { title: k.title, spider_dimension: k.spider_dimension, chapter: k.chapter, why_it_matters: k.why_it_matters, when_to_use: k.when_to_use });
       }
       const list: Drill[] = r.map((x) => {
         const c = cMap.get(x.concept_id);
         const k = kMap.get(x.ki_id);
         const rub = Array.isArray(x.drill_rubric) ? (x.drill_rubric as Array<{ c: string; must?: boolean }>) : [];
+        const conceptTitle = c?.title ?? 'Drill';
+        const modelLine = c?.model_line_plain ?? null;
+        const teachScript = composeTeachScript({
+          conceptTitle,
+          teachBeatMd: c?.teach_beat_md ?? null,
+          whyItMatters: k?.why_it_matters ?? null,
+          whenToUse: k?.when_to_use ?? null,
+          modelLinePlain: modelLine,
+        });
         return {
           ki_id: x.ki_id, concept_id: x.concept_id,
           spoke: c?.spoke ?? 'general',
           topic: c?.topic ?? '',
           band: ((c?.band ?? 1) as Band),
           sub_level: c?.sub_level ?? '',
-          concept_title: c?.title ?? 'Drill',
+          concept_title: conceptTitle,
           ki_title: k?.title ?? '',
           scenario: x.drill_scenario ?? '', spoken_task: x.drill_spoken_task ?? '',
           response_shape: (x.drill_response_shape === 'quick_reply' ? 'quick_reply' : 'talk_track'),
           model_answer: x.drill_model_answer ?? '', rubric: rub,
           spider_dimension: k?.spider_dimension ?? null, chapter: k?.chapter ?? null,
+          teach_script: teachScript,
+          model_line_plain: modelLine,
         };
       });
       for (let i = list.length - 1; i > 0; i--) {
@@ -274,6 +293,7 @@ export default function CarMode() {
         [list[i], list[j]] = [list[j], list[i]];
       }
       setDrills(list); setLoading(false);
+
     })();
     return () => { cancelled = true; };
   }, []);
@@ -445,11 +465,28 @@ export default function CarMode() {
         } catch (e) { console.error('recordCompetencyRep failed', e); }
       }
     }
+    // ── FEEDBACK PHASE (uniform for pass/fail) ──────────────────────
+    // Score card stays visible for the entire phase (no flash). We ALWAYS
+    // speak a result line; if score < 70 we also speak the elite version.
+    // Auto-advance ONLY after speech ends + a 3s beat. Tap-anywhere on the
+    // card advances early. This is the sole advancement path after grading.
     setPhase('feedback');
-    const verbal = `${g.score} out of 100. ${g.top_fix} Elite sounded like: ${g.elite_line}`;
-    cancelSpeakRef.current = speak(verbal, () => { advance(); });
+    const coach = (g.top_fix || g.summary || '').trim();
+    let verbal = `${g.score} out of 100. ${coach}`.trim();
+    if (g.score < 70) {
+      const elite = (g.elite_line || d.model_answer || '').trim();
+      if (elite) verbal += ` Here's the elite version: ${elite}`;
+    }
+    cancelSpeakRef.current = speak(verbal, () => {
+      if (feedbackBeatTimerRef.current != null) window.clearTimeout(feedbackBeatTimerRef.current);
+      feedbackBeatTimerRef.current = window.setTimeout(() => {
+        feedbackBeatTimerRef.current = null;
+        advance();
+      }, 3000);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, advance]);
+
 
   // ── PATH A: Chrome Web Speech STT ────────────────────────────────
   const stopListening = useCallback(() => {
@@ -667,31 +704,41 @@ export default function CarMode() {
   }, [applyGrade, advance]);
 
   // ── Phase runner ─────────────────────────────────────────────────
-  const runDrill = useCallback((d: Drill) => {
-    setGrade(null); setErrMsg(null); setTranscript(''); setInterim('');
-    // Session insert and AudioContext resume run in the background so we do NOT
-    // block the first spoken line — on iOS, awaiting here loses the gesture
-    // context and speechSynthesis silently no-ops.
-    void ensureSession(d);
-    try { void audioCtxRef.current?.resume().catch(() => {}); } catch { /* noop */ }
-    setPhase('intro');
-    cancelSpeakRef.current = speak(`Skill: ${d.concept_title}.`, () => {
-      setPhase('scenario');
-      cancelSpeakRef.current = speak(d.scenario, () => {
-        setPhase('task');
-        cancelSpeakRef.current = speak(`${d.spoken_task} Go.`, () => {
-          setPhase('listening');
-          if (useRecorderPath) {
-            void startRecorderSegment(d);
-          } else {
-            if (!startListening((finalText) => gradeTextPath(d, finalText))) {
-              setPhase('listening');
-            }
+  // Every drill begins with a TEACH phase (Pimsleur): the rep must understand
+  // the tactic before attempting it. Teach script is composed client-side
+  // from fields loaded with the drill — no extra AI calls. Tap-anywhere on
+  // the card during TEACH skips ahead to the scenario prompt (see onCardTap).
+  const runScenarioThenTask = useCallback((d: Drill) => {
+    setPhase('scenario');
+    cancelSpeakRef.current = speak(d.scenario, () => {
+      setPhase('task');
+      cancelSpeakRef.current = speak(`${d.spoken_task} Go.`, () => {
+        setPhase('listening');
+        if (useRecorderPath) {
+          void startRecorderSegment(d);
+        } else {
+          if (!startListening((finalText) => gradeTextPath(d, finalText))) {
+            setPhase('listening');
           }
-        });
+        }
       });
     });
-  }, [ensureSession, startListening, gradeTextPath, startRecorderSegment]);
+  }, [startListening, gradeTextPath, startRecorderSegment]);
+
+  const runScenarioThenTaskRef = useRef(runScenarioThenTask);
+  useEffect(() => { runScenarioThenTaskRef.current = runScenarioThenTask; }, [runScenarioThenTask]);
+
+  const runDrill = useCallback((d: Drill) => {
+    setGrade(null); setErrMsg(null); setTranscript(''); setInterim('');
+    if (feedbackBeatTimerRef.current != null) { window.clearTimeout(feedbackBeatTimerRef.current); feedbackBeatTimerRef.current = null; }
+    void ensureSession(d);
+    try { void audioCtxRef.current?.resume().catch(() => {}); } catch { /* noop */ }
+    setPhase('teach');
+    cancelSpeakRef.current = speak(d.teach_script, () => {
+      runScenarioThenTaskRef.current(d);
+    });
+  }, [ensureSession, runScenarioThenTask]);
+
 
   const runDrillRef = useRef(runDrill);
   useEffect(() => { runDrillRef.current = runDrill; }, [runDrill]);
@@ -754,10 +801,32 @@ export default function CarMode() {
     handleStart();
   };
 
+  // Tap-anywhere handler:
+  //  - during TEACH: cancel the teach TTS and jump straight to the scenario prompt
+  //  - during FEEDBACK: cancel any remaining coach TTS / 3s beat and advance early
+  // Any other phase: no-op (grading/listening must run to completion).
+  const onCardTap = useCallback(() => {
+    if (phase === 'teach' && drill) {
+      cancelSpeakRef.current();
+      ttsPlayback = interruptSpeech(ttsPlayback);
+      runScenarioThenTaskRef.current(drill);
+      return;
+    }
+    if (phase === 'feedback') {
+      cancelSpeakRef.current();
+      ttsPlayback = interruptSpeech(ttsPlayback);
+      if (feedbackBeatTimerRef.current != null) {
+        window.clearTimeout(feedbackBeatTimerRef.current);
+        feedbackBeatTimerRef.current = null;
+      }
+      advance();
+    }
+  }, [phase, drill, advance]);
+
   // ── Render ───────────────────────────────────────────────────────
   const bigText = useMemo(() => {
     if (!drill) return '';
-    if (phase === 'intro') return `Skill: ${drill.concept_title}`;
+    if (phase === 'teach') return drill.teach_script;
     if (phase === 'scenario') return drill.scenario;
     if (phase === 'task') return drill.spoken_task;
     if (phase === 'listening') return transcript || interim || (useRecorderPath ? '🎙 Listening — just speak, I\'ll stop on my own' : '🎙 Speak your answer…');
@@ -765,6 +834,7 @@ export default function CarMode() {
     if (phase === 'reveal') return drill.model_answer;
     return drill.concept_title;
   }, [phase, drill, transcript, interim]);
+
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
@@ -789,7 +859,7 @@ export default function CarMode() {
           <>
             <div className="text-center text-xs uppercase tracking-widest text-white/40 mb-4">
               {phase === 'idle' && 'Ready'}
-              {phase === 'intro' && 'Setting up'}
+              {phase === 'teach' && 'Learn the tactic'}
               {phase === 'scenario' && 'Scenario'}
               {phase === 'task' && 'Your task'}
               {phase === 'listening' && (useRecorderPath ? 'Listening' : (sttSupported ? 'Listening' : 'Speak — manual mode'))}
@@ -799,9 +869,17 @@ export default function CarMode() {
               {phase === 'error' && 'Error'}
             </div>
 
-            <div className="flex-1 flex items-center justify-center">
+            <div
+              className="flex-1 flex items-center justify-center"
+              onClick={onCardTap}
+              role={(phase === 'teach' || phase === 'feedback') ? 'button' : undefined}
+              style={{ cursor: (phase === 'teach' || phase === 'feedback') ? 'pointer' : 'default' }}
+            >
               <Card className="bg-white/5 border-white/10 p-6 sm:p-10 w-full">
                 <p className="text-2xl sm:text-4xl leading-tight text-center font-medium text-white">{bigText}</p>
+                {phase === 'teach' && (
+                  <p className="text-center text-white/40 text-xs mt-6">Tap anywhere to skip to the drill</p>
+                )}
                 {phase === 'listening' && interim && (
                   <p className="text-base text-white/40 italic text-center mt-4">{interim}</p>
                 )}
@@ -823,10 +901,12 @@ export default function CarMode() {
                         ))}
                       </ul>
                     )}
+                    <p className="text-center text-white/40 text-xs pt-2">Tap anywhere to continue</p>
                   </div>
                 )}
               </Card>
             </div>
+
 
             {errMsg && (<p className="text-center text-red-400 text-sm mt-3">{errMsg}</p>)}
 
