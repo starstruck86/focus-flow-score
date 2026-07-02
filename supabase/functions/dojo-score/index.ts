@@ -480,18 +480,20 @@ YOUR DEFAULT SCORE IS 58-63. If you're about to give above 70, ask yourself: "Wo
 
 ${retryBlock}
 
-RESPONSE RULES:
-- "feedback": Exactly 2 sentences. Sentence 1: quote or paraphrase the rep's actual words to show what went right or wrong — be specific. Sentence 2: the ONE structural fix that would make this significantly better.${skill === 'executive_response' ? ` Example: "You opened with 'So our platform helps companies...' — that's a setup sentence the exec didn't ask for. Lead with the dollar figure: their cost of inaction."` : ''}
-- "improvedVersion": Exact words a better rep would say OUT LOUD. ${skill === 'executive_response' ? '≤2 sentences. First sentence must contain a number. Zero setup.' : '3-5 sentences. Must fix the specific mistake identified.'} Achievable upgrade.
-- "worldClassResponse": What a top 1% rep would ACTUALLY SAY from scratch. MATERIALLY STRONGER than improvedVersion. For ${skill}: ${wcTone}
-- "whyItWorks": 2-3 bullets explaining UNDERLYING PATTERNS of worldClassResponse. Reusable principles.
-- "moveSequence": 2-4 verb-first steps showing the STRUCTURE of worldClassResponse. Scenario-specific.
+RESPONSE RULES (STRICT WORD CAPS — exceeding these truncates the JSON; stay under every cap):
+- "feedback": Exactly 2 sentences, ≤ 60 words TOTAL. Sentence 1: quote or paraphrase the rep's actual words to show what went right or wrong — be specific. Sentence 2: the ONE structural fix that would make this significantly better.${skill === 'executive_response' ? ` Example: "You opened with 'So our platform helps companies...' — that's a setup sentence the exec didn't ask for. Lead with the dollar figure: their cost of inaction."` : ''}
+- "improvedVersion": ≤ 70 words. Exact words a better rep would say OUT LOUD. ${skill === 'executive_response' ? '≤2 sentences. First sentence must contain a number. Zero setup.' : '3-5 sentences. Must fix the specific mistake identified.'} Achievable upgrade.
+- "worldClassResponse": ≤ 80 words. What a top 1% rep would ACTUALLY SAY from scratch. MATERIALLY STRONGER than improvedVersion. For ${skill}: ${wcTone}
+- "whyItWorks": 2-3 bullets, each ≤ 20 words. UNDERLYING PATTERNS of worldClassResponse. Reusable principles.
+- "moveSequence": 2-4 verb-first steps, each ≤ 12 words. STRUCTURE of worldClassResponse. Scenario-specific.
 - "patternTags": 2-4 snake_case REUSABLE selling behaviors. Portable across scenarios.
 - "focusPattern": Single pattern from the FOCUS PATTERNS list above. MUST be from that exact list.
-- "focusReason": One sentence starting with "Because" explaining why this is highest-leverage.
-- "practiceCue": One concrete, constraint-based behavioral instruction for the retry. Must be a single rule the rep can immediately apply. Good: "Your first sentence must acknowledge using their exact words." Bad: "Be more confident."
-- "teachingNote": One sentence generalizing the lesson beyond this scenario.
-- "deltaNote": One sentence explaining the BIGGEST DIFFERENCE between improvedVersion and worldClassResponse.
+- "focusReason": ONE sentence ≤ 25 words starting with "Because" explaining why this is highest-leverage.
+- "practiceCue": ONE sentence ≤ 25 words. Concrete constraint-based instruction. Good: "Your first sentence must acknowledge using their exact words." Bad: "Be more confident."
+- "teachingNote": ONE sentence ≤ 25 words generalizing the lesson beyond this scenario.
+- "deltaNote": ONE sentence ≤ 25 words on the BIGGEST DIFFERENCE between improvedVersion and worldClassResponse.
+- Dimension fields ("reason", "evidence", "improvementAction", "targetFor7", "targetFor9"): each ≤ 20 words.
+- "gold_criteria[].note": ≤ 10 words each.
 - "topMistake": REQUIRED. Pick exactly ONE from the COMMON MISTAKES list above. You MUST always return a valid mistake code — never leave this empty or invent a new one.
 
 COHERENCE RULE (CRITICAL):
