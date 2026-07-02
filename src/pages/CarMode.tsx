@@ -246,33 +246,44 @@ export default function CarMode() {
       const conceptIds = Array.from(new Set(r.map((x) => x.concept_id)));
       const kiIds = Array.from(new Set(r.map((x) => x.ki_id)));
       const [{ data: cc }, { data: ki }] = await Promise.all([
-        (supabase as any).from('curriculum_concepts').select('concept_id, spoke, topic, band, sub_level, title').in('concept_id', conceptIds),
-        supabase.from('knowledge_items').select('id, title, spider_dimension, chapter').in('id', kiIds),
+        (supabase as any).from('curriculum_concepts').select('concept_id, spoke, topic, band, sub_level, title, teach_beat_md, model_line_plain').in('concept_id', conceptIds),
+        (supabase as any).from('knowledge_items').select('id, title, spider_dimension, chapter, why_it_matters, when_to_use').in('id', kiIds),
       ]);
-      const cMap = new Map<string, { spoke: string; topic: string; band: number; sub_level: string; title: string }>();
-      for (const c of (cc ?? []) as Array<{ concept_id: string; spoke: string; topic: string; band: number; sub_level: string; title: string }>) {
-        cMap.set(c.concept_id, { spoke: c.spoke, topic: c.topic, band: c.band, sub_level: c.sub_level, title: c.title });
+      const cMap = new Map<string, { spoke: string; topic: string; band: number; sub_level: string; title: string; teach_beat_md: string | null; model_line_plain: string | null }>();
+      for (const c of (cc ?? []) as Array<{ concept_id: string; spoke: string; topic: string; band: number; sub_level: string; title: string; teach_beat_md: string | null; model_line_plain: string | null }>) {
+        cMap.set(c.concept_id, { spoke: c.spoke, topic: c.topic, band: c.band, sub_level: c.sub_level, title: c.title, teach_beat_md: c.teach_beat_md, model_line_plain: c.model_line_plain });
       }
-      const kMap = new Map<string, { title: string; spider_dimension: string | null; chapter: string | null }>();
-      for (const k of (ki ?? []) as Array<{ id: string; title: string; spider_dimension: string | null; chapter: string | null }>) {
-        kMap.set(k.id, { title: k.title, spider_dimension: k.spider_dimension, chapter: k.chapter });
+      const kMap = new Map<string, { title: string; spider_dimension: string | null; chapter: string | null; why_it_matters: string | null; when_to_use: string | null }>();
+      for (const k of (ki ?? []) as Array<{ id: string; title: string; spider_dimension: string | null; chapter: string | null; why_it_matters: string | null; when_to_use: string | null }>) {
+        kMap.set(k.id, { title: k.title, spider_dimension: k.spider_dimension, chapter: k.chapter, why_it_matters: k.why_it_matters, when_to_use: k.when_to_use });
       }
       const list: Drill[] = r.map((x) => {
         const c = cMap.get(x.concept_id);
         const k = kMap.get(x.ki_id);
         const rub = Array.isArray(x.drill_rubric) ? (x.drill_rubric as Array<{ c: string; must?: boolean }>) : [];
+        const conceptTitle = c?.title ?? 'Drill';
+        const modelLine = c?.model_line_plain ?? null;
+        const teachScript = composeTeachScript({
+          conceptTitle,
+          teachBeatMd: c?.teach_beat_md ?? null,
+          whyItMatters: k?.why_it_matters ?? null,
+          whenToUse: k?.when_to_use ?? null,
+          modelLinePlain: modelLine,
+        });
         return {
           ki_id: x.ki_id, concept_id: x.concept_id,
           spoke: c?.spoke ?? 'general',
           topic: c?.topic ?? '',
           band: ((c?.band ?? 1) as Band),
           sub_level: c?.sub_level ?? '',
-          concept_title: c?.title ?? 'Drill',
+          concept_title: conceptTitle,
           ki_title: k?.title ?? '',
           scenario: x.drill_scenario ?? '', spoken_task: x.drill_spoken_task ?? '',
           response_shape: (x.drill_response_shape === 'quick_reply' ? 'quick_reply' : 'talk_track'),
           model_answer: x.drill_model_answer ?? '', rubric: rub,
           spider_dimension: k?.spider_dimension ?? null, chapter: k?.chapter ?? null,
+          teach_script: teachScript,
+          model_line_plain: modelLine,
         };
       });
       for (let i = list.length - 1; i > 0; i--) {
@@ -280,6 +291,7 @@ export default function CarMode() {
         [list[i], list[j]] = [list[j], list[i]];
       }
       setDrills(list); setLoading(false);
+
     })();
     return () => { cancelled = true; };
   }, []);
