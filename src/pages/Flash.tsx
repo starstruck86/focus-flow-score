@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Layout } from '@/components/Layout';
 import { SHELL } from '@/lib/layout';
+const PAGE_CLS = `min-h-screen ${SHELL.main.bottomPad}`;
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ArrowLeft, ChevronRight, Loader2, Sparkles, Zap } from 'lucide-react';
