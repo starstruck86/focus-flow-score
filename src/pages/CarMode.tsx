@@ -300,12 +300,6 @@ export default function CarMode() {
         drill_rubric: unknown;
         drill_teach_script: string | null;
       }>;
-        ki_id: string; concept_id: string;
-        drill_scenario: string; drill_spoken_task: string;
-        drill_response_shape: string; drill_model_answer: string;
-        drill_rubric: unknown;
-        drill_teach_script: string | null;
-      }>;
       if (r.length === 0) { setDrills([]); setLoading(false); return; }
       const conceptIds = Array.from(new Set(r.map((x) => x.concept_id)));
       const kiIds = Array.from(new Set(r.map((x) => x.ki_id)));
