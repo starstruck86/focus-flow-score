@@ -32,6 +32,8 @@ import {
   type TtsConfig,
 } from '@/lib/daveVoiceRuntime';
 
+import { composeTeachScript } from '@/lib/carmode/teachScript';
+
 type Shape = 'quick_reply' | 'talk_track';
 
 interface Drill {
@@ -50,6 +52,9 @@ interface Drill {
   rubric: Array<{ c: string; must?: boolean }>;
   spider_dimension: string | null;
   chapter: string | null;
+  // Teach-phase source fields (loaded with the drill; no runtime queries)
+  teach_script: string;
+  model_line_plain: string | null;
 }
 
 interface GradeResult {
@@ -61,7 +66,8 @@ interface GradeResult {
   summary: string;
 }
 
-type Phase = 'idle' | 'intro' | 'scenario' | 'task' | 'listening' | 'grading' | 'feedback' | 'reveal' | 'error';
+type Phase = 'idle' | 'teach' | 'scenario' | 'task' | 'listening' | 'grading' | 'feedback' | 'reveal' | 'error';
+
 
 // ── Capability detection ────────────────────────────────────────────
 type SR = any; // eslint-disable-line @typescript-eslint/no-explicit-any
