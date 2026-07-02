@@ -217,6 +217,10 @@ export interface GateItemInput {
   /** Tag for traceability — NOT passed into scoring. */
   sourceKiId?: string;
   sourceTitle?: string;
+  /** Concept-specific gold model line — sent as gold.model_line. */
+  modelLine?: string | null;
+  /** Optional rubric for this gate item. */
+  rubric?: Array<{ c: string; must?: boolean }> | null;
 }
 
 export interface GateItemResult {
@@ -254,12 +258,18 @@ export async function runBandGate(input: BandGateRunInput): Promise<BandGateRunR
   const itemResults: GateItemResult[] = [];
   for (let i = 0; i < input.items.length; i++) {
     const it = input.items[i];
+    const gold =
+      (it.modelLine && it.modelLine.trim().length > 0) ||
+      (Array.isArray(it.rubric) && it.rubric.length > 0)
+        ? { model_line: it.modelLine ?? null, rubric: it.rubric ?? null }
+        : null;
     const scored = await scoreRep({
       skillFocus: input.skillFocus,
       userResponse: it.userResponse,
       objection: it.objection,
       context: it.context,
       ki: null,
+      gold,
     });
     itemResults.push({
       index: i,
