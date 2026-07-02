@@ -117,6 +117,17 @@ export async function getNextDueCurriculum(
   type Candidate = DailyLadderPick & { rank: number };
   const candidates: Candidate[] = [];
 
+  // ── P0-3 RANK TABLE (lower = higher priority) ───────────────────────
+  //   0                     retest due (never boosted — stays on top)
+  //  10 + band              in-progress drill (progress > 0)
+  //  20 + band              not-started drill
+  //   … minus 5 when spoke ∈ focus_spokes (focus boost)
+  //
+  // Retests are intentionally excluded from the focus boost so a due
+  // retest in any spoke still outranks every drill. Focus boost only
+  // shuffles among drills.
+  const focusBoost = (spoke: string) => (focusSpokes.has(spoke) ? -5 : 0);
+
   for (const [tk, conceptsInTopic] of topicGroups) {
     const [spoke, topic] = tk.split('|');
     const gatesForTopic = gateIdx.get(tk);
@@ -127,7 +138,7 @@ export async function getNextDueCurriculum(
       return prev?.status === 'passed';
     };
 
-    // ── Retests due (highest priority) ──
+    // ── Retests due (highest priority — no focus boost) ──
     if (gatesForTopic) {
       for (const [band, g] of gatesForTopic) {
         if (g.status === 'passed' && isRetestDue(g)) {
@@ -175,6 +186,7 @@ export async function getNextDueCurriculum(
       const concept = concepts[0];
 
       const inProgress = progress > 0 && progress < 1;
+      const baseRank = (inProgress ? 1 : 2) * 10 + band;
       candidates.push({
         spoke, topic,
         band,
@@ -187,14 +199,14 @@ export async function getNextDueCurriculum(
         reason: inProgress
           ? `In progress · ${Math.round(progress * 100)}%`
           : `Next up · Band ${band} · ${sl}`,
-        // rank: in-progress (1) beats not-started (2); lower band first
-        rank: (inProgress ? 1 : 2) * 10 + band,
+        rank: baseRank + focusBoost(spoke),
       });
       picked = true;
     }
   }
 
-  // Sort: retests first (rank 0), then in-progress, then by band asc
+  // Sort: retests (0) → in-progress focus (6..10) → in-progress (11..15)
+  //     → not-started focus (16..20) → not-started (21..25)
   candidates.sort((a, b) => a.rank - b.rank);
 
   // Spread across spokes for variety
