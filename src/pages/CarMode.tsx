@@ -950,15 +950,17 @@ export default function CarMode() {
           <>
             <div className="text-center text-xs uppercase tracking-widest text-white/40 mb-4">
               {phase === 'idle' && 'Ready'}
-              {phase === 'teach' && 'Learn the tactic'}
+              {phase === 'teach' && (drill.teach_mode === 'refresher' ? 'Refresher' : 'Learn the tactic')}
               {phase === 'scenario' && 'Scenario'}
               {phase === 'task' && 'Your task'}
               {phase === 'listening' && (useRecorderPath ? 'Listening' : (sttSupported ? 'Listening' : 'Speak — manual mode'))}
               {phase === 'grading' && 'Grading'}
               {phase === 'feedback' && grade && (grade.passed ? '✓ Pass' : '✗ Try again')}
               {phase === 'reveal' && 'Elite answer'}
+              {phase === 'done' && 'Session complete'}
               {phase === 'error' && 'Error'}
             </div>
+
 
             <div
               className="flex-1 flex items-center justify-center"
