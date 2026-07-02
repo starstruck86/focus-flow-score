@@ -50,6 +50,11 @@ interface ScoreOpts {
   context?: string;
   /** Practice mode passes ki play context; gate mode passes undefined (cold). */
   ki?: CurriculumKi | null;
+  /** Optional concept-specific gold: model_line + rubric. */
+  gold?: {
+    model_line?: string | null;
+    rubric?: Array<{ c: string; must?: boolean }> | null;
+  } | null;
 }
 
 interface ScoreResult {
@@ -85,6 +90,18 @@ export async function scoreRep(opts: ScoreOpts): Promise<ScoreResult> {
       when_not_to_use: opts.ki.when_not_to_use ?? '',
       why_it_matters: opts.ki.why_it_matters ?? '',
     };
+  }
+
+  // Concept-specific gold (optional). Only include non-empty fields.
+  if (opts.gold) {
+    const gold: Record<string, unknown> = {};
+    if (opts.gold.model_line && String(opts.gold.model_line).trim().length > 0) {
+      gold.model_line = String(opts.gold.model_line).trim();
+    }
+    if (Array.isArray(opts.gold.rubric) && opts.gold.rubric.length > 0) {
+      gold.rubric = opts.gold.rubric;
+    }
+    if (Object.keys(gold).length > 0) body.gold = gold;
   }
 
   const res = await fetch(`${SUPABASE_URL}/functions/v1/dojo-score`, {
