@@ -711,6 +711,29 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       if (sc < 2 && parsed.score > 55) parsed.score = 55;
     }
 
+    // ── Gold-based enforcement (P0-1): must:true miss caps score at 60 ──
+    if (hasGold) {
+      const gc = Array.isArray(parsed.gold_criteria) ? parsed.gold_criteria : [];
+      // Normalize into aligned array by index with the input rubric
+      const normalized = goldRubric.map((r, i) => {
+        const raw = gc[i] ?? {};
+        return {
+          c: r.c,
+          must: !!r.must,
+          met: raw && typeof raw === 'object' && typeof raw.met === 'boolean' ? raw.met : false,
+          note: raw && typeof raw === 'object' && typeof raw.note === 'string' ? raw.note : '',
+        };
+      });
+      const anyMustMissed = normalized.some((n) => n.must && !n.met);
+      if (anyMustMissed && typeof parsed.score === 'number' && parsed.score > 60) {
+        parsed.score = 60;
+      }
+      parsed.gold_criteria = normalized;
+      parsed.gold_model_line_met =
+        typeof parsed.gold_model_line_met === 'boolean' ? parsed.gold_model_line_met : null;
+      parsed.gold_applied = true;
+    }
+
     // ── Parse and validate structured dimensions ──────────────────
     parsed.dimensions = parseDimensions(parsed.dimensions, skill);
 
