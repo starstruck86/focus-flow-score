@@ -33,6 +33,7 @@ function hydrateKi(
     order_in_concept: number;
     active?: boolean;
     scenario?: string | null;
+    drillRubric?: Array<{ c: string; must?: boolean }> | null;
   },
   ki: AnyRow | undefined,
 ): CurriculumKi | null {
@@ -52,6 +53,7 @@ function hydrateKi(
     spider_dimension: (ki.spider_dimension as string | null) ?? null,
     chapter: (ki.chapter as string | null) ?? null,
     scenario: ref.scenario ?? null,
+    drillRubric: ref.drillRubric ?? null,
   };
 }
 
@@ -108,7 +110,7 @@ export async function getConceptWithItems(
     (supabase as any).from('curriculum_concepts').select('*').eq('concept_id', conceptId).maybeSingle(),
     (supabase as any)
       .from('ki_curriculum_full')
-      .select('ki_id, role, is_exemplar, order_in_concept, active, drill_scenario')
+      .select('ki_id, role, is_exemplar, order_in_concept, active, drill_scenario, drill_rubric')
       .eq('concept_id', conceptId)
       .eq('active', true)
       .order('order_in_concept', { ascending: true }),
@@ -159,11 +161,19 @@ export async function getConceptWithItems(
           order_in_concept: Number(l.order_in_concept) || 0,
           active: l.active !== false,
           scenario: (l.drill_scenario as string | null) ?? null,
+          drillRubric: Array.isArray(l.drill_rubric)
+            ? (l.drill_rubric as Array<{ c: string; must?: boolean }>)
+            : null,
         },
         kiMap.get(String(l.ki_id)),
       ),
     )
     .filter((x): x is CurriculumKi => !!x);
+  // Attach concept's model_line_plain to every hydrated KI (drills + exemplar)
+  // so the grader can receive it as gold.
+  for (const h of hydrated) {
+    h.modelLinePlain = concept.model_line_plain ?? null;
+  }
 
   const exemplarKi = hydrated.find((k) => k.is_exemplar) ?? null;
   const drillsAll = hydrated.filter((k) => !k.is_exemplar);

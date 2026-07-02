@@ -50,6 +50,11 @@ interface ScoreOpts {
   context?: string;
   /** Practice mode passes ki play context; gate mode passes undefined (cold). */
   ki?: CurriculumKi | null;
+  /** Optional concept-specific gold: model_line + rubric. */
+  gold?: {
+    model_line?: string | null;
+    rubric?: Array<{ c: string; must?: boolean }> | null;
+  } | null;
 }
 
 interface ScoreResult {
@@ -85,6 +90,18 @@ export async function scoreRep(opts: ScoreOpts): Promise<ScoreResult> {
       when_not_to_use: opts.ki.when_not_to_use ?? '',
       why_it_matters: opts.ki.why_it_matters ?? '',
     };
+  }
+
+  // Concept-specific gold (optional). Only include non-empty fields.
+  if (opts.gold) {
+    const gold: Record<string, unknown> = {};
+    if (opts.gold.model_line && String(opts.gold.model_line).trim().length > 0) {
+      gold.model_line = String(opts.gold.model_line).trim();
+    }
+    if (Array.isArray(opts.gold.rubric) && opts.gold.rubric.length > 0) {
+      gold.rubric = opts.gold.rubric;
+    }
+    if (Object.keys(gold).length > 0) body.gold = gold;
   }
 
   const res = await fetch(`${SUPABASE_URL}/functions/v1/dojo-score`, {
@@ -139,12 +156,21 @@ export async function runPracticeRep(input: PracticeRepInput): Promise<PracticeR
     input.ki.scenario ??
     input.ki.when_to_use ??
     'Respond to this buyer situation.';
+  const gold =
+    (input.ki.modelLinePlain && input.ki.modelLinePlain.trim().length > 0) ||
+    (Array.isArray(input.ki.drillRubric) && input.ki.drillRubric.length > 0)
+      ? {
+          model_line: input.ki.modelLinePlain ?? null,
+          rubric: input.ki.drillRubric ?? null,
+        }
+      : null;
   const scored = await scoreRep({
     skillFocus: input.skillFocus,
     userResponse: input.userResponse,
     objection,
     context: input.ki.when_to_use ?? undefined,
     ki: isPromptOnly ? null : input.ki,
+    gold,
   });
 
   // Per-KI SRS — only when there is a real KI behind this rep.
@@ -191,6 +217,10 @@ export interface GateItemInput {
   /** Tag for traceability — NOT passed into scoring. */
   sourceKiId?: string;
   sourceTitle?: string;
+  /** Concept-specific gold model line — sent as gold.model_line. */
+  modelLine?: string | null;
+  /** Optional rubric for this gate item. */
+  rubric?: Array<{ c: string; must?: boolean }> | null;
 }
 
 export interface GateItemResult {
@@ -228,12 +258,18 @@ export async function runBandGate(input: BandGateRunInput): Promise<BandGateRunR
   const itemResults: GateItemResult[] = [];
   for (let i = 0; i < input.items.length; i++) {
     const it = input.items[i];
+    const gold =
+      (it.modelLine && it.modelLine.trim().length > 0) ||
+      (Array.isArray(it.rubric) && it.rubric.length > 0)
+        ? { model_line: it.modelLine ?? null, rubric: it.rubric ?? null }
+        : null;
     const scored = await scoreRep({
       skillFocus: input.skillFocus,
       userResponse: it.userResponse,
       objection: it.objection,
       context: it.context,
       ki: null,
+      gold,
     });
     itemResults.push({
       index: i,

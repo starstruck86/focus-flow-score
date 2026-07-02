@@ -414,7 +414,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { scenario, userResponse, retryCount, focusReminder, ki: rawKi } = await req.json();
+    const { scenario, userResponse, retryCount, focusReminder, ki: rawKi, gold: rawGold } = await req.json();
     if (!scenario || !userResponse) {
       return new Response(JSON.stringify({ error: "Missing scenario or userResponse" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -605,10 +605,30 @@ Total score = recognitionScore + executionScore + awarenessScore.
 
 CRITICAL: When ki context is provided, "worldClassResponse" must be your independent rendering of what an elite rep would say to execute the described play (tactic_summary + when_to_use) in this scenario. Do NOT echo a canned example — generate the response from the play's intent.` : '';
 
+    // ── OPTIONAL concept-specific gold ──────────────────────────
+    // When present, grade AGAINST this gold — not just prior calibration.
+    // Any missed must:true rubric criterion caps the score at ≤60.
+    const gold = rawGold && typeof rawGold === 'object' ? rawGold : null;
+    const goldModelLine = gold && typeof gold.model_line === 'string' ? gold.model_line.trim() : '';
+    const goldRubric: Array<{ c: string; must?: boolean }> = Array.isArray(gold?.rubric)
+      ? (gold.rubric as Array<{ c: string; must?: boolean }>).filter((r) => r && typeof r.c === 'string')
+      : [];
+    const hasGold = !!goldModelLine || goldRubric.length > 0;
+    const goldRubricList = goldRubric.map((r, i) => `${i + 1}. ${r.c}${r.must ? ' (REQUIRED)' : ''}`).join('\n');
+    const goldBlock = hasGold ? `
+
+CONCEPT-SPECIFIC GOLD (grade AGAINST this — this is the target):
+${goldModelLine ? `GOLD MODEL LINE (what an elite rep would say — verbatim not required; semantic match on the core move counts as success; parroting this line IS acceptable success for talk tracks):\n"${goldModelLine}"` : ''}
+${goldRubricList ? `\nGOLD RUBRIC — judge EACH criterion individually:\n${goldRubricList}` : ''}
+
+You MUST return an additional field "gold_criteria": an array with one entry per rubric criterion in order, each { "c": "<criterion text>", "met": true|false, "note": "<one short phrase>" }. If no rubric was provided, return an empty array.
+You MUST also return "gold_model_line_met": true|false — did the response semantically execute the core move of the GOLD MODEL LINE? (Verbatim/paraphrase both count as met.)
+HARD RULE: if ANY criterion marked (REQUIRED) is met=false, your "score" MUST be ≤ 60 (below every pass bar). Do not exceed 60 in that case.` : '';
+
     const userPrompt = `SCENARIO:
 Skill being tested: ${skill}
 Situation: ${scenario.context}
-Buyer says: "${scenario.objection}"${stakeholderBlock}${kiBlock}
+Buyer says: "${scenario.objection}"${stakeholderBlock}${kiBlock}${goldBlock}
 
 REP'S RESPONSE:
 "${userResponse}"
@@ -624,7 +644,7 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5",
-        max_tokens: 2000,
+        max_tokens: hasGold ? 3000 : 2000,
         system: systemPrompt,
         messages: [
           { role: "user", content: userPrompt },
@@ -689,6 +709,29 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
     if (typeof userResponse === "string") {
       const sc = userResponse.split(/[.!?]+/).filter((s: string) => s.trim().length > 5).length;
       if (sc < 2 && parsed.score > 55) parsed.score = 55;
+    }
+
+    // ── Gold-based enforcement (P0-1): must:true miss caps score at 60 ──
+    if (hasGold) {
+      const gc = Array.isArray(parsed.gold_criteria) ? parsed.gold_criteria : [];
+      // Normalize into aligned array by index with the input rubric
+      const normalized = goldRubric.map((r, i) => {
+        const raw = gc[i] ?? {};
+        return {
+          c: r.c,
+          must: !!r.must,
+          met: raw && typeof raw === 'object' && typeof raw.met === 'boolean' ? raw.met : false,
+          note: raw && typeof raw === 'object' && typeof raw.note === 'string' ? raw.note : '',
+        };
+      });
+      const anyMustMissed = normalized.some((n) => n.must && !n.met);
+      if (anyMustMissed && typeof parsed.score === 'number' && parsed.score > 60) {
+        parsed.score = 60;
+      }
+      parsed.gold_criteria = normalized;
+      parsed.gold_model_line_met =
+        typeof parsed.gold_model_line_met === 'boolean' ? parsed.gold_model_line_met : null;
+      parsed.gold_applied = true;
     }
 
     // ── Parse and validate structured dimensions ──────────────────
