@@ -147,6 +147,13 @@ export async function getConceptWithItems(
   const links = (linkData as AnyRow[]) ?? [];
   const kiIds = links.map((l) => String(l.ki_id));
 
+  const rubricMap = new Map<string, Array<{ c: string; must?: boolean }>>();
+  for (const r of (rubricData as AnyRow[]) ?? []) {
+    if (Array.isArray(r.drill_rubric)) {
+      rubricMap.set(String(r.ki_id), r.drill_rubric as Array<{ c: string; must?: boolean }>);
+    }
+  }
+
   let kiMap = new Map<string, AnyRow>();
   if (kiIds.length) {
     const { data: kiRows, error: kErr } = await (supabase as any)
@@ -167,9 +174,7 @@ export async function getConceptWithItems(
           order_in_concept: Number(l.order_in_concept) || 0,
           active: l.active !== false,
           scenario: (l.drill_scenario as string | null) ?? null,
-          drillRubric: Array.isArray(l.drill_rubric)
-            ? (l.drill_rubric as Array<{ c: string; must?: boolean }>)
-            : null,
+          drillRubric: rubricMap.get(String(l.ki_id)) ?? null,
         },
         kiMap.get(String(l.ki_id)),
       ),
