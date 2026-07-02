@@ -828,6 +828,29 @@ export default function CarMode() {
     if (drill) runDrill(drill);
   }, [drill, runDrill, stopListening]);
 
+  // Item 3 — "Go again" from the DONE recap: reshuffle drills, reset
+  // index and session score history, and drop back to idle. The learner
+  // taps Start Car Mode to begin the new pass (no auto-restart, per spec).
+  const handleGoAgain = useCallback(() => {
+    ttsPlayback = interruptSpeech(ttsPlayback);
+    setDrills((prev) => {
+      const next = prev.slice();
+      for (let i = next.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [next[i], next[j]] = [next[j], next[i]];
+      }
+      return next;
+    });
+    setIdx(0);
+    setSessionScores([]);
+    setGrade(null);
+    setTranscript(''); setInterim('');
+    bestScoreRef.current = 0;
+    sessionIdRef.current = null;
+    turnIndexRef.current = 0;
+    setPhase('idle');
+  }, []);
+
   const handleReveal = useCallback(() => {
     if (!drill) return;
     setPhase('reveal');
