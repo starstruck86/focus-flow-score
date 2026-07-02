@@ -207,6 +207,8 @@ export default function CarMode() {
   const recogRef = useRef<SR | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
   const cancelSpeakRef = useRef<() => void>(() => {});
+  const feedbackBeatTimerRef = useRef<number | null>(null);
+
 
   // Persistent stream + audio graph for VAD
   const mediaStreamRef = useRef<MediaStream | null>(null);
