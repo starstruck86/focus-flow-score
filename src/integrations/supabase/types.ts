@@ -2159,6 +2159,7 @@ export type Database = {
         Row: {
           band: number
           created_at: string
+          gate_content_status: string | null
           gate_prompt: string
           id: string
           item_strategy: string
@@ -2170,6 +2171,7 @@ export type Database = {
         Insert: {
           band: number
           created_at?: string
+          gate_content_status?: string | null
           gate_prompt: string
           id?: string
           item_strategy?: string
@@ -2181,6 +2183,7 @@ export type Database = {
         Update: {
           band?: number
           created_at?: string
+          gate_content_status?: string | null
           gate_prompt?: string
           id?: string
           item_strategy?: string
