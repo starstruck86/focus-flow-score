@@ -56,7 +56,8 @@ interface Drill {
   teach_script: string;
   model_line_plain: string | null;
   // Item 2 — adaptive teach dosage. 'refresher' means times_drilled >= 1
-  // AND best_score >= 70; the spoken script is a short recap.
+  // AND best_score >= 85 (§7.33 unified pass bar — "already passed at the real bar");
+  // the spoken script is a short recap.
   teach_mode: 'full' | 'refresher';
 }
 
@@ -304,9 +305,9 @@ export default function CarMode() {
       const conceptIds = Array.from(new Set(r.map((x) => x.concept_id)));
       const kiIds = Array.from(new Set(r.map((x) => x.ki_id)));
       // Item 2 — one .in() to ki_mastery keyed on (user_id, kiIds). Only
-      // rows with times_drilled >= 1 AND best_score >= 70 flip a drill to
-      // 'refresher'. Flash-created rows have times_drilled 0/null so they
-      // naturally fail this gate.
+      // rows with times_drilled >= 1 AND best_score >= 85 flip a drill to
+      // 'refresher' (§7.33: "already passed at the real bar"). Flash-created
+      // rows have times_drilled 0/null so they naturally fail this gate.
       const { data: userData } = await supabase.auth.getUser();
       const uid = userData?.user?.id ?? null;
       const [{ data: cc }, { data: ki }, masteryRes] = await Promise.all([
@@ -346,7 +347,7 @@ export default function CarMode() {
             });
         const m = masteryMap.get(x.ki_id);
         const teachMode: 'full' | 'refresher' =
-          m && m.times_drilled >= 1 && m.best_score >= 70 ? 'refresher' : 'full';
+          m && m.times_drilled >= 1 && m.best_score >= 85 ? 'refresher' : 'full';
         return {
           ki_id: x.ki_id, concept_id: x.concept_id,
           spoke: c?.spoke ?? 'general',

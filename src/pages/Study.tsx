@@ -64,7 +64,7 @@ function MapLevel({ spokes, onPick }: { spokes: SpokeStat[]; onPick: (spoke: str
         <ProgressLine
           passed={totals.passed}
           total={totals.drill}
-          label={`Concepts passed (best score ≥ 70)`}
+          label={`Concepts passed (best score ≥ 85)`}
         />
         <p className="text-[11px] text-muted-foreground mt-2">
           {totals.drill} of {totals.total} concepts are drill-ready. Pick a spoke to browse.
