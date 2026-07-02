@@ -106,17 +106,23 @@ export async function getConceptWithItems(
 ): Promise<ConceptWithItems | null> {
   const cap = opts.drillCap ?? TRAIN_TUNABLES.drillsPerRepCap;
 
-  const [{ data: conceptData, error: cErr }, { data: linkData, error: lErr }] = await Promise.all([
+  const [{ data: conceptData, error: cErr }, { data: linkData, error: lErr }, { data: rubricData, error: rErr }] = await Promise.all([
     (supabase as any).from('curriculum_concepts').select('*').eq('concept_id', conceptId).maybeSingle(),
     (supabase as any)
       .from('ki_curriculum_full')
-      .select('ki_id, role, is_exemplar, order_in_concept, active, drill_scenario, drill_rubric')
+      .select('ki_id, role, is_exemplar, order_in_concept, active, drill_scenario')
       .eq('concept_id', conceptId)
       .eq('active', true)
       .order('order_in_concept', { ascending: true }),
+    (supabase as any)
+      .from('ki_curriculum')
+      .select('ki_id, drill_rubric')
+      .eq('concept_id', conceptId)
+      .not('drill_rubric', 'is', null),
   ]);
   if (cErr) throw cErr;
   if (lErr) throw lErr;
+  if (rErr) throw rErr;
   if (!conceptData) return null;
 
   const concept: ConceptRow = {
