@@ -22,6 +22,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { writeKIMastery } from '@/lib/dojo/kiMasteryWriter';
+import { recordCompetencyRep } from '@/lib/train/recordCompetencyRep';
+import type { Band } from '@/types/train';
 import { ArrowLeft, Mic, MicOff, SkipForward, RotateCcw, Eye, Volume2 } from 'lucide-react';
 import {
   speak as daveSpeak,
@@ -36,6 +38,9 @@ interface Drill {
   ki_id: string;
   concept_id: string;
   spoke: string;
+  topic: string;
+  band: Band;
+  sub_level: string;
   concept_title: string;
   ki_title: string;
   scenario: string;
@@ -235,12 +240,12 @@ export default function CarMode() {
       const conceptIds = Array.from(new Set(r.map((x) => x.concept_id)));
       const kiIds = Array.from(new Set(r.map((x) => x.ki_id)));
       const [{ data: cc }, { data: ki }] = await Promise.all([
-        (supabase as any).from('curriculum_concepts').select('concept_id, spoke, title').in('concept_id', conceptIds),
+        (supabase as any).from('curriculum_concepts').select('concept_id, spoke, topic, band, sub_level, title').in('concept_id', conceptIds),
         supabase.from('knowledge_items').select('id, title, spider_dimension, chapter').in('id', kiIds),
       ]);
-      const cMap = new Map<string, { spoke: string; title: string }>();
-      for (const c of (cc ?? []) as Array<{ concept_id: string; spoke: string; title: string }>) {
-        cMap.set(c.concept_id, { spoke: c.spoke, title: c.title });
+      const cMap = new Map<string, { spoke: string; topic: string; band: number; sub_level: string; title: string }>();
+      for (const c of (cc ?? []) as Array<{ concept_id: string; spoke: string; topic: string; band: number; sub_level: string; title: string }>) {
+        cMap.set(c.concept_id, { spoke: c.spoke, topic: c.topic, band: c.band, sub_level: c.sub_level, title: c.title });
       }
       const kMap = new Map<string, { title: string; spider_dimension: string | null; chapter: string | null }>();
       for (const k of (ki ?? []) as Array<{ id: string; title: string; spider_dimension: string | null; chapter: string | null }>) {
@@ -252,7 +257,11 @@ export default function CarMode() {
         const rub = Array.isArray(x.drill_rubric) ? (x.drill_rubric as Array<{ c: string; must?: boolean }>) : [];
         return {
           ki_id: x.ki_id, concept_id: x.concept_id,
-          spoke: c?.spoke ?? 'general', concept_title: c?.title ?? 'Drill',
+          spoke: c?.spoke ?? 'general',
+          topic: c?.topic ?? '',
+          band: ((c?.band ?? 1) as Band),
+          sub_level: c?.sub_level ?? '',
+          concept_title: c?.title ?? 'Drill',
           ki_title: k?.title ?? '',
           scenario: x.drill_scenario ?? '', spoken_task: x.drill_spoken_task ?? '',
           response_shape: (x.drill_response_shape === 'quick_reply' ? 'quick_reply' : 'talk_track'),
@@ -397,6 +406,43 @@ export default function CarMode() {
             updated_at: new Date().toISOString(),
           }).eq('id', sessionIdRef.current);
         } catch (e) { console.error('dojo_sessions write failed', e); }
+      }
+
+      // ── TRAIN v2 competency ladder write ────────────────────────────
+      // Two-bar semantics: 70 = Car Mode's UI `passed` flag (unchanged, cosmetic);
+      // 85 = curriculum ladder pass bar (applied INSIDE incrementSubLevelRep on
+      // the RAW score we pass here — do NOT re-threshold).
+      // Locked-skip rule: only advance the ladder when this drill's band is
+      // unlocked for this user (band 1 always; band N iff band N-1 gate
+      // status === 'passed') — same rule as src/lib/train/dailyLadder.ts.
+      // dailyLadder's bandUnlocked is an internal closure (not exported) and
+      // competencyRead does not expose one either, so we replicate the check
+      // inline via a user_band_gate lookup.
+      if (d.topic && d.sub_level) {
+        try {
+          let unlocked = d.band === 1;
+          if (!unlocked) {
+            const { data: prevGate } = await (supabase as any)
+              .from('user_band_gate')
+              .select('status')
+              .eq('user_id', user.id)
+              .eq('spoke', d.spoke)
+              .eq('topic', d.topic)
+              .eq('band', d.band - 1)
+              .maybeSingle();
+            unlocked = (prevGate as { status?: string } | null)?.status === 'passed';
+          }
+          if (unlocked) {
+            await recordCompetencyRep({
+              userId: user.id,
+              spoke: d.spoke,
+              topic: d.topic,
+              band: d.band,
+              subLevel: d.sub_level,
+              score: g.score,
+            });
+          }
+        } catch (e) { console.error('recordCompetencyRep failed', e); }
       }
     }
     setPhase('feedback');
