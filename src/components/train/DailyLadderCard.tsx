@@ -78,6 +78,12 @@ export function DailyLadderCard() {
           </span>
         </div>
 
+        <div className="space-y-1">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Focus</div>
+          <FocusSpokesChips />
+        </div>
+
+
         {isLoading && (
           <p className="text-xs text-muted-foreground">Loading next-due…</p>
         )}
