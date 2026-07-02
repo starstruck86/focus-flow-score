@@ -310,6 +310,7 @@ export default function TrainAtom() {
 // ── Beat 1: CONCEPT ──────────────────────────────────────────────
 function ConceptBeat({
   data,
+  authoredScript,
   onContinue,
   hasDrills,
   hasEliteBeat,
@@ -317,6 +318,7 @@ function ConceptBeat({
   topic,
 }: {
   data: NonNullable<ReturnType<typeof useConceptAtom>['data']>;
+  authoredScript: string | null;
   onContinue: () => void;
   hasDrills: boolean;
   hasEliteBeat: boolean;
@@ -326,6 +328,7 @@ function ConceptBeat({
   const t = data.teach;
   const navigate = useNavigate();
   const continueLabel = hasEliteBeat ? 'Continue →' : hasDrills ? 'Start drilling →' : 'Got it';
+  const hasAuthored = isNonEmpty(authoredScript);
 
   return (
     <Card className="p-4">
@@ -336,17 +339,25 @@ function ConceptBeat({
       {t.kind === 'ki_exemplar' && (
         <div className="space-y-4 text-sm">
           <h3 className="text-base font-semibold">{t.exemplar.title}</h3>
-          {isNonEmpty(t.exemplar.why_it_matters) && (
+          {hasAuthored ? (
             <section>
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Why this matters</div>
-              <p className="leading-relaxed">{t.exemplar.why_it_matters}</p>
+              <p className="leading-relaxed whitespace-pre-wrap">{authoredScript}</p>
             </section>
-          )}
-          {isNonEmpty(t.exemplar.when_to_use) && (
-            <section>
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">When to use it</div>
-              <p className="leading-relaxed">{t.exemplar.when_to_use}</p>
-            </section>
+          ) : (
+            <>
+              {isNonEmpty(t.exemplar.why_it_matters) && (
+                <section>
+                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Why this matters</div>
+                  <p className="leading-relaxed">{t.exemplar.why_it_matters}</p>
+                </section>
+              )}
+              {isNonEmpty(t.exemplar.when_to_use) && (
+                <section>
+                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">When to use it</div>
+                  <p className="leading-relaxed">{t.exemplar.when_to_use}</p>
+                </section>
+              )}
+            </>
           )}
         </div>
       )}
