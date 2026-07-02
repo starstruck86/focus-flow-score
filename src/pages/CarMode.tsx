@@ -781,7 +781,12 @@ export default function CarMode() {
     void ensureSession(d);
     try { void audioCtxRef.current?.resume().catch(() => {}); } catch { /* noop */ }
     setPhase('teach');
-    cancelSpeakRef.current = speak(d.teach_script, () => {
+    // Item 2 — refresher dosage: shorter, signposted spoken cue when the
+    // learner already passed this KI. Full script otherwise.
+    const spoken = d.teach_mode === 'refresher'
+      ? `Quick refresher: ${firstBeatOfScript(d.teach_script)}`
+      : d.teach_script;
+    cancelSpeakRef.current = speak(spoken, () => {
       runScenarioThenTaskRef.current(d);
     });
   }, [ensureSession, runScenarioThenTask]);
