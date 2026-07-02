@@ -106,17 +106,23 @@ export async function getConceptWithItems(
 ): Promise<ConceptWithItems | null> {
   const cap = opts.drillCap ?? TRAIN_TUNABLES.drillsPerRepCap;
 
-  const [{ data: conceptData, error: cErr }, { data: linkData, error: lErr }] = await Promise.all([
+  const [{ data: conceptData, error: cErr }, { data: linkData, error: lErr }, { data: rubricData, error: rErr }] = await Promise.all([
     (supabase as any).from('curriculum_concepts').select('*').eq('concept_id', conceptId).maybeSingle(),
     (supabase as any)
       .from('ki_curriculum_full')
-      .select('ki_id, role, is_exemplar, order_in_concept, active, drill_scenario, drill_rubric')
+      .select('ki_id, role, is_exemplar, order_in_concept, active, drill_scenario')
       .eq('concept_id', conceptId)
       .eq('active', true)
       .order('order_in_concept', { ascending: true }),
+    (supabase as any)
+      .from('ki_curriculum')
+      .select('ki_id, drill_rubric')
+      .eq('concept_id', conceptId)
+      .not('drill_rubric', 'is', null),
   ]);
   if (cErr) throw cErr;
   if (lErr) throw lErr;
+  if (rErr) throw rErr;
   if (!conceptData) return null;
 
   const concept: ConceptRow = {
@@ -141,6 +147,13 @@ export async function getConceptWithItems(
   const links = (linkData as AnyRow[]) ?? [];
   const kiIds = links.map((l) => String(l.ki_id));
 
+  const rubricMap = new Map<string, Array<{ c: string; must?: boolean }>>();
+  for (const r of (rubricData as AnyRow[]) ?? []) {
+    if (Array.isArray(r.drill_rubric)) {
+      rubricMap.set(String(r.ki_id), r.drill_rubric as Array<{ c: string; must?: boolean }>);
+    }
+  }
+
   let kiMap = new Map<string, AnyRow>();
   if (kiIds.length) {
     const { data: kiRows, error: kErr } = await (supabase as any)
@@ -161,9 +174,7 @@ export async function getConceptWithItems(
           order_in_concept: Number(l.order_in_concept) || 0,
           active: l.active !== false,
           scenario: (l.drill_scenario as string | null) ?? null,
-          drillRubric: Array.isArray(l.drill_rubric)
-            ? (l.drill_rubric as Array<{ c: string; must?: boolean }>)
-            : null,
+          drillRubric: rubricMap.get(String(l.ki_id)) ?? null,
         },
         kiMap.get(String(l.ki_id)),
       ),
