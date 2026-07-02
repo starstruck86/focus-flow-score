@@ -435,6 +435,7 @@ export default function Dojo() {
 
 
         <div className="px-4 py-4 space-y-4">
+          <FieldVsTrainingCard />
           {/* 2. Branch Prep Mode — primary entry point */}
           <div className="rounded-xl border border-green-500/30 bg-green-500/5 px-3 py-3 space-y-2">
             <div className="flex items-center justify-between">
