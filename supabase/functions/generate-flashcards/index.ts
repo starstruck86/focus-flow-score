@@ -11,7 +11,7 @@ const MODEL = "google/gemini-2.5-flash";
 type Card = {
   ki_id: string;
   concept_id?: string | null;
-  card_type: "trigger" | "definition" | "talk_track";
+  card_type: "trigger" | "definition";
   front: string;
   back: string;
 };
@@ -73,7 +73,7 @@ async function callAI(lovableApiKey: string, userPrompt: string): Promise<Card[]
   const cards = Array.isArray(parsed.cards) ? parsed.cards : [];
   return cards.filter((c: any) =>
     c && typeof c.ki_id === "string" && typeof c.front === "string" && typeof c.back === "string" &&
-    ["trigger", "definition", "talk_track"].includes(c.card_type)
+    ["trigger", "definition"].includes(c.card_type)
   );
 }
 
