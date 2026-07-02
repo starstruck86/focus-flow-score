@@ -644,7 +644,7 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5",
-        max_tokens: 2000,
+        max_tokens: hasGold ? 3000 : 2000,
         system: systemPrompt,
         messages: [
           { role: "user", content: userPrompt },
