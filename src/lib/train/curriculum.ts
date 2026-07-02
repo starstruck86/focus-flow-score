@@ -110,7 +110,7 @@ export async function getConceptWithItems(
     (supabase as any).from('curriculum_concepts').select('*').eq('concept_id', conceptId).maybeSingle(),
     (supabase as any)
       .from('ki_curriculum_full')
-      .select('ki_id, role, is_exemplar, order_in_concept, active, drill_scenario')
+      .select('ki_id, role, is_exemplar, order_in_concept, active, drill_scenario, drill_rubric')
       .eq('concept_id', conceptId)
       .eq('active', true)
       .order('order_in_concept', { ascending: true }),
