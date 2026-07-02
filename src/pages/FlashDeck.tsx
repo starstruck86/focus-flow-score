@@ -232,7 +232,7 @@ export default function FlashDeck() {
 
   return (
     <Layout>
-      <div className={SHELL.page}>
+      <div className={PAGE_CLS}>
         <div className="px-4 pt-3 pb-2 flex items-center gap-3">
           <button onClick={() => navigate('/flash')} className="p-1.5 rounded-lg hover:bg-muted">
             <ArrowLeft className="h-4 w-4" />
