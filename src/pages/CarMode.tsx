@@ -240,12 +240,12 @@ export default function CarMode() {
       const conceptIds = Array.from(new Set(r.map((x) => x.concept_id)));
       const kiIds = Array.from(new Set(r.map((x) => x.ki_id)));
       const [{ data: cc }, { data: ki }] = await Promise.all([
-        (supabase as any).from('curriculum_concepts').select('concept_id, spoke, title').in('concept_id', conceptIds),
+        (supabase as any).from('curriculum_concepts').select('concept_id, spoke, topic, band, sub_level, title').in('concept_id', conceptIds),
         supabase.from('knowledge_items').select('id, title, spider_dimension, chapter').in('id', kiIds),
       ]);
-      const cMap = new Map<string, { spoke: string; title: string }>();
-      for (const c of (cc ?? []) as Array<{ concept_id: string; spoke: string; title: string }>) {
-        cMap.set(c.concept_id, { spoke: c.spoke, title: c.title });
+      const cMap = new Map<string, { spoke: string; topic: string; band: number; sub_level: string; title: string }>();
+      for (const c of (cc ?? []) as Array<{ concept_id: string; spoke: string; topic: string; band: number; sub_level: string; title: string }>) {
+        cMap.set(c.concept_id, { spoke: c.spoke, topic: c.topic, band: c.band, sub_level: c.sub_level, title: c.title });
       }
       const kMap = new Map<string, { title: string; spider_dimension: string | null; chapter: string | null }>();
       for (const k of (ki ?? []) as Array<{ id: string; title: string; spider_dimension: string | null; chapter: string | null }>) {
@@ -257,7 +257,11 @@ export default function CarMode() {
         const rub = Array.isArray(x.drill_rubric) ? (x.drill_rubric as Array<{ c: string; must?: boolean }>) : [];
         return {
           ki_id: x.ki_id, concept_id: x.concept_id,
-          spoke: c?.spoke ?? 'general', concept_title: c?.title ?? 'Drill',
+          spoke: c?.spoke ?? 'general',
+          topic: c?.topic ?? '',
+          band: ((c?.band ?? 1) as Band),
+          sub_level: c?.sub_level ?? '',
+          concept_title: c?.title ?? 'Drill',
           ki_title: k?.title ?? '',
           scenario: x.drill_scenario ?? '', spoken_task: x.drill_spoken_task ?? '',
           response_shape: (x.drill_response_shape === 'quick_reply' ? 'quick_reply' : 'talk_track'),
