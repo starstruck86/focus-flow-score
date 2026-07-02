@@ -23,30 +23,30 @@ function json(status: number, body: unknown) {
   });
 }
 
-const SYSTEM_PROMPT = `You are building spaced-repetition flashcards for an elite enterprise sales AE.
+const SYSTEM_PROMPT = `You are building COMPREHENSION flashcards for an elite enterprise sales AE. Each card must test UNDERSTANDING of a tactic, concept, or product fact — what it is, why it works, when it applies — so the rep fully understands the material BEFORE drilling execution. Execution/recital of model lines belongs to the drill flow, NOT to Flash.
 
-CARD TYPES & FRONT-QUALITY BAR (non-negotiable):
+CARD TYPES (produce 1–2 per input item; prefer 1 unless a second of a clearly different type adds real value):
 
-- "trigger": FRONT = a concrete mini-scenario, 15–40 words, containing (a) a specific persona at a specific company type AND (b) either a quoted line they say OR a specific observable behavior. Never a category description. BACK = the tactic name + the one-line move.
+- "definition" (UNDERSTANDING — what / why / how it works): FRONT = one specific, answerable question that tests comprehension of the tactic, concept, or product fact. Examples of the RIGHT shape: "Why do first-time economic buyers stall enterprise deals more often than experienced ones?" / "What does deferred deep linking preserve that a standard link loses?" / "What single metric does a new CFO weigh a purchase against in their first 90 days?" NEVER open-ended prompts like "Explain X" or "What do you know about X". BACK = a crisp 1–2 sentence answer, ≤40 words, grounded ONLY in the teach_beat_md / KI / model-line material provided — never invented facts.
+
+- "trigger" (WHEN — applicability): FRONT = a concrete mini-scenario, 15–40 words, containing (a) a specific persona at a specific company type AND (b) either a quoted line they say OR a specific observable behavior. Never a category description.
   GOOD trigger front: "The newly promoted CFO at a 400-person retail brand opens your exec review with: 'Convince me this isn't just a nice-to-have we cut next quarter.'"
   BAD trigger front (NEVER produce anything like this): "You're dealing with a CRO or CFO who is new to their role or new to purchasing solutions like yours."
+  BACK = the tactic/concept NAME + one line on WHY it applies to this cue (understanding of applicability). Do NOT write a scripted move-line, model line, or verbatim recital — model-line rehearsal belongs to the drill flow.
 
-- "definition": FRONT = one specific, answerable question about the term/feature/concept (e.g. "What single metric does an economic buyer weigh a purchase against in their first 90 days?"). NEVER open-ended prompts like "What do you know about X" or "Explain X". BACK = a crisp 1–2 sentence answer.
-
-- "talk_track": FRONT = a vivid situation prompt naming a specific persona and company type, same 15–40 word concreteness bar as trigger — the AE must respond out loud. BACK = the elite model line (use model_line_plain VERBATIM when provided).
+DO NOT produce "talk_track" cards. Model-line recital is out of scope for Flash.
 
 HARD RULES:
 - FRONT must NEVER contain or paraphrase the answer. A learner should not be able to guess the back from the front alone.
-- BACK must be <= 40 words.
-- Do NOT invent product facts. If model_line_plain is missing, derive the back only from teach_beat_md or the KI content given.
-- Produce 1–2 cards per input item. Prefer 1 unless a second card of a clearly different type adds real value.
+- BACK must be ≤40 words.
+- Do NOT invent product facts. Derive backs only from teach_beat_md, KI fields, or model_line_plain when provided.
+- If the source for an item is genuinely too thin to build a concrete comprehension card that meets the bar above, SKIP that item entirely (return NO cards for it). Fewer, better cards is the goal.
 
 SOURCE-MATERIAL RULE:
 - When teach_beat_md is present, use its concrete details as the source of the cue.
-- When teach_beat_md is absent, synthesize the cue from when_to_use PLUS the provided drill_scenarios and ki_example — favor concrete personas, quoted lines, and observable behaviors from those scenarios. Do not fall back to abstract category framings.
-- If the source for an item is genuinely too thin to build a concrete card that meets the bar above, SKIP that item entirely (return NO cards for it). Fewer, better cards is the goal.
+- When teach_beat_md is absent, synthesize from when_to_use PLUS the provided drill_scenarios and ki_example — favor concrete personas, quoted lines, and observable behaviors from those scenarios. Do not fall back to abstract category framings.
 
-Return STRICT JSON: {"cards": [{ki_id, concept_id, card_type, front, back}, ...]}. concept_id may be null when not applicable. Items you skip simply produce no cards; do not include placeholder entries.`;
+Return STRICT JSON: {"cards": [{ki_id, concept_id, card_type, front, back}, ...]}. card_type must be "definition" or "trigger" only. concept_id may be null when not applicable. Items you skip simply produce no cards; do not include placeholder entries.`;
 
 async function callAI(lovableApiKey: string, userPrompt: string): Promise<Card[]> {
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
