@@ -2,12 +2,13 @@
 
 Pointer + registry for the Dynamic roadmap. The full roadmap is the versioned Google Drive doc named below; this index's job is to ALWAYS name the CURRENT master + its Drive file ID (so the pointer never goes stale) plus the session ritual. Anchored in the permanent Lovable project (id `2750cde7-6277-4433-9311-204bcc16e1d1`).
 
-Last reconciled: 2026-07-02 (early AM) — v13 cut, verified, and set as current master.
+Last reconciled: 2026-07-02 (night) — v14 cut, verified, current master.
 
 ## CURRENT MASTER — confirmed
-- **DYNAMIC — MASTER STATE & ROADMAP (v13)** — Drive ID `1Ed_uB1W1gTnhMjzVi32nG8MddIX5bpGEaUAGgy7Goxw` — cut July 2 2026 (early AM): all three TRAIN P0s shipped & verified (P0-1 grade-vs-gold incl. gates, edt-ec4d712f; P0-2 test-out live; P0-3 focus weighting live, commit 0f2e4486, seed SQL-verified) + dojo-score JSON-truncation production defect fixed (edt-894bf3b5, 0/5→3/3 parse) + first grader-reliability number (spread 6). Supersedes v12. Content verified in-place.
+- **DYNAMIC — MASTER STATE & ROADMAP (v14)** — Drive ID `1s2FaCchkpJLqEv8sUrFeEFEpGC-4s6yFQEkF2gSzoxA` — cut July 2 2026 (night): Car Mode pedagogy rebuild (teach-before-drill + feedback pacing), teach scripts became authored content (8/8 QA'd), 5-item gap scan closed (TrainAtom/CarMode teach unified, adaptive dosage, session-end recap, resource-Flash bug fixed+verified live for the first time, TTS speakability). Supersedes v13. Content verified in-place.
 
 ## LINKED DOCS (Drive IDs)
+- Master v13 (superseded) — `1Ed_uB1W1gTnhMjzVi32nG8MddIX5bpGEaUAGgy7Goxw`
 - Master v12 (superseded Jul 2 2026) — `1sgPRhFgjACagOmqgX1zE90ZSK9gdlDtNAMh94Q_6RGk`
 - Master v11 (superseded Jul 1 2026 late) — `1D2AM-LAYUTd4VNEc6esBEaw3oihIE3bRrz-YYtHpy38`
 - Master v10 (superseded Jul 1 2026 PM) — `16ezm7r_riRT_AhqrHi0pjoY-QeuinQgzlQiINgCeJ5s`
