@@ -55,6 +55,9 @@ interface Drill {
   // Teach-phase source fields (loaded with the drill; no runtime queries)
   teach_script: string;
   model_line_plain: string | null;
+  // Item 2 — adaptive teach dosage. 'refresher' means times_drilled >= 1
+  // AND best_score >= 70; the spoken script is a short recap.
+  teach_mode: 'full' | 'refresher';
 }
 
 interface GradeResult {
@@ -66,7 +69,30 @@ interface GradeResult {
   summary: string;
 }
 
-type Phase = 'idle' | 'teach' | 'scenario' | 'task' | 'listening' | 'grading' | 'feedback' | 'reveal' | 'error';
+type Phase = 'idle' | 'teach' | 'scenario' | 'task' | 'listening' | 'grading' | 'feedback' | 'reveal' | 'error' | 'done';
+
+
+/**
+ * Item 2 — refresher-script split. Authored scripts follow the four-beat
+ * shape "The tactic: ... Use it when ... Why it matters: ... Now listen to
+ * elite: ...". Split on the " Use it" boundary and take everything before,
+ * trimmed to a sentence terminator. Fallback: first two sentences.
+ */
+function firstBeatOfScript(script: string): string {
+  const trimmed = script.trim();
+  const marker = trimmed.indexOf(' Use it');
+  if (marker > 0) {
+    // Walk back to the previous sentence terminator so we don't cut mid-clause.
+    const head = trimmed.slice(0, marker);
+    const lastTerm = Math.max(head.lastIndexOf('.'), head.lastIndexOf('!'), head.lastIndexOf('?'));
+    if (lastTerm > 0) return head.slice(0, lastTerm + 1).trim();
+    return head.trim() + '.';
+  }
+  const parts = trimmed.match(/[^.!?]+[.!?]+(\s|$)/g);
+  if (parts && parts.length > 0) return parts.slice(0, 2).join('').trim();
+  return trimmed;
+}
+
 
 
 // ── Capability detection ────────────────────────────────────────────
