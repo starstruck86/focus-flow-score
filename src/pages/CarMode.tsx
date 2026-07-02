@@ -869,9 +869,17 @@ export default function CarMode() {
               {phase === 'error' && 'Error'}
             </div>
 
-            <div className="flex-1 flex items-center justify-center">
+            <div
+              className="flex-1 flex items-center justify-center"
+              onClick={onCardTap}
+              role={(phase === 'teach' || phase === 'feedback') ? 'button' : undefined}
+              style={{ cursor: (phase === 'teach' || phase === 'feedback') ? 'pointer' : 'default' }}
+            >
               <Card className="bg-white/5 border-white/10 p-6 sm:p-10 w-full">
                 <p className="text-2xl sm:text-4xl leading-tight text-center font-medium text-white">{bigText}</p>
+                {phase === 'teach' && (
+                  <p className="text-center text-white/40 text-xs mt-6">Tap anywhere to skip to the drill</p>
+                )}
                 {phase === 'listening' && interim && (
                   <p className="text-base text-white/40 italic text-center mt-4">{interim}</p>
                 )}
@@ -893,10 +901,12 @@ export default function CarMode() {
                         ))}
                       </ul>
                     )}
+                    <p className="text-center text-white/40 text-xs pt-2">Tap anywhere to continue</p>
                   </div>
                 )}
               </Card>
             </div>
+
 
             {errMsg && (<p className="text-center text-red-400 text-sm mt-3">{errMsg}</p>)}
 
