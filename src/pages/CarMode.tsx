@@ -230,6 +230,9 @@ export default function CarMode() {
   const sessionIdRef = useRef<string | null>(null);
   const turnIndexRef = useRef(0);
   const bestScoreRef = useRef(0);
+  // Item 3 — per-session score history for the end-of-session recap.
+  // Cleared on mount and on "Go again".
+  const [sessionScores, setSessionScores] = useState<number[]>([]);
   const recogRef = useRef<SR | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
   const cancelSpeakRef = useRef<() => void>(() => {});
