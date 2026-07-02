@@ -266,13 +266,16 @@ export default function CarMode() {
         const rub = Array.isArray(x.drill_rubric) ? (x.drill_rubric as Array<{ c: string; must?: boolean }>) : [];
         const conceptTitle = c?.title ?? 'Drill';
         const modelLine = c?.model_line_plain ?? null;
-        const teachScript = composeTeachScript({
-          conceptTitle,
-          teachBeatMd: c?.teach_beat_md ?? null,
-          whyItMatters: k?.why_it_matters ?? null,
-          whenToUse: k?.when_to_use ?? null,
-          modelLinePlain: modelLine,
-        });
+        const authored = (x.drill_teach_script ?? '').trim();
+        const teachScript = authored.length > 0
+          ? authored
+          : composeTeachScript({
+              conceptTitle,
+              teachBeatMd: c?.teach_beat_md ?? null,
+              whyItMatters: k?.why_it_matters ?? null,
+              whenToUse: k?.when_to_use ?? null,
+              modelLinePlain: modelLine,
+            });
         return {
           ki_id: x.ki_id, concept_id: x.concept_id,
           spoke: c?.spoke ?? 'general',
