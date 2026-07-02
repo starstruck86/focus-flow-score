@@ -38,6 +38,9 @@ interface Drill {
   ki_id: string;
   concept_id: string;
   spoke: string;
+  topic: string;
+  band: Band;
+  sub_level: string;
   concept_title: string;
   ki_title: string;
   scenario: string;
