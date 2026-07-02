@@ -407,6 +407,43 @@ export default function CarMode() {
           }).eq('id', sessionIdRef.current);
         } catch (e) { console.error('dojo_sessions write failed', e); }
       }
+
+      // ── TRAIN v2 competency ladder write ────────────────────────────
+      // Two-bar semantics: 70 = Car Mode's UI `passed` flag (unchanged, cosmetic);
+      // 85 = curriculum ladder pass bar (applied INSIDE incrementSubLevelRep on
+      // the RAW score we pass here — do NOT re-threshold).
+      // Locked-skip rule: only advance the ladder when this drill's band is
+      // unlocked for this user (band 1 always; band N iff band N-1 gate
+      // status === 'passed') — same rule as src/lib/train/dailyLadder.ts.
+      // dailyLadder's bandUnlocked is an internal closure (not exported) and
+      // competencyRead does not expose one either, so we replicate the check
+      // inline via a user_band_gate lookup.
+      if (d.topic && d.sub_level) {
+        try {
+          let unlocked = d.band === 1;
+          if (!unlocked) {
+            const { data: prevGate } = await (supabase as any)
+              .from('user_band_gate')
+              .select('status')
+              .eq('user_id', user.id)
+              .eq('spoke', d.spoke)
+              .eq('topic', d.topic)
+              .eq('band', d.band - 1)
+              .maybeSingle();
+            unlocked = (prevGate as { status?: string } | null)?.status === 'passed';
+          }
+          if (unlocked) {
+            await recordCompetencyRep({
+              userId: user.id,
+              spoke: d.spoke,
+              topic: d.topic,
+              band: d.band,
+              subLevel: d.sub_level,
+              score: g.score,
+            });
+          }
+        } catch (e) { console.error('recordCompetencyRep failed', e); }
+      }
     }
     setPhase('feedback');
     const verbal = `${g.score} out of 100. ${g.top_fix} Elite sounded like: ${g.elite_line}`;
