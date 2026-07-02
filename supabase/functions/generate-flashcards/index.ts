@@ -273,7 +273,11 @@ ${batch.map((b, i) => `--- ITEM ${i + 1} ---\n${b.prompt_block}`).join("\n\n")}`
       .update({ generation_status: "complete", card_count: count ?? 0 })
       .eq("id", deck.id);
 
-    return json(200, { deck_id: deck.id, generated: allCards.length, inserted, total_cards: count ?? 0 });
+    const kiWithCards = new Set(allCards.map((c) => c.ki_id));
+    const skipped = items.filter((i) => !kiWithCards.has(i.ki_id)).length;
+    console.log(`generate-flashcards: deck=${deck.id} items=${items.length} generated=${allCards.length} inserted=${inserted} skipped=${skipped}`);
+
+    return json(200, { deck_id: deck.id, generated: allCards.length, inserted, total_cards: count ?? 0, skipped_items: skipped, source_items: items.length });
   } catch (err) {
     console.error("Unhandled", err);
     return json(500, { error: "internal", detail: String(err).slice(0, 400) });
