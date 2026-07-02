@@ -274,9 +274,18 @@ export default function CarMode() {
       if (r.length === 0) { setDrills([]); setLoading(false); return; }
       const conceptIds = Array.from(new Set(r.map((x) => x.concept_id)));
       const kiIds = Array.from(new Set(r.map((x) => x.ki_id)));
-      const [{ data: cc }, { data: ki }] = await Promise.all([
+      // Item 2 — one .in() to ki_mastery keyed on (user_id, kiIds). Only
+      // rows with times_drilled >= 1 AND best_score >= 70 flip a drill to
+      // 'refresher'. Flash-created rows have times_drilled 0/null so they
+      // naturally fail this gate.
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData?.user?.id ?? null;
+      const [{ data: cc }, { data: ki }, masteryRes] = await Promise.all([
         (supabase as any).from('curriculum_concepts').select('concept_id, spoke, topic, band, sub_level, title, teach_beat_md, model_line_plain').in('concept_id', conceptIds),
         (supabase as any).from('knowledge_items').select('id, title, spider_dimension, chapter, why_it_matters, when_to_use').in('id', kiIds),
+        uid
+          ? (supabase as any).from('ki_mastery').select('ki_id, times_drilled, best_score').eq('user_id', uid).in('ki_id', kiIds)
+          : Promise.resolve({ data: [] as Array<{ ki_id: string; times_drilled: number | null; best_score: number | null }> }),
       ]);
       const cMap = new Map<string, { spoke: string; topic: string; band: number; sub_level: string; title: string; teach_beat_md: string | null; model_line_plain: string | null }>();
       for (const c of (cc ?? []) as Array<{ concept_id: string; spoke: string; topic: string; band: number; sub_level: string; title: string; teach_beat_md: string | null; model_line_plain: string | null }>) {
@@ -285,6 +294,10 @@ export default function CarMode() {
       const kMap = new Map<string, { title: string; spider_dimension: string | null; chapter: string | null; why_it_matters: string | null; when_to_use: string | null }>();
       for (const k of (ki ?? []) as Array<{ id: string; title: string; spider_dimension: string | null; chapter: string | null; why_it_matters: string | null; when_to_use: string | null }>) {
         kMap.set(k.id, { title: k.title, spider_dimension: k.spider_dimension, chapter: k.chapter, why_it_matters: k.why_it_matters, when_to_use: k.when_to_use });
+      }
+      const masteryMap = new Map<string, { times_drilled: number; best_score: number }>();
+      for (const m of ((masteryRes as { data: Array<{ ki_id: string; times_drilled: number | null; best_score: number | null }> | null }).data ?? [])) {
+        masteryMap.set(m.ki_id, { times_drilled: m.times_drilled ?? 0, best_score: m.best_score ?? 0 });
       }
       const list: Drill[] = r.map((x) => {
         const c = cMap.get(x.concept_id);
@@ -302,6 +315,9 @@ export default function CarMode() {
               whenToUse: k?.when_to_use ?? null,
               modelLinePlain: modelLine,
             });
+        const m = masteryMap.get(x.ki_id);
+        const teachMode: 'full' | 'refresher' =
+          m && m.times_drilled >= 1 && m.best_score >= 70 ? 'refresher' : 'full';
         return {
           ki_id: x.ki_id, concept_id: x.concept_id,
           spoke: c?.spoke ?? 'general',
@@ -316,6 +332,7 @@ export default function CarMode() {
           spider_dimension: k?.spider_dimension ?? null, chapter: k?.chapter ?? null,
           teach_script: teachScript,
           model_line_plain: modelLine,
+          teach_mode: teachMode,
         };
       });
       for (let i = list.length - 1; i > 0; i--) {
