@@ -25,17 +25,28 @@ function json(status: number, body: unknown) {
 
 const SYSTEM_PROMPT = `You are building spaced-repetition flashcards for an elite enterprise sales AE.
 
-CARD TYPES:
-- "trigger": FRONT = a concrete buyer situation, cue, or moment that should fire this tactic (no answer, no paraphrase of the tactic name). BACK = the tactic name + the one-line move.
-- "definition": FRONT = a question about the term/feature/concept. BACK = a crisp 1-2 sentence answer.
-- "talk_track": FRONT = a situation prompt where the AE must respond. BACK = the elite model line (use model_line_plain VERBATIM when provided).
+CARD TYPES & FRONT-QUALITY BAR (non-negotiable):
+
+- "trigger": FRONT = a concrete mini-scenario, 15–40 words, containing (a) a specific persona at a specific company type AND (b) either a quoted line they say OR a specific observable behavior. Never a category description. BACK = the tactic name + the one-line move.
+  GOOD trigger front: "The newly promoted CFO at a 400-person retail brand opens your exec review with: 'Convince me this isn't just a nice-to-have we cut next quarter.'"
+  BAD trigger front (NEVER produce anything like this): "You're dealing with a CRO or CFO who is new to their role or new to purchasing solutions like yours."
+
+- "definition": FRONT = one specific, answerable question about the term/feature/concept (e.g. "What single metric does an economic buyer weigh a purchase against in their first 90 days?"). NEVER open-ended prompts like "What do you know about X" or "Explain X". BACK = a crisp 1–2 sentence answer.
+
+- "talk_track": FRONT = a vivid situation prompt naming a specific persona and company type, same 15–40 word concreteness bar as trigger — the AE must respond out loud. BACK = the elite model line (use model_line_plain VERBATIM when provided).
 
 HARD RULES:
 - FRONT must NEVER contain or paraphrase the answer. A learner should not be able to guess the back from the front alone.
 - BACK must be <= 40 words.
 - Do NOT invent product facts. If model_line_plain is missing, derive the back only from teach_beat_md or the KI content given.
-- Produce 1-2 cards per input item. Prefer 1 unless a second card of a clearly different type adds real value.
-- Return STRICT JSON: {"cards": [{ki_id, concept_id, card_type, front, back}, ...]}. concept_id may be null when not applicable.`;
+- Produce 1–2 cards per input item. Prefer 1 unless a second card of a clearly different type adds real value.
+
+SOURCE-MATERIAL RULE:
+- When teach_beat_md is present, use its concrete details as the source of the cue.
+- When teach_beat_md is absent, synthesize the cue from when_to_use PLUS the provided drill_scenarios and ki_example — favor concrete personas, quoted lines, and observable behaviors from those scenarios. Do not fall back to abstract category framings.
+- If the source for an item is genuinely too thin to build a concrete card that meets the bar above, SKIP that item entirely (return NO cards for it). Fewer, better cards is the goal.
+
+Return STRICT JSON: {"cards": [{ki_id, concept_id, card_type, front, back}, ...]}. concept_id may be null when not applicable. Items you skip simply produce no cards; do not include placeholder entries.`;
 
 async function callAI(lovableApiKey: string, userPrompt: string): Promise<Card[]> {
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
