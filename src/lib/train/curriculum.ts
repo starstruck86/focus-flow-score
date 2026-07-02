@@ -34,6 +34,7 @@ function hydrateKi(
     active?: boolean;
     scenario?: string | null;
     drillRubric?: Array<{ c: string; must?: boolean }> | null;
+    drillTeachScript?: string | null;
   },
   ki: AnyRow | undefined,
 ): CurriculumKi | null {
@@ -54,6 +55,7 @@ function hydrateKi(
     chapter: (ki.chapter as string | null) ?? null,
     scenario: ref.scenario ?? null,
     drillRubric: ref.drillRubric ?? null,
+    drillTeachScript: ref.drillTeachScript ?? null,
   };
 }
 
@@ -116,9 +118,8 @@ export async function getConceptWithItems(
       .order('order_in_concept', { ascending: true }),
     (supabase as any)
       .from('ki_curriculum')
-      .select('ki_id, drill_rubric')
-      .eq('concept_id', conceptId)
-      .not('drill_rubric', 'is', null),
+      .select('ki_id, drill_rubric, drill_teach_script')
+      .eq('concept_id', conceptId),
   ]);
   if (cErr) throw cErr;
   if (lErr) throw lErr;
@@ -148,10 +149,14 @@ export async function getConceptWithItems(
   const kiIds = links.map((l) => String(l.ki_id));
 
   const rubricMap = new Map<string, Array<{ c: string; must?: boolean }>>();
+  const scriptMap = new Map<string, string>();
   for (const r of (rubricData as AnyRow[]) ?? []) {
+    const kiId = String(r.ki_id);
     if (Array.isArray(r.drill_rubric)) {
-      rubricMap.set(String(r.ki_id), r.drill_rubric as Array<{ c: string; must?: boolean }>);
+      rubricMap.set(kiId, r.drill_rubric as Array<{ c: string; must?: boolean }>);
     }
+    const s = (r.drill_teach_script as string | null) ?? null;
+    if (s && s.trim().length > 0) scriptMap.set(kiId, s);
   }
 
   let kiMap = new Map<string, AnyRow>();
@@ -175,6 +180,7 @@ export async function getConceptWithItems(
           active: l.active !== false,
           scenario: (l.drill_scenario as string | null) ?? null,
           drillRubric: rubricMap.get(String(l.ki_id)) ?? null,
+          drillTeachScript: scriptMap.get(String(l.ki_id)) ?? null,
         },
         kiMap.get(String(l.ki_id)),
       ),

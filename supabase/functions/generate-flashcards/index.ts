@@ -198,7 +198,7 @@ ${scenariosBlock}`,
         });
       }
     } else if (source_type === "resource" || source_type === "chapter") {
-      const filterCol = source_type === "resource" ? "resource_id" : "chapter";
+      const filterCol = source_type === "resource" ? "source_resource_id" : "chapter";
       const { data: kis } = await admin.from("knowledge_items")
         .select("id, title, tactic_summary, why_it_matters, when_to_use, example_usage")
         .eq(filterCol, source_ref).eq("active", true).limit(30);

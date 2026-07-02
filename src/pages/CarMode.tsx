@@ -55,6 +55,9 @@ interface Drill {
   // Teach-phase source fields (loaded with the drill; no runtime queries)
   teach_script: string;
   model_line_plain: string | null;
+  // Item 2 — adaptive teach dosage. 'refresher' means times_drilled >= 1
+  // AND best_score >= 70; the spoken script is a short recap.
+  teach_mode: 'full' | 'refresher';
 }
 
 interface GradeResult {
@@ -66,7 +69,30 @@ interface GradeResult {
   summary: string;
 }
 
-type Phase = 'idle' | 'teach' | 'scenario' | 'task' | 'listening' | 'grading' | 'feedback' | 'reveal' | 'error';
+type Phase = 'idle' | 'teach' | 'scenario' | 'task' | 'listening' | 'grading' | 'feedback' | 'reveal' | 'error' | 'done';
+
+
+/**
+ * Item 2 — refresher-script split. Authored scripts follow the four-beat
+ * shape "The tactic: ... Use it when ... Why it matters: ... Now listen to
+ * elite: ...". Split on the " Use it" boundary and take everything before,
+ * trimmed to a sentence terminator. Fallback: first two sentences.
+ */
+function firstBeatOfScript(script: string): string {
+  const trimmed = script.trim();
+  const marker = trimmed.indexOf(' Use it');
+  if (marker > 0) {
+    // Walk back to the previous sentence terminator so we don't cut mid-clause.
+    const head = trimmed.slice(0, marker);
+    const lastTerm = Math.max(head.lastIndexOf('.'), head.lastIndexOf('!'), head.lastIndexOf('?'));
+    if (lastTerm > 0) return head.slice(0, lastTerm + 1).trim();
+    return head.trim() + '.';
+  }
+  const parts = trimmed.match(/[^.!?]+[.!?]+(\s|$)/g);
+  if (parts && parts.length > 0) return parts.slice(0, 2).join('').trim();
+  return trimmed;
+}
+
 
 
 // ── Capability detection ────────────────────────────────────────────
@@ -204,6 +230,9 @@ export default function CarMode() {
   const sessionIdRef = useRef<string | null>(null);
   const turnIndexRef = useRef(0);
   const bestScoreRef = useRef(0);
+  // Item 3 — per-session score history for the end-of-session recap.
+  // Cleared on mount and on "Go again".
+  const [sessionScores, setSessionScores] = useState<number[]>([]);
   const recogRef = useRef<SR | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
   const cancelSpeakRef = useRef<() => void>(() => {});
@@ -248,9 +277,18 @@ export default function CarMode() {
       if (r.length === 0) { setDrills([]); setLoading(false); return; }
       const conceptIds = Array.from(new Set(r.map((x) => x.concept_id)));
       const kiIds = Array.from(new Set(r.map((x) => x.ki_id)));
-      const [{ data: cc }, { data: ki }] = await Promise.all([
+      // Item 2 — one .in() to ki_mastery keyed on (user_id, kiIds). Only
+      // rows with times_drilled >= 1 AND best_score >= 70 flip a drill to
+      // 'refresher'. Flash-created rows have times_drilled 0/null so they
+      // naturally fail this gate.
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData?.user?.id ?? null;
+      const [{ data: cc }, { data: ki }, masteryRes] = await Promise.all([
         (supabase as any).from('curriculum_concepts').select('concept_id, spoke, topic, band, sub_level, title, teach_beat_md, model_line_plain').in('concept_id', conceptIds),
         (supabase as any).from('knowledge_items').select('id, title, spider_dimension, chapter, why_it_matters, when_to_use').in('id', kiIds),
+        uid
+          ? (supabase as any).from('ki_mastery').select('ki_id, times_drilled, best_score').eq('user_id', uid).in('ki_id', kiIds)
+          : Promise.resolve({ data: [] as Array<{ ki_id: string; times_drilled: number | null; best_score: number | null }> }),
       ]);
       const cMap = new Map<string, { spoke: string; topic: string; band: number; sub_level: string; title: string; teach_beat_md: string | null; model_line_plain: string | null }>();
       for (const c of (cc ?? []) as Array<{ concept_id: string; spoke: string; topic: string; band: number; sub_level: string; title: string; teach_beat_md: string | null; model_line_plain: string | null }>) {
@@ -259,6 +297,10 @@ export default function CarMode() {
       const kMap = new Map<string, { title: string; spider_dimension: string | null; chapter: string | null; why_it_matters: string | null; when_to_use: string | null }>();
       for (const k of (ki ?? []) as Array<{ id: string; title: string; spider_dimension: string | null; chapter: string | null; why_it_matters: string | null; when_to_use: string | null }>) {
         kMap.set(k.id, { title: k.title, spider_dimension: k.spider_dimension, chapter: k.chapter, why_it_matters: k.why_it_matters, when_to_use: k.when_to_use });
+      }
+      const masteryMap = new Map<string, { times_drilled: number; best_score: number }>();
+      for (const m of ((masteryRes as { data: Array<{ ki_id: string; times_drilled: number | null; best_score: number | null }> | null }).data ?? [])) {
+        masteryMap.set(m.ki_id, { times_drilled: m.times_drilled ?? 0, best_score: m.best_score ?? 0 });
       }
       const list: Drill[] = r.map((x) => {
         const c = cMap.get(x.concept_id);
@@ -276,6 +318,9 @@ export default function CarMode() {
               whenToUse: k?.when_to_use ?? null,
               modelLinePlain: modelLine,
             });
+        const m = masteryMap.get(x.ki_id);
+        const teachMode: 'full' | 'refresher' =
+          m && m.times_drilled >= 1 && m.best_score >= 70 ? 'refresher' : 'full';
         return {
           ki_id: x.ki_id, concept_id: x.concept_id,
           spoke: c?.spoke ?? 'general',
@@ -290,6 +335,7 @@ export default function CarMode() {
           spider_dimension: k?.spider_dimension ?? null, chapter: k?.chapter ?? null,
           teach_script: teachScript,
           model_line_plain: modelLine,
+          teach_mode: teachMode,
         };
       });
       for (let i = list.length - 1; i > 0; i--) {
@@ -391,11 +437,23 @@ export default function CarMode() {
   }, [user?.id]);
 
   // ── Shared post-grade handler ────────────────────────────────────
+  // Item 3 — when advance() runs past the final drill we enter a DONE
+  // phase with a spoken recap and a recap card offering "Go again".
+  // Previously this dropped back to 'idle' at the same idx, leaving the
+  // learner with a "Start" button that would replay the last drill.
   const advance = useCallback(() => {
     setIdx((i) => {
       if (i + 1 >= drills.length) {
-        setPhase('idle');
-        speak('That was the last drill. Great work.');
+        setPhase('done');
+        setSessionScores((scores) => {
+          const n = scores.length;
+          const best = n ? Math.max(...scores) : 0;
+          const recap = n > 0
+            ? `Session complete. ${n} drill${n === 1 ? '' : 's'}. Best score ${best}.`
+            : 'Session complete. Great work.';
+          cancelSpeakRef.current = speak(recap);
+          return scores;
+        });
         return i;
       }
       return i + 1;
@@ -405,6 +463,7 @@ export default function CarMode() {
   const applyGrade = useCallback(async (d: Drill, finalTranscript: string, g: GradeResult) => {
     setTranscript(finalTranscript);
     setGrade(g);
+    setSessionScores((s) => [...s, g.score]);
     if (user?.id) {
       try {
         await writeKIMastery({
@@ -738,7 +797,12 @@ export default function CarMode() {
     void ensureSession(d);
     try { void audioCtxRef.current?.resume().catch(() => {}); } catch { /* noop */ }
     setPhase('teach');
-    cancelSpeakRef.current = speak(d.teach_script, () => {
+    // Item 2 — refresher dosage: shorter, signposted spoken cue when the
+    // learner already passed this KI. Full script otherwise.
+    const spoken = d.teach_mode === 'refresher'
+      ? `Quick refresher: ${firstBeatOfScript(d.teach_script)}`
+      : d.teach_script;
+    cancelSpeakRef.current = speak(spoken, () => {
       runScenarioThenTaskRef.current(d);
     });
   }, [ensureSession, runScenarioThenTask]);
@@ -763,6 +827,29 @@ export default function CarMode() {
     ttsPlayback = interruptSpeech(ttsPlayback);
     if (drill) runDrill(drill);
   }, [drill, runDrill, stopListening]);
+
+  // Item 3 — "Go again" from the DONE recap: reshuffle drills, reset
+  // index and session score history, and drop back to idle. The learner
+  // taps Start Car Mode to begin the new pass (no auto-restart, per spec).
+  const handleGoAgain = useCallback(() => {
+    ttsPlayback = interruptSpeech(ttsPlayback);
+    setDrills((prev) => {
+      const next = prev.slice();
+      for (let i = next.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [next[i], next[j]] = [next[j], next[i]];
+      }
+      return next;
+    });
+    setIdx(0);
+    setSessionScores([]);
+    setGrade(null);
+    setTranscript(''); setInterim('');
+    bestScoreRef.current = 0;
+    sessionIdRef.current = null;
+    turnIndexRef.current = 0;
+    setPhase('idle');
+  }, []);
 
   const handleReveal = useCallback(() => {
     if (!drill) return;
@@ -829,6 +916,7 @@ export default function CarMode() {
 
   // ── Render ───────────────────────────────────────────────────────
   const bigText = useMemo(() => {
+    if (phase === 'done') return 'Nice work — session complete.';
     if (!drill) return '';
     if (phase === 'teach') return drill.teach_script;
     if (phase === 'scenario') return drill.scenario;
@@ -863,15 +951,17 @@ export default function CarMode() {
           <>
             <div className="text-center text-xs uppercase tracking-widest text-white/40 mb-4">
               {phase === 'idle' && 'Ready'}
-              {phase === 'teach' && 'Learn the tactic'}
+              {phase === 'teach' && (drill.teach_mode === 'refresher' ? 'Refresher' : 'Learn the tactic')}
               {phase === 'scenario' && 'Scenario'}
               {phase === 'task' && 'Your task'}
               {phase === 'listening' && (useRecorderPath ? 'Listening' : (sttSupported ? 'Listening' : 'Speak — manual mode'))}
               {phase === 'grading' && 'Grading'}
               {phase === 'feedback' && grade && (grade.passed ? '✓ Pass' : '✗ Try again')}
               {phase === 'reveal' && 'Elite answer'}
+              {phase === 'done' && 'Session complete'}
               {phase === 'error' && 'Error'}
             </div>
+
 
             <div
               className="flex-1 flex items-center justify-center"
@@ -942,6 +1032,34 @@ export default function CarMode() {
               )}
 
               {phase === 'grading' && (<div className="h-20 flex items-center justify-center text-white/60">Scoring…</div>)}
+
+              {phase === 'done' && (() => {
+                // Item 3 — recap card: drills done, avg + best score, Go again.
+                const n = sessionScores.length;
+                const best = n ? Math.max(...sessionScores) : 0;
+                const avg = n ? Math.round(sessionScores.reduce((a, b) => a + b, 0) / n) : 0;
+                return (
+                  <div className="grid gap-3">
+                    <div className="grid grid-cols-3 gap-3 text-center">
+                      <div className="rounded-2xl bg-white/5 border border-white/10 py-4">
+                        <div className="text-3xl font-bold font-mono">{n}</div>
+                        <div className="text-xs uppercase tracking-widest text-white/50 mt-1">Drills</div>
+                      </div>
+                      <div className="rounded-2xl bg-white/5 border border-white/10 py-4">
+                        <div className="text-3xl font-bold font-mono">{avg}</div>
+                        <div className="text-xs uppercase tracking-widest text-white/50 mt-1">Avg</div>
+                      </div>
+                      <div className="rounded-2xl bg-white/5 border border-white/10 py-4">
+                        <div className="text-3xl font-bold font-mono">{best}</div>
+                        <div className="text-xs uppercase tracking-widest text-white/50 mt-1">Best</div>
+                      </div>
+                    </div>
+                    <Button onClick={handleGoAgain} className="h-20 text-2xl rounded-2xl bg-emerald-600 hover:bg-emerald-500">
+                      <RotateCcw className="h-7 w-7 mr-2" /> Go again
+                    </Button>
+                  </div>
+                );
+              })()}
             </div>
 
             {useRecorderPath && (
