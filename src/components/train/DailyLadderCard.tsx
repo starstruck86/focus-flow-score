@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { getNextDueCurriculum, type DailyLadderPick } from '@/lib/train/dailyLadder';
 import { BAND_NAMES } from '@/types/train';
+import { FocusSpokesChips } from './FocusSpokesChips';
 import { ChevronRight, Flame, Sparkles, Target } from 'lucide-react';
 
 const DAILY_GOAL = 3;
