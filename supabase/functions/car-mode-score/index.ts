@@ -56,10 +56,20 @@ Required criteria (marked REQUIRED) must be met = true for the rep to pass. If a
       return new Response(JSON.stringify({ error: `gateway ${res.status}`, detail: text.slice(0, 500) }), { status: res.status === 429 || res.status === 402 ? res.status : 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const j = await res.json();
-    let parsed: Record<string, unknown> = {};
-    try { parsed = JSON.parse(j.choices?.[0]?.message?.content ?? "{}"); } catch { parsed = {}; }
-
-    const score = Math.max(0, Math.min(100, Math.round(Number(parsed.score ?? 0))));
+    const rawContent: string = j.choices?.[0]?.message?.content ?? "";
+    let parsed: Record<string, unknown> | null = null;
+    try { parsed = JSON.parse(rawContent || "{}"); } catch { parsed = null; }
+    // Hardening (post-forensics): silent parse-fallback used to fabricate score:0
+    // + all-criteria-false verdicts on gateway hiccups, corrupting mastery data.
+    // Surface parse failure and missing/NaN score as a 502 so the caller can retry.
+    const rawScoreNum = Number((parsed as Record<string, unknown> | null)?.score);
+    if (!parsed || !Number.isFinite(rawScoreNum)) {
+      return new Response(
+        JSON.stringify({ error: "grader_parse_failed", raw: rawContent.slice(0, 200) }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    const score = Math.max(0, Math.min(100, Math.round(rawScoreNum)));
     const criteria = Array.isArray(parsed.criteria) ? parsed.criteria : rubric.map((r) => ({ c: r.c, met: false }));
     // pass = all REQUIRED criteria met AND score >= 85 (§7.33 unified pass bar)
     const requiredOk = rubric.every((r, i) => {
