@@ -437,11 +437,23 @@ export default function CarMode() {
   }, [user?.id]);
 
   // ── Shared post-grade handler ────────────────────────────────────
+  // Item 3 — when advance() runs past the final drill we enter a DONE
+  // phase with a spoken recap and a recap card offering "Go again".
+  // Previously this dropped back to 'idle' at the same idx, leaving the
+  // learner with a "Start" button that would replay the last drill.
   const advance = useCallback(() => {
     setIdx((i) => {
       if (i + 1 >= drills.length) {
-        setPhase('idle');
-        speak('That was the last drill. Great work.');
+        setPhase('done');
+        setSessionScores((scores) => {
+          const n = scores.length;
+          const best = n ? Math.max(...scores) : 0;
+          const recap = n > 0
+            ? `Session complete. ${n} drill${n === 1 ? '' : 's'}. Best score ${best}.`
+            : 'Session complete. Great work.';
+          cancelSpeakRef.current = speak(recap);
+          return scores;
+        });
         return i;
       }
       return i + 1;
