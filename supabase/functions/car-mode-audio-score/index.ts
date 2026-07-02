@@ -227,10 +227,19 @@ Required criteria must be met=true to pass. If a required criterion is missed, t
       );
     }
     const grJson = await grRes.json();
-    let parsed: Record<string, unknown> = {};
-    try { parsed = JSON.parse(grJson.choices?.[0]?.message?.content ?? "{}"); } catch { parsed = {}; }
-
-    const score = Math.max(0, Math.min(100, Math.round(Number(parsed.score ?? 0))));
+    const rawContent: string = grJson.choices?.[0]?.message?.content ?? "";
+    let parsed: Record<string, unknown> | null = null;
+    try { parsed = JSON.parse(rawContent || "{}"); } catch { parsed = null; }
+    // Hardening (post-forensics): silent parse-fallback fabricated score:0 verdicts
+    // on gateway hiccups, corrupting mastery data. Return 502 so caller can retry.
+    const rawScoreNum = Number((parsed as Record<string, unknown> | null)?.score);
+    if (!parsed || !Number.isFinite(rawScoreNum)) {
+      return new Response(
+        JSON.stringify({ error: "grader_parse_failed", raw: rawContent.slice(0, 200) }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    const score = Math.max(0, Math.min(100, Math.round(rawScoreNum)));
     const criteria = Array.isArray(parsed.criteria) ? parsed.criteria : rubric.map((r) => ({ c: r.c, met: false }));
     const requiredOk = rubric.every((r, i) => {
       if (!r.must) return true;

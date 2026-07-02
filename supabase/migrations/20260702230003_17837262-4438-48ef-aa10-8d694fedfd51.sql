@@ -1,0 +1,3 @@
+UPDATE public.ki_curriculum
+SET drill_model_answer = 'Before I touch any of the three contacts, I spend about fifteen minutes on account-level research — I pull their recent job postings and note the top two hiring priorities they''re investing in. I then reuse that same posting signal across all three contacts: one shared hook driven by what the account is actually building, tailored one line per persona to how each of them would care about it. That keeps me inside the forty-five minute prep budget with no per-contact deep dive at the IC level, and every opener lands on something the account is actively spending on right now.'
+WHERE concept_id = 'RES01' AND drill_ready = true;
