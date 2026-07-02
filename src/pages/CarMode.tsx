@@ -557,13 +557,14 @@ export default function CarMode() {
     }
     // ── FEEDBACK PHASE (uniform for pass/fail) ──────────────────────
     // Score card stays visible for the entire phase (no flash). We ALWAYS
-    // speak a result line; if score < 70 we also speak the elite version.
+    // speak a result line; if score < 85 we also speak the elite version.
     // Auto-advance ONLY after speech ends + a 3s beat. Tap-anywhere on the
     // card advances early. This is the sole advancement path after grading.
     setPhase('feedback');
     const coach = (g.top_fix || g.summary || '').trim();
     let verbal = `${g.score} out of 100. ${coach}`.trim();
-    if (g.score < 70) {
+    // §7.33 — any rep below the 85 bar hears the elite line (a failing 78 must hear the fix).
+    if (g.score < 85) {
       const elite = (g.elite_line || d.model_answer || '').trim();
       if (elite) verbal += ` Here's the elite version: ${elite}`;
     }
