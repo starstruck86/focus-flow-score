@@ -39,6 +39,8 @@ export default function FlashDeck() {
   const [statesByCard, setStatesByCard] = useState<Map<string, StateRow>>(new Map());
   const [conceptMeta, setConceptMeta] = useState<Map<string, ConceptMeta>>(new Map());
   const [conceptMetaResolved, setConceptMetaResolved] = useState(true);
+  const [kiTitles, setKiTitles] = useState<Map<string, string>>(new Map());
+  const [conceptTitles, setConceptTitles] = useState<Map<string, string>>(new Map());
   const [pos, setPos] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [requeued, setRequeued] = useState<Set<string>>(new Set());
@@ -138,10 +140,35 @@ export default function FlashDeck() {
         }
       }
 
+      // Batch title lookups for source footer (ki_id → title, concept_id → title)
+      const kiIdList = Array.from(new Set(built.map((c) => c.ki_id).filter(Boolean))) as string[];
+      const kiTitleMap = new Map<string, string>();
+      if (kiIdList.length > 0) {
+        const { data: ki } = await supabase
+          .from('knowledge_items')
+          .select('id, title')
+          .in('id', kiIdList);
+        for (const r of (ki ?? []) as { id: string; title: string }[]) {
+          if (r.title) kiTitleMap.set(r.id, r.title);
+        }
+      }
+      const conceptTitleMap = new Map<string, string>();
+      if (conceptIds.length > 0) {
+        const { data: ct } = await supabase
+          .from('curriculum_concepts')
+          .select('concept_id, title')
+          .in('concept_id', conceptIds);
+        for (const r of (ct ?? []) as { concept_id: string; title: string }[]) {
+          if (r.title) conceptTitleMap.set(r.concept_id, r.title);
+        }
+      }
+
       if (cancelled) return;
       setStatesByCard(stateMap);
       setConceptMeta(meta);
       setConceptMetaResolved(resolved);
+      setKiTitles(kiTitleMap);
+      setConceptTitles(conceptTitleMap);
       setQueue(built);
       setPos(0);
       setFlipped(false);
@@ -285,6 +312,19 @@ export default function FlashDeck() {
                   )}
                 </div>
               </button>
+
+              {flipped && (() => {
+                const kiTitle = kiTitles.get(currentCard.ki_id);
+                const conceptTitle = currentCard.concept_id ? conceptTitles.get(currentCard.concept_id) : null;
+                if (!kiTitle && !conceptTitle) return null;
+                return (
+                  <p className="px-2 text-[11px] leading-snug text-muted-foreground break-words">
+                    {conceptTitle
+                      ? <>📌 {conceptTitle}{kiTitle ? <> · KI: {kiTitle}</> : null}</>
+                      : <>📌 KI: {kiTitle}</>}
+                  </p>
+                );
+              })()}
 
               {flipped && drillHref && (
                 <button
