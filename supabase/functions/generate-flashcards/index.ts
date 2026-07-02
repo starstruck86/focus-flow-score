@@ -25,17 +25,28 @@ function json(status: number, body: unknown) {
 
 const SYSTEM_PROMPT = `You are building spaced-repetition flashcards for an elite enterprise sales AE.
 
-CARD TYPES:
-- "trigger": FRONT = a concrete buyer situation, cue, or moment that should fire this tactic (no answer, no paraphrase of the tactic name). BACK = the tactic name + the one-line move.
-- "definition": FRONT = a question about the term/feature/concept. BACK = a crisp 1-2 sentence answer.
-- "talk_track": FRONT = a situation prompt where the AE must respond. BACK = the elite model line (use model_line_plain VERBATIM when provided).
+CARD TYPES & FRONT-QUALITY BAR (non-negotiable):
+
+- "trigger": FRONT = a concrete mini-scenario, 15–40 words, containing (a) a specific persona at a specific company type AND (b) either a quoted line they say OR a specific observable behavior. Never a category description. BACK = the tactic name + the one-line move.
+  GOOD trigger front: "The newly promoted CFO at a 400-person retail brand opens your exec review with: 'Convince me this isn't just a nice-to-have we cut next quarter.'"
+  BAD trigger front (NEVER produce anything like this): "You're dealing with a CRO or CFO who is new to their role or new to purchasing solutions like yours."
+
+- "definition": FRONT = one specific, answerable question about the term/feature/concept (e.g. "What single metric does an economic buyer weigh a purchase against in their first 90 days?"). NEVER open-ended prompts like "What do you know about X" or "Explain X". BACK = a crisp 1–2 sentence answer.
+
+- "talk_track": FRONT = a vivid situation prompt naming a specific persona and company type, same 15–40 word concreteness bar as trigger — the AE must respond out loud. BACK = the elite model line (use model_line_plain VERBATIM when provided).
 
 HARD RULES:
 - FRONT must NEVER contain or paraphrase the answer. A learner should not be able to guess the back from the front alone.
 - BACK must be <= 40 words.
 - Do NOT invent product facts. If model_line_plain is missing, derive the back only from teach_beat_md or the KI content given.
-- Produce 1-2 cards per input item. Prefer 1 unless a second card of a clearly different type adds real value.
-- Return STRICT JSON: {"cards": [{ki_id, concept_id, card_type, front, back}, ...]}. concept_id may be null when not applicable.`;
+- Produce 1–2 cards per input item. Prefer 1 unless a second card of a clearly different type adds real value.
+
+SOURCE-MATERIAL RULE:
+- When teach_beat_md is present, use its concrete details as the source of the cue.
+- When teach_beat_md is absent, synthesize the cue from when_to_use PLUS the provided drill_scenarios and ki_example — favor concrete personas, quoted lines, and observable behaviors from those scenarios. Do not fall back to abstract category framings.
+- If the source for an item is genuinely too thin to build a concrete card that meets the bar above, SKIP that item entirely (return NO cards for it). Fewer, better cards is the goal.
+
+Return STRICT JSON: {"cards": [{ki_id, concept_id, card_type, front, back}, ...]}. concept_id may be null when not applicable. Items you skip simply produce no cards; do not include placeholder entries.`;
 
 async function callAI(lovableApiKey: string, userPrompt: string): Promise<Card[]> {
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -130,23 +141,29 @@ serve(async (req) => {
 
       const conceptIds = (concepts ?? []).map((c: any) => c.concept_id);
       const { data: ki } = await admin.from("ki_curriculum")
-        .select("concept_id, ki_id, is_exemplar, role, order_in_concept, active")
+        .select("concept_id, ki_id, is_exemplar, role, order_in_concept, active, drill_scenario")
         .in("concept_id", conceptIds).eq("active", true);
 
-      const byConcept = new Map<string, { ki_id: string }[]>();
+      const byConcept = new Map<string, any[]>();
       for (const r of (ki ?? []) as any[]) {
         if (!byConcept.has(r.concept_id)) byConcept.set(r.concept_id, []);
         byConcept.get(r.concept_id)!.push(r);
       }
-      // pick one exemplar/teach KI per concept
+      // pick one exemplar/teach KI per concept, and collect up to 3 drill scenarios
       const kiIds = new Set<string>();
       const conceptToKi = new Map<string, string>();
+      const conceptToScenarios = new Map<string, string[]>();
       for (const c of (concepts ?? []) as any[]) {
         const rows = (byConcept.get(c.concept_id) ?? []).sort((a: any, b: any) =>
           (b.is_exemplar ? 1 : 0) - (a.is_exemplar ? 1 : 0) ||
           (a.order_in_concept ?? 0) - (b.order_in_concept ?? 0)
         );
         if (rows[0]) { conceptToKi.set(c.concept_id, rows[0].ki_id); kiIds.add(rows[0].ki_id); }
+        const scenarios = rows
+          .map((r) => (typeof r.drill_scenario === "string" ? r.drill_scenario.trim() : ""))
+          .filter((s) => s.length > 0)
+          .slice(0, 3);
+        if (scenarios.length) conceptToScenarios.set(c.concept_id, scenarios);
       }
       const { data: kiRows } = await admin.from("knowledge_items")
         .select("id, title, tactic_summary, why_it_matters, when_to_use, example_usage")
@@ -158,6 +175,10 @@ serve(async (req) => {
         const kid = conceptToKi.get(c.concept_id);
         if (!kid) continue;
         const k = kiMap.get(kid) || {};
+        const scenarios = conceptToScenarios.get(c.concept_id) ?? [];
+        const scenariosBlock = scenarios.length
+          ? scenarios.map((s, i) => `  ${i + 1}. ${s.slice(0, 400)}`).join("\n")
+          : "  (none)";
         items.push({
           ki_id: kid,
           concept_id: c.concept_id,
@@ -171,7 +192,9 @@ ki_title: ${k.title ?? ""}
 ki_summary: ${k.tactic_summary ?? ""}
 ki_why: ${k.why_it_matters ?? ""}
 ki_when: ${k.when_to_use ?? ""}
-ki_example: ${(k.example_usage ?? "").slice(0, 300)}`,
+ki_example: ${(k.example_usage ?? "").slice(0, 300)}
+drill_scenarios:
+${scenariosBlock}`,
         });
       }
     } else if (source_type === "resource" || source_type === "chapter") {
@@ -250,7 +273,11 @@ ${batch.map((b, i) => `--- ITEM ${i + 1} ---\n${b.prompt_block}`).join("\n\n")}`
       .update({ generation_status: "complete", card_count: count ?? 0 })
       .eq("id", deck.id);
 
-    return json(200, { deck_id: deck.id, generated: allCards.length, inserted, total_cards: count ?? 0 });
+    const kiWithCards = new Set(allCards.map((c) => c.ki_id));
+    const skipped = items.filter((i) => !kiWithCards.has(i.ki_id)).length;
+    console.log(`generate-flashcards: deck=${deck.id} items=${items.length} generated=${allCards.length} inserted=${inserted} skipped=${skipped}`);
+
+    return json(200, { deck_id: deck.id, generated: allCards.length, inserted, total_cards: count ?? 0, skipped_items: skipped, source_items: items.length });
   } catch (err) {
     console.error("Unhandled", err);
     return json(500, { error: "internal", detail: String(err).slice(0, 400) });
