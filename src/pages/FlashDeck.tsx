@@ -140,10 +140,35 @@ export default function FlashDeck() {
         }
       }
 
+      // Batch title lookups for source footer (ki_id → title, concept_id → title)
+      const kiIdList = Array.from(new Set(built.map((c) => c.ki_id).filter(Boolean))) as string[];
+      const kiTitleMap = new Map<string, string>();
+      if (kiIdList.length > 0) {
+        const { data: ki } = await supabase
+          .from('knowledge_items')
+          .select('id, title')
+          .in('id', kiIdList);
+        for (const r of (ki ?? []) as { id: string; title: string }[]) {
+          if (r.title) kiTitleMap.set(r.id, r.title);
+        }
+      }
+      const conceptTitleMap = new Map<string, string>();
+      if (conceptIds.length > 0) {
+        const { data: ct } = await supabase
+          .from('curriculum_concepts')
+          .select('concept_id, title')
+          .in('concept_id', conceptIds);
+        for (const r of (ct ?? []) as { concept_id: string; title: string }[]) {
+          if (r.title) conceptTitleMap.set(r.concept_id, r.title);
+        }
+      }
+
       if (cancelled) return;
       setStatesByCard(stateMap);
       setConceptMeta(meta);
       setConceptMetaResolved(resolved);
+      setKiTitles(kiTitleMap);
+      setConceptTitles(conceptTitleMap);
       setQueue(built);
       setPos(0);
       setFlipped(false);
