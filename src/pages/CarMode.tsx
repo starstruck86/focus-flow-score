@@ -741,9 +741,16 @@ export default function CarMode() {
           });
           return;
         }
-        setPhase('error');
-        setErrMsg(`Couldn't grade: ${msg}`);
-        cancelSpeakRef.current = speak('Could not grade that one. Moving on.', () => advance());
+        // GRADING HICCUP path (post-forensics): any non-2xx from car-mode-audio-score —
+        // including 502 grader_parse_failed — must NOT be treated as a failing rep.
+        // Zero writes to mastery/session state; re-queue the same drill.
+        console.warn('car-mode-audio-score hiccup, re-queueing drill', msg);
+        cancelSpeakRef.current = speak("Grading hiccup — that one won't count. Let's run it again.", () => {
+          if (drillRef.current && drillRef.current.ki_id === d.ki_id) {
+            setPhase('task');
+            startRecorderSegment(d);
+          }
+        });
       }
     };
 
