@@ -27,7 +27,7 @@ Last reconciled: 2026-07-02 (early AM) — v13 cut, verified, and set as current
 
 ## SESSION PROTOCOL
 START: open this index -> open the CURRENT MASTER (v9) -> re-orient before acting. If a Drive link is stale, the master's §9 lists current IDs.
-END: update the master doc (a NEW versioned Drive file per its maintenance rule) AND update this index's CURRENT MASTER pointer + Todoist 6gwh7jGXpJRJXhpg. Never leave stale.
+END: 1) Update the master doc (new versioned Drive file) + this index's CURRENT MASTER pointer + Todoist. 2) If app code changed, PUBLISH the frontend to production (Lovable deploy/publish) — edge functions and DB deploy immediately, but the production frontend only updates on publish; never leave prod stale behind preview. 3) Note what changed. Never leave stale.
 RECOVERY: anchor = the Lovable project (permanent id), never a single Drive doc. This index always names the current master's ID.
 
 ## DOC LINEAGE (archive, by name — from Recent screenshots)
