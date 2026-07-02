@@ -414,16 +414,22 @@ export default function Dojo() {
           )}
           <AccomplishmentDashboard />
           <DailyLadderCard />
-          <button
-            onClick={() => navigate('/car-mode')}
-            className="w-full rounded-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-600/15 to-blue-600/15 hover:from-emerald-600/25 hover:to-blue-600/25 px-4 py-3 flex items-center justify-between transition"
-          >
-            <div className="text-left">
-              <p className="text-sm font-semibold flex items-center gap-2">🚗 Car Mode <span className="text-[10px] uppercase tracking-widest text-emerald-400">hands-free</span></p>
-              <p className="text-[11px] text-muted-foreground">Practice out loud while you drive — spoken scenarios, spoken coaching.</p>
-            </div>
-            <ChevronRight className="h-5 w-5 text-emerald-400" />
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => navigate('/car-mode')}
+              className="rounded-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-600/15 to-blue-600/15 hover:from-emerald-600/25 hover:to-blue-600/25 px-3 py-3 flex flex-col items-start gap-0.5 transition text-left"
+            >
+              <p className="text-sm font-semibold flex items-center gap-1.5">🚗 Car Mode</p>
+              <p className="text-[10px] text-muted-foreground leading-tight">Hands-free spoken reps</p>
+            </button>
+            <button
+              onClick={() => navigate('/flash')}
+              className="rounded-xl border border-yellow-500/30 bg-gradient-to-r from-yellow-600/15 to-orange-600/15 hover:from-yellow-600/25 hover:to-orange-600/25 px-3 py-3 flex flex-col items-start gap-0.5 transition text-left"
+            >
+              <p className="text-sm font-semibold flex items-center gap-1.5">⚡ Flash</p>
+              <p className="text-[10px] text-muted-foreground leading-tight">Recognition reps · tap-flip cards</p>
+            </button>
+          </div>
         </div>
 
 
