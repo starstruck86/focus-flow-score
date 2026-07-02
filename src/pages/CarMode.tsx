@@ -451,6 +451,7 @@ export default function CarMode() {
   const applyGrade = useCallback(async (d: Drill, finalTranscript: string, g: GradeResult) => {
     setTranscript(finalTranscript);
     setGrade(g);
+    setSessionScores((s) => [...s, g.score]);
     if (user?.id) {
       try {
         await writeKIMastery({
