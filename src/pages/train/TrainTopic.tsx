@@ -60,6 +60,22 @@ export default function TrainTopic() {
       .map(([b]) => Number(b) as Band);
   }, [data]);
 
+  // P0-2 test-out: the first not-yet-passed band the user CAN start (current)
+  // and the immediately-next locked band (bypass via test-out).
+  const { currentBand, nextLockedBand } = useMemo(() => {
+    if (!data) return { currentBand: null as Band | null, nextLockedBand: null as Band | null };
+    let current: Band | null = null;
+    let next: Band | null = null;
+    for (const b of [1, 2, 3, 4, 5] as Band[]) {
+      const prev = b > 1 ? data.gates[(b - 1) as Band] : undefined;
+      const unlocked = b === 1 || prev?.status === 'passed';
+      const passed = data.gates[b]?.status === 'passed';
+      if (unlocked && !passed && current === null) current = b;
+      if (!unlocked && next === null) next = b;
+    }
+    return { currentBand: current, nextLockedBand: next };
+  }, [data]);
+
   return (
     <Layout>
       <main className={cn('mx-auto max-w-2xl px-4 pt-4', SHELL.main.bottomPad)}>
@@ -91,6 +107,10 @@ export default function TrainTopic() {
           const prevGate = band > 1 ? data.gates[(band - 1) as Band] : undefined;
           const unlocked = band === 1 || prevGate?.status === 'passed';
           const gateStatus = gate?.status ?? (unlocked ? 'available' : 'locked');
+          const showTestOut =
+            data.gatePool.has(band) &&
+            gate?.status !== 'passed' &&
+            (band === currentBand || band === nextLockedBand);
 
           return (
             <section key={band} className="mb-6">
@@ -102,6 +122,17 @@ export default function TrainTopic() {
                   <span className="text-[11px] text-muted-foreground">Best {gate.best_score}</span>
                 )}
               </div>
+
+              {showTestOut && (
+                <button
+                  onClick={() => navigate(`/train/${spoke}/${topic}/gate/${band}`)}
+                  className="mb-2 w-full text-left text-[12px] px-3 py-2 rounded-md border border-dashed border-primary/40 text-primary hover:bg-primary/5 transition-colors flex items-center justify-between"
+                >
+                  <span>Already know this? Test out of Band {band}</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              )}
+
 
               <div className="space-y-2">
                 {groups.map((g: { sub_level: string; concepts: ConceptRow[] }) => {
