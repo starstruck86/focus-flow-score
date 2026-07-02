@@ -156,12 +156,21 @@ export async function runPracticeRep(input: PracticeRepInput): Promise<PracticeR
     input.ki.scenario ??
     input.ki.when_to_use ??
     'Respond to this buyer situation.';
+  const gold =
+    (input.ki.modelLinePlain && input.ki.modelLinePlain.trim().length > 0) ||
+    (Array.isArray(input.ki.drillRubric) && input.ki.drillRubric.length > 0)
+      ? {
+          model_line: input.ki.modelLinePlain ?? null,
+          rubric: input.ki.drillRubric ?? null,
+        }
+      : null;
   const scored = await scoreRep({
     skillFocus: input.skillFocus,
     userResponse: input.userResponse,
     objection,
     context: input.ki.when_to_use ?? undefined,
     ki: isPromptOnly ? null : input.ki,
+    gold,
   });
 
   // Per-KI SRS — only when there is a real KI behind this rep.
