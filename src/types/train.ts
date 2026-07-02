@@ -152,8 +152,8 @@ export const TRAIN_TUNABLES = {
   subLevelRequiredPasses: 3,        // floor; effective = max(3, drillCount)
   subLevelPassThreshold: 85,        // per-rep score considered "passing"
   bandGateItemCount: 5,
-  bandGatePassThreshold: 80,        // overridden by curriculum_gates row if present
-  bandGateWarningFloor: 70,         // 70-79 = warning interval
+  bandGatePassThreshold: 85,        // §7.33: unified pass bar 85 everywhere; overridden by curriculum_gates row if present
+  bandGateWarningFloor: 70,         // 70-84 = warning interval (not passing)
   retestPassDays: 30,
   retestWarningDays: 14,
 } as const;

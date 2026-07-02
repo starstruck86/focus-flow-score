@@ -75,7 +75,7 @@ Deno.serve(async (req: Request) => {
     for (const row of drillReady || []) {
       const cs = conceptSpoke.get(row.concept_id);
       const m = masteryMap.get(row.ki_id);
-      if (m && m.times_drilled >= 1 && (m.best_score ?? 0) >= 70) refresherEligible++;
+      if (m && m.times_drilled >= 1 && (m.best_score ?? 0) >= 85) refresherEligible++;
       if (!m || m.times_drilled === 0) {
         if (cs && FOCUS_SPOKES.includes(cs.spoke)) {
           neverAttemptedBySpoke[cs.spoke]++;
@@ -83,7 +83,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Suggested topic: topic with highest drill_ready count where no KI has best_score >= 70
+    // Suggested topic: topic with highest drill_ready count where no KI has best_score >= 85 (§7.33)
     const topicCounts = new Map<string, { spoke: string; topic: string; total: number; passed: number }>();
     for (const row of drillReady || []) {
       const cs = conceptSpoke.get(row.concept_id);
@@ -92,7 +92,7 @@ Deno.serve(async (req: Request) => {
       const entry = topicCounts.get(key) || { spoke: cs.spoke, topic: cs.topic, total: 0, passed: 0 };
       entry.total++;
       const m = masteryMap.get(row.ki_id);
-      if (m && (m.best_score ?? 0) >= 70) entry.passed++;
+      if (m && (m.best_score ?? 0) >= 85) entry.passed++;
       topicCounts.set(key, entry);
     }
     const suggested = [...topicCounts.values()]

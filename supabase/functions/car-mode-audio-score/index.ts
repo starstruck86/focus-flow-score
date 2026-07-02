@@ -237,7 +237,7 @@ Required criteria must be met=true to pass. If a required criterion is missed, t
       const match = (criteria as Array<{ c?: string; met?: boolean }>)[i];
       return match?.met === true;
     });
-    const passed = requiredOk && score >= 70;
+    const passed = requiredOk && score >= 85;
 
     return new Response(
       JSON.stringify({

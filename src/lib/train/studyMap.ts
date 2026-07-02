@@ -12,7 +12,7 @@ export interface ConceptStat {
   topic: string;
   band: number;
   drill_ready: boolean;
-  passed: boolean; // any KI on this concept with best_score >= 70
+  passed: boolean; // any KI on this concept with best_score >= 85 (§7.33 unified pass bar)
 }
 
 export interface TopicStat {
@@ -89,7 +89,7 @@ export async function fetchStudyMap(): Promise<StudyMap> {
         .eq('user_id', uid)
         .in('ki_id', slice);
       for (const m of (mast ?? []) as Array<{ ki_id: string; best_score: number | null }>) {
-        if ((m.best_score ?? 0) >= 70) passedKi.add(m.ki_id);
+        if ((m.best_score ?? 0) >= 85) passedKi.add(m.ki_id);
       }
     }
   }

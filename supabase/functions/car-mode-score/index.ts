@@ -61,13 +61,13 @@ Required criteria (marked REQUIRED) must be met = true for the rep to pass. If a
 
     const score = Math.max(0, Math.min(100, Math.round(Number(parsed.score ?? 0))));
     const criteria = Array.isArray(parsed.criteria) ? parsed.criteria : rubric.map((r) => ({ c: r.c, met: false }));
-    // pass = all REQUIRED criteria met AND score >= 70
+    // pass = all REQUIRED criteria met AND score >= 85 (§7.33 unified pass bar)
     const requiredOk = rubric.every((r, i) => {
       if (!r.must) return true;
       const match = (criteria as Array<{ c?: string; met?: boolean }>)[i];
       return match?.met === true;
     });
-    const passed = requiredOk && score >= 70;
+    const passed = requiredOk && score >= 85;
 
     return new Response(
       JSON.stringify({
