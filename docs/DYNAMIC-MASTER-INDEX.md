@@ -2,12 +2,13 @@
 
 Pointer + registry for the Dynamic roadmap. The full roadmap is the versioned Google Drive doc named below; this index's job is to ALWAYS name the CURRENT master + its Drive file ID (so the pointer never goes stale) plus the session ritual. Anchored in the permanent Lovable project (id `2750cde7-6277-4433-9311-204bcc16e1d1`).
 
-Last reconciled: 2026-07-01 (PM) — v11 cut, verified, and set as current master.
+Last reconciled: 2026-07-01 (late) — v12 cut, verified, and set as current master.
 
 ## CURRENT MASTER — confirmed
-- **DYNAMIC — MASTER STATE & ROADMAP (v11)** — Drive ID `1D2AM-LAYUTd4VNEc6esBEaw3oihIE3bRrz-YYtHpy38` — cut July 1 2026 (evening): best_score fix (641b5313), Car Mode wired to the competency ladder (60d0a300), FLASH flashcard subsystem shipped F0–F2 (e5ed48f1 + 26af34e7), TRAIN consolidation plan v2 (self-audit corrected 3 errors). Supersedes v10. Content verified in-place after creation.
+- **DYNAMIC — MASTER STATE & ROADMAP (v12)** — Drive ID `1sgPRhFgjACagOmqgX1zE90ZSK9gdlDtNAMh94Q_6RGk` — cut July 1 2026 (late): TRAIN end-to-end audit (assessment layer = the weak spine: grader ignores gold, stripes≠belts, alphabetical cold-start, 41 wrong-job drills sized, 253 gate prompts never QA'd) + 3 new roadmap items (job-fit decontamination, gate-content QA, on-device acceptance script). P0-1/2/3 defined, pending Corey ratification. No code changed. Supersedes v11. Content verified in-place.
 
 ## LINKED DOCS (Drive IDs)
+- Master v11 (superseded Jul 1 2026 late) — `1D2AM-LAYUTd4VNEc6esBEaw3oihIE3bRrz-YYtHpy38`
 - Master v10 (superseded Jul 1 2026 PM) — `16ezm7r_riRT_AhqrHi0pjoY-QeuinQgzlQiINgCeJ5s`
 - Master v9 (superseded Jul 1 2026) — `1SqNUmqQCXZfTspvepC_3mBPQ5nChbuz_HujRGXMd41k`
 - Evidence Appendix (raw SQL/code/diff receipts) — `1lOSWg5e1MH7x159CMf_S1hek7GlMpLHW9ssJNYuh0fc`
