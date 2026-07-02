@@ -1,5 +1,10 @@
 project_id = "odbjjklumdsuqdvkgwyv"
 
+[functions.training-digest]
+verify_jwt = false
+
+
+
 [functions.enrich-account]
 verify_jwt = false
 

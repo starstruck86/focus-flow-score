@@ -10555,6 +10555,25 @@ export type Database = {
           },
         ]
       }
+      training_field_efficacy: {
+        Row: {
+          calls_graded: number | null
+          drills_touched: number | null
+          field_commercial_score: number | null
+          field_discovery_score: number | null
+          field_granularity: string | null
+          field_next_step_score: number | null
+          field_overall_score: number | null
+          field_product_knowledge_score: number | null
+          spoke: string | null
+          total_drills: number | null
+          training_avg_score: number | null
+          training_best_score: number | null
+          user_id: string | null
+          week_start: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       claim_podcast_queue_items: {
