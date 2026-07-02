@@ -12,6 +12,7 @@ export interface LadderData {
   groups: SubLevelGroup[];
   competency: Record<string, UserCompetencyRow>; // key: sub_level
   gates: Record<number, UserBandGateRow>;        // key: band
+  gatePool: Set<number>;                          // bands with a curriculum_gates row
 }
 
 export function useSubLevelLadder(spoke: string, topic: string) {
@@ -22,7 +23,7 @@ export function useSubLevelLadder(spoke: string, topic: string) {
     queryFn: async () => {
       const groups = await getSubLevels(spoke, topic);
 
-      const [{ data: compRows }, { data: gateRows }] = await Promise.all([
+      const [{ data: compRows }, { data: gateRows }, { data: poolRows }] = await Promise.all([
         (supabase as any)
           .from('user_competency')
           .select('*')
@@ -35,6 +36,11 @@ export function useSubLevelLadder(spoke: string, topic: string) {
           .eq('user_id', user!.id)
           .eq('spoke', spoke)
           .eq('topic', topic),
+        (supabase as any)
+          .from('curriculum_gates')
+          .select('band')
+          .eq('spoke', spoke)
+          .eq('topic', topic),
       ]);
 
       const competency: Record<string, UserCompetencyRow> = {};
@@ -45,7 +51,9 @@ export function useSubLevelLadder(spoke: string, topic: string) {
       for (const r of (gateRows as UserBandGateRow[]) ?? []) {
         gates[r.band] = r;
       }
-      return { groups, competency, gates };
+      const gatePool = new Set<number>();
+      for (const r of (poolRows as { band: number }[]) ?? []) gatePool.add(Number(r.band));
+      return { groups, competency, gates, gatePool };
     },
   });
 }

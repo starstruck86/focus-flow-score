@@ -9854,6 +9854,24 @@ export type Database = {
           },
         ]
       }
+      user_train_prefs: {
+        Row: {
+          focus_spokes: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          focus_spokes?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          focus_spokes?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       verification_runs: {
         Row: {
           by_failure_bucket: Json

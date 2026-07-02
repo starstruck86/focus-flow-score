@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { getNextDueCurriculum, type DailyLadderPick } from '@/lib/train/dailyLadder';
 import { BAND_NAMES } from '@/types/train';
+import { FocusSpokesChips } from './FocusSpokesChips';
 import { ChevronRight, Flame, Sparkles, Target } from 'lucide-react';
 
 const DAILY_GOAL = 3;
@@ -76,6 +77,12 @@ export function DailyLadderCard() {
             Goal: {DAILY_GOAL} drills
           </span>
         </div>
+
+        <div className="space-y-1">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Focus</div>
+          <FocusSpokesChips />
+        </div>
+
 
         {isLoading && (
           <p className="text-xs text-muted-foreground">Loading next-due…</p>
