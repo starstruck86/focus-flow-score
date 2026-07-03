@@ -261,35 +261,7 @@ interface JournalRow {
   daily_score: number | null;
 }
 
-interface WhoopRow {
-  date: string;
-  recovery_score: number | null;
-  sleep_score: number | null;
-  strain_score: number | null;
-}
 
-async function fetchJournal(userId: string, start: string, end: string): Promise<JournalRow[]> {
-  const { data } = await supabase
-    .from('daily_journal_entries')
-    .select('date, dials, conversations, prospects_added, meetings_set, customer_meetings_held, opportunities_created, prospecting_block_minutes, pipeline_moved, daily_score')
-    .eq('user_id', userId)
-    .eq('checked_in', true)
-    .gte('date', start)
-    .lte('date', end)
-    .order('date');
-  return (data as JournalRow[] | null) || [];
-}
-
-async function fetchWhoop(userId: string, start: string, end: string): Promise<WhoopRow[]> {
-  const { data } = await supabase
-    .from('whoop_daily_metrics')
-    .select('date, recovery_score, sleep_score, strain_score')
-    .eq('user_id', userId)
-    .gte('date', start)
-    .lte('date', end)
-    .order('date');
-  return (data as WhoopRow[] | null) || [];
-}
 
 // ── Aggregation ─────────────────────────────────────────────────
 
