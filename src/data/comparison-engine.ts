@@ -279,7 +279,7 @@ function sum(arr: number[]): number { return arr.reduce((a, b) => a + b, 0); }
 function avg(arr: number[]): number { return arr.length ? sum(arr) / arr.length : 0; }
 function nonNull(arr: (number | null)[]): number[] { return arr.filter((v): v is number => v !== null && v !== undefined); }
 
-export function aggregateMetrics(journal: JournalRow[], whoop: WhoopRow[]): AggregatedMetrics {
+export function aggregateMetrics(journal: JournalRow[]): AggregatedMetrics {
   const dials = sum(journal.map(j => j.dials || 0));
   const conversations = sum(journal.map(j => j.conversations || 0));
   const prospects = sum(journal.map(j => j.prospects_added || 0));
@@ -291,19 +291,15 @@ export function aggregateMetrics(journal: JournalRow[], whoop: WhoopRow[]): Aggr
   const scores = nonNull(journal.map(j => j.daily_score));
   const avgScore = scores.length ? Math.round(avg(scores) * 10) / 10 : null;
 
-  const recoveries = nonNull(whoop.map(w => w.recovery_score ? Number(w.recovery_score) : null));
-  const sleeps = nonNull(whoop.map(w => w.sleep_score ? Number(w.sleep_score) : null));
-  const strains = nonNull(whoop.map(w => w.strain_score ? Number(w.strain_score) : null));
-
   return {
     dials, conversations, prospects, meetingsSet, meetingsHeld, oppsCreated,
     prospectingMinutes, pipelineMoved, avgScore,
     dialToConvo: dials > 0 ? Math.round((conversations / dials) * 1000) / 10 : null,
     convoToMeeting: conversations > 0 ? Math.round((meetingsSet / conversations) * 1000) / 10 : null,
     days: journal.length,
-    avgRecovery: recoveries.length ? Math.round(avg(recoveries)) : null,
-    avgSleep: sleeps.length ? Math.round(avg(sleeps)) : null,
-    avgStrain: strains.length ? Math.round(avg(strains) * 10) / 10 : null,
+    avgRecovery: null,
+    avgSleep: null,
+    avgStrain: null,
   };
 }
 
