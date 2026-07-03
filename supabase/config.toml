@@ -129,3 +129,13 @@ verify_jwt = false
 
 [functions.simulate-chat]
 verify_jwt = false
+
+# Security wave: require JWT on scorers. Both are only called from authed
+# client pages (CarMode, DojoSession, SimulationMode, AudioSessionMode, DojoQA,
+# qaRunner) via supabase.functions.invoke — session token auto-attached.
+# No cron invokes these. Future verification harnesses MUST authenticate.
+[functions.car-mode-score]
+verify_jwt = true
+
+[functions.dojo-score]
+verify_jwt = true
