@@ -186,19 +186,12 @@ function buildDetailedTrend(result: ComparisonResult): string {
   if (modeNote) sentences.push(modeNote);
 
   const workMetrics = metrics.filter(m => !['avgRecovery', 'avgSleep', 'avgStrain'].includes(m.metric));
-  const whoopMetrics = metrics.filter(m => ['avgRecovery', 'avgSleep', 'avgStrain'].includes(m.metric));
 
   if (workMetrics.length) {
     sentences.push('\nWork metrics:');
     for (const m of workMetrics) sentences.push(formatMetricLine(m));
   }
 
-  if (whoopMetrics.length && whoopMetrics.some(m => m.currentValue + m.previousValue > 0)) {
-    sentences.push('\nBiometrics:');
-    for (const m of whoopMetrics) {
-      if (m.currentValue + m.previousValue > 0) sentences.push(formatMetricLine(m));
-    }
-  }
 
   sentences.push('');
   sentences.push(interpretComparisons(result));
