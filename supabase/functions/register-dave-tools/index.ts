@@ -172,7 +172,7 @@ const DAVE_TOOLS: ToolDef[] = [
   { name: "pipeline_creation_suggest", description: "Suggest top 3-5 accounts to prospect this week based on ICP fit, trigger signals, and outreach status. Use when pipeline is dry or user asks for prospecting targets.", parameters: {} },
   { name: "kill_switch", description: "Identify low-value or stale deals that should be deprioritized or closed lost. Helps free up focus for higher-ROI work.", parameters: {} },
   { name: "behavior_summary", description: "Show the user's action completion patterns — what gets done vs ignored, broken down by entity type. Helps understand execution habits.", parameters: {} },
-  { name: "energy_match", description: "Recommend task types based on current energy level. Uses WHOOP biometrics if available, otherwise journal self-report.", parameters: {} },
+  { name: "energy_match", description: "Recommend task types based on the user's self-reported energy level from their daily journal.", parameters: {} },
 
   // ── Recast Engine ────────────────────────────────────────────
   { name: "recast_today", description: "Re-optimize the remaining blocks of today's Daily Game Plan based on current progress and time remaining. Use when the user says 'recast my day', 'what should I do now', 'I'm behind', or asks to reprioritize the rest of their day. Returns adjusted blocks, what was dropped/compressed, and the next suggested action.", parameters: {} },
