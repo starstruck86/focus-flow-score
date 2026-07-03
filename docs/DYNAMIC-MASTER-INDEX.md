@@ -2,12 +2,13 @@
 
 Pointer + registry for the Dynamic roadmap. The full roadmap is the versioned Google Drive doc named below; this index's job is to ALWAYS name the CURRENT master + its Drive file ID (so the pointer never goes stale) plus the session ritual. Anchored in the permanent Lovable project (id `2750cde7-6277-4433-9311-204bcc16e1d1`).
 
-Last reconciled: 2026-07-03 (~10:00 ET) — v18 cut, discretionary waves 2–5 shipped, current master.
+Last reconciled: 2026-07-03 (~12:15 ET) — v19 cut, Wave 9 final polish — CORPUS & PIPELINE CERTIFIED.
 
 ## CURRENT MASTER — confirmed
-- **DYNAMIC — MASTER STATE & ROADMAP (v18)** — Drive ID `19snXtJ_W2j4TJ6ihTgLCO6ZzUA_d2PGJc5MVRewXOV0` — cut July 3 2026 (~10:00 ET): discretionary waves 2–5 — 90 concepts authored, zero-gap ×5, parallel self-verifying pipeline. Supersedes v17.
+- **DYNAMIC — MASTER STATE & ROADMAP (v19)** — Drive ID `1m0K3Bi7-mw-oku0QzgsG5Xezm8WgaForIWrzj8R_neQ` — cut July 3 2026 (~12:15 ET): CORPUS & PIPELINE CERTIFIED — 97 concepts, 81 gates, zero-gap ×7, production path proven (car-mode-score, gold-payload). Supersedes v18.
 
 ## LINKED DOCS (Drive IDs)
+- Master v18 (superseded Jul 3 2026 ~12:15 ET) — `19snXtJ_W2j4TJ6ihTgLCO6ZzUA_d2PGJc5MVRewXOV0`
 - Master v17 (superseded Jul 3 2026 ~10:00 ET) — `1e3XPVjuJmwYX97Fj51WpfufQJhZseqAZ9u0hyurvTQs`
 - Master v16 (superseded) — `1Ky3KmI2tkufFmh8Mit7LC3yQwMLyjBXomphN74Xntbk`
 - Master v15 (superseded) — `1xHPUc1vL2hjjcWE71R8q5HIZc6PTL-4qKRCo3w9dBLI`
