@@ -82,11 +82,6 @@ export interface WeeklyPatternsResult {
   patterns_summary?: string;
 }
 
-/** Shape for trackedInvoke result from whoop-sync */
-export interface WhoopSyncResult {
-  synced?: number;
-  error?: string;
-}
 
 /** Dynamic access to MEDDICC confirmed fields */
 export type MeddiccFieldKey = 'metrics' | 'economic_buyer' | 'decision_criteria' | 'decision_process' | 'identify_pain' | 'champion' | 'competition';
