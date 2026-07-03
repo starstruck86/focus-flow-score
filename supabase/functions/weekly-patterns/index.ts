@@ -53,17 +53,6 @@ serve(async (req) => {
       );
     }
 
-    // Get WHOOP data for correlation
-    const dates = entries.map(e => e.date);
-    const { data: whoopData } = await supabase
-      .from("whoop_daily_metrics")
-      .select("date, recovery_score, sleep_score, strain_score")
-      .eq("user_id", user.id)
-      .in("date", dates);
-
-    // Build correlation map
-    const whoopByDate: Record<string, any> = {};
-    (whoopData || []).forEach(w => { whoopByDate[w.date] = w; });
 
     // Get targets
     const { data: targets } = await supabase
