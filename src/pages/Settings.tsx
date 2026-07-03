@@ -1150,7 +1150,6 @@ export default function Settings() {
 
           <section className="space-y-4">
             <h2 className="text-base font-semibold text-foreground/90 border-b border-border/40 pb-2">Integrations</h2>
-             <WhoopIntegration />
              <DaveHealthSection />
              {/* Wake Word Toggle */}
              {typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) && (
