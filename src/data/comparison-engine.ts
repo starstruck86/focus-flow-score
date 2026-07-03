@@ -390,17 +390,15 @@ export async function runComparison(
   const pair = getPeriodPair(periodType);
   const contextLabel = `${pair.currentLabel}_vs_${pair.previousLabel}`.replace(/\s+/g, '_');
 
-  const [curJournal, prevJournal, curWhoop, prevWhoop] = await Promise.all([
+  const [curJournal, prevJournal] = await Promise.all([
     fetchJournal(userId, pair.current.start, pair.current.end),
     fetchJournal(userId, pair.previous.start, pair.previous.end),
-    fetchWhoop(userId, pair.current.start, pair.current.end),
-    fetchWhoop(userId, pair.previous.start, pair.previous.end),
   ]);
 
   if (!curJournal.length && !prevJournal.length) return null;
 
-  const curAgg = aggregateMetrics(curJournal, curWhoop);
-  const prevAgg = aggregateMetrics(prevJournal, prevWhoop);
+  const curAgg = aggregateMetrics(curJournal);
+  const prevAgg = aggregateMetrics(prevJournal);
   const metrics = buildMetricComparisons(curAgg, prevAgg, periodType, contextLabel);
 
   const withPct = metrics.filter(c => c.percentChange !== null && c.trend !== 'flat' && (c.currentValue + c.previousValue) > 0);
