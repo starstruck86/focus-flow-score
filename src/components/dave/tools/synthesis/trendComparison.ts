@@ -145,20 +145,6 @@ function interpretComparisons(result: ComparisonResult): string {
     }
   }
 
-  // WHOOP + performance cross-correlation
-  const recoveryM = metrics.find(m => m.metric === 'avgRecovery');
-  const scoreM = metrics.find(m => m.metric === 'avgScore');
-  if (recoveryM && scoreM && recoveryM.trend !== 'flat' && scoreM.trend !== 'flat') {
-    if (recoveryM.trend === 'down' && scoreM.trend === 'down') {
-      sentences.push(`Both recovery and daily scores dropped — rest might be the lever here.`);
-    } else if (recoveryM.trend === 'up' && scoreM.trend === 'up') {
-      sentences.push(`Recovery is up and so are your scores — the body-performance link is real.`);
-    } else if (recoveryM.trend === 'down' && scoreM.trend === 'up') {
-      sentences.push(`Interesting — scores are up despite lower recovery. You're grinding, but watch for burnout.`);
-    } else if (recoveryM.trend === 'up' && scoreM.trend === 'down') {
-      sentences.push(`Better recovery but scores are down — might be a focus or strategy issue, not energy.`);
-    }
-  }
 
   if (ups.length && downs.length) {
     sentences.push(`Overall, ${ups.length} metric${ups.length > 1 ? 's' : ''} improved and ${downs.length} declined compared to ${previousLabel}.`);
