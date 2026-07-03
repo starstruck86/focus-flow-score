@@ -261,7 +261,17 @@ interface JournalRow {
   daily_score: number | null;
 }
 
-
+async function fetchJournal(userId: string, start: string, end: string): Promise<JournalRow[]> {
+  const { data } = await supabase
+    .from('daily_journal_entries')
+    .select('date, dials, conversations, prospects_added, meetings_set, customer_meetings_held, opportunities_created, prospecting_block_minutes, pipeline_moved, daily_score')
+    .eq('user_id', userId)
+    .eq('checked_in', true)
+    .gte('date', start)
+    .lte('date', end)
+    .order('date');
+  return (data as JournalRow[] | null) || [];
+}
 
 // ── Aggregation ─────────────────────────────────────────────────
 
