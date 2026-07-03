@@ -238,7 +238,7 @@ If system becomes complex, simplify to: 1-2 call blocks, 1 build block, minimal 
 - Deal risk → use assess_deal_risk
 - MEDDICC gap tasks → use create_methodology_tasks
 - Meeting prep → use meeting_brief
-- WHOOP → use get_whoop_status / sync_whoop
+
 - Save commitments → use save_commitment`;
 
 // ─── Structured error types for client-side handling ───
