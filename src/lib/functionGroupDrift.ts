@@ -17,7 +17,6 @@ export interface FunctionGroup {
 }
 
 export const FUNCTION_GROUPS: FunctionGroup[] = [
-  { name: 'whoop', functions: ['whoop-auth', 'whoop-callback', 'whoop-sync'] },
   { name: 'dave', functions: ['dave-conversation-token'] },
 ];
 

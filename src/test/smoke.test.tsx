@@ -506,7 +506,6 @@ describe('Edge function deploy groups', () => {
   const path = require('path');
 
   const FUNCTION_GROUPS: Record<string, string[]> = {
-    whoop: ['whoop-auth', 'whoop-callback', 'whoop-sync'],
     dave: ['dave-conversation-token'],
   };
 

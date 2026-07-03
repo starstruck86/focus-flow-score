@@ -153,9 +153,7 @@ const DAVE_TOOLS: ToolDef[] = [
   { name: "create_methodology_tasks", description: "Convert unconfirmed MEDDICC gaps on a deal into specific, actionable tasks with talk tracks and due dates based on close date.", parameters: { opportunityName: str("The opportunity to create MEDDICC tasks for") }, required: ["opportunityName"] },
   { name: "meeting_brief", description: "Get a concise inline prep brief for an upcoming meeting. Auto-matches calendar title to account and pulls deal context, MEDDICC gaps, contacts, and last call summary.", parameters: { meetingTitle: str("Meeting title to match — omit for the next upcoming meeting") } },
 
-  // ── WHOOP & Resource Intelligence ────────────────────────────
-  { name: "get_whoop_status", description: "Get the user's WHOOP biometric data — recovery, sleep, and strain scores with coaching context", parameters: {} },
-  { name: "sync_whoop", description: "Trigger a manual WHOOP data sync to fetch the latest biometric data", parameters: {} },
+  // ── Resource Intelligence ────────────────────────────
   { name: "read_resource_digest", description: "Read the operationalized intelligence digest of a resource — takeaways, use cases, grading criteria. Use when the user asks about a framework, playbook, or training material's key points.", parameters: { title: str("The resource title or partial match to find") }, required: ["title"] },
 
   // ═══════════════════════════════════════════════════════════════
@@ -174,7 +172,7 @@ const DAVE_TOOLS: ToolDef[] = [
   { name: "pipeline_creation_suggest", description: "Suggest top 3-5 accounts to prospect this week based on ICP fit, trigger signals, and outreach status. Use when pipeline is dry or user asks for prospecting targets.", parameters: {} },
   { name: "kill_switch", description: "Identify low-value or stale deals that should be deprioritized or closed lost. Helps free up focus for higher-ROI work.", parameters: {} },
   { name: "behavior_summary", description: "Show the user's action completion patterns — what gets done vs ignored, broken down by entity type. Helps understand execution habits.", parameters: {} },
-  { name: "energy_match", description: "Recommend task types based on current energy level. Uses WHOOP biometrics if available, otherwise journal self-report.", parameters: {} },
+  { name: "energy_match", description: "Recommend task types based on the user's self-reported energy level from their daily journal.", parameters: {} },
 
   // ── Recast Engine ────────────────────────────────────────────
   { name: "recast_today", description: "Re-optimize the remaining blocks of today's Daily Game Plan based on current progress and time remaining. Use when the user says 'recast my day', 'what should I do now', 'I'm behind', or asks to reprioritize the rest of their day. Returns adjusted blocks, what was dropped/compressed, and the next suggested action.", parameters: {} },

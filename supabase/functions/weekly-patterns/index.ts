@@ -53,17 +53,6 @@ serve(async (req) => {
       );
     }
 
-    // Get WHOOP data for correlation
-    const dates = entries.map(e => e.date);
-    const { data: whoopData } = await supabase
-      .from("whoop_daily_metrics")
-      .select("date, recovery_score, sleep_score, strain_score")
-      .eq("user_id", user.id)
-      .in("date", dates);
-
-    // Build correlation map
-    const whoopByDate: Record<string, any> = {};
-    (whoopData || []).forEach(w => { whoopByDate[w.date] = w; });
 
     // Get targets
     const { data: targets } = await supabase
@@ -116,32 +105,6 @@ serve(async (req) => {
         insights.push(
           `Days with 30+ min prospecting blocks average ${pctMore}% more conversations (${avgConvWith.toFixed(1)} vs ${avgConvWithout.toFixed(1)}). Block time is working.`
         );
-      }
-    }
-
-    // 3. WHOOP recovery → performance correlation
-    if (Object.keys(whoopByDate).length >= 5) {
-      const entriesWithWhoop = entries
-        .filter(e => whoopByDate[e.date]?.recovery_score != null)
-        .map(e => ({
-          ...e,
-          recovery: Number(whoopByDate[e.date].recovery_score),
-        }));
-
-      if (entriesWithWhoop.length >= 5) {
-        const highRecovery = entriesWithWhoop.filter(e => e.recovery >= 60);
-        const lowRecovery = entriesWithWhoop.filter(e => e.recovery < 50);
-
-        if (highRecovery.length >= 2 && lowRecovery.length >= 2) {
-          const highGoalRate = highRecovery.filter(e => e.goal_met).length / highRecovery.length;
-          const lowGoalRate = lowRecovery.filter(e => e.goal_met).length / lowRecovery.length;
-
-          if (highGoalRate > lowGoalRate + 0.2) {
-            insights.push(
-              `When WHOOP recovery is 60%+, your goal-met rate is ${Math.round(highGoalRate * 100)}% vs ${Math.round(lowGoalRate * 100)}% on low recovery days. Sleep quality directly impacts your output.`
-            );
-          }
-        }
       }
     }
 

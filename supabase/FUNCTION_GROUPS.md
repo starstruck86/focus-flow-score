@@ -7,26 +7,6 @@ When editing ANY function in a group, deploy the ENTIRE group.
 
 ---
 
-## Group: `whoop` — WHOOP OAuth & Sync
-
-| Function            | Role                                      |
-|---------------------|--------------------------------------------|
-| `whoop-auth`        | Initiates OAuth, builds HMAC-signed state  |
-| `whoop-callback`    | Verifies HMAC state, exchanges code for tokens |
-| `whoop-sync`        | Reads tokens, syncs biometric data         |
-
-**Shared contracts:**
-- HMAC-SHA256 state signing/verification (key: `WHOOP_CLIENT_SECRET`)
-- State payload shape: `{ userId, redirectUri, nonce, v }`
-- `whoop_connections` table schema (tokens, scopes)
-
-**Version constant:** `FUNCTION_GROUP_VERSION` in each file.
-Bump the version (`whoop-v3`, etc.) when changing any shared contract.
-
-**Runtime drift detection:** `whoop-callback` logs an explicit error if
-the state's `v` field doesn't match its own `FUNCTION_GROUP_VERSION`.
-
----
 
 ## Group: `dave` — Dave Voice Assistant
 

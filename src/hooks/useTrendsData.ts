@@ -67,24 +67,8 @@ export function useTrendsData(range: TrendRange) {
 
       if (error) throw error;
 
-      // Fetch WHOOP data
-      const dates = (entries || []).map(e => e.date);
-      let whoopMap: Record<string, { recovery: number | null; sleep: number | null; strain: number | null }> = {};
-      
-      if (dates.length > 0) {
-        const { data: whoop } = await supabase
-          .from('whoop_daily_metrics')
-          .select('date, recovery_score, sleep_score, strain_score')
-          .in('date', dates);
-        
-        (whoop || []).forEach((w: any) => {
-          whoopMap[w.date] = {
-            recovery: w.recovery_score,
-            sleep: w.sleep_score,
-            strain: w.strain_score,
-          };
-        });
-      }
+
+
 
       const dailyMetrics: DayMetric[] = (entries || []).map((e: any) => ({
         date: e.date,
@@ -104,9 +88,9 @@ export function useTrendsData(range: TrendRange) {
         sentimentScore: e.sentiment_score,
         sentimentLabel: e.sentiment_label,
         pipelineMoved: e.pipeline_moved,
-        recovery: whoopMap[e.date]?.recovery ?? null,
-        sleep: whoopMap[e.date]?.sleep ?? null,
-        strain: whoopMap[e.date]?.strain ?? null,
+        recovery: null,
+        sleep: null,
+        strain: null,
         focusScore: e.focus_score,
         distractedMinutes: e.distracted_minutes,
         workdayStartTime: e.workday_start_time,

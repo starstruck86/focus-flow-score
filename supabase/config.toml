@@ -14,15 +14,6 @@ verify_jwt = false
 [functions.territory-copilot]
 verify_jwt = false
 
-[functions.whoop-auth]
-verify_jwt = false
-
-[functions.whoop-callback]
-verify_jwt = false
-
-[functions.whoop-sync]
-verify_jwt = false
-
 [functions.analyze-sentiment]
 verify_jwt = false
 

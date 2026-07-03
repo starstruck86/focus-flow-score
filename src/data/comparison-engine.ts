@@ -261,13 +261,6 @@ interface JournalRow {
   daily_score: number | null;
 }
 
-interface WhoopRow {
-  date: string;
-  recovery_score: number | null;
-  sleep_score: number | null;
-  strain_score: number | null;
-}
-
 async function fetchJournal(userId: string, start: string, end: string): Promise<JournalRow[]> {
   const { data } = await supabase
     .from('daily_journal_entries')
@@ -280,24 +273,13 @@ async function fetchJournal(userId: string, start: string, end: string): Promise
   return (data as JournalRow[] | null) || [];
 }
 
-async function fetchWhoop(userId: string, start: string, end: string): Promise<WhoopRow[]> {
-  const { data } = await supabase
-    .from('whoop_daily_metrics')
-    .select('date, recovery_score, sleep_score, strain_score')
-    .eq('user_id', userId)
-    .gte('date', start)
-    .lte('date', end)
-    .order('date');
-  return (data as WhoopRow[] | null) || [];
-}
-
 // ── Aggregation ─────────────────────────────────────────────────
 
 function sum(arr: number[]): number { return arr.reduce((a, b) => a + b, 0); }
 function avg(arr: number[]): number { return arr.length ? sum(arr) / arr.length : 0; }
 function nonNull(arr: (number | null)[]): number[] { return arr.filter((v): v is number => v !== null && v !== undefined); }
 
-export function aggregateMetrics(journal: JournalRow[], whoop: WhoopRow[]): AggregatedMetrics {
+export function aggregateMetrics(journal: JournalRow[]): AggregatedMetrics {
   const dials = sum(journal.map(j => j.dials || 0));
   const conversations = sum(journal.map(j => j.conversations || 0));
   const prospects = sum(journal.map(j => j.prospects_added || 0));
@@ -309,19 +291,15 @@ export function aggregateMetrics(journal: JournalRow[], whoop: WhoopRow[]): Aggr
   const scores = nonNull(journal.map(j => j.daily_score));
   const avgScore = scores.length ? Math.round(avg(scores) * 10) / 10 : null;
 
-  const recoveries = nonNull(whoop.map(w => w.recovery_score ? Number(w.recovery_score) : null));
-  const sleeps = nonNull(whoop.map(w => w.sleep_score ? Number(w.sleep_score) : null));
-  const strains = nonNull(whoop.map(w => w.strain_score ? Number(w.strain_score) : null));
-
   return {
     dials, conversations, prospects, meetingsSet, meetingsHeld, oppsCreated,
     prospectingMinutes, pipelineMoved, avgScore,
     dialToConvo: dials > 0 ? Math.round((conversations / dials) * 1000) / 10 : null,
     convoToMeeting: conversations > 0 ? Math.round((meetingsSet / conversations) * 1000) / 10 : null,
     days: journal.length,
-    avgRecovery: recoveries.length ? Math.round(avg(recoveries)) : null,
-    avgSleep: sleeps.length ? Math.round(avg(sleeps)) : null,
-    avgStrain: strains.length ? Math.round(avg(strains) * 10) / 10 : null,
+    avgRecovery: null,
+    avgSleep: null,
+    avgStrain: null,
   };
 }
 
@@ -412,17 +390,15 @@ export async function runComparison(
   const pair = getPeriodPair(periodType);
   const contextLabel = `${pair.currentLabel}_vs_${pair.previousLabel}`.replace(/\s+/g, '_');
 
-  const [curJournal, prevJournal, curWhoop, prevWhoop] = await Promise.all([
+  const [curJournal, prevJournal] = await Promise.all([
     fetchJournal(userId, pair.current.start, pair.current.end),
     fetchJournal(userId, pair.previous.start, pair.previous.end),
-    fetchWhoop(userId, pair.current.start, pair.current.end),
-    fetchWhoop(userId, pair.previous.start, pair.previous.end),
   ]);
 
   if (!curJournal.length && !prevJournal.length) return null;
 
-  const curAgg = aggregateMetrics(curJournal, curWhoop);
-  const prevAgg = aggregateMetrics(prevJournal, prevWhoop);
+  const curAgg = aggregateMetrics(curJournal);
+  const prevAgg = aggregateMetrics(prevJournal);
   const metrics = buildMetricComparisons(curAgg, prevAgg, periodType, contextLabel);
 
   const withPct = metrics.filter(c => c.percentChange !== null && c.trend !== 'flat' && (c.currentValue + c.previousValue) > 0);

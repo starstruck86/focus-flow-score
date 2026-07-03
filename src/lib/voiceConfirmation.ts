@@ -25,7 +25,6 @@ const NONE_TOOLS = new Set([
   'query_opportunities', 'query_renewals', 'query_tasks',
   'query_quota', 'query_pipeline', 'query_dashboard',
   'compare_trends', 'personal_insights', 'new_logo_targets',
-  'whoop_performance_insights', 'whoop_today_context',
   'start_roleplay', 'start_drill', 'grade_call',
   'prep_meeting', 'open_content_builder',
   // Explain intent
