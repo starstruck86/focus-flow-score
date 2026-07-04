@@ -93,6 +93,7 @@ const TrainSpoke = lazy(() => import("./pages/train/TrainSpoke"));
 const TrainTopic = lazy(() => import("./pages/train/TrainTopic"));
 const TrainAtom = lazy(() => import("./pages/train/TrainAtom"));
 const TrainBandGate = lazy(() => import("./pages/train/TrainBandGate"));
+const GatesHub = lazy(() => import("./pages/GatesHub"));
 const CarMode = lazy(() => import("./pages/CarMode"));
 const Flash = lazy(() => import("./pages/Flash"));
 const FlashDeck = lazy(() => import("./pages/FlashDeck"));
