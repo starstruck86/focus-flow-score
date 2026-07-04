@@ -16,6 +16,7 @@ import { Layout } from '@/components/Layout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { EmbeddedLayoutProvider } from '@/components/layout/EmbeddedContext';
+import { useSwipeTabs } from '@/lib/gestures/useSwipeTabs';
 
 const Study = lazy(() => import('./Study'));
 const Dojo = lazy(() => import('./Dojo'));
@@ -24,6 +25,11 @@ const GatesHub = lazy(() => import('./GatesHub'));
 const JADE = 'hsl(160 66% 55%)';
 const VALID_TABS = ['study', 'skills', 'review'] as const;
 type Tab = typeof VALID_TABS[number];
+
+function SwipeTabsZone({ tabs, active, onChange, children }: { tabs: readonly string[]; active: string; onChange: (t: string) => void; children: React.ReactNode }) {
+  const handlers = useSwipeTabs({ tabs, active, onChange });
+  return <div {...handlers} style={{ touchAction: 'pan-y' }}>{children}</div>;
+}
 
 function Loading({ label }: { label: string }) {
   return <div className="p-8 text-sm text-muted-foreground">Loading {label}…</div>;
@@ -94,9 +100,11 @@ export default function TrainHub() {
               <TabsTrigger value="review">Review</TabsTrigger>
             </TabsList>
           </div>
-          <TabsContent value="study"><StudyTab /></TabsContent>
-          <TabsContent value="skills"><SkillsTab /></TabsContent>
-          <TabsContent value="review"><ReviewTab /></TabsContent>
+          <SwipeTabsZone tabs={VALID_TABS} active={tab} onChange={setTab}>
+            <TabsContent value="study"><StudyTab /></TabsContent>
+            <TabsContent value="skills"><SkillsTab /></TabsContent>
+            <TabsContent value="review"><ReviewTab /></TabsContent>
+          </SwipeTabsZone>
         </Tabs>
       </div>
     </Layout>

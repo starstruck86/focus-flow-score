@@ -23,6 +23,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { SwipeCompleteRow } from '@/components/gestures/SwipeCompleteRow';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { todayET } from '@/lib/timeFormat';
@@ -383,28 +384,29 @@ function TodaysTasks() {
         {tasks.map((t: any) => {
           const overdue = t.due_date && t.due_date < today;
           return (
-            <div
-              key={t.id}
-              className="flex items-center gap-2 py-2 px-1 min-h-[44px] rounded hover:bg-muted/30 transition-colors"
-            >
-              <button
-                onClick={() => complete.mutate(t.id)}
-                className="shrink-0 p-1 -m-1"
-                aria-label={`Complete ${t.title}`}
+            <SwipeCompleteRow key={t.id} onComplete={() => complete.mutate(t.id)}>
+              <div
+                className="flex items-center gap-2 py-2 px-1 min-h-[44px] rounded hover:bg-muted/30 transition-colors"
               >
-                <Circle className="h-4 w-4 text-muted-foreground hover:text-status-green transition-colors" />
-              </button>
-              <button
-                onClick={() => nav('/tasks')}
-                className="flex-1 min-w-0 text-left"
-              >
-                <div className="text-sm truncate">{t.title}</div>
-              </button>
-              {overdue && (
-                <span className="text-[10px] text-status-red font-medium shrink-0">Overdue</span>
-              )}
-              <span className="text-[10px] font-mono text-muted-foreground shrink-0">{t.priority}</span>
-            </div>
+                <button
+                  onClick={() => complete.mutate(t.id)}
+                  className="shrink-0 p-1 -m-1"
+                  aria-label={`Complete ${t.title}`}
+                >
+                  <Circle className="h-4 w-4 text-muted-foreground hover:text-status-green transition-colors" />
+                </button>
+                <button
+                  onClick={() => nav('/tasks')}
+                  className="flex-1 min-w-0 text-left"
+                >
+                  <div className="text-sm truncate">{t.title}</div>
+                </button>
+                {overdue && (
+                  <span className="text-[10px] text-status-red font-medium shrink-0">Overdue</span>
+                )}
+                <span className="text-[10px] font-mono text-muted-foreground shrink-0">{t.priority}</span>
+              </div>
+            </SwipeCompleteRow>
           );
         })}
       </CardContent>

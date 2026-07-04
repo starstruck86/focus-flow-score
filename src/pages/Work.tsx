@@ -17,6 +17,7 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { Briefcase, ArrowRight } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { useSwipeTabs } from '@/lib/gestures/useSwipeTabs';
 import { Button } from '@/components/ui/button';
 import { EmbeddedLayoutProvider } from '@/components/layout/EmbeddedContext';
 import { DeskComposition } from '@/components/work/DeskComposition';
@@ -99,6 +100,7 @@ export default function Work() {
   };
 
   const headerStyle = useMemo(() => ({ borderBottomColor: `${AMBER}33` }), []);
+  const swipe = useSwipeTabs({ tabs: VALID_TABS, active: tab, onChange: setTab });
 
   return (
     <Layout>
@@ -120,10 +122,12 @@ export default function Work() {
               <TabsTrigger value="strategy">Strategy</TabsTrigger>
             </TabsList>
           </div>
-          <TabsContent value="desk"><DeskTab /></TabsContent>
-          <TabsContent value="pipeline"><PipelineTab /></TabsContent>
-          <TabsContent value="territory"><TerritoryTab /></TabsContent>
-          <TabsContent value="strategy"><StrategyTab /></TabsContent>
+          <div {...swipe} style={{ touchAction: 'pan-y' }}>
+            <TabsContent value="desk"><DeskTab /></TabsContent>
+            <TabsContent value="pipeline"><PipelineTab /></TabsContent>
+            <TabsContent value="territory"><TerritoryTab /></TabsContent>
+            <TabsContent value="strategy"><StrategyTab /></TabsContent>
+          </div>
         </Tabs>
       </div>
     </Layout>
