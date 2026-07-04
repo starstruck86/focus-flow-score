@@ -19,6 +19,7 @@ import { Layout } from '@/components/Layout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { EmbeddedLayoutProvider } from '@/components/layout/EmbeddedContext';
+import { DeskComposition } from '@/components/work/DeskComposition';
 
 const WeeklyOutreach = lazy(() => import('./WeeklyOutreach'));
 const Deals = lazy(() => import('./Deals'));
