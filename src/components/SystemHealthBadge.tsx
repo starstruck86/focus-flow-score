@@ -79,12 +79,7 @@ export function SystemHealthBadge() {
             </div>
           )}
 
-          <button
-            onClick={() => { setOpen(false); window.location.href = '/smoke-test'; }}
-            className="flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            <ExternalLink className="size-3" /> Open full dashboard
-          </button>
+          {/* P1d: link to /smoke-test removed from visible nav. Route reachable via Settings → Admin & QA. */}
         </div>
       )}
     </div>
