@@ -101,8 +101,10 @@ const Study = lazy(() => import("./pages/Study"));
 const Work = lazy(() => import("./pages/Work"));
 const TrainHub = lazy(() => import("./pages/TrainHub"));
 const SettingsLegacy = lazy(() => import("./pages/SettingsLegacy"));
+const NavUsage = lazy(() => import("./pages/NavUsage"));
 
 import { useLastSurface } from "@/hooks/useLastSurface";
+import { ShortcutHintBanner } from "@/components/ShortcutHintBanner";
 const LastSurfaceTracker = () => { useLastSurface(); return null; };
 
 
