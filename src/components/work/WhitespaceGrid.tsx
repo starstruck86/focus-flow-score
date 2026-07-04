@@ -43,7 +43,7 @@ export function WhitespaceGrid() {
     enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('products' as never)
+        .from('products' as any)
         .select('id, name, list_price, sort_order, active')
         .order('sort_order');
       if (error) throw error;
@@ -56,7 +56,7 @@ export function WhitespaceGrid() {
     enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('account_product_ownership' as never)
+        .from('account_product_ownership' as any)
         .select('account_id, product_id')
         .eq('owned', true);
       if (error) throw error;
@@ -75,17 +75,17 @@ export function WhitespaceGrid() {
       if (!user) throw new Error('no auth');
       if (currentlyOwned) {
         const { error } = await supabase
-          .from('account_product_ownership' as never)
+          .from('account_product_ownership' as any)
           .delete()
           .eq('account_id', accountId)
           .eq('product_id', productId);
         if (error) throw error;
       } else {
         const { error } = await supabase
-          .from('account_product_ownership' as never)
+          .from('account_product_ownership' as any)
           .upsert(
             { user_id: user.id, account_id: accountId, product_id: productId, owned: true, noted_at: new Date().toISOString() },
-            { onConflict: 'account_id,product_id' } as never,
+            { onConflict: 'account_id,product_id' },
           );
         if (error) throw error;
       }
@@ -114,8 +114,8 @@ export function WhitespaceGrid() {
       if (!user) throw new Error('no auth');
       const maxSort = Math.max(0, ...(productsQ.data ?? []).map((p) => p.sort_order));
       const { error } = await supabase
-        .from('products' as never)
-        .insert({ user_id: user.id, name: name.trim(), sort_order: maxSort + 10 } as never);
+        .from('products' as any)
+        .insert({ user_id: user.id, name: name.trim(), sort_order: maxSort + 10 } as any);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -127,7 +127,7 @@ export function WhitespaceGrid() {
 
   const updateProduct = useMutation({
     mutationFn: async ({ id, patch }: { id: string; patch: Partial<Product> }) => {
-      const { error } = await supabase.from('products' as never).update(patch as never).eq('id', id);
+      const { error } = await supabase.from('products' as any).update(patch as any).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['whitespace-products', user?.id] }),
