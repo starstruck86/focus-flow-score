@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      _agent_staging: {
+        Row: {
+          created_at: string
+          job: string
+          payload: Json
+          row_id: string
+        }
+        Insert: {
+          created_at?: string
+          job: string
+          payload: Json
+          row_id: string
+        }
+        Update: {
+          created_at?: string
+          job?: string
+          payload?: Json
+          row_id?: string
+        }
+        Relationships: []
+      }
       account_contacts: {
         Row: {
           account_id: string | null
