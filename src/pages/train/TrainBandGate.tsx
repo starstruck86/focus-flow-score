@@ -343,8 +343,8 @@ export default function TrainBandGate() {
               )}
 
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => navigate(`/train/${spoke}/${topic}`)}>
-                  Back to ladder
+                <Button variant="outline" onClick={() => navigate(backPath)}>
+                  {fromGatesHub ? 'Back to Gates' : 'Back to ladder'}
                 </Button>
                 {!finalSummary.passed && <Button onClick={retake}>Retake</Button>}
               </div>
