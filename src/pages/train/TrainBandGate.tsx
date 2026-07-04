@@ -190,10 +190,10 @@ export default function TrainBandGate() {
       <main className={cn('mx-auto max-w-2xl px-4 pt-4', SHELL.main.bottomPad)}>
         <header className="mb-4">
           <button
-            onClick={() => navigate(`/train/${spoke}/${topic}`)}
+            onClick={() => navigate(backPath)}
             className="text-xs text-muted-foreground hover:text-foreground"
           >
-            ← Ladder
+            {backLabel}
           </button>
           <h1 className="text-xl font-bold mt-2">Band {band} Gate · {BAND_NAMES[band]}</h1>
         </header>
