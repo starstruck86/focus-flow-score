@@ -23,6 +23,7 @@ import {
 import { Layout } from '@/components/Layout';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { supabase } from '@/integrations/supabase/client';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useAuth } from '@/contexts/AuthContext';
 import GUIDE_MD from '../../docs/GUIDE.md?raw';
 
