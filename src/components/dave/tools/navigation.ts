@@ -118,7 +118,7 @@ export function createNavigationTools(ctx: ToolContext): ToolMap {
     },
 
     grade_call: () => {
-      ctx.navigate('/coach');
+      ctx.navigate('/grade');
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('voice-grade-call'));
       }, 500);
