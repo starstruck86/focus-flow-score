@@ -32,8 +32,9 @@ const ROUTE_ALIASES: Record<string, string> = {
   'post-call': '/post-call',
   settings: '/settings',
   // New P1c aliases (destinations will flip once /work + /train-hub are live)
-  work: '/strategy',
-  train: '/study',
+  // P1c-REAL: hubs live at /work and /train-hub
+  work: '/work',
+  train: '/train-hub',
 };
 function resolveAlias(path: string): string {
   if (!path) return path;

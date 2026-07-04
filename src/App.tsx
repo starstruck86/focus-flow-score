@@ -97,6 +97,8 @@ const CarMode = lazy(() => import("./pages/CarMode"));
 const Flash = lazy(() => import("./pages/Flash"));
 const FlashDeck = lazy(() => import("./pages/FlashDeck"));
 const Study = lazy(() => import("./pages/Study"));
+const Work = lazy(() => import("./pages/Work"));
+const TrainHub = lazy(() => import("./pages/TrainHub"));
 
 import { useLastSurface } from "@/hooks/useLastSurface";
 const LastSurfaceTracker = () => { useLastSurface(); return null; };
@@ -154,6 +156,8 @@ const App = () => (
                   <Route path="/study" element={<ProtectedPage routeName="Study"><Suspense fallback={<LazyFallback text="Loading study hub…" />}><Study /></Suspense></ProtectedPage>} />
 
                   <Route path="/today" element={<ProtectedPage routeName="Today"><Today /></ProtectedPage>} />
+                  <Route path="/work" element={<ProtectedPage routeName="Work"><Suspense fallback={<LazyFallback text="Loading Work…" />}><Work /></Suspense></ProtectedPage>} />
+                  <Route path="/train-hub" element={<ProtectedPage routeName="Train"><Suspense fallback={<LazyFallback text="Loading Train…" />}><TrainHub /></Suspense></ProtectedPage>} />
                   <Route path="/dashboard" element={<ProtectedPage routeName="Dashboard"><Dashboard /></ProtectedPage>} />
 
                   <Route path="/outreach" element={<ProtectedPage routeName="Outreach"><WeeklyOutreach /></ProtectedPage>} />
