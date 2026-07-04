@@ -24,8 +24,27 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const perplexityKey = Deno.env.get("PERPLEXITY_API_KEY");
+    const cronSecret = Deno.env.get("CRON_SECRET");
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    // Dual-mode auth: cron sends x-cron-secret, clients send a real user JWT.
+    const isCron = !!cronSecret && req.headers.get("x-cron-secret") === cronSecret;
+    let authedUserId: string | null = null;
+    if (!isCron) {
+      const authHeader = req.headers.get("Authorization") || "";
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      authedUserId = user.id;
+    }
 
     if (!perplexityKey) {
       throw new Error("PERPLEXITY_API_KEY not configured");
