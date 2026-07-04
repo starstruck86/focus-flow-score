@@ -40,7 +40,10 @@ function StudyTab() {
 function SkillsTab() {
   return (
     <EmbeddedLayoutProvider>
-      <Suspense fallback={<Loading label="skills" />}><Dojo /></Suspense>
+      <Suspense fallback={<Loading label="gates" />}><GatesHub /></Suspense>
+      <div className="mt-6 border-t border-border pt-2">
+        <Suspense fallback={<Loading label="skills" />}><Dojo /></Suspense>
+      </div>
     </EmbeddedLayoutProvider>
   );
 }
