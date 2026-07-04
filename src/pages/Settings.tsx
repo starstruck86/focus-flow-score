@@ -23,6 +23,7 @@ import {
 import { Layout } from '@/components/Layout';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { supabase } from '@/integrations/supabase/client';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useAuth } from '@/contexts/AuthContext';
 import GUIDE_MD from '../../docs/GUIDE.md?raw';
 
@@ -80,6 +81,21 @@ function useCalendarStatus() {
     },
   });
 }
+
+// Voice status — real dave-health-check (authed). Not a fake ping.
+function useVoiceStatus() {
+  return useQuery({
+    queryKey: ['settings-voice-health'],
+    staleTime: 5 * 60_000,
+    refetchOnMount: true,
+    queryFn: async () => {
+      const { data, error } = await trackedInvoke<any>('dave-health-check');
+      if (error) throw error;
+      return data as { apiKeySet: boolean; apiKeyValid: boolean; agentIdSet: boolean; tokenGenOk: boolean; error: string | null };
+    },
+  });
+}
+
 
 type StatusLevel = 'ok' | 'warn' | 'bad' | 'idle';
 function StatusDot({ level }: { level: StatusLevel }) {
@@ -142,6 +158,7 @@ export default function Settings() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const calStatus = useCalendarStatus();
+  const voiceStatus = useVoiceStatus();
 
   const cal = useMemo<{ level: StatusLevel; label: string }>(() => {
     if (calStatus.isLoading) return { level: 'idle', label: 'Checking…' };
@@ -154,12 +171,18 @@ export default function Settings() {
     return { level: 'bad', label: `Stale · ${Math.round(ageMin / 60)}h ago` };
   }, [calStatus.data, calStatus.isLoading]);
 
-  const voice: { level: StatusLevel; label: string } = {
-    // The client cannot honestly read server secrets. Show "not configured"
-    // as the default; a successful Dave health check flips this row.
-    level: 'idle',
-    label: 'Not configured (check via Ops → Diagnostics)',
-  };
+  const voice = useMemo<{ level: StatusLevel; label: string }>(() => {
+    if (voiceStatus.isLoading) return { level: 'idle', label: 'Checking…' };
+    if (voiceStatus.isError) return { level: 'bad', label: 'Health check failed — check /ops' };
+    const d = voiceStatus.data;
+    if (!d) return { level: 'idle', label: 'Unknown' };
+    if (d.tokenGenOk && d.apiKeyValid) return { level: 'ok', label: 'Connected · ElevenLabs key valid' };
+    if (d.apiKeySet && d.agentIdSet) return { level: 'warn', label: d.error ? `Configured · token gen error: ${String(d.error).slice(0, 80)}` : 'Configured · token gen not verified' };
+    if (!d.apiKeySet) return { level: 'bad', label: 'ELEVENLABS_API_KEY missing' };
+    if (!d.agentIdSet) return { level: 'bad', label: 'ELEVENLABS_AGENT_ID missing' };
+    return { level: 'warn', label: 'Configured · unverified' };
+  }, [voiceStatus.data, voiceStatus.isLoading, voiceStatus.isError]);
+
 
   // Group admin routes for the drawer.
   const grouped = useMemo(() => {

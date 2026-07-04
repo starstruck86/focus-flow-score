@@ -147,9 +147,11 @@ are the thing we remove.
 3. **Integrations** → live status.
     - **Calendar** — green if `integration_runs` has a recent
       (`source='calendar'`, `status='success'`) row.
-    - **Voice** — the client can't read server secrets. So this row honestly
-      reports "not configured" unless a Dave health check has succeeded from
-      the client. It does not fake green.
+    - **Voice** — reads live evidence from `dave-health-check` (authed): shows
+      "Connected · ElevenLabs key valid" when the health call returns a valid
+      token, "Configured · unverified" when the key is set but token gen
+      hasn't been confirmed, and a red state only if the health call actually
+      fails. Dave voice is operational; the key is set.
 4. **Notifications & nudges** — existing prefs if any; honest placeholder if
    none.
 5. **Strategy pills & contracts** → `/strategy/settings`.
