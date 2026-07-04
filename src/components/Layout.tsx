@@ -33,6 +33,8 @@ import { useVoiceReminders } from '@/hooks/useVoiceReminders';
 import { useWakeWord } from '@/hooks/useWakeWord';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BottomNav, useActiveTabColor, COLOR_VAR } from '@/components/layout/BottomNav';
+import { PrimaryRail, isPrimaryRailRoute } from '@/components/nav/PrimaryRail';
+import { useIsEmbeddedLayout } from '@/components/layout/EmbeddedContext';
 import { SHELL } from '@/lib/layout';
 import { GlobalRefreshButton } from '@/components/GlobalRefreshButton';
 import { supabase } from '@/integrations/supabase/client';
