@@ -140,10 +140,11 @@ export default function GatesHub() {
   }
   if (!data || data.length === 0) {
     return (
-      <div className="p-6 max-w-2xl mx-auto">
+      <div className="p-6 max-w-2xl mx-auto space-y-4">
         <Card className="p-4 text-sm text-muted-foreground">
           No gate exams configured yet. Gates unlock as curriculum is authored.
         </Card>
+        <CorpusCoverageCard />
       </div>
     );
   }
