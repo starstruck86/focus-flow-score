@@ -144,8 +144,9 @@ const App = () => (
                 <Routes>
                   <Route path="/auth" element={<Auth />} />
                   <Route path="/auth/callback" element={<AuthCallback />} />
-                  <Route path="/" element={<Navigate to="/study" replace />} />
+                  <Route path="/" element={<Navigate to="/today" replace />} />
                   <Route path="/study" element={<ProtectedPage routeName="Study"><Suspense fallback={<LazyFallback text="Loading study hub…" />}><Study /></Suspense></ProtectedPage>} />
+
                   <Route path="/today" element={<ProtectedPage routeName="Dashboard"><Dashboard /></ProtectedPage>} />
                   <Route path="/dashboard" element={<ProtectedPage routeName="Dashboard"><Dashboard /></ProtectedPage>} />
                   <Route path="/outreach" element={<ProtectedPage routeName="Outreach"><WeeklyOutreach /></ProtectedPage>} />
@@ -290,13 +291,9 @@ const App = () => (
                     </Suspense>
                   </ProtectedRoute>
                 } />
-                  <Route path="/learn" element={
-                    <ProtectedRoute>
-                      <Suspense fallback={<LazyFallback />}>
-                        <Learn />
-                      </Suspense>
-                    </ProtectedRoute>
-                  } />
+                  {/* /learn → /study redirect (Guide v3 §3). /learn/lesson/:id preserved below. */}
+                  <Route path="/learn" element={<Navigate to="/study" replace />} />
+
                   <Route path="/skills" element={
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback />}>

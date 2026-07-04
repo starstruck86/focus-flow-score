@@ -629,8 +629,25 @@ Deno.serve(async (req) => {
       if (attempt < 3) await new Promise((res) => setTimeout(res, 800 * attempt));
     }
 
+    // Service-role client used for both event writes and integration_runs logging.
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const logRun = async (status: 'success' | 'failure', meta: Record<string, unknown>) => {
+      try {
+        await supabase.from('integration_runs').insert({
+          user_id: userId,
+          source: 'calendar',
+          status,
+          meta,
+        });
+      } catch (e) {
+        console.warn('[sync-calendar] integration_runs insert failed:', (e as Error).message);
+      }
+    };
+
     if (!icsResponse) {
       console.warn(`ICS upstream unavailable after retries: ${lastStatus} ${lastStatusText}`);
+      await logRun('failure', { reason: 'upstream_unavailable', upstream_status: lastStatus, upstream_text: lastStatusText });
       return new Response(
         JSON.stringify({
           success: false,
@@ -655,8 +672,6 @@ Deno.serve(async (req) => {
     console.log('Calendar sync window start:', syncStart.toISOString());
     console.log('Expanded events from local day start:', syncedEvents.length);
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     await supabase.from('calendar_events').delete().eq('user_id', userId);
 
     for (let i = 0; i < syncedEvents.length; i += 100) {
@@ -666,6 +681,8 @@ Deno.serve(async (req) => {
         .upsert(chunk, { onConflict: 'external_id' });
       if (error) throw error;
     }
+
+    await logRun('success', { synced: syncedEvents.length, window_start: syncStart.toISOString() });
 
     return new Response(
       JSON.stringify({
@@ -677,6 +694,20 @@ Deno.serve(async (req) => {
     );
   } catch (error) {
     console.error('Sync error:', error);
+    // Best-effort failure log (userId may not be defined if auth failed earlier).
+    try {
+      const svc = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+      // deno-lint-ignore no-explicit-any
+      const uid = (typeof userId !== 'undefined' ? userId : null) as any;
+      if (uid) {
+        await svc.from('integration_runs').insert({
+          user_id: uid,
+          source: 'calendar',
+          status: 'failure',
+          meta: { reason: 'exception', message: (error as Error).message },
+        });
+      }
+    } catch { /* swallow */ }
     return new Response(
       JSON.stringify({ success: false, error: 'An unexpected error occurred. Please try again.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

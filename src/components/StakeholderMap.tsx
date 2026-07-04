@@ -58,11 +58,11 @@ const INFLUENCE_LEVELS = ['high', 'medium', 'low'] as const;
 const CRITICAL_ROLES = ['economic_buyer', 'champion', 'coach'];
 const DISCOVERY_MODES = [
   { value: 'auto', label: 'Auto' },
-  { value: 'marketing', label: 'Marketing' },
-  { value: 'digital_engagement', label: 'Digital Engagement' },
-  { value: 'marketing_ops', label: 'Marketing Ops' },
-  { value: 'revenue', label: 'Revenue' },
-  { value: 'cx_loyalty', label: 'CX / Loyalty' },
+  { value: 'mobile_product', label: 'Mobile Product' },
+  { value: 'growth', label: 'Growth / User Acquisition' },
+  { value: 'engineering', label: 'Mobile Engineering' },
+  { value: 'marketing', label: 'Marketing / Lifecycle' },
+  { value: 'analytics', label: 'Analytics / Data' },
   { value: 'operations', label: 'Operations' },
   { value: 'it', label: 'IT / Systems' },
   { value: 'executive', label: 'Executive' },
