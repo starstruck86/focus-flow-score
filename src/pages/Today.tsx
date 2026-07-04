@@ -227,8 +227,37 @@ export default function Today() {
   const resumePath = lastSurface.data?.last_surface_path;
   const showResume = !!resumePath && !['/', '/today', '/dashboard', '/auth'].includes(resumePath);
 
+  const qc = useQueryClient();
+  const staleOverHour = !calSync.data || (Date.now() - new Date(calSync.data.ran_at).getTime() > 60 * 60 * 1000);
+  const { pull, refreshing } = usePullToRefresh({
+    onRefresh: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['calendar-events'] }),
+        qc.invalidateQueries({ queryKey: ['daily-digest'] }),
+        qc.invalidateQueries({ queryKey: ['today-tasks'] }),
+        qc.invalidateQueries({ queryKey: ['streak'] }),
+        qc.invalidateQueries({ queryKey: ['integration-runs'] }),
+        qc.invalidateQueries({ queryKey: ['latest-calendar-sync'] }),
+      ]);
+      if (staleOverHour) {
+        try { await syncCal.mutateAsync(); } catch { /* noop */ }
+      }
+    },
+  });
+
   return (
     <div className={cn('min-h-screen', T.ink, T.text)}>
+      {(pull > 0 || refreshing) && (
+        <div
+          className="fixed top-0 left-0 right-0 z-40 pointer-events-none flex justify-center"
+          style={{ paddingTop: 'env(safe-area-inset-top)' }}
+        >
+          <div
+            className="h-0.5 bg-[#FFA226] transition-all"
+            style={{ width: `${Math.max(refreshing ? 40 : pull * 40, refreshing ? 40 : 0)}%`, opacity: refreshing ? 1 : pull }}
+          />
+        </div>
+      )}
       <div className="mx-auto max-w-2xl px-4 pb-24 pt-4 sm:pt-6">
         {/* Header */}
         <header className="flex items-center justify-between mb-6">
