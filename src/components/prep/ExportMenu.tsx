@@ -88,9 +88,9 @@ export function ExportMenu({ title, markdown, accountName }: ExportMenuProps) {
       <body>
         <div class="cover">
           <div class="cover-line"></div>
-          <h1>${title}</h1>
-          ${accountName ? `<div class="meta">${accountName}</div>` : ''}
-          <div class="meta">${dateStr}</div>
+          <h1>${safeTitle}</h1>
+          ${safeAccount ? `<div class="meta">${safeAccount}</div>` : ''}
+          <div class="meta">${safeDate}</div>
         </div>
         ${bodyHtml}
       </body></html>`);
