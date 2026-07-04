@@ -65,6 +65,13 @@ Deno.serve(async (req: Request) => {
       }
     } catch { /* no body = process all */ }
 
+    // Client-invoked calls are scoped to the authed user — never let a client
+    // enumerate or target another user's accounts.
+    if (!isCron && authedUserId) {
+      targetUserId = authedUserId;
+      forceRegenerate = true;
+    }
+
     let query = supabase
       .from("accounts")
       .select("id, user_id, name, website, industry, lifecycle_tier, icp_fit_score, tier, trigger_events, notes, marketing_platform_detected, tech_stack");
