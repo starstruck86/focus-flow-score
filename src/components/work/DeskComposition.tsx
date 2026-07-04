@@ -23,6 +23,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { SwipeCompleteRow } from '@/components/gestures/SwipeCompleteRow';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { todayET } from '@/lib/timeFormat';
