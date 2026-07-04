@@ -3,12 +3,53 @@ import type { ToolContext, ToolMap } from '../toolTypes';
 
 type CopilotMode = 'quick' | 'meeting' | 'research' | 'coaching';
 
+// Route-alias map — every legacy/short voice target must resolve to an existing route.
+// Additive only: zero removals. New in P1c: 'work' and 'train' aliases (destinations
+// stay pointed at the current homes /strategy and /study until /work + /train-hub ship).
+const ROUTE_ALIASES: Record<string, string> = {
+  today: '/today',
+  dashboard: '/dashboard',
+  tasks: '/tasks',
+  outreach: '/outreach',
+  territory: '/outreach',
+  renewals: '/renewals',
+  deals: '/deals',
+  strategy: '/strategy',
+  quota: '/quota',
+  trends: '/trends',
+  prep: '/prep',
+  library: '/prep',
+  coach: '/coach',
+  dojo: '/dojo',
+  skills: '/skills',
+  study: '/study',
+  learn: '/study',
+  flash: '/flash',
+  'car-mode': '/car-mode',
+  car: '/car-mode',
+  brief: '/brief',
+  meeting: '/meeting',
+  'post-call': '/post-call',
+  settings: '/settings',
+  // New P1c aliases (destinations will flip once /work + /train-hub are live)
+  work: '/strategy',
+  train: '/study',
+};
+function resolveAlias(path: string): string {
+  if (!path) return path;
+  if (path.startsWith('/')) return path;
+  const key = path.toLowerCase().trim();
+  return ROUTE_ALIASES[key] ?? (key.startsWith('/') ? key : `/${key}`);
+}
+
 export function createNavigationTools(ctx: ToolContext): ToolMap {
   return {
     navigate: (params: { path: string }) => {
-      ctx.navigate(params.path);
-      return `Navigated to ${params.path}`;
+      const dest = resolveAlias(params.path);
+      ctx.navigate(dest);
+      return `Navigated to ${dest}`;
     },
+
 
     open_copilot: (params: { question: string; mode?: string }) => {
       ctx.askCopilot(params.question, (params.mode || 'quick') as CopilotMode);
