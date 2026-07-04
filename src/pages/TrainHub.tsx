@@ -22,7 +22,7 @@ const Study = lazy(() => import('./Study'));
 const Dojo = lazy(() => import('./Dojo'));
 const GatesHub = lazy(() => import('./GatesHub'));
 
-const JADE = 'hsl(160 66% 55%)';
+const JADE = 'hsl(var(--brand-train))';
 const VALID_TABS = ['study', 'skills', 'review'] as const;
 type Tab = typeof VALID_TABS[number];
 

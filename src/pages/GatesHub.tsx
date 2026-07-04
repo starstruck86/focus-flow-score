@@ -162,8 +162,8 @@ export default function GatesHub() {
       </header>
 
       {hero && (
-        <Card className="p-4 border-amber-500/40 bg-amber-500/5">
-          <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-amber-600 mb-2">
+        <Card className="p-4 border-[hsl(var(--brand-work))]/40 bg-[hsl(var(--brand-work))]/5">
+          <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-[hsl(var(--brand-work))] mb-2">
             <Sparkles className="h-3.5 w-3.5" /> Gate ready
           </div>
           <div className="flex items-start justify-between gap-3">

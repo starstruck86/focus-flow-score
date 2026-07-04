@@ -37,14 +37,14 @@ const ITEMS: RailItem[] = [
     label: 'Work',
     icon: Briefcase,
     match: (p) => p.startsWith('/work'),
-    accent: 'hsl(38 92% 58%)', // amber
+    accent: 'hsl(var(--brand-work))', // Work — themed
   },
   {
     to: '/train-hub',
     label: 'Train',
     icon: Dumbbell,
     match: (p) => p.startsWith('/train-hub'),
-    accent: 'hsl(160 66% 55%)', // jade
+    accent: 'hsl(var(--brand-train))', // Train — themed
   },
 ];
 

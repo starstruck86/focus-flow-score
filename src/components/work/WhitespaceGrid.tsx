@@ -20,7 +20,7 @@ type Account = { id: string; name: string };
 type Product = { id: string; name: string; list_price: number | null; sort_order: number; active: boolean };
 type Ownership = { account_id: string; product_id: string };
 
-const AMBER = 'hsl(38 92% 58%)';
+const AMBER = 'hsl(var(--brand-work))';
 
 export function WhitespaceGrid() {
   const { user } = useAuth();

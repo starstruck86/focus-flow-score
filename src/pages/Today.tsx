@@ -52,16 +52,16 @@ function friendlySurface(path: string): string {
 
 // ── Tokens (Guide v3 §8) ────────────────────────────────────────────────────
 const T = {
-  ink: 'bg-[#0B0F14]',
-  panel: 'bg-[#141B24]',
-  line: 'border-[#26313F]',
-  text: 'text-[#F2F5F8]',
-  muted: 'text-[#8A97A6]',
-  amber: 'text-[#FFA226]',
-  amberBg: 'bg-[#FFA226]',
-  jade: 'text-[#3DDC97]',
-  jadeBg: 'bg-[#3DDC97]',
-  live: 'text-[#FF5C5C]',
+  ink: 'bg-[hsl(var(--brand-ink))]',
+  panel: 'bg-[hsl(var(--brand-panel))]',
+  line: 'border-[hsl(var(--brand-line))]',
+  text: 'text-[hsl(var(--brand-text))]',
+  muted: 'text-[hsl(var(--brand-muted))]',
+  amber: 'text-[hsl(var(--brand-work))]',
+  amberBg: 'bg-[hsl(var(--brand-work))]',
+  jade: 'text-[hsl(var(--brand-train))]',
+  jadeBg: 'bg-[hsl(var(--brand-train))]',
+  live: 'text-[hsl(var(--brand-urgent))]',
 };
 
 // ── Data hooks ──────────────────────────────────────────────────────────────
@@ -186,7 +186,7 @@ function Panel({ children, className, accent }: { children: React.ReactNode; cla
     <div
       className={cn(
         T.panel, 'border rounded-2xl p-5',
-        accent === 'amber' ? 'border-[#FFA226]/40' : accent === 'jade' ? 'border-[#3DDC97]/40' : T.line,
+        accent === 'amber' ? 'border-[hsl(var(--brand-work))]/40' : accent === 'jade' ? 'border-[hsl(var(--brand-train))]/40' : T.line,
         className
       )}
     >
@@ -253,7 +253,7 @@ export default function Today() {
           style={{ paddingTop: 'env(safe-area-inset-top)' }}
         >
           <div
-            className="h-0.5 bg-[#FFA226] transition-all"
+            className="h-0.5 bg-[hsl(var(--brand-work))] transition-all"
             style={{ width: `${Math.max(refreshing ? 40 : pull * 40, refreshing ? 40 : 0)}%`, opacity: refreshing ? 1 : pull }}
           />
         </div>
@@ -271,7 +271,7 @@ export default function Today() {
               onClick={() => syncStale && syncCal.mutate()}
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs',
-                syncFresh ? 'border-[#3DDC97]/40 text-[#3DDC97]' : 'border-[#FFA226]/40 text-[#FFA226] hover:bg-[#FFA226]/10',
+                syncFresh ? 'border-[hsl(var(--brand-train))]/40 text-[hsl(var(--brand-train))]' : 'border-[hsl(var(--brand-work))]/40 text-[hsl(var(--brand-work))] hover:bg-[hsl(var(--brand-work))]/10',
               )}
               title={syncFresh ? `Calendar synced ${syncMinsAgo}m ago` : 'Tap to sync calendar'}
             >
@@ -300,7 +300,7 @@ export default function Today() {
             onClick={() => nav(resumePath!)}
             className={cn(
               'mb-4 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs',
-              'border-[#26313F] hover:border-[#3DDC97]/40', T.muted
+              'border-[hsl(var(--brand-line))] hover:border-[hsl(var(--brand-train))]/40', T.muted
             )}
           >
             Resume · <span className={T.text}>{friendlySurface(resumePath!)}</span>
@@ -407,14 +407,14 @@ function MomentTile({
     return (
       <Panel accent="amber">
         <div className="flex items-center gap-2 text-xs mb-1">
-          <Calendar className="h-3.5 w-3.5 text-[#FFA226]" />
+          <Calendar className="h-3.5 w-3.5 text-[hsl(var(--brand-work))]" />
           <span className={T.amber}>Next up · T-{Math.max(1, moment.minutesUntil)}m</span>
         </div>
         <div className="text-xl font-semibold leading-tight">{e.title || 'Untitled meeting'}</div>
         <div className={cn('text-sm mt-0.5', T.muted)}>{formatTimeET(e.start_time)}{e.location ? ` · ${e.location}` : ''}</div>
         <button
           onClick={onOpenBrief}
-          className={cn('mt-4 w-full h-12 rounded-xl text-sm font-medium', T.amberBg, 'text-[#0B0F14] hover:opacity-90')}
+          className={cn('mt-4 w-full h-12 rounded-xl text-sm font-medium', T.amberBg, 'text-[hsl(var(--brand-ink))] hover:opacity-90')}
         >
           Brief ready →
         </button>
@@ -429,7 +429,7 @@ function MomentTile({
         <div className="flex items-center justify-between">
           <div className="min-w-0">
             <div className={cn('text-xs mb-0.5 flex items-center gap-1.5', T.live)}>
-              <span className="h-1.5 w-1.5 rounded-full bg-[#FF5C5C] animate-pulse" /> Live
+              <span className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--brand-urgent))] animate-pulse" /> Live
             </div>
             <div className="truncate text-base font-medium">{e.title || 'Meeting'}</div>
           </div>
@@ -449,7 +449,7 @@ function MomentTile({
         <div className="text-xl font-semibold leading-tight">{e.title || 'Meeting'}</div>
         <button
           onClick={onOpenPostCall}
-          className={cn('mt-4 w-full h-12 rounded-xl text-sm font-medium', T.amberBg, 'text-[#0B0F14] hover:opacity-90')}
+          className={cn('mt-4 w-full h-12 rounded-xl text-sm font-medium', T.amberBg, 'text-[hsl(var(--brand-ink))] hover:opacity-90')}
         >
           Log it while it's hot →
         </button>
@@ -574,7 +574,7 @@ function DoorTile({
       onClick={onClick}
       className={cn(
         T.panel, 'rounded-2xl p-5 text-left border transition-colors',
-        accent === 'amber' ? 'border-[#26313F] hover:border-[#FFA226]/50' : 'border-[#26313F] hover:border-[#3DDC97]/50'
+        accent === 'amber' ? 'border-[hsl(var(--brand-line))] hover:border-[hsl(var(--brand-work))]/50' : 'border-[hsl(var(--brand-line))] hover:border-[hsl(var(--brand-train))]/50'
       )}
     >
       <div className="flex items-center gap-2 mb-3">
