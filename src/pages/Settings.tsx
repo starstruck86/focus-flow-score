@@ -82,6 +82,19 @@ function useCalendarStatus() {
   });
 }
 
+// Voice status — real dave-health-check (authed). Not a fake ping.
+function useVoiceStatus() {
+  return useQuery({
+    queryKey: ['settings-voice-health'],
+    staleTime: 5 * 60_000,
+    refetchOnMount: true,
+    queryFn: async () => {
+      const { data, error } = await trackedInvoke<any>('dave-health-check');
+      if (error) throw error;
+      return data as { apiKeySet: boolean; apiKeyValid: boolean; agentIdSet: boolean; tokenGenOk: boolean; error: string | null };
+    },
+  });
+
 type StatusLevel = 'ok' | 'warn' | 'bad' | 'idle';
 function StatusDot({ level }: { level: StatusLevel }) {
   const color =
