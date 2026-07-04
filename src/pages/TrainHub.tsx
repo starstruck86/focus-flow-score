@@ -16,6 +16,7 @@ import { Layout } from '@/components/Layout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { EmbeddedLayoutProvider } from '@/components/layout/EmbeddedContext';
+import { useSwipeTabs } from '@/lib/gestures/useSwipeTabs';
 
 const Study = lazy(() => import('./Study'));
 const Dojo = lazy(() => import('./Dojo'));
