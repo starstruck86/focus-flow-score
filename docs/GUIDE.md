@@ -92,8 +92,12 @@ The Work rail on this route class is the PrimaryRail: **Today · Work · Train**
 - **Skills** — embedded skills ladder.
 - **Review** — weekly review + progress tiles + Dojo entry.
 
-Dojo, Flash, Sharpen, Grind, Car Mode remain mounted at their old paths and
-are reachable from inside Train. They do not appear on the rail.
+Dojo, Flash, Sharpen, Grind, Car Mode, and Game film remain mounted at their
+old paths and are reachable from inside Train. They do not appear on the rail.
+
+**Game film** (call grading) lives at `/grade`. The legacy `/coach` URL
+redirects to `/grade` so bookmarks and deep links keep working. "Coach" is
+reserved for the future copilot vocabulary; the grader is Game film.
 
 ---
 
