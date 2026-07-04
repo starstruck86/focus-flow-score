@@ -20,6 +20,7 @@ import { DurableJobRehydrator } from "@/components/jobs/DurableJobRehydrator";
 import '@/lib/pendingWriteSync'; // Register online listener for pending write queue
 import { SystemHealthBadge } from '@/components/SystemHealthBadge';
 import Dashboard from "./pages/Dashboard";
+import Today from "./pages/Today";
 import WeeklyOutreach from "./pages/WeeklyOutreach";
 import Renewals from "./pages/Renewals";
 import Tasks from "./pages/Tasks";
