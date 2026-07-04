@@ -607,7 +607,7 @@ function ImportMappingsSection() {
   );
 }
 
-export default function Settings() {
+export default function SettingsLegacy() {
   const { data: config, isLoading: configLoading } = useWorkScheduleConfig();
   const { data: holidays, isLoading: holidaysLoading } = useHolidays();
   const { data: ptoDays, isLoading: ptoLoading } = usePtoDays();
