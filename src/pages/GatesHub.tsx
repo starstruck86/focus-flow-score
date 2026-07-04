@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { BAND_NAMES, TRAIN_TUNABLES, type Band } from '@/types/train';
+import { CorpusCoverageCard } from '@/components/train/CorpusCoverageCard';
 
 interface GateRow {
   spoke: string;
@@ -139,10 +140,11 @@ export default function GatesHub() {
   }
   if (!data || data.length === 0) {
     return (
-      <div className="p-6 max-w-2xl mx-auto">
+      <div className="p-6 max-w-2xl mx-auto space-y-4">
         <Card className="p-4 text-sm text-muted-foreground">
           No gate exams configured yet. Gates unlock as curriculum is authored.
         </Card>
+        <CorpusCoverageCard />
       </div>
     );
   }
@@ -228,6 +230,7 @@ export default function GatesHub() {
           );
         })}
       </div>
+      <CorpusCoverageCard />
     </section>
   );
 }
