@@ -33,6 +33,8 @@ import { useVoiceReminders } from '@/hooks/useVoiceReminders';
 import { useWakeWord } from '@/hooks/useWakeWord';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BottomNav, useActiveTabColor, COLOR_VAR } from '@/components/layout/BottomNav';
+import { PrimaryRail, isPrimaryRailRoute } from '@/components/nav/PrimaryRail';
+import { useIsEmbeddedLayout } from '@/components/layout/EmbeddedContext';
 import { SHELL } from '@/lib/layout';
 import { GlobalRefreshButton } from '@/components/GlobalRefreshButton';
 import { supabase } from '@/integrations/supabase/client';
@@ -78,7 +80,7 @@ function DaveTapPrompt({ onTap }: { onTap: () => void }) {
 // ─── Cross-Tab Dave Guard ───
 const DAVE_CHANNEL_NAME = 'dave-session';
 
-export function Layout({ children, hideFloatingFab }: { children: React.ReactNode; hideFloatingFab?: boolean }) {
+export function Layout({ children, hideFloatingFab, embedded: embeddedProp }: { children: React.ReactNode; hideFloatingFab?: boolean; embedded?: boolean }) {
   const { user, signOut } = useAuth();
   const { isReviewMode, guardDestructive } = useReviewMode();
   const location = useLocation();
@@ -87,13 +89,20 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
   const activeColor = useActiveTabColor();
   const isMobile = useIsMobile();
   const { isWork } = useAppMode();
+  const isEmbeddedCtx = useIsEmbeddedLayout();
+  // P1c-REAL: embedded mode suppresses all chrome so hubs (Work / TrainHub)
+  // own the shell. Trigger via prop OR via <EmbeddedLayoutProvider>.
+  const embedded = embeddedProp === true || isEmbeddedCtx;
   const isStrategy = location.pathname === '/strategy';
+  const usePrimaryRail = !embedded && isPrimaryRailRoute(location.pathname);
   // /strategy desktop replaces the bottom nav with a top global rail.
   // /strategy mobile keeps the full bottom nav; the shell reserves its
   // measured height so the docked composer never covers or clips it.
-  const bottomNavVariant: 'default' | 'condensed' | 'hidden' = isStrategy
-    ? (isMobile ? 'default' : 'hidden')
-    : 'default';
+  const bottomNavVariant: 'default' | 'condensed' | 'hidden' = embedded || usePrimaryRail
+    ? 'hidden'
+    : isStrategy
+      ? (isMobile ? 'default' : 'hidden')
+      : 'default';
   
   // Dave state
   const [daveOpen, setDaveOpen] = useState(false);
@@ -336,7 +345,7 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
           : 'min-h-screen',
       )}
     >
-      {location.pathname !== '/strategy' && (
+      {!embedded && location.pathname !== '/strategy' && (
         <header
           data-testid="app-header"
           className="flex items-center gap-2 px-3 py-2 border-b sticky top-[env(safe-area-inset-top)] z-40 bg-background/95 backdrop-blur-md"
@@ -369,19 +378,10 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
         ═══════════════════════════════════════════════════════════
         REGRESSION-LOCKED INVARIANT: Header / KPI / Journal layout
         ═══════════════════════════════════════════════════════════
-        The GlobalWeekStrip and ActivityRings MUST NOT overlap.
-        This layout uses flex-wrap so rings wrap below the week
-        strip on narrow viewports. Critical rules:
-          - flex-wrap on container
-          - basis-[180px] + min-w-0 on week strip (allows shrink)
-          - shrink-0 + overflow-x-auto on rings (prevents collapse)
-          - overflow-hidden on outer container (prevents bleed)
-        DO NOT replace with absolute positioning or fixed widths.
-        Test at 320px, 402px, zoomed, and with large KPI numbers.
+        (see original comment) — suppressed entirely when embedded.
         ═══════════════════════════════════════════════════════════
       */}
-      {/* Hide shell chrome on /strategy — reclaim vertical space */}
-      {location.pathname !== '/strategy' && (
+      {!embedded && location.pathname !== '/strategy' && (
         <div className="px-4 lg:px-6 max-w-4xl mx-auto w-full pt-2 space-y-2 overflow-hidden">
           <div className="flex items-center gap-2 sm:gap-4">
             <div className="flex-1 min-w-0 overflow-hidden">
@@ -395,7 +395,7 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
         </div>
       )}
 
-      {location.pathname !== '/strategy' && <Breadcrumbs />}
+      {!embedded && location.pathname !== '/strategy' && <Breadcrumbs />}
       <main
         data-testid="main-content"
         className={cn(
@@ -412,8 +412,9 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
       </main>
 
       <BottomNav variant={bottomNavVariant} />
-      <BackToToday />
-      {!hideFloatingFab && location.pathname !== '/strategy' && <GlobalFAB position="bottom-left" />}
+      {usePrimaryRail && <PrimaryRail />}
+      {!embedded && <BackToToday />}
+      {!embedded && !hideFloatingFab && location.pathname !== '/strategy' && <GlobalFAB position="bottom-left" />}
 
       {/* Dave is the PRIMARY floating action — bottom-right, thumb-accessible.
           On /strategy we hide on mobile only (md:hidden) to avoid overlapping the
