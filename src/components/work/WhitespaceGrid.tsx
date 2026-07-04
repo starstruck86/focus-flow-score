@@ -47,7 +47,7 @@ export function WhitespaceGrid() {
         .select('id, name, list_price, sort_order, active')
         .order('sort_order');
       if (error) throw error;
-      return (data ?? []) as Product[];
+      return ((data ?? []) as unknown) as Product[];
     },
   });
 
@@ -60,7 +60,7 @@ export function WhitespaceGrid() {
         .select('account_id, product_id')
         .eq('owned', true);
       if (error) throw error;
-      return (data ?? []) as Ownership[];
+      return ((data ?? []) as unknown) as Ownership[];
     },
   });
 
