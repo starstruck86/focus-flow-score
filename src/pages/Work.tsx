@@ -34,18 +34,7 @@ function Loading({ label }: { label: string }) {
 }
 
 function DeskTab() {
-  const navigate = useNavigate();
-  return (
-    <div className="p-4 max-w-2xl mx-auto space-y-3">
-      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Desk</h2>
-      <div className="grid grid-cols-2 gap-3">
-        <Button variant="outline" onClick={() => navigate('/tasks')}>Tasks</Button>
-        <Button variant="outline" onClick={() => navigate('/quota')}>Quota</Button>
-        <Button variant="outline" onClick={() => navigate('/trends')}>Trends</Button>
-        <Button variant="outline" onClick={() => navigate('/prep')}>Sales Brain</Button>
-      </div>
-    </div>
-  );
+  return <DeskComposition />;
 }
 
 function PipelineTab() {
