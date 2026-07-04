@@ -15,7 +15,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.analyze-sentiment]
-verify_jwt = false
+verify_jwt = true
 
 [functions.journal-nudge]
 verify_jwt = false
