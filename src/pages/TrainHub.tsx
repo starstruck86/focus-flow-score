@@ -95,9 +95,11 @@ export default function TrainHub() {
               <TabsTrigger value="review">Review</TabsTrigger>
             </TabsList>
           </div>
-          <TabsContent value="study"><StudyTab /></TabsContent>
-          <TabsContent value="skills"><SkillsTab /></TabsContent>
-          <TabsContent value="review"><ReviewTab /></TabsContent>
+          <SwipeTabsZone tabs={VALID_TABS} active={tab} onChange={setTab}>
+            <TabsContent value="study"><StudyTab /></TabsContent>
+            <TabsContent value="skills"><SkillsTab /></TabsContent>
+            <TabsContent value="review"><ReviewTab /></TabsContent>
+          </SwipeTabsZone>
         </Tabs>
       </div>
     </Layout>
