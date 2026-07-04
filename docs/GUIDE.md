@@ -92,11 +92,25 @@ The Work rail on this route class is the PrimaryRail: **Today · Work · Train**
 
 - **Study** — embedded `Study` (Learn was consolidated into Study;
   `/learn` → `/study` redirect).
-- **Skills** — embedded skills ladder.
+- **Skills** — gate exams + skills ladder, with a live **Corpus coverage**
+  card underneath so I can see the factory backlog at a glance.
 - **Review** — weekly review + progress tiles + Dojo entry.
 
-Dojo, Flash, Sharpen, Grind, Car Mode, and Game film remain mounted at their
-old paths and are reachable from inside Train. They do not appear on the rail.
+My corpus is a **growing spine**, not a finished library. Today that spine
+is ~478 certified concepts and ~253 gates sitting on top of a KI library of
+~35k raw items. Coverage is the work: KIs get promoted into concepts,
+concepts get teach scripts, drills, decks, and gates. Study, Car Mode,
+Flash, and Dojo are the four formats that consume this spine — each one
+fills in as the content factory runs. The Corpus coverage card on the
+Skills tab is the honest readout of that progress; it reads live from
+`knowledge_items`, `curriculum_concepts`, `ki_curriculum`,
+`flashcard_decks`/`flashcards`, `curriculum_gates`, and `user_band_gate`.
+Where a denominator is unknowable (KIs → concepts has no fixed target)
+I show raw counts, not invented percentages.
+
+Dojo, Flash, Sharpen, Grind, Car Mode, and Game film remain mounted at
+their old paths and are reachable from inside Train. They do not appear
+on the rail.
 
 **Game film** (call grading) lives at `/grade`. The legacy `/coach` URL
 redirects to `/grade` so bookmarks and deep links keep working. "Coach" is
