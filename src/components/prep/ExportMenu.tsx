@@ -1,10 +1,22 @@
 import { useState } from 'react';
+import DOMPurify from 'dompurify';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Download, FileText, Presentation, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+
+// HTML-escape untrusted strings before interpolating into a template literal
+// that is later handed to `document.write`. Prevents stored-XSS via account
+// name / title / any AI-generated text.
+const escHtml = (s: string): string =>
+  String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 
 interface ExportMenuProps {
   title: string;
