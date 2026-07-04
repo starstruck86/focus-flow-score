@@ -412,8 +412,9 @@ export function Layout({ children, hideFloatingFab, embedded: embeddedProp }: { 
       </main>
 
       <BottomNav variant={bottomNavVariant} />
-      <BackToToday />
-      {!hideFloatingFab && location.pathname !== '/strategy' && <GlobalFAB position="bottom-left" />}
+      {usePrimaryRail && <PrimaryRail />}
+      {!embedded && <BackToToday />}
+      {!embedded && !hideFloatingFab && location.pathname !== '/strategy' && <GlobalFAB position="bottom-left" />}
 
       {/* Dave is the PRIMARY floating action — bottom-right, thumb-accessible.
           On /strategy we hide on mobile only (md:hidden) to avoid overlapping the
