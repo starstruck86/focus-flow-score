@@ -100,6 +100,7 @@ export default function Work() {
   };
 
   const headerStyle = useMemo(() => ({ borderBottomColor: `${AMBER}33` }), []);
+  const swipe = useSwipeTabs({ tabs: VALID_TABS, active: tab, onChange: setTab });
 
   return (
     <Layout>
@@ -121,10 +122,12 @@ export default function Work() {
               <TabsTrigger value="strategy">Strategy</TabsTrigger>
             </TabsList>
           </div>
-          <TabsContent value="desk"><DeskTab /></TabsContent>
-          <TabsContent value="pipeline"><PipelineTab /></TabsContent>
-          <TabsContent value="territory"><TerritoryTab /></TabsContent>
-          <TabsContent value="strategy"><StrategyTab /></TabsContent>
+          <div {...swipe} style={{ touchAction: 'pan-y' }}>
+            <TabsContent value="desk"><DeskTab /></TabsContent>
+            <TabsContent value="pipeline"><PipelineTab /></TabsContent>
+            <TabsContent value="territory"><TerritoryTab /></TabsContent>
+            <TabsContent value="strategy"><StrategyTab /></TabsContent>
+          </div>
         </Tabs>
       </div>
     </Layout>
