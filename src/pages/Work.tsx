@@ -20,6 +20,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { EmbeddedLayoutProvider } from '@/components/layout/EmbeddedContext';
 import { DeskComposition } from '@/components/work/DeskComposition';
+import { WhitespaceGrid } from '@/components/work/WhitespaceGrid';
 
 const WeeklyOutreach = lazy(() => import('./WeeklyOutreach'));
 const Deals = lazy(() => import('./Deals'));
