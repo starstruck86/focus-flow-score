@@ -4,7 +4,7 @@
  * Tabs (URL-driven via ?tab=): study | skills | review.
  *   - study   → <Study embedded/>
  *   - skills  → <Dojo embedded/> (drills / skill practice)
- *   - review  → links to /review, /coach, /car-mode
+ *   - review  → links to /review, /grade, /car-mode
  *
  * Chrome: single hub header, jade accent. Embedded children render
  * chromeless via <EmbeddedLayoutProvider>.
