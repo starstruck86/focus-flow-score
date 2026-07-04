@@ -135,7 +135,10 @@ const ProtectedPage = ({ children, routeName }: { children: React.ReactNode; rou
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    {/* App is dark-only (index.html sets class="dark"); forcing dark prevents next-themes
+        from stripping the class on Light-mode systems, which would break the
+        [data-theme='branch'].dark palette override. */}
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} forcedTheme="dark">
       <TooltipProvider>
         <AuthProvider>
           <ReviewModeProvider>
