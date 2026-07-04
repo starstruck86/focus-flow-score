@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { BAND_NAMES, TRAIN_TUNABLES, type Band } from '@/types/train';
+import { CorpusCoverageCard } from '@/components/train/CorpusCoverageCard';
 
 interface GateRow {
   spoke: string;
