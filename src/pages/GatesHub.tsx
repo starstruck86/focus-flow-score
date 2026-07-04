@@ -230,6 +230,7 @@ export default function GatesHub() {
           );
         })}
       </div>
+      <CorpusCoverageCard />
     </section>
   );
 }
