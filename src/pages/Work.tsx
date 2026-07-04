@@ -17,6 +17,7 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { Briefcase, ArrowRight } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { useSwipeTabs } from '@/lib/gestures/useSwipeTabs';
 import { Button } from '@/components/ui/button';
 import { EmbeddedLayoutProvider } from '@/components/layout/EmbeddedContext';
 import { DeskComposition } from '@/components/work/DeskComposition';
