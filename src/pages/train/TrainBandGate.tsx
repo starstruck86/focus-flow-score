@@ -51,6 +51,10 @@ export default function TrainBandGate() {
   const { spoke = 'product', topic = 'deep_linking', band: bandStr = '1' } = useParams();
   const band = (Math.max(1, Math.min(5, Number(bandStr))) as Band);
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromGatesHub = location.pathname.startsWith('/gates');
+  const backPath = fromGatesHub ? '/gates' : `/train/${spoke}/${topic}`;
+  const backLabel = fromGatesHub ? '← Gates' : '← Ladder';
   const { user } = useAuth();
   const { data, isLoading, error } = useBandGate(spoke, topic, band);
 
