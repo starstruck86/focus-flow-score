@@ -29,11 +29,11 @@ import GUIDE_MD from '../../docs/GUIDE.md?raw';
 
 // ── Tokens (Guide v3 §8) ──────────────────────────────────────────────
 const T = {
-  ink: 'bg-[#0B0F14]',
-  panel: 'bg-[#141B24]',
-  line: 'border-[#26313F]',
-  text: 'text-[#F2F5F8]',
-  muted: 'text-[#8A97A6]',
+  ink: 'bg-[hsl(var(--brand-ink))]',
+  panel: 'bg-[hsl(var(--brand-panel))]',
+  line: 'border-[hsl(var(--brand-line))]',
+  text: 'text-[hsl(var(--brand-text))]',
+  muted: 'text-[hsl(var(--brand-muted))]',
 };
 
 // Admin/QA route ledger (Guide v3 §5).
@@ -101,10 +101,10 @@ function useVoiceStatus() {
 type StatusLevel = 'ok' | 'warn' | 'bad' | 'idle';
 function StatusDot({ level }: { level: StatusLevel }) {
   const color =
-    level === 'ok' ? 'bg-[#3DDC97]' :
-    level === 'warn' ? 'bg-[#FFA226]' :
+    level === 'ok' ? 'bg-[hsl(var(--brand-train))]' :
+    level === 'warn' ? 'bg-[hsl(var(--brand-work))]' :
     level === 'bad' ? 'bg-red-500' :
-    'bg-[#26313F]';
+    'bg-[hsl(var(--brand-line))]';
   return <span className={`inline-block h-2 w-2 rounded-full ${color}`} aria-hidden />;
 }
 
@@ -148,7 +148,7 @@ function Row({
 
 function Section({ children }: { children: React.ReactNode }) {
   return (
-    <div className={`${T.panel} border ${T.line} rounded-2xl overflow-hidden divide-y divide-[#26313F]`}>
+    <div className={`${T.panel} border ${T.line} rounded-2xl overflow-hidden divide-y divide-[hsl(var(--brand-line))]`}>
       {children}
     </div>
   );
@@ -214,7 +214,7 @@ export default function Settings() {
             />
             {guideOpen && (
               <div className={`px-5 py-5 ${T.text}`}>
-                <article className="prose prose-invert prose-sm max-w-none prose-headings:text-[#F2F5F8] prose-p:text-[#F2F5F8]/90 prose-strong:text-[#F2F5F8] prose-a:text-[#3DDC97] prose-code:text-[#FFA226] prose-hr:border-[#26313F] prose-li:text-[#F2F5F8]/90">
+                <article className="prose prose-invert prose-sm max-w-none prose-headings:text-[hsl(var(--brand-text))] prose-p:text-[hsl(var(--brand-text))]/90 prose-strong:text-[hsl(var(--brand-text))] prose-a:text-[hsl(var(--brand-train))] prose-code:text-[hsl(var(--brand-work))] prose-hr:border-[hsl(var(--brand-line))] prose-li:text-[hsl(var(--brand-text))]/90">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{GUIDE_MD}</ReactMarkdown>
                 </article>
               </div>
@@ -233,7 +233,7 @@ export default function Settings() {
 
           {/* 3 · Integrations */}
           <Section>
-            <div className="px-4 pt-3 pb-1 text-[11px] uppercase tracking-wider text-[#8A97A6]">Integrations</div>
+            <div className="px-4 pt-3 pb-1 text-[11px] uppercase tracking-wider text-[hsl(var(--brand-muted))]">Integrations</div>
             <Row
               icon={<Plug className="h-4 w-4" />}
               title="Calendar"
@@ -250,7 +250,7 @@ export default function Settings() {
 
           {/* 4 · Notifications & nudges */}
           <Section>
-            <div className="px-4 pt-3 pb-1 text-[11px] uppercase tracking-wider text-[#8A97A6]">Notifications & nudges</div>
+            <div className="px-4 pt-3 pb-1 text-[11px] uppercase tracking-wider text-[hsl(var(--brand-muted))]">Notifications & nudges</div>
             <div className="p-2">
               <NotificationSettings />
             </div>
@@ -288,8 +288,8 @@ export default function Settings() {
               <div className="px-3 py-3 space-y-4">
                 {Object.entries(grouped).map(([group, rows]) => (
                   <div key={group}>
-                    <div className="px-2 pb-1 text-[11px] uppercase tracking-wider text-[#8A97A6]">{group}</div>
-                    <div className={`rounded-lg border ${T.line} divide-y divide-[#26313F]`}>
+                    <div className="px-2 pb-1 text-[11px] uppercase tracking-wider text-[hsl(var(--brand-muted))]">{group}</div>
+                    <div className={`rounded-lg border ${T.line} divide-y divide-[hsl(var(--brand-line))]`}>
                       {rows.map(r => (
                         <Link
                           key={r.path}
