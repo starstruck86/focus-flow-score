@@ -11,9 +11,9 @@ import { useAuth } from '@/contexts/AuthContext';
 // Kept in-file (this is admin-only) — extend as new user-facing routes ship.
 const USER_FACING_ROUTES = [
   '/today', '/work', '/train-hub', '/gates', '/quota', '/grade', '/car-mode',
-  '/study', '/flash', '/coach', '/deals', '/renewals', '/tasks', '/trends',
-  '/weekly-review', '/prep', '/simulate', '/playbooks', '/competitive',
-  '/signal-inbox', '/ki-library', '/dojo', '/skills', '/learn',
+  '/study', '/flash', '/deals', '/renewals', '/tasks', '/trends',
+  '/review', '/prep', '/simulate', '/playbooks', '/competitive',
+  '/signals', '/ki-library', '/dojo', '/skills', '/learn',
 ];
 
 export default function NavUsage() {
