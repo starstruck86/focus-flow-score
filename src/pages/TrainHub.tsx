@@ -50,7 +50,7 @@ function ReviewTab() {
       <p className="text-sm text-muted-foreground">Review & reflection surfaces.</p>
       <div className="grid grid-cols-1 gap-2">
         <Button asChild variant="outline" className="justify-between"><Link to="/review">Weekly Review <ArrowRight className="h-4 w-4" /></Link></Button>
-        <Button asChild variant="outline" className="justify-between"><Link to="/coach">Coach (Call Grading) <ArrowRight className="h-4 w-4" /></Link></Button>
+        <Button asChild variant="outline" className="justify-between"><Link to="/grade">Game film <ArrowRight className="h-4 w-4" /></Link></Button>
         <Button asChild variant="outline" className="justify-between"><Link to="/car-mode">Car Mode <ArrowRight className="h-4 w-4" /></Link></Button>
         <Button asChild variant="outline" className="justify-between"><Link to="/progress">Progress <ArrowRight className="h-4 w-4" /></Link></Button>
       </div>

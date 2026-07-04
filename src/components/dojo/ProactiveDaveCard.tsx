@@ -39,7 +39,7 @@ function getContext(hour: number, hasCompletedRepsToday: boolean, streak: number
         headline: 'End of day — grade a call',
         subline: 'The pattern is fresh. One grade updates your drill queue.',
         cta: 'Grade a Call',
-        route: '/coach',
+        route: '/grade',
         color: 'border-blue-500/20 bg-blue-500/5',
       };
     }
@@ -91,7 +91,7 @@ function getContext(hour: number, hasCompletedRepsToday: boolean, streak: number
       headline: 'Grade a call tonight',
       subline: "The pattern is fresh. Tomorrow's drill queue updates from it.",
       cta: 'Open Coach',
-      route: '/coach',
+      route: '/grade',
       color: 'border-blue-500/20 bg-blue-500/5',
     };
   }
