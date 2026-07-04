@@ -15,7 +15,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.analyze-sentiment]
-verify_jwt = false
+verify_jwt = true
 
 [functions.journal-nudge]
 verify_jwt = false
@@ -105,7 +105,7 @@ verify_jwt = false
 [functions.suggest-resource-uses]
 
 [functions.dave-health-check]
-verify_jwt = false
+verify_jwt = true
 
 [functions.batch-actionize]
 verify_jwt = false
