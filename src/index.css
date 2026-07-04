@@ -518,3 +518,72 @@
   50% { transform: translateX(200%); }
   100% { transform: translateX(-100%); }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+ * BRAND THEME LAYER — swappable engagement-layer skin.
+ * Selected in ONE place: src/lib/theme.ts → ACTIVE_THEME.
+ * All brand consumers read `--brand-*`; app chrome reads shadcn tokens.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/* Instrument (prior palette, preserved verbatim). Default when unset. */
+:root,
+:root[data-theme='instrument'] {
+  --brand-ink: 214 34% 6%;         /* #0B0F14 */
+  --brand-panel: 214 26% 11%;      /* #141B24 */
+  --brand-line: 214 24% 19%;       /* #26313F */
+  --brand-text: 210 20% 96%;       /* #F2F5F8 */
+  --brand-muted: 210 12% 60%;      /* #8A97A6 */
+  --brand-work: 32 100% 57%;       /* #FFA226 amber */
+  --brand-work-strong: 32 100% 57%;
+  --brand-train: 158 68% 55%;      /* #3DDC97 jade */
+  --brand-urgent: 0 100% 68%;      /* #FF5C5C */
+  --brand-warn: 32 100% 57%;
+  --brand-celebrate: 45 100% 60%;
+}
+
+/* Branch — official 2026 palette (branch.io/brand). */
+:root[data-theme='branch'] {
+  --brand-ink: 222 45% 11%;        /* #0F172B slate-950 */
+  --brand-panel: 218 36% 18%;      /* #1D293D slate-800 */
+  --brand-line: 214 29% 27%;       /* #314258 slate-700 */
+  --brand-text: 210 40% 98%;       /* #F8FAFC slate-50 */
+  --brand-muted: 214 20% 65%;      /* #90A1B9 slate-400 */
+  --brand-work: 262 100% 66%;      /* #8E51FF violet-400 — text/icons on ink (AA 5.8:1) */
+  --brand-work-strong: 264 99% 56%;/* #7F22FE violet-500 — fills, white-on-purple */
+  --brand-train: 172 100% 42%;     /* #00D5BE teal — AA 7.9:1 */
+  --brand-urgent: 346 100% 56%;    /* #FF2056 action coral — AA 4.6:1 */
+  --brand-warn: 25 100% 50%;       /* #FF6900 orange — AA 5.4:1 */
+  --brand-celebrate: 47 99% 50%;   /* #FDC700 yellow — AAA 10:1 */
+}
+
+/* Branch dark — override shadcn base tokens so chrome adopts the palette. */
+[data-theme='branch'].dark {
+  --background: 222 45% 11%;
+  --foreground: 210 40% 98%;
+  --card: 218 36% 18%;
+  --card-foreground: 210 40% 98%;
+  --popover: 218 36% 18%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 262 100% 66%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 214 22% 22%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 214 25% 20%;
+  --muted-foreground: 214 20% 65%;
+  --accent: 172 100% 42%;
+  --accent-foreground: 222 45% 11%;
+  --destructive: 346 100% 56%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 29% 27%;
+  --input: 214 29% 27%;
+  --ring: 262 100% 66%;
+  --sidebar-background: 222 45% 11%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-primary: 262 100% 66%;
+  --sidebar-accent: 218 36% 18%;
+  --sidebar-border: 214 29% 27%;
+  --sidebar-ring: 262 100% 66%;
+  --nav-quota: 264 99% 56%;        /* Work — purple */
+  --nav-coach: 172 100% 42%;       /* Train — teal */
+  --nav-today: 262 100% 66%;
+}
