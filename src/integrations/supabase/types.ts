@@ -10825,6 +10825,7 @@ export type Database = {
         Returns: Json
       }
       is_approved_user: { Args: { _user_id: string }; Returns: boolean }
+      monitor_counts: { Args: never; Returns: Json }
       signal_dimension_weakness: {
         Args: {
           p_signal_score: number
