@@ -403,6 +403,13 @@ const App = () => (
                       </Suspense>
                     </ProtectedRoute>
                   } />
+                  <Route path="/admin/nav-usage" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<LazyFallback text="Loading nav usage…" />}>
+                        <NavUsage />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
                   <Route path="/course-import" element={
                     <ProtectedPage routeName="Course Import">
                       <Suspense fallback={<LazyFallback />}>
