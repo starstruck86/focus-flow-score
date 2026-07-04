@@ -47,6 +47,7 @@ const ADMIN_ROUTES: { path: string; label: string; group: string }[] = [
   { path: '/observability', label: 'Observability Dashboard', group: 'Ops' },
   { path: '/reliability', label: 'Reliability QA', group: 'Ops' },
   { path: '/smoke-test', label: 'Smoke Test', group: 'Ops' },
+  { path: '/admin/nav-usage', label: 'Nav Usage', group: 'Ops' },
 
   { path: '/verify-enrichment', label: 'Verify Enrichment', group: 'Knowledge' },
   { path: '/extraction-admin', label: 'Extraction Admin', group: 'Knowledge' },

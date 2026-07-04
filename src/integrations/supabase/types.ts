@@ -5030,6 +5030,41 @@ export type Database = {
           },
         ]
       }
+      nav_events: {
+        Row: {
+          at: string
+          from_path: string | null
+          id: string
+          to_path: string
+          user_id: string
+          via: string | null
+        }
+        Insert: {
+          at?: string
+          from_path?: string | null
+          id?: string
+          to_path: string
+          user_id: string
+          via?: string | null
+        }
+        Update: {
+          at?: string
+          from_path?: string | null
+          id?: string
+          to_path?: string
+          user_id?: string
+          via?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nav_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       opportunities: {
         Row: {
           account_id: string | null
@@ -10003,6 +10038,7 @@ export type Database = {
           intensive_start_date: string | null
           last_surface_at: string | null
           last_surface_path: string | null
+          shown_hints: Json
           updated_at: string
           user_id: string
         }
@@ -10012,6 +10048,7 @@ export type Database = {
           intensive_start_date?: string | null
           last_surface_at?: string | null
           last_surface_path?: string | null
+          shown_hints?: Json
           updated_at?: string
           user_id: string
         }
@@ -10021,6 +10058,7 @@ export type Database = {
           intensive_start_date?: string | null
           last_surface_at?: string | null
           last_surface_path?: string | null
+          shown_hints?: Json
           updated_at?: string
           user_id?: string
         }
