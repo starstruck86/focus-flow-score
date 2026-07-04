@@ -3859,6 +3859,44 @@ export type Database = {
         }
         Relationships: []
       }
+      integration_runs: {
+        Row: {
+          created_at: string
+          id: string
+          meta: Json
+          ran_at: string
+          source: string
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          meta?: Json
+          ran_at?: string
+          source: string
+          status: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          meta?: Json
+          ran_at?: string
+          source?: string
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_runs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       intelligence_units: {
         Row: {
           category: string | null
@@ -7941,6 +7979,8 @@ export type Database = {
           fallback_used: boolean | null
           id: string
           latency_ms: number | null
+          linked_account_id: string | null
+          linked_opportunity_id: string | null
           manifest_id: string | null
           message_type: string
           model_used: string | null
@@ -7956,6 +7996,8 @@ export type Database = {
           fallback_used?: boolean | null
           id?: string
           latency_ms?: number | null
+          linked_account_id?: string | null
+          linked_opportunity_id?: string | null
           manifest_id?: string | null
           message_type?: string
           model_used?: string | null
@@ -7971,6 +8013,8 @@ export type Database = {
           fallback_used?: boolean | null
           id?: string
           latency_ms?: number | null
+          linked_account_id?: string | null
+          linked_opportunity_id?: string | null
           manifest_id?: string | null
           message_type?: string
           model_used?: string | null
@@ -7980,6 +8024,27 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "strategy_messages_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_messages_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "strategy_messages_linked_opportunity_id_fkey"
+            columns: ["linked_opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "strategy_messages_thread_id_fkey"
             columns: ["thread_id"]
@@ -9833,6 +9898,8 @@ export type Database = {
           created_at: string
           deal_control_intensive: boolean
           intensive_start_date: string | null
+          last_surface_at: string | null
+          last_surface_path: string | null
           updated_at: string
           user_id: string
         }
@@ -9840,6 +9907,8 @@ export type Database = {
           created_at?: string
           deal_control_intensive?: boolean
           intensive_start_date?: string | null
+          last_surface_at?: string | null
+          last_surface_path?: string | null
           updated_at?: string
           user_id: string
         }
@@ -9847,6 +9916,8 @@ export type Database = {
           created_at?: string
           deal_control_intensive?: boolean
           intensive_start_date?: string | null
+          last_surface_at?: string | null
+          last_surface_path?: string | null
           updated_at?: string
           user_id?: string
         }
