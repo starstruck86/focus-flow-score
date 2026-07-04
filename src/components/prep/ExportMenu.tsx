@@ -1,10 +1,22 @@
 import { useState } from 'react';
+import DOMPurify from 'dompurify';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Download, FileText, Presentation, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+
+// HTML-escape untrusted strings before interpolating into a template literal
+// that is later handed to `document.write`. Prevents stored-XSS via account
+// name / title / any AI-generated text.
+const escHtml = (s: string): string =>
+  String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 
 interface ExportMenuProps {
   title: string;
@@ -34,8 +46,11 @@ export function ExportMenu({ title, markdown, accountName }: ExportMenuProps) {
     const printWindow = window.open('', '_blank');
     if (!printWindow) { toast.error('Pop-up blocked'); return; }
 
-    const bodyHtml = markdownToStyledHtml(markdown);
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
+    const bodyHtml = DOMPurify.sanitize(markdownToStyledHtml(markdown));
+    const safeTitle = escHtml(title);
+    const safeAccount = accountName ? escHtml(accountName) : '';
+    const safeDate = escHtml(dateStr);
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>${safeTitle}</title>
       <style>
         @page { size: letter; margin: 1in; }
         body { font-family: 'Georgia', 'Times New Roman', serif; max-width: 100%; margin: 0; padding: 0; line-height: 1.7; color: #1a1a1a; font-size: 11pt; }
@@ -73,9 +88,9 @@ export function ExportMenu({ title, markdown, accountName }: ExportMenuProps) {
       <body>
         <div class="cover">
           <div class="cover-line"></div>
-          <h1>${title}</h1>
-          ${accountName ? `<div class="meta">${accountName}</div>` : ''}
-          <div class="meta">${dateStr}</div>
+          <h1>${safeTitle}</h1>
+          ${safeAccount ? `<div class="meta">${safeAccount}</div>` : ''}
+          <div class="meta">${safeDate}</div>
         </div>
         ${bodyHtml}
       </body></html>`);
