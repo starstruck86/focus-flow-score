@@ -80,7 +80,7 @@ function DaveTapPrompt({ onTap }: { onTap: () => void }) {
 // ─── Cross-Tab Dave Guard ───
 const DAVE_CHANNEL_NAME = 'dave-session';
 
-export function Layout({ children, hideFloatingFab }: { children: React.ReactNode; hideFloatingFab?: boolean }) {
+export function Layout({ children, hideFloatingFab, embedded: embeddedProp }: { children: React.ReactNode; hideFloatingFab?: boolean; embedded?: boolean }) {
   const { user, signOut } = useAuth();
   const { isReviewMode, guardDestructive } = useReviewMode();
   const location = useLocation();
@@ -89,13 +89,20 @@ export function Layout({ children, hideFloatingFab }: { children: React.ReactNod
   const activeColor = useActiveTabColor();
   const isMobile = useIsMobile();
   const { isWork } = useAppMode();
+  const isEmbeddedCtx = useIsEmbeddedLayout();
+  // P1c-REAL: embedded mode suppresses all chrome so hubs (Work / TrainHub)
+  // own the shell. Trigger via prop OR via <EmbeddedLayoutProvider>.
+  const embedded = embeddedProp === true || isEmbeddedCtx;
   const isStrategy = location.pathname === '/strategy';
+  const usePrimaryRail = !embedded && isPrimaryRailRoute(location.pathname);
   // /strategy desktop replaces the bottom nav with a top global rail.
   // /strategy mobile keeps the full bottom nav; the shell reserves its
   // measured height so the docked composer never covers or clips it.
-  const bottomNavVariant: 'default' | 'condensed' | 'hidden' = isStrategy
-    ? (isMobile ? 'default' : 'hidden')
-    : 'default';
+  const bottomNavVariant: 'default' | 'condensed' | 'hidden' = embedded || usePrimaryRail
+    ? 'hidden'
+    : isStrategy
+      ? (isMobile ? 'default' : 'hidden')
+      : 'default';
   
   // Dave state
   const [daveOpen, setDaveOpen] = useState(false);
