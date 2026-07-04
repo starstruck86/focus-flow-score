@@ -215,7 +215,7 @@ export function WhitespaceGrid() {
       )}
 
       {/* Grid — sticky first col, horizontal scroll */}
-      <div className="overflow-x-auto border-y border-border">
+      <div className="overflow-x-auto border-y border-border" data-swipe-exempt="true">
         <table className="border-collapse text-sm">
           <thead>
             <tr className="bg-muted/30">
