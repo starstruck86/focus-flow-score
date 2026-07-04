@@ -78,7 +78,7 @@ export function createNavigationTools(ctx: ToolContext): ToolMap {
     },
 
     start_roleplay: (params: { call_type?: string; difficulty?: number; industry?: string }) => {
-      ctx.navigate('/coach');
+      ctx.navigate('/grade');
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('voice-start-roleplay', { detail: params }));
       }, 500);
