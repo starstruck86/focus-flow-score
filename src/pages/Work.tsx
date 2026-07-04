@@ -58,7 +58,16 @@ function PipelineTab() {
 function TerritoryTab() {
   return (
     <EmbeddedLayoutProvider>
-      <Suspense fallback={<Loading label="territory" />}><WeeklyOutreach /></Suspense>
+      <div className="space-y-6">
+        <section>
+          <h3 className="px-4 pt-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Whitespace</h3>
+          <WhitespaceGrid />
+        </section>
+        <section>
+          <h3 className="px-4 pt-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Territory</h3>
+          <Suspense fallback={<Loading label="territory" />}><WeeklyOutreach /></Suspense>
+        </section>
+      </div>
     </EmbeddedLayoutProvider>
   );
 }
