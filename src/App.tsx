@@ -99,6 +99,7 @@ const FlashDeck = lazy(() => import("./pages/FlashDeck"));
 const Study = lazy(() => import("./pages/Study"));
 const Work = lazy(() => import("./pages/Work"));
 const TrainHub = lazy(() => import("./pages/TrainHub"));
+const SettingsLegacy = lazy(() => import("./pages/SettingsLegacy"));
 
 import { useLastSurface } from "@/hooks/useLastSurface";
 const LastSurfaceTracker = () => { useLastSurface(); return null; };
@@ -174,6 +175,7 @@ const App = () => (
                   <Route path="/regrade" element={<ProtectedPage routeName="Batch Regrade"><BatchRegrade /></ProtectedPage>} />
                   <Route path="/prep" element={<ProtectedPage routeName="Sales Brain OS"><PrepHub /></ProtectedPage>} />
                   <Route path="/settings" element={<ProtectedPage routeName="Settings"><Settings /></ProtectedPage>} />
+                  <Route path="/settings/legacy" element={<ProtectedPage routeName="Settings (legacy)"><Suspense fallback={<LazyFallback text="Loading legacy settings…" />}><SettingsLegacy /></Suspense></ProtectedPage>} />
                   <Route path="/settings/territory" element={<ProtectedPage routeName="Territory Setup"><Suspense fallback={<LazyFallback />}><TerritorySetup /></Suspense></ProtectedPage>} />
                   <Route path="/strategy" element={
                     <ProtectedPage routeName="Strategy">

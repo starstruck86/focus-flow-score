@@ -327,12 +327,7 @@ export function KnowledgeControlPlane() {
               {new Date(cpSummary.lastUpdated).toLocaleTimeString()}
             </span>
           )}
-          <Button asChild variant="outline" size="sm" className="h-7 text-xs gap-1.5">
-            <Link to="/admin/lifecycle-reconciliation">
-              <ShieldCheck className="h-3 w-3" />
-              Reconciliation
-            </Link>
-          </Button>
+          {/* P1d: link to /admin/lifecycle-reconciliation removed from visible nav. Route reachable via Settings → Admin & QA. */}
           <Button
             variant="outline" size="sm"
             onClick={() => { refetch(); queueRefresh(); }} disabled={isRefetching}
