@@ -209,7 +209,7 @@ export default function PostCallLog() {
                 Back to Territory
               </Button>
               <Button
-                onClick={() => navigate('/coach')}
+                onClick={() => navigate('/grade')}
                 className="h-11 bg-green-600 hover:bg-green-700 text-white"
               >
                 🌿 Grade It in Coach

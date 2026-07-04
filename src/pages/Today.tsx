@@ -34,7 +34,7 @@ const SURFACE_LABELS: Record<string, string> = {
   '/deals': 'Deals',
   '/accounts': 'Accounts',
   '/renewals': 'Renewals',
-  '/coach': 'Coach',
+  '/grade': 'Game film',
   '/dojo': 'Dojo',
   '/flash': 'Flash',
   '/brief': 'Brief',

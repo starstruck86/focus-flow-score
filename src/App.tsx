@@ -170,8 +170,9 @@ const App = () => (
                   <Route path="/trends" element={<ProtectedPage routeName="Trends"><Trends /></ProtectedPage>} />
                   <Route path="/quota" element={<ProtectedPage routeName="Quota"><Quota /></ProtectedPage>} />
                   <Route path="/deals" element={<ProtectedPage routeName="Deals"><Deals /></ProtectedPage>} />
-                  <Route path="/coach" element={<ProtectedPage routeName="Coach"><Coach /></ProtectedPage>} />
-                  {/* Coach is no longer a nav destination — accessible via /coach for transcript grading */}
+                  {/* Game film (call grader) — primary at /grade, legacy /coach redirects */}
+                  <Route path="/grade" element={<ProtectedPage routeName="Game Film"><Coach /></ProtectedPage>} />
+                  <Route path="/coach" element={<Navigate to="/grade" replace />} />
                   <Route path="/regrade" element={<ProtectedPage routeName="Batch Regrade"><BatchRegrade /></ProtectedPage>} />
                   <Route path="/prep" element={<ProtectedPage routeName="Sales Brain OS"><PrepHub /></ProtectedPage>} />
                   <Route path="/settings" element={<ProtectedPage routeName="Settings"><Settings /></ProtectedPage>} />

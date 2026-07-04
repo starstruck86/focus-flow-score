@@ -512,7 +512,7 @@ export default function Dojo() {
             {[
               { label: 'Library', emoji: '📚', path: '/ki-library' },
               { label: 'Simulate', emoji: '🎭', path: '/simulate' },
-              { label: 'Coach', emoji: '📋', path: '/coach' },
+              { label: 'Game film', emoji: '📋', path: '/grade' },
             ].map(link => (
               <button
                 key={link.path}

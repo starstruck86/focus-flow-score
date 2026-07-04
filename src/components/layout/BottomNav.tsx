@@ -56,7 +56,7 @@ export const trainNavItems: NavItemDef[] = [
   { to: '/study',  label: 'Study',   icon: Compass,     color: 'dojo' },
   { to: '/dojo',   label: 'Dojo',    icon: Swords,      color: 'dojo' },
   { to: '/skills', label: 'Skills',  icon: Target,      color: 'skills' },
-  { to: '/coach',  label: 'Coach',   icon: Mic,         color: 'coach' },
+  { to: '/grade',  label: 'Game film', icon: Mic,         color: 'coach' },
   { to: '/prep',   label: 'Library', icon: Brain,       color: 'prep' },
 ];
 

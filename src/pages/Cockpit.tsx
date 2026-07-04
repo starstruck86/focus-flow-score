@@ -127,7 +127,7 @@ function PlaybookSection() {
       <p className="text-sm font-semibold text-foreground">{rec.playbook.title}</p>
       <p className="text-xs text-muted-foreground">{rec.reason}</p>
       <div className="flex gap-1.5 pt-1">
-        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => navigate('/coach')}>
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => navigate('/grade')}>
           Practice
         </Button>
         <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => navigate('/prep')}>

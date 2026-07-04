@@ -253,7 +253,7 @@ export default function Progress() {
                     : `${grades?.length} call${(grades?.length ?? 0) !== 1 ? 's' : ''} graded, but all outside the 8-week window.`}
                 </p>
                 <button
-                  onClick={() => navigate('/coach')}
+                  onClick={() => navigate('/grade')}
                   className="text-xs font-medium text-primary hover:text-primary/80"
                 >
                   Grade a call →

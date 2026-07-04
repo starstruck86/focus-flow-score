@@ -19,7 +19,9 @@ const ROUTE_ALIASES: Record<string, string> = {
   trends: '/trends',
   prep: '/prep',
   library: '/prep',
-  coach: '/coach',
+  coach: '/grade',
+  grade: '/grade',
+  'game-film': '/grade',
   dojo: '/dojo',
   skills: '/skills',
   study: '/study',
@@ -76,7 +78,7 @@ export function createNavigationTools(ctx: ToolContext): ToolMap {
     },
 
     start_roleplay: (params: { call_type?: string; difficulty?: number; industry?: string }) => {
-      ctx.navigate('/coach');
+      ctx.navigate('/grade');
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('voice-start-roleplay', { detail: params }));
       }, 500);
@@ -116,7 +118,7 @@ export function createNavigationTools(ctx: ToolContext): ToolMap {
     },
 
     grade_call: () => {
-      ctx.navigate('/coach');
+      ctx.navigate('/grade');
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('voice-grade-call'));
       }, 500);

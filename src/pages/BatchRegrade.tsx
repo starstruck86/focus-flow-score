@@ -200,7 +200,7 @@ export default function BatchRegrade() {
 
       {isComplete && total > 0 && (
         <div className="max-w-md mx-auto">
-          <button onClick={() => navigate('/coach')} className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium">
+          <button onClick={() => navigate('/grade')} className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium">
             View Grades in Coach →
           </button>
         </div>
@@ -208,7 +208,7 @@ export default function BatchRegrade() {
 
       {isComplete && total === 0 && (
         <div className="max-w-md mx-auto">
-          <button onClick={() => navigate('/coach')} className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium">
+          <button onClick={() => navigate('/grade')} className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium">
             Go to Coach →
           </button>
         </div>
