@@ -19,6 +19,7 @@ import { EmbeddedLayoutProvider } from '@/components/layout/EmbeddedContext';
 
 const Study = lazy(() => import('./Study'));
 const Dojo = lazy(() => import('./Dojo'));
+const GatesHub = lazy(() => import('./GatesHub'));
 
 const JADE = 'hsl(160 66% 55%)';
 const VALID_TABS = ['study', 'skills', 'review'] as const;
