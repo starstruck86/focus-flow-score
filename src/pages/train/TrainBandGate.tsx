@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
