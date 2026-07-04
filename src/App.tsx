@@ -93,6 +93,7 @@ const TrainSpoke = lazy(() => import("./pages/train/TrainSpoke"));
 const TrainTopic = lazy(() => import("./pages/train/TrainTopic"));
 const TrainAtom = lazy(() => import("./pages/train/TrainAtom"));
 const TrainBandGate = lazy(() => import("./pages/train/TrainBandGate"));
+const GatesHub = lazy(() => import("./pages/GatesHub"));
 const CarMode = lazy(() => import("./pages/CarMode"));
 const Flash = lazy(() => import("./pages/Flash"));
 const FlashDeck = lazy(() => import("./pages/FlashDeck"));
@@ -294,6 +295,8 @@ const App = () => (
                 <Route path="/train/:spoke/:topic" element={<ProtectedPage routeName="Train · Topic"><Suspense fallback={<LazyFallback />}><TrainTopic /></Suspense></ProtectedPage>} />
                 <Route path="/train/:spoke/:topic/atom/:conceptId" element={<ProtectedPage routeName="Train · Atom"><Suspense fallback={<LazyFallback />}><TrainAtom /></Suspense></ProtectedPage>} />
                 <Route path="/train/:spoke/:topic/gate/:band" element={<ProtectedPage routeName="Train · Band Gate"><Suspense fallback={<LazyFallback />}><TrainBandGate /></Suspense></ProtectedPage>} />
+                <Route path="/gates" element={<ProtectedPage routeName="Gates"><Suspense fallback={<LazyFallback />}><GatesHub /></Suspense></ProtectedPage>} />
+                <Route path="/gates/:spoke/:topic/:band" element={<ProtectedPage routeName="Gate Exam"><Suspense fallback={<LazyFallback />}><TrainBandGate /></Suspense></ProtectedPage>} />
                 <Route path="/car-mode" element={<ProtectedPage routeName="Car Mode"><Suspense fallback={<LazyFallback text="Loading Car Mode…" />}><CarMode /></Suspense></ProtectedPage>} />
                 <Route path="/flash" element={<ProtectedPage routeName="Flash"><Suspense fallback={<LazyFallback text="Loading Flash…" />}><Flash /></Suspense></ProtectedPage>} />
                 <Route path="/flash/deck/:id" element={<ProtectedPage routeName="Flash · Deck"><Suspense fallback={<LazyFallback text="Loading deck…" />}><FlashDeck /></Suspense></ProtectedPage>} />

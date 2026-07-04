@@ -19,6 +19,7 @@ import { EmbeddedLayoutProvider } from '@/components/layout/EmbeddedContext';
 
 const Study = lazy(() => import('./Study'));
 const Dojo = lazy(() => import('./Dojo'));
+const GatesHub = lazy(() => import('./GatesHub'));
 
 const JADE = 'hsl(160 66% 55%)';
 const VALID_TABS = ['study', 'skills', 'review'] as const;
@@ -39,7 +40,10 @@ function StudyTab() {
 function SkillsTab() {
   return (
     <EmbeddedLayoutProvider>
-      <Suspense fallback={<Loading label="skills" />}><Dojo /></Suspense>
+      <Suspense fallback={<Loading label="gates" />}><GatesHub /></Suspense>
+      <div className="mt-6 border-t border-border pt-2">
+        <Suspense fallback={<Loading label="skills" />}><Dojo /></Suspense>
+      </div>
     </EmbeddedLayoutProvider>
   );
 }

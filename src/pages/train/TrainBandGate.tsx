@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
@@ -51,6 +51,10 @@ export default function TrainBandGate() {
   const { spoke = 'product', topic = 'deep_linking', band: bandStr = '1' } = useParams();
   const band = (Math.max(1, Math.min(5, Number(bandStr))) as Band);
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromGatesHub = location.pathname.startsWith('/gates');
+  const backPath = fromGatesHub ? '/gates' : `/train/${spoke}/${topic}`;
+  const backLabel = fromGatesHub ? '← Gates' : '← Ladder';
   const { user } = useAuth();
   const { data, isLoading, error } = useBandGate(spoke, topic, band);
 
@@ -186,10 +190,10 @@ export default function TrainBandGate() {
       <main className={cn('mx-auto max-w-2xl px-4 pt-4', SHELL.main.bottomPad)}>
         <header className="mb-4">
           <button
-            onClick={() => navigate(`/train/${spoke}/${topic}`)}
+            onClick={() => navigate(backPath)}
             className="text-xs text-muted-foreground hover:text-foreground"
           >
-            ← Ladder
+            {backLabel}
           </button>
           <h1 className="text-xl font-bold mt-2">Band {band} Gate · {BAND_NAMES[band]}</h1>
         </header>
@@ -339,8 +343,8 @@ export default function TrainBandGate() {
               )}
 
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => navigate(`/train/${spoke}/${topic}`)}>
-                  Back to ladder
+                <Button variant="outline" onClick={() => navigate(backPath)}>
+                  {fromGatesHub ? 'Back to Gates' : 'Back to ladder'}
                 </Button>
                 {!finalSummary.passed && <Button onClick={retake}>Retake</Button>}
               </div>
