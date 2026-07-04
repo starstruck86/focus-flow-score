@@ -26,6 +26,11 @@ const JADE = 'hsl(160 66% 55%)';
 const VALID_TABS = ['study', 'skills', 'review'] as const;
 type Tab = typeof VALID_TABS[number];
 
+function SwipeTabsZone({ tabs, active, onChange, children }: { tabs: readonly string[]; active: string; onChange: (t: string) => void; children: React.ReactNode }) {
+  const handlers = useSwipeTabs({ tabs, active, onChange });
+  return <div {...handlers} style={{ touchAction: 'pan-y' }}>{children}</div>;
+}
+
 function Loading({ label }: { label: string }) {
   return <div className="p-8 text-sm text-muted-foreground">Loading {label}…</div>;
 }
