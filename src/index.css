@@ -556,7 +556,9 @@
   --brand-celebrate: 47 99% 50%;   /* #FDC700 yellow — AAA 10:1 */
 }
 
-/* Branch dark — override shadcn base tokens so chrome adopts the palette. */
+/* Branch chrome — override shadcn base tokens so chrome adopts the palette.
+   Applies whether or not `.dark` is present on <html>; the app is dark-only. */
+[data-theme='branch'],
 [data-theme='branch'].dark {
   --background: 222 45% 11%;
   --foreground: 210 40% 98%;
