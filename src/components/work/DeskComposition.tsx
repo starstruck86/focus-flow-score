@@ -29,7 +29,7 @@ import { cn } from '@/lib/utils';
 import { todayET } from '@/lib/timeFormat';
 import { useDbOpportunities, useDbRenewals } from '@/hooks/useAccountsData';
 
-const AMBER = 'hsl(38 92% 58%)';
+const AMBER = 'hsl(var(--brand-work))';
 
 function fmt$(n: number): string {
   if (!n) return '$0';

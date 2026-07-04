@@ -27,7 +27,7 @@ const WeeklyOutreach = lazy(() => import('./WeeklyOutreach'));
 const Deals = lazy(() => import('./Deals'));
 const Renewals = lazy(() => import('./Renewals'));
 
-const AMBER = 'hsl(38 92% 58%)';
+const AMBER = 'hsl(var(--brand-work))';
 const VALID_TABS = ['desk', 'pipeline', 'territory', 'strategy'] as const;
 type Tab = typeof VALID_TABS[number];
 

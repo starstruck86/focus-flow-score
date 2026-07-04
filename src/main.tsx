@@ -1,8 +1,12 @@
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { initCrashSentinel } from "./lib/crashSentinel";
+import { initTheme } from "./lib/theme";
 import App from "./App.tsx";
 import "./index.css";
+
+// Apply active engagement theme (see src/lib/theme.ts) BEFORE first paint.
+initTheme();
 
 // Initialize crash sentinel BEFORE React renders
 initCrashSentinel();

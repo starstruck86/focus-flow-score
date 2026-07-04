@@ -17,6 +17,9 @@ happening — on real conversations, not vanity metrics.
 
 The rules the app follows:
 
+0. **The visual theme is a swappable engagement-layer skin** (current: Branch);
+   the career layer carries no employer identity — themes are data, not
+   identity (see `src/lib/theme.ts`).
 1. **Honest empties over fake data.** If a tile has nothing to show, it says
    so. No zombie skeletons, no placeholder charts.
 2. **One nav system per route class.** Today, Work, Train, Strategy, Admin —
@@ -194,13 +197,25 @@ rejected.
 
 Non-negotiable palette for the Today shell and everything embedded in it:
 
-- `ink` `#0B0F14` — page background
-- `panel` `#141B24` — cards
-- `line` `#26313F` — borders
-- `text` `#F2F5F8` — primary text
-- `muted` `#8A97A6` — secondary text
-- `amber` `#FFA226` — work moments (Work hub accent)
-- `jade` `#3DDC97` — train / positive states (Train hub accent)
+Colors are consumed as CSS variables (see `src/index.css` brand token layer);
+the values below reflect the active theme (Branch). Swap themes in one line via
+`src/lib/theme.ts → ACTIVE_THEME`.
+
+- `--brand-ink` `#0F172B` — page background (Branch slate-950)
+- `--brand-panel` `#1D293D` — cards
+- `--brand-line` `#314258` — borders
+- `--brand-text` `#F8FAFC` — primary text
+- `--brand-muted` `#90A1B9` — secondary text
+- `--brand-work` — the active theme's Work accent (currently Branch purple
+  `#8E51FF`, with `#7F22FE` for solid fills)
+- `--brand-train` — the active theme's Train accent (currently Branch teal
+  `#00D5BE`)
+- `--brand-urgent` `#FF2056` (action coral), `--brand-warn` `#FF6900` (stale/
+  sync), `--brand-celebrate` `#FDC700` (yellow) — reserved for wayfinding.
+
+One accent per screen. Color is wayfinding: purple means Work, teal means
+Train. Money-good stays green; money-bad stays red — semantic status colors
+override brand tokens where meaning matters.
 
 Fonts: system font stack. No serifs. No generic marketing gradients.
 Mobile-first. Every screen must respect safe-area insets top and bottom.
