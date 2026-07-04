@@ -46,8 +46,11 @@ export function ExportMenu({ title, markdown, accountName }: ExportMenuProps) {
     const printWindow = window.open('', '_blank');
     if (!printWindow) { toast.error('Pop-up blocked'); return; }
 
-    const bodyHtml = markdownToStyledHtml(markdown);
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
+    const bodyHtml = DOMPurify.sanitize(markdownToStyledHtml(markdown));
+    const safeTitle = escHtml(title);
+    const safeAccount = accountName ? escHtml(accountName) : '';
+    const safeDate = escHtml(dateStr);
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>${safeTitle}</title>
       <style>
         @page { size: letter; margin: 1in; }
         body { font-family: 'Georgia', 'Times New Roman', serif; max-width: 100%; margin: 0; padding: 0; line-height: 1.7; color: #1a1a1a; font-size: 11pt; }
