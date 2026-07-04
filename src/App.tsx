@@ -20,6 +20,7 @@ import { DurableJobRehydrator } from "@/components/jobs/DurableJobRehydrator";
 import '@/lib/pendingWriteSync'; // Register online listener for pending write queue
 import { SystemHealthBadge } from '@/components/SystemHealthBadge';
 import Dashboard from "./pages/Dashboard";
+import Today from "./pages/Today";
 import WeeklyOutreach from "./pages/WeeklyOutreach";
 import Renewals from "./pages/Renewals";
 import Tasks from "./pages/Tasks";
@@ -152,8 +153,9 @@ const App = () => (
                   <Route path="/" element={<Navigate to="/today" replace />} />
                   <Route path="/study" element={<ProtectedPage routeName="Study"><Suspense fallback={<LazyFallback text="Loading study hub…" />}><Study /></Suspense></ProtectedPage>} />
 
-                  <Route path="/today" element={<ProtectedPage routeName="Dashboard"><Dashboard /></ProtectedPage>} />
+                  <Route path="/today" element={<ProtectedPage routeName="Today"><Today /></ProtectedPage>} />
                   <Route path="/dashboard" element={<ProtectedPage routeName="Dashboard"><Dashboard /></ProtectedPage>} />
+
                   <Route path="/outreach" element={<ProtectedPage routeName="Outreach"><WeeklyOutreach /></ProtectedPage>} />
                   <Route path="/accounts/:id" element={<ProtectedPage routeName="Account Detail"><AccountDetail /></ProtectedPage>} />
                   <Route path="/opportunities/:id" element={<ProtectedPage routeName="Opportunity Detail"><OpportunityDetail /></ProtectedPage>} />
