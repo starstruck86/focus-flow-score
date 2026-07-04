@@ -209,10 +209,11 @@ Mobile-first. Every screen must respect safe-area insets top and bottom.
 
 ## §9 · Product boundaries (co-existence rules)
 
-- **Coach** owns real-call analysis. Dojo does not analyze real calls.
-- **Dojo** owns practice and simulations. Coach does not run simulations.
-- **Study / Learn** owns structured knowledge (KIs, chapters, playbooks).
-  Neither Coach nor Dojo owns the KI corpus; they both consume it.
+- **Game film** (`/grade`) owns real-call analysis and transcript grading.
+  Dojo does not analyze real calls.
+- **Dojo** owns practice and simulations. Game film does not run simulations.
+- **Study/Learn** owns the KI corpus and structured knowledge.
+  Neither Game film nor Dojo owns the KI corpus; they both consume it.
 - **Strategy** owns thread-scoped reasoning + discovery prep. It is not a
   chat wrapper; every artifact it produces is grounded in resources or
   admits absence.
