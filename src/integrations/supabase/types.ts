@@ -98,6 +98,68 @@ export type Database = {
           },
         ]
       }
+      account_product_ownership: {
+        Row: {
+          account_id: string
+          created_at: string
+          id: string
+          noted_at: string
+          owned: boolean
+          product_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          id?: string
+          noted_at?: string
+          owned?: boolean
+          product_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          id?: string
+          noted_at?: string
+          owned?: boolean
+          product_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_product_ownership_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_product_ownership_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_product_ownership_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_product_ownership_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       account_project_settings: {
         Row: {
           account_family: string
@@ -5857,6 +5919,47 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      products: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          list_price: number | null
+          name: string
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          list_price?: number | null
+          name: string
+          sort_order?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          list_price?: number | null
+          name?: string
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "branch_readiness"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       pto_days: {
         Row: {

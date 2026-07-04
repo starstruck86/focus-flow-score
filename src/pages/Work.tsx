@@ -20,6 +20,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { EmbeddedLayoutProvider } from '@/components/layout/EmbeddedContext';
 import { DeskComposition } from '@/components/work/DeskComposition';
+import { WhitespaceGrid } from '@/components/work/WhitespaceGrid';
 
 const WeeklyOutreach = lazy(() => import('./WeeklyOutreach'));
 const Deals = lazy(() => import('./Deals'));
@@ -57,7 +58,16 @@ function PipelineTab() {
 function TerritoryTab() {
   return (
     <EmbeddedLayoutProvider>
-      <Suspense fallback={<Loading label="territory" />}><WeeklyOutreach /></Suspense>
+      <div className="space-y-6">
+        <section>
+          <h3 className="px-4 pt-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Whitespace</h3>
+          <WhitespaceGrid />
+        </section>
+        <section>
+          <h3 className="px-4 pt-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Territory</h3>
+          <Suspense fallback={<Loading label="territory" />}><WeeklyOutreach /></Suspense>
+        </section>
+      </div>
     </EmbeddedLayoutProvider>
   );
 }
