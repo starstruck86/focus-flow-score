@@ -94,6 +94,8 @@ function useVoiceStatus() {
       return data as { apiKeySet: boolean; apiKeyValid: boolean; agentIdSet: boolean; tokenGenOk: boolean; error: string | null };
     },
   });
+}
+
 
 type StatusLevel = 'ok' | 'warn' | 'bad' | 'idle';
 function StatusDot({ level }: { level: StatusLevel }) {
