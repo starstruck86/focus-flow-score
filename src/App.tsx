@@ -97,6 +97,10 @@ const Flash = lazy(() => import("./pages/Flash"));
 const FlashDeck = lazy(() => import("./pages/FlashDeck"));
 const Study = lazy(() => import("./pages/Study"));
 
+import { useLastSurface } from "@/hooks/useLastSurface";
+const LastSurfaceTracker = () => { useLastSurface(); return null; };
+
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -141,6 +145,7 @@ const App = () => (
               
               
               <BrowserRouter>
+                <LastSurfaceTracker />
                 <Routes>
                   <Route path="/auth" element={<Auth />} />
                   <Route path="/auth/callback" element={<AuthCallback />} />
