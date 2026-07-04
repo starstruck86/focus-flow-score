@@ -345,7 +345,7 @@ export function Layout({ children, hideFloatingFab, embedded: embeddedProp }: { 
           : 'min-h-screen',
       )}
     >
-      {location.pathname !== '/strategy' && (
+      {!embedded && location.pathname !== '/strategy' && (
         <header
           data-testid="app-header"
           className="flex items-center gap-2 px-3 py-2 border-b sticky top-[env(safe-area-inset-top)] z-40 bg-background/95 backdrop-blur-md"
@@ -378,19 +378,10 @@ export function Layout({ children, hideFloatingFab, embedded: embeddedProp }: { 
         ═══════════════════════════════════════════════════════════
         REGRESSION-LOCKED INVARIANT: Header / KPI / Journal layout
         ═══════════════════════════════════════════════════════════
-        The GlobalWeekStrip and ActivityRings MUST NOT overlap.
-        This layout uses flex-wrap so rings wrap below the week
-        strip on narrow viewports. Critical rules:
-          - flex-wrap on container
-          - basis-[180px] + min-w-0 on week strip (allows shrink)
-          - shrink-0 + overflow-x-auto on rings (prevents collapse)
-          - overflow-hidden on outer container (prevents bleed)
-        DO NOT replace with absolute positioning or fixed widths.
-        Test at 320px, 402px, zoomed, and with large KPI numbers.
+        (see original comment) — suppressed entirely when embedded.
         ═══════════════════════════════════════════════════════════
       */}
-      {/* Hide shell chrome on /strategy — reclaim vertical space */}
-      {location.pathname !== '/strategy' && (
+      {!embedded && location.pathname !== '/strategy' && (
         <div className="px-4 lg:px-6 max-w-4xl mx-auto w-full pt-2 space-y-2 overflow-hidden">
           <div className="flex items-center gap-2 sm:gap-4">
             <div className="flex-1 min-w-0 overflow-hidden">
@@ -404,7 +395,7 @@ export function Layout({ children, hideFloatingFab, embedded: embeddedProp }: { 
         </div>
       )}
 
-      {location.pathname !== '/strategy' && <Breadcrumbs />}
+      {!embedded && location.pathname !== '/strategy' && <Breadcrumbs />}
       <main
         data-testid="main-content"
         className={cn(
