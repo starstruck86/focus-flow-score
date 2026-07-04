@@ -25,46 +25,46 @@ import { cn } from '@/lib/utils';
 
 const DEMO_OUTPUT = `## Executive Summary
 
-Franklin Park Conservatory is evaluating Acoustic's marketing automation platform as a replacement for their current Tessitura-native email tooling. This represents a mid-market arts & culture opportunity with strong product-market fit.
+This enterprise account is expanding mobile investment and evaluating attribution + deep linking to unify web-to-app and paid channels. Strong fit for Branch Universal Ads, Email-to-App, and Web-to-App.
 
 ## Strategic Context
 
-The Conservatory operates a complex multi-channel engagement model spanning memberships, events, education programs, and seasonal exhibitions. Their current stack relies heavily on Tessitura for CRM and ticketing, with limited marketing automation capabilities.
+Their current stack relies on a legacy MMP with limited deep-linking coverage across email and SMS. A recent app refresh signals renewed growth investment — ideal window to propose full-funnel Branch.
 
-**Key Insight:** Their recent website redesign signals investment in digital experience — making this an ideal time to propose integrated lifecycle marketing.
+**Key Insight:** They're already spending on paid UA but losing attribution on organic + owned channels. Branch closes that gap.
 
 ## Stakeholder Hypotheses
 
-- **Director of Marketing** — Primary champion. Frustrated with Tessitura's email limitations. Needs segmentation and automation.
-- **IT Director** — Technical evaluator. Will care about Tessitura API integration and data security.
-- **CFO** — Economic buyer. Will need ROI justification against current spend.
+- **Head of Growth** — Primary champion. Owns paid + owned channel performance.
+- **Mobile Engineering Lead** — Technical evaluator. Cares about SDK footprint and privacy posture.
+- **VP Marketing / CMO** — Economic buyer. Needs ROI vs. incumbent MMP.
 
 ## Recommended Approach
 
-1. **Lead with integration story** — Show how Acoustic connects to Tessitura without replacing it
-2. **Quantify the gap** — Help them measure what they're losing with current tooling (open rates, conversion, time spent)
-3. **Reference similar wins** — Use performing arts case studies from similar-sized organizations
+1. **Lead with deep-linking coverage** — quantify the routing losses on their current stack
+2. **Anchor on Universal Ads** — one link, every channel, full attribution
+3. **Reference peer wins** — similar-scale apps that consolidated MMP + linking on Branch
 
 ## Key Risks
 
-- Tessitura has a strong ecosystem lock-in; switching costs may be perceived as high
-- Budget cycle timing — arts organizations often plan 12-18 months ahead
-- Champion may not have direct budget authority
+- Incumbent MMP contract cycle timing
+- Advanced Privacy / AIO readiness questions from engineering
+- Champion may not control mobile budget directly
 
 ## Next Steps
 
-1. Schedule technical discovery with IT Director to map Tessitura integration requirements
-2. Prepare ROI calculator based on their current email volume and conversion rates
-3. Identify 2-3 peer organizations using Acoustic for social proof
-4. Draft a mutual action plan targeting their Q3 budget planning window`;
+1. Technical discovery with Mobile Engineering on SDK + deep-link coverage
+2. Build ROI model on paid UA spend + attribution recovery
+3. Line up 2-3 peer expansion references
+4. Draft mutual action plan targeting next budget cycle`;
 
 const DEMO_BLOCKS = [
-  { heading: 'Executive Summary', content: 'Franklin Park Conservatory is evaluating Acoustic\'s marketing automation platform as a replacement for their current Tessitura-native email tooling. This represents a mid-market arts & culture opportunity with strong product-market fit.' },
-  { heading: 'Strategic Context', content: 'The Conservatory operates a complex multi-channel engagement model spanning memberships, events, education programs, and seasonal exhibitions. Their current stack relies heavily on Tessitura for CRM and ticketing, with limited marketing automation capabilities.\n\n**Key Insight:** Their recent website redesign signals investment in digital experience — making this an ideal time to propose integrated lifecycle marketing.' },
-  { heading: 'Stakeholder Hypotheses', content: '- **Director of Marketing** — Primary champion. Frustrated with Tessitura\'s email limitations. Needs segmentation and automation.\n- **IT Director** — Technical evaluator. Will care about Tessitura API integration and data security.\n- **CFO** — Economic buyer. Will need ROI justification against current spend.' },
-  { heading: 'Recommended Approach', content: '1. **Lead with integration story** — Show how Acoustic connects to Tessitura without replacing it\n2. **Quantify the gap** — Help them measure what they\'re losing with current tooling\n3. **Reference similar wins** — Use performing arts case studies from similar-sized organizations' },
-  { heading: 'Key Risks', content: '- Tessitura has a strong ecosystem lock-in; switching costs may be perceived as high\n- Budget cycle timing — arts organizations often plan 12-18 months ahead\n- Champion may not have direct budget authority' },
-  { heading: 'Next Steps', content: '1. Schedule technical discovery with IT Director to map Tessitura integration requirements\n2. Prepare ROI calculator based on their current email volume and conversion rates\n3. Identify 2-3 peer organizations using Acoustic for social proof\n4. Draft a mutual action plan targeting their Q3 budget planning window' },
+  { heading: 'Executive Summary', content: 'This enterprise account is expanding mobile investment and evaluating attribution + deep linking to unify web-to-app and paid channels. Strong fit for Branch Universal Ads, Email-to-App, and Web-to-App.' },
+  { heading: 'Strategic Context', content: 'Their current stack relies on a legacy MMP with limited deep-linking coverage across email and SMS. A recent app refresh signals renewed growth investment.\n\n**Key Insight:** They\'re already spending on paid UA but losing attribution on organic + owned channels.' },
+  { heading: 'Stakeholder Hypotheses', content: '- **Head of Growth** — Primary champion. Owns paid + owned channel performance.\n- **Mobile Engineering Lead** — Technical evaluator. Cares about SDK footprint and privacy posture.\n- **VP Marketing / CMO** — Economic buyer. Needs ROI vs. incumbent MMP.' },
+  { heading: 'Recommended Approach', content: '1. **Lead with deep-linking coverage** — quantify routing losses on their current stack\n2. **Anchor on Universal Ads** — one link, every channel, full attribution\n3. **Reference peer wins** — similar-scale apps that consolidated MMP + linking on Branch' },
+  { heading: 'Key Risks', content: '- Incumbent MMP contract cycle timing\n- Advanced Privacy / AIO readiness questions from engineering\n- Champion may not control mobile budget directly' },
+  { heading: 'Next Steps', content: '1. Technical discovery with Mobile Engineering on SDK + deep-link coverage\n2. Build ROI model on paid UA spend + attribution recovery\n3. Line up 2-3 peer expansion references\n4. Draft mutual action plan targeting next budget cycle' },
 ];
 
 interface Props {
