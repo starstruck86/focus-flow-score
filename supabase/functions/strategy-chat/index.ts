@@ -6282,6 +6282,8 @@ async function handleChat(
     workingThesis: priorThesis,
     resourceHits,
     kiHits: kiHitList,
+    libraryKis,
+    libraryPlaybooks,
     retrievalDebug,
     retrievalDiagnostics,
     retrievalSucceeded,
