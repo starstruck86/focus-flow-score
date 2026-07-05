@@ -165,6 +165,90 @@ function withRoutingMeta(
   };
 }
 
+// ── BOLT 3 helpers ─────────────────────────────────────────────
+// Structured citations for strategy_messages.citations_json.
+// Kept intentionally minimal (id + title) so the operator UI /
+// audit surfaces can attribute each assistant turn to the exact
+// resource/KI/playbook rows that shaped the prompt.
+function buildCitationsJson(args: {
+  resourceHits: Array<{ id: string; title: string }>;
+  kiHits: Array<{ id: string; title: string; chapter?: string | null }>;
+  libraryKis: Array<{ id: string; title: string }>;
+  libraryPlaybooks: Array<{ id: string; title: string }>;
+}): Record<string, unknown> | null {
+  const dedupById = <T extends { id: string; title: string }>(rows: T[]) => {
+    const seen = new Set<string>();
+    const out: Array<{ id: string; title: string }> = [];
+    for (const r of rows) {
+      if (!r?.id || !r?.title) continue;
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      out.push({ id: r.id, title: r.title });
+    }
+    return out;
+  };
+  const resources = dedupById(args.resourceHits || []);
+  const kis = dedupById([
+    ...(args.kiHits || []),
+    ...(args.libraryKis || []),
+  ]);
+  const playbooks = dedupById(args.libraryPlaybooks || []);
+  const total = resources.length + kis.length + playbooks.length;
+  if (total === 0) return null;
+  return {
+    version: 1,
+    resources,
+    kis,
+    playbooks,
+    stamped_at: new Date().toISOString(),
+  };
+}
+
+// Best-effort insert into playbook_usage_events for every playbook
+// that was folded into the prompt on this turn. Never throws.
+async function logPlaybookUsageBestEffort(
+  supabase: any,
+  args: {
+    userId: string;
+    threadId: string;
+    accountId: string | null;
+    opportunityId?: string | null;
+    playbooks: Array<{ id: string; title: string }>;
+    surface: string;
+  },
+): Promise<void> {
+  const pbs = (args.playbooks || []).filter((p) => p?.id && p?.title);
+  if (pbs.length === 0) return;
+  try {
+    const rows = pbs.map((p) => ({
+      user_id: args.userId,
+      playbook_id: p.id,
+      playbook_title: p.title,
+      event_type: "recommendation_shown",
+      context_block_type: "strategy_chat",
+      context_account_id: args.accountId ?? null,
+      context_opportunity_id: args.opportunityId ?? null,
+      metadata: { thread_id: args.threadId, surface: args.surface },
+    }));
+    const { error } = await supabase.from("playbook_usage_events").insert(rows);
+    if (error) {
+      console.warn(
+        "[playbook_usage_events] insert failed:",
+        String(error.message).slice(0, 200),
+      );
+    } else {
+      console.log(
+        `[playbook_usage_events] logged ${rows.length} row(s) (${args.surface})`,
+      );
+    }
+  } catch (e) {
+    console.warn(
+      "[playbook_usage_events] threw (ignored):",
+      String((e as Error).message).slice(0, 200),
+    );
+  }
+}
+
 function buildDeepWorkInputs(
   decision: RoutingDecision,
   content: string,
@@ -2856,7 +2940,14 @@ serve(async (req) => {
         },
         explicit_task_type: typeof body?.task_type === "string" ? body.task_type : null,
         override: typeof body?.override === "string" ? body.override : null,
-        library_precheck_count: 0,
+        // BOLT 2 — unmute the library signal for the router.
+        // Cheap pre-route hint: count of scopes the situation/library
+        // path WOULD query. Purely keyword-derived (no DB), so it stays
+        // pre-retrieval and pre-classifier. Zero cost, non-null truth.
+        library_precheck_count: deriveLibraryScopes(
+          contextPack.account,
+          content || "",
+        ).length,
       });
       await logRoutingDecision(supabase, {
         user_id: userId,
@@ -5651,6 +5742,8 @@ async function buildChatSystemPrompt(args: {
       workingThesis: null,
       resourceHits: [],
       kiHits: [],
+      libraryKis: [],
+      libraryPlaybooks: [],
       retrievalDebug: null,
       retrievalDiagnostics: buildRetrievalDiagnostics({ userContent, resources: null, retrievalError: null, intent }),
       retrievalSucceeded: false,
@@ -5858,6 +5951,8 @@ async function buildChatSystemPrompt(args: {
       workingThesis: null,
       resourceHits: [],
       kiHits: [],
+      libraryKis: [],
+      libraryPlaybooks: [],
       retrievalDebug: toRetrievalDebugShape(resources),
       retrievalDiagnostics,
       retrievalSucceeded: !!resources && !retrievalError,
@@ -5997,11 +6092,22 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     title: k.title,
     chapter: k.chapter,
   }));
+  // BOLT 3 — surface the actual library selections (KIs + playbooks)
+  // that were folded into the prompt so downstream can stamp
+  // citations_json and log playbook_usage_events.
+  const libraryKis = ((library as any)?.knowledgeItems || [])
+    .map((k: any) => ({ id: k?.id, title: k?.title }))
+    .filter((k: any) => k.id && k.title);
+  const libraryPlaybooks = ((library as any)?.playbooks || [])
+    .map((p: any) => ({ id: p?.id, title: p?.title }))
+    .filter((p: any) => p.id && p.title);
   return {
     prompt,
     workingThesis,
     resourceHits,
     kiHits,
+    libraryKis,
+    libraryPlaybooks,
     retrievalDebug: toRetrievalDebugShape(resources),
     retrievalDiagnostics,
     retrievalSucceeded: !!resources && !retrievalError,
@@ -6260,6 +6366,8 @@ async function handleChat(
     workingThesis: priorThesis,
     resourceHits,
     kiHits: kiHitList,
+    libraryKis,
+    libraryPlaybooks,
     retrievalDebug,
     retrievalDiagnostics,
     retrievalSucceeded,
@@ -6283,6 +6391,7 @@ async function handleChat(
     workspaceKeyRaw,
   });
   const accountId: string | null = pack.account?.id ?? null;
+  const opportunityId: string | null = pack.opportunity?.id ?? null;
 
   // ── 4-MODE LIBRARY DECISION (replaces binary refusal gate) ──
   // Library is a foundation, not a gate. Always produce output.
@@ -7531,6 +7640,14 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         String(shErr).slice(0, 200),
       );
     }
+    // BOLT 3 — build structured citations for the assistant message
+    // and (best-effort) record playbook usage. Additive; never blocks.
+    const __citationsJson = buildCitationsJson({
+      resourceHits,
+      kiHits: kiHitList,
+      libraryKis,
+      libraryPlaybooks,
+    });
     await supabase.from("strategy_messages").insert({
       thread_id: threadId,
       user_id: userId,
@@ -7542,6 +7659,15 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       fallback_used: result.fallbackUsed,
       latency_ms: result.latencyMs,
       content_json: nonStreamContentJson,
+      citations_json: __citationsJson,
+    });
+    await logPlaybookUsageBestEffort(supabase, {
+      userId,
+      threadId,
+      accountId,
+      opportunityId,
+      playbooks: libraryPlaybooks,
+      surface: "chat_nonstream",
     });
     // Cross-thread resource memory: persist VERIFIED citations only.
     // This is the write side of strategy_thread_resources — what makes
@@ -8076,6 +8202,13 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
             String(shErr).slice(0, 200),
           );
         }
+        // BOLT 3 — citations + playbook usage (stream path).
+        const __streamCitationsJson = buildCitationsJson({
+          resourceHits,
+          kiHits: kiHitList,
+          libraryKis,
+          libraryPlaybooks,
+        });
         await supabase.from("strategy_messages").insert({
           thread_id: threadId,
           user_id: userId,
@@ -8087,6 +8220,15 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           fallback_used: false,
           latency_ms: latency,
           content_json: streamContentJson,
+          citations_json: __streamCitationsJson,
+        });
+        await logPlaybookUsageBestEffort(supabase, {
+          userId,
+          threadId,
+          accountId,
+          opportunityId,
+          playbooks: libraryPlaybooks,
+          surface: "chat_stream",
         });
         await supabase.from("strategy_threads").update({
           updated_at: new Date().toISOString(),

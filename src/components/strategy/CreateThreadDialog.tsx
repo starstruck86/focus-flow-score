@@ -53,7 +53,7 @@ export function CreateThreadDialog({ open, onOpenChange, onCreateThread }: Props
   const [linkedAccountId, setLinkedAccountId] = useState<string>('');
   const [linkedOpportunityId, setLinkedOpportunityId] = useState<string>('');
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
-  const [opportunities, setOpportunities] = useState<{ id: string; name: string }[]>([]);
+  const [opportunities, setOpportunities] = useState<{ id: string; name: string; account_id?: string | null }[]>([]);
   const [objectSearch, setObjectSearch] = useState('');
 
   // Load accounts/opportunities for picker
@@ -62,10 +62,12 @@ export function CreateThreadDialog({ open, onOpenChange, onCreateThread }: Props
     const load = async () => {
       const [acctRes, oppRes] = await Promise.all([
         supabase.from('accounts').select('id, name').eq('user_id', user.id).is('deleted_at', null).order('name').limit(100),
-        supabase.from('opportunities').select('id, name').eq('user_id', user.id).order('name').limit(100),
+        // BOLT 1 — pull account_id so the opportunity picker can be
+        // scoped to the currently-linked account.
+        supabase.from('opportunities').select('id, name, account_id').eq('user_id', user.id).order('name').limit(200),
       ]);
       if (acctRes.data) setAccounts(acctRes.data);
-      if (oppRes.data) setOpportunities(oppRes.data);
+      if (oppRes.data) setOpportunities(oppRes.data as { id: string; name: string; account_id?: string | null }[]);
     };
     load();
   }, [open, user]);
@@ -104,7 +106,12 @@ export function CreateThreadDialog({ open, onOpenChange, onCreateThread }: Props
       lane,
       threadType,
       linkedAccountId: threadType === 'account_linked' && linkedAccountId ? linkedAccountId : undefined,
-      linkedOpportunityId: threadType === 'opportunity_linked' && linkedOpportunityId ? linkedOpportunityId : undefined,
+      // BOLT 1 — allow an account-linked thread to also attach an
+      // opportunity that belongs to that account.
+      linkedOpportunityId:
+        threadType === 'opportunity_linked' && linkedOpportunityId
+          ? linkedOpportunityId
+          : (threadType === 'account_linked' && linkedOpportunityId ? linkedOpportunityId : undefined),
     });
     onOpenChange(false);
     // Reset
@@ -194,6 +201,43 @@ export function CreateThreadDialog({ open, onOpenChange, onCreateThread }: Props
                   ))
                 )}
               </div>
+
+              {/* BOLT 1 — optional opportunity picker scoped to the
+                  linked account. Only shows once an account is chosen
+                  and only lists opportunities belonging to it. */}
+              {linkedAccountId && (() => {
+                const scoped = opportunities.filter(o => o.account_id === linkedAccountId);
+                if (scoped.length === 0) return null;
+                return (
+                  <div className="mt-3 space-y-1.5">
+                    <label className="text-[11px] font-medium text-muted-foreground">
+                      Optional opportunity on this account
+                    </label>
+                    <div className="max-h-28 overflow-y-auto border border-border rounded-md">
+                      {scoped.slice(0, 20).map(o => (
+                        <button
+                          key={o.id}
+                          onClick={() =>
+                            setLinkedOpportunityId(prev => prev === o.id ? '' : o.id)
+                          }
+                          className={cn(
+                            'w-full text-left px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors flex items-center gap-2',
+                            linkedOpportunityId === o.id && 'bg-primary/5 text-primary'
+                          )}
+                        >
+                          <Target className="h-3 w-3 shrink-0 text-muted-foreground" />
+                          <span className="truncate">{o.name}</span>
+                          {linkedOpportunityId === o.id && (
+                            <Badge variant="secondary" className="text-[8px] px-1 py-0 ml-auto">
+                              Selected
+                            </Badge>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
