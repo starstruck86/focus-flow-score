@@ -165,6 +165,90 @@ function withRoutingMeta(
   };
 }
 
+// ── BOLT 3 helpers ─────────────────────────────────────────────
+// Structured citations for strategy_messages.citations_json.
+// Kept intentionally minimal (id + title) so the operator UI /
+// audit surfaces can attribute each assistant turn to the exact
+// resource/KI/playbook rows that shaped the prompt.
+function buildCitationsJson(args: {
+  resourceHits: Array<{ id: string; title: string }>;
+  kiHits: Array<{ id: string; title: string; chapter?: string | null }>;
+  libraryKis: Array<{ id: string; title: string }>;
+  libraryPlaybooks: Array<{ id: string; title: string }>;
+}): Record<string, unknown> | null {
+  const dedupById = <T extends { id: string; title: string }>(rows: T[]) => {
+    const seen = new Set<string>();
+    const out: Array<{ id: string; title: string }> = [];
+    for (const r of rows) {
+      if (!r?.id || !r?.title) continue;
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      out.push({ id: r.id, title: r.title });
+    }
+    return out;
+  };
+  const resources = dedupById(args.resourceHits || []);
+  const kis = dedupById([
+    ...(args.kiHits || []),
+    ...(args.libraryKis || []),
+  ]);
+  const playbooks = dedupById(args.libraryPlaybooks || []);
+  const total = resources.length + kis.length + playbooks.length;
+  if (total === 0) return null;
+  return {
+    version: 1,
+    resources,
+    kis,
+    playbooks,
+    stamped_at: new Date().toISOString(),
+  };
+}
+
+// Best-effort insert into playbook_usage_events for every playbook
+// that was folded into the prompt on this turn. Never throws.
+async function logPlaybookUsageBestEffort(
+  supabase: any,
+  args: {
+    userId: string;
+    threadId: string;
+    accountId: string | null;
+    opportunityId?: string | null;
+    playbooks: Array<{ id: string; title: string }>;
+    surface: string;
+  },
+): Promise<void> {
+  const pbs = (args.playbooks || []).filter((p) => p?.id && p?.title);
+  if (pbs.length === 0) return;
+  try {
+    const rows = pbs.map((p) => ({
+      user_id: args.userId,
+      playbook_id: p.id,
+      playbook_title: p.title,
+      event_type: "recommendation_shown",
+      context_block_type: "strategy_chat",
+      context_account_id: args.accountId ?? null,
+      context_opportunity_id: args.opportunityId ?? null,
+      metadata: { thread_id: args.threadId, surface: args.surface },
+    }));
+    const { error } = await supabase.from("playbook_usage_events").insert(rows);
+    if (error) {
+      console.warn(
+        "[playbook_usage_events] insert failed:",
+        String(error.message).slice(0, 200),
+      );
+    } else {
+      console.log(
+        `[playbook_usage_events] logged ${rows.length} row(s) (${args.surface})`,
+      );
+    }
+  } catch (e) {
+    console.warn(
+      "[playbook_usage_events] threw (ignored):",
+      String((e as Error).message).slice(0, 200),
+    );
+  }
+}
+
 function buildDeepWorkInputs(
   decision: RoutingDecision,
   content: string,
