@@ -1,5 +1,9 @@
 project_id = "odbjjklumdsuqdvkgwyv"
 
+[functions.drill-review]
+verify_jwt = true
+
+
 [functions.training-digest]
 verify_jwt = false
 

@@ -58,6 +58,8 @@ const ExecuteWorkspace = lazy(() => import("./pages/ExecuteWorkspace"));
 const BulkExtractRunner = lazy(() => import("./pages/BulkExtractRunner"));
 const ExtractionAdmin = lazy(() => import("./pages/ExtractionAdmin"));
 const Dojo = lazy(() => import("./pages/Dojo"));
+const DrillReview = lazy(() => import("./pages/DrillReview"));
+
 const DojoSession = lazy(() => import("./pages/DojoSession"));
 const DojoQA = lazy(() => import("./pages/DojoQA"));
 const DojoV6QA = lazy(() => import("./pages/DojoV6QA"));
@@ -227,6 +229,14 @@ const App = () => (
                       </Suspense>
                     </ProtectedRoute>
                   } />
+                  <Route path="/internal/drill-review" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<LazyFallback text="Loading review…" />}>
+                        <DrillReview />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+
                   <Route path="/verify-enrichment" element={
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback text="Loading verification…" />}>
