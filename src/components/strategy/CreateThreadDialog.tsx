@@ -53,7 +53,7 @@ export function CreateThreadDialog({ open, onOpenChange, onCreateThread }: Props
   const [linkedAccountId, setLinkedAccountId] = useState<string>('');
   const [linkedOpportunityId, setLinkedOpportunityId] = useState<string>('');
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
-  const [opportunities, setOpportunities] = useState<{ id: string; name: string }[]>([]);
+  const [opportunities, setOpportunities] = useState<{ id: string; name: string; account_id?: string | null }[]>([]);
   const [objectSearch, setObjectSearch] = useState('');
 
   // Load accounts/opportunities for picker
