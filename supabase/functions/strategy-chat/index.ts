@@ -6391,6 +6391,7 @@ async function handleChat(
     workspaceKeyRaw,
   });
   const accountId: string | null = pack.account?.id ?? null;
+  const opportunityId: string | null = pack.opportunity?.id ?? null;
 
   // ── 4-MODE LIBRARY DECISION (replaces binary refusal gate) ──
   // Library is a foundation, not a gate. Always produce output.
