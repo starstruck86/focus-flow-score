@@ -8117,6 +8117,13 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
             String(shErr).slice(0, 200),
           );
         }
+        // BOLT 3 — citations + playbook usage (stream path).
+        const __streamCitationsJson = buildCitationsJson({
+          resourceHits,
+          kiHits: kiHitList,
+          libraryKis,
+          libraryPlaybooks,
+        });
         await supabase.from("strategy_messages").insert({
           thread_id: threadId,
           user_id: userId,
@@ -8128,6 +8135,15 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           fallback_used: false,
           latency_ms: latency,
           content_json: streamContentJson,
+          citations_json: __streamCitationsJson,
+        });
+        await logPlaybookUsageBestEffort(supabase, {
+          userId,
+          threadId,
+          accountId,
+          opportunityId,
+          playbooks: libraryPlaybooks,
+          surface: "chat_stream",
         });
         await supabase.from("strategy_threads").update({
           updated_at: new Date().toISOString(),
