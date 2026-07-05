@@ -62,10 +62,12 @@ export function CreateThreadDialog({ open, onOpenChange, onCreateThread }: Props
     const load = async () => {
       const [acctRes, oppRes] = await Promise.all([
         supabase.from('accounts').select('id, name').eq('user_id', user.id).is('deleted_at', null).order('name').limit(100),
-        supabase.from('opportunities').select('id, name').eq('user_id', user.id).order('name').limit(100),
+        // BOLT 1 — pull account_id so the opportunity picker can be
+        // scoped to the currently-linked account.
+        supabase.from('opportunities').select('id, name, account_id').eq('user_id', user.id).order('name').limit(200),
       ]);
       if (acctRes.data) setAccounts(acctRes.data);
-      if (oppRes.data) setOpportunities(oppRes.data);
+      if (oppRes.data) setOpportunities(oppRes.data as { id: string; name: string; account_id?: string | null }[]);
     };
     load();
   }, [open, user]);
