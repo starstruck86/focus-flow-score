@@ -6004,11 +6004,22 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     title: k.title,
     chapter: k.chapter,
   }));
+  // BOLT 3 — surface the actual library selections (KIs + playbooks)
+  // that were folded into the prompt so downstream can stamp
+  // citations_json and log playbook_usage_events.
+  const libraryKis = ((library as any)?.knowledgeItems || [])
+    .map((k: any) => ({ id: k?.id, title: k?.title }))
+    .filter((k: any) => k.id && k.title);
+  const libraryPlaybooks = ((library as any)?.playbooks || [])
+    .map((p: any) => ({ id: p?.id, title: p?.title }))
+    .filter((p: any) => p.id && p.title);
   return {
     prompt,
     workingThesis,
     resourceHits,
     kiHits,
+    libraryKis,
+    libraryPlaybooks,
     retrievalDebug: toRetrievalDebugShape(resources),
     retrievalDiagnostics,
     retrievalSucceeded: !!resources && !retrievalError,
