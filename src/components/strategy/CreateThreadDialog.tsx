@@ -106,7 +106,12 @@ export function CreateThreadDialog({ open, onOpenChange, onCreateThread }: Props
       lane,
       threadType,
       linkedAccountId: threadType === 'account_linked' && linkedAccountId ? linkedAccountId : undefined,
-      linkedOpportunityId: threadType === 'opportunity_linked' && linkedOpportunityId ? linkedOpportunityId : undefined,
+      // BOLT 1 — allow an account-linked thread to also attach an
+      // opportunity that belongs to that account.
+      linkedOpportunityId:
+        threadType === 'opportunity_linked' && linkedOpportunityId
+          ? linkedOpportunityId
+          : (threadType === 'account_linked' && linkedOpportunityId ? linkedOpportunityId : undefined),
     });
     onOpenChange(false);
     // Reset
