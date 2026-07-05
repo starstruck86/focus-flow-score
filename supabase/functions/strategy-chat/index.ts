@@ -7555,6 +7555,14 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         String(shErr).slice(0, 200),
       );
     }
+    // BOLT 3 — build structured citations for the assistant message
+    // and (best-effort) record playbook usage. Additive; never blocks.
+    const __citationsJson = buildCitationsJson({
+      resourceHits,
+      kiHits: kiHitList,
+      libraryKis,
+      libraryPlaybooks,
+    });
     await supabase.from("strategy_messages").insert({
       thread_id: threadId,
       user_id: userId,
@@ -7566,6 +7574,15 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       fallback_used: result.fallbackUsed,
       latency_ms: result.latencyMs,
       content_json: nonStreamContentJson,
+      citations_json: __citationsJson,
+    });
+    await logPlaybookUsageBestEffort(supabase, {
+      userId,
+      threadId,
+      accountId,
+      opportunityId,
+      playbooks: libraryPlaybooks,
+      surface: "chat_nonstream",
     });
     // Cross-thread resource memory: persist VERIFIED citations only.
     // This is the write side of strategy_thread_resources — what makes
