@@ -201,6 +201,43 @@ export function CreateThreadDialog({ open, onOpenChange, onCreateThread }: Props
                   ))
                 )}
               </div>
+
+              {/* BOLT 1 — optional opportunity picker scoped to the
+                  linked account. Only shows once an account is chosen
+                  and only lists opportunities belonging to it. */}
+              {linkedAccountId && (() => {
+                const scoped = opportunities.filter(o => o.account_id === linkedAccountId);
+                if (scoped.length === 0) return null;
+                return (
+                  <div className="mt-3 space-y-1.5">
+                    <label className="text-[11px] font-medium text-muted-foreground">
+                      Optional opportunity on this account
+                    </label>
+                    <div className="max-h-28 overflow-y-auto border border-border rounded-md">
+                      {scoped.slice(0, 20).map(o => (
+                        <button
+                          key={o.id}
+                          onClick={() =>
+                            setLinkedOpportunityId(prev => prev === o.id ? '' : o.id)
+                          }
+                          className={cn(
+                            'w-full text-left px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors flex items-center gap-2',
+                            linkedOpportunityId === o.id && 'bg-primary/5 text-primary'
+                          )}
+                        >
+                          <Target className="h-3 w-3 shrink-0 text-muted-foreground" />
+                          <span className="truncate">{o.name}</span>
+                          {linkedOpportunityId === o.id && (
+                            <Badge variant="secondary" className="text-[8px] px-1 py-0 ml-auto">
+                              Selected
+                            </Badge>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
