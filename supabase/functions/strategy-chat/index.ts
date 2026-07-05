@@ -2856,7 +2856,14 @@ serve(async (req) => {
         },
         explicit_task_type: typeof body?.task_type === "string" ? body.task_type : null,
         override: typeof body?.override === "string" ? body.override : null,
-        library_precheck_count: 0,
+        // BOLT 2 — unmute the library signal for the router.
+        // Cheap pre-route hint: count of scopes the situation/library
+        // path WOULD query. Purely keyword-derived (no DB), so it stays
+        // pre-retrieval and pre-classifier. Zero cost, non-null truth.
+        library_precheck_count: deriveLibraryScopes(
+          contextPack.account,
+          content || "",
+        ).length,
       });
       await logRoutingDecision(supabase, {
         user_id: userId,
