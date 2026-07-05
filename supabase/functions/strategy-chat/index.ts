@@ -5658,6 +5658,8 @@ async function buildChatSystemPrompt(args: {
       workingThesis: null,
       resourceHits: [],
       kiHits: [],
+      libraryKis: [],
+      libraryPlaybooks: [],
       retrievalDebug: null,
       retrievalDiagnostics: buildRetrievalDiagnostics({ userContent, resources: null, retrievalError: null, intent }),
       retrievalSucceeded: false,
