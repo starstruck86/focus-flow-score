@@ -2299,6 +2299,49 @@ function packToPromptSection(pack: ContextPack): string {
     sections.push(sigSection);
   }
 
+  // G2: Branch POV (linked account's owned point-of-view rows)
+  if (pack.branchPov && pack.branchPov.length > 0) {
+    let povSection = `\n### Branch POV (${pack.branchPov.length})`;
+    for (const p of pack.branchPov) {
+      const conv = p.conviction != null ? `c${p.conviction}` : 'c?';
+      const ratified = p.ratified ? '✓ratified' : 'draft';
+      const line = `\n- ${p.surface} → ${p.target_status || '?'} [${conv} · ${ratified}]`;
+      if (charBudget - line.length < 0) break;
+      povSection += line; charBudget -= line.length;
+    }
+    sections.push(povSection);
+  }
+
+  // G2: Subsidiaries rollup — strict ~1200 char budget for the whole block
+  if (pack.subsidiaries && pack.subsidiaries.length > 0) {
+    const SUB_BUDGET = 1200;
+    const total = pack.subsidiariesTotalCount ?? pack.subsidiaries.length;
+    let header = `\n### Subsidiaries (${pack.subsidiaries.length}/${total})`;
+    let block = header;
+    let used = header.length;
+    let shown = 0;
+    for (const c of pack.subsidiaries) {
+      const surf = c.surfaces.length ? ` | ${c.surfaces.join(',')}` : '';
+      const risks = c.risks.length
+        ? ` | risks: ${c.risks.map(r => `${r.risk_type}${r.severity != null ? `(sev${r.severity})` : ''}`).join(',')}`
+        : '';
+      const sig = c.signalCount > 0 ? ` | sigs90d:${c.signalCount}` : '';
+      const line = `\n- ${c.name}${surf}${risks}${sig}`;
+      if (used + line.length > SUB_BUDGET) break;
+      block += line; used += line.length; shown++;
+    }
+    const remaining = pack.subsidiaries.length - shown + Math.max(0, total - pack.subsidiaries.length);
+    if (remaining > 0) {
+      const tail = `\n…+${remaining} more entities`;
+      if (used + tail.length <= SUB_BUDGET) { block += tail; used += tail.length; }
+    }
+    if (charBudget - block.length > 0) {
+      sections.push(block);
+      charBudget -= block.length;
+    }
+  }
+
+
   if (pack.opportunity) {
     const s = `\n### Linked Opportunity: ${pack.opportunity.name}\nStage: ${
       pack.opportunity.stage || "Unknown"
