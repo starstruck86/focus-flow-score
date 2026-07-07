@@ -1787,6 +1787,15 @@ interface ContextPack {
   branchFootprint?: any | null;
   recentCalls?: any[];
   recentSignals?: any[];
+  subsidiaries?: Array<{
+    id: string;
+    name: string;
+    surfaces: string[];       // compressed surface:status pairs, non-null/unknown only
+    risks: Array<{ risk_type: string; severity: number | null }>;
+    signalCount: number;
+  }>;
+  subsidiariesTotalCount?: number;
+  branchPov?: Array<{ surface: string; target_status: string | null; conviction: number | null; ratified: boolean | null }>;
   retrievalMeta: {
     memoriesScored: number;
     uploadsIncluded: number;
