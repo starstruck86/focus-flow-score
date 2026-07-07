@@ -461,7 +461,33 @@ Deno.serve(async (req) => {
   if (!parsed.success) {
     return json({ success: false, error: 'Invalid payload', issues: parsed.error.flatten() }, 400);
   }
-  const { course_url, session_cookie, dry_run } = parsed.data;
+  const { course_url, session_cookie, dry_run, action, cookie_name, community_host } = parsed.data;
+
+  // ── save_cookie action: encrypt-at-rest and upsert, then return ──
+  if (action === 'save_cookie') {
+    const rawCookie = extractCookieValue(session_cookie, cookie_name || '_circle_session');
+    if (!rawCookie) {
+      return json({ success: false, error: 'session_cookie required for save_cookie' }, 400);
+    }
+    let encrypted: string;
+    try { encrypted = await encryptCookie(rawCookie); }
+    catch (e) { return json({ success: false, error: (e as Error).message }, 500); }
+    const { error: upErr } = await supabase
+      .from('circle_credentials')
+      .upsert({
+        user_id: userId,
+        session_cookie: encrypted,
+        cookie_name: cookie_name || '_circle_session',
+        community_host: community_host || null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+    if (upErr) return json({ success: false, error: 'Failed to save credentials: ' + upErr.message }, 500);
+    return json({ success: true, encrypted_at_rest: true });
+  }
+
+  if (!course_url) {
+    return json({ success: false, error: 'course_url required' }, 400);
+  }
 
   // ── Look up cookie if not supplied ──
   let cookieValue = extractCookieValue(session_cookie);
@@ -483,8 +509,10 @@ Deno.serve(async (req) => {
       }, 400);
     }
     cookieName = cred.cookie_name || '_circle_session';
-    cookieValue = extractCookieValue(cred.session_cookie, cookieName);
-    cookieName = cred.cookie_name || '_circle_session';
+    let decrypted: string | undefined;
+    try { decrypted = await decryptCookieIfNeeded(cred.session_cookie); }
+    catch (e) { return json({ success: false, error: 'Failed to decrypt stored cookie: ' + (e as Error).message }, 500); }
+    cookieValue = extractCookieValue(decrypted, cookieName);
   }
   const platformEmail = Deno.env.get('COURSE_PLATFORM_EMAIL') || '';
   const platformPassword = Deno.env.get('COURSE_PLATFORM_PASSWORD') || '';
