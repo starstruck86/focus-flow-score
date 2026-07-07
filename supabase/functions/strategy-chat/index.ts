@@ -1939,6 +1939,90 @@ async function buildContextPack(
       pack.recentCalls = (callsRes.data ?? []) as any[];
       pack.recentSignals = (signalsRes.data ?? []) as any[];
     })());
+
+    // G2: subsidiaries rollup + branch_pov for the linked account (additive only)
+    promises.push((async () => {
+      const parentId = thread.linked_account_id;
+      const [childRes, povRes] = await Promise.all([
+        supabase.from('accounts')
+          .select('id, name')
+          .eq('parent_account_id', parentId)
+          .is('deleted_at', null)
+          .limit(50),
+        supabase.from('branch_pov')
+          .select('surface, target_status, conviction, ratified, sequence_rank, updated_at')
+          .eq('account_id', parentId)
+          .order('ratified', { ascending: false })
+          .order('conviction', { ascending: false, nullsFirst: false })
+          .order('sequence_rank', { ascending: true, nullsFirst: false })
+          .limit(8),
+      ]);
+      pack.branchPov = (povRes.data ?? []).slice(0, 8).map((p: any) => ({
+        surface: p.surface,
+        target_status: p.target_status,
+        conviction: p.conviction,
+        ratified: p.ratified,
+      }));
+
+      const children = (childRes.data ?? []) as Array<{ id: string; name: string }>;
+      if (children.length === 0) { pack.subsidiaries = []; pack.subsidiariesTotalCount = 0; return; }
+      const childIds = children.map(c => c.id);
+
+      const PRODUCT_KEYS: Array<[string, string]> = [
+        ['deep_linking_status', 'DL'], ['universal_ads_status', 'UA'],
+        ['email_to_app_status', 'E2A'], ['sms_to_app_status', 'S2A'],
+        ['web_to_app_status', 'W2A'], ['qr_status', 'QR'],
+        ['aio_status', 'AIO'], ['advanced_privacy_status', 'AP'],
+      ];
+      const isMeaningful = (v: any) =>
+        v != null && String(v).trim() !== '' && String(v).toLowerCase() !== 'unknown';
+
+      const sinceIso = new Date(Date.now() - 90 * 86400_000).toISOString();
+      const [fpRes2, riskRes, sigRes] = await Promise.all([
+        supabase.from('branch_footprint')
+          .select('account_id, ' + PRODUCT_KEYS.map(([k]) => k).join(', '))
+          .in('account_id', childIds),
+        supabase.from('account_risks')
+          .select('account_id, risk_type, severity, status')
+          .in('account_id', childIds)
+          .neq('status', 'resolved')
+          .limit(200),
+        supabase.from('account_signals')
+          .select('linked_account_id, created_at')
+          .in('linked_account_id', childIds)
+          .gte('created_at', sinceIso)
+          .limit(500),
+      ]);
+      const fpMap = new Map<string, any>();
+      for (const r of (fpRes2.data ?? []) as any[]) fpMap.set(r.account_id, r);
+      const riskMap = new Map<string, Array<{ risk_type: string; severity: number | null }>>();
+      for (const r of (riskRes.data ?? []) as any[]) {
+        const arr = riskMap.get(r.account_id) ?? [];
+        arr.push({ risk_type: r.risk_type, severity: r.severity ?? null });
+        riskMap.set(r.account_id, arr);
+      }
+      const sigCount = new Map<string, number>();
+      for (const s of (sigRes.data ?? []) as any[]) {
+        sigCount.set(s.linked_account_id, (sigCount.get(s.linked_account_id) ?? 0) + 1);
+      }
+
+      const enriched = children.map(c => {
+        const fp = fpMap.get(c.id) || {};
+        const surfaces: string[] = [];
+        for (const [col, label] of PRODUCT_KEYS) {
+          const v = fp[col];
+          if (isMeaningful(v)) surfaces.push(`${label}:${String(v).slice(0, 12)}`);
+        }
+        const risks = (riskMap.get(c.id) ?? []).slice(0, 3);
+        const signalCount = sigCount.get(c.id) ?? 0;
+        // relevance: signals > risks > surfaces > name
+        const rel = signalCount * 10 + risks.length * 3 + surfaces.length;
+        return { id: c.id, name: c.name, surfaces, risks, signalCount, _rel: rel };
+      }).sort((a, b) => b._rel - a._rel);
+
+      pack.subsidiaries = enriched.slice(0, 6).map(({ _rel, ...rest }) => rest);
+      pack.subsidiariesTotalCount = children.length;
+    })());
   }
 
   if (thread.linked_opportunity_id) {
