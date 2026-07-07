@@ -222,6 +222,78 @@ export type Database = {
           },
         ]
       }
+      account_risks: {
+        Row: {
+          account_id: string
+          bound_play_id: string | null
+          competitor: string | null
+          competitor_renewal_date: string | null
+          created_at: string | null
+          id: string
+          likelihood: number | null
+          observed_at: string
+          rationale: string | null
+          risk_type: string
+          severity: number | null
+          source_ref: string | null
+          status: string
+          surface: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          bound_play_id?: string | null
+          competitor?: string | null
+          competitor_renewal_date?: string | null
+          created_at?: string | null
+          id?: string
+          likelihood?: number | null
+          observed_at?: string
+          rationale?: string | null
+          risk_type: string
+          severity?: number | null
+          source_ref?: string | null
+          status?: string
+          surface?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          bound_play_id?: string | null
+          competitor?: string | null
+          competitor_renewal_date?: string | null
+          created_at?: string | null
+          id?: string
+          likelihood?: number | null
+          observed_at?: string
+          rationale?: string | null
+          risk_type?: string
+          severity?: number | null
+          source_ref?: string | null
+          status?: string
+          surface?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_risks_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_risks_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       account_signals: {
         Row: {
           created_at: string | null
@@ -377,6 +449,7 @@ export type Database = {
         Row: {
           account_family: string | null
           account_status: string | null
+          aliases: string[] | null
           cadence_name: string | null
           category_complexity: boolean | null
           confidence_score: number | null
@@ -396,6 +469,7 @@ export type Database = {
           id: string
           industry: string | null
           last_enriched_at: string | null
+          last_reviewed_at: string | null
           last_touch_date: string | null
           last_touch_type: string | null
           lifecycle_override: boolean | null
@@ -434,6 +508,7 @@ export type Database = {
         Insert: {
           account_family?: string | null
           account_status?: string | null
+          aliases?: string[] | null
           cadence_name?: string | null
           category_complexity?: boolean | null
           confidence_score?: number | null
@@ -453,6 +528,7 @@ export type Database = {
           id?: string
           industry?: string | null
           last_enriched_at?: string | null
+          last_reviewed_at?: string | null
           last_touch_date?: string | null
           last_touch_type?: string | null
           lifecycle_override?: boolean | null
@@ -491,6 +567,7 @@ export type Database = {
         Update: {
           account_family?: string | null
           account_status?: string | null
+          aliases?: string[] | null
           cadence_name?: string | null
           category_complexity?: boolean | null
           confidence_score?: number | null
@@ -510,6 +587,7 @@ export type Database = {
           id?: string
           industry?: string | null
           last_enriched_at?: string | null
+          last_reviewed_at?: string | null
           last_touch_date?: string | null
           last_touch_type?: string | null
           lifecycle_override?: boolean | null
@@ -1167,6 +1245,72 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "branch_readiness"
             referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      branch_pov: {
+        Row: {
+          account_id: string
+          conviction: number
+          created_at: string | null
+          evidence: Json | null
+          id: string
+          ratified: boolean
+          ratified_at: string | null
+          rationale: string | null
+          sequence_rank: number | null
+          surface: string
+          target_status: string
+          updated_at: string | null
+          user_id: string
+          version: number
+        }
+        Insert: {
+          account_id: string
+          conviction: number
+          created_at?: string | null
+          evidence?: Json | null
+          id?: string
+          ratified?: boolean
+          ratified_at?: string | null
+          rationale?: string | null
+          sequence_rank?: number | null
+          surface: string
+          target_status: string
+          updated_at?: string | null
+          user_id: string
+          version?: number
+        }
+        Update: {
+          account_id?: string
+          conviction?: number
+          created_at?: string | null
+          evidence?: Json | null
+          id?: string
+          ratified?: boolean
+          ratified_at?: string | null
+          rationale?: string | null
+          sequence_rank?: number | null
+          surface?: string
+          target_status?: string
+          updated_at?: string | null
+          user_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "branch_pov_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "branch_pov_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
           },
         ]
       }
