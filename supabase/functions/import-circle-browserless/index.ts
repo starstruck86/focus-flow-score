@@ -28,12 +28,58 @@ const corsHeaders = {
 };
 
 const BodySchema = z.object({
-  course_url: z.string().url(),
+  course_url: z.string().url().optional(),
   /** Optional override; otherwise we read the stored cookie. */
   session_cookie: z.string().min(10).optional(),
   /** Optional debug-only — return the harvested array without saving. */
   dry_run: z.boolean().optional(),
+  /** When set, this call stores/updates the caller's encrypted Circle cookie and returns. */
+  action: z.enum(['save_cookie']).optional(),
+  cookie_name: z.string().min(1).max(120).optional(),
+  community_host: z.string().min(1).max(255).optional(),
 });
+
+// ─── Encryption at rest for Circle session cookies (F2 hardening) ───────────
+// AES-GCM using CIRCLE_CRED_KEY (any string; hashed to 256-bit key).
+// Ciphertext format: "enc:v1:<base64(iv|ct)>"  — legacy plaintext still readable.
+const ENC_PREFIX = 'enc:v1:';
+let cachedKey: CryptoKey | null = null;
+async function getCredKey(): Promise<CryptoKey | null> {
+  if (cachedKey) return cachedKey;
+  const raw = Deno.env.get('CIRCLE_CRED_KEY');
+  if (!raw) return null;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+  cachedKey = await crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
+  return cachedKey;
+}
+function b64encode(buf: Uint8Array): string {
+  let s = ''; for (const b of buf) s += String.fromCharCode(b); return btoa(s);
+}
+function b64decode(s: string): Uint8Array {
+  const bin = atob(s); const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function encryptCookie(plaintext: string): Promise<string> {
+  const key = await getCredKey();
+  if (!key) throw new Error('CIRCLE_CRED_KEY not configured');
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext)));
+  const packed = new Uint8Array(iv.length + ct.length);
+  packed.set(iv, 0); packed.set(ct, iv.length);
+  return ENC_PREFIX + b64encode(packed);
+}
+async function decryptCookieIfNeeded(stored: string | null | undefined): Promise<string | undefined> {
+  if (!stored) return undefined;
+  if (!stored.startsWith(ENC_PREFIX)) return stored; // legacy plaintext
+  const key = await getCredKey();
+  if (!key) throw new Error('CIRCLE_CRED_KEY not configured — cannot decrypt stored cookie');
+  const packed = b64decode(stored.slice(ENC_PREFIX.length));
+  const iv = packed.slice(0, 12);
+  const ct = packed.slice(12);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  return new TextDecoder().decode(pt);
+}
 
 function extractCookieValue(raw: string | undefined, preferredName = '_circle_session'): string | undefined {
   const input = (raw || '').trim();
