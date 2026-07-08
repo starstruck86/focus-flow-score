@@ -4,7 +4,6 @@ import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import {
   IcpAccountSourcing,
   CompanyMonitorCard,
-  AccountHealthPulseCard,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 import { 
