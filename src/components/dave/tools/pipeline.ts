@@ -35,7 +35,7 @@ export function createPipelineTools(ctx: ToolContext): ToolMap {
 
       const [quotaRes, closedWonRes] = await Promise.all([
         supabase.from('quota_targets').select('new_arr_quota, renewal_arr_quota').eq('user_id', userId).limit(1),
-        supabase.from('opportunities').select('arr, deal_type').eq('user_id', userId).eq('status', 'closed-won'),
+        supabase.from('opportunities').select('arr, deal_type').eq('user_id', userId).is('archived_at', null).eq('status', 'closed-won'),
       ]);
 
       const quota = quotaRes.data?.[0];
@@ -58,7 +58,7 @@ export function createPipelineTools(ctx: ToolContext): ToolMap {
 
       const [quotaRes, closedRes] = await Promise.all([
         supabase.from('quota_targets').select('*').eq('user_id', userId).limit(1),
-        supabase.from('opportunities').select('arr, deal_type').eq('user_id', userId).eq('status', 'closed-won'),
+        supabase.from('opportunities').select('arr, deal_type').eq('user_id', userId).is('archived_at', null).eq('status', 'closed-won'),
       ]);
 
       const quota = quotaRes.data?.[0];
@@ -89,8 +89,8 @@ export function createPipelineTools(ctx: ToolContext): ToolMap {
 
       const [quotaRes, allOppsRes, closedWonRes] = await Promise.all([
         supabase.from('quota_targets').select('new_arr_quota, renewal_arr_quota').eq('user_id', userId).limit(1),
-        supabase.from('opportunities').select('name, arr, deal_type, status').eq('user_id', userId).not('status', 'eq', 'closed-lost'),
-        supabase.from('opportunities').select('arr, deal_type').eq('user_id', userId).eq('status', 'closed-won'),
+        supabase.from('opportunities').select('name, arr, deal_type, status').eq('user_id', userId).is('archived_at', null).not('status', 'eq', 'closed-lost'),
+        supabase.from('opportunities').select('arr, deal_type').eq('user_id', userId).is('archived_at', null).eq('status', 'closed-won'),
       ]);
 
       const quota = quotaRes.data?.[0];
