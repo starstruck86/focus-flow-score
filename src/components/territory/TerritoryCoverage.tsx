@@ -68,6 +68,30 @@ export function TerritoryCoverage() {
     },
   });
 
+  // W1 fix #4: open risks are the SSOT for "at risk" — surface the actual
+  // account_risks rows, not a locally-derived heuristic.
+  const { data: openRisksByAccount } = useQuery({
+    queryKey: ['territory-open-risks'],
+    staleTime: 2 * 60 * 1000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('account_risks')
+        .select('account_id, severity, risk_type')
+        .is('resolved_at', null);
+      const map = new Map<string, { count: number; maxSeverity: number }>();
+      (data ?? []).forEach((r: any) => {
+        if (!r.account_id) return;
+        const prev = map.get(r.account_id) ?? { count: 0, maxSeverity: 0 };
+        const sev = Number(r.severity) || 0;
+        map.set(r.account_id, {
+          count: prev.count + 1,
+          maxSeverity: Math.max(prev.maxSeverity, sev),
+        });
+      });
+      return map;
+    },
+  });
+
   const footprintMap = useMemo(() => {
     const map = new Map<string, number>();
     (footprints ?? []).forEach((fp: any) => {
@@ -88,15 +112,20 @@ export function TerritoryCoverage() {
         ? Math.floor((Date.now() - new Date(a.last_touch_date).getTime()) / 86400000)
         : null;
       const products = footprintMap.get(a.id) ?? 0;
-      return { health: scoreHealth(days, a.tier, !!a.next_step, products), tier: a.tier };
+      return {
+        health: scoreHealth(days, a.tier, !!a.next_step, products),
+        tier: a.tier,
+        hasOpenRisk: (openRisksByAccount?.get(a.id)?.count ?? 0) > 0,
+      };
     });
     return {
       total: rows.length,
       tierA: rows.filter((r) => r.tier === 'A').length,
-      atRisk: rows.filter((r) => r.health === 'at_risk').length,
+      // W1 fix #4: atRisk = accounts with any unresolved account_risks row.
+      atRisk: rows.filter((r) => r.hasOpenRisk).length,
       cold: rows.filter((r) => r.health === 'cold').length,
     };
-  }, [accounts, footprintMap]);
+  }, [accounts, footprintMap, openRisksByAccount]);
 
   return (
     <div className="space-y-3">
