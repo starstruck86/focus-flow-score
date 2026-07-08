@@ -1249,6 +1249,8 @@ function TranscriptIngestion({ onSaved, onSaveAndGrade }: { onSaved: () => void;
 export default function Coach() {
   const [tab, setTab] = useState('scorecard');
   const { data: transcripts, refetch: refetchTranscripts } = useCallTranscripts();
+  const { data: archivedTranscripts = [] } = useArchivedTranscripts();
+  const [showArchived, setShowArchived] = useState(false);
   const { data: allGrades, isLoading } = useAllTranscriptGrades();
   const gradeTranscript = useGradeTranscript();
   const [selectedTranscriptId, setSelectedTranscriptId] = useState<string | null>(null);
