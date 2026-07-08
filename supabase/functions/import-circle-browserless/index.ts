@@ -575,7 +575,7 @@ Deno.serve(async (req) => {
   }
 
   // ── Update last_used_at ──
-  await supabase
+  await credClient
     .from('circle_credentials')
     .update({ last_used_at: new Date().toISOString() })
     .eq('user_id', userId);
