@@ -437,6 +437,7 @@ Deno.serve(async (req) => {
   }
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseAnon = Deno.env.get('SUPABASE_ANON_KEY')!;
+  const supabaseServiceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const browserlessKey = Deno.env.get('BROWSERLESS_API_KEY');
   if (!browserlessKey) {
     return json({ success: false, error: 'BROWSERLESS_API_KEY not configured' }, 500);
@@ -444,6 +445,11 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, supabaseAnon, {
     global: { headers: { Authorization: authHeader } },
+  });
+  // F2 hardening: circle_credentials is server-only. Access via service-role,
+  // always scoped to the authenticated user's id — never client-reachable.
+  const credClient = createClient(supabaseUrl, supabaseServiceRole, {
+    auth: { persistSession: false, autoRefreshToken: false },
   });
   const token = authHeader.replace('Bearer ', '');
   const { data: userData, error: userErr } = await supabase.auth.getUser(token);
@@ -472,7 +478,7 @@ Deno.serve(async (req) => {
     let encrypted: string;
     try { encrypted = await encryptCookie(rawCookie); }
     catch (e) { return json({ success: false, error: (e as Error).message }, 500); }
-    const { error: upErr } = await supabase
+    const { error: upErr } = await credClient
       .from('circle_credentials')
       .upsert({
         user_id: userId,
@@ -493,7 +499,7 @@ Deno.serve(async (req) => {
   let cookieValue = extractCookieValue(session_cookie);
   let cookieName = '_circle_session';
   if (!cookieValue) {
-    const { data: cred, error: credErr } = await supabase
+    const { data: cred, error: credErr } = await credClient
       .from('circle_credentials')
       .select('session_cookie, cookie_name')
       .eq('user_id', userId)
@@ -569,7 +575,7 @@ Deno.serve(async (req) => {
   }
 
   // ── Update last_used_at ──
-  await supabase
+  await credClient
     .from('circle_credentials')
     .update({ last_used_at: new Date().toISOString() })
     .eq('user_id', userId);
