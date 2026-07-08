@@ -1,10 +1,11 @@
 import React, { useState, useRef, useMemo, useCallback, memo, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import {
   IcpAccountSourcing,
   CompanyMonitorCard,
-  AccountHealthPulseCard,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 import { 
@@ -125,7 +126,7 @@ import { OpportunitiesTable } from '@/components/OpportunitiesTable';
 import { OpportunityDrawer } from '@/components/OpportunityDrawer';
 import { AccountContactsField, type AccountContact } from '@/components/AccountContactsField';
 import { StakeholderMap } from '@/components/StakeholderMap';
-import { BatchDiscoveryModal } from '@/components/BatchDiscoveryModal';
+// BatchDiscoveryModal retired from Territory toolbar (W3). Edge function preserved.
 import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
 import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
 import { MetricFieldCell } from '@/components/table/MetricFieldCell';
@@ -144,8 +145,8 @@ import { emitSaveStatus } from '@/components/SaveIndicator';
 import { TouchLogButtons } from '@/components/TouchLogButtons';
 import { LifecycleTierBadge, IcpScorePill, TriggeredBadge, EnrichButton, SignalDetailPanel } from '@/components/LifecycleIntelligence';
 import { useAccountEnrichment } from '@/hooks/useAccountEnrichment';
+// Bulk enrichment panel retired from Territory (W3). Hook still available for programmatic use.
 import { useBulkEnrichment } from '@/hooks/useBulkEnrichment';
-import { BulkEnrichmentPanel } from '@/components/BulkEnrichmentPanel';
 import { 
   sortAccountsDefault, 
   applySortWithFallback,
@@ -263,11 +264,7 @@ const FUNNEL_GROUPS: FunnelGroup[] = [
   { status: 'inactive', label: '4 - Inactive', hint: 'Holding bucket', color: 'text-muted-foreground', borderColor: 'border-border', defaultCollapsed: false, section: 'holding' },
 ];
 
-const DEFAULT_TARGETS: Record<string, number> = {
-  researching: 25,
-  prepped: 20,
-  active: 30,
-};
+// DEFAULT_TARGETS removed (W3 De-SDR): funnel target thresholds retired.
 
 // Sort within funnel group: Tier → ICP Score (desc) → Name A-Z
 function sortFunnelGroup(accounts: Account[], sortOverride?: { key: string; direction: 'asc' | 'desc' } | null): Account[] {
@@ -308,20 +305,25 @@ function sortFunnelGroup(accounts: Account[], sortOverride?: { key: string; dire
 }
 
 // ===== STALENESS ALERT =====
-const StalenessAlert = memo(function StalenessAlert({ accounts }: { accounts: Account[] }) {
+const StalenessAlert = memo(function StalenessAlert({ accounts, childIds }: { accounts: Account[]; childIds: Set<string> }) {
+  // W3 De-SDR: exclude children from parent-level alarm counts unless they've
+  // been individually touched. Prevents parent+child double-counting.
+  const dedupe = (a: Account) => !childIds.has(a.id) || !!a.lastTouchDate;
+
   const staleCount = accounts.filter(a => {
+    if (!dedupe(a)) return false;
     if (a.accountStatus === 'disqualified' || a.accountStatus === 'inactive') return false;
     if (!a.lastTouchDate) return true;
     const days = Math.floor((Date.now() - new Date(a.lastTouchDate).getTime()) / 86400000);
     return days > 14;
   }).length;
 
-  const noNextStep = accounts.filter(a => 
-    (a.accountStatus === 'active' || a.accountStatus === 'prepped') && !a.nextStep
+  const noNextStep = accounts.filter(a =>
+    dedupe(a) && (a.accountStatus === 'active' || a.accountStatus === 'prepped') && !a.nextStep
   ).length;
 
-  const noCadence = accounts.filter(a => 
-    a.accountStatus === 'active' && !a.cadenceName
+  const noCadence = accounts.filter(a =>
+    dedupe(a) && a.accountStatus === 'active' && !a.cadenceName
   ).length;
 
   if (staleCount === 0 && noNextStep === 0 && noCadence === 0) return null;
@@ -461,49 +463,9 @@ function OpportunitiesStageSummary({ activeStageFilter, onStageFilterChange }: {
   );
 }
 
-// ===== FUNNEL HEALTH BAR =====
-const FunnelHealthBar = memo(function FunnelHealthBar({ accounts }: { accounts: Account[] }) {
-  const counts: Record<string, number> = { researching: 0, prepped: 0, active: 0 };
-  accounts.forEach(a => {
-    if (counts[a.accountStatus] !== undefined) counts[a.accountStatus]++;
-  });
+// ===== FUNNEL HEALTH BAR REMOVED (W3 De-SDR) =====
+// Prospecting-era target thresholds and warnings retired for expansion-AE motion.
 
-  const stages = [
-    { key: 'researching', label: '1 - Researching', count: counts.researching, target: DEFAULT_TARGETS.researching, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-    { key: 'prepped', label: '2 - Prepped', count: counts.prepped, target: DEFAULT_TARGETS.prepped, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
-    { key: 'active', label: '3 - Active', count: counts.active, target: DEFAULT_TARGETS.active, color: 'text-status-green', bg: 'bg-status-green/10' },
-  ];
-
-  const warnings = stages.filter(s => s.count < s.target);
-
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
-        {stages.map(s => {
-          const belowTarget = s.count < s.target;
-          return (
-            <div key={s.key} className={cn("metric-card p-3 flex flex-col", s.bg)}>
-              <div className="flex items-center justify-between">
-                <span className={cn("text-xs font-medium", s.color)}>{s.label}</span>
-                <span className={cn("text-xl font-bold font-mono", belowTarget ? "text-status-yellow" : "text-foreground")}>
-                  {s.count}
-                  <span className="text-xs text-muted-foreground font-normal"> / {s.target}</span>
-                </span>
-              </div>
-              {belowTarget && (
-                <div className="flex items-center gap-1 mt-1">
-                  <AlertTriangle className="h-3 w-3 text-status-yellow" />
-                  <span className="text-[10px] text-status-yellow">Below target by {s.target - s.count}</span>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-});
-FunnelHealthBar.displayName = 'FunnelHealthBar';
 
 // ===== FUNNEL GROUP SECTION =====
 const FunnelGroupSection = memo(function FunnelGroupSection({
@@ -850,15 +812,34 @@ export default function WeeklyOutreach() {
     { id: 'opportunity-stage-summary', label: 'Opportunity Stage Summary', visible: true, order: 0 },
     { id: 'opportunities-table', label: 'Active Opportunities', visible: true, order: 1 },
     { id: 'account-staleness', label: 'Staleness & Urgency Summary', visible: true, order: 2 },
-    { id: 'account-health-pulse', label: 'Account Health Pulse', visible: true, order: 3 },
-    { id: 'funnel-health-bar', label: 'Funnel Health Bar', visible: true, order: 4 },
-    { id: 'sourcing-intelligence', label: 'Sourcing Intelligence', visible: true, order: 5 },
+    { id: 'sourcing-intelligence', label: 'Sourcing Intelligence', visible: true, order: 3 },
   ]), []);
   const outreachSectionLayout = useWidgetLayout('weekly-outreach-sections', outreachSections);
   const isOutreachSectionCollapsed = useCallback(
     (id: string) => outreachSectionLayout.widgets.find((widget) => widget.id === id)?.collapsed ?? false,
     [outreachSectionLayout.widgets]
   );
+
+  // W3 De-SDR: fetch parent/child map for hierarchy-aware account list and
+  // parent-only alarm counts.
+  const { data: hierarchyMap } = useQuery({
+    queryKey: ['territory-hierarchy-map'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('accounts')
+        .select('id, parent_account_id');
+      const parentOf = new Map<string, string | null>();
+      const childIds = new Set<string>();
+      (data ?? []).forEach((r: { id: string; parent_account_id: string | null }) => {
+        parentOf.set(r.id, r.parent_account_id);
+        if (r.parent_account_id) childIds.add(r.id);
+      });
+      return { parentOf, childIds };
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const childAccountIds = hierarchyMap?.childIds ?? new Set<string>();
+  const parentOf = hierarchyMap?.parentOf ?? new Map<string, string | null>();
 
   const toggleGroupCollapse = (status: AccountStatus) => {
     setCollapsedGroups(prev => {
@@ -1173,20 +1154,48 @@ export default function WeeklyOutreach() {
       'disqualified': [],
       'meeting-booked': [],
     };
-    
+
     filteredAccounts.forEach(a => {
       const status = a.accountStatus || 'inactive';
       if (groups[status]) groups[status].push(a);
       else groups['inactive'].push(a);
     });
-    
-    // Sort each group
+
     Object.keys(groups).forEach(key => {
       groups[key as AccountStatus] = sortFunnelGroup(groups[key as AccountStatus]);
     });
-    
+
     return groups;
   }, [filteredAccounts]);
+
+  // W3 De-SDR: hierarchy-aware flat list — parents first (tier→ICP→name),
+  // each parent immediately followed by its children in the filtered set.
+  const hierarchySortedAccounts = useMemo(() => {
+    const byId = new Map(filteredAccounts.map(a => [a.id, a]));
+    const parents = sortFunnelGroup(
+      filteredAccounts.filter(a => !childAccountIds.has(a.id))
+    );
+    const childrenByParent = new Map<string, Account[]>();
+    filteredAccounts.forEach(a => {
+      if (!childAccountIds.has(a.id)) return;
+      const pid = parentOf.get(a.id);
+      if (!pid) return;
+      const list = childrenByParent.get(pid) ?? [];
+      list.push(a);
+      childrenByParent.set(pid, list);
+    });
+    const ordered: Account[] = [];
+    parents.forEach(p => {
+      ordered.push(p);
+      const kids = sortFunnelGroup(childrenByParent.get(p.id) ?? []);
+      kids.forEach(k => ordered.push(k));
+    });
+    // Orphans (child whose parent isn't in filtered set) appended at end
+    filteredAccounts.forEach(a => {
+      if (!ordered.includes(a)) ordered.push(a);
+    });
+    return ordered;
+  }, [filteredAccounts, childAccountIds, parentOf]);
 
   const handleAddAccount = () => {
     if (!newAccount.name) {
@@ -1317,26 +1326,9 @@ export default function WeeklyOutreach() {
               collapsed={isOutreachSectionCollapsed('account-staleness')}
               onToggle={() => outreachSectionLayout.collapseWidget('account-staleness')}
             >
-              <StalenessAlert accounts={newLogoAccounts} />
+              <StalenessAlert accounts={newLogoAccounts} childIds={childAccountIds} />
             </CollapsibleWidgetSection>
 
-            <CollapsibleWidgetSection
-              label="Account Health Pulse"
-              collapsed={isOutreachSectionCollapsed('account-health-pulse')}
-              onToggle={() => outreachSectionLayout.collapseWidget('account-health-pulse')}
-            >
-              <WidgetErrorBoundary widgetId="account-health-pulse">
-                <AccountHealthPulseCard motionFilter="new-logo" />
-              </WidgetErrorBoundary>
-            </CollapsibleWidgetSection>
-
-            <CollapsibleWidgetSection
-              label="Funnel Health Bar"
-              collapsed={isOutreachSectionCollapsed('funnel-health-bar')}
-              onToggle={() => outreachSectionLayout.collapseWidget('funnel-health-bar')}
-            >
-              <FunnelHealthBar accounts={newLogoAccounts} />
-            </CollapsibleWidgetSection>
             
             {/* Actions Bar */}
             <div className="space-y-3">
@@ -1443,12 +1435,9 @@ export default function WeeklyOutreach() {
                   <Upload className="h-4 w-4 mr-2" />
                   Claude Import
                 </Button>
-                <BatchDiscoveryModal>
-                  <Button variant="outline">
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    Batch Discover
-                  </Button>
-                </BatchDiscoveryModal>
+                {/* Batch Discover retired from Territory toolbar (W3). */}
+
+
                 
                 <Dialog open={showBulkImportDialog} onOpenChange={(open) => {
                   setShowBulkImportDialog(open);
@@ -1708,7 +1697,7 @@ export default function WeeklyOutreach() {
                   id: 'change-motion',
                   label: 'Change Motion',
                   options: [
-                    { value: 'new-logo', label: 'New Logo' },
+                    { value: 'new-logo', label: 'Prospect' },
                     { value: 'renewal', label: 'Renewal' },
                     { value: 'general', label: 'General' },
                     { value: 'both', label: 'Both' },
@@ -1752,18 +1741,8 @@ export default function WeeklyOutreach() {
               </div>
             )}
 
-            {/* Bulk Enrichment Panel */}
-            <BulkEnrichmentPanel
-              state={bulkEnrich.state}
-              accounts={filteredAccounts}
-              onSetBatchSize={bulkEnrich.setBatchSize}
-              onStart={bulkEnrich.start}
-              onPause={bulkEnrich.pause}
-              onResume={bulkEnrich.resume}
-              onCancel={bulkEnrich.cancel}
-              onReset={bulkEnrich.reset}
-              hasFailures={bulkEnrich.hasFailures}
-            />
+            {/* Bulk Enrichment Panel retired from Territory (W3). Hook preserved for programmatic use. */}
+
 
             {newLogoAccounts.length === 0 ? (
               <EmptyState
@@ -1785,74 +1764,30 @@ export default function WeeklyOutreach() {
               />
             ) : (
               <div className="space-y-2">
-                {/* Primary Funnel: 1-3 */}
-                <div className="space-y-1">
-                  {FUNNEL_GROUPS.filter(g => g.section === 'primary').map(group => (
-                    <FunnelGroupSection
-                      key={group.status}
-                      group={group}
-                      accounts={groupedAccounts[group.status]}
-                      expandedAccountId={expandedAccountId}
-                      setExpandedAccountId={setExpandedAccountId}
-                      updateAccount={updateAccount}
-                      deleteAccount={(id) => { const acct = accounts.find(a => a.id === id); if (acct) deleteWithUndo(acct); }}
-                      isCollapsed={collapsedGroups.has(group.status)}
-                      onToggleCollapse={() => toggleGroupCollapse(group.status)}
-                      isSelected={bulkSelection.isSelected}
-                      onToggleSelect={bulkSelection.toggle}
-                      highlightId={highlightId}
-                      onOpenAccountDetail={(id) => navigate(`/accounts/${id}`)}
-                    />
-                  ))}
-                </div>
-
-                {/* Outcomes: Meeting Booked + Disqualified */}
-                <div className="pt-3 border-t border-border/50">
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1 px-1">Outcomes</p>
-                  <div className="space-y-1">
-                    {FUNNEL_GROUPS.filter(g => g.section === 'outcome').map(group => (
-                      <FunnelGroupSection
-                        key={group.status}
-                        group={group}
-                        accounts={groupedAccounts[group.status]}
-                        expandedAccountId={expandedAccountId}
-                        setExpandedAccountId={setExpandedAccountId}
-                        updateAccount={updateAccount}
-                        deleteAccount={(id) => { const acct = accounts.find(a => a.id === id); if (acct) deleteWithUndo(acct); }}
-                        isCollapsed={collapsedGroups.has(group.status)}
-                        onToggleCollapse={() => toggleGroupCollapse(group.status)}
-                        isSelected={bulkSelection.isSelected}
-                        onToggleSelect={bulkSelection.toggle}
-                        highlightId={highlightId}
-                        onOpenAccountDetail={(id) => navigate(`/accounts/${id}`)}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Holding: Inactive */}
-                <div className="pt-3 border-t border-border/50">
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1 px-1">Holding</p>
-                  <div className="space-y-1">
-                    {FUNNEL_GROUPS.filter(g => g.section === 'holding').map(group => (
-                      <FunnelGroupSection
-                        key={group.status}
-                        group={group}
-                        accounts={groupedAccounts[group.status]}
-                        expandedAccountId={expandedAccountId}
-                        setExpandedAccountId={setExpandedAccountId}
-                        updateAccount={updateAccount}
-                        deleteAccount={(id) => { const acct = accounts.find(a => a.id === id); if (acct) deleteWithUndo(acct); }}
-                        isCollapsed={collapsedGroups.has(group.status)}
-                        onToggleCollapse={() => toggleGroupCollapse(group.status)}
-                        isSelected={bulkSelection.isSelected}
-                        onToggleSelect={bulkSelection.toggle}
-                        highlightId={highlightId}
-                        onOpenAccountDetail={(id) => navigate(`/accounts/${id}`)}
-                      />
-                    ))}
-                  </div>
-                </div>
+                {/* W3 De-SDR: single hierarchy-aware account list (parents
+                    with children indented). Funnel stage grouping retired. */}
+                <FunnelGroupSection
+                  group={{
+                    status: 'active',
+                    label: `All Accounts (${hierarchySortedAccounts.length})`,
+                    hint: 'Parents first, children indented',
+                    color: 'text-foreground',
+                    borderColor: 'border-border',
+                    defaultCollapsed: false,
+                    section: 'primary',
+                  }}
+                  accounts={hierarchySortedAccounts}
+                  expandedAccountId={expandedAccountId}
+                  setExpandedAccountId={setExpandedAccountId}
+                  updateAccount={updateAccount}
+                  deleteAccount={(id) => { const acct = accounts.find(a => a.id === id); if (acct) deleteWithUndo(acct); }}
+                  isCollapsed={false}
+                  onToggleCollapse={() => { /* single group — no toggle */ }}
+                  isSelected={bulkSelection.isSelected}
+                  onToggleSelect={bulkSelection.toggle}
+                  highlightId={highlightId}
+                  onOpenAccountDetail={(id) => navigate(`/accounts/${id}`)}
+                />
               </div>
             )}
           </TabsContent>
