@@ -43,6 +43,7 @@ import { MicroDrillSession } from '@/components/dojo/MicroDrillSession';
 import { Button } from '@/components/ui/button';
 import { Flame, Target, ChevronRight, Zap, Brain, AlertTriangle, TrendingUp, BookOpen, MessageSquare, Swords, BookMarked } from 'lucide-react';
 import { useIntensiveMode } from '@/hooks/useIntensiveMode';
+import { DAILY_REP_GOAL } from '@/lib/dailyGoal';
 
 function BranchCountdown() {
   const startDate = new Date('2026-07-13');
@@ -127,7 +128,8 @@ function DailyProgress() {
     try { return parseInt(localStorage.getItem(storageKey) ?? '0', 10) || 0; }
     catch { return 0; }
   })();
-  const GOAL = 15;
+  // W1 fix #6: read the shared daily-goal constant so header + curriculum card agree.
+  const GOAL = DAILY_REP_GOAL;
   const pct = Math.min((repsToday / GOAL) * 100, 100);
   
 

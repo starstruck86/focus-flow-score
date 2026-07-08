@@ -15,8 +15,7 @@ import { getNextDueCurriculum, type DailyLadderPick } from '@/lib/train/dailyLad
 import { BAND_NAMES } from '@/types/train';
 import { FocusSpokesChips } from './FocusSpokesChips';
 import { ChevronRight, Flame, Sparkles, Target } from 'lucide-react';
-
-const DAILY_GOAL = 3;
+import { DAILY_REP_GOAL } from '@/lib/dailyGoal';
 
 function Ring({ progress }: { progress: number }) {
   const size = 40;
@@ -74,7 +73,7 @@ export function DailyLadderCard() {
             <h3 className="text-sm font-bold uppercase tracking-wider">Today · Curriculum</h3>
           </div>
           <span className="text-[11px] text-muted-foreground">
-            Goal: {DAILY_GOAL} drills
+            Goal: {DAILY_REP_GOAL} reps
           </span>
         </div>
 
