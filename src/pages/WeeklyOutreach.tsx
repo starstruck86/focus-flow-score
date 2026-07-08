@@ -1736,74 +1736,30 @@ export default function WeeklyOutreach() {
               />
             ) : (
               <div className="space-y-2">
-                {/* Primary Funnel: 1-3 */}
-                <div className="space-y-1">
-                  {FUNNEL_GROUPS.filter(g => g.section === 'primary').map(group => (
-                    <FunnelGroupSection
-                      key={group.status}
-                      group={group}
-                      accounts={groupedAccounts[group.status]}
-                      expandedAccountId={expandedAccountId}
-                      setExpandedAccountId={setExpandedAccountId}
-                      updateAccount={updateAccount}
-                      deleteAccount={(id) => { const acct = accounts.find(a => a.id === id); if (acct) deleteWithUndo(acct); }}
-                      isCollapsed={collapsedGroups.has(group.status)}
-                      onToggleCollapse={() => toggleGroupCollapse(group.status)}
-                      isSelected={bulkSelection.isSelected}
-                      onToggleSelect={bulkSelection.toggle}
-                      highlightId={highlightId}
-                      onOpenAccountDetail={(id) => navigate(`/accounts/${id}`)}
-                    />
-                  ))}
-                </div>
-
-                {/* Outcomes: Meeting Booked + Disqualified */}
-                <div className="pt-3 border-t border-border/50">
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1 px-1">Outcomes</p>
-                  <div className="space-y-1">
-                    {FUNNEL_GROUPS.filter(g => g.section === 'outcome').map(group => (
-                      <FunnelGroupSection
-                        key={group.status}
-                        group={group}
-                        accounts={groupedAccounts[group.status]}
-                        expandedAccountId={expandedAccountId}
-                        setExpandedAccountId={setExpandedAccountId}
-                        updateAccount={updateAccount}
-                        deleteAccount={(id) => { const acct = accounts.find(a => a.id === id); if (acct) deleteWithUndo(acct); }}
-                        isCollapsed={collapsedGroups.has(group.status)}
-                        onToggleCollapse={() => toggleGroupCollapse(group.status)}
-                        isSelected={bulkSelection.isSelected}
-                        onToggleSelect={bulkSelection.toggle}
-                        highlightId={highlightId}
-                        onOpenAccountDetail={(id) => navigate(`/accounts/${id}`)}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Holding: Inactive */}
-                <div className="pt-3 border-t border-border/50">
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1 px-1">Holding</p>
-                  <div className="space-y-1">
-                    {FUNNEL_GROUPS.filter(g => g.section === 'holding').map(group => (
-                      <FunnelGroupSection
-                        key={group.status}
-                        group={group}
-                        accounts={groupedAccounts[group.status]}
-                        expandedAccountId={expandedAccountId}
-                        setExpandedAccountId={setExpandedAccountId}
-                        updateAccount={updateAccount}
-                        deleteAccount={(id) => { const acct = accounts.find(a => a.id === id); if (acct) deleteWithUndo(acct); }}
-                        isCollapsed={collapsedGroups.has(group.status)}
-                        onToggleCollapse={() => toggleGroupCollapse(group.status)}
-                        isSelected={bulkSelection.isSelected}
-                        onToggleSelect={bulkSelection.toggle}
-                        highlightId={highlightId}
-                        onOpenAccountDetail={(id) => navigate(`/accounts/${id}`)}
-                      />
-                    ))}
-                  </div>
-                </div>
+                {/* W3 De-SDR: single hierarchy-aware account list (parents
+                    with children indented). Funnel stage grouping retired. */}
+                <FunnelGroupSection
+                  group={{
+                    status: 'active',
+                    label: `All Accounts (${hierarchySortedAccounts.length})`,
+                    hint: 'Parents first, children indented',
+                    color: 'text-foreground',
+                    borderColor: 'border-border',
+                    defaultCollapsed: false,
+                    section: 'primary',
+                  }}
+                  accounts={hierarchySortedAccounts}
+                  expandedAccountId={expandedAccountId}
+                  setExpandedAccountId={setExpandedAccountId}
+                  updateAccount={updateAccount}
+                  deleteAccount={(id) => { const acct = accounts.find(a => a.id === id); if (acct) deleteWithUndo(acct); }}
+                  isCollapsed={false}
+                  onToggleCollapse={() => { /* single group — no toggle */ }}
+                  isSelected={bulkSelection.isSelected}
+                  onToggleSelect={bulkSelection.toggle}
+                  highlightId={highlightId}
+                  onOpenAccountDetail={(id) => navigate(`/accounts/${id}`)}
+                />
               </div>
             )}
           </TabsContent>
