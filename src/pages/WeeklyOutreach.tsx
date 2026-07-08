@@ -1692,18 +1692,8 @@ export default function WeeklyOutreach() {
               </div>
             )}
 
-            {/* Bulk Enrichment Panel */}
-            <BulkEnrichmentPanel
-              state={bulkEnrich.state}
-              accounts={filteredAccounts}
-              onSetBatchSize={bulkEnrich.setBatchSize}
-              onStart={bulkEnrich.start}
-              onPause={bulkEnrich.pause}
-              onResume={bulkEnrich.resume}
-              onCancel={bulkEnrich.cancel}
-              onReset={bulkEnrich.reset}
-              hasFailures={bulkEnrich.hasFailures}
-            />
+            {/* Bulk Enrichment Panel retired from Territory (W3). Hook preserved for programmatic use. */}
+
 
             {newLogoAccounts.length === 0 ? (
               <EmptyState
