@@ -185,7 +185,8 @@ async function estimateRecentPipelineValue(userId: string, lookbackDays: number)
     .select('arr')
     .eq('user_id', userId)
     .gte('created_at', cutoff.toISOString())
-    .eq('status', 'active');
+    .eq('status', 'active')
+    .is('archived_at', null);
 
   return (data || []).reduce((s, o) => s + (Number(o.arr) || 0), 0);
 }
