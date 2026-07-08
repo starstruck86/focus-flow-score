@@ -1697,7 +1697,7 @@ export default function WeeklyOutreach() {
                   id: 'change-motion',
                   label: 'Change Motion',
                   options: [
-                    { value: 'new-logo', label: 'New Logo' },
+                    { value: 'new-logo', label: 'Prospect' },
                     { value: 'renewal', label: 'Renewal' },
                     { value: 'general', label: 'General' },
                     { value: 'both', label: 'Both' },
