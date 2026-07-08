@@ -262,11 +262,7 @@ const FUNNEL_GROUPS: FunnelGroup[] = [
   { status: 'inactive', label: '4 - Inactive', hint: 'Holding bucket', color: 'text-muted-foreground', borderColor: 'border-border', defaultCollapsed: false, section: 'holding' },
 ];
 
-const DEFAULT_TARGETS: Record<string, number> = {
-  researching: 25,
-  prepped: 20,
-  active: 30,
-};
+// DEFAULT_TARGETS removed (W3 De-SDR): funnel target thresholds retired.
 
 // Sort within funnel group: Tier → ICP Score (desc) → Name A-Z
 function sortFunnelGroup(accounts: Account[], sortOverride?: { key: string; direction: 'asc' | 'desc' } | null): Account[] {
