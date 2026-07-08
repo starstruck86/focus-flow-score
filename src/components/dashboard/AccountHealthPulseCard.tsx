@@ -40,6 +40,12 @@ export function AccountHealthPulseCard({ motionFilter }: AccountHealthPulseCardP
     cold: (accounts || []).filter(a => a.tier === 'cold').length,
   };
 
+  // W1 fix #7: when a motion filter is applied and yields zero rows, hide
+  // the widget entirely rather than instructing the user to add accounts.
+  if (motionFilter && !isLoading && top10.length === 0) {
+    return null;
+  }
+
   return (
     <Card className="metric-card border-primary/20">
       <CardHeader className="pb-2">

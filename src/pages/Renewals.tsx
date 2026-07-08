@@ -308,14 +308,20 @@ function RenewalStageSummary({ activeStageFilter, onStageFilterChange }: {
   const formatCurrencyLocal = (value: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
 
-  const totalARR = Object.values(stageSummary).reduce((sum, s) => sum + s.arr, 0);
-  const totalCount = Object.values(stageSummary).reduce((sum, s) => sum + s.count, 0);
+  // W1 fix #5: exclude closed stages from Active Pipeline totals.
+  const OPEN_STAGES = new Set<OpportunityStage>(['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate']);
+  const totalARR = Object.entries(stageSummary)
+    .filter(([stage]) => OPEN_STAGES.has(stage as OpportunityStage))
+    .reduce((sum, [, s]) => sum + s.arr, 0);
+  const totalCount = Object.entries(stageSummary)
+    .filter(([stage]) => OPEN_STAGES.has(stage as OpportunityStage))
+    .reduce((sum, [, s]) => sum + s.count, 0);
 
   return (
     <div className="space-y-3 mb-4">
       <div className="flex items-center gap-4">
         <div className="text-sm text-muted-foreground">
-          Active Pipeline: <span className="font-semibold text-foreground">{totalCount} opps</span> • <span className="font-mono font-semibold text-foreground">{formatCurrencyLocal(totalARR)}</span>
+          Active Pipeline <span className="text-[11px]">(open stages)</span>: <span className="font-semibold text-foreground">{totalCount} opps</span> • <span className="font-mono font-semibold text-foreground">{formatCurrencyLocal(totalARR)}</span>
         </div>
         {activeStageFilter && (
           <button onClick={() => onStageFilterChange?.(null)} className="text-[10px] text-primary hover:text-primary/80 underline">

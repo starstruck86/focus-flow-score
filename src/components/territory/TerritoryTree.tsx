@@ -5,7 +5,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { fromActiveAccounts } from '@/data/accounts';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
 interface AccountRow {
@@ -151,10 +151,15 @@ export function TerritoryTree() {
     queryKey: ['territory-tree-accounts'],
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const { data, error } = await fromActiveAccounts()
+      // W1 fix #3: query raw accounts + soft-delete filter — the active_accounts
+      // view lacks parent_account_id / account_family, so the previous select
+      // errored silently and the tree rendered "No accounts yet".
+      const { data, error } = await supabase
+        .from('accounts')
         .select(
           'id, name, tier, account_status, last_touch_date, icp_fit_score, parent_account_id, account_family'
         )
+        .is('deleted_at', null)
         .order('name');
       if (error) throw error;
       return (data ?? []) as AccountRow[];

@@ -119,6 +119,54 @@ export type Database = {
           },
         ]
       }
+      account_dossiers: {
+        Row: {
+          account_id: string
+          content_md: string
+          id: string
+          is_current: boolean
+          rendered_at: string
+          rendered_by: string
+          user_id: string
+          version: number
+        }
+        Insert: {
+          account_id: string
+          content_md: string
+          id?: string
+          is_current?: boolean
+          rendered_at?: string
+          rendered_by?: string
+          user_id: string
+          version?: number
+        }
+        Update: {
+          account_id?: string
+          content_md?: string
+          id?: string
+          is_current?: boolean
+          rendered_at?: string
+          rendered_by?: string
+          user_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_dossiers_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_dossiers_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       account_product_ownership: {
         Row: {
           account_id: string
@@ -302,7 +350,9 @@ export type Database = {
           intelligence_head: string
           linked_account_id: string | null
           linked_account_name: string | null
+          observed_at: string | null
           raw_text: string
+          signal_class: string | null
           signal_type: string
           source_label: string | null
           source_url: string | null
@@ -315,7 +365,9 @@ export type Database = {
           intelligence_head: string
           linked_account_id?: string | null
           linked_account_name?: string | null
+          observed_at?: string | null
           raw_text: string
+          signal_class?: string | null
           signal_type: string
           source_label?: string | null
           source_url?: string | null
@@ -328,7 +380,9 @@ export type Database = {
           intelligence_head?: string
           linked_account_id?: string | null
           linked_account_name?: string | null
+          observed_at?: string | null
           raw_text?: string
+          signal_class?: string | null
           signal_type?: string
           source_label?: string | null
           source_url?: string | null
@@ -503,6 +557,7 @@ export type Database = {
           triggered_account: boolean | null
           updated_at: string
           user_id: string
+          vertical_id: string | null
           website: string | null
         }
         Insert: {
@@ -562,6 +617,7 @@ export type Database = {
           triggered_account?: boolean | null
           updated_at?: string
           user_id: string
+          vertical_id?: string | null
           website?: string | null
         }
         Update: {
@@ -621,6 +677,7 @@ export type Database = {
           triggered_account?: boolean | null
           updated_at?: string
           user_id?: string
+          vertical_id?: string | null
           website?: string | null
         }
         Relationships: [
@@ -638,7 +695,146 @@ export type Database = {
             referencedRelation: "active_accounts"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "accounts_vertical_id_fkey"
+            columns: ["vertical_id"]
+            isOneToOne: false
+            referencedRelation: "verticals"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      agent_configs: {
+        Row: {
+          agent: string
+          budget_note: string | null
+          caste: string
+          enabled: boolean
+          home: string
+          model: string | null
+          prompt: string | null
+          schedule: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          agent: string
+          budget_note?: string | null
+          caste: string
+          enabled?: boolean
+          home: string
+          model?: string | null
+          prompt?: string | null
+          schedule?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          agent?: string
+          budget_note?: string | null
+          caste?: string
+          enabled?: boolean
+          home?: string
+          model?: string | null
+          prompt?: string | null
+          schedule?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      agent_events: {
+        Row: {
+          account_id: string | null
+          agent: string
+          confidence: number | null
+          created_at: string
+          event_type: string
+          expires_at: string | null
+          id: string
+          lease_until: string | null
+          payload: Json | null
+          provenance: Json | null
+          signal_class: string | null
+          so_what: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          agent: string
+          confidence?: number | null
+          created_at?: string
+          event_type: string
+          expires_at?: string | null
+          id?: string
+          lease_until?: string | null
+          payload?: Json | null
+          provenance?: Json | null
+          signal_class?: string | null
+          so_what: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          agent?: string
+          confidence?: number | null
+          created_at?: string
+          event_type?: string
+          expires_at?: string | null
+          id?: string
+          lease_until?: string | null
+          payload?: Json | null
+          provenance?: Json | null
+          signal_class?: string | null
+          so_what?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_events_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_events_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "active_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_trust: {
+        Row: {
+          agent: string
+          ratified_count: number
+          rejected_count: number
+          trust_score: number
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          agent: string
+          ratified_count?: number
+          rejected_count?: number
+          trust_score?: number
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          agent?: string
+          ratified_count?: number
+          rejected_count?: number
+          trust_score?: number
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       ai_feedback: {
         Row: {
@@ -10309,6 +10505,45 @@ export type Database = {
           total_in_scope?: number
           total_resources?: number
           user_id?: string
+        }
+        Relationships: []
+      }
+      verticals: {
+        Row: {
+          branch_relevance_map: string | null
+          created_at: string | null
+          id: string
+          name: string
+          refreshed_at: string | null
+          structural_forces: Json | null
+          teaching_narrative: string | null
+          thesis: string | null
+          user_id: string
+          vocabulary: Json | null
+        }
+        Insert: {
+          branch_relevance_map?: string | null
+          created_at?: string | null
+          id?: string
+          name: string
+          refreshed_at?: string | null
+          structural_forces?: Json | null
+          teaching_narrative?: string | null
+          thesis?: string | null
+          user_id: string
+          vocabulary?: Json | null
+        }
+        Update: {
+          branch_relevance_map?: string | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          refreshed_at?: string | null
+          structural_forces?: Json | null
+          teaching_narrative?: string | null
+          thesis?: string | null
+          user_id?: string
+          vocabulary?: Json | null
         }
         Relationships: []
       }
