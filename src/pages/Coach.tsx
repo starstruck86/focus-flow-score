@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SHELL } from '@/lib/layout';
-import { useCallTranscripts, useSaveTranscript } from '@/hooks/useCallTranscripts';
+import { useCallTranscripts, useSaveTranscript, useArchivedTranscripts } from '@/hooks/useCallTranscripts';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { useStore } from '@/store/useStore';
