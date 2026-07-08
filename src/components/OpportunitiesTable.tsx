@@ -1393,6 +1393,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <SelectItem value="no-next-step">No Next Step</SelectItem>
           </SelectContent>
         </Select>
+        <ArchivedOppsChip />
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="outline" className="w-auto gap-1.5 text-sm">
