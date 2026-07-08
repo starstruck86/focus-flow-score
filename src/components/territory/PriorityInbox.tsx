@@ -168,8 +168,8 @@ export function PriorityInbox() {
                   <span className="text-sm font-medium truncate">{account.name}</span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-xs text-red-500 font-medium">
-                    {daysAgo === null ? 'Never' : `${daysAgo}d`}
+                  <span className={cn("text-xs font-medium", daysAgo === null ? "text-muted-foreground" : "text-red-500")}>
+                    {daysAgo === null ? 'No touch yet' : `${daysAgo}d`}
                   </span>
                   <button
                     onClick={(e) => { e.stopPropagation(); navigate(`/meeting?accountId=${account.id}`); }}
