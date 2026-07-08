@@ -21,6 +21,13 @@ export function useCallTranscripts(filters?: TranscriptFilters) {
   });
 }
 
+export function useArchivedTranscripts() {
+  return useQuery({
+    queryKey: ['call-transcripts', 'archived'],
+    queryFn: () => getArchivedTranscripts(),
+  });
+}
+
 export function useTranscriptsForAccount(accountId: string | undefined) {
   return useQuery({
     queryKey: ['call-transcripts', 'account', accountId],
