@@ -1154,20 +1154,48 @@ export default function WeeklyOutreach() {
       'disqualified': [],
       'meeting-booked': [],
     };
-    
+
     filteredAccounts.forEach(a => {
       const status = a.accountStatus || 'inactive';
       if (groups[status]) groups[status].push(a);
       else groups['inactive'].push(a);
     });
-    
-    // Sort each group
+
     Object.keys(groups).forEach(key => {
       groups[key as AccountStatus] = sortFunnelGroup(groups[key as AccountStatus]);
     });
-    
+
     return groups;
   }, [filteredAccounts]);
+
+  // W3 De-SDR: hierarchy-aware flat list — parents first (tier→ICP→name),
+  // each parent immediately followed by its children in the filtered set.
+  const hierarchySortedAccounts = useMemo(() => {
+    const byId = new Map(filteredAccounts.map(a => [a.id, a]));
+    const parents = sortFunnelGroup(
+      filteredAccounts.filter(a => !childAccountIds.has(a.id))
+    );
+    const childrenByParent = new Map<string, Account[]>();
+    filteredAccounts.forEach(a => {
+      if (!childAccountIds.has(a.id)) return;
+      const pid = parentOf.get(a.id);
+      if (!pid) return;
+      const list = childrenByParent.get(pid) ?? [];
+      list.push(a);
+      childrenByParent.set(pid, list);
+    });
+    const ordered: Account[] = [];
+    parents.forEach(p => {
+      ordered.push(p);
+      const kids = sortFunnelGroup(childrenByParent.get(p.id) ?? []);
+      kids.forEach(k => ordered.push(k));
+    });
+    // Orphans (child whose parent isn't in filtered set) appended at end
+    filteredAccounts.forEach(a => {
+      if (!ordered.includes(a)) ordered.push(a);
+    });
+    return ordered;
+  }, [filteredAccounts, childAccountIds, parentOf]);
 
   const handleAddAccount = () => {
     if (!newAccount.name) {
