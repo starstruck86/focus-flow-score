@@ -236,7 +236,7 @@ export const WeeklyQueueOverview = memo(function WeeklyQueueOverview() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold">🎯 Weekly New Logo Queue</span>
+          <span className="text-sm font-semibold">🎯 Weekly Research Queue</span>
           <span className="text-[10px] text-muted-foreground">Week of {weekStart}</span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
