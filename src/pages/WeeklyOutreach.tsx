@@ -1277,26 +1277,9 @@ export default function WeeklyOutreach() {
               collapsed={isOutreachSectionCollapsed('account-staleness')}
               onToggle={() => outreachSectionLayout.collapseWidget('account-staleness')}
             >
-              <StalenessAlert accounts={newLogoAccounts} />
+              <StalenessAlert accounts={newLogoAccounts} childIds={childAccountIds} />
             </CollapsibleWidgetSection>
 
-            <CollapsibleWidgetSection
-              label="Account Health Pulse"
-              collapsed={isOutreachSectionCollapsed('account-health-pulse')}
-              onToggle={() => outreachSectionLayout.collapseWidget('account-health-pulse')}
-            >
-              <WidgetErrorBoundary widgetId="account-health-pulse">
-                <AccountHealthPulseCard motionFilter="new-logo" />
-              </WidgetErrorBoundary>
-            </CollapsibleWidgetSection>
-
-            <CollapsibleWidgetSection
-              label="Funnel Health Bar"
-              collapsed={isOutreachSectionCollapsed('funnel-health-bar')}
-              onToggle={() => outreachSectionLayout.collapseWidget('funnel-health-bar')}
-            >
-              <FunnelHealthBar accounts={newLogoAccounts} />
-            </CollapsibleWidgetSection>
             
             {/* Actions Bar */}
             <div className="space-y-3">
