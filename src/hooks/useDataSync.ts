@@ -617,7 +617,7 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
             if (prevState.current) prevState.current.accounts = mapped;
           }
         } else if (table === 'opportunities') {
-          const { data } = await supabase.from('opportunities').select('*').order('created_at', { ascending: false });
+          const { data } = await supabase.from('opportunities').select('*').is('archived_at', null).order('created_at', { ascending: false });
           if (data) {
             const mapped = data.map(dbOpportunityToStore);
             useStore.setState({ opportunities: mapped });
