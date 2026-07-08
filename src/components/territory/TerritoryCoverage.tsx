@@ -168,6 +168,7 @@ export function TerritoryCoverage() {
           const signals = signalCounts?.get(account.id) ?? 0;
           const health = scoreHealth(daysAgo, account.tier, !!account.next_step, products);
           const hc = HEALTH_CONFIG[health];
+          const risk = openRisksByAccount?.get(account.id);
 
           return (
             <div
@@ -175,7 +176,15 @@ export function TerritoryCoverage() {
               onClick={() => navigate(`/accounts/${account.id}`)}
               className={cn(GRID, 'px-3 py-2.5 border-b border-border/40 last:border-0 hover:bg-muted/30 cursor-pointer transition-colors items-center')}
             >
-              <span className="text-sm font-medium truncate">{account.name}</span>
+              <span className="text-sm font-medium truncate flex items-center gap-1.5">
+                {risk && (
+                  <span
+                    title={`${risk.count} open risk${risk.count > 1 ? 's' : ''} (sev ${risk.maxSeverity})`}
+                    className="inline-block h-1.5 w-1.5 rounded-full bg-red-500 shrink-0"
+                  />
+                )}
+                {account.name}
+              </span>
               <span className={cn('text-[10px] font-bold text-center px-1.5 py-0.5 rounded', account.tier === 'A' ? 'bg-green-500/15 text-green-600' : 'bg-amber-500/15 text-amber-600')}>
                 {account.tier ?? '—'}
               </span>
