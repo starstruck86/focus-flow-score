@@ -24,7 +24,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { BackToToday } from '@/components/BackToToday';
 import { useCopilot, type PageContext } from '@/contexts/CopilotContext';
 import { DayTimeline } from '@/components/tasks/DayTimeline';
-import { ActivityRings } from '@/components/ActivityRings';
+// ActivityRings retired (W3 De-SDR) — daily journal widget removed from UI.
 import { GlobalWeekStrip } from '@/components/GlobalWeekStrip';
 import { useAppMode } from '@/hooks/useAppMode';
 import { useDaveContext, DaveSessionError, type DaveSessionData } from '@/hooks/useDaveContext';
