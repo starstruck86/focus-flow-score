@@ -357,7 +357,7 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
       try {
         const [accountsRes, oppsRes, renewalsRes, contactsRes, tasksRes] = await Promise.all([
           fromActiveAccounts().select('*').order('name'),
-          supabase.from('opportunities').select('*').order('created_at', { ascending: false }),
+          supabase.from('opportunities').select('*').is('archived_at', null).order('created_at', { ascending: false }),
           supabase.from('renewals').select('*').order('renewal_due'),
           supabase.from('contacts').select('*').order('name'),
           supabase.from('tasks').select('*').order('created_at', { ascending: false }),
@@ -617,7 +617,7 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
             if (prevState.current) prevState.current.accounts = mapped;
           }
         } else if (table === 'opportunities') {
-          const { data } = await supabase.from('opportunities').select('*').order('created_at', { ascending: false });
+          const { data } = await supabase.from('opportunities').select('*').is('archived_at', null).order('created_at', { ascending: false });
           if (data) {
             const mapped = data.map(dbOpportunityToStore);
             useStore.setState({ opportunities: mapped });

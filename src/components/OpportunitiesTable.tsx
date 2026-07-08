@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { LayoutGrid, List, ChevronUp, FolderOpen } from 'lucide-react';
 import { OpportunityResourcesPanel } from '@/components/table/OpportunityResourcesPanel';
+import { ArchivedOppsChip } from '@/components/ArchivedOppsChip';
 import {
   Table,
   TableBody,
@@ -1392,6 +1393,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <SelectItem value="no-next-step">No Next Step</SelectItem>
           </SelectContent>
         </Select>
+        <ArchivedOppsChip />
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="outline" className="w-auto gap-1.5 text-sm">

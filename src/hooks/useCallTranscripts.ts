@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   getTranscripts,
+  getArchivedTranscripts,
   getTranscriptsForAccount,
   getRecentTranscriptsForPrep,
   insertTranscript,
@@ -17,6 +18,13 @@ export function useCallTranscripts(filters?: TranscriptFilters) {
   return useQuery({
     queryKey: ['call-transcripts', filters],
     queryFn: () => getTranscripts(filters),
+  });
+}
+
+export function useArchivedTranscripts() {
+  return useQuery({
+    queryKey: ['call-transcripts', 'archived'],
+    queryFn: () => getArchivedTranscripts(),
   });
 }
 
