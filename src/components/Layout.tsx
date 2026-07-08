@@ -387,9 +387,6 @@ export function Layout({ children, hideFloatingFab, embedded: embeddedProp }: { 
             <div className="flex-1 min-w-0 overflow-hidden">
               {isWork && <GlobalWeekStrip />}
             </div>
-            <div className="shrink-0">
-              {isWork && <ActivityRings />}
-            </div>
           </div>
           <DayTimeline />
         </div>
