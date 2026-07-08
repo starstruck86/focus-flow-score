@@ -145,8 +145,9 @@ export default function Skills() {
                       if (name === 'Real Calls') {
                         return [`${value}% · ${props.payload.call_count} calls`, 'Real Calls'];
                       }
+                      const avgText = props.payload.avg > 0 ? `avg ${props.payload.avg}` : 'pending';
                       return [
-                        `${value}% · ${props.payload.reps} reps · avg ${props.payload.avg}`,
+                        `${value}% · ${props.payload.reps} reps · ${avgText}`,
                         'Practice',
                       ];
                     }}
@@ -343,7 +344,7 @@ export default function Skills() {
                       <div className="text-xs text-muted-foreground italic">Not yet drilled</div>
                     ) : (
                       <div className="text-xs text-muted-foreground">
-                        {d.total_reps} reps · avg {d.avg_score}
+                        {d.total_reps} reps · {d.avg_score > 0 ? `avg ${d.avg_score}` : 'pending'}
                       </div>
                     )}
 
