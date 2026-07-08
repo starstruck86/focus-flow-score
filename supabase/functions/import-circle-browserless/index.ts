@@ -478,7 +478,7 @@ Deno.serve(async (req) => {
     let encrypted: string;
     try { encrypted = await encryptCookie(rawCookie); }
     catch (e) { return json({ success: false, error: (e as Error).message }, 500); }
-    const { error: upErr } = await supabase
+    const { error: upErr } = await credClient
       .from('circle_credentials')
       .upsert({
         user_id: userId,
