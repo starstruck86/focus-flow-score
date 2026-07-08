@@ -33,7 +33,7 @@ export function DaveReadinessStrip({ readiness, totalResources, onFilterReadines
     {
       key: 'withActiveKIs',
       icon: Brain,
-      label: 'Active KIs',
+      label: 'Resources w/ KIs',
       value: readiness.withActiveKIs,
       detail: `${readiness.withActiveKIs} of ${totalResources} resources have at least one active knowledge item`,
       color: readiness.withActiveKIs > 0 ? 'text-blue-600' : 'text-muted-foreground',

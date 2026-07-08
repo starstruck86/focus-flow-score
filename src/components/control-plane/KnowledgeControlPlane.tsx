@@ -248,7 +248,7 @@ export function KnowledgeControlPlane() {
   /** Contextual explanation for the current filter */
   const filterExplanation = useMemo((): string | null => {
     if (customFilterLabel) {
-      if (customFilterLabel.includes('Active KIs')) return 'Resources with at least one active knowledge item — usable for downstream AI.';
+      if (customFilterLabel.includes('Resources w/ KIs') || customFilterLabel.includes('Active KIs')) return 'Resources with at least one active knowledge item — usable for downstream AI.';
       if (customFilterLabel.includes('With Contexts')) return 'Resources with active KIs that have usage contexts assigned — ready for coaching and playbooks.';
       if (customFilterLabel.includes('Grounding-Ready')) return 'Resources eligible for Dave grounding — active KIs, contexts, and no blockers.';
       if (customFilterLabel.includes('conflicted')) return 'Resources with contradictory lifecycle signals that may need manual review.';
@@ -269,7 +269,7 @@ export function KnowledgeControlPlane() {
 
   const handleFilterReadiness = useCallback((key: 'withActiveKIs' | 'withContexts' | 'groundingEligible') => {
     const labels: Record<string, string> = {
-      withActiveKIs: 'Active KIs',
+      withActiveKIs: 'Resources w/ KIs',
       withContexts: 'With Contexts',
       groundingEligible: 'Grounding-Ready',
     };

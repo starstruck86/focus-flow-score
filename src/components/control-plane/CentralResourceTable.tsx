@@ -217,7 +217,7 @@ export function CentralResourceTable({
     if (customFilterLabel) {
       if (customFilterLabel.includes('Grounding-Ready')) {
         customEmpty = { title: 'No grounding-ready resources yet', hint: 'Resources need active KIs, usage contexts, and no blockers to qualify.' };
-      } else if (customFilterLabel.includes('Active KIs')) {
+      } else if (customFilterLabel.includes('Resources w/ KIs') || customFilterLabel.includes('Active KIs')) {
         customEmpty = { title: 'No resources with active KIs', hint: 'Run Extract on resources with content to generate knowledge items.' };
       } else if (customFilterLabel.includes('With Contexts')) {
         customEmpty = { title: 'No resources with contexts yet', hint: 'Add usage contexts to extracted knowledge items to reach this stage.' };

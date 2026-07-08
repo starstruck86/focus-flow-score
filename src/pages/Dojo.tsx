@@ -218,6 +218,22 @@ export default function Dojo() {
   const { data: stats } = useDojoStats();
   const { status: kiSyncStatus, cachedCount: kiCachedCount } = useKISync();
 
+  // W1 fix #2: single source of truth for Branch.io KI count — branch_readiness view.
+  const { data: branchReadiness } = useQuery({
+    queryKey: ['dojo-branch-readiness', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from('branch_readiness')
+        .select('total_branch_kis')
+        .eq('user_id', user!.id)
+        .maybeSingle();
+      return data as { total_branch_kis: number } | null;
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+  const branchKiCount = branchReadiness?.total_branch_kis ?? 0;
+
 
   // Resolve SkillSession from Learn → Dojo navigation
   const stateObj = (location.state ?? {}) as Record<string, unknown>;
@@ -443,7 +459,7 @@ export default function Dojo() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-green-700 dark:text-green-400">🌿 Branch Prep Mode</p>
-                <p className="text-[11px] text-muted-foreground">586 Branch.io KIs · product, expansion, deal control, competitive</p>
+                <p className="text-[11px] text-muted-foreground">{branchKiCount.toLocaleString()} Branch.io KIs · product, expansion, deal control, competitive</p>
               </div>
               <button
                 onClick={() => navigate('/sharpen', { state: { branchMode: true } })}
