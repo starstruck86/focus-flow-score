@@ -437,6 +437,7 @@ Deno.serve(async (req) => {
   }
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseAnon = Deno.env.get('SUPABASE_ANON_KEY')!;
+  const supabaseServiceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const browserlessKey = Deno.env.get('BROWSERLESS_API_KEY');
   if (!browserlessKey) {
     return json({ success: false, error: 'BROWSERLESS_API_KEY not configured' }, 500);
@@ -444,6 +445,11 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, supabaseAnon, {
     global: { headers: { Authorization: authHeader } },
+  });
+  // F2 hardening: circle_credentials is server-only. Access via service-role,
+  // always scoped to the authenticated user's id — never client-reachable.
+  const credClient = createClient(supabaseUrl, supabaseServiceRole, {
+    auth: { persistSession: false, autoRefreshToken: false },
   });
   const token = authHeader.replace('Bearer ', '');
   const { data: userData, error: userErr } = await supabase.auth.getUser(token);
