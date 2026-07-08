@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 const ROUTE_LABELS: Record<string, string> = {
   '/': 'Dashboard',
   '/tasks': 'Tasks',
-  '/outreach': 'New Logo Outreach',
+  '/outreach': 'Territory',
   '/renewals': 'Renewals',
   '/trends': 'Trends',
   '/quota': 'Quota & Commission',
