@@ -818,6 +818,20 @@ export default function WeeklyOutreach() {
     [outreachSectionLayout.widgets]
   );
 
+  // W3 De-SDR: fetch child account ids so alarm counts don't double-count
+  // parent + child entities. `useQuery` result may be undefined during load.
+  const { data: childAccountIds = new Set<string>() } = useQuery({
+    queryKey: ['territory-child-account-ids'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('accounts')
+        .select('id')
+        .not('parent_account_id', 'is', null);
+      return new Set<string>((data ?? []).map((r: { id: string }) => r.id));
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
   const toggleGroupCollapse = (status: AccountStatus) => {
     setCollapsedGroups(prev => {
       const next = new Set(prev);
