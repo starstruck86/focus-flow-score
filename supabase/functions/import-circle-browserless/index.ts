@@ -499,7 +499,7 @@ Deno.serve(async (req) => {
   let cookieValue = extractCookieValue(session_cookie);
   let cookieName = '_circle_session';
   if (!cookieValue) {
-    const { data: cred, error: credErr } = await supabase
+    const { data: cred, error: credErr } = await credClient
       .from('circle_credentials')
       .select('session_cookie, cookie_name')
       .eq('user_id', userId)
