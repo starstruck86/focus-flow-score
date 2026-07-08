@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { LayoutGrid, List, ChevronUp, FolderOpen } from 'lucide-react';
 import { OpportunityResourcesPanel } from '@/components/table/OpportunityResourcesPanel';
+import { ArchivedOppsChip } from '@/components/ArchivedOppsChip';
 import {
   Table,
   TableBody,
