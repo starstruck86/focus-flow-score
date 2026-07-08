@@ -14,7 +14,18 @@ export async function getOpportunities(): Promise<OpportunityRow[]> {
   const { data, error } = await supabase
     .from('opportunities')
     .select('*')
+    .is('archived_at', null)
     .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function getArchivedOpportunities(): Promise<OpportunityRow[]> {
+  const { data, error } = await supabase
+    .from('opportunities')
+    .select('*')
+    .not('archived_at', 'is', null)
+    .order('archived_at', { ascending: false });
   if (error) throw error;
   return data;
 }
