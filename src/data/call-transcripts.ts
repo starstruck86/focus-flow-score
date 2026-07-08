@@ -15,6 +15,8 @@ export interface TranscriptFilters {
   opportunityId?: string;
   renewalId?: string;
   search?: string;
+  /** Include archived transcripts (default false — archived rows hidden from lists). */
+  includeArchived?: boolean;
 }
 
 export async function getTranscripts(filters?: TranscriptFilters, limit = 100): Promise<TranscriptRow[]> {
@@ -23,6 +25,7 @@ export async function getTranscripts(filters?: TranscriptFilters, limit = 100): 
     .select('*')
     .order('call_date', { ascending: false });
 
+  if (!filters?.includeArchived) query = query.is('archived_at', null);
   if (filters?.accountId) query = query.eq('account_id', filters.accountId);
   if (filters?.opportunityId) query = query.eq('opportunity_id', filters.opportunityId);
   if (filters?.renewalId) query = query.eq('renewal_id', filters.renewalId);
@@ -33,11 +36,23 @@ export async function getTranscripts(filters?: TranscriptFilters, limit = 100): 
   return data || [];
 }
 
+export async function getArchivedTranscripts(limit = 100): Promise<TranscriptRow[]> {
+  const { data, error } = await supabase
+    .from('call_transcripts')
+    .select('*')
+    .not('archived_at', 'is', null)
+    .order('call_date', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
 export async function getTranscriptsForAccount(accountId: string, limit = 20): Promise<TranscriptRow[]> {
   const { data, error } = await supabase
     .from('call_transcripts')
     .select('*')
     .eq('account_id', accountId)
+    .is('archived_at', null)
     .order('call_date', { ascending: false })
     .limit(limit);
   if (error) throw error;
@@ -51,6 +66,7 @@ export async function getRecentTranscriptsForPrep(accountId: string): Promise<Pr
     .from('call_transcripts')
     .select('id, title, call_date, call_type, summary, participants, notes')
     .eq('account_id', accountId)
+    .is('archived_at', null)
     .order('call_date', { ascending: false })
     .limit(3);
   if (error) throw error;
