@@ -303,20 +303,25 @@ function sortFunnelGroup(accounts: Account[], sortOverride?: { key: string; dire
 }
 
 // ===== STALENESS ALERT =====
-const StalenessAlert = memo(function StalenessAlert({ accounts }: { accounts: Account[] }) {
+const StalenessAlert = memo(function StalenessAlert({ accounts, childIds }: { accounts: Account[]; childIds: Set<string> }) {
+  // W3 De-SDR: exclude children from parent-level alarm counts unless they've
+  // been individually touched. Prevents parent+child double-counting.
+  const dedupe = (a: Account) => !childIds.has(a.id) || !!a.lastTouchDate;
+
   const staleCount = accounts.filter(a => {
+    if (!dedupe(a)) return false;
     if (a.accountStatus === 'disqualified' || a.accountStatus === 'inactive') return false;
     if (!a.lastTouchDate) return true;
     const days = Math.floor((Date.now() - new Date(a.lastTouchDate).getTime()) / 86400000);
     return days > 14;
   }).length;
 
-  const noNextStep = accounts.filter(a => 
-    (a.accountStatus === 'active' || a.accountStatus === 'prepped') && !a.nextStep
+  const noNextStep = accounts.filter(a =>
+    dedupe(a) && (a.accountStatus === 'active' || a.accountStatus === 'prepped') && !a.nextStep
   ).length;
 
-  const noCadence = accounts.filter(a => 
-    a.accountStatus === 'active' && !a.cadenceName
+  const noCadence = accounts.filter(a =>
+    dedupe(a) && a.accountStatus === 'active' && !a.cadenceName
   ).length;
 
   if (staleCount === 0 && noNextStep === 0 && noCadence === 0) return null;
