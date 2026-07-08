@@ -76,8 +76,8 @@ export function TerritoryCoverage() {
     queryFn: async () => {
       const { data } = await supabase
         .from('account_risks')
-        .select('account_id, severity, risk_type')
-        .is('resolved_at', null);
+        .select('account_id, severity, risk_type, status')
+        .not('status', 'in', '("resolved","dismissed","closed")');
       const map = new Map<string, { count: number; maxSeverity: number }>();
       (data ?? []).forEach((r: any) => {
         if (!r.account_id) return;
