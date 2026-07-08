@@ -1654,6 +1654,7 @@ export type Database = {
       call_transcripts: {
         Row: {
           account_id: string | null
+          archived_at: string | null
           call_date: string
           call_goals: string[] | null
           call_type: string | null
@@ -1679,6 +1680,7 @@ export type Database = {
         }
         Insert: {
           account_id?: string | null
+          archived_at?: string | null
           call_date?: string
           call_goals?: string[] | null
           call_type?: string | null
@@ -1704,6 +1706,7 @@ export type Database = {
         }
         Update: {
           account_id?: string | null
+          archived_at?: string | null
           call_date?: string
           call_goals?: string[] | null
           call_type?: string | null
@@ -5430,6 +5433,7 @@ export type Database = {
         Row: {
           account_id: string | null
           activity_log: Json | null
+          archived_at: string | null
           arr: number | null
           churn_risk: string | null
           close_date: string | null
@@ -5473,6 +5477,7 @@ export type Database = {
         Insert: {
           account_id?: string | null
           activity_log?: Json | null
+          archived_at?: string | null
           arr?: number | null
           churn_risk?: string | null
           close_date?: string | null
@@ -5516,6 +5521,7 @@ export type Database = {
         Update: {
           account_id?: string | null
           activity_log?: Json | null
+          archived_at?: string | null
           arr?: number | null
           churn_risk?: string | null
           close_date?: string | null
