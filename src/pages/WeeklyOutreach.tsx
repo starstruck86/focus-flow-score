@@ -461,49 +461,9 @@ function OpportunitiesStageSummary({ activeStageFilter, onStageFilterChange }: {
   );
 }
 
-// ===== FUNNEL HEALTH BAR =====
-const FunnelHealthBar = memo(function FunnelHealthBar({ accounts }: { accounts: Account[] }) {
-  const counts: Record<string, number> = { researching: 0, prepped: 0, active: 0 };
-  accounts.forEach(a => {
-    if (counts[a.accountStatus] !== undefined) counts[a.accountStatus]++;
-  });
+// ===== FUNNEL HEALTH BAR REMOVED (W3 De-SDR) =====
+// Prospecting-era target thresholds and warnings retired for expansion-AE motion.
 
-  const stages = [
-    { key: 'researching', label: '1 - Researching', count: counts.researching, target: DEFAULT_TARGETS.researching, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-    { key: 'prepped', label: '2 - Prepped', count: counts.prepped, target: DEFAULT_TARGETS.prepped, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
-    { key: 'active', label: '3 - Active', count: counts.active, target: DEFAULT_TARGETS.active, color: 'text-status-green', bg: 'bg-status-green/10' },
-  ];
-
-  const warnings = stages.filter(s => s.count < s.target);
-
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
-        {stages.map(s => {
-          const belowTarget = s.count < s.target;
-          return (
-            <div key={s.key} className={cn("metric-card p-3 flex flex-col", s.bg)}>
-              <div className="flex items-center justify-between">
-                <span className={cn("text-xs font-medium", s.color)}>{s.label}</span>
-                <span className={cn("text-xl font-bold font-mono", belowTarget ? "text-status-yellow" : "text-foreground")}>
-                  {s.count}
-                  <span className="text-xs text-muted-foreground font-normal"> / {s.target}</span>
-                </span>
-              </div>
-              {belowTarget && (
-                <div className="flex items-center gap-1 mt-1">
-                  <AlertTriangle className="h-3 w-3 text-status-yellow" />
-                  <span className="text-[10px] text-status-yellow">Below target by {s.target - s.count}</span>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-});
-FunnelHealthBar.displayName = 'FunnelHealthBar';
 
 // ===== FUNNEL GROUP SECTION =====
 const FunnelGroupSection = memo(function FunnelGroupSection({
