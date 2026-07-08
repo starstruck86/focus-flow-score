@@ -1519,6 +1519,35 @@ export default function Coach() {
                   </div>
                 )}
 
+                {archivedTranscripts.length > 0 && (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowArchived(v => !v)}
+                      className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                    >
+                      {showArchived ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      Archived ({archivedTranscripts.length})
+                    </button>
+                    {showArchived && (
+                      <div className="mt-2 space-y-1 border-l-2 border-border/50 pl-2">
+                        <p className="text-[10px] text-muted-foreground italic">
+                          Prior-role transcripts; excluded from Ready-to-Grade by default.
+                        </p>
+                        {archivedTranscripts.map(t => (
+                          <div key={t.id} className="text-[11px] py-1">
+                            <p className="truncate font-medium">{t.title || 'Untitled'}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {format(parseISO(t.call_date), 'MMM d, yyyy')}
+                              {t.call_type ? ` · ${t.call_type}` : ''}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {ungraded.length === 0 && !transcripts?.length && (
                   <div className="text-center py-12 text-muted-foreground">
                     <Mic className="h-10 w-10 mx-auto mb-3 opacity-40" />
