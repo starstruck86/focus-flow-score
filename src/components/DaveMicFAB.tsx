@@ -17,6 +17,11 @@ interface Props {
 export function DaveMicFAB({ onTap, isLoading, isActive }: Props) {
   if (isActive) return null;
 
+  // Stacked above the GlobalFAB (h-12 + 12px gap ≈ 60px) so the two floating
+  // controls never overlap each other or nav chevrons.
+  const stackedBottom =
+    'bottom-[calc(var(--shell-fab-clearance)*1px+env(safe-area-inset-bottom)+64px)]';
+
   return (
     <button
       onClick={onTap}
@@ -25,7 +30,7 @@ export function DaveMicFAB({ onTap, isLoading, isActive }: Props) {
       className={cn(
         'fixed z-50 flex items-center justify-center rounded-full shadow-lg',
         'h-14 w-14',
-        `right-4 ${SHELL.fab.bottom}`,
+        `right-4 ${stackedBottom}`,
         'transition-colors duration-150',
         isLoading
           ? 'bg-muted text-muted-foreground cursor-wait'
