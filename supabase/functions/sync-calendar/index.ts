@@ -672,14 +672,25 @@ Deno.serve(async (req) => {
     console.log('Calendar sync window start:', syncStart.toISOString());
     console.log('Expanded events from local day start:', syncedEvents.length);
 
-    await supabase.from('calendar_events').delete().eq('user_id', userId);
-
+    // Upsert-then-prune: never delete before writing. Only prune rows whose external_id
+    // is not present in the freshly-synced set, so a partial upsert failure never
+    // leaves the calendar empty.
     for (let i = 0; i < syncedEvents.length; i += 100) {
       const chunk = syncedEvents.slice(i, i + 100);
       const { error } = await supabase
         .from('calendar_events')
         .upsert(chunk, { onConflict: 'external_id' });
       if (error) throw error;
+    }
+
+    const keepIds = syncedEvents.map(e => e.external_id);
+    if (keepIds.length > 0) {
+      const { error: pruneErr } = await supabase
+        .from('calendar_events')
+        .delete()
+        .eq('user_id', userId)
+        .not('external_id', 'in', `(${keepIds.map(id => `"${id.replace(/"/g, '\\"')}"`).join(',')})`);
+      if (pruneErr) console.warn('[sync-calendar] prune failed (non-fatal):', pruneErr.message);
     }
 
     await logRun('success', { synced: syncedEvents.length, window_start: syncStart.toISOString() });
