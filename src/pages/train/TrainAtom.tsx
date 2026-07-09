@@ -292,7 +292,10 @@ export default function TrainAtom() {
         {data && beat === 'feedback' && result && (
           <Card className="p-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="text-3xl font-bold">{result.score}</div>
+              <div className="flex items-center gap-3">
+                <div className="text-3xl font-bold">{result.score}</div>
+                <DrillModeBadge mode={drillMode} />
+              </div>
               <div className="text-xs text-muted-foreground text-right">
                 Sub-level progress: {Math.round(result.progress * 100)}% · {result.reps} reps
               </div>
