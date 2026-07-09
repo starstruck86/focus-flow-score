@@ -557,9 +557,7 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
         });
       };
 
-      // Only sync Branch accounts (motion='both') — never write legacy non-Branch accounts to DB
-      const branchOnly = (accts: Account[]) => accts.filter(a => !a.motion || a.motion === 'both');
-      diffAndSync('accounts', branchOnly(prev.accounts), branchOnly(state.accounts), storeAccountToDb, 'accounts');
+      diffAndSync('accounts', prev.accounts, state.accounts, storeAccountToDb, 'accounts');
       diffAndSync('opportunities', prev.opportunities, state.opportunities, storeOpportunityToDb, 'opportunities');
       diffAndSync('renewals', prev.renewals, state.renewals, storeRenewalToDb, 'renewals');
       diffAndSync('contacts', prev.contacts, state.contacts, storeContactToDb, 'contacts');
