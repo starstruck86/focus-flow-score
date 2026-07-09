@@ -3306,6 +3306,8 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
+    const internalSecretHeader = req.headers.get("x-internal-secret");
+    const internalSecret = Deno.env.get("INTERNAL_FUNCTION_SECRET");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -3314,17 +3316,26 @@ Deno.serve(async (req) => {
     let supabase: ReturnType<typeof createClient>;
 
     // Try user auth first
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader! } },
-    });
-    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    let user: { id: string } | null = null;
+    if (authHeader?.startsWith("Bearer ")) {
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data } = await userClient.auth.getUser();
+      user = data?.user ?? null;
+      if (user) {
+        userId = user.id;
+        supabase = userClient as any;
+      }
+    }
 
-    if (user) {
-      // Authenticated user call
-      userId = user.id;
-      supabase = userClient as any;
-    } else {
-      // Fallback: service-role / internal call — use admin client
+    if (!user) {
+      // Internal service-role path requires the shared secret header
+      if (!internalSecret || internalSecretHeader !== internalSecret) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       supabase = createClient(supabaseUrl, serviceRoleKey);
       const body = await req.clone().json().catch(() => ({}));
       if (body.user_id) {
