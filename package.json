@@ -11,7 +11,9 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "analyze": "ANALYZE=true vite build"
+
   },
   "dependencies": {
     "@elevenlabs/react": "^0.14.3",
