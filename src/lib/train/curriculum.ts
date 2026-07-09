@@ -145,6 +145,7 @@ export async function getConceptWithItems(
     model_line_plain: (conceptData.model_line_plain as string | null) ?? null,
     notes: (conceptData.notes as string | null) ?? null,
 
+    lesson_md: ((conceptData as any).lesson_md as string | null) ?? null,
   };
 
   const links = (linkData as AnyRow[]) ?? [];
