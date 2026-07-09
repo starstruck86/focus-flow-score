@@ -57,6 +57,7 @@ function hydrateKi(
     scenario: ref.scenario ?? null,
     drillRubric: ref.drillRubric ?? null,
     drillTeachScript: ref.drillTeachScript ?? null,
+    drillModelAnswer: ref.drillModelAnswer ?? null,
   };
 }
 
