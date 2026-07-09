@@ -732,8 +732,12 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                     {expandedAccountId === account.id && (
                       <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
                         <TableCell colSpan={99} className="pt-0 pb-3">
-                          <div className="space-y-3">
+                          <div className="space-y-4">
+                            {/* Truth-model command center */}
+                            <AccountRoom accountId={account.id} compact />
+                            {/* Footprint evidence (repurposed ICP detection surfaces) */}
                             <SignalDetailPanel account={account} />
+                            {/* Stakeholders (existing per-account) */}
                             <AccountContactsField
                               accountId={account.id}
                               contacts={account.accountContacts || []}
