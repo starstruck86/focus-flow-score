@@ -144,6 +144,9 @@ import { useUndoDelete } from '@/hooks/useUndoDelete';
 import { emitSaveStatus } from '@/components/SaveIndicator';
 import { TouchLogButtons } from '@/components/TouchLogButtons';
 import { LifecycleTierBadge, IcpScorePill, TriggeredBadge, EnrichButton, SignalDetailPanel } from '@/components/LifecycleIntelligence';
+import { AccountRoom } from '@/components/account-room/AccountRoom';
+import { GapScorePill } from '@/components/account-room/GapScorePill';
+import { useAccountGapScores } from '@/hooks/useAccountGapScores';
 import { useAccountEnrichment } from '@/hooks/useAccountEnrichment';
 // Bulk enrichment panel retired from Territory (W3). Hook still available for programmatic use.
 import { useBulkEnrichment } from '@/hooks/useBulkEnrichment';
