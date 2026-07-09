@@ -250,7 +250,7 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
                   onClick={() => handleStartTimer('prospecting')}
                 >
                   <Timer className="h-4 w-4 mr-2" />
-                  Focus: Prospecting
+                  Focus: Account Research
                 </Button>
 
                 <Button

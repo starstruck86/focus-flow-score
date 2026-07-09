@@ -76,7 +76,7 @@ export const PAGE_SUGGESTED_QUESTIONS: Record<string, { text: string; mode: Copi
   coach: [
     { text: "Where is my product_knowledge score weakest?", mode: "quick" },
     { text: "What Branch play did I underuse in recent role plays?", mode: "quick" },
-    { text: "Which KIs should I drill most before July 13?", mode: "resource-qa" },
+    { text: "Which KIs should I drill most before my next QBR?", mode: "resource-qa" },
     { text: "What's my biggest coaching gap from the role plays?", mode: "quick" },
     { text: "How do I improve my discovery score?", mode: "quick" },
     { text: "What would a top Branch expansion AE do differently?", mode: "resource-qa" },

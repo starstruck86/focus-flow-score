@@ -265,7 +265,7 @@ export default function Skills() {
             {(branchReadiness?.total_branch_kis ?? 0) === 0 && (
               <div className="mt-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
                 <p className="text-xs text-amber-700 dark:text-amber-400">
-                  Branch.io intelligence is your moat. Ingest battle cards, case studies, and persona guides before July 1.
+                  Branch.io intelligence is your moat. Ingest battle cards, case studies, and persona guides to build coverage.
                 </p>
               </div>
             )}

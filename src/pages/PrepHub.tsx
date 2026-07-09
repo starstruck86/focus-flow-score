@@ -55,7 +55,7 @@ export default function PrepHub() {
               </div>
               <div>
                 <p className="text-sm font-semibold">Branch.io Intelligence</p>
-                <p className="text-xs text-muted-foreground">Ingest these before July to build your competitive edge</p>
+                <p className="text-xs text-muted-foreground">Ingest these to sharpen your expansion pitch</p>
               </div>
             </div>
             <div className="space-y-1.5">
