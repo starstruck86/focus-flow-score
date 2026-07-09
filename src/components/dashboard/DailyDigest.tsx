@@ -13,6 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useDailyDigest, type DigestItem } from '@/hooks/useDailyDigest';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { format, subDays } from 'date-fns';
 
 const categoryConfig: Record<string, { icon: typeof Briefcase; label: string; borderColor: string; bgColor: string; textColor: string }> = {
