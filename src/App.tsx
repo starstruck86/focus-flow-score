@@ -20,26 +20,6 @@ import { DurableJobRehydrator } from "@/components/jobs/DurableJobRehydrator";
 import '@/lib/pendingWriteSync'; // Register online listener for pending write queue
 import { SystemHealthBadge } from '@/components/SystemHealthBadge';
 // Dashboard removed from routing (W5): /dashboard redirects to /today.
-import Today from "./pages/Today";
-import WeeklyOutreach from "./pages/WeeklyOutreach";
-import Renewals from "./pages/Renewals";
-import Tasks from "./pages/Tasks";
-import RecurringTasks from "./pages/RecurringTasks";
-import Trends from "./pages/Trends";
-import Quota from "./pages/Quota";
-import Deals from "./pages/Deals";
-import Settings from "./pages/Settings";
-import AccountDetail from "./pages/AccountDetail";
-import OpportunityDetail from "./pages/OpportunityDetail";
-import Auth from "./pages/Auth";
-import AuthCallback from "./pages/AuthCallback";
-import Coach from "./pages/Coach";
-import PrepHub from "./pages/PrepHub";
-import Brief from "./pages/Brief";
-import BatchRegrade from "./pages/BatchRegrade";
-import Progress from "./pages/Progress";
-import NotFound from "./pages/NotFound";
-
 import { lazy, Suspense } from "react";
 
 const LazyFallback = ({ text = "Loading…" }: { text?: string }) => (
@@ -47,6 +27,27 @@ const LazyFallback = ({ text = "Loading…" }: { text?: string }) => (
     <p className="text-muted-foreground">{text}</p>
   </div>
 );
+
+const Today = lazy(() => import("./pages/Today"));
+const WeeklyOutreach = lazy(() => import("./pages/WeeklyOutreach"));
+const Renewals = lazy(() => import("./pages/Renewals"));
+const Tasks = lazy(() => import("./pages/Tasks"));
+const RecurringTasks = lazy(() => import("./pages/RecurringTasks"));
+const Trends = lazy(() => import("./pages/Trends"));
+const Quota = lazy(() => import("./pages/Quota"));
+const Deals = lazy(() => import("./pages/Deals"));
+const Settings = lazy(() => import("./pages/Settings"));
+const AccountDetail = lazy(() => import("./pages/AccountDetail"));
+const OpportunityDetail = lazy(() => import("./pages/OpportunityDetail"));
+const Auth = lazy(() => import("./pages/Auth"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
+const Coach = lazy(() => import("./pages/Coach"));
+const PrepHub = lazy(() => import("./pages/PrepHub"));
+const Brief = lazy(() => import("./pages/Brief"));
+const BatchRegrade = lazy(() => import("./pages/BatchRegrade"));
+const Progress = lazy(() => import("./pages/Progress"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+
 
 const Diagnostics = lazy(() => import("./pages/Diagnostics"));
 const Strategy = lazy(() => import("./pages/Strategy"));
