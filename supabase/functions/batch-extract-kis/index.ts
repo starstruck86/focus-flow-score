@@ -21,11 +21,13 @@
  *   After max attempts: marked 'extraction_requires_review', not terminal 'failed'
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 // ═══════════════════════════════════════════
 // Constants
 // ═══════════════════════════════════════════
 
+let MODEL_NAME = 'google/gemini-2.5-flash';
 const LESSON_TRANSCRIPT_MARKER = '--- Video Transcript ---';
 const VALID_CHAPTERS = new Set([
   'cold_calling', 'discovery', 'objection_handling', 'negotiation', 'competitors',
