@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { requireUser } from "../_shared/requireUser.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,6 +12,9 @@ serve(async (req) => {
   }
 
   try {
+    const auth = await requireUser(req, corsHeaders);
+    if (!auth.ok) return auth.response;
+
     const { text, existingAccounts, existingOpportunities, existingContacts } = await req.json();
 
     if (!text || typeof text !== 'string') {

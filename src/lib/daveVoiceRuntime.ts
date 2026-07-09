@@ -250,6 +250,9 @@ async function fetchTtsWithRetry(
       const timeoutId = setTimeout(() => attemptAbort.abort(), TTS_FETCH_TIMEOUT_MS);
       let response: Response;
       try {
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data: { session } } = await supabase.auth.getSession();
+        const authToken = session?.access_token ?? config.supabaseAnonKey;
         response = await fetch(
           `${config.supabaseUrl}/functions/v1/elevenlabs-tts-stream`,
           {
@@ -257,7 +260,7 @@ async function fetchTtsWithRetry(
             headers: {
               'Content-Type': 'application/json',
               apikey: config.supabaseAnonKey,
-              Authorization: `Bearer ${config.supabaseAnonKey}`,
+              Authorization: `Bearer ${authToken}`,
             },
             body: JSON.stringify(body),
             signal: attemptAbort.signal,

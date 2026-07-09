@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireUser } from "../_shared/requireUser.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,6 +14,10 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const auth = await requireUser(req, corsHeaders);
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
+
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       return new Response(
@@ -29,6 +34,33 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Restrict image URLs to same-project Supabase Storage
+    const supabaseUrlEnv = Deno.env.get('SUPABASE_URL')!;
+    const badUrl = imageUrls.find((u: unknown) => typeof u !== 'string' || !(u as string).startsWith(supabaseUrlEnv + '/storage/'));
+    if (badUrl) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Image URLs must be Supabase Storage URLs' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Ownership check when accountId provided
+    if (accountId) {
+      const { data: owned, error: ownErr } = await auth.supabaseUser
+        .from('accounts')
+        .select('id')
+        .eq('id', accountId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (ownErr || !owned) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
 
     console.log(`Parsing ${imageUrls.length} screenshots for account: ${accountName}`);
 
@@ -142,9 +174,7 @@ Combine data from ALL screenshots into a single unified result. If the same fiel
     // Write to DB if accountId provided
     if (accountId) {
       try {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-        const supabase = createClient(supabaseUrl, supabaseKey);
+        const supabase = auth.supabaseUser;
 
         const updates: Record<string, any> = {
           mar_tech: marTechString,
@@ -167,6 +197,8 @@ Combine data from ALL screenshots into a single unified result. If the same fiel
           .from('accounts')
           .select('enrichment_evidence, enrichment_source_summary')
           .eq('id', accountId)
+          .eq('user_id', userId)
+          .single();
           .single();
 
         const existingEvidence = (existing?.enrichment_evidence as Record<string, string>) || {};
@@ -206,7 +238,8 @@ Combine data from ALL screenshots into a single unified result. If the same fiel
         const { error: dbError } = await supabase
           .from('accounts')
           .update(updates)
-          .eq('id', accountId);
+          .eq('id', accountId)
+          .eq('user_id', userId);
 
         if (dbError) console.error('DB write error:', dbError);
         else console.log('Screenshot enrichment persisted for', accountId);

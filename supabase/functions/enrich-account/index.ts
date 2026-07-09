@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireUser } from "../_shared/requireUser.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -552,7 +553,27 @@ Deno.serve(async (req) => {
   const traceId = req.headers.get('x-trace-id') || 'no-trace';
 
   try {
+    const auth = await requireUser(req, corsHeaders);
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
+
     const { url, accountName, accountId, industry } = await req.json();
+
+    // Ownership check when accountId provided
+    if (accountId) {
+      const { data: owned, error: ownErr } = await auth.supabaseUser
+        .from('accounts')
+        .select('id')
+        .eq('id', accountId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (ownErr || !owned) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     // Auto-discover website if not provided
     let formattedUrl = (url || '').trim();
@@ -681,9 +702,7 @@ Deno.serve(async (req) => {
     // Write to DB
     if (accountId) {
       try {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-        const supabase = createClient(supabaseUrl, supabaseKey);
+        const supabase = auth.supabaseUser;
 
         const evidence = {
           direct_ecommerce: signals.direct_ecommerce_details || '',
@@ -730,7 +749,7 @@ Deno.serve(async (req) => {
 
         if (discoveredUrl) updatePayload.website = discoveredUrl;
 
-        const { error: dbError } = await supabase.from('accounts').update(updatePayload).eq('id', accountId);
+        const { error: dbError } = await supabase.from('accounts').update(updatePayload).eq('id', accountId).eq('user_id', userId);
         if (dbError) console.error('DB write error:', dbError);
         else console.log('Enrichment persisted for', accountId, 'via', source);
       } catch (dbErr) {

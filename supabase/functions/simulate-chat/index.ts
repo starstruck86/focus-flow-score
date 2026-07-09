@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { requireUser } from '../_shared/requireUser.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
 
@@ -26,6 +27,9 @@ serve(async (req) => {
   }
 
   try {
+    const auth = await requireUser(req, corsHeaders);
+    if (!auth.ok) return auth.response;
+
     const body = await req.json();
     const { messages, system, isGradeMode, accountContext } = body;
 

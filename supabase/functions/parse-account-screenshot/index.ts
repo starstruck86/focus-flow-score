@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireUser } from "../_shared/requireUser.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,6 +14,9 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const auth = await requireUser(req, corsHeaders);
+    if (!auth.ok) return auth.response;
+
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       return new Response(
