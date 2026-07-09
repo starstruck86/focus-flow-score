@@ -2518,6 +2518,8 @@ export type Database = {
           drill_prompt: string | null
           exemplar_ki_id: string | null
           gate_elite: string | null
+          lesson_authored_at: string | null
+          lesson_md: string | null
           model_line_plain: string | null
           notes: string | null
           order_in_sublevel: number
@@ -2538,6 +2540,8 @@ export type Database = {
           drill_prompt?: string | null
           exemplar_ki_id?: string | null
           gate_elite?: string | null
+          lesson_authored_at?: string | null
+          lesson_md?: string | null
           model_line_plain?: string | null
           notes?: string | null
           order_in_sublevel: number
@@ -2558,6 +2562,8 @@ export type Database = {
           drill_prompt?: string | null
           exemplar_ki_id?: string | null
           gate_elite?: string | null
+          lesson_authored_at?: string | null
+          lesson_md?: string | null
           model_line_plain?: string | null
           notes?: string | null
           order_in_sublevel?: number

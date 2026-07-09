@@ -81,12 +81,19 @@ export function RubricChecklist({ rubric, results, title, compact }: Props) {
                 )}>
                   {line.c}
                 </span>
-                {line.must && (
+                {line.must ? (
                   <Badge
                     variant="outline"
                     className="ml-1.5 text-[9px] uppercase tracking-wider border-amber-500/40 text-amber-600 dark:text-amber-400 px-1 py-0"
                   >
-                    must
+                    required
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="ml-1.5 text-[9px] uppercase tracking-wider border-muted-foreground/30 text-muted-foreground px-1 py-0"
+                  >
+                    strengthens
                   </Badge>
                 )}
                 {ev?.note && (
