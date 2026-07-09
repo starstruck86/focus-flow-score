@@ -27,10 +27,10 @@ const SystemHealthBadge = lazy(() =>
 );
 
 type IdleCallbackHandle = number;
-interface IdleWindow extends Window {
+type IdleWindow = Window & {
   requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => IdleCallbackHandle;
   cancelIdleCallback?: (handle: IdleCallbackHandle) => void;
-}
+};
 
 export function DeferredStartupTasks() {
   const { user } = useAuth();
