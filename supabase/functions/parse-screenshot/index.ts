@@ -14,6 +14,10 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const auth = await requireUser(req, corsHeaders);
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
+
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       return new Response(
@@ -23,6 +27,39 @@ Deno.serve(async (req) => {
     }
 
     const { imageUrls, accountId, accountName } = await req.json();
+
+    if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'No images provided' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Restrict image URLs to same-project Supabase Storage
+    const supabaseUrlEnv = Deno.env.get('SUPABASE_URL')!;
+    const badUrl = imageUrls.find((u: unknown) => typeof u !== 'string' || !(u as string).startsWith(supabaseUrlEnv + '/storage/'));
+    if (badUrl) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Image URLs must be Supabase Storage URLs' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Ownership check when accountId provided
+    if (accountId) {
+      const { data: owned, error: ownErr } = await auth.supabaseUser
+        .from('accounts')
+        .select('id')
+        .eq('id', accountId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (ownErr || !owned) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
       return new Response(
