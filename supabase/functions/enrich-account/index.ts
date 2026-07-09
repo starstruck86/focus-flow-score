@@ -749,7 +749,7 @@ Deno.serve(async (req) => {
 
         if (discoveredUrl) updatePayload.website = discoveredUrl;
 
-        const { error: dbError } = await supabase.from('accounts').update(updatePayload).eq('id', accountId);
+        const { error: dbError } = await supabase.from('accounts').update(updatePayload).eq('id', accountId).eq('user_id', userId);
         if (dbError) console.error('DB write error:', dbError);
         else console.log('Enrichment persisted for', accountId, 'via', source);
       } catch (dbErr) {
