@@ -30,6 +30,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useAccountRoom, type PovRow, type RiskRow, type SignalRow } from '@/hooks/useAccountRoom';
 import { GapScorePill } from './GapScorePill';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 interface AccountRoomProps {
   accountId: string;
@@ -215,7 +216,7 @@ function SignalCard({ row }: { row: SignalRow }) {
   );
 }
 
-export function AccountRoom({ accountId, compact = false }: AccountRoomProps) {
+function AccountRoomContent({ accountId, compact = false }: AccountRoomProps) {
   const navigate = useNavigate();
   const {
     loading,
@@ -402,5 +403,13 @@ export function AccountRoom({ accountId, compact = false }: AccountRoomProps) {
         </div>
       )}
     </div>
+  );
+}
+
+export function AccountRoom(props: AccountRoomProps) {
+  return (
+    <ErrorBoundary label={`Account Room:${props.accountId}`}>
+      <AccountRoomContent {...props} />
+    </ErrorBoundary>
   );
 }

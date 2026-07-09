@@ -9,6 +9,7 @@ import { LoadingState, EmptyState, ErrorState } from '@/components/StateComponen
 import { GapScorePill } from '@/components/account-room/GapScorePill';
 import { useAccountGapScores } from '@/hooks/useAccountGapScores';
 import { useVerticalDetail } from '@/hooks/useVerticalDetail';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 function CalloutBlock({ tone = 'primary', children }: { tone?: 'primary' | 'amber'; children: React.ReactNode }) {
   const cls =
@@ -90,46 +91,48 @@ export default function VerticalDetail() {
 
             {/* Three Structural Forces */}
             {data.structural_forces.length > 0 && (
-              <Section title="Three Structural Forces">
-                <div className="space-y-3">
-                  {data.structural_forces.map((f, idx) => (
-                    <Card key={idx} className="p-4 space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <h3 className="text-sm font-semibold text-foreground">{f.name}</h3>
-                        {f.class && (
-                          <Badge variant="outline" className="shrink-0 text-[10px]">
-                            {f.class}
-                          </Badge>
+              <ErrorBoundary label={`VerticalDetail:structural_forces:${id ?? 'unknown'}`}>
+                <Section title="Three Structural Forces">
+                  <div className="space-y-3">
+                    {data.structural_forces.map((f, idx) => (
+                      <Card key={idx} className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="text-sm font-semibold text-foreground">{f.name}</h3>
+                          {f.class && (
+                            <Badge variant="outline" className="shrink-0 text-[10px]">
+                              {f.class}
+                            </Badge>
+                          )}
+                        </div>
+                        {f.evidence && (
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                              Evidence
+                            </p>
+                            <p className="text-sm text-foreground leading-relaxed">{f.evidence}</p>
+                          </div>
                         )}
-                      </div>
-                      {f.evidence && (
-                        <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                            Evidence
-                          </p>
-                          <p className="text-sm text-foreground leading-relaxed">{f.evidence}</p>
-                        </div>
-                      )}
-                      {f.mechanism && (
-                        <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                            Mechanism
-                          </p>
-                          <p className="text-sm text-muted-foreground leading-relaxed">{f.mechanism}</p>
-                        </div>
-                      )}
-                      {f.so_what && (
-                        <CalloutBlock tone="amber">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-status-yellow mb-1">
-                            So What
-                          </p>
-                          <p className="text-sm text-foreground leading-relaxed">{f.so_what}</p>
-                        </CalloutBlock>
-                      )}
-                    </Card>
-                  ))}
-                </div>
-              </Section>
+                        {f.mechanism && (
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                              Mechanism
+                            </p>
+                            <p className="text-sm text-muted-foreground leading-relaxed">{f.mechanism}</p>
+                          </div>
+                        )}
+                        {f.so_what && (
+                          <CalloutBlock tone="amber">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-status-yellow mb-1">
+                              So What
+                            </p>
+                            <p className="text-sm text-foreground leading-relaxed">{f.so_what}</p>
+                          </CalloutBlock>
+                        )}
+                      </Card>
+                    ))}
+                  </div>
+                </Section>
+              </ErrorBoundary>
             )}
 
             {/* Cross-Account Map */}

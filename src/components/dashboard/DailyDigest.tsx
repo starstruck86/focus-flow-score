@@ -13,6 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useDailyDigest, type DigestItem } from '@/hooks/useDailyDigest';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { format, subDays } from 'date-fns';
 
 const categoryConfig: Record<string, { icon: typeof Briefcase; label: string; borderColor: string; bgColor: string; textColor: string }> = {
@@ -214,36 +215,38 @@ export function DailyDigest() {
             )}
           </div>
         ) : (
-          <ScrollArea className="max-h-[400px]">
-            <div className="space-y-2 pr-3">
-              {actionableItems.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-primary uppercase tracking-wide">
-                    <AlertTriangle className="h-3 w-3" />
-                    Actionable ({actionableItems.length})
-                  </div>
-                  {actionableItems.map(item => (
-                    <DigestItemCard key={item.id} item={item} onMarkRead={markRead} />
-                  ))}
-                </div>
-              )}
-              {regularItems.length > 0 && (
-                <div className="space-y-2">
-                  {actionableItems.length > 0 && (
-                    <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-2">
-                      Other Updates ({regularItems.length})
+          <ErrorBoundary label="DailyDigest:items">
+            <ScrollArea className="max-h-[400px]">
+              <div className="space-y-2 pr-3">
+                {actionableItems.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-primary uppercase tracking-wide">
+                      <AlertTriangle className="h-3 w-3" />
+                      Actionable ({actionableItems.length})
                     </div>
-                  )}
-                  {regularItems.map(item => (
-                    <DigestItemCard key={item.id} item={item} onMarkRead={markRead} />
-                  ))}
-                </div>
-              )}
-              <p className="text-[10px] text-muted-foreground text-center pt-2 pb-1">
-                {format(new Date(selectedDate), 'EEEE, MMMM d')} • {items.length} update{items.length !== 1 ? 's' : ''} across {new Set(items.map(i => i.accountName)).size} accounts
-              </p>
-            </div>
-          </ScrollArea>
+                    {actionableItems.map(item => (
+                      <DigestItemCard key={item.id} item={item} onMarkRead={markRead} />
+                    ))}
+                  </div>
+                )}
+                {regularItems.length > 0 && (
+                  <div className="space-y-2">
+                    {actionableItems.length > 0 && (
+                      <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-2">
+                        Other Updates ({regularItems.length})
+                      </div>
+                    )}
+                    {regularItems.map(item => (
+                      <DigestItemCard key={item.id} item={item} onMarkRead={markRead} />
+                    ))}
+                  </div>
+                )}
+                <p className="text-[10px] text-muted-foreground text-center pt-2 pb-1">
+                  {format(new Date(selectedDate), 'EEEE, MMMM d')} • {items.length} update{items.length !== 1 ? 's' : ''} across {new Set(items.map(i => i.accountName)).size} accounts
+                </p>
+              </div>
+            </ScrollArea>
+          </ErrorBoundary>
         )}
       </CardContent>
     </Card>
