@@ -185,7 +185,7 @@ const App = () => (
                   <Route path="/regrade" element={<ProtectedPage routeName="Batch Regrade"><BatchRegrade /></ProtectedPage>} />
                   <Route path="/prep" element={<ProtectedPage routeName="Sales Brain OS"><PrepHub /></ProtectedPage>} />
                   <Route path="/settings" element={<ProtectedPage routeName="Settings"><Settings /></ProtectedPage>} />
-                  <Route path="/settings/legacy" element={<ProtectedPage routeName="Settings (legacy)"><Suspense fallback={<LazyFallback text="Loading legacy settings…" />}><SettingsLegacy /></Suspense></ProtectedPage>} />
+                  {/* /settings/legacy route removed (W5) */}
                   <Route path="/settings/territory" element={<ProtectedPage routeName="Territory Setup"><Suspense fallback={<LazyFallback />}><TerritorySetup /></Suspense></ProtectedPage>} />
                   <Route path="/strategy" element={
                     <ProtectedPage routeName="Strategy">
