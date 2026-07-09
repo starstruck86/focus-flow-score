@@ -1,10 +1,21 @@
-import { useState } from 'react';
+/**
+ * SignalDigest — Digest tab card list (W1.5 v2).
+ *
+ * Card contract:
+ *  - Implications / so-what render as the PRIMARY (headline) content — never truncated.
+ *  - raw_text renders below as supporting evidence (line-clamped).
+ *  - Visible date = observed_at (fallback created_at).
+ *  - signal_class badge: window (amber) / specimen (yellow) / evergreen (muted).
+ *  - Source chip: source_label → source_url.
+ *  - Actions: Prep (Account Strategy), View account, Archive (session-local).
+ */
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format, subDays } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ExternalLink, Archive as ArchiveIcon, ArrowRight, Building2 } from 'lucide-react';
 
 const SIGNAL_COLORS: Record<string, string> = {
   competitive: 'bg-red-500/15 text-red-600',
@@ -14,11 +25,45 @@ const SIGNAL_COLORS: Record<string, string> = {
   strategic: 'bg-amber-500/15 text-amber-600',
 };
 
+// Same tone system as the Account Room cards.
+const CLASS_STYLES: Record<string, { label: string; className: string }> = {
+  window: { label: 'Window', className: 'bg-amber-500/15 text-amber-600 border-amber-500/30' },
+  specimen: { label: 'Specimen', className: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30' },
+  evergreen: { label: 'Evergreen', className: 'bg-muted text-muted-foreground border-border' },
+};
+
+const ARCHIVE_KEY = 'signal-digest.archived.v1';
+
+function loadArchived(): Set<string> {
+  try {
+    const raw = sessionStorage.getItem(ARCHIVE_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function persistArchived(set: Set<string>) {
+  try {
+    sessionStorage.setItem(ARCHIVE_KEY, JSON.stringify(Array.from(set)));
+  } catch {
+    /* noop */
+  }
+}
+
+// Strip leftover bracket artifacts like [FYI], [source], [1] from display copy.
+function stripBrackets(text: string | null | undefined): string {
+  if (!text) return '';
+  return text.replace(/\[[^\]]{0,40}\]/g, '').replace(/\s{2,}/g, ' ').trim();
+}
+
 export function SignalDigest() {
   const navigate = useNavigate();
   const [signalSynthesis, setSignalSynthesis] = useState<string | null>(null);
   const [synthesizing, setSynthesizing] = useState(false);
+  const [archived, setArchived] = useState<Set<string>>(() => loadArchived());
 
+  useEffect(() => { persistArchived(archived); }, [archived]);
 
   const { data: signals } = useQuery({
     queryKey: ['signal-digest'],
@@ -26,16 +71,21 @@ export function SignalDigest() {
       const since = subDays(new Date(), 7).toISOString();
       const { data } = await (supabase as any)
         .from('account_signals')
-        .select('id, signal_type, raw_text, implications, created_at, linked_account_id, accounts(name, tier)')
+        .select('id, signal_type, signal_class, raw_text, implications, observed_at, created_at, source_label, source_url, linked_account_id, accounts(name, tier)')
         .gte('created_at', since)
-        .order('created_at', { ascending: false });
+        .order('observed_at', { ascending: false, nullsFirst: false });
       return (data ?? []) as any[];
     },
     staleTime: 60_000,
   });
 
+  const visibleSignals = useMemo(
+    () => (signals ?? []).filter((s) => !archived.has(s.id)),
+    [signals, archived],
+  );
+
   const synthesizeSignals = async () => {
-    if (!signals || signals.length === 0) return;
+    if (!visibleSignals || visibleSignals.length === 0) return;
     setSynthesizing(true);
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -46,11 +96,7 @@ export function SignalDigest() {
           max_tokens: 400,
           messages: [{
             role: 'user',
-            content: `You are analyzing territory signals for a Branch.io expansion AE.
-
-Signals: ${JSON.stringify(signals)}
-
-In 2-3 sentences, tell the AE what these signals mean for their territory this week and what they should do about them. Be specific about account names and actions. Plain text only, no markdown.`,
+            content: `You are analyzing territory signals for a Branch.io expansion AE.\n\nSignals: ${JSON.stringify(visibleSignals)}\n\nIn 2-3 sentences, tell the AE what these signals mean for their territory this week and what they should do about them. Be specific about account names and actions. Plain text only, no markdown.`,
           }],
         }),
       });
@@ -65,16 +111,18 @@ In 2-3 sentences, tell the AE what these signals mean for their territory this w
   };
 
   if (!signals) return <div className="text-center py-8 text-sm text-muted-foreground">Loading digest…</div>;
-  if (signals.length === 0)
+  if (visibleSignals.length === 0)
     return (
       <div className="text-center py-12 space-y-2">
-        <p className="text-sm text-muted-foreground">No signals logged in the last 7 days.</p>
-        <p className="text-xs text-muted-foreground">Paste signals in Signal Inbox to start building intelligence.</p>
+        <p className="text-sm text-muted-foreground">
+          {signals.length === 0 ? 'No signals logged in the last 7 days.' : 'All signals archived for this session.'}
+        </p>
+        <p className="text-xs text-muted-foreground">Paste signals in Signal Inbox to build intelligence.</p>
       </div>
     );
 
   const grouped: Record<string, { accountName: string; tier: string | null; accountId: string | null; signals: any[] }> = {};
-  signals.forEach((s) => {
+  visibleSignals.forEach((s) => {
     const id = s.linked_account_id ?? '__unlinked__';
     const acct = s.accounts;
     if (!grouped[id]) {
@@ -90,9 +138,15 @@ In 2-3 sentences, tell the AE what these signals mean for their territory this w
 
   const entries = Object.values(grouped).sort((a, b) => b.signals.length - a.signals.length);
   const typeCount: Record<string, number> = {};
-  signals.forEach((s) => {
-    typeCount[s.signal_type] = (typeCount[s.signal_type] ?? 0) + 1;
-  });
+  visibleSignals.forEach((s) => { typeCount[s.signal_type] = (typeCount[s.signal_type] ?? 0) + 1; });
+
+  const handleArchive = (id: string) => {
+    setArchived((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -103,10 +157,8 @@ In 2-3 sentences, tell the AE what these signals mean for their territory this w
           </p>
           <p className="text-xs leading-relaxed text-foreground">{signalSynthesis}</p>
         </div>
-      ) : signals.length > 0 && !synthesizing ? (
-        <button onClick={synthesizeSignals} className="text-xs text-primary">
-          Synthesize signals →
-        </button>
+      ) : visibleSignals.length > 0 && !synthesizing ? (
+        <button onClick={synthesizeSignals} className="text-xs text-primary">Synthesize signals →</button>
       ) : synthesizing ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3 w-3 animate-spin" /> Interpreting signals...
@@ -115,8 +167,7 @@ In 2-3 sentences, tell the AE what these signals mean for their territory this w
 
       <div className="flex flex-wrap gap-3 items-center text-[11px]">
         <span className="font-semibold text-muted-foreground">
-          Last 7 days: {signals.length} signal{signals.length !== 1 ? 's' : ''} across {entries.length} account
-          {entries.length !== 1 ? 's' : ''}
+          Last 7 days: {visibleSignals.length} signal{visibleSignals.length !== 1 ? 's' : ''} across {entries.length} account{entries.length !== 1 ? 's' : ''}
         </span>
         {Object.entries(typeCount).map(([type, count]) => (
           <span
@@ -142,15 +193,11 @@ In 2-3 sentences, tell the AE what these signals mean for their territory this w
                 <span
                   className={cn(
                     'text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0',
-                    group.tier === 'A'
-                      ? 'bg-green-500/15 text-green-600'
-                      : group.tier === 'B'
-                        ? 'bg-amber-500/15 text-amber-600'
-                        : 'bg-muted text-muted-foreground',
+                    group.tier === 'A' ? 'bg-green-500/15 text-green-600' :
+                    group.tier === 'B' ? 'bg-amber-500/15 text-amber-600' :
+                    'bg-muted text-muted-foreground',
                   )}
-                >
-                  {group.tier}
-                </span>
+                >{group.tier}</span>
               )}
               <h3 className="text-sm font-semibold">{group.accountName}</h3>
             </div>
@@ -159,25 +206,96 @@ In 2-3 sentences, tell the AE what these signals mean for their territory this w
             </span>
           </div>
           <div className="divide-y divide-border/30">
-            {group.signals.map((signal) => (
-              <div key={signal.id} className="px-4 py-2.5 space-y-1">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      'text-[10px] font-medium px-2 py-0.5 rounded-full',
-                      SIGNAL_COLORS[signal.signal_type] ?? 'bg-muted text-muted-foreground',
+            {group.signals.map((signal) => {
+              const cls = CLASS_STYLES[signal.signal_class as string] ?? null;
+              const dateSrc = signal.observed_at ?? signal.created_at;
+              const soWhat = stripBrackets(signal.implications);
+              const raw = stripBrackets(signal.raw_text);
+              return (
+                <div key={signal.id} className="px-4 py-3 space-y-2">
+                  {/* Meta row: type + class + date */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={cn('text-[10px] font-medium px-2 py-0.5 rounded-full', SIGNAL_COLORS[signal.signal_type] ?? 'bg-muted text-muted-foreground')}>
+                      {signal.signal_type}
+                    </span>
+                    {cls && (
+                      <span className={cn('text-[10px] font-medium px-2 py-0.5 rounded-full border', cls.className)}>
+                        {cls.label}
+                      </span>
                     )}
-                  >
-                    {signal.signal_type}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">{format(new Date(signal.created_at), 'MMM d')}</span>
+                    {dateSrc && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {format(new Date(dateSrc), 'MMM d')}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Primary content: the so-what — full text, never truncated */}
+                  {soWhat ? (
+                    <p className="text-sm font-medium text-foreground leading-snug">{soWhat}</p>
+                  ) : (
+                    <p className="text-sm font-medium text-muted-foreground italic leading-snug">
+                      No implications captured — add a so-what to make this signal actionable.
+                    </p>
+                  )}
+
+                  {/* Supporting raw text (truncatable) */}
+                  {raw && (
+                    <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-3">{raw}</p>
+                  )}
+
+                  {/* Source chip */}
+                  {signal.source_label && (
+                    signal.source_url ? (
+                      <a
+                        href={signal.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline"
+                      >
+                        {signal.source_label}
+                        <ExternalLink className="h-2.5 w-2.5" />
+                      </a>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                        {signal.source_label}
+                      </span>
+                    )
+                  )}
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1.5 pt-1">
+                    {group.accountId && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); navigate(`/strategy?account=${group.accountId}`); }}
+                          className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
+                        >
+                          <ArrowRight className="h-3 w-3" /> Prep
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); navigate(`/accounts/${group.accountId}`); }}
+                          className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-md bg-muted text-foreground hover:bg-muted/70 transition-colors"
+                        >
+                          <Building2 className="h-3 w-3" /> View account
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleArchive(signal.id); }}
+                      className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-md text-muted-foreground hover:bg-muted/50 transition-colors ml-auto"
+                      title="Archive for this session"
+                    >
+                      <ArchiveIcon className="h-3 w-3" /> Archive
+                    </button>
+                  </div>
                 </div>
-                <p className="text-xs text-foreground leading-relaxed line-clamp-3">{signal.raw_text}</p>
-                {signal.implications && (
-                  <p className="text-[10px] text-muted-foreground italic line-clamp-2">{signal.implications}</p>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ))}

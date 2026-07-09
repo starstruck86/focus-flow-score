@@ -19,7 +19,7 @@ import { SessionResumePrompt } from "@/components/SessionResumePrompt";
 import { DurableJobRehydrator } from "@/components/jobs/DurableJobRehydrator";
 import '@/lib/pendingWriteSync'; // Register online listener for pending write queue
 import { SystemHealthBadge } from '@/components/SystemHealthBadge';
-import Dashboard from "./pages/Dashboard";
+// Dashboard removed from routing (W5): /dashboard redirects to /today.
 import Today from "./pages/Today";
 import WeeklyOutreach from "./pages/WeeklyOutreach";
 import Renewals from "./pages/Renewals";
@@ -62,7 +62,7 @@ const DrillReview = lazy(() => import("./pages/DrillReview"));
 
 const DojoSession = lazy(() => import("./pages/DojoSession"));
 const DojoQA = lazy(() => import("./pages/DojoQA"));
-const DojoV6QA = lazy(() => import("./pages/DojoV6QA"));
+// DojoV6QA route removed (W5); component file preserved.
 const Sharpen = lazy(() => import("./pages/Sharpen"));
 const Grind = lazy(() => import("./pages/Grind"));
 const WeeklyReview = lazy(() => import("./pages/WeeklyReview"));
@@ -73,7 +73,7 @@ const SkillBuilderSession = lazy(() => import("./pages/SkillBuilderSession"));
 const SkillBuilderAudit = lazy(() => import("./pages/SkillBuilderAudit"));
 const ReliabilityQA = lazy(() => import("./pages/ReliabilityQA"));
 const ObservabilityDashboard = lazy(() => import("./pages/ObservabilityDashboard"));
-const SmokeTest = lazy(() => import("./pages/SmokeTest"));
+// SmokeTest route removed from routing (W5); component file preserved.
 const LifecycleReconciliation = lazy(() => import("./pages/LifecycleReconciliation"));
 const PhaseEvidenceRunner = lazy(() => import("./pages/PhaseEvidenceRunner"));
 const StrategyOpsPanel = lazy(() => import("./pages/StrategyOpsPanel"));
@@ -88,7 +88,7 @@ const KILibrary = lazy(() => import("./pages/KILibrary"));
 const Simulate = lazy(() => import("./pages/Simulate"));
 const Competitive = lazy(() => import("./pages/Competitive"));
 const Playbooks = lazy(() => import("./pages/Playbooks"));
-const SignalInbox = lazy(() => import("./pages/SignalInbox"));
+// SignalInbox route merged into Digest tab (W5); /signals → /outreach.
 const OrgTree = lazy(() => import("./pages/OrgTree"));
 const TrainHome = lazy(() => import("./pages/train/TrainHome"));
 const TrainSpoke = lazy(() => import("./pages/train/TrainSpoke"));
@@ -102,7 +102,7 @@ const FlashDeck = lazy(() => import("./pages/FlashDeck"));
 const Study = lazy(() => import("./pages/Study"));
 const Work = lazy(() => import("./pages/Work"));
 const TrainHub = lazy(() => import("./pages/TrainHub"));
-const SettingsLegacy = lazy(() => import("./pages/SettingsLegacy"));
+// SettingsLegacy route removed (W5); component file preserved.
 const NavUsage = lazy(() => import("./pages/NavUsage"));
 
 import { useLastSurface } from "@/hooks/useLastSurface";
@@ -168,7 +168,7 @@ const App = () => (
                   <Route path="/today" element={<ProtectedPage routeName="Today"><Today /></ProtectedPage>} />
                   <Route path="/work" element={<ProtectedPage routeName="Work"><Suspense fallback={<LazyFallback text="Loading Work…" />}><Work /></Suspense></ProtectedPage>} />
                   <Route path="/train-hub" element={<ProtectedPage routeName="Train"><Suspense fallback={<LazyFallback text="Loading Train…" />}><TrainHub /></Suspense></ProtectedPage>} />
-                  <Route path="/dashboard" element={<ProtectedPage routeName="Dashboard"><Dashboard /></ProtectedPage>} />
+                  <Route path="/dashboard" element={<Navigate to="/today" replace />} />
 
                   <Route path="/outreach" element={<ProtectedPage routeName="Outreach"><WeeklyOutreach /></ProtectedPage>} />
                   <Route path="/accounts/:id" element={<ProtectedPage routeName="Account Detail"><AccountDetail /></ProtectedPage>} />
@@ -185,7 +185,7 @@ const App = () => (
                   <Route path="/regrade" element={<ProtectedPage routeName="Batch Regrade"><BatchRegrade /></ProtectedPage>} />
                   <Route path="/prep" element={<ProtectedPage routeName="Sales Brain OS"><PrepHub /></ProtectedPage>} />
                   <Route path="/settings" element={<ProtectedPage routeName="Settings"><Settings /></ProtectedPage>} />
-                  <Route path="/settings/legacy" element={<ProtectedPage routeName="Settings (legacy)"><Suspense fallback={<LazyFallback text="Loading legacy settings…" />}><SettingsLegacy /></Suspense></ProtectedPage>} />
+                  {/* /settings/legacy route removed (W5) */}
                   <Route path="/settings/territory" element={<ProtectedPage routeName="Territory Setup"><Suspense fallback={<LazyFallback />}><TerritorySetup /></Suspense></ProtectedPage>} />
                   <Route path="/strategy" element={
                     <ProtectedPage routeName="Strategy">
@@ -286,13 +286,7 @@ const App = () => (
                       </Suspense>
                     </ProtectedRoute>
                   } />
-                  <Route path="/dojo/v6-qa" element={
-                    <ProtectedRoute>
-                      <Suspense fallback={<LazyFallback />}>
-                        <DojoV6QA />
-                      </Suspense>
-                    </ProtectedRoute>
-                  } />
+                  {/* /dojo/v6-qa route removed (W5) */}
                   <Route path="/sharpen" element={
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback />}>
@@ -304,7 +298,7 @@ const App = () => (
                 <Route path="/simulate" element={<ProtectedPage routeName="Conversation Simulator"><Suspense fallback={<LazyFallback />}><Simulate /></Suspense></ProtectedPage>} />
                 <Route path="/competitive" element={<ProtectedPage routeName="Competitive Intel"><Suspense fallback={<LazyFallback />}><Competitive /></Suspense></ProtectedPage>} />
                 <Route path="/playbooks" element={<ProtectedPage routeName="Playbooks"><Suspense fallback={<LazyFallback />}><Playbooks /></Suspense></ProtectedPage>} />
-                <Route path="/signals" element={<ProtectedPage routeName="Signal Inbox"><Suspense fallback={<LazyFallback />}><SignalInbox /></Suspense></ProtectedPage>} />
+                <Route path="/signals" element={<Navigate to="/outreach" replace />} />
                 <Route path="/org-tree" element={<ProtectedPage routeName="Account Org Tree"><Suspense fallback={<LazyFallback />}><OrgTree /></Suspense></ProtectedPage>} />
                 <Route path="/train" element={<ProtectedPage routeName="Train · Home"><Suspense fallback={<LazyFallback />}><TrainHome /></Suspense></ProtectedPage>} />
                 <Route path="/train/:spoke" element={<ProtectedPage routeName="Train · Spoke"><Suspense fallback={<LazyFallback />}><TrainSpoke /></Suspense></ProtectedPage>} />
@@ -388,13 +382,7 @@ const App = () => (
                       </Suspense>
                     </ProtectedRoute>
                   } />
-                  <Route path="/smoke-test" element={
-                    <ProtectedRoute>
-                      <Suspense fallback={<LazyFallback />}>
-                        <SmokeTest />
-                      </Suspense>
-                    </ProtectedRoute>
-                  } />
+                  {/* /smoke-test route removed (W5) */}
                   <Route path="/admin/lifecycle-reconciliation" element={
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback text="Loading reconciliation…" />}>

@@ -8,7 +8,7 @@ type CopilotMode = 'quick' | 'meeting' | 'research' | 'coaching';
 // stay pointed at the current homes /strategy and /study until /work + /train-hub ship).
 const ROUTE_ALIASES: Record<string, string> = {
   today: '/today',
-  dashboard: '/dashboard',
+  dashboard: '/today',
   tasks: '/tasks',
   outreach: '/outreach',
   territory: '/outreach',

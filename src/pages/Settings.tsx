@@ -46,7 +46,7 @@ const ADMIN_ROUTES: { path: string; label: string; group: string }[] = [
   { path: '/admin/phase-evidence', label: 'Phase Evidence Runner', group: 'Ops' },
   { path: '/observability', label: 'Observability Dashboard', group: 'Ops' },
   { path: '/reliability', label: 'Reliability QA', group: 'Ops' },
-  { path: '/smoke-test', label: 'Smoke Test', group: 'Ops' },
+  // /smoke-test retired (W5)
   { path: '/admin/nav-usage', label: 'Nav Usage', group: 'Ops' },
 
   { path: '/verify-enrichment', label: 'Verify Enrichment', group: 'Knowledge' },
@@ -58,7 +58,7 @@ const ADMIN_ROUTES: { path: string; label: string; group: string }[] = [
   { path: '/learn/skill-builder-audit', label: 'Skill-Builder Audit', group: 'Knowledge' },
 
   { path: '/dojo/qa', label: 'Dojo QA', group: 'Dojo' },
-  { path: '/dojo/v6-qa', label: 'Dojo V6 QA', group: 'Dojo' },
+  // /dojo/v6-qa retired (W5)
 
   { path: '/strategy/debug', label: 'Strategy Debug', group: 'Strategy' },
   { path: '/strategy/control', label: 'Strategy Control Panel', group: 'Strategy' },
@@ -307,15 +307,7 @@ export default function Settings() {
             )}
           </Section>
 
-          {/* Advanced / legacy — preserves the old detailed settings page */}
-          <Section>
-            <Row
-              icon={<Wrench className="h-4 w-4" />}
-              title="Advanced / legacy tools"
-              hint="Imports, appearance, conversion benchmarks, knowledge export, Dave health"
-              to="/settings/legacy"
-            />
-          </Section>
+          {/* /settings/legacy retired (W5) */}
         </div>
       </div>
     </Layout>
