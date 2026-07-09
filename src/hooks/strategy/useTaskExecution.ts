@@ -128,7 +128,7 @@ export function useTaskExecution() {
     try {
       // Phase 3A SOP "SAFE BRIDGE" — when the user has enabled the
       // Discovery Prep SOP in Strategy Settings, attach the parsed
-      // contract under inputs.__sop so the orchestrator can run shadow
+      // contract under inputs._sop so the orchestrator can run shadow
       // input/output validation. The server NEVER injects this into
       // prompt builders in Phase 3A — it is observation only.
       let sopAttachment: Record<string, unknown> | null = null;
@@ -154,7 +154,7 @@ export function useTaskExecution() {
         sopAttachment = null;
       }
       const enrichedInputs = sopAttachment
-        ? { ...inputs, __sop: sopAttachment }
+        ? { ...inputs, _sop: sopAttachment }
         : inputs;
 
       // 1) Kick off the background job (returns immediately).

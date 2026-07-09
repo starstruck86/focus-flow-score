@@ -84,7 +84,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   
   // Determine states
   const today = new Date();
-  const isTodayEligible = config && holidays && ptoDays && overrides
+  const _isTodayEligible = config && holidays && ptoDays && overrides
     ? isEligibleDay(today, config, holidays, ptoDays, overrides)
     : false;
   

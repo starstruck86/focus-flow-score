@@ -2,18 +2,7 @@
  * Tests for resource quality validation, eligibility, lifecycle, and reconciliation.
  */
 import { describe, it, expect } from 'vitest';
-import {
-  validateResourceQuality,
-  assertCompletionContract,
-  determinePostEnrichmentStatus,
-  classifyFailureMode,
-  reconcileResource,
-  assertEnrichmentInvariants,
-  QUALITY_THRESHOLDS,
-  CURRENT_ENRICHMENT_VERSION,
-  CURRENT_VALIDATION_VERSION,
-  type ResourceForValidation,
-} from '@/lib/resourceQuality';
+import { validateResourceQuality, assertCompletionContract, determinePostEnrichmentStatus, classifyFailureMode, reconcileResource, assertEnrichmentInvariants, CURRENT_ENRICHMENT_VERSION, CURRENT_VALIDATION_VERSION, type ResourceForValidation } from '@/lib/resourceQuality';
 import {
   evaluateResourceEligibility,
   getEligibleResources,

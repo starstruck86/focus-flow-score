@@ -8,7 +8,6 @@
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 import type { KICatalogEntry } from '@/lib/dojo/v3/programmingEngine';
 import { SKILL_CURRICULA, type CurriculumLevel } from './learnSkillCurriculum';
-import { CHAPTER_PATTERN_MAP, ANCHOR_SKILL_MAP } from '@/lib/dojo/v3/kiCatalogBridge';
 
 // ── Group KIs by focusPattern ─────────────────────────────────────
 

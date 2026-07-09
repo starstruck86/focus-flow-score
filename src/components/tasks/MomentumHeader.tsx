@@ -52,7 +52,7 @@ export function MomentumHeader({ workstreamFilter }: { workstreamFilter: 'pg' | 
   ].filter(g => g.gap > 0).sort((a, b) => b.gap - a.gap).slice(0, 3) : [];
 
   const pointsColor = pointsToday >= 8 ? 'text-status-green' : pointsToday >= 5 ? 'text-status-yellow' : 'text-foreground';
-  const metCount = drivers.filter(d => d.target > 0 ? d.actual >= d.target : d.actual > 0).length;
+  const _metCount = drivers.filter(d => d.target > 0 ? d.actual >= d.target : d.actual > 0).length;
 
   return (
     <div className="rounded-lg border border-border bg-card mb-4">

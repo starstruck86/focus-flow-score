@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateSkillTrack, type SkillTrack, type SkillBlock } from '@/lib/learning/skillBuilderEngine';
-import { SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';
+import { type SkillFocus } from '@/lib/dojo/scenarios';
 import { FOCUS_PATTERN_LABELS } from '@/lib/dojo/focusPatterns';
 import {
   Loader2, BookOpen, Dumbbell, Brain, ChevronRight, CheckCircle2,
@@ -90,7 +90,7 @@ export default function SkillBuilderSession() {
   const [lastMicError, setLastMicError] = useState<string | null>(null);
   const { data: skillLevels } = useSkillLevels();
   const [lastInterruptSource, setLastInterruptSource] = useState<string | null>(null);
-  const [lastStaleSuppression, setLastStaleSuppression] = useState<string | null>(null);
+  const [lastStaleSuppression, _setLastStaleSuppression] = useState<string | null>(null);
   const [downgradeReason, setDowngradeReason] = useState<string | null>(null);
   const [dedupeBlocked, setDedupeBlocked] = useState(0);
 
@@ -584,7 +584,7 @@ function BlockRenderer({
   block,
   onAdvance,
   onStartRep,
-  onRepComplete,
+  onRepComplete: _onRepComplete,
   dave,
   isFromTraining,
 }: {

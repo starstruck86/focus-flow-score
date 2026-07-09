@@ -68,7 +68,7 @@ function addBullets(doc: jsPDF, items: string[], y: number): number {
   return y + 2;
 }
 
-export async function generateDiscoveryPdf(sections: any[], companyName: string): Promise<Blob> {
+export async function generateDiscoveryPdf(sections: any[], _companyName: string): Promise<Blob> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
   let y = 20;
 

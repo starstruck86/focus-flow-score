@@ -1,15 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  isDeepEnrichEligible,
-  isReenrichEligible,
-  getEligibleResources,
-  getEligiblePool,
-  selectBatch,
-  assertBatchEligibility,
-  getRecommendedAction,
-  getEnrichmentStatusLabel,
-  CURRENT_ENRICHMENT_VERSION,
-} from '@/lib/resourceEligibility';
+import { isDeepEnrichEligible, isReenrichEligible, getEligibleResources, selectBatch, assertBatchEligibility, getRecommendedAction, getEnrichmentStatusLabel, CURRENT_ENRICHMENT_VERSION } from '@/lib/resourceEligibility';
 import type { Resource } from '@/hooks/useResources';
 
 function makeResource(overrides: Partial<Resource> & { file_url?: string | null; enrichment_status?: string } = {}): Resource {

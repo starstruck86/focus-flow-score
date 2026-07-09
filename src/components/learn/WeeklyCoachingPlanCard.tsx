@@ -7,7 +7,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Calendar, CheckCircle2, Circle, Zap } from 'lucide-react';
-import { ANCHOR_LABELS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
+import { ANCHOR_LABELS } from '@/lib/dojo/v3/dayAnchors';
 import type { WeeklyCoachingPlan } from '@/lib/learning/learnWeeklyEngine';
 
 interface Props {

@@ -1,6 +1,6 @@
 // Next 45 Days Risk Window - Opportunities + Renewals tables
 import { motion } from 'framer-motion';
-import { AlertTriangle, Calendar, ExternalLink, FileText, Link2 } from 'lucide-react';
+import { AlertTriangle, Calendar, FileText, Link2 } from 'lucide-react';
 import { format, differenceInDays, parseISO, addDays, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { isWarningEligible } from '@/lib/warningEligibility';

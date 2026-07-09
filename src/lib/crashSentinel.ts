@@ -297,7 +297,7 @@ export function initCrashSentinel(): void {
   trackTimer(routeInterval);
 
   // ── Fetch error breadcrumbs (idempotent — only patch once) ──
-  if (!(window.fetch as any).__crashSentinelPatched) {
+  if (!(window.fetch as any)._crashSentinelPatched) {
     const originalFetch = window.fetch;
     const patchedFetch = async function(this: any, ...args: Parameters<typeof fetch>) {
       const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request)?.url ?? '';
@@ -319,7 +319,7 @@ export function initCrashSentinel(): void {
         throw err;
       }
     };
-    (patchedFetch as any).__crashSentinelPatched = true;
+    (patchedFetch as any)._crashSentinelPatched = true;
     window.fetch = patchedFetch as typeof fetch;
   }
 

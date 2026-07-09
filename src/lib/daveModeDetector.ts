@@ -10,7 +10,7 @@
 import { createLogger } from './logger';
 import { classifyVoiceIntent, type VoiceIntent } from './voiceIntent';
 
-const log = createLogger('DaveModeDetector');
+const _log = createLogger('DaveModeDetector');
 
 // ── Voice intent → Dave mode mapping ──────────────────────
 

@@ -19,7 +19,6 @@ import {
   escalateAlert,
   autoEscalateStaleAlerts,
   persistAlerts,
-  loadAlerts,
   computeAlertResolutionStats,
   computeSystemConfidence,
   determineSystemMode,
@@ -31,11 +30,8 @@ import {
   type HealthInputs,
   type HealthSnapshot,
   type SteeringBias,
-  type DecisionFactor,
   type SystemAlert,
-  type AlertState,
-  type SystemConfidence,
-} from '@/lib/systemIntelligence';
+  type AlertState} from '@/lib/systemIntelligence';
 
 beforeEach(() => {
   localStorage.clear();
@@ -57,8 +53,7 @@ describe('Explainability', () => {
       ],
       alternatives: [
         { id: 'deal-2', label: 'Expand Beta Corp', reason: 'Lower urgency', score: 40 },
-      ],
-    });
+      ] });
 
     expect(e.decisionType).toBe('next_best_action');
     expect(e.topFactors[0].factor).toBe('Risk'); // highest weight first
@@ -74,8 +69,7 @@ describe('Explainability', () => {
       chosenLabel: 'Discovery playbook',
       confidence: 30,
       factors: [{ factor: 'Fit', weight: 0.5, impact: 'neutral', value: 'OK' }],
-      alternatives: [],
-    });
+      alternatives: [] });
     expect(e.confidenceDrivers[0]).toContain('Limited data');
   });
 
@@ -89,8 +83,7 @@ describe('Explainability', () => {
         { factor: 'Stage match', weight: 0.6, impact: 'positive', value: 'Yes' },
         { factor: 'Memory', weight: 0.2, impact: 'negative', value: '2 failures' },
       ],
-      alternatives: [{ id: 'seq-2', label: 'Recovery Seq', reason: 'Lower match', score: 30 }],
-    });
+      alternatives: [{ id: 'seq-2', label: 'Recovery Seq', reason: 'Lower match', score: 30 }] });
     const summary = formatExplanationSummary(e);
     expect(summary).toContain('sequencing');
     expect(summary).toContain('New Logo Sequence');
@@ -108,8 +101,7 @@ describe('Explainability', () => {
       alternatives: [],
       signalChanges: [
         { signal: 'churn_risk', previousValue: 'moderate', currentValue: 'high', changedAt: new Date().toISOString(), direction: 'degraded' },
-      ],
-    });
+      ] });
     expect(e.recentSignalChanges).toHaveLength(1);
     expect(e.recentSignalChanges[0].direction).toBe('degraded');
   });
@@ -128,8 +120,7 @@ describe('System Health Monitoring', () => {
     exploitationWinRate: 30,
     daveFailureRate: 3,
     daveRetryRate: 5,
-    singlePlaybookConcentration: 30,
-  };
+    singlePlaybookConcentration: 30 };
 
   it('reports healthy when all metrics are good', () => {
     const snap = computeHealthSnapshot(healthyInputs);
@@ -194,8 +185,7 @@ describe('Health History & Anomalies', () => {
       timestamp: new Date().toISOString(),
       metrics: [{ metric: 'test', value: 10, threshold: 20, status: 'healthy', trend: 'stable', sampleWindow: '24h' }],
       alerts: [],
-      overallStatus: 'healthy',
-    };
+      overallStatus: 'healthy' };
     recordHealthSnapshot(snap);
     recordHealthSnapshot(snap);
     const history = loadHealthHistory();
@@ -207,8 +197,7 @@ describe('Health History & Anomalies', () => {
       timestamp: new Date().toISOString(),
       metrics: [{ metric: 'enrichment_failure_rate', value: val, threshold: 20, status: 'healthy', trend: 'stable', sampleWindow: '24h' }],
       alerts: [],
-      overallStatus: 'healthy',
-    });
+      overallStatus: 'healthy' });
 
     const history = [makeSnap(5), makeSnap(6), makeSnap(5), makeSnap(7), makeSnap(5)];
     const current = makeSnap(50); // huge spike
@@ -223,8 +212,7 @@ describe('Health History & Anomalies', () => {
       timestamp: new Date().toISOString(),
       metrics: [{ metric: 'test', value: 99, threshold: 20, status: 'healthy', trend: 'stable', sampleWindow: '24h' }],
       alerts: [],
-      overallStatus: 'healthy',
-    };
+      overallStatus: 'healthy' };
     expect(detectAnomalies(snap, [snap, snap])).toHaveLength(0);
   });
 
@@ -233,8 +221,7 @@ describe('Health History & Anomalies', () => {
       timestamp: new Date().toISOString(),
       metrics: [{ metric: 'test', value: val, threshold: 20, status: 'healthy', trend: 'stable', sampleWindow: '24h' }],
       alerts: [],
-      overallStatus: 'healthy',
-    });
+      overallStatus: 'healthy' });
     const history = [makeSnap(10), makeSnap(11), makeSnap(10), makeSnap(12), makeSnap(10)];
     const current = makeSnap(11);
     expect(detectAnomalies(current, history)).toHaveLength(0);
@@ -434,8 +421,7 @@ const healthyInputs: HealthInputs = {
   exploitationWinRate: 30,
   daveFailureRate: 3,
   daveRetryRate: 5,
-  singlePlaybookConcentration: 30,
-};
+  singlePlaybookConcentration: 30 };
 
 // ── Alert Lifecycle ────────────────────────────────────────
 
@@ -452,8 +438,7 @@ describe('Alert Lifecycle', () => {
       triggeredAt: new Date().toISOString(),
       acknowledged: false,
       state: 'active' as AlertState,
-      ...overrides,
-    };
+      ...overrides };
   }
 
   it('acknowledges an active alert', () => {
@@ -578,7 +563,7 @@ describe('System Modes', () => {
   });
 
   it('MODE_PROFILES have valid values for all modes', () => {
-    for (const [name, profile] of Object.entries(MODE_PROFILES)) {
+    for (const [_name, profile] of Object.entries(MODE_PROFILES)) {
       expect(profile.maxConcurrency).toBeGreaterThan(0);
       expect(profile.explorationRate).toBeGreaterThanOrEqual(0);
       expect(profile.explorationRate).toBeLessThanOrEqual(1);

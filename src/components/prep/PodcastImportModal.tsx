@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Podcast, ExternalLink, Users, CalendarDays, CheckCircle2 } from 'lucide-react';
+import { Loader2, Podcast, ExternalLink, Users, CheckCircle2 } from 'lucide-react';
 import { insertSource, getSources } from '@/data/source-registry';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';

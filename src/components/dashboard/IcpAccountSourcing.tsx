@@ -11,7 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Crosshair, Sparkles, ThumbsUp, ThumbsDown, ExternalLink, RefreshCw, Linkedin, Users, Zap, Copy } from 'lucide-react';
+import { Crosshair, Sparkles, ThumbsDown, ExternalLink, RefreshCw, Linkedin, Users, Zap, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAccountEnrichment } from '@/hooks/useAccountEnrichment';
 import type { IcpSourcedAccount, IcpSuggestedContact } from '@/types/dashboard';

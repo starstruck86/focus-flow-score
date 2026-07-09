@@ -22,7 +22,6 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { aggregateRoutes, PIPELINE_LABELS, type Pipeline } from '@/lib/processingRoute';
 
 // ── Constants ──────────────────────────────────────────────
 const BUCKET_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string }> = {
@@ -452,7 +451,7 @@ export function CatchupDashboard() {
             {(['enrich', 'extract', 'activate', 'surface_to_qa'] as CatchupPhase[]).map(phase => {
               const pr = phaseResults[phase];
               const pc = PHASE_CONFIG[phase];
-              const Icon = pc.icon;
+              const _Icon = pc.icon;
               const isActive = currentPhase === phase && isRunning;
               const phasePct = pr.total > 0 ? Math.round((pr.processed / pr.total) * 100) : (pr.status === 'complete' ? 100 : 0);
               const wasSkipped = pr.status === 'skipped';

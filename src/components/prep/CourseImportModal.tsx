@@ -123,7 +123,7 @@ const TYPE_ICONS: Record<string, typeof Video> = {
   quiz: HelpCircle,
 };
 
-const STATUS_ICONS: Record<string, typeof CheckCircle2> = {
+const _STATUS_ICONS: Record<string, typeof CheckCircle2> = {
   complete: CheckCircle2,
   failed: XCircle,
 };
@@ -134,7 +134,7 @@ const VIDEO_TRANSCRIPT_MARKER = '\n\n--- Video Transcript ---\n\n';
  * Basic text extraction from a base64-encoded PDF.
  * Uses stream-based extraction without a full PDF library.
  */
-function extractTextFromPdfBase64(base64Data: string): string {
+function _extractTextFromPdfBase64(base64Data: string): string {
   try {
     const binaryStr = atob(base64Data);
     // Look for text streams in the PDF binary
@@ -1135,7 +1135,7 @@ export function CourseImportModal({ open, onOpenChange }: CourseImportModalProps
   });
 
   // Find result for a lesson by its original index in the toImport array
-  const getResultForLesson = (originalIndex: number): LessonImportResult | undefined => {
+  const _getResultForLesson = (originalIndex: number): LessonImportResult | undefined => {
     // Map original lesson index to toImport index
     const toImport = lessons.filter((_, i) => selected.has(i));
     const toImportIdx = toImport.findIndex(l => l.index === originalIndex);

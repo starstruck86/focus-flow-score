@@ -4,11 +4,11 @@
  * Covers: systemGovernance, daveModeDetector, workflowOrchestrator, interventionGuard, featureFlags
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 
 // ── Feature Flags ──────────────────────────────────────────
 
-import { loadFeatureFlags, setFeatureFlag, isSystemOSEnabled } from '@/lib/featureFlags';
+import { setFeatureFlag, isSystemOSEnabled } from '@/lib/featureFlags';
 
 describe('featureFlags', () => {
   beforeEach(() => localStorage.clear());

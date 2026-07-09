@@ -22,7 +22,7 @@ import { StageResourcesSection } from './StageResourcesSection';
 import { StagePlaybookSection } from './StagePlaybookSection';
 import { FrameworkSectionsPanel } from './FrameworkSectionsPanel';
 import { rankActions } from './actionRanking';
-import { fetchActionizedAssets, buildTacticInjection, buildPromptInjection, trackActionizationFeedback, type ActionizedTactic, type ActionizedPrompt } from '@/lib/actionizationEngine';
+import { fetchActionizedAssets, buildTacticInjection, buildPromptInjection, trackActionizationFeedback } from '@/lib/actionizationEngine';
 import type { ContextItem } from './contextTypes';
 import type { EvidenceData } from './EvidencePanel';
 import type { StageConfig, StageAction } from './stageConfig';
@@ -55,9 +55,9 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
 
   // Ranked resources
   const [rankedTemplates, setRankedTemplates] = useState<RankedResource[]>([]);
-  const [rankedExamples, setRankedExamples] = useState<RankedResource[]>([]);
+  const [_rankedExamples, setRankedExamples] = useState<RankedResource[]>([]);
   const [rankedKI, setRankedKI] = useState<RankedResource[]>([]);
-  const [assetsLoading, setAssetsLoading] = useState(false);
+  const [_assetsLoading, setAssetsLoading] = useState(false);
 
   // Accounts
   const { data: accounts = [] } = useQuery({

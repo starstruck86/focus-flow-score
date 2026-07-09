@@ -106,10 +106,10 @@ export function AddTaskDialog({ open, onOpenChange, defaultWorkstream }: AddTask
           </div>
           <div className="space-y-2">
             <Label>Linked Account</Label>
-            <Select value={accountId || '__none__'} onValueChange={v => { setAccountId(v === '__none__' ? '' : v); setOppId(''); }}>
+            <Select value={accountId || '_none__'} onValueChange={v => { setAccountId(v === '_none__' ? '' : v); setOppId(''); }}>
               <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__">None</SelectItem>
+                <SelectItem value="_none__">None</SelectItem>
                 {allAccounts.map(a => <SelectItem key={a.id} value={a.id}>{a.name}{a.isRenewal ? ' (Renewal)' : ''}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -117,10 +117,10 @@ export function AddTaskDialog({ open, onOpenChange, defaultWorkstream }: AddTask
           {accountId && accountOpps.length > 0 && (
             <div className="space-y-2">
               <Label>Linked Opportunity</Label>
-              <Select value={oppId || '__none__'} onValueChange={v => setOppId(v === '__none__' ? '' : v)}>
+              <Select value={oppId || '_none__'} onValueChange={v => setOppId(v === '_none__' ? '' : v)}>
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
+                  <SelectItem value="_none__">None</SelectItem>
                   {accountOpps.map(o => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
                 </SelectContent>
               </Select>

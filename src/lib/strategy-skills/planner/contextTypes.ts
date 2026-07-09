@@ -4,7 +4,7 @@
  * Typed shapes the planner accepts. The planner does not import from
  * hooks, edge functions, or the runtime. Tests pass fixtures.
  */
-import type { SkillDepth, SkillManifest, SkillSourceMode } from '../types';
+import type { SkillDepth, SkillSourceMode } from '../types';
 
 export type PlannerScope =
   | 'knowledge_items'

@@ -8,7 +8,7 @@
  * how output should be shaped and validated.
  *
  * Phase 1 is **inert**: no runtime code imports these manifests.
- * They are reachable only from tests in `src/lib/strategy-skills/__tests__/`.
+ * They are reachable only from tests in `src/lib/strategy-skills/_tests__/`.
  *
  * Hard rules enforced by the schema validator:
  *   • No static `resource_ids` / hardcoded library item references.

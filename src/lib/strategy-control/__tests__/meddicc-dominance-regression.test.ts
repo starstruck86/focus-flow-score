@@ -8,7 +8,7 @@
  *   - Baseline total score exceeds Strategy total score
  */
 import { describe, it, expect } from "vitest";
-import { scoreOutput, compareOutputs, type ScoringContext } from "../outputScorer";
+import { compareOutputs, type ScoringContext } from "../outputScorer";
 
 const MEDDICC_CTX: ScoringContext = {
   shape: "structured_artifact",

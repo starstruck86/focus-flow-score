@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Target, AlertTriangle, CheckCircle2, Brain, Crosshair, Lightbulb, BookOpen } from 'lucide-react';
+import { Target, AlertTriangle, Brain, Crosshair, Lightbulb, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/store/useStore';
 import { useAllTranscriptGrades, useBehavioralPatterns } from '@/hooks/useTranscriptGrades';

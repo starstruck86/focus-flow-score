@@ -6,7 +6,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import { normalizeMultiThreadAssessment, type MultiThreadAssessment } from './multiThreadTypes';
+import { normalizeMultiThreadAssessment } from './multiThreadTypes';
 import { validateScoredFixture, type V6ScorerFixtureResult } from './qaHarness';
 import { V6_FIXTURES, type V6Fixture } from './qaFixtures';
 
@@ -105,7 +105,7 @@ export function computeBatchSummary(results: V6LiveRunResult[]): V6BatchSummary 
   for (const r of results) {
     if (r.error) { errors++; continue; }
 
-    const fixture = r; // has group, expected is on the original fixture
+    const _fixture = r; // has group, expected is on the original fixture
     const activated = r.rawMultiThread !== undefined;
     const expected = getFixtureById(r.fixtureId);
     if (!expected) continue;

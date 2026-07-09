@@ -173,7 +173,7 @@ export function LessonGenerationPanel({ lessons, onComplete }: LessonGenerationP
         {/* Progress list — shown when running or expanded */}
         {(isRunning || expanded) && needsGeneration.length > 0 && (
           <div className="mt-3 space-y-1 max-h-48 overflow-y-auto">
-            {needsGeneration.map((lesson, i) => {
+            {needsGeneration.map((lesson, _i) => {
               const status = statusMap[lesson.id] ?? 'pending';
               return (
                 <div key={lesson.id} className="flex items-center gap-2 text-xs">

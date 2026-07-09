@@ -5,7 +5,7 @@
  * Reads from skill memory, daily assignments, and block snapshots.
  */
 
-import type { SkillMemory, SkillProfile } from '../skillMemory';
+import type { SkillMemory } from '../skillMemory';
 import type { DayAnchor } from './dayAnchors';
 import { ANCHORS_IN_ORDER, DAY_ANCHORS } from './dayAnchors';
 import type { TrainingBlock, BlockSnapshot } from './blockManager';
@@ -169,7 +169,7 @@ export function computeWeeklySummary(
 
 export function computeBlockSummary(
   block: TrainingBlock,
-  skillMemory: SkillMemory | null,
+  _skillMemory: SkillMemory | null,
 ): BlockProgressSummary {
   const benchmark = block.benchmarkSnapshot;
   const retest = block.retestSnapshot;

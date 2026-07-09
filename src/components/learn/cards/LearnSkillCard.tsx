@@ -4,7 +4,7 @@
  */
 
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, AlertTriangle, Zap, Swords } from 'lucide-react';
+import { AlertTriangle, Zap, Swords } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';

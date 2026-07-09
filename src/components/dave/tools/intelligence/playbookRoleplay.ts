@@ -234,7 +234,7 @@ export async function startPlaybookRoleplay(
 /**
  * End the current roleplay and provide feedback.
  */
-export async function endPlaybookRoleplay(ctx: ToolContext) {
+export async function endPlaybookRoleplay(_ctx: ToolContext) {
   const state = getState();
   if (!state?.active) {
     return 'No active roleplay session to end.';

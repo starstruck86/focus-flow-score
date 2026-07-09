@@ -3,7 +3,7 @@
     "allowJs": true,
     "noImplicitAny": false,
     "noUnusedLocals": false,
-    "noUnusedParameters": false,
+    "noUnusedParameters": true,
     "paths": {
       "@/*": [
         "./src/*"

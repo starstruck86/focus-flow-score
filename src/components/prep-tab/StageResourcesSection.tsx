@@ -28,7 +28,7 @@ interface Props {
 export function StageResourcesSection({ stageId, stageLabel }: Props) {
   const {
     keystoneResources, supportingResources, isLoading,
-    addResource, removeResource, toggleKeystone,
+    addResource: _addResource, removeResource, toggleKeystone,
   } = useStageResources(stageId);
 
   if (isLoading) {

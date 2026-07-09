@@ -26,11 +26,7 @@ import {
   getAssistedResolutionGuidance,
   type EnrichmentAttemptRecord,
 } from '@/lib/advancedExtraction';
-import {
-  resolveResourceWithManualInput,
-  getRecoveryInvalidationKeys,
-  type RecoveryMode,
-} from '@/lib/manualRecoveryResolver';
+import { resolveResourceWithManualInput, getRecoveryInvalidationKeys } from '@/lib/manualRecoveryResolver';
 import { ZoomAssistPanel } from '@/components/prep/enrichment/ZoomAssistPanel';
 import { useQueryClient } from '@tanstack/react-query';
 import type { VerifiedResource } from '@/lib/enrichmentVerification';

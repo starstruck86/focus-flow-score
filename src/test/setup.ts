@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom";
 
 // Vite define globals
-(globalThis as any).__BUILD_TIMESTAMP__ = '2026-01-01T00:00:00.000Z';
+(globalThis as any)._BUILD_TIMESTAMP__ = '2026-01-01T00:00:00.000Z';
 
 // Guard against node-environment tests (no window).
 if (typeof window !== "undefined") {

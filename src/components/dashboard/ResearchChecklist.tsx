@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
 
-import type { ResearchChecklistItem, ResearchChecklistAccount, ResearchChecklistContact, ResearchChecklistOpp } from '@/types/dashboard';
+import type { ResearchChecklistItem } from '@/types/dashboard';
 
 type ChecklistItem = ResearchChecklistItem;
 

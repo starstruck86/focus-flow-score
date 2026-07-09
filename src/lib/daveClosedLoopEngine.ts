@@ -13,11 +13,11 @@
 
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 import { evaluateFocusApplication, type FocusContext } from '@/lib/learning/learnFocusEvaluator';
-import { DIMENSION_LABELS, SKILL_DIMENSION_KEYS } from '@/lib/learning/learnScoringSchema';
+import { DIMENSION_LABELS } from '@/lib/learning/learnScoringSchema';
 import { getSubSkillDefinition, getSubSkillsForSkill } from '@/lib/learning/learnSubSkillMap';
 import { createLogger } from '@/lib/logger';
 
-const logger = createLogger('ClosedLoopEngine');
+const _logger = createLogger('ClosedLoopEngine');
 
 // ── Types ──────────────────────────────────────────────────────────
 

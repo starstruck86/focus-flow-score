@@ -1,11 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import {
-  ChevronRight, Link2, Lightbulb, HelpCircle, FileText,
-  Pin, Copy, Save, Plus, RefreshCw, Loader2, Sparkles,
-  Upload, BarChart3, Building2, Target, Globe, Cpu, Tag,
-  AlertTriangle, CheckCircle2, Clock, Eye, Mail, ArrowRight,
-  Trash2, X, PinOff, ThumbsDown, ChevronDown,
-} from 'lucide-react';
+import { ChevronRight, Link2, FileText, Pin, Copy, Save, Plus, RefreshCw, Loader2, Sparkles, Upload, BarChart3, Building2, Target, Globe, Cpu, Tag, AlertTriangle, CheckCircle2, Clock, Eye, Mail, ArrowRight, Trash2, X, PinOff, ThumbsDown, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent } from '@/components/ui/card';
@@ -132,7 +126,7 @@ export function StrategyRightRail({
   onSaveMemory, onDeleteMemory, onTogglePin, onSetConfidence, onMarkIrrelevant,
   rollup, memorySuggestions, isRollupLoading, onTriggerRollup,
   onRegenerateArtifact, isTransforming, onReprocessUpload,
-  onUseArtifactAsInput, onDuplicateArtifact,
+  onUseArtifactAsInput: _onUseArtifactAsInput, onDuplicateArtifact: _onDuplicateArtifact,
   proposals, proposalsLoading, onConfirmProposal, onRejectProposal, onEditProposalPayload, onPromoteProposal, onScanThreadProposals,
   onStageProposal,
 }: Props) {

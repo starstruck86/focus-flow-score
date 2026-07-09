@@ -20,39 +20,14 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Clock, Search, DollarSign, Activity, Shield, Flame, Wrench, FlaskConical, Zap } from 'lucide-react';
-import {
-  fetchEvidenceByType, fetchGateAggregates, fetchLatencyData, fetchCostData,
-  fetchAnomalyRuns, fetchRunDetail, fetchRecentRuns,
-  parseArtifactGate, parseCost, parseAnomalyFlags, parseStageLats, parseTokenUsage, parseRemediation,
-  fetchRemediationRolloutData, filterRemediationGateChangers, computeRolloutHealth,
-  type EvidenceRow, type GateAggRow, type TelemetryRow, type CostRow,
-  type AnomalyRow, type RunListRow, type TaskRunSectionRow, type RemediationRolloutRow,
-} from '@/lib/strategy-ops/queries';
-import {
-  getCostSummary, getCostByTaskType, getCostByProvider, getCostByStage,
-  getMostExpensiveRuns, getFailedRunCostWaste,
-  type CostSummary, type CostByDimension, type ExpensiveRun, type FailedRunWaste,
-} from '@/lib/strategy-ops/costAnalytics';
-import {
-  getLatencySummary, getLatencyByStage, getLatencyByTaskType,
-  getSlowestRuns, getLatencyTrend, getBatchExecutionAnalytics,
-  type LatencySummary, type StageLatency, type SlowestRun, type LatencyTrendPoint, type BatchAnalytics,
-} from '@/lib/strategy-ops/latencyAnalytics';
-import { computeReleaseConfidence, type ReleaseConfidence } from '@/lib/strategy-ops/releaseConfidence';
-import {
-  getCohortSummaries, getFailureBreakdown, getWasteSummary, classifyFailures,
-  type CohortSummary, type FailureBreakdown, type WasteSummary, type ClassifiedFailure,
-  REASON_LABELS, ERA_LABELS,
-} from '@/lib/strategy-ops/failureAnalysis';
-import { aggregateRemediationOpportunities, isRemediationEnabled, type RemediationOpportunity } from '@/lib/strategy-ops/targetedRemediation';
-import { loadStrategyFlags, setStrategyFlag, type StrategyOptFlags } from '@/lib/strategy-ops/strategyFeatureFlags';
-import {
-  getMostMissingSections, getBatchFailureHeatmap, getProviderFailureSummary,
-  getProviderSuccessByBatch, getFallbackFrequency,
-  getSectionLossTree, getMostCorruptedBatches,
-  type MissingSectionEntry, type BatchFailureHeatmapEntry, type ProviderFailureSummary,
-  type ProviderBatchSuccess,
-} from '@/lib/strategy-ops/templateFidelity';
+import { fetchEvidenceByType, fetchGateAggregates, fetchAnomalyRuns, fetchRunDetail, fetchRecentRuns, parseArtifactGate, parseCost, parseAnomalyFlags, parseStageLats, parseTokenUsage, parseRemediation, fetchRemediationRolloutData, filterRemediationGateChangers, computeRolloutHealth } from '@/lib/strategy-ops/queries';
+import { getCostSummary, getCostByTaskType, getCostByProvider, getCostByStage, getMostExpensiveRuns, getFailedRunCostWaste } from '@/lib/strategy-ops/costAnalytics';
+import { getLatencySummary, getLatencyByStage, getLatencyByTaskType, getSlowestRuns, getLatencyTrend, getBatchExecutionAnalytics } from '@/lib/strategy-ops/latencyAnalytics';
+import { computeReleaseConfidence } from '@/lib/strategy-ops/releaseConfidence';
+import { getCohortSummaries, getFailureBreakdown, getWasteSummary, classifyFailures, REASON_LABELS } from '@/lib/strategy-ops/failureAnalysis';
+import { aggregateRemediationOpportunities, isRemediationEnabled } from '@/lib/strategy-ops/targetedRemediation';
+import { loadStrategyFlags, setStrategyFlag } from '@/lib/strategy-ops/strategyFeatureFlags';
+import { getMostMissingSections, getBatchFailureHeatmap, getProviderFailureSummary, getProviderSuccessByBatch, getFallbackFrequency, getSectionLossTree, getMostCorruptedBatches } from '@/lib/strategy-ops/templateFidelity';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -283,9 +258,9 @@ function CostDeepTab({ userId }: { userId: string }) {
   const { data: summary, loading: l1 } = useAsyncData(() => getCostSummary(userId, days), [userId, days]);
   const { data: byType, loading: l2 } = useAsyncData(() => getCostByTaskType(userId, days), [userId, days]);
   const { data: byProvider, loading: l3 } = useAsyncData(() => getCostByProvider(userId, days), [userId, days]);
-  const { data: byStage, loading: l4 } = useAsyncData(() => getCostByStage(userId, days), [userId, days]);
-  const { data: expensive, loading: l5 } = useAsyncData(() => getMostExpensiveRuns(userId, 10), [userId]);
-  const { data: waste, loading: l6 } = useAsyncData(() => getFailedRunCostWaste(userId, days), [userId, days]);
+  const { data: byStage, loading: _l4 } = useAsyncData(() => getCostByStage(userId, days), [userId, days]);
+  const { data: expensive, loading: _l5 } = useAsyncData(() => getMostExpensiveRuns(userId, 10), [userId]);
+  const { data: waste, loading: _l6 } = useAsyncData(() => getFailedRunCostWaste(userId, days), [userId, days]);
 
   const loading = l1 || l2 || l3;
   if (loading) return <LoadingSkeleton />;
@@ -419,10 +394,10 @@ function LatencyDeepTab({ userId }: { userId: string }) {
   const [days, setDays] = useState(7);
   const { data: summary, loading: l1 } = useAsyncData(() => getLatencySummary(userId, days), [userId, days]);
   const { data: byStage, loading: l2 } = useAsyncData(() => getLatencyByStage(userId, days), [userId, days]);
-  const { data: byType, loading: l3 } = useAsyncData(() => getLatencyByTaskType(userId, days), [userId, days]);
-  const { data: slowest, loading: l4 } = useAsyncData(() => getSlowestRuns(userId, 10), [userId]);
-  const { data: trend, loading: l5 } = useAsyncData(() => getLatencyTrend(userId, days), [userId, days]);
-  const { data: batches, loading: l6 } = useAsyncData(() => getBatchExecutionAnalytics(userId, days), [userId, days]);
+  const { data: byType, loading: _l3 } = useAsyncData(() => getLatencyByTaskType(userId, days), [userId, days]);
+  const { data: slowest, loading: _l4 } = useAsyncData(() => getSlowestRuns(userId, 10), [userId]);
+  const { data: trend, loading: _l5 } = useAsyncData(() => getLatencyTrend(userId, days), [userId, days]);
+  const { data: batches, loading: _l6 } = useAsyncData(() => getBatchExecutionAnalytics(userId, days), [userId, days]);
 
   if (l1 || l2) return <LoadingSkeleton />;
 
@@ -921,11 +896,11 @@ function RunDrilldownTab({ userId, initialRunId }: { userId: string; initialRunI
 /*  TAB: Failures (Phase 4D)                                           */
 /* ================================================================== */
 
-function FailuresTab({ userId, onDrilldown, remFlag }: { userId: string; onDrilldown: (id: string) => void; remFlag: boolean }) {
+function FailuresTab({ userId, onDrilldown, remFlag: _remFlag }: { userId: string; onDrilldown: (id: string) => void; remFlag: boolean }) {
   const { data: waste, loading: l1 } = useAsyncData(() => getWasteSummary(userId), [userId]);
   const { data: cohorts, loading: l2 } = useAsyncData(() => getCohortSummaries(userId), [userId]);
-  const { data: breakdown, loading: l3 } = useAsyncData(() => getFailureBreakdown(userId), [userId]);
-  const { data: failures, loading: l4 } = useAsyncData(() => classifyFailures(userId), [userId]);
+  const { data: breakdown, loading: _l3 } = useAsyncData(() => getFailureBreakdown(userId), [userId]);
+  const { data: failures, loading: _l4 } = useAsyncData(() => classifyFailures(userId), [userId]);
   const { data: rolloutData, loading: l5 } = useAsyncData(() => fetchRemediationRolloutData(userId), [userId]);
 
   const opportunities = useMemo(() => {
@@ -1462,10 +1437,10 @@ export default function StrategyOpsPanel() {
     const { data: missingSections, loading: l1 } = useAsyncData(() => getMostMissingSections(userId), [userId]);
     const { data: batchHeatmap, loading: l2 } = useAsyncData(() => getBatchFailureHeatmap(userId), [userId]);
     const { data: providerFailures, loading: l3 } = useAsyncData(() => getProviderFailureSummary(userId), [userId]);
-    const { data: providerByBatch, loading: l4 } = useAsyncData(() => getProviderSuccessByBatch(userId), [userId]);
-    const { data: fallback, loading: l5 } = useAsyncData(() => getFallbackFrequency(userId), [userId]);
-    const { data: sectionLoss, loading: l6 } = useAsyncData(() => getSectionLossTree(userId), [userId]);
-    const { data: corruptedBatches, loading: l7 } = useAsyncData(() => getMostCorruptedBatches(userId), [userId]);
+    const { data: providerByBatch, loading: _l4 } = useAsyncData(() => getProviderSuccessByBatch(userId), [userId]);
+    const { data: fallback, loading: _l5 } = useAsyncData(() => getFallbackFrequency(userId), [userId]);
+    const { data: sectionLoss, loading: _l6 } = useAsyncData(() => getSectionLossTree(userId), [userId]);
+    const { data: corruptedBatches, loading: _l7 } = useAsyncData(() => getMostCorruptedBatches(userId), [userId]);
 
     if (l1 || l2 || l3) return <LoadingSkeleton />;
 

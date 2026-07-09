@@ -4,10 +4,7 @@ import { usePerformanceProfile } from '@/hooks/usePerformanceProfile';
 import { useSalesAge } from '@/hooks/useSalesAge';
 import { getLevelTitle, getProgressToNextLevel } from '@/types/streak';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Flame, Target, Zap, Phone, Users, CalendarCheck, 
-  Briefcase, Trophy, TrendingUp, Clock, Star, Award
-} from 'lucide-react';
+import { Target, Zap, Phone, Users, CalendarCheck, Briefcase, Trophy, TrendingUp, Clock, Star, Award } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 

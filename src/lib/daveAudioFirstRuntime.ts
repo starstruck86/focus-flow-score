@@ -32,8 +32,8 @@
  * Both Dojo and Learn sessions use this runtime.
  */
 
-import type { TtsConfig, ActivePlayback, SpeechQueueItem, VoiceCommand } from '@/lib/daveVoiceRuntime';
-import { speak, listen, interruptSpeech, parseVoiceCommand } from '@/lib/daveVoiceRuntime';
+import type { TtsConfig, ActivePlayback, SpeechQueueItem } from '@/lib/daveVoiceRuntime';
+import { speak, listen, interruptSpeech } from '@/lib/daveVoiceRuntime';
 import { createLogger } from '@/lib/logger';
 import type { DrivingMode } from '@/hooks/useDrivingMode';
 

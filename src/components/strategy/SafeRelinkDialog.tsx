@@ -39,7 +39,7 @@ interface Props {
 }
 
 type Tab = 'account' | 'opportunity';
-type Action = 'clone' | 'mutate' | 'unlink' | null;
+type _Action = 'clone' | 'mutate' | 'unlink' | null;
 
 export function SafeRelinkDialog({
   open, onOpenChange, thread, trustState, hasMeaningfulContent,

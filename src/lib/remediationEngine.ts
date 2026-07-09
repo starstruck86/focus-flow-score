@@ -5,7 +5,7 @@
  * Each action maps to a real DB mutation via the resource lifecycle system.
  */
 import { supabase } from '@/integrations/supabase/client';
-import type { VerifiedResource, FixabilityBucket } from './enrichmentVerification';
+import type { VerifiedResource } from './enrichmentVerification';
 
 // ── Action Queue Types ────────────────────────────────────
 

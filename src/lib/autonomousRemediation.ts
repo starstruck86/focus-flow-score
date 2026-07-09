@@ -9,7 +9,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { validateResourceQuality, type QualityResult } from '@/lib/resourceQuality';
-import type { VerifiedResource, FixabilityBucket } from '@/lib/enrichmentVerification';
+import type { VerifiedResource } from '@/lib/enrichmentVerification';
 import type { RemediationQueue } from '@/lib/remediationEngine';
 
 // ── Types ─────────────────────────────────────────────────
@@ -215,7 +215,7 @@ async function getResourceState(resourceId: string): Promise<{ status: string; f
 
 // ── Check strict exit conditions ──────────────────────────
 
-function checkExitCondition(item: RemediationItem, score: number, contradictions: number): RemediationItemStatus | null {
+function checkExitCondition(_item: RemediationItem, score: number, contradictions: number): RemediationItemStatus | null {
   // Exit 1: score === 100 AND no contradictions
   if (score >= 100 && contradictions === 0) return 'resolved_complete';
   // Exit 2: explicitly accepted metadata-only (handled by accept_metadata_only queue)
@@ -231,7 +231,7 @@ function shouldEscalateToQuarantine(item: RemediationItem, currentBucket: string
   return sameBucketCount >= 2;
 }
 
-function getEscalationTarget(item: RemediationItem, currentBucket: string): { status: RemediationItemStatus; reason: string } {
+function _getEscalationTarget(item: RemediationItem, currentBucket: string): { status: RemediationItemStatus; reason: string } {
   if (shouldEscalateToQuarantine(item, currentBucket)) {
     return {
       status: 'resolved_quarantined',
@@ -432,7 +432,7 @@ async function processItem(item: RemediationItem, state: RemediationCycleState):
 async function autoFix(item: RemediationItem, state: RemediationCycleState, strategy: QueueStrategy): Promise<void> {
   // ── Pre-check: same failure bucket hit 2+ times → stop retrying ──
   if (item.sameFailureCount >= 2) {
-    const manualQueues: RemediationQueue[] = ['needs_transcript', 'needs_pasted_content', 'needs_access_auth', 'needs_alternate_source'];
+    const _manualQueues: RemediationQueue[] = ['needs_transcript', 'needs_pasted_content', 'needs_access_auth', 'needs_alternate_source'];
     const couldBeManual = !!item.url; // has a source → manual input path exists
     if (couldBeManual) {
       item.status = 'awaiting_manual';

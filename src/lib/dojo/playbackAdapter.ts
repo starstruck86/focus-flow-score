@@ -10,14 +10,7 @@
  * No UI. No ElevenLabs. No side effects outside state/history.
  */
 
-import type {
-  ConversationState,
-  SpeechChunk,
-  HistoryEntry,
-  HistoryEventType,
-  ChunkRole,
-  PostDeliveryPhase,
-} from './conversationEngine';
+import type { ConversationState, SpeechChunk, HistoryEntry, HistoryEventType, ChunkRole } from './conversationEngine';
 
 // Re-export everything from the core engine so consumers can import from one place
 export * from './conversationEngine';

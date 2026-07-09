@@ -76,7 +76,7 @@ const INTELLIGENCE_TYPES: DimMeta[] = [
   { value: 'competitive',            label: 'Competitive',      emoji: '🎯', color: 'bg-purple-500/15 text-purple-700 dark:text-purple-400' },
   { value: 'c_suite_engagement',     label: 'C-Suite',          emoji: '👔', color: 'bg-violet-500/15 text-violet-700 dark:text-violet-400' },
   { value: 'qualification',          label: 'Qualification',    emoji: '✅', color: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
-  { value: '__null__',               label: 'Leadership',       emoji: '🎓', color: 'bg-pink-500/15 text-pink-700 dark:text-pink-400' },
+  { value: '_null__',               label: 'Leadership',       emoji: '🎓', color: 'bg-pink-500/15 text-pink-700 dark:text-pink-400' },
 ];
 
 const DIM_BY_VALUE: Record<string, DimMeta> = Object.fromEntries(INTELLIGENCE_TYPES.map(d => [d.value, d]));
@@ -93,7 +93,7 @@ const DIMENSION_CHAPTERS: Record<string, string[]> = {
   competitive: ['competitive', 'competitors', 'branch_io'],
   c_suite_engagement: ['personas'],
   qualification: ['qualification'],
-  __null__: ['coaching', 'leadership', 'hiring', 'management', 'onboarding', 'general'],
+  _null__: ['coaching', 'leadership', 'hiring', 'management', 'onboarding', 'general'],
 };
 
 function formatChapterLabel(chapter: string): string {
@@ -103,7 +103,7 @@ function formatChapterLabel(chapter: string): string {
 
 function KICard({ ki, onDrill, userId, annotation, onAnnotationSaved }: { ki: KIResult; onDrill: (ki: KIResult) => void; userId: string; annotation?: string; onAnnotationSaved: () => void }) {
   const [expanded, setExpanded] = useState(false);
-  const dimKey = ki.spider_dimension ?? '__null__';
+  const dimKey = ki.spider_dimension ?? '_null__';
   const dimMeta = DIM_BY_VALUE[dimKey];
   return (
     <div
@@ -233,7 +233,7 @@ export default function KILibrary() {
         if (error || !data || data.length === 0) break;
         for (const ki of data as any[]) {
           counts.all++;
-          const dim = ki.spider_dimension ?? '__null__';
+          const dim = ki.spider_dimension ?? '_null__';
           counts[dim] = (counts[dim] || 0) + 1;
         }
         if (data.length < PAGE) break;
@@ -257,7 +257,7 @@ export default function KILibrary() {
         .eq('active', true);
 
       if (dimension !== 'all') {
-        if (dimension === '__null__') q = q.is('spider_dimension', null);
+        if (dimension === '_null__') q = q.is('spider_dimension', null);
         else q = q.eq('spider_dimension', dimension);
       }
       if (chapterFilter !== 'all') q = q.eq('chapter', chapterFilter);
@@ -293,7 +293,7 @@ export default function KILibrary() {
         .eq('user_id', user.id)
         .eq('active', true);
       if (dimension !== 'all') {
-        if (dimension === '__null__') q = q.is('spider_dimension', null);
+        if (dimension === '_null__') q = q.is('spider_dimension', null);
         else q = q.eq('spider_dimension', dimension);
       }
       if (chapterFilter !== 'all') q = q.eq('chapter', chapterFilter);

@@ -10,7 +10,7 @@
  */
 
 import type { Resource } from '@/hooks/useResources';
-import type { ResourceTruth, BlockerType } from '@/lib/resourceTruthState';
+import type { ResourceTruth } from '@/lib/resourceTruthState';
 
 // ── Root-Cause Categories ─────────────────────────────────
 

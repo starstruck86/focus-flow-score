@@ -17,28 +17,15 @@ import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { Zap, RefreshCw, RotateCcw,
-  Folder, FolderPlus, FilePlus, FileText, Presentation, Mail, BookOpen,
-  ChevronRight, MoreHorizontal, Search, Trash2, Edit3, Clock,
-  Star, Tag, Copy, Upload, Link2, Sparkles, Target, Shield,
-  GraduationCap, MessageSquare, Loader2, Check, X, AlertTriangle, Globe, Radar, ListVideo, Podcast,
-} from 'lucide-react';
+import { Zap, Folder, FolderPlus, FilePlus, FileText, Presentation, Mail, BookOpen, ChevronRight, MoreHorizontal, Search, Trash2, Edit3, Star, Upload, Link2, Sparkles, Target, Shield, GraduationCap, MessageSquare, Loader2, Check, X, AlertTriangle, Globe, Radar, ListVideo, Podcast } from 'lucide-react';
 import { ResourceLibraryTable } from './ResourceLibraryTable';
 import { LibraryResourceDrawer } from './LibraryResourceDrawer';
 import { ResourceAudioInspector } from './ResourceAudioInspector';
 import { ManualTranscriptAssist } from './ManualTranscriptAssist';
 import { AuthReimportDialog } from './AuthReimportDialog';
 import { cn } from '@/lib/utils';
-import {
-  useResourceFolders, useResources, useCreateFolder, useCreateResource,
-  useDeleteResource, useBulkDeleteResources, useDeleteFolder, useRenameFolder, useUpdateResource,
-  useOperationalizeResource, useResourceSuggestions, useUpdateEnrichmentStatus,
-  type Resource, type ResourceFolder, type ResourceSuggestion,
-} from '@/hooks/useResources';
-import {
-  getEnrichmentStatusLabel, getEnrichmentStatusColor, getRecommendedAction,
-  getResourceOrigin, type EnrichmentStatus,
-} from '@/lib/resourceEligibility';
+import { useResourceFolders, useResources, useCreateFolder, useCreateResource, useDeleteResource, useBulkDeleteResources, useDeleteFolder, useRenameFolder, useUpdateResource, useOperationalizeResource, useResourceSuggestions, useUpdateEnrichmentStatus, type Resource, type ResourceFolder } from '@/hooks/useResources';
+import { getResourceOrigin } from '@/lib/resourceEligibility';
 import { useClassifyResource, useUploadResource, useAddUrlResource, type ClassificationResult } from '@/hooks/useResourceUpload';
 import { ResourceEditor } from './ResourceEditor';
 import { AIGenerateDialog } from './AIGenerateDialog';
@@ -75,7 +62,7 @@ type PendingItem = {
   error?: string;
 };
 
-const RESOURCE_TYPE_ICONS: Record<string, React.ElementType> = {
+const _RESOURCE_TYPE_ICONS: Record<string, React.ElementType> = {
   document: FileText,
   presentation: Presentation,
   email: Mail,
@@ -196,7 +183,7 @@ export function ResourceManager() {
   const uploadResource = useUploadResource();
   const addUrlResource = useAddUrlResource();
   const { totalDuplicates } = useResourceDuplicates();
-  const operationalize = useOperationalizeResource();
+  const _operationalize = useOperationalizeResource();
   const updateEnrichmentStatus = useUpdateEnrichmentStatus();
   const { data: suggestions = [], refetch: refetchSuggestions, isLoading: suggestionsLoading } = useResourceSuggestions(resources.length > 0);
   const { data: audioJobsMap } = useAudioJobsMap();
@@ -283,7 +270,7 @@ export function ResourceManager() {
     setRenameFolderName('');
   }, [renamingFolder, renameFolderName, renameFolder]);
 
-  const handleRenameResource = useCallback(() => {
+  const _handleRenameResource = useCallback(() => {
     if (!renamingResourceId || !renameResourceTitle.trim()) return;
     updateResource.mutate({ id: renamingResourceId, updates: { title: renameResourceTitle.trim() } });
     toast.success('Resource renamed');
@@ -828,7 +815,7 @@ export function ResourceManager() {
             onBulkAction={async (action, resourceIds) => {
               switch (action) {
                 case 'fix_all_auto': {
-                  const { createFixAllProgress, markFixAllPhase, markFixAllItemStart, markFixAllItemDone, markFixAllItemFailed, finalizeFixAllProgress, recomputeFixAllDerived } = await import('@/lib/fixAllProgress');
+                  const { createFixAllProgress, markFixAllPhase, markFixAllItemStart, markFixAllItemDone, markFixAllItemFailed, finalizeFixAllProgress: _finalizeFixAllProgress, recomputeFixAllDerived } = await import('@/lib/fixAllProgress');
                   setIsFixAllRunning(true);
                   setFixAllLiveProgress(createFixAllProgress(resourceIds.length));
                   setLastFixResult(null);
@@ -1386,7 +1373,7 @@ export function ResourceManager() {
                   const ids = Array.from(selectedResourceIds).length > 0
                     ? Array.from(selectedResourceIds)
                     : filteredResources.filter(r => {
-                        const lc = (r as any)._lifecycle;
+                        const _lc = (r as any)._lifecycle;
                         return r.enrichment_status && ['deep_enriched', 'enriched', 'verified'].includes(r.enrichment_status);
                       }).map(r => r.id);
                   if (ids.length === 0) {

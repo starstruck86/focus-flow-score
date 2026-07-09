@@ -2,7 +2,7 @@
 import { useMemo } from 'react';
 import { useStore } from '@/store/useStore';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
-import { differenceInDays, differenceInHours, parseISO, format, startOfDay } from 'date-fns';
+import { differenceInDays, parseISO, startOfDay } from 'date-fns';
 import type { Account, Opportunity, Renewal } from '@/types';
 import { isWarningEligible } from '@/lib/warningEligibility';
 

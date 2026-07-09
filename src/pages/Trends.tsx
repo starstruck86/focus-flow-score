@@ -1,14 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { Reorder } from 'framer-motion';
 import { AIInsightsNarrator } from '@/components/dashboard/AIInsightsNarrator';
 import { Layout } from '@/components/Layout';
 import { SystemTelemetryPanel } from '@/components/trends/SystemTelemetryPanel';
 import { isSystemOSEnabled } from '@/lib/featureFlags';
-import {
-  TrendingUp, BarChart3, Activity, Zap, Target, Brain,
-  ArrowUpRight, ArrowDownRight, Minus, Phone, Users, Calendar,
-  Lightbulb, Gauge, GripVertical,
-} from 'lucide-react';
+import { TrendingUp, BarChart3, Activity, Zap, Target, Brain, ArrowDownRight, Phone, Calendar, Lightbulb, Gauge } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -17,11 +13,7 @@ import { useTrendsData, type TrendRange } from '@/hooks/useTrendsData';
 import { useWidgetLayout, type WidgetConfig } from '@/hooks/useWidgetLayout';
 import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
-import {
-  ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart,
-  RadialBarChart, RadialBar, Cell,
-} from 'recharts';
+import { ResponsiveContainer, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart } from 'recharts';
 
 const RANGES: { value: TrendRange; label: string }[] = [
   { value: '7d', label: '7 Days' },
@@ -338,7 +330,7 @@ function SummaryCard({ label, value, icon, accent }: { label: string; value: str
   );
 }
 
-function FunnelStep({ label, value, rate, color }: { label: string; value: number; rate: number | null; color: string }) {
+function FunnelStep({ label, value, rate: _rate, color }: { label: string; value: number; rate: number | null; color: string }) {
   return (
     <div className={cn('flex items-center justify-between px-3 py-2 rounded-lg', color)}>
       <span className="text-xs font-semibold">{label}</span>

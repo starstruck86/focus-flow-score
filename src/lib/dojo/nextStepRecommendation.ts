@@ -5,7 +5,7 @@
  * missed dimensions, retry count, and consistency of misses.
  */
 
-import { SKILL_RUBRICS, normalizeDimensionScores, selectPrimaryCoachingLever } from './skillRubric';
+import { SKILL_RUBRICS, selectPrimaryCoachingLever } from './skillRubric';
 
 export type NextAction =
   | 'retry_same'           // Same scenario, apply the constraint
@@ -39,7 +39,7 @@ export function recommendNextStep(opts: {
   previousTopMistake?: string;
 }): NextStepRecommendation {
   const { score, dimensions, skill, retryCount, topMistake, previousTopMistake } = opts;
-  const rubric = SKILL_RUBRICS[skill];
+  const _rubric = SKILL_RUBRICS[skill];
   const lever = selectPrimaryCoachingLever(dimensions, skill);
 
   // Use primary coaching lever for focus, not just weakest

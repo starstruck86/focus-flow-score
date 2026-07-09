@@ -99,7 +99,7 @@ export async function primaryAction(ctx: ToolContext): Promise<string> {
   const now = new Date();
   const todayStr = todayInAppTz();
   const currentMinutes = getCurrentMinutesET();
-  const currentBlock = await detectCurrentBlock(userId);
+  const _currentBlock = await detectCurrentBlock(userId);
   const ignoreCounts = getIgnoreCounts();
 
   const [tasksRes, oppsRes, renewalsRes, calendarRes, journalRes] = await Promise.all([

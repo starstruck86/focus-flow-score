@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Collapsible,
   CollapsibleContent,
@@ -46,11 +46,7 @@ import {
   validateChatMessageSchema,
   validateTaskRunSchema,
 } from "@/lib/strategy/debug/schemaValidators";
-import {
-  compareSchemaHealth,
-  type PersistedSchemaHealth,
-  readPersistedSchemaHealth,
-} from "@/lib/strategy/debug/persistedSchemaHealth";
+import { compareSchemaHealth, readPersistedSchemaHealth } from "@/lib/strategy/debug/persistedSchemaHealth";
 import {
   type DriftHistorySummary,
   summarizeDriftHistory,

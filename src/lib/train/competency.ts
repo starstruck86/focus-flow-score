@@ -28,7 +28,7 @@ interface RepInput {
  * requiredPasses = max(floor, drillCountInSubLevel)
  */
 export async function incrementSubLevelRep(input: RepInput): Promise<UserCompetencyRow> {
-  const { userId, spoke, topic, band, subLevel, score, drillCountInSubLevel } = input;
+  const { userId, spoke, topic, band, subLevel, score, drillCountInSubLevel: _drillCountInSubLevel } = input;
 
   const { data: existing } = await (supabase as any)
     .from('user_competency')

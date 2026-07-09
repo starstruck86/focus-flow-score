@@ -2,7 +2,7 @@
 import { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Sparkles, TrendingUp, UserPlus, Newspaper, Cpu, ExternalLink } from 'lucide-react';
+import { Sparkles, TrendingUp, UserPlus, Newspaper, Cpu } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TriggerEvent, TimelineEntry } from '@/types/dashboard';
@@ -14,7 +14,7 @@ interface EnrichmentTimelineProps {
   enrichmentSourceSummary?: string | null;
 }
 
-export function EnrichmentTimeline({ enrichmentEvidence, triggerEvents, lastEnrichedAt, enrichmentSourceSummary }: EnrichmentTimelineProps) {
+export function EnrichmentTimeline({ enrichmentEvidence, triggerEvents, lastEnrichedAt, enrichmentSourceSummary: _enrichmentSourceSummary }: EnrichmentTimelineProps) {
   const timeline = useMemo(() => {
     const events: TimelineEntry[] = [];
 

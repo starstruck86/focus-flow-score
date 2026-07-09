@@ -8,7 +8,7 @@
  * This is a PURE classification layer. It does not mutate state.
  */
 
-import type { VerifiedResource, FixabilityBucket } from '@/lib/enrichmentVerification';
+import type { VerifiedResource } from '@/lib/enrichmentVerification';
 import type { ResourceSubtype } from '@/lib/salesBrain/resourceSubtype';
 
 // ── Resolution types ───────────────────────────────────────

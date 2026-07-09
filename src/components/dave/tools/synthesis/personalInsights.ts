@@ -4,11 +4,11 @@
  */
 import type { ToolContext } from '../../toolTypes';
 import { supabase } from '@/integrations/supabase/client';
-import { startOfWeek, endOfWeek, subWeeks, parseISO, isWithinInterval } from 'date-fns';
+import { startOfWeek } from 'date-fns';
 
 const SCORE_CATEGORIES = ['structure', 'cotm', 'meddicc', 'discovery', 'presence', 'commercial', 'next_step'] as const;
 
-export async function personalInsights(ctx: ToolContext, params?: { question?: string }) {
+export async function personalInsights(ctx: ToolContext, _params?: { question?: string }) {
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated.';
 

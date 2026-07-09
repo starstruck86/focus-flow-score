@@ -1,10 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Briefcase, UserPlus, Newspaper, Cpu, RefreshCw, CheckCheck,
-  ExternalLink, ChevronRight, Sparkles, Eye,
-  AlertTriangle, Zap, DollarSign, Info,
-} from 'lucide-react';
+import { Briefcase, UserPlus, Newspaper, Cpu, RefreshCw, CheckCheck, ExternalLink, ChevronRight, Sparkles, Eye, AlertTriangle, Zap } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

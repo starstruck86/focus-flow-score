@@ -23,14 +23,7 @@ import {
   requireRegistration,
   STRATEGY_SURFACE_REGISTRY,
 } from "../surfaceRegistry";
-import {
-  adaptChatArtifact,
-  adaptTransformOutput,
-  adaptTaskRun,
-  type ChatMessageRow,
-  type TransformOutputRow,
-  type TaskRunRow,
-} from "../evidenceAdapters";
+import { adaptChatArtifact, adaptTransformOutput, adaptTaskRun, type ChatMessageRow, type TransformOutputRow } from "../evidenceAdapters";
 import {
   runUniversalEvidenceCheck,
   validateSingleEvidence,

@@ -128,7 +128,7 @@ export function DayTimeline() {
 
   const completedGoals = new Set((plan?.completed_goals || []) as string[]);
 
-  const { dayStart, dayEnd, totalMinutes } = useMemo(() => {
+  const { dayStart, dayEnd: _dayEnd, totalMinutes } = useMemo(() => {
     if (blocks.length === 0) return { dayStart: 0, dayEnd: 0, totalMinutes: 1 };
     const ds = toMinutes(blocks[0].start_time);
     const de = toMinutes(blocks[blocks.length - 1].end_time);

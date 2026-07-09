@@ -15,7 +15,7 @@
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import { deriveProcessingState } from '@/lib/processingState';
-import { deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS, ASSET_LABELS } from '@/lib/processingRoute';
+import { deriveProcessingRoute } from '@/lib/processingRoute';
 import { isJobStale, STALE_JOB_TIMEOUT_MS } from '@/store/useResourceJobProgress';
 import { detectAttachmentReferences } from '@/lib/attachmentDetection';
 import { isPlaceholderContent } from '@/lib/canonicalLifecycle';

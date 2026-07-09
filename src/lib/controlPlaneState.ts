@@ -5,7 +5,7 @@
  * It collapses the detailed internal stages into 6 user-facing states.
  */
 
-import type { CanonicalResourceStatus, LifecycleStage, BlockedReason } from '@/lib/canonicalLifecycle';
+import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
 
 // ── The 6 canonical control plane states ───────────────────
 export type ControlPlaneState =

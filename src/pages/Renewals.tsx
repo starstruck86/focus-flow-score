@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useCallback, memo, useEffect } from 'react';
+import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import {
@@ -6,23 +6,7 @@ import {
   CompanyMonitorCard,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
-import { 
-  Plus, 
-  Phone, 
-  Mail, 
-  MessageSquare,
-  MoreHorizontal,
-  Search,
-  ExternalLink,
-  AlertTriangle,
-  Calendar,
-  DollarSign,
-  Upload,
-  FileSpreadsheet,
-  Download,
-  ChevronDown,
-  ChevronRight,
-} from 'lucide-react';
+import { Plus, MoreHorizontal, Search, AlertTriangle, Calendar, DollarSign, Upload, FileSpreadsheet, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { StreakChip } from '@/components/StreakChip';
 import { LifecycleTierBadge, IcpScorePill, EnrichButton, SignalDetailPanel } from '@/components/LifecycleIntelligence';
@@ -75,11 +59,10 @@ import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { RenewalDetailsField } from '@/components/RenewalDetailsField';
 import { EditableTextCell, EditableNumberCell, DisplaySelectCell, PlanhatLinkCell, AgreementLinkCell, AccountNameCell, WebsiteLinkCell } from '@/components/table';
 import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
-import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
 import { MetricFieldCell } from '@/components/table/MetricFieldCell';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
-import { sortRenewalsDefault, applySortWithFallback, CHURN_RISK_SORT_RANK, CHURN_RISK_DISPLAY_LABELS } from '@/lib/sortUtils';
+import { sortRenewalsDefault, applySortWithFallback, CHURN_RISK_SORT_RANK } from '@/lib/sortUtils';
 import type { Renewal, HealthStatus, Opportunity, ChurnRisk, OpportunityStage } from '@/types';
 import { computeRenewalRiskScore } from '@/hooks/useTimeAllocation';
 import { useWidgetLayout, type WidgetConfig } from '@/hooks/useWidgetLayout';
@@ -90,7 +73,7 @@ import { RefreshCw } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 
 function RenewalEnrichButton({ renewal, ensureAccount }: { renewal: Renewal; ensureAccount: (r: Renewal) => string }) {
-  const { enrichAccount, isEnriching } = useAccountEnrichment();
+  const { enrichAccount, isEnriching: _isEnriching } = useAccountEnrichment();
   const [creating, setCreating] = useState(false);
   const store = useStore;
 
@@ -198,7 +181,7 @@ function RenewalUrgencyHeader({ renewals, formatCurrency }: { renewals: Renewal[
   );
 }
 
-const HEALTH_COLORS: Record<HealthStatus, string> = {
+const _HEALTH_COLORS: Record<HealthStatus, string> = {
   green: 'bg-status-green/20 text-status-green border-status-green/30',
   yellow: 'bg-status-yellow/20 text-status-yellow border-status-yellow/30',
   red: 'bg-status-red/20 text-status-red border-status-red/30',
@@ -394,7 +377,7 @@ export default function Renewals() {
     const existing = getAccountForRenewal(renewal);
     if (existing) return existing.id;
     // Create a new account linked to this renewal
-    const newId = crypto.randomUUID();
+    const _newId = crypto.randomUUID();
     addAccount({
       name: renewal.accountName,
       priority: 'medium',
@@ -894,7 +877,7 @@ export default function Renewals() {
     toast.success('Renewal added!');
   };
 
-  const handleQuickAction = (action: 'call' | 'email' | 'meeting', renewalId: string) => {
+  const _handleQuickAction = (action: 'call' | 'email' | 'meeting', _renewalId: string) => {
     switch (action) {
       case 'call':
         logCall(true);

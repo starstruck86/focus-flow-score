@@ -5,7 +5,7 @@
  */
 
 // Re-export lever types for consumers
-import { computeLeverSelection, COACHING_WHY_EXPLANATIONS } from '@/lib/dojo/leverConfig';
+import { computeLeverSelection } from '@/lib/dojo/leverConfig';
 export type { LeverSelectionResult, LeverCandidate } from '@/lib/dojo/leverConfig';
 
 export interface DimensionDef {

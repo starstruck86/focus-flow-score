@@ -109,7 +109,7 @@ export function usePreviousWeekReview() {
 
 export function useWeeklyMetricsAggregation() {
   const { user } = useAuth();
-  const { weekStart, weekEnd } = getCurrentWeekRange();
+  const { weekStart, weekEnd: _weekEnd } = getCurrentWeekRange();
 
   return useQuery({
     queryKey: ['weekly-metrics-agg', weekStart],

@@ -1,6 +1,6 @@
 import { usePodcastQueue } from '@/hooks/usePodcastQueue';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle2, Podcast, Brain } from 'lucide-react';
+import { Loader2, Podcast, Brain } from 'lucide-react';
 
 /**
  * Small indicator badge for the Prep page header showing active podcast queue progress.

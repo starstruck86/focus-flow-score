@@ -12,15 +12,7 @@ import {
   type AutoOperationalizeResult,
   type BatchSummary,
 } from '@/lib/autoOperationalize';
-import {
-  recordActionOutcome,
-  recordBulkActionOutcome,
-  reconcileOutcome,
-  deriveOutcomeStatus,
-  type ActionOutcome,
-  type BulkActionOutcome,
-  type RowFlashStatus,
-} from '@/lib/actionOutcomeStore';
+import { recordActionOutcome, recordBulkActionOutcome, reconcileOutcome, deriveOutcomeStatus, type ActionOutcome, type BulkActionOutcome } from '@/lib/actionOutcomeStore';
 import {
   type ControlPlaneState,
   deriveControlPlaneState,
@@ -175,7 +167,7 @@ export function useAutoOperationalize() {
     /** Snapshot of resources to process — preserved even if UI filter changes */
     snapshotResources: CanonicalResourceStatus[],
     actionLabel: string,
-    expectedTransitionLabel: string,
+    _expectedTransitionLabel: string,
     processingIds?: Set<string>,
   ): Promise<BulkActionOutcome> => {
     setIsRunning(true);

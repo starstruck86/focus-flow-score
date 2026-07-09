@@ -2,21 +2,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useStore } from '@/store/useStore';
-import { 
-  calculateCommissionSummary, 
-  calculateRequiredWeeklyRate,
-  DEFAULT_QUOTA_CONFIG,
-} from '@/lib/commissionCalculations';
-import { 
-  getCapacityAdjustedTarget,
-  DEFAULT_CAPACITY_SETTINGS,
-  getTemplateById,
-  calculateWeeklyExpectations,
-} from '@/lib/goodDayModel';
+import { calculateCommissionSummary, DEFAULT_QUOTA_CONFIG } from '@/lib/commissionCalculations';
+import { getCapacityAdjustedTarget, DEFAULT_CAPACITY_SETTINGS } from '@/lib/goodDayModel';
 import { useQuotaTargets } from '@/hooks/useSalesAge';
 import { useRollingAverages, useWeekToDateMetrics } from '@/hooks/useGoodDayMetrics';
 import { DEFAULT_QUOTA_TARGETS } from '@/lib/salesAgeCalculations';
-import { format, subDays, differenceInWeeks } from 'date-fns';
+import { format, differenceInWeeks } from 'date-fns';
 
 export interface CommissionPacingData {
   // Current state
@@ -67,7 +58,7 @@ export function useCommissionPacing(): {
   const { opportunities, quotaConfig } = useStore();
   const { data: quotaTargets } = useQuotaTargets();
   const { data: rollingAvgs, isLoading: rollingLoading } = useRollingAverages();
-  const { data: wtdMetrics, isLoading: wtdLoading } = useWeekToDateMetrics();
+  const { data: _wtdMetrics, isLoading: wtdLoading } = useWeekToDateMetrics();
   
   const today = new Date();
   const effectiveConfig = quotaConfig || DEFAULT_QUOTA_CONFIG;
@@ -196,7 +187,7 @@ export function useCommissionPacing(): {
 
 function estimateWeeklyCommissionFromActivity(
   avgDaily: { dials: number; conversations: number; meetingsSet: number; oppsCreated: number },
-  config: typeof DEFAULT_QUOTA_CONFIG
+  _config: typeof DEFAULT_QUOTA_CONFIG
 ): number {
   // Very rough conversion: conversations -> meetings -> opps -> ARR
   const conversionRate = 0.15; // conversations to meetings

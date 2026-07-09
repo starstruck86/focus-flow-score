@@ -5,15 +5,9 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
-import { 
-  ChevronRight,
-  DollarSign,
-  Calendar,
-  AlertTriangle,
-  ArrowUpRight,
-} from 'lucide-react';
-import type { Opportunity, OpportunityStage, DealType } from '@/types';
-import { format, differenceInDays, parseISO, isValid } from 'date-fns';
+import { AlertTriangle, ArrowUpRight } from 'lucide-react';
+import type { Opportunity, OpportunityStage } from '@/types';
+import { differenceInDays, parseISO, isValid } from 'date-fns';
 
 const STAGE_ORDER: OpportunityStage[] = ['Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate'];
 
@@ -25,7 +19,7 @@ const STAGE_COLORS: Record<string, string> = {
   'Negotiate': 'bg-purple-500/15 text-purple-400 border-purple-500/30',
 };
 
-const DEAL_TYPE_LABELS: Record<string, string> = {
+const _DEAL_TYPE_LABELS: Record<string, string> = {
   'new-logo': 'New Logo',
   'expansion': 'Expansion',
   'renewal': 'Renewal',

@@ -8,7 +8,7 @@
  * It does NOT own persistence, verification, or audio delivery.
  */
 
-import type { ClosedLoopSession, ClosedLoopVerification } from '@/lib/daveClosedLoopEngine';
+import type { ClosedLoopSession } from '@/lib/daveClosedLoopEngine';
 import { buildProgressSummary, type ClosedLoopProgressSummary } from '@/lib/daveClosedLoopStore';
 import type { VoiceSurface } from '@/lib/daveVoiceRuntime';
 import { DIMENSION_LABELS } from '@/lib/learning/learnScoringSchema';
@@ -28,7 +28,7 @@ export interface ClosedLoopResumeInfo {
 
 export function buildLoopResumeInfo(session: ClosedLoopSession): ClosedLoopResumeInfo {
   const concept = session.subSkill || session.taughtConcept;
-  const attemptCount = session.attempts.length;
+  const _attemptCount = session.attempts.length;
   const summary = buildProgressSummary(session);
 
   // Determine the spoken intro based on status

@@ -6,8 +6,7 @@ const localStorageMock = {
   getItem: (key: string) => store[key] ?? null,
   setItem: (key: string, value: string) => { store[key] = value; },
   removeItem: (key: string) => { delete store[key]; },
-  clear: () => { for (const k of Object.keys(store)) delete store[k]; },
-} as Storage;
+  clear: () => { for (const k of Object.keys(store)) delete store[k]; } } as Storage;
 vi.stubGlobal('localStorage', localStorageMock);
 
 import {
@@ -42,9 +41,7 @@ import {
   computeDecayedMemoryWeight,
   getDecayedPlaybookScore,
   type DealSignals,
-  type PrioritizationWeights,
-  type ExplorationRecord,
-} from '../lib/dealExecutionEngine';
+  type ExplorationRecord } from '../lib/dealExecutionEngine';
 
 function makeDeal(overrides: Partial<DealSignals> = {}): DealSignals {
   return {
@@ -60,8 +57,7 @@ function makeDeal(overrides: Partial<DealSignals> = {}): DealSignals {
     competitionPresent: false,
     meddiccCoverage: 50,
     isNewLogo: true,
-    ...overrides,
-  };
+    ...overrides };
 }
 
 beforeEach(() => localStorageMock.clear());
@@ -276,8 +272,7 @@ describe('Meta-Learning', () => {
   it('returns empty correlations with insufficient data', () => {
     const outcomes = Array.from({ length: 5 }, (_, i) => ({
       signals: makeDeal({ dealId: `d-${i}` }),
-      positiveOutcome: i % 2 === 0,
-    }));
+      positiveOutcome: i % 2 === 0 }));
     expect(analyzeWeightCorrelations(outcomes)).toHaveLength(0);
   });
 
@@ -399,8 +394,7 @@ describe('Exploration vs Exploitation', () => {
       timestamp: new Date().toISOString(),
       baselinePlaybookId: 'pb-a',
       exploratoryPlaybookId: 'pb-b',
-      outcome: 'positive',
-    };
+      outcome: 'positive' };
     recordExploration(record);
     const log = loadExplorationLog();
     expect(log.length).toBe(1);

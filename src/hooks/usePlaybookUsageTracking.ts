@@ -4,7 +4,7 @@
  * Tracks recommendation events, roleplay sessions, post-call feedback,
  * and provides weekly usage summaries for adoption visibility.
  */
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';

@@ -19,7 +19,7 @@ const TOUCH_TYPES: { type: TouchType; icon: typeof Phone; label: string; hasConv
   { type: 'linkedin', icon: MessageSquare, label: 'Log LinkedIn' },
 ];
 
-export function TouchLogButtons({ accountId, compact }: TouchLogButtonsProps) {
+export function TouchLogButtons({ accountId, compact: _compact }: TouchLogButtonsProps) {
   const { updateAccount, accounts } = useStore();
 
   const handleTouch = (touchType: TouchType) => {

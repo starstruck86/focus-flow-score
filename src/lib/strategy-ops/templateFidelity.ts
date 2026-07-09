@@ -323,7 +323,7 @@ function classifyBatchError(error: string): string {
   return 'unknown';
 }
 
-function classifyTelemetryError(error: string | null, metadata: any): string {
+function classifyTelemetryError(error: string | null, _metadata: any): string {
   if (!error) return 'unknown';
   const e = error.toLowerCase();
   if (e.includes('timeout') || e.includes('timed out')) return 'timeout';

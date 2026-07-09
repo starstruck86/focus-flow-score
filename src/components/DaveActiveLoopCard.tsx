@@ -8,7 +8,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BookOpen, RefreshCw, Target, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ArrowRight, BookOpen, RefreshCw, Target } from 'lucide-react';
 import type { ClosedLoopSession } from '@/lib/daveClosedLoopEngine';
 
 interface Props {

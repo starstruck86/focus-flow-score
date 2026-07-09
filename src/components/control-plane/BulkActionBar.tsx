@@ -1,7 +1,7 @@
 /**
  * Bulk Action Bar — shows contextual bulk actions with preview confirmation.
  */
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { Zap, FileText, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ControlPlaneFilter } from '@/lib/controlPlaneState';

@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { emitDataChanged } from '@/lib/daveEvents';
 import { OPP_FIELDS, MEDDICC_FIELDS } from '../toolTypes';
 import type { ToolContext, ToolMap } from '../toolTypes';
-import type { MethodologyRow, MeddiccFieldKey, TaskInsert } from '@/types/supabase-helpers';
+import type { MeddiccFieldKey, TaskInsert } from '@/types/supabase-helpers';
 import { isMeddiccConfirmed } from '@/types/supabase-helpers';
 
 export function createOpportunityTools(ctx: ToolContext): ToolMap {

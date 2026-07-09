@@ -8,9 +8,7 @@ import {
   classifyUtterance,
   selectModel,
   batchUtterances,
-  filterByVerbosity,
-  estimateSessionCost,
-} from '@/lib/voice/voiceCostController';
+  estimateSessionCost } from '@/lib/voice/voiceCostController';
 import { startUsageSession, endUsageSession } from '@/lib/voice/voiceUsageTracker';
 
 describe('Voice Cost Controller', () => {

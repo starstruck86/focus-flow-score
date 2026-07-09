@@ -1,5 +1,5 @@
 // Data Sync Bridge: Hydrates Zustand from DB on load, writes mutations back
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/store/useStore';
@@ -442,7 +442,7 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
 
         // Quarantine (don't delete) local-only items so offline-created records survive
         // and can be recovered manually. Anything present in DB stays in the main arrays;
-        // anything local-only moves under __quarantinedLocalOnly.
+        // anything local-only moves under _quarantinedLocalOnly.
         try {
           const persistKey = 'quota-compass-storage';
           const raw = localStorage.getItem(persistKey);
@@ -455,7 +455,7 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
               const dbContactIdSet = new Set<string>(dbContacts.map(c => c.id));
               const dbTaskIdSet = new Set<string>(dbTasks.map(t => t.id));
 
-              const quarantine: Record<string, unknown[]> = (parsed.state.__quarantinedLocalOnly as Record<string, unknown[]>) || {};
+              const quarantine: Record<string, unknown[]> = (parsed.state._quarantinedLocalOnly as Record<string, unknown[]>) || {};
               const partition = <T extends { id: string }>(arr: T[] | undefined, keep: Set<string>, key: string) => {
                 if (!Array.isArray(arr)) return arr;
                 const kept: T[] = [];
@@ -473,9 +473,9 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
               parsed.state.renewals = partition(parsed.state.renewals, dbRenIdSet, 'renewals');
               parsed.state.contacts = partition(parsed.state.contacts, dbContactIdSet, 'contacts');
               parsed.state.tasks = partition(parsed.state.tasks, dbTaskIdSet, 'tasks');
-              parsed.state.__quarantinedLocalOnly = quarantine;
+              parsed.state._quarantinedLocalOnly = quarantine;
               localStorage.setItem(persistKey, JSON.stringify(parsed));
-              console.log('[DataSync] Quarantined local-only items under __quarantinedLocalOnly');
+              console.log('[DataSync] Quarantined local-only items under _quarantinedLocalOnly');
             }
           }
         } catch (e) {

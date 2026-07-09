@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { validateResourceQuality, type QualityResult } from '@/lib/resourceQuality';
 import { transitionToEnriched } from '@/lib/resourceLifecycle';
-import type { VerifiedResource, FixabilityBucket } from '@/lib/enrichmentVerification';
+import type { VerifiedResource } from '@/lib/enrichmentVerification';
 import type { RemediationQueue } from '@/lib/remediationEngine';
 
 // ── Fix Run Types ─────────────────────────────────────────

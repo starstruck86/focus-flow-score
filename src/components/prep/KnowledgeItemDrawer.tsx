@@ -17,12 +17,7 @@ import {
   CheckCircle2, Play, Trash2, ExternalLink, Save, Zap, X,
   Target, Brain, Lightbulb, ListChecks, Unlock, AlertTriangle,
 } from 'lucide-react';
-import {
-  useKnowledgeItems,
-  useUpdateKnowledgeItem,
-  useDeleteKnowledgeItem,
-  type KnowledgeItem,
-} from '@/hooks/useKnowledgeItems';
+import { useKnowledgeItems, useUpdateKnowledgeItem, useDeleteKnowledgeItem } from '@/hooks/useKnowledgeItems';
 import { toast } from 'sonner';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,

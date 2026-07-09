@@ -4,7 +4,7 @@ import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useEffect, useRef } from 'react';
 import { bostonNow } from '@/lib/timeFormat';
 
-interface CalendarEvent {
+interface _CalendarEvent {
   id: string;
   external_id: string;
   title: string;

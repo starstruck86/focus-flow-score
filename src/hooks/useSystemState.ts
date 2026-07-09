@@ -5,13 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { getSystemState, getSystemSummary, loadKillSwitches, computeRecommendationAudit, type SystemState, type SystemSummary, type KillSwitches, type RecommendationAudit } from '@/lib/systemGovernance';
-import {
-  loadSystemMode, loadAlerts, loadCorrectionLog, loadHealthHistory,
-  computeSystemConfidence, computePersonalProfile, computeAggregateRegret,
-  type SystemModeState, type SystemAlert, type AutoCorrectionAction,
-  type HealthSnapshot, type SystemConfidence, type HealthInputs,
-  type PersonalProfile,
-} from '@/lib/systemIntelligence';
+import { loadSystemMode, loadAlerts, loadCorrectionLog, loadHealthHistory, computeSystemConfidence, computePersonalProfile, computeAggregateRegret, type HealthInputs, type PersonalProfile } from '@/lib/systemIntelligence';
 
 const POLL_MS = 5_000;
 

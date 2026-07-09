@@ -26,7 +26,7 @@ export interface ReleaseGateResult {
 // ═══════════════════════════════════════════════════════════════════
 
 const EDGE_FN_DIR = path.resolve("supabase/functions");
-const STRATEGY_CONTROL_TEST_DIR = path.resolve("src/lib/strategy-control/__tests__");
+const STRATEGY_CONTROL_TEST_DIR = path.resolve("src/lib/strategy-control/_tests__");
 const ORCHESTRATOR_DIR = path.resolve("supabase/functions/_shared/strategy-orchestrator");
 
 function getEdgeFunctionDirs(): string[] {
@@ -127,7 +127,7 @@ function checkRequiredTestSuites(): string[] {
   // Scan strategy-control tests + strategy-skills tests
   const testDirs = [
     STRATEGY_CONTROL_TEST_DIR,
-    path.resolve("supabase/functions/_shared/strategy-skills/__tests__"),
+    path.resolve("supabase/functions/_shared/strategy-skills/_tests__"),
   ];
   const allTestFiles = testDirs.flatMap(d => collectTestFiles(d));
   if (allTestFiles.length === 0) {

@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { Plus, Zap, ChevronRight, Trash2, TrendingUp } from 'lucide-react';
+import { Plus, Zap, Trash2, TrendingUp } from 'lucide-react';
 
 const STAGE_CONFIG: Record<string, { label: string; dimension: string; color: string; emoji: string }> = {
   prospecting:    { label: 'Prospecting',          dimension: 'internal_prospecting', color: 'bg-slate-500',  emoji: '🎯' },

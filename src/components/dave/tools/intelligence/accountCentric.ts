@@ -7,11 +7,10 @@
 
 import type { ToolContext, ToolMap } from '../../toolTypes';
 import { todayInAppTz } from '@/lib/timeFormat';
-import { isAccountCentricExecutionEnabled, isAccountExecutionModelEnabled } from '@/lib/featureFlags';
 import { getAccountState } from '@/lib/accountExecutionState';
 import { buildAccountWorkingSummary } from '@/lib/accountWorkingSummary';
 import { getPostActionRecommendation, evaluateOpportunityEscalation } from '@/lib/accountPostAction';
-import { getRecentEvents, getTimelineSummary } from '@/lib/accountTimeline';
+import { getRecentEvents } from '@/lib/accountTimeline';
 import { resolveAccountByName } from '@/data/accounts';
 
 async function resolveAccount(ctx: ToolContext, accountName: string): Promise<{ id: string; name: string; userId: string } | null> {

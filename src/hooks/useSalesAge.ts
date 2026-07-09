@@ -2,22 +2,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { format, subDays, subMonths, startOfWeek, endOfWeek } from 'date-fns';
+import { format, subDays, startOfWeek } from 'date-fns';
 import { useStore } from '@/store/useStore';
-import { 
-  calculateQPI, 
-  calculateSalesAge, 
-  calculatePaceToQuota,
-  calculateSalesAgeResult,
-  generateRecommendations,
-  getCurrentWeekEnding,
-  DEFAULT_QUOTA_TARGETS,
-  type QuotaTargets,
-  type DailyMetrics,
-  type SalesAgeResult,
-  type PaceToQuota,
-  type ActionRecommendation,
-} from '@/lib/salesAgeCalculations';
+import { calculatePaceToQuota, calculateSalesAgeResult, generateRecommendations, getCurrentWeekEnding, DEFAULT_QUOTA_TARGETS, type QuotaTargets, type DailyMetrics, type SalesAgeResult, type } from '@/lib/salesAgeCalculations';
 import { calculateCommissionSummary, DEFAULT_QUOTA_CONFIG } from '@/lib/commissionCalculations';
 
 // Transform DB row to QuotaTargets
@@ -37,8 +24,7 @@ function transformQuotaTargets(data: any): QuotaTargets {
     targetAccountsResearchedPerDay: parseFloat(data.target_accounts_researched_per_day) || DEFAULT_QUOTA_TARGETS.targetAccountsResearchedPerDay,
     targetContactsPreppedPerDay: parseFloat(data.target_contacts_prepped_per_day) || DEFAULT_QUOTA_TARGETS.targetContactsPreppedPerDay,
     qpiNewLogoWeight: parseFloat(data.qpi_new_logo_weight) || DEFAULT_QUOTA_TARGETS.qpiNewLogoWeight,
-    qpiRenewalWeight: parseFloat(data.qpi_renewal_weight) || DEFAULT_QUOTA_TARGETS.qpiRenewalWeight,
-  };
+    qpiRenewalWeight: parseFloat(data.qpi_renewal_weight) || DEFAULT_QUOTA_TARGETS.qpiRenewalWeight };
 }
 
 // Transform journal entry to DailyMetrics
@@ -52,8 +38,7 @@ function transformJournalToMetrics(entry: any): DailyMetrics {
     customerMeetingsHeld: entry.customer_meetings_held || 0,
     accountsResearched: entry.accounts_researched || 0,
     contactsPrepped: entry.contacts_prepped || 0,
-    prospectsAdded: entry.prospects_added || 0,
-  };
+    prospectsAdded: entry.prospects_added || 0 };
 }
 
 // Fetch quota targets
@@ -70,8 +55,7 @@ export function useQuotaTargets() {
       if (error) throw error;
       return data ? transformQuotaTargets(data) : DEFAULT_QUOTA_TARGETS;
     },
-    enabled: !!user,
-  });
+    enabled: !!user });
 }
 
 // Upsert quota targets
@@ -99,8 +83,7 @@ export function useSaveQuotaTargets() {
         target_accounts_researched_per_day: targets.targetAccountsResearchedPerDay,
         target_contacts_prepped_per_day: targets.targetContactsPreppedPerDay,
         qpi_new_logo_weight: targets.qpiNewLogoWeight,
-        qpi_renewal_weight: targets.qpiRenewalWeight,
-      };
+        qpi_renewal_weight: targets.qpiRenewalWeight };
       
       const { data, error } = await supabase
         .from('quota_targets')
@@ -114,8 +97,7 @@ export function useSaveQuotaTargets() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['quota-targets'] });
       queryClient.invalidateQueries({ queryKey: ['sales-age'] });
-    },
-  });
+    } });
 }
 
 // Fetch daily journal entries for metrics calculation
@@ -135,8 +117,7 @@ export function useJournalMetrics(days: number) {
       if (error) throw error;
       return (data || []).map(transformJournalToMetrics);
     },
-    enabled: !!user,
-  });
+    enabled: !!user });
 }
 
 // Fetch prior sales age snapshot
@@ -158,8 +139,7 @@ export function usePriorSalesAgeSnapshot() {
       if (error) throw error;
       return data;
     },
-    enabled: !!user,
-  });
+    enabled: !!user });
 }
 
 // Fetch sales age snapshot history
@@ -177,8 +157,7 @@ export function useSalesAgeHistory(weeks: number = 12) {
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user,
-  });
+    enabled: !!user });
 }
 
 // Calculate and return current Sales Age data
@@ -193,18 +172,16 @@ export function useSalesAge() {
   const config = quotaConfig || DEFAULT_QUOTA_CONFIG;
   const now = new Date();
   const fyStart = targets?.fiscalYearStart || config.fiscalYearStart;
-  const fyEnd = targets?.fiscalYearEnd || config.fiscalYearEnd;
+  const _fyEnd = targets?.fiscalYearEnd || config.fiscalYearEnd;
   
   const dateFilter = {
     start: fyStart,
-    end: format(now, 'yyyy-MM-dd'),
-  };
+    end: format(now, 'yyyy-MM-dd') };
   
   const commissionSummary = calculateCommissionSummary(opportunities, {
     ...config,
     newArrQuota: targets?.newArrQuota || config.newArrQuota,
-    renewalArrQuota: targets?.renewalArrQuota || config.renewalArrQuota,
-  }, dateFilter);
+    renewalArrQuota: targets?.renewalArrQuota || config.renewalArrQuota }, dateFilter);
   
   return useQuery({
     queryKey: ['sales-age', targets, metrics30d?.length, metrics6m?.length, commissionSummary.newArrBooked],
@@ -214,8 +191,7 @@ export function useSalesAge() {
       const m6m = metrics6m || [];
       const prior = priorSnapshot ? {
         salesAge: Number(priorSnapshot.sales_age),
-        qpiCombined: Number(priorSnapshot.qpi_combined),
-      } : undefined;
+        qpiCombined: Number(priorSnapshot.qpi_combined) } : undefined;
       
       // Calculate 30-60 day metrics for comparison
       const priorMetrics = m6m.filter(m => {
@@ -237,8 +213,7 @@ export function useSalesAge() {
       
       return result;
     },
-    enabled: !!targets || !!metrics30d,
-  });
+    enabled: !!targets || !!metrics30d });
 }
 
 // Get pace to quota
@@ -251,14 +226,12 @@ export function usePaceToQuota() {
   
   const dateFilter = {
     start: effectiveTargets.fiscalYearStart,
-    end: format(new Date(), 'yyyy-MM-dd'),
-  };
+    end: format(new Date(), 'yyyy-MM-dd') };
   
   const commissionSummary = calculateCommissionSummary(opportunities, {
     ...config,
     newArrQuota: effectiveTargets.newArrQuota,
-    renewalArrQuota: effectiveTargets.renewalArrQuota,
-  }, dateFilter);
+    renewalArrQuota: effectiveTargets.renewalArrQuota }, dateFilter);
   
   return calculatePaceToQuota(
     commissionSummary.newArrBooked,
@@ -342,8 +315,7 @@ export function useSaveSalesAgeSnapshot() {
         renewal_arr_closed: renewalArrClosed,
         renewal_arr_quota: renewalArrQuota,
         projected_finish_30d: salesAge.projectedFinish30d,
-        projected_finish_6m: salesAge.projectedFinish6m,
-      };
+        projected_finish_6m: salesAge.projectedFinish6m };
       
       // Use any to bypass strict type checking for the onConflict option
       const { data, error } = await (supabase
@@ -358,8 +330,7 @@ export function useSaveSalesAgeSnapshot() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales-age-snapshot-prior'] });
       queryClient.invalidateQueries({ queryKey: ['sales-age-history'] });
-    },
-  });
+    } });
 }
 
 // Performance rollups (WTD, MTD, QTD)
@@ -391,8 +362,7 @@ export function usePerformanceRollups() {
         customerMeetingsHeld: wtdEntries.reduce((s, e) => s + (e.customer_meetings_held || 0), 0),
         oppsCreated: wtdEntries.reduce((s, e) => s + (e.opportunities_created || 0), 0),
         accountsResearched: wtdEntries.reduce((s, e) => s + (e.accounts_researched || 0), 0),
-        contactsPrepped: wtdEntries.reduce((s, e) => s + (e.contacts_prepped || 0), 0),
-      };
+        contactsPrepped: wtdEntries.reduce((s, e) => s + (e.contacts_prepped || 0), 0) };
       
       // MTD
       const mtd = {
@@ -402,11 +372,9 @@ export function usePerformanceRollups() {
         customerMeetingsHeld: entries.reduce((s, e) => s + (e.customer_meetings_held || 0), 0),
         oppsCreated: entries.reduce((s, e) => s + (e.opportunities_created || 0), 0),
         accountsResearched: entries.reduce((s, e) => s + (e.accounts_researched || 0), 0),
-        contactsPrepped: entries.reduce((s, e) => s + (e.contacts_prepped || 0), 0),
-      };
+        contactsPrepped: entries.reduce((s, e) => s + (e.contacts_prepped || 0), 0) };
       
       return { wtd, mtd, wtdDays: wtdEntries.length, mtdDays: entries.length };
     },
-    enabled: !!user,
-  });
+    enabled: !!user });
 }

@@ -144,7 +144,7 @@ export function getTelemetrySummary(): Record<string, number> {
 
 /** Expose on window for console debugging — dev mode only */
 if (typeof window !== 'undefined' && import.meta.env.DEV) {
-  (window as any).__telemetry = {
+  (window as any)._telemetry = {
     getEvents: getTelemetryEvents,
     getRecent: getRecentEvents,
     getSummary: getTelemetrySummary,

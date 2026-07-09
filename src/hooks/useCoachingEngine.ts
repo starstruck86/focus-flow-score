@@ -170,7 +170,7 @@ export function useGenerateBattlePlan() {
 }
 
 export function useCompleteBattleMove() {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ planId, moveIndex }: { planId: string; moveIndex: number }) => {

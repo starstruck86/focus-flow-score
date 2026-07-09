@@ -5,8 +5,8 @@
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { RotateCcw, ArrowRight, BookOpen, Zap, Shuffle } from 'lucide-react';
-import { recommendNextStep, type NextStepRecommendation, type NextAction } from '@/lib/dojo/nextStepRecommendation';
+import { RotateCcw, BookOpen, Zap, Shuffle } from 'lucide-react';
+import { recommendNextStep, type NextAction } from '@/lib/dojo/nextStepRecommendation';
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 
 const ACTION_ICONS: Record<NextAction, typeof RotateCcw> = {

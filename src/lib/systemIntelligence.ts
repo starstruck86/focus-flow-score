@@ -928,7 +928,7 @@ function classifyDrift(pct: number): DriftResult['severity'] {
 export function computeDrift(baseline: BaselineSnapshot, current: BaselineSnapshot): DriftReport {
   const drifts: DriftResult[] = [];
 
-  const allKeys = new Set([
+  const _allKeys = new Set([
     ...Object.keys(baseline.playbookWeights),
     ...Object.keys(current.playbookWeights),
     ...Object.keys(baseline.trustDistribution),

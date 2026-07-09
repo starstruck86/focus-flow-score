@@ -53,7 +53,7 @@ export function ClickableNameCell({
   fontWeight = 'medium',
 }: ClickableNameCellProps) {
   const [isEditingName, setIsEditingName] = useState(false);
-  const [isEditingLink, setIsEditingLink] = useState(false);
+  const [_isEditingLink, setIsEditingLink] = useState(false);
   const [editName, setEditName] = useState(name);
   const [editLink, setEditLink] = useState(salesforceLink || '');
   const [popoverOpen, setPopoverOpen] = useState(false);

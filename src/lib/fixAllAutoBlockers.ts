@@ -128,7 +128,7 @@ export async function clearStalledJobStatus(resourceId: string): Promise<boolean
  * Clear failed job status for resources that actually have KIs
  * (their extract partially succeeded but left a 'failed' job marker).
  */
-async function clearFailedJobStatus(resourceId: string): Promise<boolean> {
+async function _clearFailedJobStatus(resourceId: string): Promise<boolean> {
   const { error } = await supabase
     .from('resources' as any)
     .update({
@@ -167,7 +167,7 @@ async function fixStalledJobs(
     }
 
     try {
-      const { data, error } = await invokeEnrichResource(
+      const { data: _data, error } = await invokeEnrichResource(
         { resource_id: id, force: true },
         { componentName: 'FixAllAutoBlockers' },
       );
@@ -205,7 +205,7 @@ async function fixNeedsEnrichment(
     callbacks?.onItemStart?.(id, 'enrichment', `Enriching ${i + 1}/${resourceIds.length}`);
     onProgress?.(`Enriching ${i + 1}/${resourceIds.length}`);
     try {
-      const { data, error } = await invokeEnrichResource(
+      const { data: _data, error } = await invokeEnrichResource(
         { resource_id: id },
         { componentName: 'FixAllAutoBlockers' },
       );
@@ -408,7 +408,7 @@ async function normalizeStaleStatuses(
     const isNeedsAuth = state.enrichment_status === 'needs_auth';
     const contentInfo = contentMap.get(id);
     const effectiveContentLen = Math.max(contentInfo?.content_length ?? 0, contentInfo?.actual_content_length ?? 0);
-    const hasUsableContent = effectiveContentLen >= 200 || contentInfo?.manual_content_present === true;
+    const _hasUsableContent = effectiveContentLen >= 200 || contentInfo?.manual_content_present === true;
     const isIdleJob = state.active_job_status === 'idle';
     
   // Detect stale 'running' jobs (started > 10 min ago with no update)
@@ -868,7 +868,7 @@ export async function runFixAllAutoBlockers(
 
   // Build blocker diff from real post-run state
   const afterByType: Record<string, number> = {};
-  for (const [type, count] of Object.entries(beforeByType)) {
+  for (const [type, _count] of Object.entries(beforeByType)) {
     // Count how many resources of this blocker type are still blocked (0 KIs)
     const idsOfType = blockerGroups.filter(g => g.type === type).flatMap(g => g.resourceIds);
     const stillBlocked = idsOfType.filter(id => {

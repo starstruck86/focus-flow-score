@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Plus, ChevronDown, ChevronRight, Repeat, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, Repeat, CheckCircle2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
@@ -8,12 +8,7 @@ import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Task, TaskStatus, Workstream } from '@/types';
-import {
-  MomentumHeader, TaskCard, AddTaskDialog, FilterBar, OverdueSection, TaskBulkBar,
-  TaskKanbanBoard,
-  STATUS_ORDER, STATUS_META, getWorkstream, sortTasks, getAccountName,
-  type GroupMode,
-} from '@/components/tasks';
+import { MomentumHeader, TaskCard, AddTaskDialog, FilterBar, OverdueSection, TaskBulkBar, TaskKanbanBoard, getWorkstream, sortTasks, getAccountName, type GroupMode } from '@/components/tasks';
 
 export default function Tasks() {
   const { tasks, accounts, opportunities, recurringTemplates, generateDueRecurringInstances } = useStore();
@@ -63,7 +58,7 @@ export default function Tasks() {
   );
   const overdueIds = useMemo(() => new Set(overdueTasks.map(t => t.id)), [overdueTasks]);
 
-  const groupedByStatus = useMemo(() => {
+  const _groupedByStatus = useMemo(() => {
     const groups: Record<TaskStatus, Task[]> = { 'next': [], 'in-progress': [], 'blocked': [], 'done': [], 'dropped': [] };
     filteredTasks.forEach(task => {
       if (overdueIds.has(task.id)) return;
@@ -74,7 +69,7 @@ export default function Tasks() {
     return groups;
   }, [filteredTasks, overdueIds]);
 
-  const groupedByAccount = useMemo(() => {
+  const _groupedByAccount = useMemo(() => {
     const groups: Record<string, Task[]> = {};
     filteredTasks.forEach(task => {
       if (overdueIds.has(task.id)) return;
@@ -87,7 +82,7 @@ export default function Tasks() {
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
   }, [filteredTasks, overdueIds, accounts, opportunities]);
 
-  const toggleGroup = (key: string) => setCollapsedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+  const _toggleGroup = (key: string) => setCollapsedGroups(prev => ({ ...prev, [key]: !prev[key] }));
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev);

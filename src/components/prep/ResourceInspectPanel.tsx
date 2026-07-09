@@ -11,12 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import {
-  ChevronUp, ExternalLink, Pencil, Check, X, Loader2,
-  CheckCircle2, AlertTriangle, ArrowRight, Clock, Shield,
-  FileText, Code, Copy, Eye, Info, Zap, TrendingUp,
-} from 'lucide-react';
+import { ChevronUp, ExternalLink, Pencil, Check, X, Loader2, CheckCircle2, AlertTriangle, Zap, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
@@ -27,7 +22,7 @@ import { getResourceOrigin } from '@/lib/resourceEligibility';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { detectDrift } from '@/lib/resourceLifecycle';
 import { isAudioResource } from '@/lib/salesBrain/audioPipeline';
-import { buildFailureDossier, FAILURE_STAGE_LABELS, FAILURE_MODE_LABELS, type ResourceFailureDossier } from '@/lib/failureDossier';
+import { buildFailureDossier, FAILURE_STAGE_LABELS, FAILURE_MODE_LABELS } from '@/lib/failureDossier';
 import { ROOT_CAUSE_LABELS, ROOT_CAUSE_COLORS } from '@/lib/rootCauseDiagnosis';
 import {
   deriveProcessingRoute, PIPELINE_LABELS, EXTRACTION_METHOD_LABELS, ORIGIN_TYPE_LABELS, ASSET_LABELS,
@@ -44,7 +39,7 @@ interface Props {
 }
 
 // ── A. Identity Section ────────────────────────────────────
-function IdentitySection({ resource, onClose, onAction }: Props) {
+function IdentitySection({ resource, onClose, onAction: _onAction }: Props) {
   const qc = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(resource.title);
@@ -119,7 +114,7 @@ function IdentitySection({ resource, onClose, onAction }: Props) {
 }
 
 // ── B. Pipeline Route ──────────────────────────────────────
-function PipelineRouteSection({ resource, onAction }: { resource: Resource; onAction: (action: string, resource: Resource) => void }) {
+function PipelineRouteSection({ resource, onAction: _onAction }: { resource: Resource; onAction: (action: string, resource: Resource) => void }) {
   const { summary } = useCanonicalLifecycle();
   const qc = useQueryClient();
   const status = summary?.resources.find(r => r.resource_id === resource.id);
@@ -573,7 +568,7 @@ function PreviewSection({ resource }: { resource: Resource }) {
   const { user } = useAuth();
   const r = resource as any;
   const [tab, setTab] = useState<'content' | 'knowledge'>('content');
-  const [copied, setCopied] = useState(false);
+//   const [copied, setCopied] = useState(false);
 
   const { data: fullContent } = useQuery({
     queryKey: ['resource-content', resource.id],

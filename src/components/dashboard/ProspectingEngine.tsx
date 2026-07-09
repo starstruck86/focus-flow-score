@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import type { TierLevel, ProspectingStep, DailyTierTargets } from '@/lib/prospectingEngine';
+import type { TierLevel, DailyTierTargets } from '@/lib/prospectingEngine';
 
 const TIER_LABEL: Record<TierLevel, { text: string; color: string }> = {
   floor: { text: 'Must Do', color: 'text-status-yellow' },
@@ -205,7 +205,7 @@ export function ProspectingEngine() {
 
 // ── Sub-components ──────────────────────────────────────────────
 
-function MetricChip({ label, val, target }: { label: string; val: number; target: number }) {
+function MetricChip({ label: _label, val, target }: { label: string; val: number; target: number }) {
   const done = val >= target && target > 0;
   return (
     <span className={cn('font-medium', done ? 'text-status-green' : '')}>

@@ -10,15 +10,15 @@ import { supabase } from '@/integrations/supabase/client';
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 import { SKILL_LABELS } from '@/lib/dojo/scenarios';
 import { SKILL_CURRICULA, getCurriculumLevel, type CurriculumLevel } from './learnSkillCurriculum';
-import { buildKIClusterMap, getKIIdsForLevel } from './learnKIClusterMap';
+import { buildKIClusterMap } from './learnKIClusterMap';
 import { selectKIsForLevel } from './kiClusterBuilder';
 import { fetchFullKICatalog } from '@/lib/dojo/v3/kiCatalogBridge';
 import { buildCapabilityProfiles } from '@/lib/dojo/v4/capabilityModel';
 import type { KICatalogEntry } from '@/lib/dojo/v3/programmingEngine';
 import { runSkillBuilderCoverageAudit } from './skillBuilderCoverageAudit';
-import { getSkillDepthProfile, getPatternCoverage } from './skillBuilderHardening';
+import { getSkillDepthProfile } from './skillBuilderHardening';
 import { evaluateSkillLevel, type UserSkillLevel } from './learnLevelEvaluator';
-import { getSkillLevel as getSkillLevelDef, getCumulativePatterns } from './learnSkillLevels';
+import { getSkillLevel as getSkillLevelDef } from './learnSkillLevels';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -157,7 +157,7 @@ export async function generateSkillTrack(
   const recentKIIds = await fetchRecentlyUsedKIIds(userId, recentDays);
 
   // Build cluster map for KI selection
-  const clusterMap = buildKIClusterMap(catalog);
+  const _clusterMap = buildKIClusterMap(catalog);
 
   // Select focus patterns for this session
   const patternCount = getPatternCount(durationMinutes, shouldDegrade);
@@ -296,13 +296,13 @@ function mapDifficulty(level: number): 'foundational' | 'intermediate' | 'advanc
   return 'advanced';
 }
 
-function buildScenarioContext(skill: SkillFocus, pattern: string, ki: KICatalogEntry): string {
+function buildScenarioContext(skill: SkillFocus, _pattern: string, ki: KICatalogEntry): string {
   // Build a context string from KI data
   const base = `Apply "${ki.title}" in a ${SKILL_LABELS[skill].toLowerCase()} scenario.`;
   return base;
 }
 
-function buildScenarioObjection(skill: SkillFocus, pattern: string): string {
+function buildScenarioObjection(_skill: SkillFocus, pattern: string): string {
   // Generate a generic objection aligned to the pattern
   const objections: Record<string, string> = {
     isolate_before_answering: "We're already working with someone on this.",

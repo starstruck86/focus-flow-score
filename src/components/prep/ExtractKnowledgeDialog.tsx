@@ -8,7 +8,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, Sparkles, Zap, FileText, Brain, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Loader2, Sparkles, Zap, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useInsertKnowledgeItems, useKnowledgeItems } from '@/hooks/useKnowledgeItems';

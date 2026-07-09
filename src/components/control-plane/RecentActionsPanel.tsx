@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { getRecentActions, getRecentBulkActions, type ActionOutcome, type ReconciliationVerdict } from '@/lib/actionOutcomeStore';
+import { getRecentActions, getRecentBulkActions, type ReconciliationVerdict } from '@/lib/actionOutcomeStore';
 import type { BulkActionOutcome } from '@/lib/actionOutcomeStore';
 
 const STATUS_CONFIG: Record<string, { icon: React.ElementType; label: string; color: string }> = {
@@ -32,7 +32,7 @@ interface Props {
   onOpenBulkResult?: (outcome: BulkActionOutcome) => void;
 }
 
-export function RecentActionsPanel({ refreshKey, onOpenResource, onOpenBulkResult }: Props) {
+export function RecentActionsPanel({ refreshKey: _refreshKey, onOpenResource, onOpenBulkResult }: Props) {
   const [expanded, setExpanded] = useState(false);
   const actions = getRecentActions();
   const bulkActions = getRecentBulkActions();

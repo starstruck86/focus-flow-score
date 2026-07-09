@@ -7,15 +7,7 @@ import { useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import {
-  createResourceJob,
-  runPipeline,
-  retryJob,
-  getJobWithSteps,
-  getJobsForResource,
-  type ResourceJob,
-  type ResourceJobStep,
-} from '@/lib/resourcePipeline';
+import { createResourceJob, runPipeline, retryJob, getJobWithSteps, getJobsForResource } from '@/lib/resourcePipeline';
 
 export function useResourceJobs(resourceId: string) {
   const { user } = useAuth();
@@ -92,7 +84,7 @@ export function useStartPipeline() {
       const job = await createResourceJob(resourceId, user.id);
       // Run in background — don't await
       runPipeline(job.id, {
-        onStepComplete: (step) => {
+        onStepComplete: (_step) => {
           queryClient.invalidateQueries({ queryKey: ['resource-job-details', job.id] });
         },
       }).then(result => {

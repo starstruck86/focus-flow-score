@@ -1,7 +1,7 @@
 /**
  * Phase 4C Tests — Feature Flags, Synthesis Cache, Release Confidence, Cost/Latency Analytics
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 
 // ── Feature Flags ──────────────────────────────────────────────────
 

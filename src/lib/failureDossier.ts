@@ -7,7 +7,7 @@
 
 import type { Resource } from '@/hooks/useResources';
 import type { ResourceTruth } from '@/lib/resourceTruthState';
-import { diagnoseRootCause, type RootCauseCategory, type RootCauseEvidence } from '@/lib/rootCauseDiagnosis';
+import { diagnoseRootCause, type RootCauseCategory } from '@/lib/rootCauseDiagnosis';
 
 // ── Failure Stage ─────────────────────────────────────────
 

@@ -9,9 +9,9 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { getOrCreateActiveBlock, derivePhase, type TrainingBlock } from '@/lib/dojo/v3/blockManager';
-import { computeWeeklySummaryFromDB, type WeeklySummary } from '@/lib/dojo/v3/weeklySummaryEngine';
+import { computeWeeklySummaryFromDB } from '@/lib/dojo/v3/weeklySummaryEngine';
 import { ANCHORS_IN_ORDER, DAY_ANCHORS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
-import { buildCapabilityProfiles, type CapabilityProfile } from '@/lib/dojo/v4/capabilityModel';
+import { buildCapabilityProfiles } from '@/lib/dojo/v4/capabilityModel';
 import { getMistakeEntry } from '@/lib/dojo/mistakeTaxonomy';
 
 // ── Types ──────────────────────────────────────────────────────────

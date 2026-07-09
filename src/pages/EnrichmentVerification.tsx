@@ -8,11 +8,7 @@ import { useAudioJobsMap } from '@/hooks/useAudioJobs';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ArrowLeft, Download, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight,
-  Copy, ExternalLink, Search, Filter, History, Zap, ShieldAlert, Lock, FileText,
-  Ban, Bug, RotateCcw, Play, Loader2, Square, ArrowRight, Wrench, Eye
-} from 'lucide-react';
+import { ArrowLeft, Download, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Copy, ExternalLink, Search, Filter, Zap, ShieldAlert, Lock, FileText, Ban, Bug, RotateCcw, Play, Loader2, Square, ArrowRight, Wrench, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,16 +25,13 @@ import {
   buildRemediationQueues, executeBulkAction, QUEUE_LABELS, QUEUE_DESCRIPTIONS, QUEUE_ACTIONS,
   type RemediationQueue, type BulkActionResult,
 } from '@/lib/remediationEngine';
-import {
-  runAutonomousRemediation, getQueueSummaries, QUEUE_STRATEGIES,
-  type RemediationCycleState, type RemediationItem, type RemediationItemStatus,
-} from '@/lib/autonomousRemediation';
+import { runAutonomousRemediation, getQueueSummaries, QUEUE_STRATEGIES, type RemediationCycleState, type RemediationItemStatus } from '@/lib/autonomousRemediation';
 import {
   runEndToEndValidation,
   type ValidationResult, type ValidationPhase,
 } from '@/lib/validationOrchestrator';
 import { analyzeRemediationBatch, type RemediationSummary } from '@/lib/remediationIntelligence';
-import { generateProductRoadmap, generateBuildPrompt, type RoadmapSummary, type RoadmapIssue, type IssueSeverity } from '@/lib/systemGapRoadmap';
+import { generateProductRoadmap, generateBuildPrompt, type RoadmapIssue, type IssueSeverity } from '@/lib/systemGapRoadmap';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
@@ -86,7 +79,7 @@ export default function EnrichmentVerification() {
   const qc = useQueryClient();
   const { data: allResources, isLoading: loadingResources } = useAllResources();
   const { data: audioJobsMap, isLoading: loadingAudio } = useAudioJobsMap();
-  const { data: history } = useVerificationHistory();
+  const { data: _history } = useVerificationHistory();
 
   const [mode, setMode] = useState<PageMode>('verify');
   const [hasRun, setHasRun] = useState(false);
@@ -95,7 +88,7 @@ export default function EnrichmentVerification() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
   const [drawerResource, setDrawerResource] = useState<VerifiedResource | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
+//   const [showHistory, setShowHistory] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     dashboard: true, fixPlan: true, remediation: true, patterns: false, table: true,
   });
@@ -807,7 +800,7 @@ function RemediationDashboard({ queueSummaries, queues, onRunAction, runningQueu
       {/* All queues */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {queueSummaries.map(qs => {
-          const resources = queues[qs.queue];
+          const _resources = queues[qs.queue];
           const isRunning = runningQueue === qs.queue;
           const strategy = QUEUE_STRATEGIES[qs.queue];
 
@@ -1736,7 +1729,7 @@ function ProductRoadmapView({ resources }: { resources: VerifiedResource[] }) {
       </div>
 
       {/* Issue Cards */}
-      {roadmap.issues.map((issue, idx) => (
+      {roadmap.issues.map((issue, _idx) => (
         <div key={issue.groupKey} className={`rounded-lg border-2 overflow-hidden ${severityColors[issue.severity]}`}>
           <div className="p-4 space-y-3">
             {/* Header */}

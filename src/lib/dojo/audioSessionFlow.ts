@@ -61,7 +61,7 @@ export function buildRetryInstructionText(): string {
 }
 
 /** Build retry prompt text */
-export function buildRetryPromptText(feedback: string, practiceCue?: string): string {
+export function buildRetryPromptText(_feedback: string, practiceCue?: string): string {
   const cue = practiceCue ? ` Focus on this: ${practiceCue}` : '';
   return `Let's try that again.${cue} Give it another shot.`;
 }

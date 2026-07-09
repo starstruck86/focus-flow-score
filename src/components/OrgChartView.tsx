@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -400,12 +400,12 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
             <div>
               <Label className="text-[10px]">Reports To</Label>
               <Select
-                value={editForm.reporting_to || '__none__'}
-                onValueChange={v => setEditForm(f => ({ ...f, reporting_to: v === '__none__' ? '' : v }))}
+                value={editForm.reporting_to || '_none__'}
+                onValueChange={v => setEditForm(f => ({ ...f, reporting_to: v === '_none__' ? '' : v }))}
               >
                 <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">None (root)</SelectItem>
+                  <SelectItem value="_none__">None (root)</SelectItem>
                   {(contacts || []).filter(c => c.id !== contact.id).map(c => (
                     <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
                   ))}

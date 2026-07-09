@@ -5,12 +5,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import type { SkillFocus } from './scenarios';
-import type {
-  PatternMemory,
-  PatternMemoryEntry,
-  CoachingInsights,
-  DojoScoreResult,
-} from './types';
+import type { PatternMemory, PatternMemoryEntry, CoachingInsights } from './types';
 
 /** Build pattern memory from recent session turns */
 export async function buildPatternMemory(userId: string): Promise<PatternMemory> {

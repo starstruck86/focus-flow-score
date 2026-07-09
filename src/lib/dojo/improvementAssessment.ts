@@ -9,7 +9,7 @@
  * Key principle: improvement = behavior change, not just score increase.
  */
 
-import { MISTAKE_TAXONOMY, getMistakeEntry, type MistakeEntry } from './mistakeTaxonomy';
+import { getMistakeEntry, type MistakeEntry } from './mistakeTaxonomy';
 
 // ── Types ──────────────────────────────────────────────────────────
 

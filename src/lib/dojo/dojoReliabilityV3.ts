@@ -124,7 +124,7 @@ export function onForwardProgress(m: ReliabilityMetrics): ReliabilityMetrics {
   };
 }
 
-export function onFailure(m: ReliabilityMetrics, chunkId?: string): ReliabilityMetrics {
+export function onFailure(m: ReliabilityMetrics, _chunkId?: string): ReliabilityMetrics {
   const now = Date.now();
   const recentFailures = [...m.recentFailureTimestamps.filter(t => now - t < FAILURE_WINDOW_MS), now]
     .slice(-MAX_FAILURE_TIMESTAMPS);
@@ -304,7 +304,7 @@ function assessHealth(m: ReliabilityMetrics): HealthScore {
   }
 
   // Factor 4: Recovery chain depth
-  const pendingRecoveries = m.recoveryAttempts.filter(r => r.succeeded === null).length;
+  const _pendingRecoveries = m.recoveryAttempts.filter(r => r.succeeded === null).length;
   const failedRecoveries = m.recoveryAttempts.filter(r => r.succeeded === false && now - r.timestamp < FAILURE_WINDOW_MS).length;
   if (failedRecoveries >= 2) {
     score -= 25;

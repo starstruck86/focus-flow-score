@@ -11,10 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Eye, ExternalLink, FileText, Code, Copy, Check,
-  Loader2, AlertTriangle, CheckCircle2, ChevronUp, X, Pencil,
-} from 'lucide-react';
+import { ExternalLink, FileText, Code, Copy, Check, Loader2, AlertTriangle, ChevronUp, X, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
@@ -31,7 +28,7 @@ interface Props {
 }
 
 // ── Metadata Header ────────────────────────────────────────
-function MetadataHeader({ resource, onClose, onAction }: Props) {
+function MetadataHeader({ resource, onClose, onAction: _onAction }: Props) {
   const qc = useQueryClient();
   const { summary } = useCanonicalLifecycle();
   const status = summary?.resources.find(r => r.resource_id === resource.id);

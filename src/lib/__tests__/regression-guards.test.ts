@@ -1,6 +1,6 @@
 /**
  * Regression tests for locked invariants.
- * Run: npx vitest run src/lib/__tests__/regression-guards.test.ts
+ * Run: npx vitest run src/lib/_tests__/regression-guards.test.ts
  *
  * These tests protect against silent regressions in:
  *   1. Soft-delete filtering

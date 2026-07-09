@@ -40,7 +40,7 @@ export type EnrichmentFinalStatus = 'enriched' | 'partial' | 'needs_auth' | 'uns
  * Called progressively during processing and after completion.
  */
 function invalidateResourceQueries() {
-  const qc = (window as any).__QUERY_CLIENT__ as QueryClient | undefined;
+  const qc = (window as any)._QUERY_CLIENT__ as QueryClient | undefined;
   if (!qc) return;
   qc.invalidateQueries({ queryKey: ['resources'] });
   qc.invalidateQueries({ queryKey: ['resource-digests'] });
@@ -572,7 +572,7 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
     }));
   };
 
-  function failItem(id: string, error: string, category: FailureCategory, retryEligible = true) {
+  function failItem(id: string, error: string, category: FailureCategory, _retryEligible = true) {
     // Route failure to canonical bucket
     const item = get().state.items.find(i => i.id === id);
     const { routeFailure, shouldQuarantine, NON_RETRYABLE_BUCKETS } = require('@/lib/failureRouting') as typeof import('@/lib/failureRouting');

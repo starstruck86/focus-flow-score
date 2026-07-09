@@ -4,7 +4,7 @@
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wifi, WifiOff, RefreshCw, AlertTriangle, Loader2 } from 'lucide-react';
+import { WifiOff, RefreshCw, AlertTriangle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DaveConnectionState, DaveConnectionMeta } from '@/lib/daveConnectionManager';
 

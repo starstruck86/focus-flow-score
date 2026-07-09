@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
-import { useAccountHealthPulse, AccountHealthPulse } from '@/hooks/useAccountHealthPulse';
+import { useAccountHealthPulse } from '@/hooks/useAccountHealthPulse';
 import { Activity, Flame, ThermometerSun, Snowflake, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 

@@ -10,7 +10,7 @@ import { useDojoStats } from '@/lib/dojo/useDojoStreak';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { Flame, ChevronRight, Loader2, X } from 'lucide-react';
+import { ChevronRight, Loader2, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;

@@ -10,14 +10,7 @@ import { WeeklyRealignmentModal } from '@/components/weekly/WeeklyRealignmentMod
 import { WeeklyReviewBanner } from '@/components/dashboard/WeeklyReviewBanner';
 import { useCurrentWeekReview } from '@/hooks/useWeeklyReview';
 import { useStore } from '@/store/useStore';
-import { 
-  useWorkScheduleConfig, 
-  useHolidays, 
-  usePtoDays, 
-  useWorkdayOverrides,
-  useStreakEvents,
-  isEligibleDay 
-} from '@/hooks/useStreakData';
+import { useWorkScheduleConfig, useHolidays, usePtoDays, useWorkdayOverrides, useStreakEvents } from '@/hooks/useStreakData';
 import { useTodayJournalEntry } from '@/hooks/useDailyJournal';
 import { useCommissionPacing } from '@/hooks/useCommissionPacing';
 import { useQuotaTargets } from '@/hooks/useSalesAge';
@@ -137,14 +130,14 @@ export default function Dashboard() {
   const [showWeeklyReview, setShowWeeklyReview] = useState(false);
   const { data: currentWeekReview, isLoading: weeklyReviewLoading } = useCurrentWeekReview();
   
-  const { data: config } = useWorkScheduleConfig();
-  const { data: holidays } = useHolidays();
-  const { data: ptoDays } = usePtoDays();
-  const { data: overrides } = useWorkdayOverrides();
+  const { data: _config } = useWorkScheduleConfig();
+  const { data: _holidays } = useHolidays();
+  const { data: _ptoDays } = usePtoDays();
+  const { data: _overrides } = useWorkdayOverrides();
   const { data: streakEvents } = useStreakEvents();
   const { data: todayJournalEntry, isLoading: journalLoading } = useTodayJournalEntry();
   const { data: commissionPacing, isLoading: pacingLoading } = useCommissionPacing();
-  const { data: quotaTargets } = useQuotaTargets();
+  const { data: _quotaTargets } = useQuotaTargets();
   const { data: wtdMetrics, isLoading: wtdLoading } = useWeekToDateMetrics();
 
   // Widget layout system

@@ -1,24 +1,6 @@
 import { NavLink as RouterNavLink, useLocation } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
-import {
-  LayoutDashboard,
-  Users,
-  RefreshCw,
-  CheckSquare,
-  TrendingUp,
-  DollarSign,
-  Settings,
-  Brain,
-  Crosshair,
-  Swords,
-  GraduationCap,
-  Target,
-  Briefcase,
-  Dumbbell,
-  BookOpen,
-  Mic,
-  Compass,
-} from 'lucide-react';
+import { Users, TrendingUp, DollarSign, Brain, Crosshair, Swords, Target, Briefcase, Dumbbell, Mic, Compass } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAppMode } from '@/hooks/useAppMode';
@@ -48,8 +30,7 @@ export const COLOR_VAR: Record<NavColor, string> = {
   skills: 'var(--nav-coach)',
   work_toggle: 'var(--nav-today)',
   train_toggle: 'var(--nav-today)',
-  deals: 'var(--nav-quota)',
-};
+  deals: 'var(--nav-quota)' };
 
 // ── Train mode items ──────────────────────────────────────────────────
 export const trainNavItems: NavItemDef[] = [
@@ -104,8 +85,7 @@ function NavItem({ item }: { item: NavItemDef }) {
               className="absolute -top-px left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full"
               style={{
                 backgroundColor: `hsl(${COLOR_VAR[item.color]})`,
-                boxShadow: `0 0 8px ${glowColor}`,
-              }}
+                boxShadow: `0 0 8px ${glowColor}` }}
             />
           )}
           <item.icon
@@ -209,7 +189,7 @@ export function BottomNav({ variant = 'default' }: { variant?: 'default' | 'cond
   if (keyboardOpen) return null;
 
   const activeItems = mode === 'train' ? trainNavItems : workNavItems;
-  const condensed = variant === 'condensed';
+  const _condensed = variant === 'condensed';
 
   return (
     <nav

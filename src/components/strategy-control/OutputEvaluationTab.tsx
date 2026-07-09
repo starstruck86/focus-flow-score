@@ -15,12 +15,7 @@ import {
 } from "@/components/ui/collapsible";
 import { ChevronDown, Play, Trophy, Minus, Eye, Download } from "lucide-react";
 import type { ValidationCase } from "@/lib/strategy-control/cases";
-import {
-  buildDefaultEvalCases,
-  runEvaluation,
-  type EvaluationResult,
-  type EvaluationCase,
-} from "@/lib/strategy-control/evaluationRunner";
+import { buildDefaultEvalCases, runEvaluation, type EvaluationResult } from "@/lib/strategy-control/evaluationRunner";
 import type { OutputScore } from "@/lib/strategy-control/outputScorer";
 import { BASELINE_PROMPT_VERSION } from "@/lib/strategy-control/baselineGenerator";
 

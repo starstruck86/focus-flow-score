@@ -15,7 +15,6 @@ import {
   checkRateLimit,
   acquireJobSlot,
   releaseJobSlot,
-  recordRetryAttempt,
   acquireCrossSessionLock,
   releaseCrossSessionLock,
   appendTimelineEvent,
@@ -28,8 +27,7 @@ import {
   computeFirewallStats,
   detectEnvironment,
   getEnvironmentPolicy,
-  type EnvironmentProfile,
-} from '@/lib/resourceFirewall';
+  type EnvironmentProfile } from '@/lib/resourceFirewall';
 import type { ResourceForTrust } from '@/lib/resourceTrust';
 
 // ── Helpers ────────────────────────────────────────────────
@@ -49,8 +47,7 @@ function makeTrusted(): ResourceForTrust {
     description: 'Full training material with detailed content',
     last_quality_score: 85,
     last_quality_tier: 'complete',
-    failure_count: 0,
-  };
+    failure_count: 0 };
 }
 
 function makeQuarantined(): ResourceForTrust {
@@ -68,8 +65,7 @@ function makeQuarantined(): ResourceForTrust {
     description: null,
     last_quality_score: 5,
     last_quality_tier: 'failed',
-    failure_count: 6,
-  };
+    failure_count: 6 };
 }
 
 function makeStale(): ResourceForTrust {
@@ -87,8 +83,7 @@ function makeStale(): ResourceForTrust {
     description: 'Old content',
     last_quality_score: 55,
     last_quality_tier: 'shallow',
-    failure_count: 0,
-  };
+    failure_count: 0 };
 }
 
 beforeEach(() => {

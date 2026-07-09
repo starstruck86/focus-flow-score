@@ -5,7 +5,7 @@
  * Shows: system state label, explicit reason string, blocker counts,
  * burn-down results after Fix All, and clickable health chips.
  */
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, AlertTriangle, Shield, Zap, RefreshCw } from 'lucide-react';

@@ -20,14 +20,10 @@ import {
   archiveDoctrine,
   mergeDoctrine,
   adjustDoctrineConfidence,
-  togglePropagation,
   isDoctrineEligibleForPropagation,
   getActiveDoctrine,
-  getPropagationEligibleDoctrine,
-  detectDuplicatesAndConflicts,
   getDoctrineReviewQueue,
-  type DoctrineEntry,
-} from '@/lib/salesBrain/doctrine';
+  type DoctrineEntry } from '@/lib/salesBrain/doctrine';
 
 function makeEntry(overrides: Partial<DoctrineEntry> = {}): DoctrineEntry {
   const id = `test-${Math.random().toString(36).slice(2, 7)}`;
@@ -48,8 +44,7 @@ function makeEntry(overrides: Partial<DoctrineEntry> = {}): DoctrineEntry {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     governance: defaultGovernance('review_needed'),
-    ...overrides,
-  };
+    ...overrides };
 }
 
 describe('Doctrine Governance', () => {
@@ -177,8 +172,7 @@ describe('Doctrine Governance', () => {
       examples: [], sourceInsightIds: [], sourceResourceIds: [],
       confidence: 0.5, freshnessState: 'fresh', version: 1,
       supersedesId: null, createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+      updatedAt: new Date().toISOString() };
     store['sales-brain-doctrine'] = JSON.stringify([legacy]);
     const loaded = loadDoctrine();
     expect(loaded[0].governance).toBeDefined();

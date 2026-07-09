@@ -8,10 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
-import { 
-  Target, Trophy, TrendingUp, AlertTriangle, Calendar, BookOpen, 
-  Plus, X, Compass, DollarSign, ChevronRight, RefreshCw, CheckCircle2, XCircle
-} from 'lucide-react';
+import { Target, Trophy, AlertTriangle, Calendar, BookOpen, Plus, X, Compass, DollarSign, ChevronRight, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { 
@@ -53,7 +50,7 @@ export function WeeklyRealignmentModal({ open, onComplete, onOpenChange }: Props
   const { data: metrics, isLoading: metricsLoading } = useWeeklyMetricsAggregation();
   const { data: pipeline, isLoading: pipelineLoading } = usePipelineForReview();
   const { data: renewals, isLoading: renewalsLoading } = useRenewalsForReview();
-  const { data: prevReview, isLoading: prevLoading } = usePreviousWeekReview();
+  const { data: prevReview, isLoading: _prevLoading } = usePreviousWeekReview();
   const saveReview = useSaveWeeklyReview();
   const { weekStart, weekEnd } = getCurrentWeekRange();
   const { data: quotaTargets } = useQuotaTargets();

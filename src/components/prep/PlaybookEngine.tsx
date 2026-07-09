@@ -14,7 +14,7 @@ import {
   CheckCircle2, Clock, ChevronRight, Info, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useKnowledgeStats, type KnowledgeItem } from '@/hooks/useKnowledgeItems';
+import { useKnowledgeStats } from '@/hooks/useKnowledgeItems';
 import { useChapterRoleplay } from '@/hooks/useChapterRoleplay';
 import { ChapterDetailSheet } from './ChapterDetailSheet';
 import { KnowledgeItemDrawer } from './KnowledgeItemDrawer';
@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/collapsible';
 
 /** Priority chapters first, rest after */
-const PRIORITY_IDS = ['cold_calling', 'discovery', 'competitors', 'messaging'];
+const _PRIORITY_IDS = ['cold_calling', 'discovery', 'competitors', 'messaging'];
 
 const CHAPTERS = [
   { id: 'cold_calling', label: 'Cold Calling', icon: '📞', priority: true },

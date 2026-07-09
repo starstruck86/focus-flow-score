@@ -21,7 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { CanaryResultParser } from './CanaryResultParser';
 import { EvidenceSummaryCard } from './EvidenceSummaryCard';
 import { ProductionDecisionActions } from './ProductionDecisionActions';
-import { buildEvidenceSummary, getRecommendation } from '@/lib/strategy/canary/recommend';
+import { buildEvidenceSummary } from '@/lib/strategy/canary/recommend';
 import { fetchLatestCanaryReview } from '@/lib/strategy/canary/repository';
 import type {
   CanaryReviewRow,

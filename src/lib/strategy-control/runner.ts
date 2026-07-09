@@ -7,7 +7,7 @@
  * No edge changes. No new endpoints. No persistence.
  */
 import { supabase } from "@/integrations/supabase/client";
-import type { ValidationCase, CaseExpectation } from "./cases";
+import type { ValidationCase } from "./cases";
 
 const STRATEGY_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/strategy-chat`;
 
@@ -299,7 +299,7 @@ function evaluate(
 ): { status: CaseStatus; reason: string } {
   const expectation = c.expectation;
   const isSkillEnvelope = signals.schema === "skill_envelope.v1";
-  const ok = !!(raw && typeof raw === "object" && (raw as Record<string, unknown>).envelope);
+  const _ok = !!(raw && typeof raw === "object" && (raw as Record<string, unknown>).envelope);
   const refused = !!signals.refusal_code;
 
   switch (expectation) {

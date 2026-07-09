@@ -11,18 +11,14 @@
  * - Underutilized resource grouping
  */
 
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import {
-  Loader2, RefreshCw, Wrench, Sparkles, Zap, Trash2, Tag, CheckCircle2,
-  AlertTriangle, XCircle, FileText, Brain, HelpCircle, Info, ArrowRight,
-  ChevronDown, ChevronRight, Rocket,
-} from 'lucide-react';
+import { Loader2, RefreshCw, Wrench, Sparkles, Zap, Trash2, Tag, CheckCircle2, AlertTriangle, XCircle, FileText, Brain, HelpCircle, ArrowRight, ChevronDown, ChevronRight, Rocket } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BatchSelectionPanel } from './BatchSelectionPanel';
 import { QueueActionBar, type QueueProgress } from './QueueActionBar';
@@ -35,10 +31,10 @@ import {
   type ReadinessBucket,
   type AuditedResource,
 } from '@/lib/resourceAudit';
-import { autoOperationalizeBatch, summarizeBatchResults, getStageLabel, autoOperationalizeAllResources, countEligibleResources, forceExtractAll, getExtractionCoverage, estimateBatchOutput, type BackfillSummary, type ForceExtractResult, type ExtractionCoverage, type BlockedExample, type BlockedReason, type BatchSummary } from '@/lib/autoOperationalize';
+import { autoOperationalizeBatch, summarizeBatchResults, autoOperationalizeAllResources, forceExtractAll, getExtractionCoverage, estimateBatchOutput, type BackfillSummary, type ForceExtractResult, type ExtractionCoverage, type BlockedExample, type BatchSummary } from '@/lib/autoOperationalize';
 import { LifecycleSummaryBar } from './LifecycleSummaryBar';
 import { useCanonicalLifecycle, STAGE_LABELS, STAGE_COLORS } from '@/hooks/useCanonicalLifecycle';
-import { deriveCanonicalStage, type LifecycleStage } from '@/lib/canonicalLifecycle';
+import { deriveCanonicalStage } from '@/lib/canonicalLifecycle';
 import { scanExistingKnowledge, executeKIBackfill, type BackfillReport } from '@/lib/kiBackfill';
 import {
   auditPipelineIntegrity, auditKnowledgeUtilization, getSystemMetrics,
@@ -234,7 +230,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
 
   // ── Queue selection state ──
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [queueProgress, setQueueProgress] = useState<QueueProgress | null>(null);
+  const [queueProgress, _setQueueProgress] = useState<QueueProgress | null>(null);
 
   const toggleSelection = useCallback((id: string) => {
     setSelectedIds(prev => {

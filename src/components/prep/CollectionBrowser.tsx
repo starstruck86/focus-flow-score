@@ -10,13 +10,10 @@ import { Input } from '@/components/ui/input';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  FolderOpen, Plus, ChevronRight, CheckCircle2,
-  AlertTriangle, TrendingUp, FolderTree, Tag,
-} from 'lucide-react';
+import { FolderOpen, Plus, ChevronRight, CheckCircle2, AlertTriangle, TrendingUp, FolderTree } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { useCollections, useCreateCollection, type ResourceCollection } from '@/hooks/useCollections';
+import { useCollections, useCreateCollection } from '@/hooks/useCollections';
 import { deriveReadiness } from '@/lib/resourceSignal';
 import type { Resource } from '@/hooks/useResources';
 

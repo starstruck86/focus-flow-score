@@ -7,9 +7,9 @@
 
 import type { Resource } from '@/hooks/useResources';
 import { detectResourceSubtype, classifyEnrichability, type ResourceSubtype } from '@/lib/salesBrain/resourceSubtype';
-import { isAudioResource, detectAudioSubtype, getAudioStrategy } from '@/lib/salesBrain/audioPipeline';
+import { isAudioResource } from '@/lib/salesBrain/audioPipeline';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
-import { validateResourceQuality, type QualityResult, QUALITY_THRESHOLDS } from '@/lib/resourceQuality';
+import { validateResourceQuality } from '@/lib/resourceQuality';
 
 // ── The 11 canonical states ────────────────────────────────
 

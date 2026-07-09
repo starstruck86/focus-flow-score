@@ -2,14 +2,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { format, startOfWeek, endOfWeek, startOfMonth, subDays } from 'date-fns';
-import { 
-  calculateGoodDayPoints, 
-  getTemplateById, 
-  calculateWeeklyExpectations,
-  type DayTypeTemplate,
-  type WeeklyExpectedMetrics,
-} from '@/lib/goodDayModel';
+import { format, startOfWeek, startOfMonth, subDays } from 'date-fns';
+import { type WeeklyExpectedMetrics } from '@/lib/goodDayModel';
 import { 
   useWorkScheduleConfig, 
   useHolidays, 

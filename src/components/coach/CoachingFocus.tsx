@@ -2,11 +2,7 @@ import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import {
-  Crosshair, Target, AlertTriangle, CheckCircle2, Lightbulb,
-  ArrowRight, TrendingUp, TrendingDown, Flame, Zap, Brain,
-  Clock, Eye, ShieldCheck, MessageSquareQuote,
-} from 'lucide-react';
+import { Crosshair, Target, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, Flame, Zap, Brain, Clock, Eye, ShieldCheck, MessageSquareQuote } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAllTranscriptGrades, useBehavioralPatterns, useMeddiccCompleteness } from '@/hooks/useTranscriptGrades';
 
@@ -95,7 +91,7 @@ interface FocusRecommendation {
 
 export function CoachingFocus() {
   const { data: allGrades } = useAllTranscriptGrades();
-  const { patterns, weakestArea, trendSummary } = useBehavioralPatterns();
+  const { patterns, weakestArea: _weakestArea, trendSummary } = useBehavioralPatterns();
   const meddicc = useMeddiccCompleteness();
 
   const focus = useMemo((): FocusRecommendation | null => {
@@ -150,8 +146,8 @@ export function CoachingFocus() {
     const meta = CATEGORY_META[top.cat];
 
     // Get the most recent coaching issue and replacement for this area
-    const relevantGrades = recent.filter(g => {
-      const focus = g.feedback_focus?.toLowerCase() || '';
+    const _relevantGrades = recent.filter(g => {
+      const _focus = g.feedback_focus?.toLowerCase() || '';
       // Broad matching
       return true; // We'll take any recent one
     });

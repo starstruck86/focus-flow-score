@@ -12,7 +12,7 @@ import type { KnowledgeItemInsert } from '@/hooks/useKnowledgeItems';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { createLogger } from '@/lib/logger';
 import { inferTags, mergeTags } from '@/lib/resourceTags';
-import { validateTrust, deduplicateKnowledgeItems, type TrustValidation } from '@/lib/trustValidation';
+import { validateTrust, deduplicateKnowledgeItems } from '@/lib/trustValidation';
 import { detectFramework } from '@/data/frameworkLibrary';
 
 const log = createLogger('KnowledgeExtraction');

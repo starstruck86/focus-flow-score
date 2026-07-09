@@ -59,7 +59,7 @@ export function usePlaybooks() {
 }
 
 export function useGeneratePlaybooks() {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {

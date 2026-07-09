@@ -1,8 +1,5 @@
 import { useState, useEffect } from 'react';
-import {
-  ClipboardCheck, Check, X, Edit2, AlertTriangle, Building2, Target,
-  Loader2, ChevronDown, Rocket, ExternalLink, Archive, BookmarkPlus, UserPlus,
-} from 'lucide-react';
+import { ClipboardCheck, X, Edit2, AlertTriangle, Building2, Target, Loader2, ChevronDown, Rocket, ExternalLink, Archive, BookmarkPlus, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

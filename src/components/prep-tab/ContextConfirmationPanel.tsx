@@ -33,7 +33,7 @@ interface Props {
   actionLabel: string;
 }
 
-export function ContextConfirmationPanel({ signals, onConfirm, onEdit, isGenerating, actionLabel }: Props) {
+export function ContextConfirmationPanel({ signals, onConfirm, onEdit, isGenerating, actionLabel: _actionLabel }: Props) {
   if (signals.length === 0) return null;
 
   const grouped = signals.reduce<Record<string, PrepSignal[]>>((acc, s) => {

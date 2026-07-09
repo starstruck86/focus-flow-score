@@ -1,10 +1,6 @@
 // Comprehensive Import Wizard - Multi-step combined file import
 import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
-import { 
-  Upload, FileSpreadsheet, Download, AlertTriangle, Check, X, Info, 
-  ChevronRight, Settings2, Link2, HelpCircle, Filter, Save,
-  ArrowLeft, ArrowRight, Loader2, Eye, EyeOff
-} from 'lucide-react';
+import { Upload, FileSpreadsheet, Download, AlertTriangle, Check, X, Info, ChevronRight, Settings2, HelpCircle, ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -16,24 +12,20 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  DialogTitle } from '@/components/ui/dialog';
 import {
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+  TableRow } from '@/components/ui/table';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+  SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Switch } from '@/components/ui/switch';
@@ -42,71 +34,20 @@ import {
   Accordion,
   AccordionContent,
   AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+  AccordionTrigger } from '@/components/ui/accordion';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { 
-  EnhancedHeaderMapping, 
-  ParsedImportRow, 
-  ImportState,
-  ImportTargetObject,
-  DataTransform,
-  PendingValueMapping,
-  UnrecognizedLink,
-  NeedsReviewRow,
-  AccountNotFoundItem,
-  OpportunityNotFoundItem,
-  OrphanOpportunityItem,
-  OpportunityConflictItem,
-} from '@/lib/importTypes';
-import { 
-  ACCOUNT_FIELDS, 
-  OPPORTUNITY_FIELDS, 
-  RENEWAL_FIELDS, 
-  CONTACT_FIELDS,
-  PICKLIST_VALUES,
-  canProceedWithImport,
-} from '@/lib/importTypes';
-import {
-  parseCSV,
-  autoMapHeaders,
-  detectMotion,
-  applyTransform,
-  buildAccountLookup,
-  buildOpportunityLookup,
-  findMatchingAccount,
-  findMatchingOpportunity,
-  findFuzzyMatches,
-  findFuzzyOpportunityMatches,
-  calculateSummary,
-  extractSalesforceId,
-  normalizeUrl,
-  detectLinkType,
-  detectOpportunityConflicts,
-} from '@/lib/importParser';
-import { 
-  useHeaderMappings, 
-  useSaveHeaderMapping, 
-  useDeleteHeaderMapping,
-  useValueMappings,
-  useSaveValueMapping,
-  useAccountAliases,
-  useSaveAccountAlias,
-} from '@/hooks/useImportMappings';
+import type { EnhancedHeaderMapping, ParsedImportRow, ImportTargetObject, PendingValueMapping, UnrecognizedLink, NeedsReviewRow, AccountNotFoundItem, OpportunityNotFoundItem, OrphanOpportunityItem, OpportunityConflictItem } from '@/lib/importTypes';
+import { ACCOUNT_FIELDS, OPPORTUNITY_FIELDS, RENEWAL_FIELDS, CONTACT_FIELDS, PICKLIST_VALUES } from '@/lib/importTypes';
+import { parseCSV, autoMapHeaders, detectMotion, applyTransform, buildAccountLookup, buildOpportunityLookup, findMatchingAccount, findFuzzyMatches, calculateSummary, extractSalesforceId, detectLinkType, detectOpportunityConflicts } from '@/lib/importParser';
+import { useHeaderMappings, useSaveHeaderMapping, useValueMappings, useSaveValueMapping, useAccountAliases, useSaveAccountAlias } from '@/hooks/useImportMappings';
 import { 
   useDbAccounts, 
   useUpsertAccount, 
   useDbOpportunities,
   useUpsertOpportunity,
   useDbRenewals,
-  useUpsertRenewal,
-} from '@/hooks/useAccountsData';
+  useUpsertRenewal } from '@/hooks/useAccountsData';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface ImportWizardProps {
@@ -124,7 +65,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
   
   // Wizard state
   const [step, setStep] = useState<WizardStep>('upload');
-  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [_csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [csvRows, setCsvRows] = useState<string[][]>([]);
   
   // Mappings
@@ -154,13 +95,12 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
     accountsCreated: 0, accountsUpdated: 0,
     opportunitiesCreated: 0, opportunitiesUpdated: 0,
     renewalsCreated: 0, renewalsUpdated: 0,
-    errors: 0,
-  });
+    errors: 0 });
   
   // Data hooks
   const { data: existingAccounts = [] } = useDbAccounts();
   const { data: existingOpportunities = [] } = useDbOpportunities();
-  const { data: existingRenewals = [] } = useDbRenewals();
+  const { data: _existingRenewals = [] } = useDbRenewals();
   const { data: savedHeaderMappings = [] } = useHeaderMappings();
   const { data: savedValueMappings = [] } = useValueMappings();
   const { data: savedAliases = [] } = useAccountAliases();
@@ -194,8 +134,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
       accountsCreated: 0, accountsUpdated: 0,
       opportunitiesCreated: 0, opportunitiesUpdated: 0,
       renewalsCreated: 0, renewalsUpdated: 0,
-      errors: 0,
-    });
+      errors: 0 });
     if (fileInputRef.current) fileInputRef.current.value = '';
     onOpenChange(false);
   };
@@ -249,12 +188,12 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
     if (!csvRows.length || !headerMappings.length) return;
     
     const accountLookup = buildAccountLookup(existingAccounts, savedAliases);
-    const opportunityLookup = buildOpportunityLookup(existingOpportunities);
+    const _opportunityLookup = buildOpportunityLookup(existingOpportunities);
     const pendingValues: PendingValueMapping[] = [];
     const unrecLinks: UnrecognizedLink[] = [];
     const reviewRows: NeedsReviewRow[] = [];
     const accountsNotFound: AccountNotFoundItem[] = [];
-    const oppsNotFound: OpportunityNotFoundItem[] = [];
+    const _oppsNotFound: OpportunityNotFoundItem[] = [];
     const orphanOpps: OrphanOpportunityItem[] = [];
     const rows: ParsedImportRow[] = [];
     
@@ -302,8 +241,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
                 fieldName,
                 csvValue: rawValue,
                 suggestedAppValue: knownValues[0],
-                saveForFuture: true,
-              });
+                saveForFuture: true });
             }
           }
         }
@@ -377,8 +315,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
             createNew: false,
             resolved: false,
             ignored: false,
-            saveAliasForFuture: true,
-          });
+            saveAliasForFuture: true });
         } else if (fuzzyMatches.length === 0) {
           // No fuzzy matches at all - account definitely not found
           hasAccountIssue = true;
@@ -391,8 +328,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
             createNew: true, // Default to create new since no matches
             resolved: false,
             ignored: false,
-            saveAliasForFuture: true,
-          });
+            saveAliasForFuture: true });
         }
       }
       
@@ -420,8 +356,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
           suggestedAccounts: findFuzzyMatches(accountData.name || '', existingAccounts),
           resolved: false,
           ignored: false,
-          createNewAccount: false,
-        });
+          createNewAccount: false });
       }
       
       // Track opportunity assignment for conflict detection
@@ -431,8 +366,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
           oppName: oppData.name,
           oppSfId: oppData.salesforce_id,
           accountName: accountData.name,
-          accountId: matchedAccount?.id,
-        });
+          accountId: matchedAccount?.id });
       }
       
       // Build parsed row
@@ -454,8 +388,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
         needsReview: hasAccountIssue,
         ignored: false,
         warnings,
-        errors,
-      });
+        errors });
     });
     
     // Detect opportunity conflicts (same opp mapped to multiple accounts)
@@ -472,11 +405,9 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
           return {
             rowIndex: ri,
             accountName: assignment?.accountName || '',
-            accountId: assignment?.accountId,
-          };
+            accountId: assignment?.accountId };
         }),
-        resolved: false,
-      });
+        resolved: false });
     });
     
     setPendingValueMappings(pendingValues);
@@ -499,7 +430,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
   const summary = useMemo(() => calculateSummary(parsedRows), [parsedRows]);
   
   // Check if action required step has issues
-  const hasActionRequired = unmappedColumns.length > 0 || 
+  const _hasActionRequired = unmappedColumns.length > 0 || 
     pendingValueMappings.length > 0 || 
     unrecognizedLinks.length > 0 || 
     needsReviewRows.length > 0 ||
@@ -545,8 +476,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
             accountId: updates.selectedAccountId, 
             accountMatched: true, 
             accountAction: 'update',
-            needsReview: false,
-          };
+            needsReview: false };
         }
         if (updates.createNew) {
           return { ...pr, accountAction: 'create', needsReview: false };
@@ -624,8 +554,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
             accountId: updates.selectedAccountId, 
             accountMatched: true, 
             accountAction: 'update',
-            needsReview: false,
-          };
+            needsReview: false };
         }
         if (updates.createNew) {
           return { ...pr, accountAction: 'create', needsReview: false };
@@ -649,8 +578,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
             ...pr, 
             accountId: updates.selectedAccountId, 
             accountMatched: true, 
-            accountAction: 'update',
-          };
+            accountAction: 'update' };
         }
       }
       return pr;
@@ -691,8 +619,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
           csv_header: mapping.csvHeader,
           target_object: mapping.targetObject,
           target_field: mapping.targetField,
-          data_transform: mapping.dataTransform,
-        });
+          data_transform: mapping.dataTransform });
       } catch (e) {
         console.error('Failed to save header mapping:', e);
       }
@@ -704,8 +631,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
         await saveValueMapping.mutateAsync({
           field_name: vm.fieldName,
           csv_value: vm.csvValue,
-          app_value: vm.appValue!,
-        });
+          app_value: vm.appValue! });
       } catch (e) {
         console.error('Failed to save value mapping:', e);
       }
@@ -736,8 +662,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
             next_step: row.accountData.next_step,
             tech_stack: [],
             tags: [],
-            touches_this_week: 0,
-          });
+            touches_this_week: 0 });
           
           accountId = accountResult.data.id;
           if (accountResult.isUpdate) results.accountsUpdated++;
@@ -758,8 +683,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
             next_step: row.opportunityData.next_step,
             deal_type: row.opportunityData.deal_type || (row.motion === 'renewal' ? 'renewal' : 'new-logo'),
             churn_risk: row.opportunityData.churn_risk,
-            activity_log: [],
-          });
+            activity_log: [] });
           
           if (oppResult.isUpdate) results.opportunitiesUpdated++;
           else results.opportunitiesCreated++;
@@ -784,8 +708,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
             auto_renew: row.renewalData.auto_renew === 'true' || row.renewalData.auto_renew === 'yes',
             cs_notes: row.renewalData.cs_notes,
             next_step: row.renewalData.next_step,
-            owner: row.renewalData.owner,
-          });
+            owner: row.renewalData.owner });
           
           if (renewalResult.isUpdate) results.renewalsUpdated++;
           else results.renewalsCreated++;
@@ -798,8 +721,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
             await saveAccountAlias.mutateAsync({
               alias_type: 'name',
               alias_value: row.accountData.name,
-              account_id: accountId,
-            });
+              account_id: accountId });
           } catch (e) {
             console.error('Failed to save account alias:', e);
           }

@@ -5,7 +5,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useOpportunityMethodology, type CallGoal } from '@/hooks/useOpportunityMethodology';
 import { toast } from 'sonner';
@@ -35,7 +34,7 @@ const COTM_FIELDS = [
   { key: 'metrics_value', label: 'Metrics & Value', hint: 'Quantified value tied to business outcomes' },
 ] as const;
 
-export function MethodologyTracker({ opportunityId, opportunityName, stage }: Props) {
+export function MethodologyTracker({ opportunityId, opportunityName: _opportunityName, stage: _stage }: Props) {
   const { data, isLoading, upsert } = useOpportunityMethodology(opportunityId);
   const [expandedSection, setExpandedSection] = useState<'meddicc' | 'cotm' | 'goals' | null>('meddicc');
   const [newGoal, setNewGoal] = useState('');

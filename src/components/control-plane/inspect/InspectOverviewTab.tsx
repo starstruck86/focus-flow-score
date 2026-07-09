@@ -3,10 +3,7 @@
  */
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import {
-  CheckCircle2, XCircle, AlertTriangle, Clock, FileText,
-  Brain, Mic, GitBranch, Eye, Zap, Wrench, Play,
-} from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
 import { BLOCKED_LABELS } from '@/lib/canonicalLifecycle';
 import type { ControlPlaneState } from '@/lib/controlPlaneState';
@@ -21,7 +18,7 @@ interface Props {
   onNavigateTab: (tab: string) => void;
 }
 
-export function InspectOverviewTab({ canonical, state, detail, loading, onNavigateTab }: Props) {
+export function InspectOverviewTab({ canonical, state, detail, loading: _loading, onNavigateTab }: Props) {
   const evidence = deriveStateEvidence(canonical, state);
   const colors = CONTROL_PLANE_COLORS[state];
   const conflicts = detectConflicts(canonical);

@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { LayoutGrid, List, ChevronUp, FolderOpen } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { LayoutGrid, List, FolderOpen } from 'lucide-react';
 import { OpportunityResourcesPanel } from '@/components/table/OpportunityResourcesPanel';
 import { ArchivedOppsChip } from '@/components/ArchivedOppsChip';
 import {
@@ -44,9 +44,8 @@ import { ClosedWonModal } from '@/components/quota/ClosedWonModal';
 import { DeleteOpportunityDialog } from '@/components/quota/DeleteOpportunityDialog';
 import { OpportunityNameCell } from '@/components/table/ClickableNameCell';
 import { DisplaySelectCell } from '@/components/table/DisplaySelectCell';
-import { EditableNumberCell, EditableTextareaCell, EditableTextCell } from '@/components/table/EditableCell';
+import { EditableNumberCell, EditableTextareaCell } from '@/components/table/EditableCell';
 import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
-import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
 import { MetricFieldCell } from '@/components/table/MetricFieldCell';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { useCustomFields } from '@/hooks/useCustomFields';
@@ -81,7 +80,7 @@ const STATUS_COLORS: Record<OpportunityStatus, string> = {
   'closed-won': 'bg-green-600/20 text-green-400',
 };
 
-const CHURN_RISK_COLORS: Record<ChurnRisk, string> = {
+const _CHURN_RISK_COLORS: Record<ChurnRisk, string> = {
   'certain': 'bg-green-600/20 text-green-400',
   'low': 'bg-status-green/20 text-status-green',
   'medium': 'bg-status-yellow/20 text-status-yellow',
@@ -274,7 +273,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   // Check if an opportunity exists in the database (has UUID format)
   const dbOpportunityIds = useMemo(() => new Set(dbOpportunities.map(o => o.id)), [dbOpportunities]);
   const { updateOpportunity: storeUpdateOpportunity } = useStore();
-  const { duplicateOpportunities, mergeOpportunities } = useDuplicateDetection();
+  const { duplicateOpportunities, mergeOpportunities: _mergeOpportunities } = useDuplicateDetection();
 
   // Wrapper functions for mutations
   const updateOpportunity = (id: string, updates: Partial<Opportunity>) => {
@@ -373,7 +372,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const bulkSelection = useBulkSelection<Opportunity>();
 
   // Get renewals that don't have linked opportunities yet (for adding new renewal opps)
-  const renewalsWithoutOpps = useMemo(() => {
+  const _renewalsWithoutOpps = useMemo(() => {
     return renewals.filter(r => !r.linkedOpportunityId || !opportunities.some(o => o.id === r.linkedOpportunityId));
   }, [renewals, opportunities]);
 
@@ -660,7 +659,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     setShowAddRow(false);
   };
 
-  const formatDate = (dateStr?: string) => {
+  const _formatDate = (dateStr?: string) => {
     if (!dateStr) return '—';
     try {
       return format(parseISO(dateStr), 'M/d/yy');
@@ -786,7 +785,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       const lastTouchDays = opp.lastTouchDate 
         ? Math.floor((Date.now() - new Date(opp.lastTouchDate).getTime()) / 86400000)
         : null;
-      const lastTouchColor = lastTouchDays === null ? 'text-status-red' 
+      const _lastTouchColor = lastTouchDays === null ? 'text-status-red' 
         : lastTouchDays <= 3 ? 'text-status-green' 
         : lastTouchDays <= 7 ? 'text-status-yellow' 
         : 'text-status-red';
@@ -1672,7 +1671,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                         </SelectTrigger>
                         <SelectContent>
                           {renewals.length === 0 ? (
-                            <SelectItem value="__none" disabled>No renewal accounts found</SelectItem>
+                            <SelectItem value="_none" disabled>No renewal accounts found</SelectItem>
                           ) : (
                             renewals.map(renewal => (
                               <SelectItem key={renewal.id} value={renewal.id}>

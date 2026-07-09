@@ -7,7 +7,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { Send, Loader2, MessageSquare, User } from 'lucide-react';
 import type { DojoScenario } from '@/lib/dojo/scenarios';

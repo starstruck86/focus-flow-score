@@ -3,7 +3,7 @@
  * Includes: verification queue, re-extraction workflow, audit drilldown, filters.
  */
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -30,7 +30,7 @@ import { ReExtractionQueue } from './ReExtractionQueue';
 import { ResourceAuditDrilldown } from './ResourceAuditDrilldown';
 import { RealBottleneckReview } from './RealBottleneckReview';
 import { toast } from 'sonner';
-import { filterByPanel, filterByState, derivePostExtractionState } from '@/lib/postExtractionState';
+import { filterByPanel } from '@/lib/postExtractionState';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';

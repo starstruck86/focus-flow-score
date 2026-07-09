@@ -1,7 +1,7 @@
 // AI Account Prioritizer - Morning focus recommendations
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Target, Clock, ArrowRight, RefreshCw, AlertTriangle, Zap, Building2 } from 'lucide-react';
+import { Sparkles, ArrowRight, RefreshCw, Zap, Building2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

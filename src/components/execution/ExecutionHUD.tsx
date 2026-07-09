@@ -8,11 +8,7 @@
 import { useExecutionSession, evaluatePrepActionEnforcement, type ExecutionMode, type MomentumPace } from '@/lib/executionSession';
 import { isExecutionSessionLayerEnabled, isExecutionMomentumEnabled } from '@/lib/featureFlags';
 import { cn } from '@/lib/utils';
-import {
-  Target, Phone, PhoneOff, Voicemail, Calendar,
-  ArrowRight, Users, Zap, Pause, Lock, Play,
-  TrendingUp, AlertTriangle,
-} from 'lucide-react';
+import { Target, Phone, PhoneOff, Voicemail, Calendar, ArrowRight, Users, Zap, Pause, Lock, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 const MODE_LABELS: Record<ExecutionMode, { label: string; color: string }> = {

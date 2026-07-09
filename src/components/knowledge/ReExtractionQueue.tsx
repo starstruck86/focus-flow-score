@@ -17,12 +17,7 @@ import {
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
-import {
-  Collapsible, CollapsibleContent, CollapsibleTrigger,
-} from '@/components/ui/collapsible';
-import {
-  Zap, Loader2, CheckCircle2, XCircle, AlertTriangle, TrendingUp, Trash2, Info, Ban, TrendingDown, ChevronDown,
-} from 'lucide-react';
+import { Zap, Loader2, CheckCircle2, XCircle, AlertTriangle, TrendingUp, Trash2, Ban, TrendingDown, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ReExtractQueueItem, CoverageLiftSummary, LiftStatus, NoLiftReason } from '@/hooks/useDeepReExtraction';
 import { ResourceOperationProgress } from './ResourceOperationProgress';

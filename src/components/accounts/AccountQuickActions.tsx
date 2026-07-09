@@ -5,10 +5,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import {
-  Phone, PhoneOff, Voicemail, Calendar,
-  ArrowRight, Ban, Clock, MessageSquare,
-} from 'lucide-react';
+import { Phone, PhoneOff, Voicemail, Calendar, ArrowRight, Ban, Clock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { recordAccountOutcome, type OutcomeType } from '@/lib/accountExecutionState';

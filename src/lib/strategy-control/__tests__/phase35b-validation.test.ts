@@ -4,7 +4,7 @@
  * and validates acceptance criteria using the updated scorer.
  */
 import { describe, it, expect } from "vitest";
-import { compareOutputs, scoreOutput, type ScoringContext } from "../outputScorer";
+import { compareOutputs, type ScoringContext } from "../outputScorer";
 
 describe("Phase 3.5B — 5-case acceptance validation", () => {
   // ─── Case 1: Conversation POV (prose, constrained) ───

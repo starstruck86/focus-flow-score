@@ -5,16 +5,7 @@
  * All enrichment status mutations MUST flow through this module.
  */
 import { supabase } from '@/integrations/supabase/client';
-import {
-  validateResourceQuality,
-  assertEnrichmentInvariants,
-  CURRENT_ENRICHMENT_VERSION,
-  CURRENT_VALIDATION_VERSION,
-  QUALITY_THRESHOLDS,
-  type QualityResult,
-  type QualityTier,
-  type ResourceForValidation,
-} from './resourceQuality';
+import { validateResourceQuality, assertEnrichmentInvariants, CURRENT_ENRICHMENT_VERSION, CURRENT_VALIDATION_VERSION, QUALITY_THRESHOLDS, type QualityResult, type ResourceForValidation } from './resourceQuality';
 import { createLogger } from './logger';
 
 const log = createLogger('ResourceLifecycle');
@@ -219,7 +210,7 @@ export async function runReconciliation(userId: string): Promise<ReconciliationR
       report.downgraded++;
       report.corrected++;
 
-      const auditEntry = createAuditEntry(
+      const _auditEntry = createAuditEntry(
         'deep_enriched', newStatus, 'reconciliation_downgrade',
         `Score ${qr.score}, tier ${qr.tier}: ${qr.violations.join('; ')}`, qr,
       );

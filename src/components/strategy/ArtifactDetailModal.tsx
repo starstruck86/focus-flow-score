@@ -6,11 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Copy, RefreshCw, Loader2, Mail, FileText, Target, ArrowRight,
-  History, Pencil, CheckCircle2, Clock, Eye, Link2, Info,
-  ThumbsUp, ThumbsDown,
-} from 'lucide-react';
+import { Copy, RefreshCw, Loader2, Mail, FileText, Target, ArrowRight, History, Pencil, CheckCircle2, Eye, Link2, Info, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { toast } from 'sonner';
 import type { StrategyArtifact } from '@/hooks/strategy/useStrategyArtifacts';
 import { useArtifactFeedback } from '@/hooks/strategy/useArtifactFeedback';

@@ -10,7 +10,7 @@
 
 import { shouldInjectMultiThread, type MultiThreadInput } from './multiThreadSelector';
 import { normalizeMultiThreadAssessment, type MultiThreadAssessment } from './multiThreadTypes';
-import { V6_FIXTURES, type V6Fixture, type V6FixtureGroup } from './qaFixtures';
+import { type V6Fixture, type V6FixtureGroup } from './qaFixtures';
 import { V6_QA_CHECKLIST, type QACheckItem } from './qaChecklist';
 
 // ── Result types ──────────────────────────────────────────────────
@@ -351,7 +351,7 @@ export function evaluateChecklist(): QACheckItem[] {
   const selectorResults = validateSelector();
   const normalizerResults = validateNormalizer();
 
-  const allPassed = [...selectorResults, ...normalizerResults].every(r => r.passed);
+  const _allPassed = [...selectorResults, ...normalizerResults].every(r => r.passed);
 
   return V6_QA_CHECKLIST.map(item => {
     switch (item.id) {

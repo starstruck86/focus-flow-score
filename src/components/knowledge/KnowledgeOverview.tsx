@@ -9,9 +9,7 @@ import { memo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  CheckCircle2, AlertTriangle, ArrowRight, Brain, Ban, Info, Activity,
-} from 'lucide-react';
+import { AlertTriangle, ArrowRight, Brain, Ban, Info, Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCanonicalLifecycle, BLOCKED_LABELS } from '@/hooks/useCanonicalLifecycle';
 import { useInUseResources } from '@/hooks/useInUseResources';
@@ -202,7 +200,7 @@ function BlockerRow({ label, count }: { label: string; count: number }) {
   );
 }
 
-function buildNextActions(summary: LifecycleSummary, totalBlocked: number): string[] {
+function buildNextActions(summary: LifecycleSummary, _totalBlocked: number): string[] {
   const actions: string[] = [];
   if (summary.blocked.stale_blocker_state > 0) {
     actions.push(`Fix ${summary.blocked.stale_blocker_state} resources stuck in stale state`);

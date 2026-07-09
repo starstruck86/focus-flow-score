@@ -1,7 +1,7 @@
 // Meeting Prep Intelligence - Surfaces accounts with upcoming meetings that need prep
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Building2, Clock, Plus, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, Building2, Clock, Plus } from 'lucide-react';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { useStore } from '@/store/useStore';
 import { format, parseISO, differenceInMinutes, isValid } from 'date-fns';

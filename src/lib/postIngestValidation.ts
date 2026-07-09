@@ -85,7 +85,7 @@ type OperationType = 'extraction' | 'parse' | 'enrichment';
 async function hasInFlightOperation(resourceId: string, opType: OperationType): Promise<boolean> {
   try {
     // Check 1: Active background_jobs for this resource
-    const jobTypes: string[] = opType === 'extraction'
+    const _jobTypes: string[] = opType === 'extraction'
       ? ['extraction', 'batch-extract-kis', 'extract-tactics']
       : opType === 'parse'
         ? ['parse', 'parse-uploaded-file']

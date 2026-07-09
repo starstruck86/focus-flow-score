@@ -20,11 +20,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
-import {
-  ChevronDown, ChevronRight, AlertOctagon, RotateCcw,
-  FileText, Trash2, ArrowRight, Filter, Wand2,
-  Crown, Star, Undo2, History, AlertTriangle, Eye,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, AlertOctagon, RotateCcw, FileText, Trash2, ArrowRight, Filter, Wand2, Crown, Star, Undo2, History, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -174,7 +170,7 @@ import { TransformationPreviewDialog } from './TransformationPreviewDialog';
 
 // ── Component ──────────────────────────────────────────────
 
-export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onRerunStrict }: ResourceFailureQueueProps) {
+export function ResourceFailureQueue({ diagnoses, runId: _runId, onRerunResource, onRerunStrict }: ResourceFailureQueueProps) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(true);

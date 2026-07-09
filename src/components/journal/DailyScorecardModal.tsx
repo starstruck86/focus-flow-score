@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { safeInternalInvoke } from '@/lib/observability/safeInternalInvoke';
-import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo } from 'framer-motion';
+import { motion, AnimatePresence, PanInfo } from 'framer-motion';
 import {
   Phone,
   MessageSquare,
@@ -28,9 +28,7 @@ import {
   MapPin,
   AlertTriangle,
   Zap,
-  Trophy,
-  PartyPopper,
-} from 'lucide-react';
+  Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,8 +38,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
@@ -115,8 +112,7 @@ const DEFAULT_SCORECARD: ScorecardData = {
   win: '',
   tomorrowPriority: '',
   dailyReflection: '',
-  yesterdayCommitmentMet: null,
-};
+  yesterdayCommitmentMet: null };
 
 function getDefaultMode(): JournalMode {
   const hour = new Date().getHours();
@@ -145,8 +141,7 @@ function MetricCounter({
   onChange,
   icon: Icon,
   compact = false,
-  hint,
-}: {
+  hint }: {
   label: string;
   value: number;
   target: number;
@@ -177,8 +172,7 @@ function MetricCounter({
     <div className="relative overflow-hidden rounded-lg border transition-all duration-300"
       style={{
         borderColor: atTarget ? 'hsl(var(--status-green) / 0.4)' : 'hsl(var(--border))',
-        background: atTarget ? 'hsl(var(--status-green) / 0.05)' : 'hsl(var(--secondary) / 0.3)',
-      }}
+        background: atTarget ? 'hsl(var(--status-green) / 0.05)' : 'hsl(var(--secondary) / 0.3)' }}
     >
       <div
         className="absolute inset-0 transition-all duration-500 ease-out"
@@ -186,8 +180,7 @@ function MetricCounter({
           width: `${pct}%`,
           background: atTarget
             ? 'hsl(var(--status-green) / 0.08)'
-            : 'hsl(var(--primary) / 0.04)',
-        }}
+            : 'hsl(var(--primary) / 0.04)' }}
       />
       <div className={cn("relative flex items-center justify-between", compact ? "p-2" : "p-3")}>
         <div className="flex items-center gap-2.5 min-w-0">
@@ -405,11 +398,9 @@ function usePowerHourTotals(date: string) {
         dials: data.reduce((s, r) => s + (r.dials || 0), 0),
         conversations: data.reduce((s, r) => s + (r.connects || 0), 0),
         meetingsSet: data.reduce((s, r) => s + (r.meetings_set || 0), 0),
-        sessionCount: data.length,
-      };
+        sessionCount: data.length };
     },
-    staleTime: 30 * 1000,
-  });
+    staleTime: 30 * 1000 });
 }
 
 function useExistingEntry(date: string) {
@@ -423,8 +414,7 @@ function useExistingEntry(date: string) {
         .maybeSingle();
       if (error) throw error;
       return data;
-    },
-  });
+    } });
 }
 
 function useYesterdayEntry() {
@@ -439,8 +429,7 @@ function useYesterdayEntry() {
         .maybeSingle();
       if (error) throw error;
       return data;
-    },
-  });
+    } });
 }
 
 function useCalendarMeetingCount(date: string) {
@@ -463,8 +452,7 @@ function useCalendarMeetingCount(date: string) {
       });
       return { totalEvents: data?.length || 0, customerMeetings: meetings, customerMeetingCount: meetings.length };
     },
-    staleTime: 5 * 60 * 1000,
-  });
+    staleTime: 5 * 60 * 1000 });
 }
 
 function useRollingAverage() {
@@ -489,11 +477,9 @@ function useRollingAverage() {
         opportunitiesCreated: Math.round(data.reduce((s, r) => s + (r.opportunities_created || 0), 0) / n),
         accountsResearched: Math.round(data.reduce((s, r) => s + (r.accounts_researched || 0), 0) / n),
         contactsPrepped: Math.round(data.reduce((s, r) => s + (r.contacts_prepped || 0), 0) / n),
-        dayCount: n,
-      };
+        dayCount: n };
     },
-    staleTime: 10 * 60 * 1000,
-  });
+    staleTime: 10 * 60 * 1000 });
 }
 
 function useTodayCalendarEvents() {
@@ -511,8 +497,7 @@ function useTodayCalendarEvents() {
       if (error) throw error;
       return (data || []) as Array<{ id: string; title: string; start_time: string; end_time: string | null; location: string | null }>;
     },
-    staleTime: 5 * 60 * 1000,
-  });
+    staleTime: 5 * 60 * 1000 });
 }
 
 function useLastJournalEntry() {
@@ -529,8 +514,7 @@ function useLastJournalEntry() {
       if (error) throw error;
       return data;
     },
-    staleTime: 5 * 60 * 1000,
-  });
+    staleTime: 5 * 60 * 1000 });
 }
 
 function useJournalNudge() {
@@ -542,8 +526,7 @@ function useJournalNudge() {
         functionName: 'journal-nudge',
         componentName: 'JournalNudge',
         internalExecution: true,
-        strictValidation: false,
-      });
+        strictValidation: false });
       if (error) throw error;
       return data as {
         nudge: string;
@@ -554,8 +537,7 @@ function useJournalNudge() {
       };
     },
     enabled: !!user,
-    staleTime: 5 * 60 * 1000,
-  });
+    staleTime: 5 * 60 * 1000 });
 }
 
 function useWeeklyInsights() {
@@ -568,8 +550,7 @@ function useWeeklyInsights() {
       return data as { insights: string[] } | null;
     },
     enabled: !!user,
-    staleTime: 30 * 60 * 1000,
-  });
+    staleTime: 30 * 60 * 1000 });
 }
 
 function useCurrentWeeklyReview() {
@@ -585,8 +566,7 @@ function useCurrentWeeklyReview() {
       if (error) throw error;
       return data;
     },
-    staleTime: 5 * 60 * 1000,
-  });
+    staleTime: 5 * 60 * 1000 });
 }
 
 function useDailyTargets(): DailyTargets {
@@ -600,8 +580,7 @@ function useDailyTargets(): DailyTargets {
         .maybeSingle();
       if (error) throw error;
       return data;
-    },
-  });
+    } });
 
   return {
     dials: Number(data?.target_dials_per_day ?? 60),
@@ -611,8 +590,7 @@ function useDailyTargets(): DailyTargets {
     oppsCreated: Math.ceil(Number(data?.target_opps_created_per_week ?? 1) / 5),
     prospectsAdded: Number(data?.target_accounts_researched_per_day ?? 10),
     accountsResearched: Number(data?.target_accounts_researched_per_day ?? 3),
-    contactsPrepped: Number(data?.target_contacts_prepped_per_day ?? 5),
-  };
+    contactsPrepped: Number(data?.target_contacts_prepped_per_day ?? 5) };
 }
 
 function useCurrentStreak() {
@@ -627,8 +605,7 @@ function useCurrentStreak() {
       if (error) throw error;
       return data;
     },
-    staleTime: 60 * 1000,
-  });
+    staleTime: 60 * 1000 });
 }
 
 function useWhoopMetrics(_date: string) {
@@ -652,8 +629,7 @@ function useWeekDaysLogged() {
       if (error) throw error;
       return { daysLogged: data?.length || 0, totalDays: 5 };
     },
-    staleTime: 60 * 1000,
-  });
+    staleTime: 60 * 1000 });
 }
 
 // Streak-break notification scheduler
@@ -682,8 +658,7 @@ function useStreakBreakNotification(todayCheckedIn: boolean) {
           body: 'Your daily journal is waiting. Quick-log your activity to keep your streak alive.',
           icon: '/pwa-192x192.png',
           tag: 'streak-break',
-          requireInteraction: true,
-        });
+          requireInteraction: true });
       }
     }, msUntil5pm);
 
@@ -705,8 +680,7 @@ function MorningView({
   onSwitchToEvening,
   todayEvents,
   lastEntry,
-  weekDaysLogged,
-}: {
+  weekDaysLogged }: {
   yesterdayEntry: any;
   weeklyReview: any;
   nudgeData: any;
@@ -790,8 +764,7 @@ function MorningView({
               ? 'hsl(var(--status-green) / 0.06)'
               : Number(whoopMetrics.recovery_score) >= 34
                 ? 'hsl(var(--status-yellow) / 0.06)'
-                : 'hsl(var(--status-red) / 0.06)',
-          }}
+                : 'hsl(var(--status-red) / 0.06)' }}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1024,8 +997,7 @@ function EveningView({
   rollingAvg,
   quickLogMode,
   weekDaysLogged,
-  existingEntry,
-}: {
+  existingEntry }: {
   data: ScorecardData;
   update: <K extends keyof ScorecardData>(key: K, val: ScorecardData[K]) => void;
   targets: DailyTargets;
@@ -1267,8 +1239,7 @@ function EveningView({
                   className={cn("text-[9px] font-normal px-1.5 py-0", {
                     'bg-status-green/20 text-status-green': existingEntry.focus_label === 'Focus Day',
                     'bg-status-yellow/20 text-status-yellow': existingEntry.focus_label === 'Normal Day',
-                    'bg-destructive/20 text-destructive': existingEntry.focus_label === 'Drift Day',
-                  })}
+                    'bg-destructive/20 text-destructive': existingEntry.focus_label === 'Drift Day' })}
                 >
                   {existingEntry.focus_label || 'No data'}
                 </Badge>
@@ -1353,8 +1324,7 @@ export function DailyScorecardModal({
   onOpenChange,
   date,
   initialData,
-  forceMode,
-}: DailyScorecardModalProps) {
+  forceMode }: DailyScorecardModalProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(date ? new Date(date + 'T12:00:00') : new Date());
   const entryDate = format(selectedDate, 'yyyy-MM-dd');
   const [data, setData] = useState<ScorecardData>({ ...DEFAULT_SCORECARD, ...initialData });
@@ -1438,8 +1408,7 @@ export function DailyScorecardModal({
         win: existingEntry.what_worked_today || '',
         tomorrowPriority: existingEntry.tomorrow_priority || '',
         dailyReflection: existingEntry.daily_reflection || '',
-        yesterdayCommitmentMet: existingEntry.yesterday_commitment_met,
-      });
+        yesterdayCommitmentMet: existingEntry.yesterday_commitment_met });
       setPowerHourApplied(true);
       setCalendarApplied(true);
       setAvgApplied(true);
@@ -1464,8 +1433,7 @@ export function DailyScorecardModal({
         customerMeetingsHeld: prev.customerMeetingsHeld || rollingAvg.customerMeetingsHeld,
         opportunitiesCreated: prev.opportunitiesCreated || rollingAvg.opportunitiesCreated,
         accountsResearched: prev.accountsResearched || rollingAvg.accountsResearched,
-        contactsPrepped: prev.contactsPrepped || rollingAvg.contactsPrepped,
-      }));
+        contactsPrepped: prev.contactsPrepped || rollingAvg.contactsPrepped }));
     }
   }, [open, rollingAvg, avgApplied, existingEntry]);
 
@@ -1477,11 +1445,9 @@ export function DailyScorecardModal({
         ...prev,
         dials: prev.dials + powerHourTotals.dials,
         conversations: prev.conversations + powerHourTotals.conversations,
-        meetingsSet: prev.meetingsSet + powerHourTotals.meetingsSet,
-      }));
+        meetingsSet: prev.meetingsSet + powerHourTotals.meetingsSet }));
       toast.info(`Pre-filled from ${powerHourTotals.sessionCount} Power Hour session${powerHourTotals.sessionCount > 1 ? 's' : ''}`, {
-        description: `+${powerHourTotals.dials} dials, +${powerHourTotals.conversations} connects, +${powerHourTotals.meetingsSet} meetings`,
-      });
+        description: `+${powerHourTotals.dials} dials, +${powerHourTotals.conversations} connects, +${powerHourTotals.meetingsSet} meetings` });
     }
   }, [open, powerHourTotals, powerHourApplied, existingEntry]);
 
@@ -1491,11 +1457,9 @@ export function DailyScorecardModal({
       setCalendarApplied(true);
       setData(prev => ({
         ...prev,
-        customerMeetingsHeld: Math.max(prev.customerMeetingsHeld, calendarData.customerMeetingCount),
-      }));
+        customerMeetingsHeld: Math.max(prev.customerMeetingsHeld, calendarData.customerMeetingCount) }));
       toast.info(`${calendarData.customerMeetingCount} meeting${calendarData.customerMeetingCount > 1 ? 's' : ''} detected from calendar`, {
-        description: calendarData.customerMeetings.slice(0, 3).map((m: any) => m.title).join(', '),
-      });
+        description: calendarData.customerMeetings.slice(0, 3).map((m: any) => m.title).join(', ') });
     }
   }, [open, calendarData, calendarApplied, existingEntry]);
 
@@ -1537,8 +1501,7 @@ export function DailyScorecardModal({
       let sentimentPromise: Promise<{ sentiment_score: number | null; sentiment_label: string | null }> | null = null;
       if (data.dailyReflection.trim().length >= 5) {
         sentimentPromise = trackedInvoke<any>('analyze-sentiment', {
-          body: { reflection: data.dailyReflection },
-        }).then(({ data: d }) => d).catch(() => ({ sentiment_score: null, sentiment_label: null }));
+          body: { reflection: data.dailyReflection } }).then(({ data: d }) => d).catch(() => ({ sentiment_score: null, sentiment_label: null }));
       }
 
       const payload = {
@@ -1579,8 +1542,7 @@ export function DailyScorecardModal({
         stress: 3,
         clarity: 3,
         distractions: 'low',
-        context_switching: 'low',
-      };
+        context_switching: 'low' };
 
       const { error } = await supabase
         .from('daily_journal_entries')
@@ -1594,8 +1556,7 @@ export function DailyScorecardModal({
         dailyScore: savedScore,
         productivityScore: Math.round((savedScore / 6) * 100),
         isEligible: true,
-        goalMet: savedGoalMet,
-      });
+        goalMet: savedGoalMet });
 
       if (sentimentPromise) {
         const sentiment = await sentimentPromise;
@@ -1604,8 +1565,7 @@ export function DailyScorecardModal({
             .from('daily_journal_entries')
             .update({
               sentiment_score: sentiment.sentiment_score,
-              sentiment_label: sentiment.sentiment_label,
-            })
+              sentiment_label: sentiment.sentiment_label })
             .eq('date', savedDate)
             .eq('user_id', user.id);
         }
@@ -1655,10 +1615,8 @@ export function DailyScorecardModal({
               } catch {
                 toast.error('Failed to undo');
               }
-            },
-          },
-          duration: 5000,
-        }
+            } },
+          duration: 5000 }
       );
     } catch (error) {
       console.error('Save failed:', error);

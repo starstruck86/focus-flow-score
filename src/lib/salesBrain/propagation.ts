@@ -8,17 +8,7 @@
  * Targets: Dave, Roleplay, Playbooks, Prep
  */
 
-import {
-  type DoctrineEntry,
-  type DoctrineChapter,
-  type PropagationTargets,
-  getPropagationEligibleDoctrine,
-  getActiveDoctrine,
-  getInsightCount,
-  loadChangelog,
-  loadDoctrine,
-  isDoctrineEligibleForPropagation,
-} from './doctrine';
+import { type DoctrineChapter, getPropagationEligibleDoctrine, getActiveDoctrine, getInsightCount, loadChangelog, loadDoctrine, isDoctrineEligibleForPropagation } from './doctrine';
 import { logDoctrineUsageBatch } from './doctrineUsage';
 import { createLogger } from '@/lib/logger';
 
@@ -151,7 +141,7 @@ export interface PrepRecommendation {
 }
 
 export function getPrepRecommendations(
-  accountIndustry?: string,
+  _accountIndustry?: string,
   dealStage?: string,
 ): PrepRecommendation[] {
   const chapters: DoctrineChapter[] = [];

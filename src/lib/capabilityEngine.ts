@@ -45,7 +45,7 @@ export interface CapabilityContext {
 const SUPPRESSION_KEY = 'capability-prompt-history';
 const MAX_IGNORES_BEFORE_SUPPRESS = 3;
 
-function getRecentSuppressions(): Record<string, number> {
+function _getRecentSuppressions(): Record<string, number> {
   try { return JSON.parse(localStorage.getItem(SUPPRESSION_KEY) || '{}'); } catch { return {}; }
 }
 

@@ -156,4 +156,4 @@ export function buildPlan(
   return { ok: true, plan };
 }
 
-export const __test__ = { hash, stableStringify, FORBIDDEN_STATIC_KEYS };
+export const _test__ = { hash, stableStringify, FORBIDDEN_STATIC_KEYS };

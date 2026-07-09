@@ -72,7 +72,7 @@ export function CommandBar({
   const [freeText, setFreeText] = useState('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [activeTrigger, setActiveTrigger] = useState<string | null>(null);
-  const [filterText, setFilterText] = useState('');
+  const [_filterText, setFilterText] = useState('');
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [tokens, setTokens] = useState<CommandToken[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -95,7 +95,7 @@ export function CommandBar({
         .slice(0, 7)
         .map(a => ({ type: 'account', id: a.id, name: a.name }));
       if (lowerFilter.length > 1 && !items.some(i => i.name.toLowerCase() === lowerFilter)) {
-        items.push({ type: 'account', id: '__create__', name: filter, is_create: true });
+        items.push({ type: 'account', id: '_create__', name: filter, is_create: true });
       }
     } else if (type === 'opportunity') {
       items = opportunities
@@ -103,7 +103,7 @@ export function CommandBar({
         .slice(0, 7)
         .map(o => ({ type: 'opportunity', id: o.id, name: o.name, subtitle: o.account_name }));
       if (lowerFilter.length > 1 && !items.some(i => i.name.toLowerCase() === lowerFilter)) {
-        items.push({ type: 'opportunity', id: '__create__', name: filter, is_create: true });
+        items.push({ type: 'opportunity', id: '_create__', name: filter, is_create: true });
       }
     } else if (type === 'template') {
       items = templates

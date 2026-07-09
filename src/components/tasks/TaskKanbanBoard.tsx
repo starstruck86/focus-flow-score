@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import type { Task, TaskStatus } from '@/types';
-import { STATUS_ORDER, STATUS_META } from './constants';
+import { STATUS_META } from './constants';
 import { TaskCard } from './TaskCard';
 import { SHELL } from '@/lib/layout';
 
@@ -54,7 +54,7 @@ export function TaskKanbanBoard({ tasks, selectedIds, onToggleSelect }: TaskKanb
     setDragOverColumn(status);
   }, []);
 
-  const handleDragLeave = useCallback((e: React.DragEvent, status: TaskStatus) => {
+  const handleDragLeave = useCallback((_e: React.DragEvent, status: TaskStatus) => {
     dragCounter.current[status] = (dragCounter.current[status] || 0) - 1;
     if (dragCounter.current[status] <= 0) {
       dragCounter.current[status] = 0;

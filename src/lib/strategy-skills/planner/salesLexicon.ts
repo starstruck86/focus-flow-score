@@ -88,4 +88,4 @@ export function matchLexicon(rawSeed: string): LexiconMatch[] {
   return out;
 }
 
-export const __test__ = { tokenContains };
+export const _test__ = { tokenContains };

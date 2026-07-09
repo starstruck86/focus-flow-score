@@ -74,7 +74,7 @@ export default function StrategyControlPanel() {
 
   const cases = useMemo(() => buildCases(inputs), [inputs]);
   const weakCases = useMemo(() => buildWeakCases(inputs), [inputs]);
-  const verdict: VerdictReport | null = useMemo(
+  const _verdict: VerdictReport | null = useMemo(
     () => (results.length === cases.length ? computeVerdict(results) : null),
     [results, cases.length],
   );

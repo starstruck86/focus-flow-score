@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/collapsible';
 import { Play, Pause, Square, RotateCcw, ChevronDown, CheckCircle2, XCircle, SkipForward, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { BulkEnrichState, BulkEnrichStatus, BulkRecordResult } from '@/hooks/useBulkEnrichment';
+import type { BulkEnrichState, BulkEnrichStatus } from '@/hooks/useBulkEnrichment';
 import type { Account } from '@/types';
 
 interface BulkEnrichmentPanelProps {

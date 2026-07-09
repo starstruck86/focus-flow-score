@@ -7,13 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Badge } from '@/components/ui/badge';
 import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
-import {
-  ArrowLeft, Send, RotateCcw, Loader2, Target, AlertTriangle,
-  CheckCircle2, Lightbulb, Swords, ChevronRight, ChevronUp, ChevronDown, Crown, Sparkles,
-  Crosshair, ListOrdered, MessageCircle, GraduationCap,
-  TrendingUp, TrendingDown, Minus, Zap, Shield, XCircle,
-  Eye, PenLine, Volume2, VolumeX, BookOpen,
-} from 'lucide-react';
+import { ArrowLeft, Send, Loader2, Target, AlertTriangle, Lightbulb, Swords, ChevronRight, ChevronUp, ChevronDown, Crown, Sparkles, Crosshair, ListOrdered, GraduationCap, TrendingUp, TrendingDown, Minus, Zap, Shield, Eye, PenLine, Volume2, VolumeX, BookOpen } from 'lucide-react';
 import { getRandomScenario, getLaneScenario, SKILL_LABELS, MISTAKE_LABELS, type DojoScenario, type SkillFocus } from '@/lib/dojo/scenarios';
 import { generateKIDrill, type KnowledgeItemForDrill, type KIDrillScenario } from '@/lib/dojo/kiDrillGenerator';
 import { writeKIMastery } from '@/lib/dojo/kiMasteryWriter';
@@ -33,12 +27,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { completeAssignment } from '@/lib/dojo/v3/assignmentManager';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import {
-  updateLaneAfterRep,
-  loadActiveLane,
-  saveActiveLane,
-  type ActiveLane,
-} from '@/lib/sessionDurability';
+import { updateLaneAfterRep, loadActiveLane } from '@/lib/sessionDurability';
 import { motion, AnimatePresence } from 'framer-motion';
 import { selectNextKI } from '@/lib/dojo/selectNextKI';
 import DojoRoleplay from '@/components/dojo/DojoRoleplay';
@@ -74,7 +63,7 @@ import { getArcById, type SimulationArc } from '@/lib/dojo/v5/simulationArcs';
 
 type Phase = 'respond' | 'scoring' | 'feedback' | 'retry';
 
-import { FOCUS_PATTERN_LABELS, formatFocusPattern } from '@/lib/dojo/focusPatterns';
+import { FOCUS_PATTERN_LABELS } from '@/lib/dojo/focusPatterns';
 
 const PATTERN_TAG_LABELS: Record<string, string> = {
   isolates_real_issue: 'Isolates real issue',
@@ -190,7 +179,7 @@ export default function DojoSession() {
       });
   }, [user?.id, (kiContext ?? kiContextOverride)?.id, (kiContext ?? kiContextOverride)?.spider_dimension]);
 
-  const { scoreOriginal, isScoring: isScoringOriginal, originalScore } = useScoreOriginalResponse();
+  const { scoreOriginal, isScoring: _isScoringOriginal, originalScore } = useScoreOriginalResponse();
   const { data: skillLevels } = useSkillLevels();
   const skillLevelForFeedback = skillLevels?.find(l => l.skill === scenario.skillFocus) ?? null;
 

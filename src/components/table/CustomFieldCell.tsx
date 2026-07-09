@@ -116,7 +116,7 @@ export function CustomFieldCell({ field, recordId, metricDisplay }: CustomFieldC
   }
 
   // If we were in metric editing mode and the underlying cell blurs, exit
-  const wrapOnChange = (setter: (v: any) => void) => (v: any) => {
+  const _wrapOnChange = (setter: (v: any) => void) => (v: any) => {
     setter(v);
     setMetricEditing(false);
   };

@@ -1,8 +1,5 @@
 import { useState, useEffect } from 'react';
-import {
-  ExternalLink, Plus, Trash2, FileText, BookOpen, Target, FolderOpen, File,
-  Copy, Pencil, Link2, AlertTriangle, Presentation, Sheet, FileSpreadsheet,
-} from 'lucide-react';
+import { ExternalLink, Plus, Trash2, FileText, BookOpen, Target, FolderOpen, File, Copy, Pencil, Link2, Presentation, Sheet, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -55,7 +52,7 @@ interface ResourceLinksPanelProps {
   compact?: boolean;
 }
 
-export function ResourceLinksPanel({ recordType, recordId, parentAccountId, compact }: ResourceLinksPanelProps) {
+export function ResourceLinksPanel({ recordType, recordId, parentAccountId, compact: _compact }: ResourceLinksPanelProps) {
   const { data: links = [], isLoading } = useResourceLinksForRecord(recordType, recordId, parentAccountId);
   const addMutation = useAddResourceLink();
   const updateMutation = useUpdateResourceLink();

@@ -113,13 +113,13 @@ export function TaskEditDialog({ task, open, onOpenChange }: TaskEditDialogProps
           </div>
           <div className="space-y-2">
             <Label>Linked Account</Label>
-            <Select value={s.linkedAccountId || '__none__'} onValueChange={v => setS({
-              ...s, linkedAccountId: v === '__none__' ? undefined : v,
-              linkedOpportunityId: v === '__none__' ? undefined : s.linkedOpportunityId,
+            <Select value={s.linkedAccountId || '_none__'} onValueChange={v => setS({
+              ...s, linkedAccountId: v === '_none__' ? undefined : v,
+              linkedOpportunityId: v === '_none__' ? undefined : s.linkedOpportunityId,
             })}>
               <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__">None</SelectItem>
+                <SelectItem value="_none__">None</SelectItem>
                 {accounts.map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -127,10 +127,10 @@ export function TaskEditDialog({ task, open, onOpenChange }: TaskEditDialogProps
           {s.linkedAccountId && accountOpps.length > 0 && (
             <div className="space-y-2">
               <Label>Linked Opportunity</Label>
-              <Select value={s.linkedOpportunityId || '__none__'} onValueChange={v => setS({ ...s, linkedOpportunityId: v === '__none__' ? undefined : v })}>
+              <Select value={s.linkedOpportunityId || '_none__'} onValueChange={v => setS({ ...s, linkedOpportunityId: v === '_none__' ? undefined : v })}>
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
+                  <SelectItem value="_none__">None</SelectItem>
                   {accountOpps.map(o => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
                 </SelectContent>
               </Select>

@@ -41,7 +41,7 @@ import { ResumeLaneBanner } from '@/components/dojo/ResumeLaneBanner';
 import { Card, CardContent } from '@/components/ui/card';
 import { MicroDrillSession } from '@/components/dojo/MicroDrillSession';
 import { Button } from '@/components/ui/button';
-import { Flame, Target, ChevronRight, Zap, Brain, AlertTriangle, TrendingUp, BookOpen, MessageSquare, Swords, BookMarked } from 'lucide-react';
+import { Flame, Target, ChevronRight, Zap, Brain, AlertTriangle, TrendingUp, Swords, BookMarked } from 'lucide-react';
 import { useIntensiveMode } from '@/hooks/useIntensiveMode';
 import { DAILY_REP_GOAL } from '@/lib/dailyGoal';
 
@@ -348,7 +348,7 @@ export default function Dojo() {
     }
   }, [streak]);
 
-  const lastKnownStreak = (() => {
+  const _lastKnownStreak = (() => {
     try {
       const v = localStorage.getItem('dynamic_last_streak');
       return v ? parseInt(v, 10) : 0;
@@ -409,7 +409,7 @@ export default function Dojo() {
     return Math.max(0, Math.ceil((start.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
   }, []);
 
-  const repsToday = useMemo(() => {
+  const _repsToday = useMemo(() => {
     try {
       const key = `daily_reps_${new Date().toISOString().split('T')[0]}`;
       return parseInt(localStorage.getItem(key) ?? '0', 10) || 0;

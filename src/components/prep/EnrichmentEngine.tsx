@@ -6,7 +6,7 @@
  */
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
-import { useAllResources, type Resource } from '@/hooks/useResources';
+import { useAllResources } from '@/hooks/useResources';
 import { useAudioJobsMap } from '@/hooks/useAudioJobs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -23,13 +23,13 @@ import {
 import { buildRemediationQueues } from '@/lib/remediationEngine';
 import { runAutonomousRemediation, type RemediationCycleState } from '@/lib/autonomousRemediation';
 import { analyzeRemediationBatch } from '@/lib/remediationIntelligence';
-import { generateProductRoadmap, type RoadmapSummary } from '@/lib/systemGapRoadmap';
-import { shouldAutoRelease, classifyQuarantine, getQuarantineSubClass, SKIP_REASON_LABELS, getSkipReason, isRecoverableSkip, getRecoveryAction } from '@/lib/quarantineClassification';
+import { generateProductRoadmap } from '@/lib/systemGapRoadmap';
+import { shouldAutoRelease, classifyQuarantine, SKIP_REASON_LABELS, getSkipReason, isRecoverableSkip, getRecoveryAction } from '@/lib/quarantineClassification';
 import { ManualInputInbox, type InboxQueue, type InboxItem } from './ManualInputInbox';
 import { FileText, Lock, ExternalLink, Eye } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { BucketFilter, RunSnapshot, RunResult, RunScopeBucket, BucketExecutionSummary } from './enrichment/types';
-import { EMPTY_RESULT, mapVerifiedToBucket, RUN_SCOPE_META, DEFAULT_RUN_SCOPE } from './enrichment/types';
+import { EMPTY_RESULT, RUN_SCOPE_META, DEFAULT_RUN_SCOPE } from './enrichment/types';
 import { SummaryCards } from './enrichment/SummaryCards';
 import { ResourceWorkbench } from './enrichment/ResourceWorkbench';
 import { ResourceDetailDrawer } from './enrichment/ResourceDetailDrawer';
@@ -214,7 +214,7 @@ function filterByScope(verified: VerifiedResource[], selectedBuckets: RunScopeBu
  */
 function buildBucketSummaries(
   preVerified: VerifiedResource[],
-  postVerified: VerifiedResource[],
+  _postVerified: VerifiedResource[],
   skipped: Array<{ resource: VerifiedResource; reason: string; recoverable: boolean; recoveryAction: string }>,
   autoReleased: VerifiedResource[],
   remState: RemediationCycleState | null,
@@ -295,7 +295,7 @@ function buildBucketSummaries(
 // ── Main Component ─────────────────────────────────────────
 
 export function EnrichmentEngine() {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const qc = useQueryClient();
   const { data: allResources, isLoading: loadingResources } = useAllResources();
   const { data: audioJobsMap, isLoading: loadingAudio } = useAudioJobsMap();
@@ -641,7 +641,7 @@ export function EnrichmentEngine() {
           roadmap={displayRoadmap}
           expanded={expandedSections.roadmap ?? false}
           onToggle={() => toggleSection('roadmap')}
-          onViewAffected={(ids) => {
+          onViewAffected={(_ids) => {
             setActiveBucket('system_gap');
           }}
         />

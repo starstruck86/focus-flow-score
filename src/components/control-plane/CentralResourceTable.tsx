@@ -80,7 +80,7 @@ function qualityColor(ki: number, active: number): string {
   return 'text-destructive';
 }
 
-function nextActionLabel(state: ControlPlaneState, resource: CanonicalResourceStatus): string {
+function _nextActionLabel(state: ControlPlaneState, resource: CanonicalResourceStatus): string {
   switch (state) {
     case 'ingested': return 'Enrich content';
     case 'has_content': return 'Extract knowledge';
@@ -136,7 +136,7 @@ function getRowActions(state: ControlPlaneState, resource: CanonicalResourceStat
 
 export function CentralResourceTable({
   resources, filter, processingIds, conflictIds, customFilterIds, customFilterLabel,
-  onAction, onInspect, actionLoading, outcomeRefreshKey,
+  onAction, onInspect, actionLoading, outcomeRefreshKey: _outcomeRefreshKey,
 }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<'title' | 'state' | 'kis' | 'updated'>('updated');

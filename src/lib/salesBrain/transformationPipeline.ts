@@ -11,21 +11,7 @@
  * Only operator approval enables full propagation.
  */
 
-import {
-  type SalesBrainInsight,
-  type DoctrineEntry,
-  type DoctrineChapter,
-  type InsightCategory,
-  DOCTRINE_CHAPTERS,
-  loadInsights,
-  saveInsights,
-  loadDoctrine,
-  saveDoctrine,
-  appendChangelog,
-  adjustConfidence,
-  computeFreshness,
-  defaultGovernance,
-} from './doctrine';
+import { type SalesBrainInsight, type DoctrineEntry, type DoctrineChapter, type InsightCategory, loadInsights, saveInsights, loadDoctrine, saveDoctrine, appendChangelog, adjustConfidence, computeFreshness, defaultGovernance } from './doctrine';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('TransformationPipeline');
@@ -57,7 +43,7 @@ function generateId(): string {
  * Simple heuristic insight extractor (Phase 1).
  */
 export function extractInsightsHeuristic(input: ExtractionInput): SalesBrainInsight[] {
-  const { resourceId, title, content, description, tags } = input;
+  const { resourceId, title, content, description, tags: _tags } = input;
   const text = [title, description, content].filter(Boolean).join('\n').toLowerCase();
   const insights: SalesBrainInsight[] = [];
 

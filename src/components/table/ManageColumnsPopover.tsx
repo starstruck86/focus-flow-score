@@ -20,13 +20,7 @@ import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import {
-  useCustomFields,
-  type TabTarget,
-  type CustomFieldType,
-  type FieldPlacement,
-  type ColumnDisplayStyle,
-} from '@/hooks/useCustomFields';
+import { useCustomFields, type TabTarget, type CustomFieldType, type FieldPlacement } from '@/hooks/useCustomFields';
 
 interface BuiltInColumn {
   key: string;

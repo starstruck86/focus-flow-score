@@ -81,8 +81,8 @@ function DaveTapPrompt({ onTap }: { onTap: () => void }) {
 const DAVE_CHANNEL_NAME = 'dave-session';
 
 export function Layout({ children, hideFloatingFab, embedded: embeddedProp }: { children: React.ReactNode; hideFloatingFab?: boolean; embedded?: boolean }) {
-  const { user, signOut } = useAuth();
-  const { isReviewMode, guardDestructive } = useReviewMode();
+  const { user: _user, signOut } = useAuth();
+  const { isReviewMode, guardDestructive: _guardDestructive } = useReviewMode();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { setPageContext } = useCopilot();

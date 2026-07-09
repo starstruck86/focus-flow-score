@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowRight, Loader2, Sparkles, Check, X } from 'lucide-react';
+import { ArrowRight, Loader2, Sparkles, Check } from 'lucide-react';
 import { useAllResources, useUpdateResource } from '@/hooks/useResources';
 import { useReorganizeLibrary, type ClassificationResult } from '@/hooks/useResourceUpload';
 import { useCreateFolder, useResourceFolders } from '@/hooks/useResources';
@@ -29,7 +29,7 @@ export function ReorganizeModal({ open, onOpenChange }: Props) {
   const { data: folders = [] } = useResourceFolders();
   const reorganize = useReorganizeLibrary();
   const updateResource = useUpdateResource();
-  const createFolder = useCreateFolder();
+  const _createFolder = useCreateFolder();
   const { user } = useAuth();
 
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);

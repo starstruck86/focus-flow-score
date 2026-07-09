@@ -256,7 +256,7 @@ export function getThinAnchors(coverage: Record<DayAnchor, AnchorCoverage>): Day
 
 async function fetchFallbackKIs(
   userId: string,
-  skills: SkillFocus[],
+  _skills: SkillFocus[],
 ): Promise<KICatalogEntry[]> {
   // Broaden: any active KI with roleplay/coaching context
   const { data } = await supabase
@@ -272,7 +272,7 @@ async function fetchFallbackKIs(
   return (data as any[]).map(ki => mapKIToEntry(ki));
 }
 
-function mapKIToEntry(ki: any, anchor?: DayAnchor): KICatalogEntry {
+function mapKIToEntry(ki: any, _anchor?: DayAnchor): KICatalogEntry {
   const chapter = ki.chapter as string;
   const tags = (ki.tags as string[]) ?? [];
 

@@ -7,7 +7,7 @@ import {
   Play, Swords, TrendingUp, TrendingDown, Flame, Target, Zap, BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';
+import { SKILL_LABELS } from '@/lib/dojo/scenarios';
 import type { SmartAutopilotResult } from '@/lib/dojo/smartAutopilot';
 import type { SkillStat } from '@/lib/dojo/scenarios';
 import type { LessonContext } from '@/lib/learning/practiceMapping';

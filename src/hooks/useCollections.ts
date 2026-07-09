@@ -103,7 +103,7 @@ export function useAddToCollection() {
 }
 
 export function useRemoveFromCollection() {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ collectionId, resourceId }: { collectionId: string; resourceId: string }) => {

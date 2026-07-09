@@ -5,7 +5,7 @@
  */
 
 import { Card, CardContent } from '@/components/ui/card';
-import { Flame, ArrowDown, ArrowUp, Minus } from 'lucide-react';
+import { Flame, ArrowDown, Minus } from 'lucide-react';
 import type { PressureBreakdown } from '@/lib/learning/learnAdaptationEngine';
 
 interface Props {

@@ -25,9 +25,7 @@ import {
   scoreRouteConfidence,
   clusterByContent,
   resolveCluster,
-  type ContentSegment,
-  type TransformationResult,
-} from '../contentSignature';
+  type } from '../contentSignature';
 
 // ── Test 1: Mixed doc with tactic + template + example ─────
 
@@ -167,7 +165,7 @@ describe('Real email routing', () => {
   });
 
   it('should NOT route as template (no placeholders)', () => {
-    const routes = routeByContent(REAL_EMAIL);
+    const _routes = routeByContent(REAL_EMAIL);
     // It may technically match template signals, but example should be primary
     const exScore = scoreRouteConfidence(REAL_EMAIL, 'example');
     const tplScore = scoreRouteConfidence(REAL_EMAIL, 'template');

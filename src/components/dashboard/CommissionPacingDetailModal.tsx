@@ -1,20 +1,12 @@
 // Commission Pacing Detail Modal - Full breakdown and action plan
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { 
-  DollarSign, 
-  TrendingUp, 
-  TrendingDown,
-  Zap,
-  Target,
-  Calendar,
-  ArrowRight,
-} from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, Zap, Target, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/commissionCalculations';
 import { Button } from '@/components/ui/button';
@@ -59,7 +51,7 @@ export function CommissionPacingDetailModal({
   projectedCommission,
   currentCommission,
   weeklyPaceTrend,
-  projectedAttainment,
+  projectedAttainment: _projectedAttainment,
   benchmarks,
   drivers,
   actionPlan,

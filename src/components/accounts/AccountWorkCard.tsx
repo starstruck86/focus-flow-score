@@ -7,10 +7,7 @@
  */
 
 import { useState, memo } from 'react';
-import {
-  Building2, ChevronDown, ChevronUp, Phone, CheckCircle2,
-  ArrowRight, AlertTriangle, Clock, Calendar, Sparkles, ExternalLink,
-} from 'lucide-react';
+import { Building2, ChevronDown, ChevronUp, Phone, CheckCircle2, ArrowRight, AlertTriangle, Clock, Sparkles, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

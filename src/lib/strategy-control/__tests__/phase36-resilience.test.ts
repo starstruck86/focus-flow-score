@@ -13,12 +13,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { runArtifactGate, type ArtifactManifest } from "../artifactGate";
-import {
-  computeAnomalyFlags,
-  type ArtifactGateTelemetryV2,
-  type PlannerTelemetry,
-  type PerformanceTelemetry,
-} from "../phase36-telemetry";
+import { computeAnomalyFlags, type ArtifactGateTelemetryV2 } from "../phase36-telemetry";
 
 // ═══════════════════════════════════════════════════════════════════
 // Manifest for testing

@@ -25,24 +25,7 @@
 import type { DojoScenario } from './scenarios';
 import type { DojoScoreResult } from './types';
 import type { TtsConfig, ActivePlayback, SpeechQueueItem } from '@/lib/daveVoiceRuntime';
-import {
-  type AudioFirstContext,
-  type InterruptionCommand,
-  type SessionRecap,
-  type BargeInAction,
-  type BargeInDetection,
-  createAudioFirstContext,
-  speakStrict,
-  speakQueueStrict,
-  speakWithBargeIn,
-  listenStrict,
-  interruptPlayback,
-  waitForPlaybackDrain,
-  handleBargeInCommand,
-  replayCurrentCheckpoint,
-  buildSessionRecapSpeech,
-  AudioFirstSessionError,
-} from '@/lib/daveAudioFirstRuntime';
+import { type AudioFirstContext, type SessionRecap, type BargeInDetection, createAudioFirstContext, speakStrict, speakQueueStrict, speakWithBargeIn, listenStrict, interruptPlayback, waitForPlaybackDrain, handleBargeInCommand, replayCurrentCheckpoint, buildSessionRecapSpeech, AudioFirstSessionError } from '@/lib/daveAudioFirstRuntime';
 import { SessionTelemetryTracker } from '@/lib/daveSessionTelemetry';
 import { getDrivingModeConfig, type DrivingMode } from '@/hooks/useDrivingMode';
 import { buildAudioScript, buildRetryScript, buildFeedbackScript, buildAudioLessonScript } from './audioScenarioScript';

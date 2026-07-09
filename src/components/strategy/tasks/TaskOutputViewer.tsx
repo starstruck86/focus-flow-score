@@ -8,7 +8,7 @@ import {
   ChevronDown, ChevronUp, Pencil, Loader2, FileDown, Copy, Star,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { sanitizeTaskRunResult, type TaskRunResult, type Redline, type DiscoverySection } from '@/hooks/strategy/useTaskExecution';
+import { sanitizeTaskRunResult, type TaskRunResult, type DiscoverySection } from '@/hooks/strategy/useTaskExecution';
 import { RedlineCard } from './RedlineCard';
 import { generateDiscoveryDocx, downloadBlob } from '@/lib/strategy/discoveryDocxGenerator';
 import { generateDiscoveryPdf } from '@/lib/strategy/discoveryPdfGenerator';

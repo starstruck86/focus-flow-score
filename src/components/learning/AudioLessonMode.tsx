@@ -24,7 +24,7 @@ import {
   Mic, MicOff, Pause, Play, SkipForward,
   Loader2, Volume2, Square, Swords, CheckCircle2,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useDaveVoiceController } from '@/hooks/useDaveVoiceController';
 import { supabase } from '@/integrations/supabase/client';
@@ -37,7 +37,7 @@ import {
   type RecoveryController,
 } from '@/lib/sessionRecovery';
 import RecoveryBanner from '@/components/RecoveryBanner';
-import type { LearningLesson, MCQuestion } from '@/lib/learning/types';
+import type { LearningLesson } from '@/lib/learning/types';
 import {
   buildLessonAudioSections,
   buildHandoffText,
@@ -534,7 +534,7 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
   }, []);
 
   const progress = sections.length > 0 ? Math.round((completedSections.size / sections.length) * 100) : 0;
-  const isRecovering = recovery.status === 'recovering' || recovery.status === 'waiting_for_connection';
+  const _isRecovering = recovery.status === 'recovering' || recovery.status === 'waiting_for_connection';
 
   return (
     <div className="space-y-4">

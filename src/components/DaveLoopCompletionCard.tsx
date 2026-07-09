@@ -20,7 +20,7 @@ interface Props {
 
 export function DaveLoopCompletionCard({
   concept,
-  skill,
+  skill: _skill,
   attempts,
   nextConcept,
   onContinue,

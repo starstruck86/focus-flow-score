@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronRight, FileText, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { isPlaceholderContent } from '@/lib/canonicalLifecycle';
 import type { ResourceDetail } from '@/hooks/useResourceInspectData';
 

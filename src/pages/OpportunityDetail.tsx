@@ -99,7 +99,7 @@ export default function OpportunityDetail() {
     }
   }, [opp?.id, opp?.name, linkedAccount?.id, linkedAccount?.name, setPageContext]);
 
-  const { debouncedUpdate, flush } = useDebouncedUpdate(updateOpportunity, id || '');
+  const { debouncedUpdate: _debouncedUpdate, flush } = useDebouncedUpdate(updateOpportunity, id || '');
   useEffect(() => flush, [flush]);
   const [showSynopsis, setShowSynopsis] = useState(false);
   const playbookRec = useOppPlaybookRecommendation(id);

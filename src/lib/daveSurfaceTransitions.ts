@@ -8,7 +8,7 @@
 import type { VoiceSurface } from '@/lib/daveVoiceRuntime';
 import { createLogger } from '@/lib/logger';
 
-const logger = createLogger('DaveSurfaceTransitions');
+const _logger = createLogger('DaveSurfaceTransitions');
 
 // ── Types ──────────────────────────────────────────────────────────
 

@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { deriveResourceTruth } from '@/lib/resourceTruthState';
-import { Sparkles, Wrench, Tag, Loader2 as Loader2Icon } from 'lucide-react';
+import { Loader2 as Loader2Icon } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
-import { useResourceJobProgress, getJobLabel, isJobStale } from '@/store/useResourceJobProgress';
+import { useResourceJobProgress, getJobLabel } from '@/store/useResourceJobProgress';
 import { Progress } from '@/components/ui/progress';
 import { formatRelativeTime } from '@/hooks/useReExtractResource';
 import { PRIMARY_ACTIONS } from '@/components/prep/QueueActionBar';
@@ -17,23 +17,14 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import {
-  Search, ArrowUpDown, ArrowUp, ArrowDown,
-  MoreHorizontal, Zap, RefreshCw, RotateCcw, Trash2,
-  Eye, AlertTriangle, CheckCircle2, FileText,
-  Filter, X, FileAudio, HelpCircle, Info, Inbox, ShieldAlert,
-  Star, BookOpen, Activity, Shuffle, Clock, TrendingDown,
-} from 'lucide-react';
+import { Search, ArrowUpDown, ArrowUp, ArrowDown, MoreHorizontal, Zap, RefreshCw, RotateCcw, Trash2, Eye, AlertTriangle, CheckCircle2, FileText, Filter, X, HelpCircle, Info, Star, BookOpen, Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { type EnrichmentStatus, getResourceOrigin } from '@/lib/resourceEligibility';
 import { detectDrift } from '@/lib/resourceLifecycle';
-import { deriveProcessingState, getProcessingStateColor } from '@/lib/processingState';
+import { deriveProcessingState } from '@/lib/processingState';
 import { routeFailure, getFailureBucketActions } from '@/lib/failureRouting';
-import { useCanonicalLifecycle, type BlockedReason } from '@/hooks/useCanonicalLifecycle';
+import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 import { useInUseResources } from '@/hooks/useInUseResources';
 import { useIsMobile } from '@/hooks/use-mobile';
-import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audioPipeline';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { Resource } from '@/hooks/useResources';
 import { ResourceInspectPanel } from './ResourceInspectPanel';
@@ -48,10 +39,7 @@ import { CatchupDashboard } from './CatchupDashboard';
 import { LibraryTrustSummary } from './LibraryTrustSummary';
 import { deriveResourceInsight, deriveReadiness } from '@/lib/resourceSignal';
 import type { ReadinessBucket } from '@/lib/resourceAudit';
-import {
-  isAudioResource, getAudioStageLabel,
-  getAudioFailureDescription,
-} from '@/lib/salesBrain/audioPipeline';
+import { isAudioResource } from '@/lib/salesBrain/audioPipeline';
 
 // ── Types ──────────────────────────────────────────────────
 type SortKey = 'title' | 'created_at' | 'signal' | 'readiness';
@@ -193,7 +181,7 @@ function sortResources(
   });
 }
 
-function formatDate(d: string | null | undefined): string {
+function _formatDate(d: string | null | undefined): string {
   if (!d) return '—';
   const date = new Date(d);
   const days = Math.floor((Date.now() - date.getTime()) / 86400000);
@@ -209,7 +197,7 @@ export function ResourceLibraryTable({
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
-  onResourceClick,
+  onResourceClick: _onResourceClick,
   onAction,
   onBulkAction,
   audioJobsMap,
@@ -231,7 +219,7 @@ export function ResourceLibraryTable({
   const { data: inUseData } = useInUseResources();
   const inUseIds = inUseData?.inUseResourceIds ?? new Set<string>();
   const liveJobResources = useResourceJobProgress(s => s.resources);
-  const batchActive = useResourceJobProgress(s => s.batchActive);
+  const _batchActive = useResourceJobProgress(s => s.batchActive);
   const isMobile = useIsMobile();
 
   const scrollBodyRef = useRef<HTMLDivElement>(null);
@@ -852,7 +840,7 @@ export function ResourceLibraryTable({
               {analysis.isMixed && (
                 <p className="text-[10px] text-muted-foreground">
                   Primary: <span className="font-medium text-foreground">{analysis.dominantCount}/{analysis.total}</span> {analysis.breakdown[0]?.label}
-                  {analysis.breakdown.slice(1).map((b, i) => (
+                  {analysis.breakdown.slice(1).map((b, _i) => (
                     <span key={b.bucket}> · {b.count} {b.label}</span>
                   ))}
                 </p>

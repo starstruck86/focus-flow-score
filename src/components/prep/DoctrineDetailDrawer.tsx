@@ -11,13 +11,11 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
-  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription,
-} from '@/components/ui/drawer';
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from '@/components/ui/drawer';
 import {
   Check, X, Archive, ArrowUp, ArrowDown, Eye, EyeOff, GitMerge,
   MessageSquare, ExternalLink, AlertTriangle, Copy, Clock, Zap,
-  ChevronDown, ChevronRight, Shield,
-} from 'lucide-react';
+  ChevronDown, ChevronRight, Shield } from 'lucide-react';
 import {
   type DoctrineEntry,
   type PropagationTargets,
@@ -36,9 +34,7 @@ import {
   getGovernanceLabel,
   getPropagationBlockReason,
   getActiveDoctrine,
-  loadChangelog,
-  PROPAGATION_CONFIDENCE_FLOORS,
-} from '@/lib/salesBrain';
+  PROPAGATION_CONFIDENCE_FLOORS } from '@/lib/salesBrain';
 import { getDoctrineTrace } from '@/lib/salesBrain/traceability';
 import { getDoctrineUsageSummary } from '@/lib/salesBrain/doctrineUsage';
 import { cn } from '@/lib/utils';
@@ -52,8 +48,7 @@ interface DoctrineDetailDrawerProps {
 }
 
 export const DoctrineDetailDrawer = memo(function DoctrineDetailDrawer({
-  doctrineId, open, onOpenChange, onRefresh,
-}: DoctrineDetailDrawerProps) {
+  doctrineId, open, onOpenChange, onRefresh }: DoctrineDetailDrawerProps) {
   const trace = useMemo(() => doctrineId ? getDoctrineTrace(doctrineId) : null, [doctrineId, open]);
   const usage = useMemo(() => doctrineId ? getDoctrineUsageSummary(doctrineId) : null, [doctrineId, open]);
 

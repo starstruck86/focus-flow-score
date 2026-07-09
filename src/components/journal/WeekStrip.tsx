@@ -1,4 +1,4 @@
-import { format, isToday, isFuture, parseISO } from 'date-fns';
+import { isToday, isFuture, parseISO } from 'date-fns';
 import { Check, X, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WeekDaySummary } from '@/hooks/useWeekJournalEntries';

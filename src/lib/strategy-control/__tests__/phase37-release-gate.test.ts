@@ -5,7 +5,7 @@
  * and passes on a healthy repo.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -79,7 +79,7 @@ describe("Phase 3.7 — Release Gate", () => {
   });
 
   it("required test suites exist in strategy-control", () => {
-    const testDir = path.resolve("src/lib/strategy-control/__tests__");
+    const testDir = path.resolve("src/lib/strategy-control/_tests__");
     expect(fs.existsSync(testDir)).toBe(true);
     const testFiles = fs.readdirSync(testDir).filter(f => f.endsWith(".test.ts"));
     const required = ["artifact", "security", "drift", "waituntil"];

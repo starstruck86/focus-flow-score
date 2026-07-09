@@ -9,17 +9,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import {
-  Plus, Copy, Trash2, Edit3, ChevronDown, ChevronRight,
-  Sparkles, Loader2, Lightbulb, X, RefreshCw, Link2,
-  Mail, MessageSquare, Phone, FileText, Target, Presentation,
-} from 'lucide-react';
+import { Plus, Copy, Trash2, Edit3, ChevronDown, ChevronRight, Sparkles, Loader2, Lightbulb, X, RefreshCw, Link2, Mail, MessageSquare, FileText, Target, Presentation } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  useTemplates, useCreateResource, useDeleteResource, useUpdateResource,
-  useTemplateSuggestions, useDismissSuggestion, useConfirmSuggestion,
-  type Resource, type TemplateSuggestion,
-} from '@/hooks/useResources';
+import { useTemplates, useCreateResource, useDeleteResource, useUpdateResource, useTemplateSuggestions, useDismissSuggestion, useConfirmSuggestion, type Resource } from '@/hooks/useResources';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ResourceEditor } from './ResourceEditor';
@@ -42,7 +34,7 @@ export function TemplateManager() {
   const { data: suggestions = [] } = useTemplateSuggestions();
   const createResource = useCreateResource();
   const deleteResource = useDeleteResource();
-  const updateResource = useUpdateResource();
+  const _updateResource = useUpdateResource();
   const dismissSuggestion = useDismissSuggestion();
   const confirmSuggestion = useConfirmSuggestion();
   const queryClient = useQueryClient();

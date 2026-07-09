@@ -6,10 +6,7 @@ import { memo, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import {
-  Shield, ShieldAlert, ShieldOff, Clock, AlertTriangle,
-  CheckCircle2, XCircle, TrendingUp, Zap, Eye,
-} from 'lucide-react';
+import { Shield, ShieldAlert, ShieldOff, Clock, AlertTriangle, TrendingUp, Zap, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   assessBatch,

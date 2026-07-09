@@ -43,7 +43,7 @@ export function inferDepartment(title: string | null): string | null {
   return null;
 }
 
-export function inferBuyerRole(title: string | null, tier: number): string {
+export function inferBuyerRole(_title: string | null, tier: number): string {
   if (tier <= 0.5) return 'economic_buyer';
   if (tier <= 1) return 'champion';
   if (tier <= 2) return 'influencer';

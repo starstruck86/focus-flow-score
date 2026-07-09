@@ -74,7 +74,7 @@ export function SalesAgeDetailModal({
   onOpenChange, 
   salesAge,
   recommendations,
-  snapshotHistory,
+  snapshotHistory: _snapshotHistory,
 }: SalesAgeDetailModalProps) {
   if (!salesAge) return null;
 

@@ -1,22 +1,17 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { trackedInvoke } from '@/lib/trackedInvoke';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import {
-  Shield, Play, RotateCcw, Send, Mic, MicOff, Volume2,
-  Loader2, Trophy, Target, Zap, ArrowRight, CheckCircle2,
-  AlertTriangle, Clock, Flame, ChevronDown, ChevronUp,
-} from 'lucide-react';
+import { Shield, Play, RotateCcw, Send, Mic, MicOff, Loader2, Trophy, Zap, ArrowRight, CheckCircle2, AlertTriangle, Flame } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { toast } from 'sonner';
-import ReactMarkdown from 'react-markdown';
 
 // ── OBJECTION BANK ─────────────────────────────────────────
 interface Objection {

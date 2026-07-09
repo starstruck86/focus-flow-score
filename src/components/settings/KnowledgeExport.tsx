@@ -210,7 +210,7 @@ function splitOversizedChapter(chapter: string, rows: Row[], maxBodyBytes: numbe
     const kis = items.map((ki, i) => renderKI(ki, i + 1)).join('\n---\n\n');
     const label = `${titleCase(chapter)} (cont. ${idx + 1}/${parts.length})`;
     const section = `\n\n## ${label}\n\n_${items.length} Knowledge Item${items.length === 1 ? '' : 's'} in this chapter slice._\n\n${kis}\n`;
-    return { chapter: `${chapter}__part${idx + 1}`, section, kiCount: items.length };
+    return { chapter: `${chapter}_part${idx + 1}`, section, kiCount: items.length };
   });
 }
 
@@ -260,10 +260,10 @@ function buildMarkdownParts(rows: Row[], scopeLabel: string): string[] {
   const totalParts = partGroups.length;
 
   return partGroups.map((g, idx) => {
-    const partRows = g.sections.flatMap(s => byChapter.get(s.chapter.replace(/__part\d+$/, '')) || []);
+    const partRows = g.sections.flatMap(s => byChapter.get(s.chapter.replace(/_part\d+$/, '')) || []);
     const partByChapter = new Map<string, Row[]>();
     for (const s of g.sections) {
-      const baseCh = s.chapter.replace(/__part\d+$/, '');
+      const baseCh = s.chapter.replace(/_part\d+$/, '');
       if (!partByChapter.has(baseCh)) partByChapter.set(baseCh, []);
     }
     const header = buildHeader(
@@ -274,8 +274,8 @@ function buildMarkdownParts(rows: Row[], scopeLabel: string): string[] {
     );
     const toc = g.sections
       .map(s => {
-        const label = s.chapter.includes('__part')
-          ? `${titleCase(s.chapter.replace(/__part\d+$/, ''))} (cont.)`
+        const label = s.chapter.includes('_part')
+          ? `${titleCase(s.chapter.replace(/_part\d+$/, ''))} (cont.)`
           : titleCase(s.chapter);
         return `- **${label}** — ${s.kiCount} KI${s.kiCount === 1 ? '' : 's'}`;
       })

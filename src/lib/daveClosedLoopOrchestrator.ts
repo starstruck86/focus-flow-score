@@ -10,11 +10,7 @@
  */
 
 import type { SkillFocus } from '@/lib/dojo/scenarios';
-import type {
-  ClosedLoopSession,
-  ClosedLoopVerification,
-  ClosedLoopNextStep,
-} from '@/lib/daveClosedLoopEngine';
+import type { ClosedLoopSession, ClosedLoopVerification } from '@/lib/daveClosedLoopEngine';
 import { buildRetryLaunchState, selectNextConcept } from '@/lib/daveClosedLoopEngine';
 import { generateMicroCoaching } from '@/lib/daveMicroCoaching';
 import type { VoiceSurface } from '@/lib/daveVoiceRuntime';

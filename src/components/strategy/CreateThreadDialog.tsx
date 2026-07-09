@@ -2,7 +2,7 @@
  * Create Thread Dialog — object-native thread creation with lane/type/object selection.
  */
 import { useState, useEffect } from 'react';
-import { Building2, Target, Map, MessageSquare, Search, Mail, FileText, Zap } from 'lucide-react';
+import { Building2, Target, Map, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';

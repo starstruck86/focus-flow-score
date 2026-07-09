@@ -18,7 +18,7 @@ import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { StakeholderMap } from '@/components/StakeholderMap';
 import { ResourceLinksPanel } from '@/components/ResourceLinksPanel';
 import { TouchLogButtons } from '@/components/TouchLogButtons';
-import { LifecycleTierBadge, IcpScorePill, EnrichButton } from '@/components/LifecycleIntelligence';
+import { EnrichButton } from '@/components/LifecycleIntelligence';
 import { CollapsibleSection, LinkPill, LastTouchIndicator, safeFormat } from '@/components/detail';
 import { AccountRoom } from '@/components/account-room/AccountRoom';
 import { GapScorePill } from '@/components/account-room/GapScorePill';
@@ -230,7 +230,7 @@ Style: Direct, peer-to-peer, no buzzwords. Max 150 words.`;
   }, [account?.id, account?.name, accountContext, setPageContext]);
 
   // Debounced update for text inputs
-  const { debouncedUpdate, flush } = useDebouncedUpdate(updateAccount, id || '');
+  const { debouncedUpdate: _debouncedUpdate, flush } = useDebouncedUpdate(updateAccount, id || '');
 
   // Flush pending updates on unmount
   useEffect(() => flush, [flush]);

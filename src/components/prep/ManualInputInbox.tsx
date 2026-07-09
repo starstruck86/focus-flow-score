@@ -13,14 +13,14 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   FileText, Lock, ExternalLink, Bookmark, SkipForward,
   Loader2, CheckCircle2, ChevronDown, ChevronRight, Send,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { CanonicalState } from '@/lib/canonicalResourceState';
-import { CANONICAL_STATE_LABELS, CANONICAL_STATE_COLORS } from '@/lib/canonicalResourceState';
+import { CANONICAL_STATE_COLORS } from '@/lib/canonicalResourceState';
 
 // ── Types ────────────────────────────────────────────────
 

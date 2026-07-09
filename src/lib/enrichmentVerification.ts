@@ -7,7 +7,7 @@
 import type { Resource } from '@/hooks/useResources';
 import { detectResourceSubtype, classifyEnrichability, getSubtypeLabel, type ResourceSubtype, type EnrichabilityState } from '@/lib/salesBrain/resourceSubtype';
 import { validateResourceQuality, type QualityResult } from '@/lib/resourceQuality';
-import { routeFailure, type FailureBucket, NON_RETRYABLE_BUCKETS } from '@/lib/failureRouting';
+import { routeFailure, type FailureBucket } from '@/lib/failureRouting';
 import { getEnrichmentStatusLabel, type EnrichmentStatus } from '@/lib/resourceEligibility';
 import { generateRemediationPlan } from '@/lib/remediationIntelligence';
 

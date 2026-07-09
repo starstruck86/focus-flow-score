@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useWeeklyBattlePlan, useGenerateBattlePlan, useCompleteBattleMove } from '@/hooks/useCoachingEngine';
-import { Swords, Sparkles, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Swords, Sparkles, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { BattlePlanMove } from '@/types/dashboard';

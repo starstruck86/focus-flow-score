@@ -148,7 +148,7 @@ export function StrategyCanvas({ messages, isLoading, isSending, hideEmptyState 
           <div style={{ marginTop: messages.length === 0 ? 0 : 14 }}>
             <StrategyMessage
               message={{
-                id: '__streaming__',
+                id: '_streaming__',
                 thread_id: '',
                 user_id: '',
                 role: 'assistant',

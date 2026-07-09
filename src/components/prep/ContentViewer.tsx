@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { X, Copy, Check, FileText, Loader2, ArrowLeft, ArrowUp, Code } from 'lucide-react';
+import { X, Copy, Check, FileText, Loader2, ArrowLeft, Code } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -42,7 +42,7 @@ export function ContentViewer({ resource, open, onOpenChange }: Props) {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [monospace, setMonospace] = useState(false);
-  const [showScrollTop, setShowScrollTop] = useState(false);
+//   const [showScrollTop, setShowScrollTop] = useState(false);
 
   // Lazy-load content on open
   useEffect(() => {

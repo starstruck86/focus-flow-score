@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Users, Target, FileText, CheckSquare, Sparkles, Loader2, X } from 'lucide-react';
+import { Search, Users, Target, FileText, CheckSquare, Loader2, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { fromActiveAccounts } from '@/data/accounts';
 import { useStore } from '@/store/useStore';
@@ -22,7 +22,7 @@ export function GlobalSearch({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { setCurrentRecord } = useLinkedRecordContext();
+  const { setCurrentRecord: _setCurrentRecord } = useLinkedRecordContext();
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 

@@ -8,7 +8,7 @@
  * - UX-safe auto-downgrade (only between turns, never mid-turn)
  */
 
-import { getUsageLevel, type UsageLevel } from './voiceUsageTracker';
+import { getUsageLevel } from './voiceUsageTracker';
 
 // ── Voice Modes ────────────────────────────────────────────────────
 

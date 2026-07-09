@@ -50,7 +50,7 @@ export interface AnchorWeekStat {
 // ── Compute Weekly Summary ───────────────────────────────────────
 
 export async function computeWeeklySummaryFromDB(
-  userId: string,
+  _userId: string,
   blockId: string,
   weekNumber: number,
 ): Promise<WeeklySummary> {

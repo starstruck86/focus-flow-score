@@ -8,16 +8,7 @@
  * - Failure states are always logged
  */
 import { describe, it, expect } from "vitest";
-import {
-  computeAnomalyFlags,
-  validateTelemetry,
-  checkLatencyBudgets,
-  type Phase36RunMeta,
-  type PlannerTelemetry,
-  type ArtifactGateTelemetryV2,
-  type PerformanceTelemetry,
-  LATENCY_BUDGETS,
-} from "../phase36-telemetry";
+import { computeAnomalyFlags, validateTelemetry, type Phase36RunMeta } from "../phase36-telemetry";
 
 // ═══════════════════════════════════════════════════════════════════
 // Fixtures
