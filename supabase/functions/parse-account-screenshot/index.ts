@@ -62,7 +62,7 @@ Extract as many fields as you can identify. Return ONLY valid JSON with this str
       "name": "Company name (REQUIRED)",
       "website": "Company website URL",
       "industry": "Industry or vertical",
-      "motion": "new-logo or renewal (infer from context - if it mentions renewal dates/contracts it's renewal, otherwise new-logo)",
+      "motion": "new-logo, renewal, or both (infer from context - renewal dates/contracts = 'renewal'; unclear or mixed expansion context = 'both'; clearly net-new prospecting = 'new-logo')",
       "tier": "A, B, or C (infer from size/revenue if possible, otherwise null)",
       "ecommerce": "Ecommerce platform if visible (Shopify, BigCommerce, etc.)",
       "mar_tech": "Marketing tech stack if visible",
