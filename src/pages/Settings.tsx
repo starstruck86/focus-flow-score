@@ -307,15 +307,7 @@ export default function Settings() {
             )}
           </Section>
 
-          {/* Advanced / legacy — preserves the old detailed settings page */}
-          <Section>
-            <Row
-              icon={<Wrench className="h-4 w-4" />}
-              title="Advanced / legacy tools"
-              hint="Imports, appearance, conversion benchmarks, knowledge export, Dave health"
-              to="/settings/legacy"
-            />
-          </Section>
+          {/* /settings/legacy retired (W5) */}
         </div>
       </div>
     </Layout>
