@@ -20,6 +20,7 @@ interface Body {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
+    const { primary: model } = await getModelConfig('car-mode-score');
     const body = (await req.json()) as Body;
     const transcript = (body.transcript ?? "").trim();
     if (!transcript) {
