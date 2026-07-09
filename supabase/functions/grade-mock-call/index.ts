@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,6 +25,7 @@ serve(async (req) => {
       });
     }
 
+    const { primary: model } = await getModelConfig('grade-mock-call');
     const { session_id } = await req.json();
     if (!session_id) throw new Error("session_id required");
 
@@ -94,7 +96,7 @@ ${session.skill_mode ? `- Skill Focus: ${session.skill_mode}` : ''}
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Grade this mock call simulation:\n\n${transcript.substring(0, 15000)}` },

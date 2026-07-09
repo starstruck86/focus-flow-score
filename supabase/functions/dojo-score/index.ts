@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -414,6 +415,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    const { primary: model } = await getModelConfig('dojo-score');
     const { scenario, userResponse, retryCount, focusReminder, ki: rawKi, gold: rawGold } = await req.json();
     if (!scenario || !userResponse) {
       return new Response(JSON.stringify({ error: "Missing scenario or userResponse" }), {
@@ -645,7 +647,7 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5",
+        model,
         max_tokens: 3000,
         system: systemPrompt,
         messages: [
@@ -1001,7 +1003,7 @@ Grade this response strictly. Your default is 58-63. Go higher only if genuinely
             "anthropic-version": "2023-06-01",
           },
           body: JSON.stringify({
-            model: "claude-haiku-4-5",
+            model,
             max_tokens: 500,
             system: `You are Dave — an elite, encouraging sales coach. ${tone}`,
             messages: [

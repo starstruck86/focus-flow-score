@@ -13,6 +13,7 @@
 // Input:  { audioBase64, mimeType, scenario, spokenTask, modelAnswer, rubric, responseShape? }
 // Output: { has_clear_speech, transcript, score, passed, criteria, top_fix, elite_line, summary }
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -121,6 +122,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, label: string): 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
+    const { primary: model } = await getModelConfig('car-mode-audio-score');
     const body = (await req.json()) as Body;
     if (!body.audioBase64 || body.audioBase64.length < 200) {
       return new Response(JSON.stringify({ error: "empty audio" }), {
@@ -204,7 +206,7 @@ Required criteria must be met=true to pass. If a required criterion is missed, t
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${lovableKey}` },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model,
           messages: [
             { role: "system", content: gradeSys },
             { role: "user", content: gradeUser },

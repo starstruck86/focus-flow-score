@@ -1,5 +1,6 @@
 // Car Mode scorer — grades spoken response vs model answer + rubric using Lovable AI Gateway.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,6 +20,7 @@ interface Body {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
+    const { primary: model } = await getModelConfig('car-mode-score');
     const body = (await req.json()) as Body;
     const transcript = (body.transcript ?? "").trim();
     if (!transcript) {
@@ -46,7 +48,7 @@ Required criteria (marked REQUIRED) must be met = true for the rep to pass. If a
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages: [{ role: "system", content: sys }, { role: "user", content: user }],
         response_format: { type: "json_object" },
       }),

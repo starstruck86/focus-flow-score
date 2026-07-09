@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -43,6 +44,7 @@ serve(async (req) => {
       }
       userId = user.id;
     }
+    const { primary: model } = await getModelConfig('grade-transcript');
     if (!transcript_id) throw new Error("transcript_id required");
 
     const { data: transcript, error: tErr } = await supabase
@@ -311,7 +313,7 @@ ${kiContext}`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model,
         max_tokens: 4096,
         system: systemPrompt,
         messages: [
