@@ -17,11 +17,9 @@ import { isSystemOSEnabled, isVoiceOSEnabled } from '@/lib/featureFlags';
 import { getSystemState } from '@/lib/systemGovernance';
 import { classifyVoiceIntent } from '@/lib/voiceIntent';
 import { resolveContextReference, getVoiceContext, updateVoiceContext } from '@/lib/voiceContext';
-import { getConfirmationPolicy } from '@/lib/voiceConfirmation';
 import { handleVoiceMetaIntent } from '@/lib/voiceResponse';
 import { parseChainedWorkflow, advanceChain, type ChainedWorkflow } from '@/lib/voiceWorkflows';
 import { recordWorkflow, beginWorkflowTimer, classifyWorkflow, type WorkflowType } from '@/lib/acceptanceHarness';
-import { recordFriction } from '@/lib/frictionSignals';
 
 const MODE_ICONS: Record<CopilotMode, typeof Zap> = {
   quick: Zap,

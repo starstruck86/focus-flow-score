@@ -62,6 +62,7 @@ const ACTIVE_STAGES = new Set([
 const _TERMINAL_STAGES = new Set([
   'complete', 'partial', 'needs_auth', 'unsupported', 'skipped', 'failed', 'needs_review', 'quarantined',
 ]);
+void _TERMINAL_STAGES;
 
 /**
  * Derive a canonical session from the raw ingestion state.
@@ -222,6 +223,7 @@ function validateSessionInvariants(s: EnrichSession): void {
 
   // Failed items should not also be counted as remaining
   const _failedIds = new Set(s.failedItems.map(i => i.id));
+  void _failedIds;
   // This check is structural — if an item is in failedItems, its stage must be 'failed'
   for (const item of s.failedItems) {
     if (item.stage !== 'failed' && item.stage !== 'needs_review') {

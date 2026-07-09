@@ -121,6 +121,7 @@ const _STAGE_PATTERNS: Array<{ tag: string; patterns: RegExp[] }> = [
   { tag: 'negotiation_stage', patterns: [/negotiat/i, /contract/i] },
   { tag: 'closing_stage', patterns: [/clos(e|ing)\s+deal/i] },
 ];
+void _STAGE_PATTERNS;
 
 // ── Tag Inference ──────────────────────────────────────────
 

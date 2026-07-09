@@ -6,7 +6,6 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 
 const MAX_SECTION_LENGTH = 50_000;
 const SEPARATOR_REGEX = /^---\s+(.+?)\s+---$/gm;

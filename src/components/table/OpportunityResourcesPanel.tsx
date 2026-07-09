@@ -8,7 +8,6 @@ import {
   Folder, FileText, Presentation, Mail, BookOpen,
   Star, ChevronRight, ExternalLink, Plus,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { useCreateResource, type Resource, type ResourceFolder } from '@/hooks/useResources';
 import { Input } from '@/components/ui/input';
 import { format, parseISO } from 'date-fns';

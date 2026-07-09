@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   ChevronDown, ChevronRight, Layers, Crown, Star, Zap,
   Trash2, FileText, Check, ArrowDown, ShieldCheck,

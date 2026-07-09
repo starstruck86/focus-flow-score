@@ -4,7 +4,6 @@
  * Chains: Verify → Remediate → Re-verify → Produce final summary.
  * Proves whether the remediation system actually works on real data.
  */
-import { supabase } from '@/integrations/supabase/client';
 import {
   verifyResource, buildVerificationSummary,
   type VerifiedResource, type VerificationSummary, type AudioJobInfo,
@@ -269,6 +268,7 @@ export async function runEndToEndValidation(
     // ── Compute final summary ───────────────────────────
     const preIds = new Set(result.preResources.filter(v => v.fixabilityBucket !== 'truly_complete').map(v => v.id));
     const _postBrokenMap = new Map(post.filter(v => v.fixabilityBucket !== 'truly_complete').map(v => [v.id, v]));
+    void _postBrokenMap;
     const postCompleteIds = new Set(post.filter(v => v.fixabilityBucket === 'truly_complete').map(v => v.id));
 
     // Auto-resolved: was broken before, now truly_complete

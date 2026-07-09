@@ -322,6 +322,7 @@ const _ANCHOR_SKILL_MAP: Record<string, string> = {
   deal_control_negotiation: 'deal_control',
   executive_roi_mixed: 'executive_response',
 };
+void _ANCHOR_SKILL_MAP;
 
 const ANCHOR_TOPICS: Record<string, string[]> = {
   opening_cold_call: ['cold call', 'opening', 'pattern interrupt', 'hook', 'gatekeeper', 'tonality', 'first 30 seconds'],

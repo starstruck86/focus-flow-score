@@ -212,6 +212,7 @@ const _TIER_OPTIONS = [
   { value: 'B', label: 'B', className: 'border-status-yellow text-status-yellow bg-transparent' },
   { value: 'C', label: 'C', className: 'border-muted-foreground text-muted-foreground bg-transparent' },
 ];
+void _TIER_OPTIONS;
 
 // Contact Status options
 const CONTACT_STATUS_OPTIONS = [
@@ -239,6 +240,7 @@ const _FUNNEL_GROUPS: FunnelGroup[] = [
   { status: 'disqualified', label: '6 - Disqualified', hint: 'Not a fit', color: 'text-status-red', borderColor: 'border-status-red/50', defaultCollapsed: true, section: 'outcome' },
   { status: 'inactive', label: '4 - Inactive', hint: 'Holding bucket', color: 'text-muted-foreground', borderColor: 'border-border', defaultCollapsed: false, section: 'holding' },
 ];
+void _FUNNEL_GROUPS;
 
 // DEFAULT_TARGETS removed (W3 De-SDR): funnel target thresholds retired.
 
@@ -823,6 +825,7 @@ export default function WeeklyOutreach() {
       return next;
     });
   };
+  void _toggleGroupCollapse;
 
   useEffect(() => {
     const urlId = searchParams.get('highlight');
@@ -1135,11 +1138,13 @@ export default function WeeklyOutreach() {
 
     return groups;
   }, [filteredAccounts]);
+  void _groupedAccounts;
 
   // W3 De-SDR: hierarchy-aware flat list — parents first (tier→ICP→name),
   // each parent immediately followed by its children in the filtered set.
   const hierarchySortedAccounts = useMemo(() => {
     const _byId = new Map(filteredAccounts.map(a => [a.id, a]));
+    void _byId;
     const parents = sortFunnelGroup(
       filteredAccounts.filter(a => !childAccountIds.has(a.id))
     );

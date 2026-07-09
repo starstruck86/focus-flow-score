@@ -24,7 +24,6 @@ import { getBuyerMessage } from '@/lib/dojo/v5/simulationArcs';
 import { computeArcScore, toArcTurnResult, type ArcScore, type ArcTurnResult } from '@/lib/dojo/v5/arcScoring';
 import { normalizeScoreResult, type DojoScoreResult } from '@/lib/dojo/types';
 import { SKILL_LABELS, MISTAKE_LABELS } from '@/lib/dojo/scenarios';
-import { FOCUS_PATTERN_LABELS } from '@/lib/dojo/focusPatterns';
 import { ConversationFlowCard } from './ConversationFlowCard';
 import type { Json } from '@/integrations/supabase/types';
 import { completeAssignment } from '@/lib/dojo/v3/assignmentManager';

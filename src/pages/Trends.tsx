@@ -1,9 +1,7 @@
 import { useState } from 'react';
-import { Reorder } from 'framer-motion';
 import { AIInsightsNarrator } from '@/components/dashboard/AIInsightsNarrator';
 import { Layout } from '@/components/Layout';
 import { SystemTelemetryPanel } from '@/components/trends/SystemTelemetryPanel';
-import { isSystemOSEnabled } from '@/lib/featureFlags';
 import { TrendingUp, BarChart3, Activity, Zap, Target, Brain, ArrowDownRight, Phone, Calendar, Lightbulb, Gauge } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +10,6 @@ import { cn } from '@/lib/utils';
 import { useTrendsData, type TrendRange } from '@/hooks/useTrendsData';
 import { useWidgetLayout, type WidgetConfig } from '@/hooks/useWidgetLayout';
 import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
-import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 import { ResponsiveContainer, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart } from 'recharts';
 
 const RANGES: { value: TrendRange; label: string }[] = [

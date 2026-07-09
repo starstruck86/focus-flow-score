@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +30,7 @@ export function PrepDraftOutput({
   const saveOutput = useSaveOutput();
   const createTemplate = useCreateTemplate();
   const _promoteOutput = usePromoteOutputToTemplate();
+  void _promoteOutput;
 
   const handleCopy = () => {
     const text = subjectLine ? `Subject: ${subjectLine}\n\n${draft}` : draft;

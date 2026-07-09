@@ -1,6 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
 import { Calendar, Building2, Target, AlertCircle, Repeat, Clock, Bell } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -31,6 +30,7 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
   const workstream = getWorkstream(task);
   const accountName = getAccountName(task, accounts, opportunities);
   const _oppName = getOpportunityName(task, opportunities);
+  void _oppName;
   const inferredTag = useMemo(() => inferDriverTag(task), [task.title, task.notes]);
   const isRecurring = recurringTemplates.some(t => t.activeInstanceId === task.id);
   const effectiveStatus: TaskStatus = (task.status as string) === 'open' ? 'next' : task.status;

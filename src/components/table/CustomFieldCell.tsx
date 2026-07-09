@@ -120,6 +120,7 @@ export function CustomFieldCell({ field, recordId, metricDisplay }: CustomFieldC
     setter(v);
     setMetricEditing(false);
   };
+  void _wrapOnChange;
 
   switch (field.type) {
     case 'text':

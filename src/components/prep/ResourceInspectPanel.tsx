@@ -18,10 +18,8 @@ import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 import { deriveProcessingState, getProcessingStateColor } from '@/lib/processingState';
 import { deriveResourceInsight } from '@/lib/resourceSignal';
 import { deriveResourceTruth } from '@/lib/resourceTruthState';
-import { getResourceOrigin } from '@/lib/resourceEligibility';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { detectDrift } from '@/lib/resourceLifecycle';
-import { isAudioResource } from '@/lib/salesBrain/audioPipeline';
 import { buildFailureDossier, FAILURE_STAGE_LABELS, FAILURE_MODE_LABELS } from '@/lib/failureDossier';
 import { ROOT_CAUSE_LABELS, ROOT_CAUSE_COLORS } from '@/lib/rootCauseDiagnosis';
 import {
@@ -30,7 +28,6 @@ import {
 } from '@/lib/processingRoute';
 import { useResourceJobProgress, getJobLabel, isJobStale } from '@/store/useResourceJobProgress';
 import type { Resource } from '@/hooks/useResources';
-import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
 
 interface Props {
   resource: Resource;

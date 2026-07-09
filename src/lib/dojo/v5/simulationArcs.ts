@@ -6,7 +6,6 @@
  */
 
 import type { SkillFocus } from '../scenarios';
-import type { PressureProfile } from '../v4/pressureModel';
 
 // ── Types ─────────────────────────────────────────────────────────
 

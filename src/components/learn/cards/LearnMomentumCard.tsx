@@ -4,7 +4,6 @@
  */
 
 import { TrendingUp, Flame, BarChart3 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import type { UserSkillLevel } from '@/lib/learning/learnLevelEvaluator';
 
 interface Props {

@@ -15,6 +15,7 @@ import { shouldSuppressIntervention, recordIntervention } from './interventionGu
 import { computePersonalProfile } from './systemIntelligence';
 
 const _log = createLogger('WorkflowOrchestrator');
+void _log;
 
 // ── Types ──────────────────────────────────────────────────
 

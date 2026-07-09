@@ -936,6 +936,7 @@ export function computeDrift(baseline: BaselineSnapshot, current: BaselineSnapsh
     ...Object.keys(baseline.outcomeRates),
     ...Object.keys(current.outcomeRates),
   ]);
+  void _allKeys;
 
   const check = (field: string, bv: number | undefined, cv: number | undefined) => {
     const b = bv ?? 0;

@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Crosshair, Target, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, Flame, Zap, Brain, Clock, Eye, ShieldCheck, MessageSquareQuote } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAllTranscriptGrades, useBehavioralPatterns, useMeddiccCompleteness } from '@/hooks/useTranscriptGrades';
@@ -148,9 +147,11 @@ export function CoachingFocus() {
     // Get the most recent coaching issue and replacement for this area
     const _relevantGrades = recent.filter(g => {
       const _focus = g.feedback_focus?.toLowerCase() || '';
+      void _focus;
       // Broad matching
       return true; // We'll take any recent one
     });
+    void _relevantGrades;
 
     // Find the coaching issue most related to this category
     let topIssue: string | null = null;

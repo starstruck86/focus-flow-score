@@ -7,7 +7,6 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { buildCapabilityProfiles } from '@/lib/dojo/v4/capabilityModel';
-import { getMistakeEntry } from '@/lib/dojo/mistakeTaxonomy';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -147,6 +146,7 @@ export async function getReinforcementDecay(userId: string): Promise<DecayItem[]
   const kiTracker = new Map<string, { appearances: number; misses: number; firstSeen: string; lastApplied: string | null }>();
 
   const _assignmentIds = assignments.map(a => a.id);
+  void _assignmentIds;
   const sessionIdSets = assignments.flatMap(a => (a.session_ids as string[] | null) ?? []);
 
   // Get turns for these sessions

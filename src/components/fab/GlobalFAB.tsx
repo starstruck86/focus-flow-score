@@ -87,6 +87,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   const _isTodayEligible = config && holidays && ptoDays && overrides
     ? isEligibleDay(today, config, holidays, ptoDays, overrides)
     : false;
+  void _isTodayEligible;
   
   const hasCheckedInToday = todayEntry?.checkedIn || false;
   

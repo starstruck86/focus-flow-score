@@ -452,6 +452,7 @@ export function CatchupDashboard() {
               const pr = phaseResults[phase];
               const pc = PHASE_CONFIG[phase];
               const _Icon = pc.icon;
+              void _Icon;
               const isActive = currentPhase === phase && isRunning;
               const phasePct = pr.total > 0 ? Math.round((pr.processed / pr.total) * 100) : (pr.status === 'complete' ? 100 : 0);
               const wasSkipped = pr.status === 'skipped';

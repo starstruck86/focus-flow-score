@@ -20,7 +20,6 @@ import { fromActiveAccounts } from '@/data/accounts';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { OutputType, ExecutionTemplate, ExecutionOutput } from '@/lib/executionTemplateTypes';
-import { OUTPUT_TYPE_LABELS } from '@/lib/executionTemplateTypes';
 
 import { DeliverableTypeSelector } from './DeliverableTypeSelector';
 import { RecommendedStartingPoints } from './RecommendedStartingPoints';

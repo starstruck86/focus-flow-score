@@ -13,6 +13,7 @@ const _GRADE_COLORS: Record<string, string> = {
   'C+': 'text-grade-average', C: 'text-grade-average', 'C-': 'text-grade-average',
   'D+': 'text-grade-poor', D: 'text-grade-poor', F: 'text-grade-failing',
 };
+void _GRADE_COLORS;
 
 export function WeeklyCoachingDigest() {
   const { data: allGrades } = useAllTranscriptGrades();

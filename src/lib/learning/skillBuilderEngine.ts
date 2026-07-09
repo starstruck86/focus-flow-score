@@ -158,6 +158,7 @@ export async function generateSkillTrack(
 
   // Build cluster map for KI selection
   const _clusterMap = buildKIClusterMap(catalog);
+  void _clusterMap;
 
   // Select focus patterns for this session
   const patternCount = getPatternCount(durationMinutes, shouldDegrade);

@@ -22,6 +22,7 @@ import { makeOpKey, clearIdempotencyRecords, runIdempotent } from '@/lib/daveIde
 import { createLogger } from '@/lib/logger';
 
 const _logger = createLogger('DaveAudioFailureAudit');
+void _logger;
 
 // ── Result Type ─────────────────────────────────────────────
 

@@ -19,18 +19,6 @@ import {
   type BottleneckFix,
 } from '@/data/pipeline-forecast';
 
-// ── Types ───────────────────────────────────────────────────────
-
-interface _BoundAction {
-  accountName: string;
-  accountId: string;
-  contactName?: string;
-  contactTitle?: string;
-  action: string;
-  script?: string;
-  rationale: string;
-  workContext: string;
-}
 
 type WorkBlock = 'prospecting' | 'calls' | 'meetings' | 'admin' | 'unknown';
 

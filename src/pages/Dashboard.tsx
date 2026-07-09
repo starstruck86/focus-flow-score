@@ -9,18 +9,15 @@ import { DailyScorecardModal, JournalDashboardCard } from '@/components/journal'
 import { WeeklyRealignmentModal } from '@/components/weekly/WeeklyRealignmentModal';
 import { WeeklyReviewBanner } from '@/components/dashboard/WeeklyReviewBanner';
 import { useCurrentWeekReview } from '@/hooks/useWeeklyReview';
-import { useStore } from '@/store/useStore';
 import { useWorkScheduleConfig, useHolidays, usePtoDays, useWorkdayOverrides, useStreakEvents } from '@/hooks/useStreakData';
 import { useTodayJournalEntry } from '@/hooks/useDailyJournal';
 import { useCommissionPacing } from '@/hooks/useCommissionPacing';
 import { useQuotaTargets } from '@/hooks/useSalesAge';
 import { useWeekToDateMetrics, calculateExpectedVsActual } from '@/hooks/useGoodDayMetrics';
 import { getTemplateById, calculateWeeklyExpectations } from '@/lib/goodDayModel';
-import { DEFAULT_QUOTA_TARGETS } from '@/lib/salesAgeCalculations';
 import { format, differenceInBusinessDays, startOfWeek } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
 import {
   CommissionPacingTile,
   CommissionPacingDetailModal,

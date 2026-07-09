@@ -17,7 +17,6 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/store/useStore';
 import { useSaveTranscript } from '@/hooks/useCallTranscripts';

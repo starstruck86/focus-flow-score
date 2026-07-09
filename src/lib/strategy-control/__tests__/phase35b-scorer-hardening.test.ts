@@ -14,13 +14,6 @@ import { describe, it, expect } from "vitest";
 function countMatches(text: string, pattern: RegExp): number {
   return (text.match(pattern) || []).length;
 }
-function _clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
-function _isJsonLike(text: string): boolean {
-  const t = text.trim();
-  return t.startsWith("{") || t.startsWith("[") || t.includes("```json");
-}
 function extractJsonContent(text: string): string {
   const fenceMatch = text.match(/```(?:json|structured_artifact)\s*([\s\S]*?)```/);
   if (fenceMatch) return fenceMatch[1];

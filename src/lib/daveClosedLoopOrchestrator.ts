@@ -9,7 +9,6 @@
  * It does NOT own scoring, audio delivery, or surface navigation.
  */
 
-import type { SkillFocus } from '@/lib/dojo/scenarios';
 import type { ClosedLoopSession, ClosedLoopVerification } from '@/lib/daveClosedLoopEngine';
 import { buildRetryLaunchState, selectNextConcept } from '@/lib/daveClosedLoopEngine';
 import { generateMicroCoaching } from '@/lib/daveMicroCoaching';

@@ -25,7 +25,6 @@ import { computeWeeklySummaryFromDB } from '@/lib/dojo/v3/weeklySummaryEngine';
 import { getBlockSnapshots, compareSnapshots } from '@/lib/dojo/v3/snapshotManager';
 
 import { BlockHeader } from '@/components/dojo/BlockHeader';
-import { DailyAssignmentCard } from '@/components/dojo/DailyAssignmentCard';
 import { DailyLadderCard } from '@/components/train/DailyLadderCard';
 import { AccomplishmentDashboard } from '@/components/train/AccomplishmentDashboard';
 import { KiProficiencyStrip } from '@/components/dojo/KiProficiencyStrip';
@@ -354,6 +353,7 @@ export default function Dojo() {
       return v ? parseInt(v, 10) : 0;
     } catch { return 0; }
   })();
+  void _lastKnownStreak;
 
   const startAutopilot = () => {
     // If launched with SkillSession from Learn, go directly to session with skill context
@@ -415,6 +415,7 @@ export default function Dojo() {
       return parseInt(localStorage.getItem(key) ?? '0', 10) || 0;
     } catch { return 0; }
   }, []);
+  void _repsToday;
 
   return (
     <Layout>

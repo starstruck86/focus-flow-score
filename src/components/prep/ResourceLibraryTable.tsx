@@ -4,7 +4,6 @@ import { Loader2 as Loader2Icon } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { useResourceJobProgress, getJobLabel } from '@/store/useResourceJobProgress';
 import { Progress } from '@/components/ui/progress';
-import { formatRelativeTime } from '@/hooks/useReExtractResource';
 import { PRIMARY_ACTIONS } from '@/components/prep/QueueActionBar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -181,15 +180,6 @@ function sortResources(
   });
 }
 
-function _formatDate(d: string | null | undefined): string {
-  if (!d) return '—';
-  const date = new Date(d);
-  const days = Math.floor((Date.now() - date.getTime()) / 86400000);
-  if (days === 0) return 'Today';
-  if (days === 1) return '1d ago';
-  if (days < 30) return `${days}d ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
 
 // ── Component ──────────────────────────────────────────────
 export function ResourceLibraryTable({
@@ -220,6 +210,7 @@ export function ResourceLibraryTable({
   const inUseIds = inUseData?.inUseResourceIds ?? new Set<string>();
   const liveJobResources = useResourceJobProgress(s => s.resources);
   const _batchActive = useResourceJobProgress(s => s.batchActive);
+  void _batchActive;
   const isMobile = useIsMobile();
 
   const scrollBodyRef = useRef<HTMLDivElement>(null);

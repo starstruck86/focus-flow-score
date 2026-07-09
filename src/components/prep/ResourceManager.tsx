@@ -74,6 +74,7 @@ const _RESOURCE_TYPE_ICONS: Record<string, React.ElementType> = {
   training: GraduationCap,
   transcript: MessageSquare,
 };
+void _RESOURCE_TYPE_ICONS;
 
 const RESOURCE_TYPE_OPTIONS = [
   { value: 'document', label: 'Document' },
@@ -184,6 +185,7 @@ export function ResourceManager() {
   const addUrlResource = useAddUrlResource();
   const { totalDuplicates } = useResourceDuplicates();
   const _operationalize = useOperationalizeResource();
+  void _operationalize;
   const updateEnrichmentStatus = useUpdateEnrichmentStatus();
   const { data: suggestions = [], refetch: refetchSuggestions, isLoading: suggestionsLoading } = useResourceSuggestions(resources.length > 0);
   const { data: audioJobsMap } = useAudioJobsMap();
@@ -277,6 +279,7 @@ export function ResourceManager() {
     setRenamingResourceId(null);
     setRenameResourceTitle('');
   }, [renamingResourceId, renameResourceTitle, updateResource]);
+  void _handleRenameResource;
 
   // Classify items in batches of 3
   const classifyBatch = async (items: PendingItem[]) => {
@@ -1374,6 +1377,7 @@ export function ResourceManager() {
                     ? Array.from(selectedResourceIds)
                     : filteredResources.filter(r => {
                         const _lc = (r as any)._lifecycle;
+                        void _lc;
                         return r.enrichment_status && ['deep_enriched', 'enriched', 'verified'].includes(r.enrichment_status);
                       }).map(r => r.id);
                   if (ids.length === 0) {

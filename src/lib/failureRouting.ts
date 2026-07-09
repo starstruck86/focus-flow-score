@@ -322,6 +322,7 @@ function getSourceSpecificReason(
 
   // For subtypes without specific templates, use the error message with bucket context
   const _bucketDef = BUCKET_DEFINITIONS[bucket];
+  void _bucketDef;
   if (errorMessage && !isGenericError(errorMessage)) {
     return errorMessage;
   }

@@ -21,7 +21,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Textarea } from '@/components/ui/textarea';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -86,6 +85,7 @@ const _CHURN_RISK_COLORS: Record<ChurnRisk, string> = {
   'medium': 'bg-status-yellow/20 text-status-yellow',
   'high': 'bg-status-red/20 text-status-red',
 };
+void _CHURN_RISK_COLORS;
 
 const STATUS_ORDER: OpportunityStatus[] = ['active', 'stalled', 'closed-won', 'closed-lost'];
 
@@ -375,6 +375,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const _renewalsWithoutOpps = useMemo(() => {
     return renewals.filter(r => !r.linkedOpportunityId || !opportunities.some(o => o.id === r.linkedOpportunityId));
   }, [renewals, opportunities]);
+  void _renewalsWithoutOpps;
 
   // Handle status change - trigger modal for Closed Won
   const handleStatusChange = (opp: Opportunity, newStatus: OpportunityStatus) => {
@@ -667,6 +668,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       return dateStr;
     }
   };
+  void _formatDate;
 
   const formatCurrency = (amount?: number) => {
     if (!amount) return '—';
@@ -789,6 +791,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
         : lastTouchDays <= 3 ? 'text-status-green' 
         : lastTouchDays <= 7 ? 'text-status-yellow' 
         : 'text-status-red';
+      void _lastTouchColor;
 
       return (
         <React.Fragment key={opp.id}>

@@ -105,7 +105,8 @@ export function computeBatchSummary(results: V6LiveRunResult[]): V6BatchSummary 
   for (const r of results) {
     if (r.error) { errors++; continue; }
 
-    const _fixture = r; // has group, expected is on the original fixture
+    const _fixture = r;
+    void _fixture; // has group, expected is on the original fixture
     const activated = r.rawMultiThread !== undefined;
     const expected = getFixtureById(r.fixtureId);
     if (!expected) continue;

@@ -18,7 +18,6 @@ import { expandSeeds, EXPANSION_MAX } from '../planner/expandSeeds';
 import { LEXICON_VERSION } from '../planner/salesLexicon';
 import { buildPlan } from '../planner/buildPlan';
 import { resolveSkill } from '../resolver';
-import { SKILL_REGISTRY } from '../registry';
 import type { PlannerContext } from '../planner';
 
 const ctx: PlannerContext = { thread: { threadId: 't-1' } };

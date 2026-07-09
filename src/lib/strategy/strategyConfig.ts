@@ -191,17 +191,6 @@ const DEFAULT_ENFORCEMENT: StrategySopEnforcement = {
   requiredSections: [],
 };
 
-function _defaultSopContract(name: string): StrategySopContract {
-  return {
-    enabled: false,
-    name,
-    rawInstructions: '',
-    parsedSections: {},
-    libraryRules: { ...DEFAULT_LIBRARY_RULES },
-    enforcement: { ...DEFAULT_ENFORCEMENT },
-    updatedAt: new Date().toISOString(),
-  };
-}
 
 const WORKSPACE_DEFAULT_NAMES: Record<StrategyWorkspaceSopKey, string> = {
   brainstorm: 'Brainstorm SOP',

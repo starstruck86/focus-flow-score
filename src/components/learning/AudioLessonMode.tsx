@@ -19,7 +19,6 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
 import {
   Mic, MicOff, Pause, Play, SkipForward,
   Loader2, Volume2, Square, Swords, CheckCircle2,
@@ -46,10 +45,8 @@ import {
 import { getPracticeMapping } from '@/lib/learning/practiceMapping';
 import { useUpsertProgress, useSaveQuizAnswer } from '@/lib/learning/hooks';
 // Session bridge consolidated into useDaveVoiceController
-import { prefetchLearnUnits } from '@/lib/daveSessionPrefetch';
 import DaveSignalBanner from '@/components/DaveSignalBanner';
 import { useClosedLoopCoaching } from '@/hooks/useClosedLoopCoaching';
-import { orchestrateNextStep } from '@/lib/daveClosedLoopOrchestrator';
 import { DaveCoachingLoopStatus } from '@/components/DaveCoachingLoopStatus';
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 import { getSubSkillsForSkill } from '@/lib/learning/learnSubSkillMap';
@@ -535,6 +532,7 @@ export default function AudioLessonMode({ lesson }: AudioLessonModeProps) {
 
   const progress = sections.length > 0 ? Math.round((completedSections.size / sections.length) * 100) : 0;
   const _isRecovering = recovery.status === 'recovering' || recovery.status === 'waiting_for_connection';
+  void _isRecovering;
 
   return (
     <div className="space-y-4">

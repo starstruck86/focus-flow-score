@@ -5,8 +5,6 @@
  */
 import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, XCircle, Zap, Eye, Loader2, Clock } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
@@ -48,8 +46,11 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
   const liveJobs = useResourceJobProgress(s => s.resources);
   const batchActive = useResourceJobProgress(s => s.batchActive);
   const _batchTotal = useResourceJobProgress(s => s.batchTotal);
+  void _batchTotal;
   const _batchProcessed = useResourceJobProgress(s => s.batchProcessed);
+  void _batchProcessed;
   const _batchJobType = useResourceJobProgress(s => s.batchJobType);
+  void _batchJobType;
 
   // Merge DB queue + Zustand live jobs for accurate processing count & panel data
   const { mergedJobs, mergedSummary, mergedProcessingCount } = useMemo(() => {

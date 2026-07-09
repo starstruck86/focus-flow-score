@@ -1,6 +1,4 @@
 // Commission Pacing Hook - Projected earnings and pace tracking
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useStore } from '@/store/useStore';
 import { calculateCommissionSummary, DEFAULT_QUOTA_CONFIG } from '@/lib/commissionCalculations';
 import { getCapacityAdjustedTarget, DEFAULT_CAPACITY_SETTINGS } from '@/lib/goodDayModel';

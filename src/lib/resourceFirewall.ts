@@ -18,7 +18,6 @@ import {
   type DownstreamPurpose,
   type TrustOverride,
 } from './resourceTrust';
-import type { EnrichmentStatus } from './resourceEligibility';
 
 const log = createLogger('ResourceFirewall');
 

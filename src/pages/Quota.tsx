@@ -27,7 +27,6 @@ import { RemainingCard } from '@/components/quota/RemainingCard';
 import { DealsLedger } from '@/components/quota/DealsLedger';
 import { QuotaConfigSettings } from '@/components/quota/QuotaConfigSettings';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
-import { DisplaySelectCell } from '@/components/table/DisplaySelectCell';
 import { 
   DEFAULT_QUOTA_CONFIG, 
   calculateCommissionSummary,
@@ -602,6 +601,7 @@ const _STAGE_OPTIONS = [
   { value: 'Closed Won', label: '6 - Closed Won' },
   { value: 'Closed Lost', label: '7 - Closed Lost' },
 ];
+void _STAGE_OPTIONS;
 
 function FixDealDialog({
   deal,
@@ -620,6 +620,7 @@ function FixDealDialog({
 
   // Reset form when deal changes
   const _dealId = deal?.id;
+  void _dealId;
   useState(() => {
     if (deal) {
       setCloseDate(deal.closeDate || '');

@@ -29,6 +29,7 @@ export interface ClosedLoopResumeInfo {
 export function buildLoopResumeInfo(session: ClosedLoopSession): ClosedLoopResumeInfo {
   const concept = session.subSkill || session.taughtConcept;
   const _attemptCount = session.attempts.length;
+  void _attemptCount;
   const summary = buildProgressSummary(session);
 
   // Determine the spoken intro based on status

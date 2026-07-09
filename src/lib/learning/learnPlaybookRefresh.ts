@@ -5,7 +5,6 @@
  * refreshes coverage for affected skills, and invalidates caches.
  */
 
-import { supabase } from '@/integrations/supabase/client';
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 import { indexSingleKI, mergeIndexedKI, type IndexedKI } from './learnKIIndexer';
 import { getAffectedSkillsFromIndexedKI } from './learnCoverageMap';

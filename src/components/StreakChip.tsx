@@ -3,7 +3,6 @@ import { Flame, Zap } from 'lucide-react';
 import { useStreakSummary } from '@/hooks/useStreakData';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { getLevelTitle } from '@/types/streak';
 import { PerformanceProfileSheet } from '@/components/PerformanceProfileSheet';
 
 interface StreakChipProps {

@@ -179,6 +179,7 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
       maximumFractionDigits: 0,
     }).format(amount);
   };
+  void _formatCurrency;
 
   return (
     <>

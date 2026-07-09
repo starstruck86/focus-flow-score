@@ -152,6 +152,7 @@ export default function AudioSessionMode({
         closedLoopSubSkill || undefined,
         closedLoopFocusPattern || undefined,
       );
+      void _session;
       closedLoop.markReadyForTest();
     }
   }, [isClosedLoop]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -588,6 +589,7 @@ export default function AudioSessionMode({
       processPendingWrites();
     } catch (e: unknown) {
       const _msg = e instanceof Error ? e.message : 'Failed to score response';
+      void _msg;
       console.error('Audio session score error — entering recovery:', e);
       emitSaveStatus('recovering');
 
@@ -718,6 +720,7 @@ export default function AudioSessionMode({
   const currentResult = retryResult || result;
   const showFeedbackDelivery = isFeedbackPhase(phase) && currentResult && sessionId;
   const _isRecovering = recovery.status === 'recovering' || recovery.status === 'waiting_for_connection';
+  void _isRecovering;
 
   return (
     <div className="space-y-4">

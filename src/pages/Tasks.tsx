@@ -5,8 +5,6 @@ import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useStore } from '@/store/useStore';
-import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import type { Task, TaskStatus, Workstream } from '@/types';
 import { MomentumHeader, TaskCard, AddTaskDialog, FilterBar, OverdueSection, TaskBulkBar, TaskKanbanBoard, getWorkstream, sortTasks, getAccountName, type GroupMode } from '@/components/tasks';
 
@@ -68,6 +66,7 @@ export default function Tasks() {
     Object.keys(groups).forEach(k => { groups[k as TaskStatus] = sortTasks(groups[k as TaskStatus]); });
     return groups;
   }, [filteredTasks, overdueIds]);
+  void _groupedByStatus;
 
   const _groupedByAccount = useMemo(() => {
     const groups: Record<string, Task[]> = {};
@@ -81,8 +80,10 @@ export default function Tasks() {
     Object.keys(groups).forEach(k => { groups[k] = sortTasks(groups[k]); });
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
   }, [filteredTasks, overdueIds, accounts, opportunities]);
+  void _groupedByAccount;
 
   const _toggleGroup = (key: string) => setCollapsedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+  void _toggleGroup;
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev);

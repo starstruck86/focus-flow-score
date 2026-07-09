@@ -2,7 +2,6 @@ import { useState, useCallback, useMemo } from 'react';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { Upload, ImagePlus, X, CheckCircle2, AlertCircle, Loader2, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';

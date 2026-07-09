@@ -165,6 +165,7 @@ describe('Real email routing', () => {
 
   it('should NOT route as template (no placeholders)', () => {
     const _routes = routeByContent(REAL_EMAIL);
+    void _routes;
     // It may technically match template signals, but example should be primary
     const exScore = scoreRouteConfidence(REAL_EMAIL, 'example');
     const tplScore = scoreRouteConfidence(REAL_EMAIL, 'template');

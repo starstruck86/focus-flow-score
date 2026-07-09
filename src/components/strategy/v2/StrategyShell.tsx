@@ -78,7 +78,6 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { MoreHorizontal, PanelLeft } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { StrategyThreadsSidebar } from './StrategyThreadsSidebar';
 import { StrategyNavSidebar, type StrategyMode, type StrategySurfaceKey } from './StrategyNavSidebar';
 import { SurfacePanel } from './SurfacePanel';
 import { WorkflowFormSheet } from './workflows/WorkflowFormSheet';
@@ -1237,6 +1236,7 @@ export function StrategyShell() {
   const _handlePillSaved = useCallback(() => {
     setPillsVersion((v) => v + 1);
   }, []);
+  void _handlePillSaved;
 
   /**
    * Click a pill → prompt-first behavior.

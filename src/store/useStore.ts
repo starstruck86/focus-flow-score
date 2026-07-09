@@ -21,7 +21,6 @@ import type {
 import type { RecurringTaskTemplate } from '@/types/recurring';
 import { isDueToday } from '@/lib/recurrence';
 import { calculateAllScores } from '@/lib/calculations';
-import { DEFAULT_QUOTA_CONFIG } from '@/lib/commissionCalculations';
 
 interface QuotaCompassStore {
   // Time Range

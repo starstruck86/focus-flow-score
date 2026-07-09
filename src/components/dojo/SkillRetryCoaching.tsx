@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { AlertTriangle, CheckCircle2, Target, Zap } from 'lucide-react';
 import type { DojoScoreResult } from '@/lib/dojo/types';
-import type { SkillFocus } from '@/lib/dojo/scenarios';
 
 // ── Skill-specific pattern tag detection ──
 

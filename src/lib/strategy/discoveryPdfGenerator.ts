@@ -1,6 +1,5 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { downloadBlob } from './discoveryDocxGenerator';
 
 // Extend jsPDF type for autotable
 declare module 'jspdf' {

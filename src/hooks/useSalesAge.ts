@@ -173,6 +173,7 @@ export function useSalesAge() {
   const now = new Date();
   const fyStart = targets?.fiscalYearStart || config.fiscalYearStart;
   const _fyEnd = targets?.fiscalYearEnd || config.fiscalYearEnd;
+  void _fyEnd;
   
   const dateFilter = {
     start: fyStart,

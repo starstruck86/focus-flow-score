@@ -43,7 +43,6 @@ import {
   type ValidationReport,
   type ReportProgress,
 } from "@/lib/strategy-control/reportRunner";
-import { VerdictHeader } from "@/components/strategy-control/VerdictHeader";
 import { CaseRow } from "@/components/strategy-control/CaseRow";
 import { OutputEvaluationTab } from "@/components/strategy-control/OutputEvaluationTab";
 
@@ -78,6 +77,7 @@ export default function StrategyControlPanel() {
     () => (results.length === cases.length ? computeVerdict(results) : null),
     [results, cases.length],
   );
+  void _verdict;
 
   const isOwner =
     !!user?.email && user.email.toLowerCase() === OWNER_EMAIL.toLowerCase();

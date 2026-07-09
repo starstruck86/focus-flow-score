@@ -8,7 +8,6 @@
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 import type { SkillSession } from './skillSession';
 import type { TrainingContent } from './skillBuilderContent';
-import { getDimensionLabel } from './skillScenarioSelector';
 
 export interface AdaptiveEmphasis {
   /** Which micro drill variant to emphasize */

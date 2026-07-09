@@ -85,6 +85,7 @@ export function useExecutionCommitment() {
         localStorage.setItem('jarvis-action-memory', JSON.stringify(records.slice(-100)));
       } catch {}
       const _updated: CommittedAction = { ...prev, state: 'interrupted', interruptReason: reason };
+      void _updated;
       saveCommitment(null); // Clear so next action can be committed
       return null;
     });

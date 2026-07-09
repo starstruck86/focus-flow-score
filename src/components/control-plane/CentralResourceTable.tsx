@@ -80,26 +80,6 @@ function qualityColor(ki: number, active: number): string {
   return 'text-destructive';
 }
 
-function _nextActionLabel(state: ControlPlaneState, resource: CanonicalResourceStatus): string {
-  switch (state) {
-    case 'ingested': return 'Enrich content';
-    case 'has_content': return 'Extract knowledge';
-    case 'extracted': return 'Activate knowledge';
-    case 'activated': return 'Ready';
-    case 'blocked': {
-      switch (resource.blocked_reason) {
-        case 'empty_content': return 'Add content';
-        case 'no_extraction': return 'Run extraction';
-        case 'no_activation': return 'Activate knowledge';
-        case 'missing_contexts': return 'Add contexts';
-        case 'stale_blocker_state': return 'Diagnose & repair';
-        default: return 'Review';
-      }
-    }
-    case 'processing': return 'In progress…';
-    default: return '—';
-  }
-}
 
 interface RowAction {
   key: string;

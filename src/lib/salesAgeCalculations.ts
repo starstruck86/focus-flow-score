@@ -175,12 +175,14 @@ export function calculateRequiredTargets(
   const fyEnd = parseISO(targets.fiscalYearEnd);
   
   const _bizDaysTotal = getBusinessDays(fyStart, fyEnd);
+  void _bizDaysTotal;
   const bizDaysRemaining = getBusinessDays(now, fyEnd);
   const weeksRemaining = Math.max(1, bizDaysRemaining / 5);
   
   // Remaining quota
   const newArrRemaining = Math.max(0, targets.newArrQuota - closedWonNewArr);
   const _renewalArrRemaining = Math.max(0, targets.renewalArrQuota - closedWonRenewalArr);
+  void _renewalArrRemaining;
   
   // Calculate historical conversion ratios from 6M data
   let dialToConnectRatio = 0.10; // 10% default
@@ -461,6 +463,7 @@ export function generateRecommendations(
   
   // Find lowest performing drivers
   const _underperformingDrivers = qpi.drivers.filter(d => d.normalizedScore < 1.0);
+  void _underperformingDrivers;
   
   // Priority 1: Address biggest pace gaps
   if (paceToQuota.newArr.status === 'behind') {

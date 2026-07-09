@@ -8,7 +8,6 @@
  */
 
 import { parseUserIntent, fetchTrainingContext, routeByIntent, type DaveRecommendation } from '@/lib/daveTrainingRouter';
-import { loadVoiceSessionBuffer } from '@/lib/daveSessionBuffer';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('DaveAudioLauncher');

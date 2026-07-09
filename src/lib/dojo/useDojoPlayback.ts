@@ -13,7 +13,6 @@
  */
 
 import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
-import type { SpeechChunk } from './conversationEngine';
 import { getInterChunkDelay } from './dojoChunkPacing';
 import { markAudioUnlocked, isAudioUnlocked } from './dojoAutoplayGate';
 import type { PlaybackState } from './playbackAdapter';

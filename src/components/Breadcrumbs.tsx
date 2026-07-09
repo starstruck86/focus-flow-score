@@ -1,7 +1,6 @@
 import { useLocation } from 'react-router-dom';
 import { ChevronRight, LayoutDashboard } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { cn } from '@/lib/utils';
 
 const ROUTE_LABELS: Record<string, string> = {
   '/': 'Dashboard',

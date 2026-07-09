@@ -3,7 +3,6 @@
  * Allows reopening the DeepEnrichModal when a job is active or just finished.
  */
 import { useEnrichmentJobStore } from '@/store/useEnrichmentJobStore';
-import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Zap, RefreshCw, Loader2, CheckCircle2, XCircle, Pause } from 'lucide-react';
 import { cn } from '@/lib/utils';

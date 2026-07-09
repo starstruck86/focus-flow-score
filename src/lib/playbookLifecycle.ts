@@ -11,6 +11,7 @@ import { createLogger } from './logger';
 import type { TrustStatus as ResourceTrustStatus } from './resourceTrust';
 
 const _log = createLogger('PlaybookLifecycle');
+void _log;
 
 // ── Canonical Playbook Statuses ────────────────────────────
 export const PLAYBOOK_STATUSES = [

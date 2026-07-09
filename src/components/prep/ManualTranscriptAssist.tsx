@@ -14,7 +14,6 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FileAudio, FileText, Bookmark } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import {
   getAudioStageLabel,
   getAudioFailureDescription,
@@ -52,6 +51,7 @@ export const ManualTranscriptAssist = memo(function ManualTranscriptAssist({
   const [content, setContent] = useState('');
   const subtype = detectAudioSubtype(resourceUrl);
   const _strategy = getAudioStrategy(subtype);
+  void _strategy;
 
   const handleSubmit = useCallback(() => {
     if (mode === 'park_later') {

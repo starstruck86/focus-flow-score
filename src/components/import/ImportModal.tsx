@@ -22,7 +22,6 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import { parseCSV, mapHeaderToField, normalizeUrl, detectLinkType, extractSalesforceId, parseCurrency, isUrlColumn, type ImportRow, type ImportPreview } from '@/lib/importUtils';
 import { useDbAccounts, useUpsertAccount, type DbAccount } from '@/hooks/useAccountsData';
 import { useAuth } from '@/contexts/AuthContext';

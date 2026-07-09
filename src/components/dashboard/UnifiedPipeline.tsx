@@ -2,7 +2,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
 import { AlertTriangle, ArrowUpRight } from 'lucide-react';
@@ -25,6 +24,7 @@ const _DEAL_TYPE_LABELS: Record<string, string> = {
   'renewal': 'Renewal',
   'one-time': 'One-Time',
 };
+void _DEAL_TYPE_LABELS;
 
 type WorkstreamFilter = 'all' | 'new-logo' | 'renewal';
 

@@ -54,7 +54,9 @@ export function useDuplicateDetection() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const _updateOpp = useUpdateOpportunity();
+  void _updateOpp;
   const _deleteOpp = useDeleteOpportunity();
+  void _deleteOpp;
 
   // DB-backed dismissed keys
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());

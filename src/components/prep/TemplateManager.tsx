@@ -10,7 +10,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Plus, Copy, Trash2, Edit3, ChevronDown, ChevronRight, Sparkles, Loader2, Lightbulb, X, RefreshCw, Link2, Mail, MessageSquare, FileText, Target, Presentation } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { useTemplates, useCreateResource, useDeleteResource, useUpdateResource, useTemplateSuggestions, useDismissSuggestion, useConfirmSuggestion, type Resource } from '@/hooks/useResources';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -35,6 +34,7 @@ export function TemplateManager() {
   const createResource = useCreateResource();
   const deleteResource = useDeleteResource();
   const _updateResource = useUpdateResource();
+  void _updateResource;
   const dismissSuggestion = useDismissSuggestion();
   const confirmSuggestion = useConfirmSuggestion();
   const queryClient = useQueryClient();
