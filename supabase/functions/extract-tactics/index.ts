@@ -2039,6 +2039,7 @@ Deno.serve(async (req) => {
         .from('resources')
         .select('title, content, description, tags, resource_type, content_length')
         .eq('id', resourceId)
+        .eq('user_id', userId)
         .single();
 
       if (fetchErr || !resource) {
