@@ -288,43 +288,53 @@ type SyncTableName = 'accounts' | 'opportunities' | 'renewals' | 'contacts' | 't
 
 async function typedUpsert(table: SyncTableName, rows: unknown[]): Promise<void> {
   if (rows.length === 0) return;
+  let error: unknown = null;
   switch (table) {
     case 'accounts':
-      await supabase.from('accounts').upsert(rows as AccountInsert[]);
+      ({ error } = await supabase.from('accounts').upsert(rows as AccountInsert[]));
       break;
     case 'opportunities':
-      await supabase.from('opportunities').upsert(rows as OpportunityInsert[]);
+      ({ error } = await supabase.from('opportunities').upsert(rows as OpportunityInsert[]));
       break;
     case 'renewals':
-      await supabase.from('renewals').upsert(rows as RenewalInsert[]);
+      ({ error } = await supabase.from('renewals').upsert(rows as RenewalInsert[]));
       break;
     case 'contacts':
-      await supabase.from('contacts').upsert(rows as ContactInsert[]);
+      ({ error } = await supabase.from('contacts').upsert(rows as ContactInsert[]));
       break;
     case 'tasks':
-      await supabase.from('tasks').upsert(rows as TaskInsert[]);
+      ({ error } = await supabase.from('tasks').upsert(rows as TaskInsert[]));
       break;
+  }
+  if (error) {
+    console.error(`[DataSync] typedUpsert(${table}) failed:`, error);
+    throw error;
   }
 }
 
 async function typedDelete(table: SyncTableName, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
+  let error: unknown = null;
   switch (table) {
     case 'accounts':
-      await supabase.from('accounts').delete().in('id', ids);
+      ({ error } = await supabase.from('accounts').delete().in('id', ids));
       break;
     case 'opportunities':
-      await supabase.from('opportunities').delete().in('id', ids);
+      ({ error } = await supabase.from('opportunities').delete().in('id', ids));
       break;
     case 'renewals':
-      await supabase.from('renewals').delete().in('id', ids);
+      ({ error } = await supabase.from('renewals').delete().in('id', ids));
       break;
     case 'contacts':
-      await supabase.from('contacts').delete().in('id', ids);
+      ({ error } = await supabase.from('contacts').delete().in('id', ids));
       break;
     case 'tasks':
-      await supabase.from('tasks').delete().in('id', ids);
+      ({ error } = await supabase.from('tasks').delete().in('id', ids));
       break;
+  }
+  if (error) {
+    console.error(`[DataSync] typedDelete(${table}) failed:`, error);
+    throw error;
   }
 }
 
