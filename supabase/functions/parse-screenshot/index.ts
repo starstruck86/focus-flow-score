@@ -199,7 +199,6 @@ Combine data from ALL screenshots into a single unified result. If the same fiel
           .eq('id', accountId)
           .eq('user_id', userId)
           .single();
-          .single();
 
         const existingEvidence = (existing?.enrichment_evidence as Record<string, string>) || {};
         updates.enrichment_evidence = {
