@@ -136,9 +136,12 @@ serve(async (req) => {
     // Use service role client for all DB operations (works for both paths)
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const { date, confirmedScreenshotEvents, rebuildContext } = await req.json();
+    const { date, confirmedScreenshotEvents, rebuildContext, fullReset } = await req.json();
     const targetDate = date || new Date().toISOString().split("T")[0];
     const requestSource = rebuildContext?.source || "generate";
+    // Preserve same-day progress by default. Only wipe when the caller explicitly asks
+    // for a full reset (e.g. user-initiated "Start over"), never on background regens.
+    const isFullReset = fullReset === true || rebuildContext?.fullReset === true;
     logStage("request_parsed", `request parsed for ${requestSource}`, {
       dismissedCount: Array.isArray(rebuildContext?.dismissed_blocks) ? rebuildContext.dismissed_blocks.length : 0,
       linkedCount: Array.isArray(rebuildContext?.linked_opportunities) ? rebuildContext.linked_opportunities.length : 0,
