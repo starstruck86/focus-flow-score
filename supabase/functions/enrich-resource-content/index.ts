@@ -3368,7 +3368,8 @@ Deno.serve(async (req) => {
       const { data: resources, error: qErr } = await supabase
         .from("resources")
         .select("id, file_url, content, enrichment_status, content_status, failure_count, content_length, manual_content_present")
-        .in("id", resource_ids.slice(0, 50));
+        .in("id", resource_ids.slice(0, 50))
+        .eq("user_id", userId);
 
       if (qErr) throw new Error("Query failed");
 
