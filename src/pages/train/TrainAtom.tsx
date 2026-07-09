@@ -96,6 +96,14 @@ export default function TrainAtom() {
       (isNonEmpty(exemplar?.why_it_matters) || isNonEmpty(exemplar?.when_to_use) || isNonEmpty(exemplar?.title)));
   const hasEliteBeat = isNonEmpty(modelLine) || isNonEmpty(exemplar?.when_not_to_use);
 
+  // Load per-drill stats whenever the current KI changes.
+  useEffect(() => {
+    if (!user || !currentDrill) return;
+    setDrillStats(readDrillStats(user.id, currentDrill.ki_id));
+  }, [user, currentDrill]);
+
+  const drillMode: DrillMode = pickDrillMode(drillStats.attempts, drillStats.passes);
+
   async function handleSubmit() {
     if (!user || !currentDrill || !data) return;
     setSubmitting(true);
@@ -111,12 +119,32 @@ export default function TrainAtom() {
         userResponse: response,
         skillFocus: topic,
       });
-      setResult({ score: r.score, feedback: r.feedback, progress: r.progress, reps: r.reps });
+      setResult({
+        score: r.score,
+        feedback: r.feedback,
+        progress: r.progress,
+        reps: r.reps,
+        goldCriteria: r.goldCriteria ?? [],
+      });
       setSessionLatest(r.score);
       setSessionBest((b) => Math.max(b, r.score));
+      // Persist per-drill attempt + pass state (drives LEARN → PRACTICE progression).
+      const passed = r.score >= TRAIN_TUNABLES.subLevelPassThreshold;
+      const nextStats = {
+        attempts: drillStats.attempts + 1,
+        passes: drillStats.passes + (passed ? 1 : 0),
+      };
+      writeDrillStats(user.id, currentDrill.ki_id, nextStats);
+      setDrillStats(nextStats);
       setBeat('feedback');
     } catch (e) {
-      setResult({ score: 0, feedback: `Scoring failed: ${(e as Error).message}`, progress: 0, reps: 0 });
+      setResult({
+        score: 0,
+        feedback: `Scoring failed: ${(e as Error).message}`,
+        progress: 0,
+        reps: 0,
+        goldCriteria: [],
+      });
       setBeat('feedback');
     } finally {
       setSubmitting(false);
