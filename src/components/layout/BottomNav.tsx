@@ -190,6 +190,7 @@ export function BottomNav({ variant = 'default' }: { variant?: 'default' | 'cond
 
   const activeItems = mode === 'train' ? trainNavItems : workNavItems;
   const _condensed = variant === 'condensed';
+  void _condensed;
 
   return (
     <nav

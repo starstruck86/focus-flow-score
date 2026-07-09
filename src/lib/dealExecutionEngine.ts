@@ -11,6 +11,7 @@
 import { createLogger } from './logger';
 
 const _log = createLogger('DealExecutionEngine');
+void _log;
 
 // ── Deal Memory ────────────────────────────────────────────
 

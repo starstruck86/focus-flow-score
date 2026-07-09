@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,7 +7,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { REVIEW_MODE } from '@/contexts/ReviewModeContext';
 

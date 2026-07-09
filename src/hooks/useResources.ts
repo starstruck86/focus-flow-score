@@ -3,7 +3,6 @@ import { trackedInvoke } from '@/lib/trackedInvoke';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { useCallback } from 'react';
 import type { EnrichmentStatus } from '@/lib/resourceEligibility';
 import { autoOperationalizeResource } from '@/lib/autoOperationalize';
 import { fetchAllPages } from '@/lib/supabasePagination';

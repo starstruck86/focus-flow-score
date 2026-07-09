@@ -16,6 +16,7 @@ import { createLogger } from './logger';
 import { CURRENT_ENRICHMENT_VERSION, CURRENT_VALIDATION_VERSION } from './resourceQuality';
 
 const _log = createLogger('ResourceTrust');
+void _log;
 
 // ── Trust Statuses ─────────────────────────────────────────
 export type TrustStatus = 'trusted' | 'limited' | 'suspect' | 'stale' | 'quarantined';

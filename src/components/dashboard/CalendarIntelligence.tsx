@@ -3,7 +3,6 @@ import { useMemo } from 'react';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { useStore } from '@/store/useStore';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Calendar, Users, Clock, TrendingUp, Zap } from 'lucide-react';
 import { parseISO, getHours, differenceInMinutes, startOfWeek, endOfWeek, isWithinInterval, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';

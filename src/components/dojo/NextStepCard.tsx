@@ -3,7 +3,6 @@
  * Varies phrasing on retries to avoid robotic repetition.
  */
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { RotateCcw, BookOpen, Zap, Shuffle } from 'lucide-react';
 import { recommendNextStep, type NextAction } from '@/lib/dojo/nextStepRecommendation';

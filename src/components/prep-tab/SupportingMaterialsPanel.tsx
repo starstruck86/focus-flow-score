@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, Mic, FileText, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';

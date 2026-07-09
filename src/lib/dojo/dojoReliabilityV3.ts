@@ -305,6 +305,7 @@ function assessHealth(m: ReliabilityMetrics): HealthScore {
 
   // Factor 4: Recovery chain depth
   const _pendingRecoveries = m.recoveryAttempts.filter(r => r.succeeded === null).length;
+  void _pendingRecoveries;
   const failedRecoveries = m.recoveryAttempts.filter(r => r.succeeded === false && now - r.timestamp < FAILURE_WINDOW_MS).length;
   if (failedRecoveries >= 2) {
     score -= 25;

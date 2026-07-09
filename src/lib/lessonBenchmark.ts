@@ -262,6 +262,7 @@ function makeErrorMetrics(resourceId: string, title: string, archetype: LessonAr
 function buildReport(lessons: LessonBenchmarkMetrics[]): BenchmarkReport {
   const successful = lessons.filter(l => l.outcome === 'success');
   const _n = successful.length || 1;
+  void _n;
 
   // Overall summary
   const summary = {

@@ -11,7 +11,6 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
 import type { DailyKIContext } from '@/hooks/useDailyKI';
 import { getMistakeEntry } from '@/lib/dojo/mistakeTaxonomy';
 import type { SkillMemory } from '@/lib/dojo/skillMemory';

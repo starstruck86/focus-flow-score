@@ -13,7 +13,6 @@
  */
 import { describe, it, expect } from 'vitest';
 import { buildPlan } from '../planner';
-import { resolveSkill } from '../resolver';
 import { meddiccReviewManifest } from '../manifests/meddiccReview';
 import type { SkillManifest } from '../types';
 import type { PlannerContext } from '../planner';

@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Users, Target, FileText, CheckSquare, Loader2, X } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { fromActiveAccounts } from '@/data/accounts';
-import { useStore } from '@/store/useStore';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';

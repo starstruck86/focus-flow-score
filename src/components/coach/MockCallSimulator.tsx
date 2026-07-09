@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Play, Square, Send, Loader2, RotateCcw, Trophy, Target, Crosshair, ShieldCheck, ShieldAlert, Eye, Brain, Zap, Clock, CheckCircle2, AlertTriangle, Lightbulb, MessageSquareQuote, Swords, Mic, MicOff, BarChart3, Volume2, VolumeX } from 'lucide-react';
@@ -803,6 +802,7 @@ export function MockCallSimulator() {
   const createSession = useCreateMockSession();
   const gradeCall = useGradeMockCall();
   const _saveMessages = useSaveMockMessages();
+  void _saveMessages;
 
   const [activeSession, setActiveSession] = useState<MockCallSession | null>(null);
   const [view, setView] = useState<'setup' | 'chat' | 'scorecard' | 'history'>('setup');

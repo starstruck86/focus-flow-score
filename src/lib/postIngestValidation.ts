@@ -90,6 +90,7 @@ async function hasInFlightOperation(resourceId: string, opType: OperationType): 
       : opType === 'parse'
         ? ['parse', 'parse-uploaded-file']
         : ['enrichment', 'run-enrichment-job'];
+    void _jobTypes;
 
     const { data: activeJobs } = await supabase
       .from('background_jobs')

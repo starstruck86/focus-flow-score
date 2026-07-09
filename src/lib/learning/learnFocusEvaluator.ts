@@ -7,7 +7,6 @@
 
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 import { DIMENSION_TO_SUBSKILL, SKILL_DIMENSION_KEYS } from './learnScoringSchema';
-import { getSubSkillsForSkill } from './learnSubSkillMap';
 
 // ── Types ─────────────────────────────────────────────────────────
 

@@ -10,9 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp, CheckCircle2, RefreshCw, AlertTriangle, Clock } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { loadUnresolvedLoops, loadRecentCompletedLoops, buildProgressSummary, type ClosedLoopProgressSummary } from '@/lib/daveClosedLoopStore';
-import type { ClosedLoopSession } from '@/lib/daveClosedLoopEngine';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface HistoryEntry extends ClosedLoopProgressSummary {

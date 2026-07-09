@@ -401,6 +401,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     } catch (err: any) {
       if (timeout) clearTimeout(timeout);
       const _rawMsg = err?.message || String(err);
+      void _rawMsg;
       console.error('[Dave] Failed to start:', err);
 
       const friendlyMessage = classifyDaveStartupError(err);

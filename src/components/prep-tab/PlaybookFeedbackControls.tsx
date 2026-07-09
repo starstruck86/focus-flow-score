@@ -3,7 +3,6 @@
  */
 import { useState } from 'react';
 import { ThumbsUp, ThumbsDown, ArrowRightLeft, AlertTriangle } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { usePlaybookFeedback, type FeedbackType } from '@/hooks/usePlaybookFeedback';
 
 interface SectionFeedbackProps {

@@ -214,6 +214,7 @@ export async function runReconciliation(userId: string): Promise<ReconciliationR
         'deep_enriched', newStatus, 'reconciliation_downgrade',
         `Score ${qr.score}, tier ${qr.tier}: ${qr.violations.join('; ')}`, qr,
       );
+      void _auditEntry;
 
       await supabase.from('resources').update({
         enrichment_status: newStatus,

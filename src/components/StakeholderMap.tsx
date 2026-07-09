@@ -786,6 +786,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
       </div>
     );
   };
+  void _renderRootDropZone;
 
   // Recursive tree renderer with connecting lines
   const renderTree = (node: any, depth: number = 0): React.ReactNode => {
@@ -1068,7 +1069,9 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
             </p>
             {discoveredContacts.map((contact, index) => {
               const _companyNew = typeof contact.company_tenure_months === 'number' && contact.company_tenure_months >= 0 && contact.company_tenure_months < 12;
+              void _companyNew;
               const _roleNew = typeof contact.role_tenure_months === 'number' && contact.role_tenure_months >= 0 && contact.role_tenure_months < 12;
+              void _roleNew;
               const linkedinFailed = contact.linkedin_verified === false;
               return (
                 <div key={`${contact.name}-${index}`} className={cn('flex items-start justify-between gap-2 rounded bg-background/80 p-2', linkedinFailed && 'opacity-60 border border-destructive/30')}>

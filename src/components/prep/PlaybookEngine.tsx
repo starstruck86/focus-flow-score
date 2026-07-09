@@ -34,6 +34,7 @@ import {
 
 /** Priority chapters first, rest after */
 const _PRIORITY_IDS = ['cold_calling', 'discovery', 'competitors', 'messaging'];
+void _PRIORITY_IDS;
 
 const CHAPTERS = [
   { id: 'cold_calling', label: 'Cold Calling', icon: '📞', priority: true },

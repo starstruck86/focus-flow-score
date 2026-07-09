@@ -106,6 +106,7 @@ export function createExecutionSessionTools(ctx: ToolContext): ToolMap {
         const result = store.maybeAutoAdvance();
         if (result.advanced) {
           const _newSession = useExecutionSession.getState().activeSession;
+          void _newSession;
           lines.push(`🚀 ${result.reason}`);
         } else if (result.reason) {
           lines.push(`⏸️ ${result.reason}`);

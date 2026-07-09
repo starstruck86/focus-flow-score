@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { fromActiveAccounts } from '@/data/accounts';
 import { trackedInvoke } from '@/lib/trackedInvoke';
-import { ResourceJobStatus as ResourceJobStatusComponent } from '@/components/ResourceJobStatus';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +13,6 @@ import {
   ArrowLeft, Save, Clock, Sparkles, BookOpen, Lightbulb, PanelRight,
   Building2, Search, Brain, ChevronDown, ChevronUp, RefreshCw, Loader2,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { useUpdateResource, useAllResources, type Resource } from '@/hooks/useResources';
 import { toast } from 'sonner';
 import { RichTextEditor, type RichTextEditorRef } from './RichTextEditor';

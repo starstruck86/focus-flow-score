@@ -4,18 +4,6 @@ import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useEffect, useRef } from 'react';
 import { bostonNow } from '@/lib/timeFormat';
 
-interface _CalendarEvent {
-  id: string;
-  external_id: string;
-  title: string;
-  description: string | null;
-  start_time: string;
-  end_time: string | null;
-  location: string | null;
-  all_day: boolean;
-  created_at: string;
-  updated_at: string;
-}
 
 const SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const LAST_SYNC_KEY = 'calendar_last_sync';

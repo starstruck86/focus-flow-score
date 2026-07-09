@@ -4,8 +4,6 @@ import { Upload, FileSpreadsheet, Download, AlertTriangle, Check, X, Info, Chevr
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
@@ -28,8 +26,6 @@ import {
   SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
-import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
 import {
   Accordion,
   AccordionContent,
@@ -189,11 +185,13 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
     
     const accountLookup = buildAccountLookup(existingAccounts, savedAliases);
     const _opportunityLookup = buildOpportunityLookup(existingOpportunities);
+    void _opportunityLookup;
     const pendingValues: PendingValueMapping[] = [];
     const unrecLinks: UnrecognizedLink[] = [];
     const reviewRows: NeedsReviewRow[] = [];
     const accountsNotFound: AccountNotFoundItem[] = [];
     const _oppsNotFound: OpportunityNotFoundItem[] = [];
+    void _oppsNotFound;
     const orphanOpps: OrphanOpportunityItem[] = [];
     const rows: ParsedImportRow[] = [];
     
@@ -297,6 +295,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
       );
       
       let needsReview = false;
+      void needsReview;
       let hasAccountIssue = false;
       
       if (!matchedAccount) {
@@ -438,6 +437,7 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
     opportunityNotFound.length > 0 ||
     orphanOpportunities.length > 0 ||
     opportunityConflicts.length > 0;
+  void _hasActionRequired;
   
   // Count ignored items
   const ignoredCount = unmappedColumns.filter(m => m.targetObject === 'ignore').length +

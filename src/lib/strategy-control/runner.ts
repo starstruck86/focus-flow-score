@@ -300,6 +300,7 @@ function evaluate(
   const expectation = c.expectation;
   const isSkillEnvelope = signals.schema === "skill_envelope.v1";
   const _ok = !!(raw && typeof raw === "object" && (raw as Record<string, unknown>).envelope);
+  void _ok;
   const refused = !!signals.refusal_code;
 
   switch (expectation) {

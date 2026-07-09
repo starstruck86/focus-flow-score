@@ -15,6 +15,7 @@ import type { DojoScoreResult } from './types';
 import { createLogger } from '@/lib/logger';
 
 const _logger = createLogger('DojoVoiceAdapter');
+void _logger;
 
 // ── Feedback Formatting ────────────────────────────────────────────
 

@@ -9,7 +9,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Zap, ShieldAlert, ShieldCheck, RotateCcw } from 'lucide-react';
 import { PRESSURE_LABELS, type PressureDimension } from '@/lib/dojo/v4/pressureModel';
-import { FOCUS_PATTERN_LABELS } from '@/lib/dojo/focusPatterns';
 
 interface PressureAnalysisCardProps {
   pressureLevel: string;

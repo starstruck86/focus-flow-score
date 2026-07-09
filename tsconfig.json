@@ -2,7 +2,7 @@
   "compilerOptions": {
     "allowJs": true,
     "noImplicitAny": false,
-    "noUnusedLocals": false,
+    "noUnusedLocals": true,
     "noUnusedParameters": true,
     "paths": {
       "@/*": [

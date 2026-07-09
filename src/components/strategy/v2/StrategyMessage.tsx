@@ -76,6 +76,7 @@ const _DIMENSION_ICONS: Record<string, string> = {
   product_knowledge: '🌿',
   internal_prospecting: '📞',
 };
+void _DIMENSION_ICONS;
 
 // Citation rendering removed — server uses RESOURCE["title"] / KI["title"|id] format
 // natively in message text; no separate sources panel needed.

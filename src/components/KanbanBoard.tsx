@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
 import type { Opportunity, OpportunityStage } from '@/types';
 
 interface KanbanBoardProps {

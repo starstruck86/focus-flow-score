@@ -8,7 +8,6 @@ import { format, differenceInMinutes, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toAppTime } from '@/lib/timeFormat';
 import { Badge } from '@/components/ui/badge';
-import type { Task } from '@/types';
 
 interface AgendaItem {
   type: 'meeting' | 'task';

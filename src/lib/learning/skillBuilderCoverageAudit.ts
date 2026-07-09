@@ -113,6 +113,7 @@ export async function runSkillBuilderCoverageAudit(userId?: string): Promise<Cov
   }
 
   const _clusterMap = buildKIClusterMap(catalog);
+  void _clusterMap;
 
   // Build per-pattern coverage
   const perPattern: PatternCoverageAudit[] = [];

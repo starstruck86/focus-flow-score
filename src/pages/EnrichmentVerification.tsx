@@ -801,6 +801,7 @@ function RemediationDashboard({ queueSummaries, queues, onRunAction, runningQueu
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {queueSummaries.map(qs => {
           const _resources = queues[qs.queue];
+          void _resources;
           const isRunning = runningQueue === qs.queue;
           const strategy = QUEUE_STRATEGIES[qs.queue];
 

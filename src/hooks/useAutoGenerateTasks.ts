@@ -1,5 +1,4 @@
 import { useStore } from '@/store/useStore';
-import { useWeekToDateMetrics } from '@/hooks/useGoodDayMetrics';
 import type { Task, Workstream } from '@/types';
 import { toast } from 'sonner';
 
@@ -10,9 +9,6 @@ const DEFAULT_TARGETS = {
   meetingsSet: 1,
 };
 
-function _generateId(): string {
-  return Math.random().toString(36).substring(2, 15);
-}
 
 export function useAutoGenerateTasks() {
   const { addTask, renewals, opportunities, accounts: _accounts } = useStore();

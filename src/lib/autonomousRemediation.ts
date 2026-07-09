@@ -225,25 +225,6 @@ function checkExitCondition(_item: RemediationItem, score: number, contradiction
 
 // ── Failure escalation ────────────────────────────────────
 
-function shouldEscalateToQuarantine(item: RemediationItem, currentBucket: string): boolean {
-  // If same failure bucket occurs twice → quarantine
-  const sameBucketCount = item.failureHistory.filter(h => h.bucket === currentBucket).length;
-  return sameBucketCount >= 2;
-}
-
-function _getEscalationTarget(item: RemediationItem, currentBucket: string): { status: RemediationItemStatus; reason: string } {
-  if (shouldEscalateToQuarantine(item, currentBucket)) {
-    return {
-      status: 'resolved_quarantined',
-      reason: `Quarantined: same failure bucket "${currentBucket}" occurred ${item.failureHistory.filter(h => h.bucket === currentBucket).length + 1} times`,
-    };
-  }
-  return {
-    status: 'escalated',
-    reason: `Escalated from "${currentBucket}" after ${item.attemptsThisRun} attempts`,
-  };
-}
-
 // ── Build items from verification ─────────────────────────
 
 export function buildRemediationItems(
@@ -433,6 +414,7 @@ async function autoFix(item: RemediationItem, state: RemediationCycleState, stra
   // ── Pre-check: same failure bucket hit 2+ times → stop retrying ──
   if (item.sameFailureCount >= 2) {
     const _manualQueues: RemediationQueue[] = ['needs_transcript', 'needs_pasted_content', 'needs_access_auth', 'needs_alternate_source'];
+    void _manualQueues;
     const couldBeManual = !!item.url; // has a source → manual input path exists
     if (couldBeManual) {
       item.status = 'awaiting_manual';

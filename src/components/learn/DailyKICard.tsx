@@ -12,11 +12,9 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { BookOpen, ArrowRight, Lightbulb, Target, AlertTriangle, Sparkles, Shield } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import type { DailyKIContext } from '@/hooks/useDailyKI';
 import { ANCHOR_LABELS } from '@/lib/dojo/v3/dayAnchors';
 import { getMistakeEntry } from '@/lib/dojo/mistakeTaxonomy';
-import type { SkillProfile } from '@/lib/dojo/skillMemory';
 
 interface DailyKICardProps {
   context: DailyKIContext;

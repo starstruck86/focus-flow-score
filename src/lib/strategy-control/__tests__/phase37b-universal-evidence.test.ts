@@ -420,6 +420,7 @@ describe("Phase 3.7B — Universality", () => {
 
     // Without evidence, runner would flag it
     const _evidenceMap = new Map<string, StrategyExecutionEvidence[]>();
+    void _evidenceMap;
     // Mock getEnforcedSurfaces to include our fake surface
     // Instead, directly test the validation logic
     expect(result.manifest_id).toBe("future-skill-x");

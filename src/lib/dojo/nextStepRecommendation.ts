@@ -40,6 +40,7 @@ export function recommendNextStep(opts: {
 }): NextStepRecommendation {
   const { score, dimensions, skill, retryCount, topMistake, previousTopMistake } = opts;
   const _rubric = SKILL_RUBRICS[skill];
+  void _rubric;
   const lever = selectPrimaryCoachingLever(dimensions, skill);
 
   // Use primary coaching lever for focus, not just weakest

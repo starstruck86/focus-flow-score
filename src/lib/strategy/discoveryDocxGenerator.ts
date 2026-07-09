@@ -21,6 +21,7 @@ const cellBorder = { style: BorderStyle.SINGLE, size: 1, color: COLORS.borderLig
 const cellBorders = { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder };
 const noBorder = { style: BorderStyle.NONE, size: 0, color: COLORS.white };
 const _noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
+void _noBorders;
 const cardBorders = {
   top: { style: BorderStyle.SINGLE, size: 1, color: COLORS.headerBg },
   bottom: { style: BorderStyle.SINGLE, size: 1, color: COLORS.headerBg },

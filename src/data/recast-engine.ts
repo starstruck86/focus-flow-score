@@ -222,6 +222,7 @@ export function recastDay(input: RecastInput): RecastResult {
 
   // ── Rebuild timeline: interleave meetings with action blocks ──
   const _allKept = [...meetingBlocks, ...keptBlocks];
+  void _allKept;
 
   // Sort by original start time for meetings, then fill gaps with action blocks
   const meetingSorted = meetingBlocks.slice().sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));

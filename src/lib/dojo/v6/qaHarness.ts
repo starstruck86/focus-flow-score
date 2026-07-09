@@ -352,6 +352,7 @@ export function evaluateChecklist(): QACheckItem[] {
   const normalizerResults = validateNormalizer();
 
   const _allPassed = [...selectorResults, ...normalizerResults].every(r => r.passed);
+  void _allPassed;
 
   return V6_QA_CHECKLIST.map(item => {
     switch (item.id) {

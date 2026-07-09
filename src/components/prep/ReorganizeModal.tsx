@@ -30,6 +30,7 @@ export function ReorganizeModal({ open, onOpenChange }: Props) {
   const reorganize = useReorganizeLibrary();
   const updateResource = useUpdateResource();
   const _createFolder = useCreateFolder();
+  void _createFolder;
   const { user } = useAuth();
 
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);

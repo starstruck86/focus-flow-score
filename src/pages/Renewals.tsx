@@ -64,7 +64,6 @@ import { useCustomFields } from '@/hooks/useCustomFields';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { sortRenewalsDefault, applySortWithFallback, CHURN_RISK_SORT_RANK } from '@/lib/sortUtils';
 import type { Renewal, HealthStatus, Opportunity, ChurnRisk, OpportunityStage } from '@/types';
-import { computeRenewalRiskScore } from '@/hooks/useTimeAllocation';
 import { useWidgetLayout, type WidgetConfig } from '@/hooks/useWidgetLayout';
 import { CollapsibleWidgetSection } from '@/components/CollapsibleWidgetSection';
 
@@ -186,6 +185,7 @@ const _HEALTH_COLORS: Record<HealthStatus, string> = {
   yellow: 'bg-status-yellow/20 text-status-yellow border-status-yellow/30',
   red: 'bg-status-red/20 text-status-red border-status-red/30',
 };
+void _HEALTH_COLORS;
 
 const CHURN_RISK_COLORS: Record<ChurnRisk, string> = {
   low: 'bg-status-green/20 text-status-green border-status-green/30',
@@ -378,6 +378,7 @@ export default function Renewals() {
     if (existing) return existing.id;
     // Create a new account linked to this renewal
     const _newId = crypto.randomUUID();
+    void _newId;
     addAccount({
       name: renewal.accountName,
       priority: 'medium',
@@ -893,6 +894,7 @@ export default function Renewals() {
         break;
     }
   };
+  void _handleQuickAction;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {

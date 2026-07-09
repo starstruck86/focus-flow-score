@@ -81,6 +81,7 @@ export function WhatActuallyWorks({ stageId, defaultTactics, persona, competitor
         return dt.keywords.some(kw => text.includes(kw));
       });
       const _exampleReuse = matchingEx.reduce((sum: number, e: any) => sum + (e.times_reused || 0), 0);
+      void _exampleReuse;
 
       const sourceCount = matchingKI.length;
       const avgConfidence = matchingKI.length > 0

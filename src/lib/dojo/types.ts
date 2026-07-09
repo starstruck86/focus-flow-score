@@ -3,7 +3,6 @@
  * Single source of truth for all scoring, session, and pattern-memory types.
  */
 
-import type { SkillFocus } from './scenarios';
 import type { MultiThreadAssessment } from './v6/multiThreadTypes';
 import { normalizeMultiThreadAssessment } from './v6/multiThreadTypes';
 

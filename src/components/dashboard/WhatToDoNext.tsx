@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Lightbulb, Zap, Phone, Users, RefreshCw, CheckSquare, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
 import type { ActionRecommendation } from '@/lib/salesAgeCalculations';
 
 interface WhatToDoNextProps {

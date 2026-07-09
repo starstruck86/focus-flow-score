@@ -9,7 +9,6 @@ import { useNavigate } from 'react-router-dom';
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 import { SKILL_LABELS } from '@/lib/dojo/scenarios';
 import { Dumbbell, Clock, ChevronRight } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 
 const SKILLS: SkillFocus[] = ['discovery', 'objection_handling', 'executive_response', 'deal_control', 'qualification'];
 const DURATIONS = [15, 30, 60] as const;

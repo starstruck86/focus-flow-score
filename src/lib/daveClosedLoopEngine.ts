@@ -18,6 +18,7 @@ import { getSubSkillDefinition, getSubSkillsForSkill } from '@/lib/learning/lear
 import { createLogger } from '@/lib/logger';
 
 const _logger = createLogger('ClosedLoopEngine');
+void _logger;
 
 // ── Types ──────────────────────────────────────────────────────────
 

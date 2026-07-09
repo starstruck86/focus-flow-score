@@ -8,7 +8,6 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { useUserCompetencySummary } from '@/lib/train/competencyRead';
 import {
   SPOKE_DISPLAY_NAMES,

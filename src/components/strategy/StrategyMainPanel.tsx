@@ -4,14 +4,12 @@ import { SafeRelinkDialog } from './SafeRelinkDialog';
 import { ThreadTrustBanner } from './ThreadTrustBanner';
 import { useThreadTrustState } from '@/hooks/strategy/useThreadTrustState';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
-import { STRATEGY_UI } from '@/lib/strategy-ui';
 import { StrategyCommandCenter } from './StrategyCommandCenter';
 import { useStrategyMessages } from '@/hooks/strategy/useStrategyMessages';
 import { useStrategyUploads } from '@/hooks/strategy/useStrategyUploads';

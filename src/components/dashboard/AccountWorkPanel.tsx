@@ -14,7 +14,6 @@ import { cn } from '@/lib/utils';
 import { AccountWorkCard } from '@/components/accounts/AccountWorkCard';
 import { useAllAccountWorkingViews } from '@/hooks/useAccountWorkingSummary';
 import { isAccountExecutionModelEnabled } from '@/lib/featureFlags';
-import type { AccountReadiness } from '@/lib/accountExecutionState';
 
 type FilterMode = 'all' | 'ready' | 'prepped' | 'worked' | 'carry';
 

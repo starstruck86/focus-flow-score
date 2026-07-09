@@ -2,7 +2,6 @@
  * QueueActionBar — sticky bulk action bar that adapts its primary CTA
  * based on the currently expanded readiness bucket (queue).
  */
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { X, Sparkles, Wrench, Tag, Trash2, Zap, RefreshCw, Loader2, CheckCircle2 } from 'lucide-react';

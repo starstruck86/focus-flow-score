@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { TrendingUp, UserPlus, Phone, Mail, Calendar, Target, Lightbulb, ArrowRight, Zap, ChevronDown } from 'lucide-react';
 import { useStore } from '@/store/useStore';
-import { useWeekToDateMetrics } from '@/hooks/useGoodDayMetrics';
 import { cn } from '@/lib/utils';
 import { DRIVER_TAG_META, DEFAULT_DRIVER_TARGETS, type DriverTag } from './constants';
 
@@ -53,6 +52,7 @@ export function MomentumHeader({ workstreamFilter }: { workstreamFilter: 'pg' | 
 
   const pointsColor = pointsToday >= 8 ? 'text-status-green' : pointsToday >= 5 ? 'text-status-yellow' : 'text-foreground';
   const _metCount = drivers.filter(d => d.target > 0 ? d.actual >= d.target : d.actual > 0).length;
+  void _metCount;
 
   return (
     <div className="rounded-lg border border-border bg-card mb-4">

@@ -9,7 +9,6 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Settings2, Plus, X, Save, Clock, Coffee, Rocket, Shield } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 interface PlanPreferences {

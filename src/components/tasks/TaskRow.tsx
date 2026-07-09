@@ -1,6 +1,5 @@
 import { useState, useMemo, useRef } from 'react';
 import { Building2, Target, AlertCircle, Repeat, ChevronDown } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/store/useStore';

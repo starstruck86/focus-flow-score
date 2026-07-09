@@ -29,7 +29,6 @@ import { VerificationQueue } from './VerificationQueue';
 import { ReExtractionQueue } from './ReExtractionQueue';
 import { ResourceAuditDrilldown } from './ResourceAuditDrilldown';
 import { RealBottleneckReview } from './RealBottleneckReview';
-import { toast } from 'sonner';
 import { filterByPanel } from '@/lib/postExtractionState';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,

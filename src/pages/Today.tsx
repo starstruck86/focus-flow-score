@@ -3,7 +3,6 @@
 // Old Dashboard remains mounted at /dashboard as fallback this wave (P1b).
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { formatDistanceToNow } from 'date-fns';
 import { Settings as SettingsIcon, RefreshCw, ChevronRight, Newspaper, Calendar, ListTodo, Target, GraduationCap, Dumbbell } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';

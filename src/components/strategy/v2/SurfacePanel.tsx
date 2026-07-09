@@ -300,6 +300,7 @@ export function SurfacePanel({
       })
       .slice(0, 6);
   }, [threads, surface, recentThreadsForSurface.length, artifactThreadIds]);
+  void _relevantFallbackWork;
 
   // Annotate the user's *own* tagged threads too, so they get the same
   // explainability chips/grouping as fallback threads.

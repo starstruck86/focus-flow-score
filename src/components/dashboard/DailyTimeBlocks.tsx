@@ -19,7 +19,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Clock, Zap, Phone, Users, BookOpen, Coffee, BriefcaseBusiness, Target, RefreshCw, Star, ChevronDown, ChevronUp, MessageSquare, Lightbulb, ThumbsUp, ThumbsDown, RotateCcw, CheckCircle2, ArrowRight, Pencil, Check, X, GripVertical, Rocket, Shield, MoreVertical, EyeOff, Link2, Building2, Settings2, Hammer, AlertTriangle, TrendingUp, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { CalendarScreenshotDrop } from './CalendarScreenshotDrop';
 import { DailyPlanPreferences } from './DailyPlanPreferences';
@@ -947,6 +946,7 @@ export function DailyTimeBlocks() {
   const totalGoals = blocks.reduce((s, b) => s + b.goals.length, 0);
   const completedGoals = ((plan?.completed_goals || []) as string[]).length;
   const _progressPct = totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
+  void _progressPct;
 
   // Visual timeline: how far through the day
   const dayProgressPct = (() => {

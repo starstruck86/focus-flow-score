@@ -18,7 +18,6 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
-import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useCustomFields, type TabTarget, type CustomFieldType, type FieldPlacement } from '@/hooks/useCustomFields';
 

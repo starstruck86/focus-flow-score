@@ -176,12 +176,14 @@ const _CONFIDENCE_ICONS = {
   medium: ShieldAlert,
   low: ShieldQuestion,
 };
+void _CONFIDENCE_ICONS;
 
 const _CONFIDENCE_COLORS = {
   high: 'text-status-green',
   medium: 'text-status-yellow',
   low: 'text-muted-foreground',
 };
+void _CONFIDENCE_COLORS;
 
 // ── Enrichment Summary Panel (clean formatted display) ──
 

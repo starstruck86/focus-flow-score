@@ -39,6 +39,7 @@ interface LibraryStats {
 
 const STALE_DAYS = 30;
 const _SHALLOW_THRESHOLD = 5000;
+void _SHALLOW_THRESHOLD;
 
 export function ResourceIntelligenceDashboard() {
   const { user } = useAuth();

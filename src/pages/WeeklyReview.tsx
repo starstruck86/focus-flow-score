@@ -7,7 +7,6 @@ import { Layout } from '@/components/Layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { TrendingUp, TrendingDown, Minus, Target, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { SPIDER_DIMENSIONS } from '@/hooks/useKiProficiency';

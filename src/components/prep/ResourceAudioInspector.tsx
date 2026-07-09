@@ -3,7 +3,6 @@
  * for a selected resource. For debugging real resources in the library.
  */
 import { memo } from 'react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { X, RefreshCw, HelpCircle, FileAudio } from 'lucide-react';

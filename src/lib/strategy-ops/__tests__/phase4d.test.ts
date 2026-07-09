@@ -5,7 +5,6 @@ import { describe, it, expect } from 'vitest';
 
 // Import internal functions for testing
 import { classifyEra, classifyReason, REASON_LABELS, ERA_LABELS } from '../failureAnalysis';
-import { parseArtifactGate } from '../queries';
 
 describe('classifyEra', () => {
   it('classifies pre-Phase-3 runs', () => {

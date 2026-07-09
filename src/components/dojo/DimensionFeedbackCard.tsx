@@ -3,7 +3,6 @@
  * dimensions were strong vs weak, with specific improvement cues.
  */
 
-import { Badge } from '@/components/ui/badge';
 import { TrendingUp, TrendingDown, Target } from 'lucide-react';
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 import { analyzeDimensionScores, getDimensionLabel } from '@/lib/learning/skillScenarioSelector';

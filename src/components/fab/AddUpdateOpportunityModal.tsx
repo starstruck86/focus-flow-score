@@ -37,7 +37,6 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
 import { Target, Building2, Check, ChevronsUpDown, Plus, Pencil, RefreshCw, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { 

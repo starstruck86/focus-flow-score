@@ -9,7 +9,6 @@ import {
 import { DollarSign, TrendingUp, TrendingDown, Zap, Target, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/commissionCalculations';
-import { Button } from '@/components/ui/button';
 
 interface CommissionPacingDetailModalProps {
   open: boolean;

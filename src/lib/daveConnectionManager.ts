@@ -12,6 +12,7 @@
 import { createLogger } from '@/lib/logger';
 
 const _logger = createLogger('DaveConnection');
+void _logger;
 
 // ── Connection States ──────────────────────────────────────────────
 export type DaveConnectionState =

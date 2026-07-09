@@ -125,6 +125,7 @@ export async function autoOperationalizeResource(
   let knowledgeExtracted = 0;
   let knowledgeActivated = 0;
   let needsReview = false;
+  void needsReview;
   let reason: string | undefined;
   let edgeFunctionInvoked = false;
   let edgeFunctionName: string | null = null;
@@ -168,6 +169,7 @@ export async function autoOperationalizeResource(
   }
 
   const _effectiveLength = Math.max(r.content?.length ?? 0, r.content_length ?? 0);
+  void _effectiveLength;
   stagesCompleted.push('content_ready');
 
   // ── Clear stale blockers if content-backed ──
@@ -666,7 +668,8 @@ export function derivePipelineStage(resource: {
 }, ki: { total: number; active: number; hasContexts: boolean }): PipelineStage {
   const isCB = contractIsContentBacked(resource);
 
-  const _isCB2 = isCB; // alias used below
+  const _isCB2 = isCB;
+  void _isCB2; // alias used below
   if (!isCB) return 'uploaded';
 
   const tags = resource.tags ?? [];

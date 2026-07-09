@@ -17,6 +17,7 @@ import type { VoiceSurface } from '@/lib/daveVoiceRuntime';
 import { createLogger } from '@/lib/logger';
 
 const _logger = createLogger('DaveTrainingRouter');
+void _logger;
 
 // ── Types ──────────────────────────────────────────────────────────
 

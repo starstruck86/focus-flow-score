@@ -124,26 +124,6 @@ export async function clearStalledJobStatus(resourceId: string): Promise<boolean
   return true;
 }
 
-/**
- * Clear failed job status for resources that actually have KIs
- * (their extract partially succeeded but left a 'failed' job marker).
- */
-async function _clearFailedJobStatus(resourceId: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('resources' as any)
-    .update({
-      active_job_status: 'succeeded',
-      active_job_finished_at: new Date().toISOString(),
-      active_job_error: null,
-    } as any)
-    .eq('id', resourceId);
-
-  if (error) {
-    log.error('Failed to clear failed job status', { resourceId, error: error.message });
-    return false;
-  }
-  return true;
-}
 
 /**
  * Retry stalled resources by clearing their job status then re-enriching.
@@ -409,6 +389,7 @@ async function normalizeStaleStatuses(
     const contentInfo = contentMap.get(id);
     const effectiveContentLen = Math.max(contentInfo?.content_length ?? 0, contentInfo?.actual_content_length ?? 0);
     const _hasUsableContent = effectiveContentLen >= 200 || contentInfo?.manual_content_present === true;
+    void _hasUsableContent;
     const isIdleJob = state.active_job_status === 'idle';
     
   // Detect stale 'running' jobs (started > 10 min ago with no update)

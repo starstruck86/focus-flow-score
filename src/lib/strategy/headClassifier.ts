@@ -6,7 +6,6 @@
  * - Respects user_id (was broken — _userId was unused)
  * - Injects up to 6 KIs + relevant playbook context
  */
-import { supabase } from '@/integrations/supabase/client';
 
 export type IntelHead = 'product' | 'competitive' | 'sales' | 'market';
 
@@ -19,6 +18,7 @@ const _HEAD_TO_DIMENSIONS: Record<IntelHead, string[]> = {
                  'internal_prospecting'],
   market:      ['expansion_strategy', 'competitive'],
 };
+void _HEAD_TO_DIMENSIONS;
 
 const HEAD_LABELS: Record<IntelHead, string> = {
   product: 'Branch Product',

@@ -729,6 +729,7 @@ export async function queryPipeline(ctx: ToolContext, params: { question?: strin
   if (!userId) return 'Not authenticated';
 
   const _filter = params.filter || (params.question ? parseFilterFromQuestion(params.question) : { mode: 'summary' as const });
+  void _filter;
 
   const { data: opps } = await supabase
     .from('opportunities')

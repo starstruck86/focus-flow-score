@@ -14,6 +14,7 @@ import { speakQueue, runTurn, createVoiceSession, logTranscript } from '@/lib/da
 import { createLogger } from '@/lib/logger';
 
 const _logger = createLogger('SkillBuilderVoiceAdapter');
+void _logger;
 
 // ── Block Types ────────────────────────────────────────────────────
 

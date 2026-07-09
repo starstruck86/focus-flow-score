@@ -16,7 +16,6 @@ import { cn } from '@/lib/utils';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import { deriveResourceInsight } from '@/lib/resourceSignal';
-import { deriveProcessingState } from '@/lib/processingState';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
 import { useResourceJobProgress, getJobLabel } from '@/store/useResourceJobProgress';
 import { deriveProcessingRoute, getRouteLabel } from '@/lib/processingRoute';

@@ -110,6 +110,7 @@ export function getSystemState(healthInputs?: HealthInputs): SystemState {
 
   let confidence: SystemConfidence = { score: 75, label: 'moderate', components: [], timestamp: new Date().toISOString() };
   let snapshot: HealthSnapshot | null = null;
+  void snapshot;
 
   if (healthInputs) {
     const health = evaluateFullSystemHealth(healthInputs);
