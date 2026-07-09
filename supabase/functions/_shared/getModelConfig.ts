@@ -6,12 +6,12 @@ const _serviceClient = () => createClient(
 );
 
 export const FALLBACK_MODELS = {
-  CLAUDE_PRIMARY:  'claude-sonnet-4-6',
-  CLAUDE_FAST:     'claude-haiku-4-5-20251001',
-  GPT_PRIMARY:     'gpt-4o',
-  GEMINI_FLASH:    'google/gemini-2.5-flash',
-  GEMINI_PRO:      'google/gemini-2.5-pro',
-  SONAR_PRO:       'sonar-pro',
+  CLAUDE_PRIMARY: 'claude-sonnet-4-6',
+  CLAUDE_FAST:    'claude-haiku-4-5-20251001',
+  GPT_PRIMARY:    'gpt-4o',
+  GEMINI_FLASH:   'google/gemini-2.5-flash',
+  GEMINI_PRO:     'google/gemini-2.5-pro',
+  SONAR_PRO:      'sonar-pro',
 } as const;
 
 export async function getModelConfig(functionName: string): Promise<{
