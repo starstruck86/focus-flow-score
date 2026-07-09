@@ -206,7 +206,7 @@ Required criteria must be met=true to pass. If a required criterion is missed, t
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${lovableKey}` },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model,
           messages: [
             { role: "system", content: gradeSys },
             { role: "user", content: gradeUser },
