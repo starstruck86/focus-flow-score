@@ -570,6 +570,7 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let userId: string | null = null;
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -595,7 +596,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const userId = claimUser.id as string;
+    userId = claimUser.id as string;
 
     const icsUrl = Deno.env.get('OUTLOOK_ICS_URL');
     if (!icsUrl) {
@@ -716,14 +717,12 @@ Deno.serve(async (req) => {
     );
   } catch (error) {
     console.error('Sync error:', error);
-    // Best-effort failure log (userId may not be defined if auth failed earlier).
+    // Best-effort failure log (userId may be null if auth failed earlier).
     try {
-      const svc = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-      // deno-lint-ignore no-explicit-any
-      const uid = (typeof userId !== 'undefined' ? userId : null) as any;
-      if (uid) {
+      if (userId) {
+        const svc = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
         await svc.from('integration_runs').insert({
-          user_id: uid,
+          user_id: userId,
           source: 'calendar',
           status: 'failure',
           meta: { reason: 'exception', message: (error as Error).message },

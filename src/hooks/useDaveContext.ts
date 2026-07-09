@@ -86,10 +86,8 @@ export function useDaveContext() {
       throw new DaveSessionError('Not authenticated. Please sign in first.', 'auth_failed');
     }
 
-    const tzOffsetHours = -5; // Boston ET nominal; edge function handles DST via America/New_York
-
+    // Edge function derives tz from getBostonTime() (DST-aware); client no longer sends tzOffsetHours.
     const requestBody = {
-      tzOffsetHours,
       currentPage: locationRef.current,
       conversationHistory: conversationHistory || '',
     };

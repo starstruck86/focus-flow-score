@@ -63,7 +63,13 @@ serve(async (req) => {
     const isClosedWon = (o: any) =>
       o.status === "closed-won" || o.stage?.toLowerCase() === "closed won";
 
-    const totalQuota = (quota ? parseFloat(quota.new_arr_quota) + parseFloat(quota.renewal_arr_quota) : 1322542);
+    const fyEndRaw = quota?.fiscal_year_end ? new Date(quota.fiscal_year_end) : null;
+    if (!quota || !fyEndRaw || isNaN(fyEndRaw.getTime())) {
+      return new Response(JSON.stringify({ error: "Quota targets not configured" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const totalQuota = parseFloat(quota.new_arr_quota) + parseFloat(quota.renewal_arr_quota);
     const closedArr = allOpps.filter(isClosedWon)
       .filter((o: any) => o.is_new_logo === true)
       .reduce((sum: number, o: any) => sum + (parseFloat(o.arr) || 0), 0);
@@ -73,7 +79,7 @@ serve(async (req) => {
     const totalClosed = closedArr + renewalClosedArr;
     const quotaGap = Math.max(0, totalQuota - totalClosed);
 
-    const fyEnd = quota ? new Date(quota.fiscal_year_end) : new Date("2026-06-30");
+    const fyEnd = fyEndRaw;
     const daysRemaining = Math.max(0, Math.floor((fyEnd.getTime() - Date.now()) / 86400000));
 
     const funnelContext = benchmarks

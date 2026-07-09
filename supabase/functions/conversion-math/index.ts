@@ -45,9 +45,15 @@ serve(async (req) => {
     };
 
     const quota = quotaRes.data;
-    const newArrQuota = quota ? parseFloat(quota.new_arr_quota) : 500000;
-    const renewalArrQuota = quota ? parseFloat(quota.renewal_arr_quota) : 822542;
-    const fyEnd = quota ? new Date(quota.fiscal_year_end) : new Date("2026-06-30");
+    const fyEndRaw = quota?.fiscal_year_end ? new Date(quota.fiscal_year_end) : null;
+    if (!quota || !fyEndRaw || isNaN(fyEndRaw.getTime())) {
+      return new Response(JSON.stringify({ error: "Quota targets not configured" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const newArrQuota = parseFloat(quota.new_arr_quota);
+    const renewalArrQuota = parseFloat(quota.renewal_arr_quota);
+    const fyEnd = fyEndRaw;
 
     // Calculate closed ARR — FIX: explicit is_new_logo checks
     const opps = oppsRes.data || [];
