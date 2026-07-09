@@ -62,7 +62,7 @@ const DrillReview = lazy(() => import("./pages/DrillReview"));
 
 const DojoSession = lazy(() => import("./pages/DojoSession"));
 const DojoQA = lazy(() => import("./pages/DojoQA"));
-const DojoV6QA = lazy(() => import("./pages/DojoV6QA"));
+// DojoV6QA route removed (W5); component file preserved.
 const Sharpen = lazy(() => import("./pages/Sharpen"));
 const Grind = lazy(() => import("./pages/Grind"));
 const WeeklyReview = lazy(() => import("./pages/WeeklyReview"));
