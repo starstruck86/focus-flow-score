@@ -683,14 +683,25 @@ Deno.serve(async (req) => {
       if (error) throw error;
     }
 
-    const keepIds = syncedEvents.map(e => e.external_id);
-    if (keepIds.length > 0) {
-      const { error: pruneErr } = await supabase
-        .from('calendar_events')
-        .delete()
-        .eq('user_id', userId)
-        .not('external_id', 'in', `(${keepIds.map(id => `"${id.replace(/"/g, '\\"')}"`).join(',')})`);
-      if (pruneErr) console.warn('[sync-calendar] prune failed (non-fatal):', pruneErr.message);
+    const keepIds = new Set(syncedEvents.map(e => e.external_id));
+    const { data: existingRows } = await supabase
+      .from('calendar_events')
+      .select('external_id')
+      .eq('user_id', userId);
+    const staleIds = (existingRows || [])
+      .map(r => r.external_id as string)
+      .filter(id => id && !keepIds.has(id));
+    if (staleIds.length > 0) {
+      // Delete in chunks to avoid oversized IN clauses.
+      for (let i = 0; i < staleIds.length; i += 200) {
+        const chunk = staleIds.slice(i, i + 200);
+        const { error: pruneErr } = await supabase
+          .from('calendar_events')
+          .delete()
+          .eq('user_id', userId)
+          .in('external_id', chunk);
+        if (pruneErr) console.warn('[sync-calendar] prune chunk failed (non-fatal):', pruneErr.message);
+      }
     }
 
     await logRun('success', { synced: syncedEvents.length, window_start: syncStart.toISOString() });
