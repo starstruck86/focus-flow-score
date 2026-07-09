@@ -297,7 +297,7 @@ Style: Direct, peer-to-peer, no buzzwords. Max 150 words.`;
                     </Badge>
                     <GapScorePill gap={gap} />
                     {account.motion && (
-                      <Badge variant="outline" className="text-[10px]">{account.motion}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{MOTION_LABELS[account.motion] || account.motion}</Badge>
                     )}
                   </div>
                   <div className="flex items-center gap-2 mt-2">
