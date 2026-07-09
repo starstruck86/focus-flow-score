@@ -363,14 +363,8 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
           supabase.from('tasks').select('*').order('created_at', { ascending: false }),
         ]);
 
-        // Self-healing: purge any non-Branch accounts that somehow got inserted
         const allDbAccountRows = accountsRes.data || [];
-        const nonBranchRows = allDbAccountRows.filter((a: any) => a.motion && a.motion !== 'both');
-        if (nonBranchRows.length > 0) {
-          console.warn(`[DataSync] Found ${nonBranchRows.length} non-Branch accounts in DB — purging`);
-          await supabase.from('accounts').delete().in('id', nonBranchRows.map((a: any) => a.id));
-        }
-        const dbAccounts = allDbAccountRows.filter((a: any) => !a.motion || a.motion === 'both').map(dbAccountToStore);
+        const dbAccounts = allDbAccountRows.map(dbAccountToStore);
         const dbOpps = (oppsRes.data || []).map(dbOpportunityToStore);
         const dbRenewals = (renewalsRes.data || []).map(dbRenewalToStore);
         const dbContacts = (contactsRes.data || []).map(dbContactToStore);
@@ -563,9 +557,7 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
         });
       };
 
-      // Only sync Branch accounts (motion='both') — never write legacy non-Branch accounts to DB
-      const branchOnly = (accts: Account[]) => accts.filter(a => !a.motion || a.motion === 'both');
-      diffAndSync('accounts', branchOnly(prev.accounts), branchOnly(state.accounts), storeAccountToDb, 'accounts');
+      diffAndSync('accounts', prev.accounts, state.accounts, storeAccountToDb, 'accounts');
       diffAndSync('opportunities', prev.opportunities, state.opportunities, storeOpportunityToDb, 'opportunities');
       diffAndSync('renewals', prev.renewals, state.renewals, storeRenewalToDb, 'renewals');
       diffAndSync('contacts', prev.contacts, state.contacts, storeContactToDb, 'contacts');
