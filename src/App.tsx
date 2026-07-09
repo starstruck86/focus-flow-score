@@ -88,7 +88,7 @@ const KILibrary = lazy(() => import("./pages/KILibrary"));
 const Simulate = lazy(() => import("./pages/Simulate"));
 const Competitive = lazy(() => import("./pages/Competitive"));
 const Playbooks = lazy(() => import("./pages/Playbooks"));
-const SignalInbox = lazy(() => import("./pages/SignalInbox"));
+// SignalInbox route merged into Digest tab (W5); /signals → /outreach.
 const OrgTree = lazy(() => import("./pages/OrgTree"));
 const TrainHome = lazy(() => import("./pages/train/TrainHome"));
 const TrainSpoke = lazy(() => import("./pages/train/TrainSpoke"));
