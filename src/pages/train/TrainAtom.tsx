@@ -55,7 +55,15 @@ export default function TrainAtom() {
   const [drillIdx, setDrillIdx] = useState(0);
   const [response, setResponse] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ score: number; feedback: string; progress: number; reps: number } | null>(null);
+  const [result, setResult] = useState<{
+    score: number;
+    feedback: string;
+    progress: number;
+    reps: number;
+    goldCriteria: RubricEvaluation[];
+  } | null>(null);
+  // Per-drill localStorage stats — recomputed when drill changes or after a rep.
+  const [drillStats, setDrillStats] = useState<{ attempts: number; passes: number }>({ attempts: 0, passes: 0 });
   const [sessionBest, setSessionBest] = useState(0);
   const [sessionLatest, setSessionLatest] = useState(0);
   const [startedAt] = useState(() => new Date().toISOString());
