@@ -1332,7 +1332,7 @@ export default function WeeklyOutreach() {
               collapsed={isOutreachSectionCollapsed('account-staleness')}
               onToggle={() => outreachSectionLayout.collapseWidget('account-staleness')}
             >
-              <StalenessAlert accounts={newLogoAccounts} childIds={childAccountIds} />
+              <StalenessAlert accounts={territoryAccounts} childIds={childAccountIds} />
             </CollapsibleWidgetSection>
 
             
@@ -1741,16 +1741,16 @@ export default function WeeklyOutreach() {
             />
             
             {/* Filtered count indicator */}
-            {filteredAccounts.length !== newLogoAccounts.length && (
+            {filteredAccounts.length !== territoryAccounts.length && (
               <div className="text-xs text-muted-foreground">
-                Showing <span className="font-semibold text-foreground">{filteredAccounts.length}</span> of {newLogoAccounts.length} accounts
+                Showing <span className="font-semibold text-foreground">{filteredAccounts.length}</span> of {territoryAccounts.length} accounts
               </div>
             )}
 
             {/* Bulk Enrichment Panel retired from Territory (W3). Hook preserved for programmatic use. */}
 
 
-            {newLogoAccounts.length === 0 ? (
+            {territoryAccounts.length === 0 ? (
               <EmptyState
                 icon={Users}
                 title="No accounts yet"
