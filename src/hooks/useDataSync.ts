@@ -440,7 +440,9 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
           tasks: mergedTasks,
         });
 
-        // Clear stale local-only items from persistence so they can't re-infect DB on next load
+        // Quarantine (don't delete) local-only items so offline-created records survive
+        // and can be recovered manually. Anything present in DB stays in the main arrays;
+        // anything local-only moves under __quarantinedLocalOnly.
         try {
           const persistKey = 'quota-compass-storage';
           const raw = localStorage.getItem(persistKey);
@@ -452,17 +454,32 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
               const dbRenIdSet = new Set(dbRenewals.map(r => r.id));
               const dbContactIdSet = new Set(dbContacts.map(c => c.id));
               const dbTaskIdSet = new Set(dbTasks.map(t => t.id));
-              if (Array.isArray(parsed.state.accounts)) parsed.state.accounts = parsed.state.accounts.filter((a: any) => dbAcctIds.has(a.id));
-              if (Array.isArray(parsed.state.opportunities)) parsed.state.opportunities = parsed.state.opportunities.filter((o: any) => dbOppIdSet.has(o.id));
-              if (Array.isArray(parsed.state.renewals)) parsed.state.renewals = parsed.state.renewals.filter((r: any) => dbRenIdSet.has(r.id));
-              if (Array.isArray(parsed.state.contacts)) parsed.state.contacts = parsed.state.contacts.filter((c: any) => dbContactIdSet.has(c.id));
-              if (Array.isArray(parsed.state.tasks)) parsed.state.tasks = parsed.state.tasks.filter((t: any) => dbTaskIdSet.has(t.id));
+
+              const quarantine: Record<string, unknown[]> = (parsed.state.__quarantinedLocalOnly as Record<string, unknown[]>) || {};
+              const partition = <T extends { id: string }>(arr: T[] | undefined, keep: Set<string>, key: string) => {
+                if (!Array.isArray(arr)) return arr;
+                const kept: T[] = [];
+                const orphans: T[] = [];
+                for (const row of arr) (keep.has(row.id) ? kept : orphans).push(row);
+                if (orphans.length > 0) {
+                  const prev = (quarantine[key] as T[]) || [];
+                  const seen = new Set(prev.map(r => r.id));
+                  quarantine[key] = [...prev, ...orphans.filter(o => !seen.has(o.id))];
+                }
+                return kept;
+              };
+              parsed.state.accounts = partition(parsed.state.accounts, dbAcctIds, 'accounts');
+              parsed.state.opportunities = partition(parsed.state.opportunities, dbOppIdSet, 'opportunities');
+              parsed.state.renewals = partition(parsed.state.renewals, dbRenIdSet, 'renewals');
+              parsed.state.contacts = partition(parsed.state.contacts, dbContactIdSet, 'contacts');
+              parsed.state.tasks = partition(parsed.state.tasks, dbTaskIdSet, 'tasks');
+              parsed.state.__quarantinedLocalOnly = quarantine;
               localStorage.setItem(persistKey, JSON.stringify(parsed));
-              console.log('[DataSync] Cleaned stale items from localStorage persistence');
+              console.log('[DataSync] Quarantined local-only items under __quarantinedLocalOnly');
             }
           }
         } catch (e) {
-          console.warn('[DataSync] Could not clean localStorage:', e);
+          console.warn('[DataSync] Could not quarantine local-only items:', e);
         }
 
 
