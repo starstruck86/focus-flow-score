@@ -363,14 +363,8 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
           supabase.from('tasks').select('*').order('created_at', { ascending: false }),
         ]);
 
-        // Self-healing: purge any non-Branch accounts that somehow got inserted
         const allDbAccountRows = accountsRes.data || [];
-        const nonBranchRows = allDbAccountRows.filter((a: any) => a.motion && a.motion !== 'both');
-        if (nonBranchRows.length > 0) {
-          console.warn(`[DataSync] Found ${nonBranchRows.length} non-Branch accounts in DB — purging`);
-          await supabase.from('accounts').delete().in('id', nonBranchRows.map((a: any) => a.id));
-        }
-        const dbAccounts = allDbAccountRows.filter((a: any) => !a.motion || a.motion === 'both').map(dbAccountToStore);
+        const dbAccounts = allDbAccountRows.map(dbAccountToStore);
         const dbOpps = (oppsRes.data || []).map(dbOpportunityToStore);
         const dbRenewals = (renewalsRes.data || []).map(dbRenewalToStore);
         const dbContacts = (contactsRes.data || []).map(dbContactToStore);
