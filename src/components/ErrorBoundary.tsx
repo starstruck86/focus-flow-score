@@ -27,13 +27,14 @@ export class ErrorBoundary extends Component<Props, State> {
     const appError = normalizeError({
       error,
       source: 'frontend',
-      componentName: 'ErrorBoundary',
+      componentName: this.props.label ? `ErrorBoundary:${this.props.label}` : 'ErrorBoundary',
       route: window.location.pathname,
       metadata: { componentStack: errorInfo.componentStack?.slice(0, 1000) },
     });
     recordError(appError);
     console.error('App crash:', error, errorInfo);
   }
+
 
   handleExportData = () => {
     try {
