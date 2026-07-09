@@ -120,7 +120,7 @@ export async function getConceptWithItems(
       .order('order_in_concept', { ascending: true }),
     (supabase as any)
       .from('ki_curriculum')
-      .select('ki_id, drill_rubric, drill_teach_script')
+      .select('ki_id, drill_rubric, drill_teach_script, drill_model_answer')
       .eq('concept_id', conceptId),
   ]);
   if (cErr) throw cErr;
