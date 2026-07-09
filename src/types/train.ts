@@ -38,6 +38,8 @@ export interface ConceptRow {
   drill_prompt: string | null;
   /** AE-facing plain-English version of the exemplar's model line. */
   model_line_plain: string | null;
+  /** Optional long-form lesson markdown (rendered as top LessonPanel). */
+  lesson_md?: string | null;
   notes: string | null;
 
 }
