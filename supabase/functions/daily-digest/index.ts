@@ -342,6 +342,17 @@ IMPORTANT: Headlines should be factual and specific — include names, numbers, 
       }
 
       if (digestItems.length > 0) {
+        if (shouldReplaceExisting) {
+          const { error: delErr } = await supabase
+            .from("daily_digest_items")
+            .delete()
+            .eq("user_id", userId)
+            .eq("digest_date", todayStr);
+          if (delErr) {
+            console.error(`Failed to delete stale digest for ${userId} — preserving old rows:`, delErr);
+            continue;
+          }
+        }
         const { error: insertError } = await supabase
           .from("daily_digest_items")
           .insert(digestItems);
