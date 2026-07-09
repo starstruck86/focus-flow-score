@@ -42,8 +42,6 @@ export default function TrainAtom() {
     reps: number;
     goldCriteria: RubricEvaluation[];
   } | null>(null);
-  // Per-drill localStorage stats — recomputed when drill changes or after a rep.
-  const [drillStats, setDrillStats] = useState<{ attempts: number; passes: number }>({ attempts: 0, passes: 0 });
   const [sessionBest, setSessionBest] = useState(0);
   const [sessionLatest, setSessionLatest] = useState(0);
   const [startedAt] = useState(() => new Date().toISOString());
