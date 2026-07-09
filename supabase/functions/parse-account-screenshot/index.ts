@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { requireUser } from "../_shared/requireUser.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,6 +15,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const { primary: model } = await getModelConfig('parse-account-screenshot');
     const auth = await requireUser(req, corsHeaders);
     if (!auth.ok) return auth.response;
 
@@ -48,7 +50,7 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
+        model,
         messages: [
           {
             role: 'system',

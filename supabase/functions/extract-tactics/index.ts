@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { logServiceRoleUsage, logCrossUserAccess, logValidationWarnings, logAuthMethod, logMissingUserScope } from '../_shared/securityLog.ts';
 import { logEnforcementEvent } from '../_shared/enforcementLog.ts';
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -249,7 +250,7 @@ const TRANSCRIPT_CHUNK_OVERLAP = 1500;
 const DOC_SINGLE_PASS_THRESHOLD = 32000;
 const TRANSCRIPT_SINGLE_PASS_THRESHOLD = 30000;
 const MAX_TOKENS = 16384;
-const MODEL_NAME = 'google/gemini-2.5-flash';
+let MODEL_NAME = 'google/gemini-2.5-flash';
 
 // ══════════════════════════════════════════════════════
 // CONTENT CATEGORY — explicit, passed through entire pipeline
@@ -1885,6 +1886,8 @@ Deno.serve(async (req) => {
       }
       userId = user.id;
     }
+
+    MODEL_NAME = (await getModelConfig('extract-tactics')).primary;
 
     const body = await req.json();
     logValidationWarnings('extract-tactics', body, ['resourceId']);

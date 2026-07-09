@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,6 +13,7 @@ serve(async (req) => {
   }
 
   try {
+    const { primary: model } = await getModelConfig('generate-execution-draft');
     const body = await req.json();
     const {
       // New command-center fields
@@ -112,7 +114,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+          model,
           messages: [
             { role: "system", content: systemParts.join(" ") },
             { role: "user", content: parts.join("\n") },

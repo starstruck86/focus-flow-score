@@ -5,6 +5,7 @@
  * control/adaptation/progression assessment, and canonical focus patterns.
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -78,6 +79,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    const { primary: model } = await getModelConfig('dojo-roleplay-score');
     const { scenario, conversation, skillFocus } = await req.json();
     if (!scenario || !conversation || !skillFocus) {
       return new Response(JSON.stringify({ error: "Missing scenario, conversation, or skillFocus" }), {
@@ -172,7 +174,7 @@ Respond with ONLY valid JSON:
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: "Score this roleplay session." },

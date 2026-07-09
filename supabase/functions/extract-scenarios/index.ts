@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,6 +62,7 @@ serve(async (req) => {
   }
 
   try {
+    const { primary: model } = await getModelConfig('extract-scenarios');
     const { transcript, title, callType } = await req.json();
 
     if (!transcript || transcript.length < 200) {
@@ -99,7 +101,7 @@ ${transcript.slice(0, 30000)}
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userPrompt },

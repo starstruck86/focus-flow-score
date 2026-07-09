@@ -5,6 +5,7 @@
  * both diagnosis quality and rewrite quality separately.
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,6 +71,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    const { primary: model } = await getModelConfig('dojo-review-score');
     const body = await req.json();
     const { scenario, skillFocus, action } = body;
     if (!scenario || !skillFocus || !action) {
@@ -89,7 +91,7 @@ serve(async (req) => {
           Authorization: `Bearer ${LOVABLE_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model,
           messages: [
             {
               role: "system",
@@ -152,7 +154,7 @@ Respond with ONLY valid JSON:
           Authorization: `Bearer ${LOVABLE_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model,
           messages: [
             {
               role: "system",

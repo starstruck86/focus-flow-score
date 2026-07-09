@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,6 +10,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    const { primary: model } = await getModelConfig('grade-objection-drill');
     const { objection, category, context, difficulty, response } = await req.json();
     if (!objection || !response) {
       return new Response(JSON.stringify({ error: "Missing objection or response" }), {
@@ -65,7 +67,7 @@ Respond with ONLY valid JSON:
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `BUYER'S OBJECTION:\n"${objection}"\n\nREP'S RESPONSE:\n"${response}"` },
