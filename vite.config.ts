@@ -94,6 +94,14 @@ export default defineConfig(({ mode }) => ({
         ],
       },
     }),
+    process.env.ANALYZE === "true" &&
+      visualizer({
+        filename: "dist/stats.html",
+        template: "treemap",
+        gzipSize: true,
+        brotliSize: true,
+        open: false,
+      }),
   ].filter(Boolean),
   resolve: {
     alias: {
@@ -101,4 +109,17 @@ export default defineConfig(({ mode }) => ({
     },
     dedupe: ["react", "react-dom", "react/jsx-runtime"],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          editor: ["@tiptap/react", "@tiptap/starter-kit"],
+          pdf: ["pdfjs-dist", "jspdf", "jspdf-autotable"],
+          office: ["docx", "pptxgenjs", "jszip"],
+          charts: ["recharts"],
+        },
+      },
+    },
+  },
 }));
+
