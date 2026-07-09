@@ -702,9 +702,7 @@ Deno.serve(async (req) => {
     // Write to DB
     if (accountId) {
       try {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-        const supabase = createClient(supabaseUrl, supabaseKey);
+        const supabase = auth.supabaseUser;
 
         const evidence = {
           direct_ecommerce: signals.direct_ecommerce_details || '',
