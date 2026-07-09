@@ -343,6 +343,9 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const auth = await requireUser(req, corsHeaders);
+    if (!auth.ok) return auth.response;
+
     const { url } = await req.json();
 
     if (!url) {
