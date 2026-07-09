@@ -62,7 +62,7 @@ export function WeeklyRealignmentModal({ open, onComplete, onOpenChange }: Props
   const [northStarGoals] = useState<string[]>([
     "President's Club - 125% of quota - top rep",
     'Most Dials Every Week',
-    'Most New Logo Opps + Pipeline every week',
+    'Most expansion pipeline generated every week',
   ]);
 
   // This week planning
