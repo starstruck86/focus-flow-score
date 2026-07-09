@@ -4070,6 +4070,30 @@ export type Database = {
           },
         ]
       }
+      function_configs: {
+        Row: {
+          fallback_model: string | null
+          function_name: string
+          notes: string | null
+          primary_model: string
+          updated_at: string | null
+        }
+        Insert: {
+          fallback_model?: string | null
+          function_name: string
+          notes?: string | null
+          primary_model: string
+          updated_at?: string | null
+        }
+        Update: {
+          fallback_model?: string | null
+          function_name?: string
+          notes?: string | null
+          primary_model?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       holidays: {
         Row: {
           created_at: string
