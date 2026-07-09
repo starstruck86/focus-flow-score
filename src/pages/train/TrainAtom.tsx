@@ -348,9 +348,11 @@ export default function TrainAtom() {
                     <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Back to teach
                   </Button>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" onClick={handleRefine}>
-                      <RotateCcw className="h-3.5 w-3.5 mr-1" /> Refine
-                    </Button>
+                    {drillMode === 'practice' && (
+                      <Button variant="outline" onClick={handleRefine}>
+                        <RotateCcw className="h-3.5 w-3.5 mr-1" /> Try again
+                      </Button>
+                    )}
                     <Button
                       variant={passed ? 'default' : 'ghost'}
                       size={passed ? 'default' : 'sm'}
