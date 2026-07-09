@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
-import { Calendar, Building2, Target, AlertCircle, Repeat, ChevronDown, Clock, Bell } from 'lucide-react';
+import { Calendar, Building2, Target, AlertCircle, Repeat, Clock, Bell } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -20,7 +20,7 @@ interface TaskCardProps {
 export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
   const { updateTask, deleteTask, accounts, opportunities, recurringTemplates } = useStore();
   const [editOpen, setEditOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, _setExpanded] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(task.title);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -30,7 +30,7 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
 
   const workstream = getWorkstream(task);
   const accountName = getAccountName(task, accounts, opportunities);
-  const oppName = getOpportunityName(task, opportunities);
+  const _oppName = getOpportunityName(task, opportunities);
   const inferredTag = useMemo(() => inferDriverTag(task), [task.title, task.notes]);
   const isRecurring = recurringTemplates.some(t => t.activeInstanceId === task.id);
   const effectiveStatus: TaskStatus = (task.status as string) === 'open' ? 'next' : task.status;

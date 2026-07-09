@@ -24,24 +24,7 @@ import type {
   DeliveryMode,
   RestoreReason,
 } from './dojoAudioController';
-import {
-  createAudioController,
-  checkForTimeout,
-  onTtsCompleted,
-  onTtsFailed,
-  onTtsStarted,
-  onTtsRequested,
-  onUserInterrupted,
-  onUserRequestedReplay,
-  onUserRequestedSkip,
-  resumeAfterInterruption,
-  switchToTextFallback,
-  switchToVoice,
-  snapshotController,
-  recoverSession,
-  onTabHidden,
-  onTabVisible,
-} from './dojoAudioController';
+import { createAudioController, checkForTimeout, onTtsFailed, onUserInterrupted, onUserRequestedReplay, onUserRequestedSkip, resumeAfterInterruption, switchToTextFallback, switchToVoice, snapshotController, recoverSession, onTabHidden, onTabVisible } from './dojoAudioController';
 import type { TransportConfig, TransportHandle } from './elevenlabsTransport';
 import {
   createTransportHandle,
@@ -50,12 +33,7 @@ import {
   destroyTransport,
 } from './elevenlabsTransport';
 import { getNextMessage } from './conversationEngine';
-import {
-  saveSnapshot,
-  loadSnapshot,
-  clearSnapshot,
-  restoreFromSnapshot,
-} from './dojoSessionSnapshot';
+import { saveSnapshot, loadSnapshot, restoreFromSnapshot } from './dojoSessionSnapshot';
 import {
   claimSession,
   startOwnershipHeartbeat,
@@ -64,33 +42,7 @@ import {
 import {
   startVisibilityGuard,
 } from './dojoVisibilityGuard';
-import {
-  createMetrics,
-  logChunkRequested,
-  logChunkCompleted,
-  logChunkFailed,
-  logChunkTimedOut,
-  logChunkSkipped,
-  logRetryAttempt,
-  logDegradation,
-  logChunkLevelDegrade,
-  logSessionLevelDegrade,
-  logRecovery,
-  logCrashRecovery,
-  logAmbiguousResume,
-  logReplay,
-  logSkip,
-  logInterruption,
-  logDuplicateSuppressed,
-  logStaleSuppressed,
-  logOwnershipConflict,
-  logTabHidden,
-  logTabResume,
-  logRestoreReason,
-  logChunkFailedAudibility,
-  logSessionSummary,
-  type DojoAudioMetrics,
-} from './dojoAudioAnalytics';
+import { createMetrics, logChunkRequested, logChunkCompleted, logChunkTimedOut, logChunkSkipped, logRetryAttempt, logDegradation, logChunkLevelDegrade, logSessionLevelDegrade, logRecovery, logCrashRecovery, logAmbiguousResume, logReplay, logSkip, logInterruption, logDuplicateSuppressed, logStaleSuppressed, logOwnershipConflict, logTabHidden, logTabResume, logRestoreReason, logChunkFailedAudibility, logSessionSummary, type DojoAudioMetrics } from './dojoAudioAnalytics';
 import {
   createReliabilityMetrics,
   onForwardProgress,

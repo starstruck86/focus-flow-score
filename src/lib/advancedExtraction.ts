@@ -184,7 +184,7 @@ async function closeAttemptFromResourceState(resourceId: string, attemptId: stri
  */
 export async function recordAttemptCompletion(
   resourceId: string,
-  userId: string,
+  _userId: string,
   result: 'success' | 'failed' | 'partial',
   details: {
     failureCategory?: string;
@@ -356,7 +356,7 @@ function cleanTranscriptFormat(text: string): string {
 /**
  * Get platform-specific guidance for assisted resolution.
  */
-export function getAssistedResolutionGuidance(platform: string | null, failureCategory: string | null): {
+export function getAssistedResolutionGuidance(platform: string | null, _failureCategory: string | null): {
   steps: string[];
   tips: string[];
   preferredMethod: 'paste' | 'upload' | 'alt_url';

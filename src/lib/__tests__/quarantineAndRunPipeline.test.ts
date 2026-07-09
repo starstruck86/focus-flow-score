@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyQuarantine, getQuarantineSubClass, shouldAutoRelease, getSkipReason, SKIP_REASON_LABELS } from '@/lib/quarantineClassification';
+import { classifyQuarantine, getQuarantineSubClass, shouldAutoRelease, getSkipReason } from '@/lib/quarantineClassification';
 import type { VerifiedResource } from '@/lib/enrichmentVerification';
 
 function makeVerified(overrides: Partial<VerifiedResource>): VerifiedResource {

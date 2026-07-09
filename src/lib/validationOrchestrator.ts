@@ -9,9 +9,7 @@ import {
   verifyResource, buildVerificationSummary,
   type VerifiedResource, type VerificationSummary, type AudioJobInfo,
 } from '@/lib/enrichmentVerification';
-import {
-  buildRemediationQueues, type RemediationQueue,
-} from '@/lib/remediationEngine';
+import { buildRemediationQueues } from '@/lib/remediationEngine';
 import {
   runAutonomousRemediation,
   type RemediationCycleState, type RemediationItem,
@@ -270,7 +268,7 @@ export async function runEndToEndValidation(
 
     // ── Compute final summary ───────────────────────────
     const preIds = new Set(result.preResources.filter(v => v.fixabilityBucket !== 'truly_complete').map(v => v.id));
-    const postBrokenMap = new Map(post.filter(v => v.fixabilityBucket !== 'truly_complete').map(v => [v.id, v]));
+    const _postBrokenMap = new Map(post.filter(v => v.fixabilityBucket !== 'truly_complete').map(v => [v.id, v]));
     const postCompleteIds = new Set(post.filter(v => v.fixabilityBucket === 'truly_complete').map(v => v.id));
 
     // Auto-resolved: was broken before, now truly_complete

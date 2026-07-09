@@ -5,11 +5,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import {
-  computeDriftSignals,
-  DRIFT_THRESHOLDS,
-  type RunTelemetryInput,
-} from "../driftMonitor";
+import { computeDriftSignals, type RunTelemetryInput } from "../driftMonitor";
 
 function makeHealthyRun(): RunTelemetryInput {
   return {

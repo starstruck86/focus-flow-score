@@ -598,7 +598,7 @@ const DEAL_TYPE_OPTIONS = [
   { value: 'one-time', label: 'One-Time' },
 ];
 
-const STAGE_OPTIONS = [
+const _STAGE_OPTIONS = [
   { value: 'Closed Won', label: '6 - Closed Won' },
   { value: 'Closed Lost', label: '7 - Closed Lost' },
 ];
@@ -619,7 +619,7 @@ function FixDealDialog({
   const [oneTimeAmount, setOneTimeAmount] = useState('');
 
   // Reset form when deal changes
-  const dealId = deal?.id;
+  const _dealId = deal?.id;
   useState(() => {
     if (deal) {
       setCloseDate(deal.closeDate || '');

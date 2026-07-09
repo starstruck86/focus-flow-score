@@ -3,10 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
-import {
-  IcpAccountSourcing,
-  CompanyMonitorCard,
-} from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 import { 
   ExternalLink, 
@@ -19,13 +15,10 @@ import {
   ChevronDown,
   ChevronRight,
   AlertTriangle,
-  Filter,
   Trash2,
-  ExternalLink as LinkIcon,
+  ExternalLink as _LinkIcon,
   Users,
-  Sparkles,
-  Phone,
-} from 'lucide-react';
+  Phone } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { StreakChip } from '@/components/StreakChip';
 import { Button } from '@/components/ui/button';
@@ -37,15 +30,13 @@ import {
   TableCell,
   TableHead,
   TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+  TableRow } from '@/components/ui/table';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
+  DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import {
   Dialog,
   DialogContent,
@@ -53,21 +44,18 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  DialogTrigger } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  SelectValue } from '@/components/ui/select';
 import {
   Tabs,
   TabsContent,
   TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs';
+  TabsTrigger } from '@/components/ui/tabs';
 import { TerritoryTree } from '@/components/territory/TerritoryTree';
 import { TerritoryCoverage } from '@/components/territory/TerritoryCoverage';
 import { PriorityInbox } from '@/components/territory/PriorityInbox';
@@ -115,8 +103,7 @@ function WeeklyReviewPrompt() {
 import {
   Collapsible,
   CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+  CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useStore } from '@/store/useStore';
@@ -124,16 +111,15 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { OpportunitiesTable } from '@/components/OpportunitiesTable';
 import { OpportunityDrawer } from '@/components/OpportunityDrawer';
-import { AccountContactsField, type AccountContact } from '@/components/AccountContactsField';
+import { AccountContactsField } from '@/components/AccountContactsField';
 import { StakeholderMap } from '@/components/StakeholderMap';
 // BatchDiscoveryModal retired from Territory toolbar (W3). Edge function preserved.
 import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
-import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
 import { MetricFieldCell } from '@/components/table/MetricFieldCell';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { ImportModal, ClaudeImportModal } from '@/components/import';
-import { EditableTextCell, EditableTextareaCell, DisplaySelectCell, WebsiteLinkCell, AccountNameCell } from '@/components/table';
-import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
+import { EditableTextareaCell, DisplaySelectCell, WebsiteLinkCell, AccountNameCell } from '@/components/table';
+import { SortableHeader } from '@/components/table/SortableHeader';
 import { useBulkSelection } from '@/hooks/useBulkSelection';
 import { BulkActionsBar } from '@/components/BulkActionsBar';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -143,22 +129,14 @@ import { FilterChips, type ActiveFilter } from '@/components/table/FilterChips';
 import { useUndoDelete } from '@/hooks/useUndoDelete';
 import { emitSaveStatus } from '@/components/SaveIndicator';
 import { TouchLogButtons } from '@/components/TouchLogButtons';
-import { LifecycleTierBadge, IcpScorePill, TriggeredBadge, EnrichButton, SignalDetailPanel } from '@/components/LifecycleIntelligence';
+import { LifecycleTierBadge, TriggeredBadge, EnrichButton, SignalDetailPanel } from '@/components/LifecycleIntelligence';
 import { AccountRoom } from '@/components/account-room/AccountRoom';
 import { GapScorePill } from '@/components/account-room/GapScorePill';
 import { useAccountGapScores } from '@/hooks/useAccountGapScores';
 import { useAccountEnrichment } from '@/hooks/useAccountEnrichment';
 // Bulk enrichment panel retired from Territory (W3). Hook still available for programmatic use.
 import { useBulkEnrichment } from '@/hooks/useBulkEnrichment';
-import { 
-  sortAccountsDefault, 
-  applySortWithFallback,
-  ACCOUNT_STATUS_SORT_RANK,
-  ACCOUNT_STATUS_DISPLAY_LABELS,
-  TIER_SORT_RANK,
-  CONTACT_STATUS_SORT_RANK,
-  CONTACT_STATUS_DISPLAY_LABELS,
-} from '@/lib/sortUtils';
+import { ACCOUNT_STATUS_SORT_RANK, TIER_SORT_RANK, CONTACT_STATUS_SORT_RANK } from '@/lib/sortUtils';
 import type { Account, AccountTier, AccountStatus, Opportunity, OpportunityStage } from '@/types';
 import { useWidgetLayout, type WidgetConfig } from '@/hooks/useWidgetLayout';
 import { CollapsibleWidgetSection } from '@/components/CollapsibleWidgetSection';
@@ -181,14 +159,12 @@ const ACCOUNT_STATUS_COLORS: Record<AccountStatus, string> = {
   'active': 'bg-status-green/20 text-status-green',
   'inactive': 'bg-muted text-muted-foreground',
   'disqualified': 'bg-status-red/20 text-status-red',
-  'meeting-booked': 'bg-primary/20 text-primary',
-};
+  'meeting-booked': 'bg-primary/20 text-primary' };
 
 const TIER_COLORS: Record<AccountTier, string> = {
   'A': 'border-status-green text-status-green',
   'B': 'border-status-yellow text-status-yellow',
-  'C': 'border-muted-foreground text-muted-foreground',
-};
+  'C': 'border-muted-foreground text-muted-foreground' };
 
 const STAGE_COLORS: Record<string, string> = {
   '': 'border-muted-foreground',
@@ -198,8 +174,7 @@ const STAGE_COLORS: Record<string, string> = {
   'Proposal': 'border-orange-400',
   'Negotiate': 'border-purple-400',
   'Closed Won': 'border-status-green',
-  'Closed Lost': 'border-status-red',
-};
+  'Closed Lost': 'border-status-red' };
 
 const STAGE_TEXT_COLORS: Record<string, string> = {
   '': 'text-muted-foreground',
@@ -209,8 +184,7 @@ const STAGE_TEXT_COLORS: Record<string, string> = {
   'Proposal': 'text-orange-400',
   'Negotiate': 'text-purple-400',
   'Closed Won': 'text-status-green',
-  'Closed Lost': 'text-status-red',
-};
+  'Closed Lost': 'text-status-red' };
 
 const STAGE_LABELS: Record<string, string> = {
   '': 'No Stage',
@@ -220,8 +194,7 @@ const STAGE_LABELS: Record<string, string> = {
   'Proposal': '4 - Proposal',
   'Negotiate': '5 - Negotiate',
   'Closed Won': '6 - Closed Won',
-  'Closed Lost': '7 - Closed Lost',
-};
+  'Closed Lost': '7 - Closed Lost' };
 
 // Status options for select dropdown with numbered labels
 const STATUS_OPTIONS = [
@@ -234,7 +207,7 @@ const STATUS_OPTIONS = [
 ];
 
 // Tier options for select dropdown  
-const TIER_OPTIONS = [
+const _TIER_OPTIONS = [
   { value: 'A', label: 'A', className: 'border-status-green text-status-green bg-transparent' },
   { value: 'B', label: 'B', className: 'border-status-yellow text-status-yellow bg-transparent' },
   { value: 'C', label: 'C', className: 'border-muted-foreground text-muted-foreground bg-transparent' },
@@ -258,7 +231,7 @@ interface FunnelGroup {
   section: 'primary' | 'outcome' | 'holding';
 }
 
-const FUNNEL_GROUPS: FunnelGroup[] = [
+const _FUNNEL_GROUPS: FunnelGroup[] = [
   { status: 'researching', label: '1 - Researching', hint: 'Identify fit + gather basics', color: 'text-blue-400', borderColor: 'border-blue-500/50', defaultCollapsed: false, section: 'primary' },
   { status: 'prepped', label: '2 - Prepped', hint: 'Ready for cadence / first touches', color: 'text-cyan-400', borderColor: 'border-cyan-500/50', defaultCollapsed: false, section: 'primary' },
   { status: 'active', label: '3 - Active', hint: 'In cadence / active outreach', color: 'text-status-green', borderColor: 'border-status-green/50', defaultCollapsed: false, section: 'primary' },
@@ -275,8 +248,7 @@ function sortFunnelGroup(accounts: Account[], sortOverride?: { key: string; dire
     const customRanks: Record<string, Record<string, number>> = {
       tier: TIER_SORT_RANK,
       accountStatus: ACCOUNT_STATUS_SORT_RANK,
-      contactStatus: CONTACT_STATUS_SORT_RANK,
-    };
+      contactStatus: CONTACT_STATUS_SORT_RANK };
     return [...accounts].sort((a, b) => {
       const key = sortOverride.key as keyof Account;
       const aVal = a[key];
@@ -403,8 +375,7 @@ function OpportunitiesStageSummary({ activeStageFilter, onStageFilterChange }: {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
+      maximumFractionDigits: 0 }).format(value);
   };
 
   // W1 fix #5: "Active Pipeline" = open opps only. Closed stages must not
@@ -483,8 +454,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
   isSelected,
   onToggleSelect,
   highlightId,
-  onOpenAccountDetail,
-}: {
+  onOpenAccountDetail }: {
   group: FunnelGroup;
   accounts: Account[];
   expandedAccountId: string | null;
@@ -498,7 +468,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
   highlightId: string | null;
   onOpenAccountDetail: (id: string) => void;
 }) {
-  const { fields, getFieldValue } = useCustomFields();
+  const { fields, getFieldValue: _getFieldValue } = useCustomFields();
   const [groupSort, setGroupSort] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const summaryCustomFields = fields.filter(
     f => f.tabTarget === 'accounts' && (f.placement === 'summary' || f.placement === 'both')
@@ -697,14 +667,12 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                             {
                               icon: ExternalLink,
                               label: 'Open in Salesforce',
-                              onClick: () => account.salesforceLink && window.open(account.salesforceLink, '_blank'),
-                            },
+                              onClick: () => account.salesforceLink && window.open(account.salesforceLink, '_blank') },
                             {
                               icon: Trash2,
                               label: 'Delete',
                               variant: 'destructive',
-                              onClick: () => deleteAccount(account.id),
-                            },
+                              onClick: () => deleteAccount(account.id) },
                           ]}
                         />
                         <DropdownMenu>
@@ -774,7 +742,7 @@ FunnelGroupSection.displayName = 'FunnelGroupSection';
 export default function WeeklyOutreach() {
   const { accounts, addAccount, updateAccount: rawUpdateAccount, deleteAccount } = useStore();
   const bulkSelection = useBulkSelection<Account>();
-  const { enrichMultiple } = useAccountEnrichment();
+  const { enrichMultiple: _enrichMultiple } = useAccountEnrichment();
   const bulkEnrich = useBulkEnrichment();
   
   // Wrap update with save indicator
@@ -788,8 +756,7 @@ export default function WeeklyOutreach() {
   const { deleteWithUndo } = useUndoDelete<Account>({
     onDelete: (id) => deleteAccount(id),
     onRestore: (item) => addAccount(item),
-    itemLabel: 'Account',
-  });
+    itemLabel: 'Account' });
   
   const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities' | 'tree' | 'coverage' | 'canvas' | 'digest'>('accounts');
   const [stageFilter, setStageFilter] = useState<OpportunityStage | null>(null);
@@ -813,7 +780,7 @@ export default function WeeklyOutreach() {
   const highlightProcessedRef = useRef<string | null>(null);
 
   // Collapsed groups - outcomes collapsed by default (must be before highlight effect)
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<AccountStatus>>(
+  const [_collapsedGroups, setCollapsedGroups] = useState<Set<AccountStatus>>(
     new Set(['meeting-booked', 'disqualified'])
   );
   const outreachSections = useMemo<WidgetConfig[]>(() => ([
@@ -844,12 +811,11 @@ export default function WeeklyOutreach() {
       });
       return { parentOf, childIds };
     },
-    staleTime: 5 * 60 * 1000,
-  });
+    staleTime: 5 * 60 * 1000 });
   const childAccountIds = hierarchyMap?.childIds ?? new Set<string>();
   const parentOf = hierarchyMap?.parentOf ?? new Map<string, string | null>();
 
-  const toggleGroupCollapse = (status: AccountStatus) => {
+  const _toggleGroupCollapse = (status: AccountStatus) => {
     setCollapsedGroups(prev => {
       const next = new Set(prev);
       if (next.has(status)) next.delete(status);
@@ -958,8 +924,7 @@ export default function WeeklyOutreach() {
     outreachStatus: 'not-started',
     techStack: [],
     tags: [],
-    techFitFlag: 'good',
-  });
+    techFitFlag: 'good' });
 
   const parseCSV = (text: string): Partial<Account>[] => {
     const lines = text.trim().split('\n');
@@ -981,8 +946,7 @@ export default function WeeklyOutreach() {
         techStack: [],
         tags: [],
         techFitFlag: 'good',
-        touchesThisWeek: 0,
-      };
+        touchesThisWeek: 0 };
       
       headers.forEach((header, idx) => {
         const value = values[idx];
@@ -1015,8 +979,7 @@ export default function WeeklyOutreach() {
               'active': 'active',
               'meeting booked': 'meeting-booked',
               'meeting-booked': 'meeting-booked',
-              'disqualified': 'disqualified',
-            };
+              'disqualified': 'disqualified' };
             const normalizedStatus = value.toLowerCase();
             if (statusMap[normalizedStatus]) {
               account.accountStatus = statusMap[normalizedStatus];
@@ -1151,15 +1114,14 @@ export default function WeeklyOutreach() {
 
 
   // Group & sort accounts by funnel status
-  const groupedAccounts = useMemo(() => {
+  const _groupedAccounts = useMemo(() => {
     const groups: Record<AccountStatus, Account[]> = {
       'researching': [],
       'prepped': [],
       'active': [],
       'inactive': [],
       'disqualified': [],
-      'meeting-booked': [],
-    };
+      'meeting-booked': [] };
 
     filteredAccounts.forEach(a => {
       const status = a.accountStatus || 'inactive';
@@ -1177,7 +1139,7 @@ export default function WeeklyOutreach() {
   // W3 De-SDR: hierarchy-aware flat list — parents first (tier→ICP→name),
   // each parent immediately followed by its children in the filtered set.
   const hierarchySortedAccounts = useMemo(() => {
-    const byId = new Map(filteredAccounts.map(a => [a.id, a]));
+    const _byId = new Map(filteredAccounts.map(a => [a.id, a]));
     const parents = sortFunnelGroup(
       filteredAccounts.filter(a => !childAccountIds.has(a.id))
     );
@@ -1218,8 +1180,7 @@ export default function WeeklyOutreach() {
       outreachStatus: 'not-started',
       techStack: [],
       tags: [],
-      techFitFlag: 'good',
-    });
+      techFitFlag: 'good' });
     toast.success('Account added!');
   };
 
@@ -1684,8 +1645,7 @@ export default function WeeklyOutreach() {
                   onExecute: (ids, value) => {
                     ids.forEach(id => updateAccount(id, { accountStatus: value as AccountStatus }));
                     bulkSelection.clear();
-                  },
-                },
+                  } },
                 {
                   id: 'change-tier',
                   label: 'Change Tier',
@@ -1697,8 +1657,7 @@ export default function WeeklyOutreach() {
                   onExecute: (ids, value) => {
                     ids.forEach(id => updateAccount(id, { tier: value as AccountTier }));
                     bulkSelection.clear();
-                  },
-                },
+                  } },
                 {
                   id: 'change-motion',
                   label: 'Change Motion',
@@ -1711,8 +1670,7 @@ export default function WeeklyOutreach() {
                   onExecute: (ids, value) => {
                     ids.forEach(id => updateAccount(id, { motion: value as Account['motion'] }));
                     bulkSelection.clear();
-                  },
-                },
+                  } },
                 {
                   id: 'enrich',
                   label: 'Enrich ICP',
@@ -1720,8 +1678,7 @@ export default function WeeklyOutreach() {
                     const selected = accounts.filter(a => ids.includes(a.id));
                     bulkEnrich.start(selected);
                     bulkSelection.clear();
-                  },
-                },
+                  } },
                 {
                   id: 'delete',
                   label: 'Delete',
@@ -1730,8 +1687,7 @@ export default function WeeklyOutreach() {
                   onExecute: (ids) => {
                     ids.forEach(id => deleteAccount(id));
                     bulkSelection.clear();
-                  },
-                },
+                  } },
               ]}
             />
 
@@ -1780,8 +1736,7 @@ export default function WeeklyOutreach() {
                     color: 'text-foreground',
                     borderColor: 'border-border',
                     defaultCollapsed: false,
-                    section: 'primary',
-                  }}
+                    section: 'primary' }}
                   accounts={hierarchySortedAccounts}
                   expandedAccountId={expandedAccountId}
                   setExpandedAccountId={setExpandedAccountId}

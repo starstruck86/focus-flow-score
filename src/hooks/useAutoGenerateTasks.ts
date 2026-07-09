@@ -10,12 +10,12 @@ const DEFAULT_TARGETS = {
   meetingsSet: 1,
 };
 
-function generateId(): string {
+function _generateId(): string {
   return Math.random().toString(36).substring(2, 15);
 }
 
 export function useAutoGenerateTasks() {
-  const { addTask, renewals, opportunities, accounts } = useStore();
+  const { addTask, renewals, opportunities, accounts: _accounts } = useStore();
 
   const generateFromGaps = (wtdMetrics: any, daysElapsed: number) => {
     const tasks: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>[] = [];

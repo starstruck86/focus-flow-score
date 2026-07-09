@@ -3,17 +3,12 @@
  */
 import { useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import {
-  Sheet, SheetContent, SheetHeader, SheetTitle,
-} from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import {
-  Zap, Play, Eye, Wrench, FileText, RotateCcw, Shield,
-  History, ArrowRight, ShieldCheck, ShieldAlert, Clock, MinusCircle,
-} from 'lucide-react';
+import { Zap, Play, Eye, Wrench, FileText, Shield, History, ArrowRight, ShieldCheck, ShieldAlert, Clock } from 'lucide-react';
 import type { CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
 import {
   type ControlPlaneState,
@@ -47,7 +42,7 @@ export function ResourceInspectDrawer({ resource, state, open, onClose, onAction
   const [activeTab, setActiveTab] = useState<string>(initialTab ?? 'overview');
 
   const resourceId = open && resource ? resource.resource_id : null;
-  const { resource: detail, knowledgeItems, loading, error } = useResourceInspectData(resourceId);
+  const { resource: detail, knowledgeItems, loading, error: _error } = useResourceInspectData(resourceId);
 
   const handleNavigateTab = useCallback((tab: string) => setActiveTab(tab), []);
 

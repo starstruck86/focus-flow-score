@@ -239,7 +239,7 @@ function buildSummary(
   pressureScore: number | null,
   recoveryRate: number | null,
   firstAttempt: number,
-  readiness: PressureReadiness,
+  _readiness: PressureReadiness,
   lateTurnDropoff?: number | null,
 ): string {
   const label = SKILL_LABELS[skill];

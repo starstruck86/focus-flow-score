@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveEnrichSession, type EnrichTerminalState } from '@/lib/enrichSession';
+import { deriveEnrichSession } from '@/lib/enrichSession';
 import type { IngestionState, IngestionItem, IngestionItemStage } from '@/store/useEnrichmentJobStore';
 
 function makeItem(overrides: Partial<IngestionItem> & { stage: IngestionItemStage }): IngestionItem {

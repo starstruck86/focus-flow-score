@@ -18,7 +18,7 @@ import {
 import { Microscope, Zap, Info, CheckCircle2, AlertTriangle, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ResourceAuditRow } from '@/hooks/useKnowledgeCoverageAudit';
-import type { ReExtractQueueItem, DominantBottleneck } from '@/hooks/useDeepReExtraction';
+import type { ReExtractQueueItem } from '@/hooks/useDeepReExtraction';
 import { filterByPanel, derivePostExtractionState } from '@/lib/postExtractionState';
 
 interface Props {

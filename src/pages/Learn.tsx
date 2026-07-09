@@ -3,7 +3,7 @@ import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { Layout } from '@/components/Layout';
 import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';
-import { GraduationCap, Loader2, BookOpen, CheckCircle2, Circle, Lock } from 'lucide-react';
+import { GraduationCap, Loader2, CheckCircle2, Circle, Lock } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -43,7 +43,7 @@ export default function Learn() {
   const navigate = useNavigate();
   const { data: courses, isLoading } = useCourses();
   const { data: progress } = useUserProgress();
-  const { data: dailyKI } = useDailyKI();
+  const { data: _dailyKI } = useDailyKI();
   const { data: learnLoop } = useLearnLoop();
   const { data: skillLevels } = useSkillLevels();
   const { data: subSkillSummaries } = useSubSkillProgress();

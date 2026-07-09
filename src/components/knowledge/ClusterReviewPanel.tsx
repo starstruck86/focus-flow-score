@@ -19,15 +19,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import {
-  clusterByContent,
-  resolveCluster,
-  type ContentCluster,
-  type ClusterResolution,
-  type ContentRoute,
-  generateSmartSnippet,
-  routeByContent,
-} from '@/lib/contentSignature';
+import { clusterByContent, resolveCluster, type ContentCluster, type ClusterResolution, generateSmartSnippet, routeByContent } from '@/lib/contentSignature';
 import { TransformationPreviewDialog } from './TransformationPreviewDialog';
 
 interface ClusterReviewPanelProps {

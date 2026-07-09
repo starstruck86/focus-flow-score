@@ -8,7 +8,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 
 /**
  * Quick metric counters — Salesforce is the system of record for individual activities.

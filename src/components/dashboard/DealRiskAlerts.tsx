@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, Clock, Target, TrendingDown, ChevronRight } from 'lucide-react';
+import { AlertTriangle, ChevronRight } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { useDbOpportunities } from '@/hooks/useAccountsData';
 import { cn } from '@/lib/utils';

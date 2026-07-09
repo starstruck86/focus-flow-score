@@ -21,7 +21,7 @@ export interface ResourceSignal {
 
 export function deriveSignal(
   lc: LifecycleInfo | undefined,
-  resource: Resource,
+  _resource: Resource,
 ): ResourceSignal {
   if (!lc) return { signal: 'low', signalLabel: 'Low', signalColor: 'text-muted-foreground' };
 

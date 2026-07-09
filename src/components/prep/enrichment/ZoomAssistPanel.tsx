@@ -7,7 +7,7 @@
  *  3. Progress indicators per strategy
  *  4. Result display with provenance
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Monitor, Copy, ExternalLink, CheckCircle2, XCircle, Loader2,
   AlertTriangle, Clipboard, ChevronDown, ChevronUp, Play,
@@ -43,7 +43,7 @@ const STRATEGY_LABELS: Record<string, string> = {
   runtime_media: 'Runtime media URL',
 };
 
-export function ZoomAssistPanel({ resourceId, userId, resourceUrl, resourceTitle, onCaptureComplete }: Props) {
+export function ZoomAssistPanel({ resourceId, userId, resourceUrl, resourceTitle: _resourceTitle, onCaptureComplete }: Props) {
   const [state, setState] = useState<ZoomSessionState>('idle');
   const [captureResult, setCaptureResult] = useState<ZoomCaptureResult | null>(null);
   const [processResult, setProcessResult] = useState<{ success: boolean; message: string; contentLength: number } | null>(null);

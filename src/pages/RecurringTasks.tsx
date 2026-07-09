@@ -39,7 +39,7 @@ import type { Priority, Workstream } from '@/types';
 import type { RecurringTaskTemplate, RecurrenceFrequency, RecurrenceEndType, MonthlyMode } from '@/types/recurring';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const FREQ_LABELS: Record<RecurrenceFrequency, string> = {
+const _FREQ_LABELS: Record<RecurrenceFrequency, string> = {
   daily: 'Daily',
   weekly: 'Weekly',
   monthly: 'Monthly',
@@ -279,10 +279,10 @@ function RecurringTemplateDialog({
           {/* Linked account */}
           <div className="space-y-2">
             <Label>Linked Account</Label>
-            <Select value={accountId || '__none__'} onValueChange={v => { setAccountId(v === '__none__' ? '' : v); setOppId(''); }}>
+            <Select value={accountId || '_none__'} onValueChange={v => { setAccountId(v === '_none__' ? '' : v); setOppId(''); }}>
               <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__">None</SelectItem>
+                <SelectItem value="_none__">None</SelectItem>
                 {accounts.map(a => (
                   <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                 ))}
@@ -293,10 +293,10 @@ function RecurringTemplateDialog({
           {accountId && accountOpps.length > 0 && (
             <div className="space-y-2">
               <Label>Linked Opportunity</Label>
-              <Select value={oppId || '__none__'} onValueChange={v => setOppId(v === '__none__' ? '' : v)}>
+              <Select value={oppId || '_none__'} onValueChange={v => setOppId(v === '_none__' ? '' : v)}>
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
+                  <SelectItem value="_none__">None</SelectItem>
                   {accountOpps.map(o => (
                     <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
                   ))}
@@ -321,7 +321,7 @@ function RecurringTemplateDialog({
 }
 
 export default function RecurringTasks() {
-  const { recurringTemplates, updateRecurringTemplate, deleteRecurringTemplate, generateDueRecurringInstances } = useStore();
+  const { recurringTemplates, updateRecurringTemplate, deleteRecurringTemplate, generateDueRecurringInstances: _generateDueRecurringInstances } = useStore();
   const [addOpen, setAddOpen] = useState(false);
   const [editTemplate, setEditTemplate] = useState<RecurringTaskTemplate | null>(null);
 

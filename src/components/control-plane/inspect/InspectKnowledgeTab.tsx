@@ -5,10 +5,7 @@ import { useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  CheckCircle2, XCircle, ChevronDown, ChevronRight,
-  BookOpen, Tag, Search,
-} from 'lucide-react';
+import { CheckCircle2, XCircle, ChevronDown, ChevronRight, BookOpen, Search } from 'lucide-react';
 import type { KnowledgeItemDetail } from '@/hooks/useResourceInspectData';
 import { Input } from '@/components/ui/input';
 

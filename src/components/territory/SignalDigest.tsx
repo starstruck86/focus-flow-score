@@ -123,7 +123,7 @@ export function SignalDigest() {
 
   const grouped: Record<string, { accountName: string; tier: string | null; accountId: string | null; signals: any[] }> = {};
   visibleSignals.forEach((s) => {
-    const id = s.linked_account_id ?? '__unlinked__';
+    const id = s.linked_account_id ?? '_unlinked__';
     const acct = s.accounts;
     if (!grouped[id]) {
       grouped[id] = {

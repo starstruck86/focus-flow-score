@@ -3,7 +3,7 @@
  * Parts 3 + 4 of the Enrichment Operator Console.
  * Mobile: renders as full-screen sheet with grouped actions.
  */
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { useQueryClient } from '@tanstack/react-query';
@@ -18,12 +18,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
-import {
-  X, Save, Zap, RotateCcw, FileText, ExternalLink, Trash2,
-  Bookmark, SkipForward, Ban, ShieldOff, Play, Wrench,
-  Loader2, CheckCircle2, AlertTriangle, Copy, Unlock, ArrowLeft, Eye, MoreHorizontal,
-  ChevronDown, ChevronRight, Upload, FolderTree,
-} from 'lucide-react';
+import { X, Save, Zap, RotateCcw, FileText, ExternalLink, Trash2, Bookmark, SkipForward, Ban, ShieldOff, Play, Wrench, Loader2, Copy, ArrowLeft, Eye, ChevronDown, ChevronRight, Upload, FolderTree } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ContentViewer } from '../ContentViewer';
@@ -53,7 +48,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
   const [description, setDescription] = useState('');
   const [actionMode, setActionMode] = useState<ActionMode>(null);
   const [actionInput, setActionInput] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [_saving, setSaving] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [showContentViewer, setShowContentViewer] = useState(false);
   const [uploading, setUploading] = useState(false);

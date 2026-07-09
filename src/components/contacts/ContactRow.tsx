@@ -4,7 +4,7 @@ import { Plus, Trash2, ExternalLink, Link } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { EditableTextCell, EditableTextareaCell } from '@/components/table/EditableCell';
+import { EditableTextCell } from '@/components/table/EditableCell';
 import {
   Popover,
   PopoverContent,

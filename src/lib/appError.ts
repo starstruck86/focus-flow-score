@@ -81,7 +81,7 @@ export function normalizeError(opts: NormalizeOpts): AppError {
 
 // ── Classification ──────────────────────────────────────────
 function classifyError(
-  raw: unknown,
+  _raw: unknown,
   msg: string,
 ): { category: ErrorCategory; retryable: boolean; code: string | number | null } {
   const lower = msg.toLowerCase();

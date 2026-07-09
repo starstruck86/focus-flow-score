@@ -17,12 +17,9 @@ import {
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import {
-  Target, Zap, AlertTriangle, MessageSquare, Swords,
-  HelpCircle, Play, ChevronDown, Loader2, Brain, Sparkles,
-} from 'lucide-react';
+import { Target, AlertTriangle, MessageSquare, Swords, HelpCircle, Play, ChevronDown, Loader2, Brain, Sparkles } from 'lucide-react';
 import { type SalesContext, type PrepOutput, generatePrep, suggestContext } from '@/lib/salesContext';
-import { COMPETITOR_TAGS, PRODUCT_TAGS, PERSONA_TAGS, STAGE_TAGS, CONTEXT_TAGS } from '@/lib/resourceTags';
+import { COMPETITOR_TAGS, PERSONA_TAGS, STAGE_TAGS, CONTEXT_TAGS } from '@/lib/resourceTags';
 
 export function MeetingPrepEngine() {
   const [ctx, setCtx] = useState<SalesContext>({});
@@ -92,7 +89,7 @@ export function MeetingPrepEngine() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Call Type</Label>
-                <Select value={ctx.context_type || '__unset__'} onValueChange={v => update({ context_type: v === '__unset__' ? undefined : v })}>
+                <Select value={ctx.context_type || '_unset__'} onValueChange={v => update({ context_type: v === '_unset__' ? undefined : v })}>
                   <SelectTrigger className="h-8 text-xs">
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
@@ -108,7 +105,7 @@ export function MeetingPrepEngine() {
 
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Stage</Label>
-                <Select value={ctx.stage || '__unset__'} onValueChange={v => update({ stage: v === '__unset__' ? undefined : v })}>
+                <Select value={ctx.stage || '_unset__'} onValueChange={v => update({ stage: v === '_unset__' ? undefined : v })}>
                   <SelectTrigger className="h-8 text-xs">
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
@@ -125,14 +122,14 @@ export function MeetingPrepEngine() {
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Competitor</Label>
                 <Select
-                  value={ctx.competitors?.[0] || '__none__'}
-                  onValueChange={v => update({ competitors: v === '__none__' ? [] : [v] })}
+                  value={ctx.competitors?.[0] || '_none__'}
+                  onValueChange={v => update({ competitors: v === '_none__' ? [] : [v] })}
                 >
                   <SelectTrigger className="h-8 text-xs">
                     <SelectValue placeholder="None" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__" className="text-xs">None</SelectItem>
+                    <SelectItem value="_none__" className="text-xs">None</SelectItem>
                     {COMPETITOR_TAGS.map(t => (
                       <SelectItem key={t} value={t} className="text-xs">
                         {t}
@@ -144,12 +141,12 @@ export function MeetingPrepEngine() {
 
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Persona</Label>
-                <Select value={ctx.persona || '__any__'} onValueChange={v => update({ persona: v === '__any__' ? undefined : v })}>
+                <Select value={ctx.persona || '_any__'} onValueChange={v => update({ persona: v === '_any__' ? undefined : v })}>
                   <SelectTrigger className="h-8 text-xs">
                     <SelectValue placeholder="Any" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__any__" className="text-xs">Any</SelectItem>
+                    <SelectItem value="_any__" className="text-xs">Any</SelectItem>
                     {PERSONA_TAGS.map(t => (
                       <SelectItem key={t} value={t} className="text-xs">
                         {t.replace(/_/g, ' ')}

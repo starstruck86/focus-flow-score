@@ -171,7 +171,7 @@ export function CalendarScreenshotDrop({ date, onEventsConfirmed }: CalendarScre
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
                 Meetings ({workEvents.length})
               </p>
-              {workEvents.map((evt, idx) => {
+              {workEvents.map((evt, _idx) => {
                 const realIdx = extractedEvents.indexOf(evt);
                 return (
                   <label
@@ -200,7 +200,7 @@ export function CalendarScreenshotDrop({ date, onEventsConfirmed }: CalendarScre
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
                 Personal / Family ({personalEvents.length})
               </p>
-              {personalEvents.map((evt, idx) => {
+              {personalEvents.map((evt, _idx) => {
                 const realIdx = extractedEvents.indexOf(evt);
                 return (
                   <label

@@ -11,7 +11,7 @@
  * - Reuses existing TTS/STT via useDaveVoiceController
  */
 
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,17 +20,11 @@ import {
   Mic, MicOff, Pause, Play, SkipForward, RotateCcw,
   Loader2, Volume2, Square,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { emitSaveStatus } from '@/components/SaveIndicator';
-import {
-  saveDojoState,
-  clearDojoState,
-  loadDojoState,
-  enqueuePendingWrite,
-  type DojoLocalState,
-} from '@/lib/sessionDurability';
+import { saveDojoState, clearDojoState, loadDojoState, enqueuePendingWrite } from '@/lib/sessionDurability';
 import { processPendingWrites } from '@/lib/pendingWriteSync';
 import {
   type RecoveryState,
@@ -152,7 +146,7 @@ export default function AudioSessionMode({
   // Initialize closed-loop session if entering from Learn
   useEffect(() => {
     if (isClosedLoop && closedLoopSkill && closedLoopConcept && !closedLoop.session) {
-      const session = closedLoop.startTeaching(
+      const _session = closedLoop.startTeaching(
         closedLoopSkill,
         closedLoopConcept,
         closedLoopSubSkill || undefined,
@@ -593,7 +587,7 @@ export default function AudioSessionMode({
       // Try to flush any pending writes
       processPendingWrites();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Failed to score response';
+      const _msg = e instanceof Error ? e.message : 'Failed to score response';
       console.error('Audio session score error — entering recovery:', e);
       emitSaveStatus('recovering');
 
@@ -723,7 +717,7 @@ export default function AudioSessionMode({
 
   const currentResult = retryResult || result;
   const showFeedbackDelivery = isFeedbackPhase(phase) && currentResult && sessionId;
-  const isRecovering = recovery.status === 'recovering' || recovery.status === 'waiting_for_connection';
+  const _isRecovering = recovery.status === 'recovering' || recovery.status === 'waiting_for_connection';
 
   return (
     <div className="space-y-4">
@@ -988,7 +982,7 @@ function ClosedLoopActions({
   session,
   onRetry,
   onComplete,
-  coaching,
+  coaching: _coaching,
 }: {
   verification: ClosedLoopVerification;
   session: ClosedLoopSession;

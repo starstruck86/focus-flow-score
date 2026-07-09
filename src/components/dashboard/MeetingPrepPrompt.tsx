@@ -1,7 +1,7 @@
 // Proactive Meeting Prep Prompt - Shows a prominent banner for upcoming client meetings
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Building2, Clock, FileText, ChevronRight, X, Video, CheckCircle2, Plus, Target, RefreshCw, Sparkles, Mail } from 'lucide-react';
+import { AlertTriangle, Building2, Clock, FileText, ChevronRight, X, Video, CheckCircle2, Plus, Target, Sparkles, Mail } from 'lucide-react';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { useStore } from '@/store/useStore';
 import { useRecentTranscriptsForMeetingPrep } from '@/hooks/useCallTranscripts';
@@ -192,7 +192,7 @@ export function MeetingPrepPrompt() {
               meeting={meeting}
               isExpanded={effectiveExpandedId === meeting.eventId}
               onToggle={() => setExpandedId(
-                effectiveExpandedId === meeting.eventId ? '__none__' : meeting.eventId
+                effectiveExpandedId === meeting.eventId ? '_none__' : meeting.eventId
               )}
               onDismiss={() => handleDismiss(meeting.eventId)}
               onAddPrep={() => handleAddPrepTask(meeting)}
@@ -211,7 +211,7 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
   onDismiss: () => void;
   onAddPrep: () => void;
 }) {
-  const { ask, askBackground } = useCopilot();
+  const { ask: _ask, askBackground } = useCopilot();
   const isUrgent = meeting.minutesUntil <= 30;
   const daysSinceTouch = meeting.lastTouchDate
     ? Math.floor((Date.now() - new Date(meeting.lastTouchDate).getTime()) / 86400000)

@@ -16,11 +16,9 @@ import {
   loadAudioJobs,
   saveAudioJobs,
   getAudioPipelineHealth,
-  reclassifyAudioFailures,
   retryRetryableAudioJobs,
   moveNonRetryableToManualAssist,
-  getAudioStageLabel,
-} from '../audioPipeline';
+  getAudioStageLabel } from '../audioPipeline';
 
 beforeEach(() => {
   localStorage.clear();

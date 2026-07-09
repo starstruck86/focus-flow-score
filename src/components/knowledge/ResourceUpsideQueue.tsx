@@ -19,11 +19,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
-import {
-  Crown, Star, Brain, FileText, ChevronDown, ChevronRight,
-  AlertTriangle, ArrowUpRight, CheckCircle2, Sparkles, TrendingUp,
-  Archive, Zap, Play, SkipForward, Edit3, Loader2,
-} from 'lucide-react';
+import { Crown, Star, Brain, FileText, ChevronDown, ChevronRight, AlertTriangle, ArrowUpRight, CheckCircle2, Sparkles, TrendingUp, Archive, Zap, Play, SkipForward, Edit3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   classifyResources,

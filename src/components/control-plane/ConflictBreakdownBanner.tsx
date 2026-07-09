@@ -31,7 +31,7 @@ interface Props {
   onFilterConflictCategory: (resourceIds: Set<string>) => void;
 }
 
-export function ConflictBreakdownBanner({ conflicts, activeFilter, onFilterConflicts, onFilterConflictCategory }: Props) {
+export function ConflictBreakdownBanner({ conflicts, activeFilter: _activeFilter, onFilterConflicts, onFilterConflictCategory }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   const grouped = useMemo(() => {

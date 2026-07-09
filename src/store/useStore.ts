@@ -16,12 +16,8 @@ import type {
   DailyActivityInputs,
   RecoveryInputs,
   Opportunity,
-  OpportunityStatus,
-  OpportunityStage,
-  OpportunityActivity,
   TouchType,
-  QuotaConfig,
-} from '@/types';
+  QuotaConfig } from '@/types';
 import type { RecurringTaskTemplate } from '@/types/recurring';
 import { isDueToday } from '@/lib/recurrence';
 import { calculateAllScores } from '@/lib/calculations';
@@ -128,8 +124,7 @@ function getDefaultRawInputs(): DailyRawInputs {
     emailsInMailsToManager: 0,
     initialMeetingsSet: 0,
     opportunitiesCreated: 0,
-    personalDevelopment: 0,
-  };
+    personalDevelopment: 0 };
 }
 
 function getDefaultActivityInputs(): DailyActivityInputs {
@@ -142,8 +137,7 @@ function getDefaultActivityInputs(): DailyActivityInputs {
     accountDeepWorkMinutes: 0,
     prospectingBlockMinutes: 0,
     expansionTouchpoints: 0,
-    focusMode: 'balanced',
-  };
+    focusMode: 'balanced' };
 }
 
 function getDefaultRecoveryInputs(): RecoveryInputs {
@@ -157,8 +151,7 @@ function getDefaultRecoveryInputs(): RecoveryInputs {
     travelDay: false,
     clarity: 3,
     contextSwitching: 'medium',
-    meetingMinutes: 0,
-  };
+    meetingMinutes: 0 };
 }
 
 function createEmptyDay(date: string): DayEntry {
@@ -175,8 +168,7 @@ function createEmptyDay(date: string): DayEntry {
     recoveryInputs: recovery,
     scores,
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
+    updatedAt: new Date().toISOString() };
 }
 
 export const useStore = create<QuotaCompassStore>()(
@@ -220,9 +212,7 @@ export const useStore = create<QuotaCompassStore>()(
             ...currentDay,
             rawInputs: newRaw,
             scores: newScores,
-            updatedAt: new Date().toISOString(),
-          },
-        });
+            updatedAt: new Date().toISOString() } });
       },
       
       updateActivityInputs: (inputs) => {
@@ -242,9 +232,7 @@ export const useStore = create<QuotaCompassStore>()(
             ...currentDay,
             activityInputs: newActivity,
             scores: newScores,
-            updatedAt: new Date().toISOString(),
-          },
-        });
+            updatedAt: new Date().toISOString() } });
       },
       
       updateRecoveryInputs: (inputs) => {
@@ -264,9 +252,7 @@ export const useStore = create<QuotaCompassStore>()(
             ...currentDay,
             recoveryInputs: newRecovery,
             scores: newScores,
-            updatedAt: new Date().toISOString(),
-          },
-        });
+            updatedAt: new Date().toISOString() } });
       },
       
       saveDay: () => {
@@ -294,8 +280,7 @@ export const useStore = create<QuotaCompassStore>()(
         blockType: 'prospecting',
         breakMode: false,
         breakDuration: 5,
-        repeatEnabled: false,
-      },
+        repeatEnabled: false },
       
       startTimer: (minutes, blockType, accountId) => {
         set({
@@ -308,21 +293,17 @@ export const useStore = create<QuotaCompassStore>()(
             accountId,
             breakMode: false,
             breakDuration: 5,
-            repeatEnabled: false,
-          },
-        });
+            repeatEnabled: false } });
       },
       
       pauseTimer: () => {
         set((state) => ({
-          timer: { ...state.timer, isPaused: true },
-        }));
+          timer: { ...state.timer, isPaused: true } }));
       },
       
       resumeTimer: () => {
         set((state) => ({
-          timer: { ...state.timer, isPaused: false },
-        }));
+          timer: { ...state.timer, isPaused: false } }));
       },
       
       resetTimer: () => {
@@ -335,9 +316,7 @@ export const useStore = create<QuotaCompassStore>()(
             blockType: 'prospecting',
             breakMode: false,
             breakDuration: 5,
-            repeatEnabled: false,
-          },
-        });
+            repeatEnabled: false } });
       },
       
       tickTimer: () => {
@@ -348,13 +327,11 @@ export const useStore = create<QuotaCompassStore>()(
           
           if (newRemaining <= 0) {
             return {
-              timer: { ...state.timer, remainingSeconds: 0, isRunning: false },
-            };
+              timer: { ...state.timer, remainingSeconds: 0, isRunning: false } };
           }
           
           return {
-            timer: { ...state.timer, remainingSeconds: newRemaining },
-          };
+            timer: { ...state.timer, remainingSeconds: newRemaining } };
         });
       },
       
@@ -371,20 +348,17 @@ export const useStore = create<QuotaCompassStore>()(
             durationMinutes: elapsedMinutes,
             type: timer.blockType,
             accountId: timer.accountId,
-            completed: true,
-          };
+            completed: true };
           
           set({ focusBlocks: [...focusBlocks, newBlock] });
           
           // Update activity inputs
           if (timer.blockType === 'prospecting') {
             updateActivityInputs({
-              prospectingBlockMinutes: (currentDay?.activityInputs.prospectingBlockMinutes || 0) + elapsedMinutes,
-            });
+              prospectingBlockMinutes: (currentDay?.activityInputs.prospectingBlockMinutes || 0) + elapsedMinutes });
           } else {
             updateActivityInputs({
-              accountDeepWorkMinutes: (currentDay?.activityInputs.accountDeepWorkMinutes || 0) + elapsedMinutes,
-            });
+              accountDeepWorkMinutes: (currentDay?.activityInputs.accountDeepWorkMinutes || 0) + elapsedMinutes });
           }
         }
         
@@ -411,8 +385,7 @@ export const useStore = create<QuotaCompassStore>()(
           id: generateId(),
           touchesThisWeek: 0,
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+          updatedAt: new Date().toISOString() };
         set((state) => ({ accounts: [...state.accounts, newAccount] }));
       },
       
@@ -422,14 +395,12 @@ export const useStore = create<QuotaCompassStore>()(
             a.id === id
               ? { ...a, ...updates, updatedAt: new Date().toISOString() }
               : a
-          ),
-        }));
+          ) }));
       },
       
       deleteAccount: (id) => {
         set((state) => ({
-          accounts: state.accounts.filter(a => a.id !== id),
-        }));
+          accounts: state.accounts.filter(a => a.id !== id) }));
       },
       
       // Contacts
@@ -440,8 +411,7 @@ export const useStore = create<QuotaCompassStore>()(
           ...contact,
           id: generateId(),
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+          updatedAt: new Date().toISOString() };
         set((state) => ({ contacts: [...state.contacts, newContact] }));
       },
       
@@ -451,14 +421,12 @@ export const useStore = create<QuotaCompassStore>()(
             c.id === id
               ? { ...c, ...updates, updatedAt: new Date().toISOString() }
               : c
-          ),
-        }));
+          ) }));
       },
       
       deleteContact: (id) => {
         set((state) => ({
-          contacts: state.contacts.filter(c => c.id !== id),
-        }));
+          contacts: state.contacts.filter(c => c.id !== id) }));
       },
       
       // Renewals
@@ -491,8 +459,7 @@ export const useStore = create<QuotaCompassStore>()(
           closeDate: closeDate,
           activityLog: [],
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+          updatedAt: new Date().toISOString() };
         
         const newRenewal: Renewal = {
           ...renewal,
@@ -502,13 +469,11 @@ export const useStore = create<QuotaCompassStore>()(
           linkedOpportunityId: opportunityId,
           churnRisk: renewal.churnRisk || 'low',
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+          updatedAt: new Date().toISOString() };
         
         set((state) => ({ 
           renewals: [...state.renewals, newRenewal],
-          opportunities: [...state.opportunities, newOpportunity],
-        }));
+          opportunities: [...state.opportunities, newOpportunity] }));
       },
       
       updateRenewal: (id, updates) => {
@@ -527,14 +492,12 @@ export const useStore = create<QuotaCompassStore>()(
             }
             
             return updated;
-          }),
-        }));
+          }) }));
       },
       
       deleteRenewal: (id) => {
         set((state) => ({
-          renewals: state.renewals.filter(r => r.id !== id),
-        }));
+          renewals: state.renewals.filter(r => r.id !== id) }));
       },
       
       createMissingRenewalOpportunities: () => {
@@ -569,15 +532,13 @@ export const useStore = create<QuotaCompassStore>()(
             closeDate: closeDate,
             activityLog: [],
             createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
+            updatedAt: new Date().toISOString() };
           
           newOpportunities.push(newOpportunity);
           updatedRenewals.push({
             ...renewal,
             linkedOpportunityId: opportunityId,
-            updatedAt: new Date().toISOString(),
-          });
+            updatedAt: new Date().toISOString() });
         });
         
         if (newOpportunities.length > 0) {
@@ -586,8 +547,7 @@ export const useStore = create<QuotaCompassStore>()(
             renewals: state.renewals.map(r => {
               const updated = updatedRenewals.find(ur => ur.id === r.id);
               return updated || r;
-            }),
-          }));
+            }) }));
         }
         
         return newOpportunities.length;
@@ -601,8 +561,7 @@ export const useStore = create<QuotaCompassStore>()(
           ...task,
           id: generateId(),
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+          updatedAt: new Date().toISOString() };
         set((state) => ({ tasks: [...state.tasks, newTask] }));
         return newTask;
       },
@@ -613,14 +572,12 @@ export const useStore = create<QuotaCompassStore>()(
             t.id === id
               ? { ...t, ...updates, updatedAt: new Date().toISOString() }
               : t
-          ),
-        }));
+          ) }));
       },
       
       deleteTask: (id) => {
         set((state) => ({
-          tasks: state.tasks.filter(t => t.id !== id),
-        }));
+          tasks: state.tasks.filter(t => t.id !== id) }));
       },
       
       toggleTaskComplete: (id) => {
@@ -631,11 +588,9 @@ export const useStore = create<QuotaCompassStore>()(
                   ...t, 
                   status: (t.status === 'done' ? 'next' : 'done') as TaskStatus,
                   completedAt: t.status !== 'done' ? new Date().toISOString() : undefined,
-                  updatedAt: new Date().toISOString(),
-                }
+                  updatedAt: new Date().toISOString() }
               : t
-          ),
-        }));
+          ) }));
       },
       
       // Recurring Task Templates
@@ -647,8 +602,7 @@ export const useStore = create<QuotaCompassStore>()(
           id: generateId(),
           paused: false,
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+          updatedAt: new Date().toISOString() };
         set((state) => ({ recurringTemplates: [...state.recurringTemplates, newTemplate] }));
         // Immediately try to generate an instance for today
         setTimeout(() => get().generateDueRecurringInstances(), 0);
@@ -658,18 +612,16 @@ export const useStore = create<QuotaCompassStore>()(
         set((state) => ({
           recurringTemplates: state.recurringTemplates.map(t =>
             t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t
-          ),
-        }));
+          ) }));
       },
       
       deleteRecurringTemplate: (id) => {
         set((state) => ({
-          recurringTemplates: state.recurringTemplates.filter(t => t.id !== id),
-        }));
+          recurringTemplates: state.recurringTemplates.filter(t => t.id !== id) }));
       },
       
       generateDueRecurringInstances: () => {
-        const { recurringTemplates, tasks, addTask } = get();
+        const { recurringTemplates, tasks, addTask: _addTask } = get();
         const todayStr = getTodayString();
         
         recurringTemplates.forEach(template => {
@@ -696,8 +648,7 @@ export const useStore = create<QuotaCompassStore>()(
             linkedOpportunityId: template.linkedOpportunityId,
             notes: template.notes,
             createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
+            updatedAt: new Date().toISOString() };
           
           // Add the task directly to state and update template tracking
           set((state) => ({
@@ -708,11 +659,9 @@ export const useStore = create<QuotaCompassStore>()(
                     ...t,
                     lastGeneratedDate: todayStr,
                     activeInstanceId: newTask.id,
-                    updatedAt: new Date().toISOString(),
-                  }
+                    updatedAt: new Date().toISOString() }
                 : t
-            ),
-          }));
+            ) }));
         });
       },
       
@@ -725,8 +674,7 @@ export const useStore = create<QuotaCompassStore>()(
           id: generateId(),
           activityLog: [],
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+          updatedAt: new Date().toISOString() };
         set((state) => ({ opportunities: [...state.opportunities, newOpportunity] }));
       },
       
@@ -760,15 +708,13 @@ export const useStore = create<QuotaCompassStore>()(
           
           return {
             opportunities: state.opportunities.map(o => o.id === id ? updatedOpp : o),
-            accounts: updatedAccounts,
-          };
+            accounts: updatedAccounts };
         });
       },
       
       deleteOpportunity: (id) => {
         set((state) => ({
-          opportunities: state.opportunities.filter(o => o.id !== id),
-        }));
+          opportunities: state.opportunities.filter(o => o.id !== id) }));
       },
       
       logOpportunityActivity: (id, type, notes) => {
@@ -787,8 +733,7 @@ export const useStore = create<QuotaCompassStore>()(
                     { id: generateId(), type, date: new Date().toISOString(), notes },
                   ],
                   lastTouchDate: todayStr,
-                  updatedAt: new Date().toISOString(),
-                }
+                  updatedAt: new Date().toISOString() }
               : o
           );
           
@@ -801,8 +746,7 @@ export const useStore = create<QuotaCompassStore>()(
                       lastTouchDate: todayStr, 
                       lastTouchType: type,
                       touchesThisWeek: (a.touchesThisWeek || 0) + 1,
-                      updatedAt: new Date().toISOString(),
-                    }
+                      updatedAt: new Date().toISOString() }
                   : a
               )
             : state.accounts;
@@ -819,8 +763,7 @@ export const useStore = create<QuotaCompassStore>()(
           return {
             opportunities: updatedOpps,
             accounts: updatedAccounts,
-            contacts: updatedContacts,
-          };
+            contacts: updatedContacts };
         });
       },
       
@@ -828,12 +771,10 @@ export const useStore = create<QuotaCompassStore>()(
       logCall: (hadConversation) => {
         const { updateActivityInputs, updateRawInputs, currentDay } = get();
         updateActivityInputs({
-          dials: (currentDay?.activityInputs.dials || 0) + 1,
-        });
+          dials: (currentDay?.activityInputs.dials || 0) + 1 });
         if (hadConversation) {
           updateRawInputs({
-            coldCallsWithConversations: (currentDay?.rawInputs.coldCallsWithConversations || 0) + 1,
-          });
+            coldCallsWithConversations: (currentDay?.rawInputs.coldCallsWithConversations || 0) + 1 });
         }
       },
       
@@ -858,28 +799,24 @@ export const useStore = create<QuotaCompassStore>()(
         
         updateActivityInputs({
           emailsTotal: newTotal,
-          automatedPercent: Math.min(100, Math.round(newPercent / 25) * 25) as 0 | 25 | 50 | 75 | 100,
-        });
+          automatedPercent: Math.min(100, Math.round(newPercent / 25) * 25) as 0 | 25 | 50 | 75 | 100 });
       },
       
       logMeetingHeld: () => {
         const { updateActivityInputs, currentDay } = get();
         updateActivityInputs({
-          customerMeetingsHeld: (currentDay?.activityInputs.customerMeetingsHeld || 0) + 1,
-        });
+          customerMeetingsHeld: (currentDay?.activityInputs.customerMeetingsHeld || 0) + 1 });
       },
       
       logProspectsAdded: (count) => {
         const { updateRawInputs, currentDay } = get();
         updateRawInputs({
-          prospectsAddedToCadence: (currentDay?.rawInputs.prospectsAddedToCadence || 0) + count,
-        });
+          prospectsAddedToCadence: (currentDay?.rawInputs.prospectsAddedToCadence || 0) + count });
       },
       
       // Quota Config
       quotaConfig: null,
-      setQuotaConfig: (config) => set({ quotaConfig: config }),
-    }),
+      setQuotaConfig: (config) => set({ quotaConfig: config }) }),
     {
       name: 'quota-compass-storage',
       version: 1,
@@ -892,8 +829,7 @@ export const useStore = create<QuotaCompassStore>()(
         recurringTemplates: state.recurringTemplates,
         focusBlocks: state.focusBlocks,
         opportunities: state.opportunities,
-        quotaConfig: state.quotaConfig,
-      }),
+        quotaConfig: state.quotaConfig }),
       storage: {
         getItem: (name) => {
           try {
@@ -912,8 +848,6 @@ export const useStore = create<QuotaCompassStore>()(
             console.error('[Store] localStorage write failed (quota?):', err);
           }
         },
-        removeItem: (name) => localStorage.removeItem(name),
-      },
-    }
+        removeItem: (name) => localStorage.removeItem(name) } }
   )
 );

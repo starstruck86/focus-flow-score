@@ -13,7 +13,7 @@
  * chromeless via <EmbeddedLayoutProvider>.
  */
 import { Suspense, lazy, useMemo } from 'react';
-import { useSearchParams, useNavigate, Link } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { Briefcase, ArrowRight } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';

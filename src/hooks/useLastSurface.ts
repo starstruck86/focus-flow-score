@@ -27,8 +27,8 @@ export function useLastSurface() {
       // Read voice hint if Dave's navigation.ts set one (best-effort, optional).
       let via: string | null = null;
       try {
-        const w = window as unknown as { __lastNavVia?: string };
-        if (w.__lastNavVia) { via = w.__lastNavVia; w.__lastNavVia = undefined; }
+        const w = window as unknown as { _lastNavVia?: string };
+        if (w._lastNavVia) { via = w._lastNavVia; w._lastNavVia = undefined; }
       } catch { /* ignore */ }
 
       void (supabase as any)

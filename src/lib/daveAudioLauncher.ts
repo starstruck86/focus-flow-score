@@ -7,13 +7,7 @@
  * Tightly scoped to training orchestration — NOT a chatbot.
  */
 
-import {
-  parseUserIntent,
-  fetchTrainingContext,
-  routeByIntent,
-  type DaveRecommendation,
-  type UserIntent,
-} from '@/lib/daveTrainingRouter';
+import { parseUserIntent, fetchTrainingContext, routeByIntent, type DaveRecommendation } from '@/lib/daveTrainingRouter';
 import { loadVoiceSessionBuffer } from '@/lib/daveSessionBuffer';
 import { createLogger } from '@/lib/logger';
 

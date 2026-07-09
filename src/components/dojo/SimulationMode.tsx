@@ -19,7 +19,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { SimulationArc, SimulationTurnTemplate } from '@/lib/dojo/v5/simulationArcs';
+import type { SimulationArc } from '@/lib/dojo/v5/simulationArcs';
 import { getBuyerMessage } from '@/lib/dojo/v5/simulationArcs';
 import { computeArcScore, toArcTurnResult, type ArcScore, type ArcTurnResult } from '@/lib/dojo/v5/arcScoring';
 import { normalizeScoreResult, type DojoScoreResult } from '@/lib/dojo/types';

@@ -13,7 +13,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllPages } from '@/lib/supabasePagination';
-import { inferTags, mergeTags, type StructuredTag } from './resourceTags';
+import { inferTags, mergeTags } from './resourceTags';
 import {
   extractKnowledgeHeuristic,
   extractKnowledgeLLMFallback,
@@ -22,16 +22,7 @@ import {
   type ExtractionSource,
 } from './knowledgeExtraction';
 import { createLogger } from '@/lib/logger';
-import {
-  isEligibleForExtraction,
-  isContentBacked as contractIsContentBacked,
-  assertEligibilityAlignment,
-  checkRegressionGuard,
-  estimateBatchOutput,
-  type PipelineOutcome,
-  type EligibilityResult,
-  ENRICHED_STATUSES,
-} from './pipelineContract';
+import { isEligibleForExtraction, isContentBacked as contractIsContentBacked, checkRegressionGuard, type PipelineOutcome } from './pipelineContract';
 
 const log = createLogger('AutoOperationalize');
 
@@ -176,7 +167,7 @@ export async function autoOperationalizeResource(
     return makeResult(resourceId, r.title, stagesCompleted, 'uploaded', tagsAdded, 0, 0, false, true, eligibility.reason, eligibility.extractionTier, 'no_content');
   }
 
-  const effectiveLength = Math.max(r.content?.length ?? 0, r.content_length ?? 0);
+  const _effectiveLength = Math.max(r.content?.length ?? 0, r.content_length ?? 0);
   stagesCompleted.push('content_ready');
 
   // ── Clear stale blockers if content-backed ──
@@ -595,8 +586,8 @@ export interface BackfillSummary extends BatchSummary {
  * Excludes junk (<50 chars, no URL, no manual content).
  */
 async function fetchEligibleResourceIds(
-  mode: 'all' | 'smart',
-  skipOperationalized: boolean,
+  _mode: 'all' | 'smart',
+  _skipOperationalized: boolean,
 ): Promise<string[]> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;
@@ -675,7 +666,7 @@ export function derivePipelineStage(resource: {
 }, ki: { total: number; active: number; hasContexts: boolean }): PipelineStage {
   const isCB = contractIsContentBacked(resource);
 
-  const isCB2 = isCB; // alias used below
+  const _isCB2 = isCB; // alias used below
   if (!isCB) return 'uploaded';
 
   const tags = resource.tags ?? [];

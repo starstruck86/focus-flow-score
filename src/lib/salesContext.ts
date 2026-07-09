@@ -5,7 +5,7 @@
  * meeting prep, and Dave grounding. Used across prep, roleplay, and coaching.
  */
 
-import { queryKnowledge, type KnowledgeQuery } from './knowledgeRetrieval';
+import { queryKnowledge } from './knowledgeRetrieval';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
 import { logKnowledgeUsage, buildUsageEntries } from '@/lib/knowledgeUsageLogger';
 import { createLogger } from '@/lib/logger';

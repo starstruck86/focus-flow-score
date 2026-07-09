@@ -39,7 +39,7 @@ interface ClaudeImportModalProps {
 }
 
 export function ClaudeImportModal({ open, onClose }: ClaudeImportModalProps) {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const { accounts, opportunities, contacts, updateAccount, addAccount, updateOpportunity, addOpportunity, updateContact, addContact } = useStore();
   const [step, setStep] = useState<'paste' | 'parsing' | 'review' | 'importing' | 'done'>('paste');
   const [rawText, setRawText] = useState('');

@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent } from '@/components/ui/card';
 import { Play, Swords, MessageSquare, Eye, Compass, ShieldCheck, Target, Mic, Phone, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';

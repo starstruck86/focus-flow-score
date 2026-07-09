@@ -1,6 +1,6 @@
 // Pace to Quota Card - New ARR + Renewal ARR lanes
 import { motion } from 'framer-motion';
-import { Target, TrendingUp, TrendingDown, Minus, DollarSign } from 'lucide-react';
+import { Target, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/commissionCalculations';

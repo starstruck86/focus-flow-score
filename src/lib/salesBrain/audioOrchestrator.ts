@@ -8,7 +8,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { detectAudioSubtype, scoreTranscriptQuality, getAudioFailureDescription } from './audioPipeline';
-import type { AudioSubtype, AudioPipelineStage, AudioFailureCode, TranscriptQualityResult } from './audioPipeline';
+import type { AudioPipelineStage, AudioFailureCode, TranscriptQualityResult } from './audioPipeline';
 
 export interface AudioJobRecord {
   id: string;

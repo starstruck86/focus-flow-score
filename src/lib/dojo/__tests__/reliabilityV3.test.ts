@@ -14,13 +14,11 @@ import {
   checkForHang,
   armHangDetector,
   disarmHangDetector,
-  markHangWarning,
   markHung,
   determineRecoveryStrategy,
   logRecoveryAttempt,
   resolveRecoveryAttempt,
-  summarizeReliability,
-} from '../dojoReliabilityV3';
+  summarizeReliability } from '../dojoReliabilityV3';
 import {
   loadChaosConfig,
   saveChaosConfig,
@@ -31,8 +29,7 @@ import {
   shouldDelayEnded,
   shouldInjectDuplicate,
   getInjectedFetchDelay,
-  CHAOS_PRESETS,
-} from '../dojoChaosTest';
+  CHAOS_PRESETS } from '../dojoChaosTest';
 
 // ── Health Scoring ────────────────────────────────────────────────
 
@@ -103,8 +100,7 @@ describe('ReliabilityV3 — Audible Confirmation', () => {
       ...m,
       audibleConfirmations: m.audibleConfirmations.map(a =>
         a.chunkId === 'chunk-1' ? { ...a, audibleAt: Date.now() - 500 } : a
-      ),
-    };
+      ) };
     m = finalizeAudible(m, 'chunk-1');
     expect(wasChunkAudible(m, 'chunk-1')).toBe(true);
   });

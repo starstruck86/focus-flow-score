@@ -22,7 +22,7 @@
  *
  * Pure presentation. No backend/engine changes.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { Link } from 'react-router-dom';
@@ -42,10 +42,7 @@ import {
   type CustomPill,
 } from '@/lib/strategy/customPills';
 import { getAllThreadTags } from '@/lib/strategy/threadTags';
-import {
-  getPinnedThreadIds, subscribePinnedThreads,
-} from '@/lib/strategy/pinnedThreads';
-import { displayThreadTitle, isUntitledTitle, WORKSPACE_SHORT } from '@/lib/strategy/threadNaming';
+import { displayThreadTitle, isUntitledTitle } from '@/lib/strategy/threadNaming';
 import { isCleanupThread } from '@/lib/strategy/threadCleanup';
 import type { StrategySurfaceKey } from './StrategyNavSidebar';
 import type { StrategyThread } from '@/types/strategy';
@@ -174,7 +171,7 @@ const SURFACE_GUIDANCE: Partial<Record<StrategySurfaceKey, string>> = {
 export function SurfacePanel({
   surface, onLaunchWorkflow, onClose,
   threads, activeThreadId, onSelectThread,
-  pillsVersion, onAddPill, onEditPill,
+  pillsVersion, onAddPill: _onAddPill, onEditPill: _onEditPill,
   runningThreadIds, artifactThreadIds,
   hasActiveThread, onNewThreadInSurface,
   onCreateThreadForAccount,
@@ -205,7 +202,7 @@ export function SurfacePanel({
   // Only show threads that *clearly belong* to this workspace's intent.
   // Each thread carries a `reason` (why it surfaced) and a `group` (light
   // bucket for visual organization). Empty is acceptable.
-  const relevantFallbackWork = useMemo<AnnotatedThread[]>(() => {
+  const _relevantFallbackWork = useMemo<AnnotatedThread[]>(() => {
     if (surface === 'work' || surface === 'projects') return [];
     if (recentThreadsForSurface.length > 0) return [];
 

@@ -1,24 +1,8 @@
 // CSV parsing and data processing for combined import
-import type { 
-  EnhancedHeaderMapping, 
-  ParsedImportRow, 
-  ImportTargetObject,
-  DataTransform,
-  MotionType,
-  RowType,
-  PendingValueMapping,
-  UnrecognizedLink,
-  NeedsReviewRow,
-  ImportPreviewSummary,
-} from './importTypes';
-import { 
-  MOTION_HEADER_ALIASES, 
-  MOTION_VALUE_ALIASES, 
-  RENEWAL_INDICATOR_FIELDS,
-  PICKLIST_VALUES,
-} from './importTypes';
+import type { EnhancedHeaderMapping, ParsedImportRow, ImportTargetObject, DataTransform, MotionType, ImportPreviewSummary } from './importTypes';
+import { MOTION_VALUE_ALIASES } from './importTypes';
 import type { HeaderMapping, ValueMapping, AccountAlias } from '@/hooks/useImportMappings';
-import type { DbAccount, DbOpportunity, DbRenewal } from '@/hooks/useAccountsData';
+import type { DbAccount, DbOpportunity } from '@/hooks/useAccountsData';
 
 // Extended header aliases for all objects
 export const HEADER_ALIASES: Record<string, { object: ImportTargetObject; field: string; transform?: DataTransform }> = {
@@ -200,8 +184,7 @@ export const HEADER_ALIASES: Record<string, { object: ImportTargetObject; field:
   'linkedin url': { object: 'contact', field: 'linkedin_url', transform: 'url' },
   'linkedin link': { object: 'contact', field: 'linkedin_url', transform: 'url' },
   'li url': { object: 'contact', field: 'linkedin_url', transform: 'url' },
-  'li link': { object: 'contact', field: 'linkedin_url', transform: 'url' },
-};
+  'li link': { object: 'contact', field: 'linkedin_url', transform: 'url' } };
 
 // Normalize header for matching
 export function normalizeHeader(header: string): string {
@@ -276,8 +259,7 @@ export function autoMapHeaders(
         dataTransform: (savedMapping.data_transform || 'text') as DataTransform,
         isMapped: true,
         isFromSavedMapping: true,
-        confidence: 'high',
-      });
+        confidence: 'high' });
       return;
     }
     
@@ -292,8 +274,7 @@ export function autoMapHeaders(
         dataTransform: aliasMatch.transform || 'text',
         isMapped: true,
         isFromSavedMapping: false,
-        confidence: 'high',
-      });
+        confidence: 'high' });
       return;
     }
     
@@ -318,8 +299,7 @@ export function autoMapHeaders(
               dataTransform: 'url',
               isMapped: true,
               isFromSavedMapping: false,
-              confidence: 'medium',
-            });
+              confidence: 'medium' });
             return;
           }
         }
@@ -335,8 +315,7 @@ export function autoMapHeaders(
       dataTransform: 'text',
       isMapped: false,
       isFromSavedMapping: false,
-      confidence: 'low',
-    });
+      confidence: 'low' });
   });
   
   return mappings;
@@ -618,8 +597,7 @@ export function calculateSummary(rows: ParsedImportRow[]): ImportPreviewSummary 
     ignoredCount: rows.filter(r => r.ignored).length,
     warningCount: rows.reduce((sum, r) => sum + r.warnings.length, 0),
     newLogoRowCount: rows.filter(r => r.motion === 'new-logo' && !r.ignored).length,
-    renewalRowCount: rows.filter(r => r.motion === 'renewal' && !r.ignored).length,
-  };
+    renewalRowCount: rows.filter(r => r.motion === 'renewal' && !r.ignored).length };
 }
 
 // Build opportunity lookup for matching

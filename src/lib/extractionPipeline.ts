@@ -8,7 +8,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import { autoOperationalizeResource, type AutoOperationalizeResult } from './autoOperationalize';
+import { autoOperationalizeResource } from './autoOperationalize';
 import { fetchAllPages } from './supabasePagination';
 import { createLogger } from './logger';
 

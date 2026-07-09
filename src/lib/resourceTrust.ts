@@ -13,14 +13,9 @@
  */
 
 import { createLogger } from './logger';
-import {
-  QUALITY_THRESHOLDS,
-  CURRENT_ENRICHMENT_VERSION,
-  CURRENT_VALIDATION_VERSION,
-  type QualityResult,
-} from './resourceQuality';
+import { CURRENT_ENRICHMENT_VERSION, CURRENT_VALIDATION_VERSION } from './resourceQuality';
 
-const log = createLogger('ResourceTrust');
+const _log = createLogger('ResourceTrust');
 
 // ── Trust Statuses ─────────────────────────────────────────
 export type TrustStatus = 'trusted' | 'limited' | 'suspect' | 'stale' | 'quarantined';

@@ -13,12 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import {
-  GraduationCap, TrendingUp, Target, Mic, Sparkles, ArrowRight, ArrowUp, ArrowDown, Minus,
-  CheckCircle2, AlertTriangle, Lightbulb, BarChart3, Loader2, MessageSquareQuote,
-  ShieldCheck, ShieldAlert, Brain, Crosshair, Zap, Clock, Eye, FileText,
-  Upload, Plus, ChevronDown, ChevronUp, Wand2, Swords, Shield, BookOpen,
-} from 'lucide-react';
+import { GraduationCap, TrendingUp, Target, Mic, Sparkles, ArrowUp, ArrowDown, CheckCircle2, AlertTriangle, Lightbulb, BarChart3, Loader2, MessageSquareQuote, ShieldCheck, ShieldAlert, Brain, Crosshair, Zap, Clock, Eye, FileText, Upload, Plus, ChevronDown, ChevronUp, Wand2, Swords, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SHELL } from '@/lib/layout';
 import { useCallTranscripts, useSaveTranscript, useArchivedTranscripts } from '@/hooks/useCallTranscripts';
@@ -953,7 +948,7 @@ function TranscriptIngestion({ onSaved, onSaveAndGrade }: { onSaved: () => void;
   const [callGoals, setCallGoals] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const saveTranscript = useSaveTranscript();
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const accounts = useStore(s => s.accounts);
   const opportunities = useStore(s => s.opportunities);
 
@@ -1134,10 +1129,10 @@ function TranscriptIngestion({ onSaved, onSaveAndGrade }: { onSaved: () => void;
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Call Type</Label>
-                    <Select value={callType || "__none__"} onValueChange={(v) => setCallType(v === "__none__" ? "" : v)}>
+                    <Select value={callType || "_none__"} onValueChange={(v) => setCallType(v === "_none__" ? "" : v)}>
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Type..." /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__none__">Any</SelectItem>
+                        <SelectItem value="_none__">Any</SelectItem>
                         {CALL_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -1148,10 +1143,10 @@ function TranscriptIngestion({ onSaved, onSaveAndGrade }: { onSaved: () => void;
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Account {autoDetected && <span className="text-primary">(auto)</span>}</Label>
-                    <Select value={accountId || "__none__"} onValueChange={(v) => { const val = v === "__none__" ? "" : v; setAccountId(val); setOpportunityId(''); setAutoDetected(null); manuallySelected.current = !!val; }}>
+                    <Select value={accountId || "_none__"} onValueChange={(v) => { const val = v === "_none__" ? "" : v; setAccountId(val); setOpportunityId(''); setAutoDetected(null); manuallySelected.current = !!val; }}>
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Link account..." /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
+                        <SelectItem value="_none__">None</SelectItem>
                         {accounts.sort((a, b) => a.name.localeCompare(b.name)).map(a => (
                           <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                         ))}
@@ -1160,10 +1155,10 @@ function TranscriptIngestion({ onSaved, onSaveAndGrade }: { onSaved: () => void;
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Opportunity</Label>
-                    <Select value={opportunityId || "__none__"} onValueChange={(v) => setOpportunityId(v === "__none__" ? "" : v)}>
+                    <Select value={opportunityId || "_none__"} onValueChange={(v) => setOpportunityId(v === "_none__" ? "" : v)}>
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Link opp..." /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
+                        <SelectItem value="_none__">None</SelectItem>
                         {opportunities
                           .filter(o => !accountId || o.accountId === accountId)
                           .sort((a, b) => a.name.localeCompare(b.name))
@@ -1251,7 +1246,7 @@ export default function Coach() {
   const { data: transcripts, refetch: refetchTranscripts } = useCallTranscripts();
   const { data: archivedTranscripts = [] } = useArchivedTranscripts();
   const [showArchived, setShowArchived] = useState(false);
-  const { data: allGrades, isLoading } = useAllTranscriptGrades();
+  const { data: allGrades, isLoading: _isLoading } = useAllTranscriptGrades();
   const gradeTranscript = useGradeTranscript();
   const [selectedTranscriptId, setSelectedTranscriptId] = useState<string | null>(null);
   const { data: selectedGrade } = useTranscriptGrade(selectedTranscriptId || undefined);
@@ -1619,7 +1614,7 @@ export default function Coach() {
                         formatter={(value: any) => [`${value}/100`, 'Avg score']}
                       />
                       <Bar dataKey="avg" radius={[0, 3, 3, 0]} maxBarSize={20}>
-                        {categoryBreakdown.map((entry, index) => (
+                        {categoryBreakdown.map((entry, _index) => (
                           <Cell
                             key={entry.key}
                             fill={

@@ -6,26 +6,7 @@ import { AppearanceSettings } from '@/components/settings/AppearanceSettings';
 import { KnowledgeExport } from '@/components/settings/KnowledgeExport';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { Layout } from '@/components/Layout';
-import { 
-  Calendar as CalendarIcon, 
-  Clock, 
-  Plus, 
-  Trash2, 
-  Settings as SettingsIcon, 
-  Palette, 
-  Database, 
-  Bell,
-  ChevronDown,
-  Check,
-  ClipboardCheck,
-  Upload,
-  Download,
-  FileSpreadsheet,
-  Link2,
-  ArrowRight,
-  RefreshCw,
-  Brain,
-} from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Plus, Trash2, Settings as SettingsIcon, Bell, ClipboardCheck, Upload, Download, FileSpreadsheet, Link2, ArrowRight, RefreshCw, Brain } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ImportWizard } from '@/components/import';
 import { DuplicateDetector } from '@/components/DuplicateDetector';
@@ -45,14 +26,12 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  SelectValue } from '@/components/ui/select';
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
+  AccordionTrigger } from '@/components/ui/accordion';
 import { 
   useWorkScheduleConfig, 
   useHolidays, 
@@ -61,16 +40,14 @@ import {
   useAddHoliday,
   useRemoveHoliday,
   useAddPtoDay,
-  useRemovePtoDay,
-} from '@/hooks/useStreakData';
+  useRemovePtoDay } from '@/hooks/useStreakData';
 import {
   useHeaderMappings,
   useDeleteHeaderMapping,
   useValueMappings,
   useDeleteValueMapping,
   useAccountAliases,
-  useDeleteAccountAlias,
-} from '@/hooks/useImportMappings';
+  useDeleteAccountAlias } from '@/hooks/useImportMappings';
 import { useDbAccounts } from '@/hooks/useAccountsData';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -102,8 +79,7 @@ function DaveHealthSection() {
           apiKey: data.apiKeyValid,
           agentId: data.agentIdSet,
           tokenOk: data.tokenGenOk,
-          overridesEnabled: data.overridesEnabled,
-        });
+          overridesEnabled: data.overridesEnabled });
       }
     } catch {
       toast.error('Health check failed');
@@ -125,8 +101,7 @@ function DaveHealthSection() {
       const { authenticatedFetch } = await import('@/lib/authenticatedFetch');
       const resp = await authenticatedFetch({
         functionName: 'dave-conversation-token',
-        body: { tzOffsetHours: new Date().getTimezoneOffset() / -60, currentPage: '/', conversationHistory: '' },
-      });
+        body: { tzOffsetHours: new Date().getTimezoneOffset() / -60, currentPage: '/', conversationHistory: '' } });
 
       if (!resp.ok) {
         setSmokeResult({
@@ -134,8 +109,7 @@ function DaveHealthSection() {
           context: { pass: false, detail: 'Skipped (no token)' },
           identity: { pass: false, detail: 'Skipped (no token)' },
           firstMessage: { pass: false, detail: 'Skipped (no token)' },
-          overrides: { pass: null, detail: 'Skipped (no token)' },
-        });
+          overrides: { pass: null, detail: 'Skipped (no token)' } });
         return;
       }
 
@@ -163,8 +137,7 @@ function DaveHealthSection() {
         context: { pass: contextOk, detail: `${data.context?.length || 0} chars${contextOk ? '' : ' (need >500)'}` },
         identity: { pass: identityOk, detail: identityOk ? 'DAVE instructions found' : 'DAVE identity NOT found in context' },
         firstMessage: { pass: firstMsgOk, detail: firstMsgOk ? `"${data.firstMessage.substring(0, 80)}..."` : 'Missing or too short' },
-        overrides: { pass: overridesOk, detail: overridesDetail },
-      });
+        overrides: { pass: overridesOk, detail: overridesDetail } });
 
       if (tokenOk && contextOk && identityOk && firstMsgOk && overridesOk !== false) {
         toast.success('Smoke test passed — Dave is ready');
@@ -208,8 +181,7 @@ function DaveHealthSection() {
               const succeeded = total - failed;
               if (failed > 0) {
                 toast.warning(`${succeeded}/${total} tools synced (${failed} failed)`, {
-                  description: data?.failedTools?.map((f: any) => f.name).join(', '),
-                });
+                  description: data?.failedTools?.map((f: any) => f.name).join(', ') });
               } else {
                 toast.success(`All ${total} tools synced successfully`);
               }
@@ -377,8 +349,7 @@ function DataExportSection() {
         tasks: state.tasks,
         days: state.days,
         recurringTemplates: state.recurringTemplates,
-        quotaConfig: state.quotaConfig,
-      };
+        quotaConfig: state.quotaConfig };
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -633,8 +604,7 @@ export default function SettingsLegacy() {
       : [...config.workingDays, dayValue].sort();
     
     updateConfig.mutate({ workingDays: newDays }, {
-      onSuccess: () => toast.success('Work schedule updated'),
-    });
+      onSuccess: () => toast.success('Work schedule updated') });
   };
   
   const handleImportUSHolidays = async () => {
@@ -663,8 +633,7 @@ export default function SettingsLegacy() {
         toast.success('Holiday added');
         setNewHolidayDate(undefined);
         setNewHolidayName('');
-      },
-    });
+      } });
   };
   
   const handleAddPto = () => {
@@ -681,8 +650,7 @@ export default function SettingsLegacy() {
         toast.success('PTO day added');
         setNewPtoDate(undefined);
         setNewPtoNote('');
-      },
-    });
+      } });
   };
   
   const isLoading = configLoading || holidaysLoading || ptoLoading;

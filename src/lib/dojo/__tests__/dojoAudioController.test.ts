@@ -13,9 +13,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import type { DojoScoreResult } from '../types';
 import {
   createSession,
-  loadResult,
-} from '../conversationEngine';
-import { withPlayback, type PlaybackState } from '../playbackAdapter';
+  loadResult } from '../conversationEngine';
+import { withPlayback } from '../playbackAdapter';
 import {
   createAudioController,
   onTtsRequested,
@@ -35,16 +34,8 @@ import {
   recoverSession,
   onTabHidden,
   onTabVisible,
-  type AudioControllerState,
-  type ControllerSnapshot,
-} from '../dojoAudioController';
-import {
-  claimSession,
-  releaseOwnership,
-  heartbeatOwnership,
-  isCurrentTabOwner,
-  TAB_ID,
-} from '../dojoSessionOwnership';
+  type AudioControllerState} from '../dojoAudioController';
+import { claimSession, releaseOwnership, heartbeatOwnership, isCurrentTabOwner } from '../dojoSessionOwnership';
 
 // ── Fixtures ──────────────────────────────────────────────────────
 
@@ -61,8 +52,7 @@ const MOCK_RESULT: DojoScoreResult = {
   patternTags: ['discovery', 'questioning'],
   focusReason: 'Discovery is the foundation of every deal.',
   teachingNote: 'Elite reps never pitch before they understand.',
-  deltaNote: 'You jumped to solution before understanding the problem.',
-};
+  deltaNote: 'You jumped to solution before understanding the problem.' };
 
 function setupController(mode: 'voice' | 'text_fallback' = 'voice'): AudioControllerState {
   const session = createSession('test-session');

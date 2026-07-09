@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Bug, X, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import type { AudioControllerState, RestoreReason, ChunkAudibleState } from '@/lib/dojo/dojoAudioController';
+import type { AudioControllerState, RestoreReason } from '@/lib/dojo/dojoAudioController';
 import type { ControllerDirective } from '@/lib/dojo/dojoAudioController';
 import type { DojoAudioMetrics } from '@/lib/dojo/dojoAudioAnalytics';
 import { loadSnapshot, clearSnapshot } from '@/lib/dojo/dojoSessionSnapshot';

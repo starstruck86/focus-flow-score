@@ -16,29 +16,12 @@ import {
   type ExecutionLoop,
   type LoopAccount,
 } from '@/lib/loopScheduler';
-import {
-  getTodayRoleplayStatus,
-  recordRoleplayBlockEvent,
-  getRoleplayBlockConfig,
-  findRoleplaySlot,
-  type RoleplayBlockStatus,
-  type RoleplayBlockEvent,
-} from '@/lib/dailyRoleplayBlock';
-import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled, isAccountExecutionModelEnabled, isAccountCentricExecutionEnabled } from '@/lib/featureFlags';
+import { getTodayRoleplayStatus, getRoleplayBlockConfig, findRoleplaySlot, type RoleplayBlockStatus, type RoleplayBlockEvent } from '@/lib/dailyRoleplayBlock';
+import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled, isAccountExecutionModelEnabled } from '@/lib/featureFlags';
 import { todayInAppTz } from '@/lib/timeFormat';
 import { appendTimelineEvent } from '@/lib/accountTimeline';
 import { recordPrepToAttempt, recordAttemptToConnect } from '@/lib/accountPostAction';
-import {
-  markAccountPrepped,
-  recordAccountOutcome,
-  markAccountWorkedGeneric,
-  buildCarryForward as buildAccountCarryForward,
-  buildExecutionSummary,
-  getLoopAccountReadiness,
-  reconcileOnPlanChange,
-  type OutcomeType,
-  type AccountExecutionEntry,
-} from '@/lib/accountExecutionState';
+import { markAccountPrepped, recordAccountOutcome, markAccountWorkedGeneric, buildCarryForward as buildAccountCarryForward, buildExecutionSummary, type OutcomeType, type AccountExecutionEntry } from '@/lib/accountExecutionState';
 
 // ── Provenance Model ───────────────────────────────────────
 

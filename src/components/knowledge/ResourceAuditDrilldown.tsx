@@ -77,7 +77,7 @@ function useBatchLedger(resourceId: string | null) {
 }
 
 /** Reconcile resource snapshot from run history */
-function useReconciledSnapshot(resourceId: string | null, runs: any[], batches: any[]) {
+function useReconciledSnapshot(_resourceId: string | null, runs: any[], batches: any[]) {
   const attemptCount = runs.length;
   const deduped = new Map<number, any>();
   for (const batch of batches) {

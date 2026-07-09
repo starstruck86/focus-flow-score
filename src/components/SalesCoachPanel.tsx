@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -162,8 +162,8 @@ function GradeCard({ grade }: { grade: TranscriptGrade }) {
 
 export function SalesCoachPanel({ open, onOpenChange }: SalesCoachPanelProps) {
   const [tab, setTab] = useState('grade');
-  const { data: transcripts, isLoading: loadingTranscripts } = useCallTranscripts();
-  const { data: allGrades, isLoading: loadingGrades } = useAllTranscriptGrades();
+  const { data: transcripts, isLoading: _loadingTranscripts } = useCallTranscripts();
+  const { data: allGrades, isLoading: _loadingGrades } = useAllTranscriptGrades();
   const gradeTranscript = useGradeTranscript();
   const [selectedTranscriptId, setSelectedTranscriptId] = useState<string | null>(null);
   const { data: selectedGrade } = useTranscriptGrade(selectedTranscriptId || undefined);

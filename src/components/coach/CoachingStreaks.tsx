@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Flame, TrendingUp, Award, Target } from 'lucide-react';
+import { Flame, TrendingUp, Award } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAllTranscriptGrades } from '@/hooks/useTranscriptGrades';
 

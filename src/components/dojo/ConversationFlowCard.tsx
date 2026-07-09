@@ -30,7 +30,7 @@ export function ConversationFlowCard({ arc, turnResults, arcScore, assignmentFoc
     return { turnIndex: i, broke };
   }) : null;
 
-  const focusHeldTurns = focusBreakdown?.filter(t => !t.broke).length ?? 0;
+  const _focusHeldTurns = focusBreakdown?.filter(t => !t.broke).length ?? 0;
   const focusBrokeTurn = focusBreakdown?.find(t => t.broke);
   const focusBrokeOnTurnLabel = focusBrokeTurn != null
     ? `Turn ${focusBrokeTurn.turnIndex + 1}`

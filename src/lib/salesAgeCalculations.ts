@@ -1,19 +1,7 @@
 // Sales Age & Quota Pace Index (QPI) Calculation Engine
 // WHOOP-like "Sales Age" derived from activity pace vs quota-required pace
 
-import { 
-  differenceInBusinessDays, 
-  addDays, 
-  subDays,
-  startOfWeek,
-  endOfWeek,
-  format,
-  parseISO,
-  isAfter,
-  isBefore,
-  startOfMonth,
-  startOfQuarter,
-} from 'date-fns';
+import { endOfWeek, format, parseISO } from 'date-fns';
 
 // Types
 export interface QuotaTargets {
@@ -136,8 +124,7 @@ export const DEFAULT_QUOTA_TARGETS: QuotaTargets = {
   targetAccountsResearchedPerDay: 3,
   targetContactsPreppedPerDay: 5,
   qpiNewLogoWeight: 0.60,
-  qpiRenewalWeight: 0.40,
-};
+  qpiRenewalWeight: 0.40 };
 
 /**
  * Calculate business days between two dates (Mon-Fri)
@@ -187,13 +174,13 @@ export function calculateRequiredTargets(
   const fyStart = parseISO(targets.fiscalYearStart);
   const fyEnd = parseISO(targets.fiscalYearEnd);
   
-  const bizDaysTotal = getBusinessDays(fyStart, fyEnd);
+  const _bizDaysTotal = getBusinessDays(fyStart, fyEnd);
   const bizDaysRemaining = getBusinessDays(now, fyEnd);
   const weeksRemaining = Math.max(1, bizDaysRemaining / 5);
   
   // Remaining quota
   const newArrRemaining = Math.max(0, targets.newArrQuota - closedWonNewArr);
-  const renewalArrRemaining = Math.max(0, targets.renewalArrQuota - closedWonRenewalArr);
+  const _renewalArrRemaining = Math.max(0, targets.renewalArrQuota - closedWonRenewalArr);
   
   // Calculate historical conversion ratios from 6M data
   let dialToConnectRatio = 0.10; // 10% default
@@ -226,8 +213,7 @@ export function calculateRequiredTargets(
     requiredNewOpps: Math.max(targets.targetOppsCreatedPerWeek, newOppsNeededPerWeek) / 5,
     requiredCustomerMeetings: targets.targetCustomerMeetingsPerWeek / 5,
     requiredAccountsResearched: targets.targetAccountsResearchedPerDay,
-    requiredContactsPrepped: targets.targetContactsPreppedPerDay,
-  };
+    requiredContactsPrepped: targets.targetContactsPreppedPerDay };
 }
 
 /**
@@ -245,8 +231,7 @@ export function calculateQPI(
       qpiNewLogo: 0,
       qpiRenewal: 0,
       qpiCombined: 0,
-      drivers: [],
-    };
+      drivers: [] };
   }
   
   const allMetrics = [...recentMetrics, ...priorMetrics];
@@ -320,8 +305,7 @@ export function calculateQPI(
       normalizedScore: normDials,
       contribution: 0.25 * normDials * targets.qpiNewLogoWeight,
       direction: getDirection(avgDials, priorAvgDials),
-      priorValue: priorAvgDials,
-    },
+      priorValue: priorAvgDials },
     {
       name: 'Connects',
       key: 'connects',
@@ -330,8 +314,7 @@ export function calculateQPI(
       normalizedScore: normConnects,
       contribution: (0.25 * targets.qpiNewLogoWeight + 0.25 * targets.qpiRenewalWeight) * normConnects,
       direction: getDirection(avgConnects, priorAvgConnects),
-      priorValue: priorAvgConnects,
-    },
+      priorValue: priorAvgConnects },
     {
       name: 'Meetings Set',
       key: 'meetingsSet',
@@ -340,8 +323,7 @@ export function calculateQPI(
       normalizedScore: normMeetingsSet,
       contribution: (0.20 * targets.qpiNewLogoWeight + 0.10 * targets.qpiRenewalWeight) * normMeetingsSet,
       direction: getDirection(avgMeetingsSet, priorAvgMeetingsSet),
-      priorValue: priorAvgMeetingsSet,
-    },
+      priorValue: priorAvgMeetingsSet },
     {
       name: 'Opps Created',
       key: 'oppsCreated',
@@ -350,8 +332,7 @@ export function calculateQPI(
       normalizedScore: normOppsCreated,
       contribution: 0.20 * normOppsCreated * targets.qpiNewLogoWeight,
       direction: getDirection(avgOppsCreated, priorAvgOppsCreated),
-      priorValue: priorAvgOppsCreated,
-    },
+      priorValue: priorAvgOppsCreated },
     {
       name: 'Customer Meetings',
       key: 'customerMeetings',
@@ -360,8 +341,7 @@ export function calculateQPI(
       normalizedScore: normCustomerMeetings,
       contribution: 0.40 * normCustomerMeetings * targets.qpiRenewalWeight,
       direction: getDirection(avgCustomerMeetings, priorAvgCustomerMeetings),
-      priorValue: priorAvgCustomerMeetings,
-    },
+      priorValue: priorAvgCustomerMeetings },
     {
       name: 'Accounts Researched',
       key: 'accountsResearched',
@@ -370,8 +350,7 @@ export function calculateQPI(
       normalizedScore: normAccountsResearched,
       contribution: (0.05 * targets.qpiNewLogoWeight + 0.15 * targets.qpiRenewalWeight) * normAccountsResearched,
       direction: getDirection(avgAccountsResearched, priorAvgAccountsResearched),
-      priorValue: priorAvgAccountsResearched,
-    },
+      priorValue: priorAvgAccountsResearched },
     {
       name: 'Contacts Prepped',
       key: 'contactsPrepped',
@@ -380,8 +359,7 @@ export function calculateQPI(
       normalizedScore: normContactsPrepped,
       contribution: (0.05 * targets.qpiNewLogoWeight + 0.10 * targets.qpiRenewalWeight) * normContactsPrepped,
       direction: getDirection(avgContactsPrepped, priorAvgContactsPrepped),
-      priorValue: priorAvgContactsPrepped,
-    },
+      priorValue: priorAvgContactsPrepped },
   ];
   
   // Sort by contribution descending
@@ -391,8 +369,7 @@ export function calculateQPI(
     qpiNewLogo: newLogoPaceScore,
     qpiRenewal: renewalPaceScore,
     qpiCombined,
-    drivers,
-  };
+    drivers };
 }
 
 /**
@@ -455,8 +432,7 @@ export function calculatePaceToQuota(
       paceExpected: newArrExpected,
       paceDelta: newArrDelta,
       neededPerWeek: newArrPerWeek,
-      status: getStatus(newArrDelta, targets.newArrQuota),
-    },
+      status: getStatus(newArrDelta, targets.newArrQuota) },
     renewalArr: {
       closed: closedWonRenewalArr,
       quota: targets.renewalArrQuota,
@@ -464,13 +440,11 @@ export function calculatePaceToQuota(
       paceExpected: renewalArrExpected,
       paceDelta: renewalArrDelta,
       neededPerWeek: renewalArrPerWeek,
-      status: getStatus(renewalArrDelta, targets.renewalArrQuota),
-    },
+      status: getStatus(renewalArrDelta, targets.renewalArrQuota) },
     bizDaysElapsed,
     bizDaysTotal,
     bizDaysRemaining,
-    weeksRemaining,
-  };
+    weeksRemaining };
 }
 
 /**
@@ -486,7 +460,7 @@ export function generateRecommendations(
   const recommendations: ActionRecommendation[] = [];
   
   // Find lowest performing drivers
-  const underperformingDrivers = qpi.drivers.filter(d => d.normalizedScore < 1.0);
+  const _underperformingDrivers = qpi.drivers.filter(d => d.normalizedScore < 1.0);
   
   // Priority 1: Address biggest pace gaps
   if (paceToQuota.newArr.status === 'behind') {
@@ -504,8 +478,7 @@ export function generateRecommendations(
         why: `Dials are ${Math.round((1 - dialsDriver.normalizedScore) * 100)}% below quota-required pace`,
         impact: `Improves QPI by ~${(0.25 * targets.qpiNewLogoWeight * 0.3).toFixed(2)}, closes gap by ~$${Math.round(gapPerWeek * 0.1).toLocaleString()}/week`,
         qpiImpact: 0.08,
-        priority: 1,
-      });
+        priority: 1 });
     }
   }
   
@@ -521,8 +494,7 @@ export function generateRecommendations(
       why: `Meeting set rate is ${Math.round((1 - meetingsDriver.normalizedScore) * 100)}% below target`,
       impact: `Each meeting = ~$${Math.round(targets.newArrQuota / 40 / 4).toLocaleString()} pipeline potential`,
       qpiImpact: 0.06,
-      priority: 2,
-    });
+      priority: 2 });
   }
   
   // Priority 3: Customer meetings for renewals
@@ -538,8 +510,7 @@ export function generateRecommendations(
         why: `Customer meetings are ${Math.round((1 - customerMeetingsDriver.normalizedScore) * 100)}% below renewal-required pace`,
         impact: `Protects ${Math.round(paceToQuota.renewalArr.neededPerWeek).toLocaleString()} renewal ARR/week`,
         qpiImpact: 0.12,
-        priority: 2,
-      });
+        priority: 2 });
     }
   }
   
@@ -555,8 +526,7 @@ export function generateRecommendations(
         why: `${oppsNext45Days} deals need active next steps to close on time`,
         impact: 'Prevents slippage, maintains pipeline velocity',
         qpiImpact: 0.02,
-        priority: 3,
-      });
+        priority: 3 });
     }
     
     if (renewalsNext45Days > 0) {
@@ -569,8 +539,7 @@ export function generateRecommendations(
         why: `${renewalsNext45Days} renewals need attention before due date`,
         impact: 'Protects baseline ARR, prevents churn',
         qpiImpact: 0.03,
-        priority: 3,
-      });
+        priority: 3 });
     }
   }
   
@@ -641,11 +610,8 @@ export function calculateSalesAgeResult(
     projectedFinish6m,
     requiredPerWeek: {
       newArr: paceToQuota.newArr.neededPerWeek,
-      renewalArr: paceToQuota.renewalArr.neededPerWeek,
-    },
+      renewalArr: paceToQuota.renewalArr.neededPerWeek },
     paceStatus: {
       newArr: paceToQuota.newArr.status,
-      renewalArr: paceToQuota.renewalArr.status,
-    },
-  };
+      renewalArr: paceToQuota.renewalArr.status } };
 }

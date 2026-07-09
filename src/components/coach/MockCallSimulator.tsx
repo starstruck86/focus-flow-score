@@ -6,14 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import {
-  Play, Square, Send, Loader2, RotateCcw, Trophy, Target, Crosshair,
-  ShieldCheck, ShieldAlert, Eye, Brain, Zap, Clock, CheckCircle2,
-  AlertTriangle, Lightbulb, MessageSquareQuote, ChevronDown, ChevronUp,
-  Swords, Mic, MicOff, BarChart3, ArrowRight, Volume2, VolumeX,
-} from 'lucide-react';
+import { Play, Square, Send, Loader2, RotateCcw, Trophy, Target, Crosshair, ShieldCheck, ShieldAlert, Eye, Brain, Zap, Clock, CheckCircle2, AlertTriangle, Lightbulb, MessageSquareQuote, Swords, Mic, MicOff, BarChart3, Volume2, VolumeX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -199,7 +193,7 @@ function LiveTracking({ messages }: { messages: { role: string; content: string 
 function ChatInterface({
   session,
   onEnd,
-  onRetry,
+  onRetry: _onRetry,
 }: {
   session: MockCallSession;
   onEnd: () => void;
@@ -804,11 +798,11 @@ function MockCallScorecard({ grade, session, onRetry }: { grade: any; session: M
 
 // ── MAIN COMPONENT ─────────────────────────────────────────
 export function MockCallSimulator() {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const { data: sessions } = useMockCallSessions();
   const createSession = useCreateMockSession();
   const gradeCall = useGradeMockCall();
-  const saveMessages = useSaveMockMessages();
+  const _saveMessages = useSaveMockMessages();
 
   const [activeSession, setActiveSession] = useState<MockCallSession | null>(null);
   const [view, setView] = useState<'setup' | 'chat' | 'scorecard' | 'history'>('setup');

@@ -5,7 +5,6 @@ import { ResourceJobStatus as ResourceJobStatusComponent } from '@/components/Re
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -18,7 +17,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useUpdateResource, useAllResources, type Resource } from '@/hooks/useResources';
 import { toast } from 'sonner';
-import { RichTextEditor, type RichTextEditorRef, htmlToMarkdown } from './RichTextEditor';
+import { RichTextEditor, type RichTextEditorRef } from './RichTextEditor';
 import { EditorFooter } from './EditorFooter';
 import { ExportMenu } from './ExportMenu';
 import { AIGenerateDialog } from './AIGenerateDialog';
@@ -139,7 +138,7 @@ export function ResourceEditor({ resource, onBack, onViewVersions }: ResourceEdi
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showReferencePanel, setShowReferencePanel] = useState(false);
   const [linkedAccountId, setLinkedAccountId] = useState(resource.account_id || '');
-  const [linkedOppId, setLinkedOppId] = useState(resource.opportunity_id || '');
+  const [linkedOppId, _setLinkedOppId] = useState(resource.opportunity_id || '');
   const [refSearch, setRefSearch] = useState('');
   const [viewingRef, setViewingRef] = useState<Resource | null>(null);
 
@@ -158,7 +157,7 @@ export function ResourceEditor({ resource, onBack, onViewVersions }: ResourceEdi
   });
 
   // Fetch opportunities for CRM linking
-  const { data: opportunities = [] } = useQuery({
+  const { data: _opportunities = [] } = useQuery({
     queryKey: ['opps-select', user?.id],
     queryFn: async () => {
       const { data } = await supabase.from('opportunities').select('id, name, stage, account_id').order('name');

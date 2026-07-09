@@ -7,8 +7,8 @@
  * account-level truth.
  */
 import { isLoopNativeSchedulerEnabled, isAccountExecutionModelEnabled } from '@/lib/featureFlags';
-import { loadLoops, computeLoopReadinessFromLoops, type LoopReadinessState } from '@/lib/loopScheduler';
-import { buildExecutionSummary, type AccountExecutionSummary } from '@/lib/accountExecutionState';
+import { loadLoops, computeLoopReadinessFromLoops } from '@/lib/loopScheduler';
+import { buildExecutionSummary } from '@/lib/accountExecutionState';
 
 export interface LoopReadiness {
   loopId: string;

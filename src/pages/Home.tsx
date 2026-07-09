@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 
 export default function Home() {
   const navigate = useNavigate();
-  const { mode, isTrain } = useAppMode();
+  const { mode: _mode, isTrain } = useAppMode();
   const { data: proficiency } = useKiProficiency();
 
   const enterTrain = () => {

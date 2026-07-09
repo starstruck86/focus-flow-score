@@ -22,7 +22,7 @@ interface Props {
 
 export function PrepOutput({
   output, onOutputChange, subjectLine, onSubjectChange,
-  sources, isGenerating, onRegenerate,
+  sources: _sources, isGenerating, onRegenerate,
   evidence, actionLabel, accountName,
 }: Props) {
   if (!output && !isGenerating) return null;

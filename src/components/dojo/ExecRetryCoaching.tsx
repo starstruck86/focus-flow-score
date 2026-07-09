@@ -2,7 +2,6 @@
  * ExecRetryCoaching — Elite coaching UX for Executive Response skill only.
  * Shows: verdict, pattern tags, side-by-side comparison, constraint box.
  */
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Zap, AlertTriangle, CheckCircle2, Target } from 'lucide-react';

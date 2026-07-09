@@ -67,8 +67,8 @@ export function ConfirmYesterdayModal({
   
   const parsedDate = new Date(entry.date + 'T12:00:00');
   const dateDisplay = isValid(parsedDate) ? format(parsedDate, 'EEEE, MMMM d') : 'yesterday';
-  const strainBand = (entry.salesStrain || 0) <= 6 ? 'low' : (entry.salesStrain || 0) <= 11 ? 'moderate' : 'high';
-  const recoveryBand = (entry.salesRecovery || 0) >= 67 ? 'green' : (entry.salesRecovery || 0) >= 34 ? 'yellow' : 'red';
+  const _strainBand = (entry.salesStrain || 0) <= 6 ? 'low' : (entry.salesStrain || 0) <= 11 ? 'moderate' : 'high';
+  const _recoveryBand = (entry.salesRecovery || 0) >= 67 ? 'green' : (entry.salesRecovery || 0) >= 34 ? 'yellow' : 'red';
   const legacyEntry = entry as Partial<{
     conversations: number;
     meetingsSet: number;

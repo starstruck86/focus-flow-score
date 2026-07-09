@@ -51,14 +51,14 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
 
   // Track pending confirmations for the confirmation gate
   const pendingConfirmations = new Map<string, { tool: string; args: any[]; resolve: (v: any) => void }>();
-  (allTools as any).__pendingConfirmations = pendingConfirmations;
+  (allTools as any)._pendingConfirmations = pendingConfirmations;
 
   // Confirmation response handler — called when user says "yes"/"confirm"
-  (allTools as any).__confirmPending = async (toolName: string) => {
+  (allTools as any)._confirmPending = async (toolName: string) => {
     const pending = pendingConfirmations.get(toolName);
     if (!pending) return 'Nothing pending to confirm.';
     pendingConfirmations.delete(toolName);
-    const original = (allTools as any)[`__original_${toolName}`];
+    const original = (allTools as any)[`_original_${toolName}`];
     if (original) {
       return await original(...pending.args);
     }
@@ -72,7 +72,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
     if (toolName in allTools) {
       const original = (allTools as any)[toolName];
       // Store original for confirmation gate
-      (allTools as any)[`__original_${toolName}`] = original;
+      (allTools as any)[`_original_${toolName}`] = original;
       (allTools as any)[toolName] = async (...args: any[]) => {
         // ── Confirmation gate (Voice OS only) ──────────────
         if (isVoiceOSEnabled()) {
@@ -140,7 +140,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
   }
 
   // ── Attach confirmation policy lookup ─────────────────────────
-  (allTools as any).__getConfirmationPolicy = getConfirmationPolicy;
+  (allTools as any)._getConfirmationPolicy = getConfirmationPolicy;
 
   return allTools;
 }

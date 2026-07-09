@@ -32,7 +32,7 @@ export function buildWhyNow(opts: {
   recentActivity?: string;
   confidence: number;
 }): WhyNowThread {
-  const { recommendation, dealName, stage, closeDate, daysUntilClose, riskLevel, recentActivity, confidence } = opts;
+  const { recommendation, dealName, stage, closeDate: _closeDate, daysUntilClose, riskLevel, recentActivity, confidence } = opts;
 
   // whyThis
   const whyThis = dealName

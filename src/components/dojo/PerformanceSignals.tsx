@@ -5,7 +5,7 @@ import {
   CheckCircle2, ArrowUpRight, XCircle, Shield, Zap, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';
+import { SKILL_LABELS } from '@/lib/dojo/scenarios';
 import type { SkillStat } from '@/lib/dojo/scenarios';
 import type { CoachingInsights } from '@/lib/dojo/types';
 import type { SkillProfile, ProgressSignal } from '@/lib/dojo/skillMemory';

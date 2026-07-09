@@ -227,7 +227,7 @@ function findInJsonStructure(value: unknown, normTarget: string): string | null 
   }
 
   // Recurse into sub-arrays named "sections", "items", "parts", or any array
-  for (const [k, v] of Object.entries(obj)) {
+  for (const [_k, v] of Object.entries(obj)) {
     if (Array.isArray(v)) {
       const found = findInJsonStructure(v, normTarget);
       if (found !== null) return found;

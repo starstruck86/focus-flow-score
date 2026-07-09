@@ -7,10 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Sparkles, FileText, Mail, BarChart3, Presentation,
-  Target, Loader2, Save, Copy, ChevronDown, X, Search, Layout, Brain
-} from 'lucide-react';
+import { Sparkles, FileText, Mail, BarChart3, Presentation, Target, Loader2, Save, Copy, Layout, Brain } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -117,7 +114,7 @@ export function ContentBuilder() {
   // Listen for Dave context event
   useEffect(() => {
     const handler = (e: CustomEvent) => {
-      const { accountName, opportunityName, contentType: ct } = e.detail || {};
+      const { accountName, opportunityName: _opportunityName, contentType: ct } = e.detail || {};
       if (accountName) {
         const acct = accounts.find(a => a.name.toLowerCase() === accountName.toLowerCase());
         if (acct) setSelectedAccount(acct.id);
@@ -232,7 +229,7 @@ export function ContentBuilder() {
       const { streamingFetch } = await import('@/lib/streamingFetch');
       let accumulated = '';
 
-      const { traceId } = await streamingFetch(
+      const { traceId: _traceId } = await streamingFetch(
         {
           functionName: 'build-resource',
           body,

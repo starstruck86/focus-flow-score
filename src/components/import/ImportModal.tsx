@@ -1,6 +1,6 @@
 // Main import modal with header-based auto-mapping
-import { useState, useRef, useMemo, useCallback } from 'react';
-import { Upload, FileSpreadsheet, Download, AlertTriangle, Check, X, Info } from 'lucide-react';
+import { useState, useRef, useCallback } from 'react';
+import { Upload, FileSpreadsheet, Download, AlertTriangle, Check, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -19,30 +19,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import {
-  parseCSV,
-  mapHeaderToField,
-  normalizeUrl,
-  detectLinkType,
-  extractSalesforceId,
-  parseCurrency,
-  parseDate,
-  isUrlColumn,
-  type ImportRow,
-  type ImportPreview,
-} from '@/lib/importUtils';
+import { parseCSV, mapHeaderToField, normalizeUrl, detectLinkType, extractSalesforceId, parseCurrency, isUrlColumn, type ImportRow, type ImportPreview } from '@/lib/importUtils';
 import { useDbAccounts, useUpsertAccount, type DbAccount } from '@/hooks/useAccountsData';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -54,10 +35,10 @@ interface ImportModalProps {
 
 type ImportStep = 'upload' | 'preview' | 'importing' | 'complete';
 
-export function ImportModal({ open, onOpenChange, importType = 'all' }: ImportModalProps) {
+export function ImportModal({ open, onOpenChange, importType: _importType = 'all' }: ImportModalProps) {
   const [step, setStep] = useState<ImportStep>('upload');
-  const [csvData, setCsvData] = useState<{ headers: string[]; rows: string[][] } | null>(null);
-  const [headerMappings, setHeaderMappings] = useState<Record<number, string>>({});
+  const [_csvData, setCsvData] = useState<{ headers: string[]; rows: string[][] } | null>(null);
+  const [_headerMappings, setHeaderMappings] = useState<Record<number, string>>({});
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [importProgress, setImportProgress] = useState(0);
   const [importResults, setImportResults] = useState<{ created: number; updated: number; errors: number }>({ created: 0, updated: 0, errors: 0 });

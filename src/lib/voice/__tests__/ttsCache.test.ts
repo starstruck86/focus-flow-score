@@ -1,15 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  ttsCacheKey,
-  lookupMemoryCache,
-  setMemoryCache,
-  clearMemoryCache,
-  storeInCache,
-  recordCacheHit,
-  getCacheStats,
-  resetCacheStats,
-  type TtsCacheKeyInputs,
-} from '@/lib/voice/ttsCache';
+import { ttsCacheKey, lookupMemoryCache, setMemoryCache, clearMemoryCache, recordCacheHit, getCacheStats, resetCacheStats, type TtsCacheKeyInputs } from '@/lib/voice/ttsCache';
 
 describe('TTS Cache', () => {
   beforeEach(() => {

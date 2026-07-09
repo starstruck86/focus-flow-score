@@ -22,7 +22,7 @@ export function ReorderableWidgetGrid({
   pageId,
   defaultWidgets,
   renderWidget,
-  customizerTitle,
+  customizerTitle: _customizerTitle,
   showCustomizer = false,
 }: ReorderableWidgetGridProps) {
   const {

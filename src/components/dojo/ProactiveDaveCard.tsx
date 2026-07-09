@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
-import { Zap, BookOpen, TrendingUp, Target, CheckCircle2 } from 'lucide-react';
+import { Zap, BookOpen, TrendingUp, Target } from 'lucide-react';
 
 interface ProactiveDaveCardProps {
   onMicroDrill?: () => void;
@@ -51,7 +51,7 @@ function getContext(hour: number, hasCompletedRepsToday: boolean, streak: number
       headline: streak === 0 ? 'Start your streak today' : `Day ${streak + 1} — protect it`,
       subline: '5 reps in the car. Enter to submit. No excuses.',
       cta: 'Start Quick Drill',
-      route: '__micro__',
+      route: '_micro__',
       color: 'border-primary/20 bg-primary/5',
     };
   }
@@ -111,7 +111,7 @@ export function ProactiveDaveCard({ onMicroDrill, hasCompletedRepsToday = false,
   const ctx = useMemo(() => getContext(hour, hasCompletedRepsToday, streak, hasBenchmark), [hour, hasCompletedRepsToday, streak, hasBenchmark]);
 
   const handleCTA = () => {
-    if (ctx.route === '__micro__') {
+    if (ctx.route === '_micro__') {
       onMicroDrill?.();
     } else {
       navigate(ctx.route);

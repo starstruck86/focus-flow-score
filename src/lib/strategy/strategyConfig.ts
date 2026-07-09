@@ -191,7 +191,7 @@ const DEFAULT_ENFORCEMENT: StrategySopEnforcement = {
   requiredSections: [],
 };
 
-function defaultSopContract(name: string): StrategySopContract {
+function _defaultSopContract(name: string): StrategySopContract {
   return {
     enabled: false,
     name,

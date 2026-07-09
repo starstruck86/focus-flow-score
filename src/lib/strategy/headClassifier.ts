@@ -11,7 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 export type IntelHead = 'product' | 'competitive' | 'sales' | 'market';
 
 // Maps each head to the spider_dimensions that carry relevant KIs
-const HEAD_TO_DIMENSIONS: Record<IntelHead, string[]> = {
+const _HEAD_TO_DIMENSIONS: Record<IntelHead, string[]> = {
   product:     ['product_knowledge'],
   competitive: ['competitive'],
   sales:       ['discovery', 'deal_control', 'expansion_strategy',

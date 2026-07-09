@@ -660,12 +660,12 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
             <div>
               <Label className="text-[10px]">Reports To</Label>
               <Select
-                value={(contact as any).reporting_to || '__none__'}
-                onValueChange={v => updateContact.mutate({ id: contact.id, updates: { reporting_to: v === '__none__' ? null : v } })}
+                value={(contact as any).reporting_to || '_none__'}
+                onValueChange={v => updateContact.mutate({ id: contact.id, updates: { reporting_to: v === '_none__' ? null : v } })}
               >
                 <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">None (root)</SelectItem>
+                  <SelectItem value="_none__">None (root)</SelectItem>
                   {(contacts || []).filter(c => c.id !== contact.id).map(c => (
                     <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
                   ))}
@@ -765,7 +765,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
   };
 
   // Root-level drop zone to make a node a root
-  const renderRootDropZone = () => {
+  const _renderRootDropZone = () => {
     if (!draggedContactId) return null;
     return (
       <div
@@ -1067,8 +1067,8 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
               {discoveredContacts.length} contacts discovered — confirm to add:
             </p>
             {discoveredContacts.map((contact, index) => {
-              const companyNew = typeof contact.company_tenure_months === 'number' && contact.company_tenure_months >= 0 && contact.company_tenure_months < 12;
-              const roleNew = typeof contact.role_tenure_months === 'number' && contact.role_tenure_months >= 0 && contact.role_tenure_months < 12;
+              const _companyNew = typeof contact.company_tenure_months === 'number' && contact.company_tenure_months >= 0 && contact.company_tenure_months < 12;
+              const _roleNew = typeof contact.role_tenure_months === 'number' && contact.role_tenure_months >= 0 && contact.role_tenure_months < 12;
               const linkedinFailed = contact.linkedin_verified === false;
               return (
                 <div key={`${contact.name}-${index}`} className={cn('flex items-start justify-between gap-2 rounded bg-background/80 p-2', linkedinFailed && 'opacity-60 border border-destructive/30')}>

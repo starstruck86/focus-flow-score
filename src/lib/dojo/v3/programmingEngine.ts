@@ -18,15 +18,15 @@
 
 import type { SkillFocus, DojoScenario } from '../scenarios';
 import { getRandomScenario } from '../scenarios';
-import type { SkillProfile, SkillMemory } from '../skillMemory';
+import type { SkillMemory } from '../skillMemory';
 import type { DayAnchor } from './dayAnchors';
 import { getAnchorForDate, getAnchorDef } from './dayAnchors';
 import type { TrainingBlock, BlockPhase } from './blockManager';
-import { getFamiliesForAnchor, type ScenarioFamily } from './scenarioFamilies';
+import { getFamiliesForAnchor } from './scenarioFamilies';
 import type { PressureProfile } from '../v4/pressureModel';
 import { PRESSURE_NONE } from '../v4/pressureModel';
 import { selectPressureProfile } from '../v4/pressureSelectors';
-import { getArcsForStage, type SimulationArc } from '../v5/simulationArcs';
+import { getArcsForStage } from '../v5/simulationArcs';
 import type { MultiThreadContext } from '../v6/multiThreadTypes';
 import { shouldInjectMultiThread, generateMultiThreadContext } from '../v6/multiThreadSelector';
 import { getSubSkillsForAnchor } from '@/lib/learning/learnSubSkillMap';
@@ -256,7 +256,7 @@ export function generateDailyAssignment(input: ProgrammingInput): DailyAssignmen
 function generateBenchmarkAssignment(
   block: TrainingBlock,
   dayAnchor: DayAnchor,
-  defaultSkill: SkillFocus,
+  _defaultSkill: SkillFocus,
 ): DailyAssignment {
   const families = getFamiliesForAnchor(dayAnchor);
   const phase = block.phase as 'benchmark' | 'retest';
@@ -634,7 +634,7 @@ function getDefaultPatternForSkill(skill: SkillFocus): string {
 export function determineRetryStrategy(
   score: number,
   topMistake: string,
-  focusPattern: string,
+  _focusPattern: string,
   persistentMistakes: string[],
   sessionDurationMinutes: number,
 ): 'weakest' | 'variation' | 'skip' {

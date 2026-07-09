@@ -5,26 +5,9 @@
  * snapshot corruption, stale closures, visibility transitions.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  initCrashSentinel,
-  addBreadcrumb,
-  getBreadcrumbs,
-  getStoredCrashes,
-  clearStoredCrashes,
-  getTelemetry,
-  incrementTelemetry,
-  trackTimer,
-  untrackTimer,
-  getLeakMetrics,
-  registerContextProvider,
-} from '../crashSentinel';
-import {
-  saveSnapshot,
-  loadSnapshot,
-  clearSnapshot,
-  restoreFromSnapshot,
-} from '../dojo/dojoSessionSnapshot';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { addBreadcrumb, getBreadcrumbs, clearStoredCrashes, getTelemetry, incrementTelemetry, trackTimer, untrackTimer, getLeakMetrics, registerContextProvider } from '../crashSentinel';
+import { saveSnapshot, loadSnapshot, clearSnapshot } from '../dojo/dojoSessionSnapshot';
 import { createAudioController } from '../dojo/dojoAudioController';
 
 // ── Crash Sentinel Tests ──────────────────────────────────────────

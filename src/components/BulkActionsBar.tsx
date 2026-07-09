@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Trash2, Tag, ArrowRight } from 'lucide-react';
+import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -29,7 +29,7 @@ interface BulkActionsBarProps {
 }
 
 export function BulkActionsBar({ selectedCount, onClear, actions, selectedIds }: BulkActionsBarProps) {
-  const [activeAction, setActiveAction] = useState<string | null>(null);
+//   const [activeAction, setActiveAction] = useState<string | null>(null);
 
   if (selectedCount === 0) return null;
 

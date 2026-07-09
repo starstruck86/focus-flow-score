@@ -7,19 +7,7 @@ import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useQuery } from '@tanstack/react-query';
-import {
-  ChevronDown,
-  ChevronRight,
-  Settings as SettingsIcon,
-  Map as MapIcon,
-  Plug,
-  Bell,
-  Sparkles,
-  Database,
-  Shield,
-  BookOpen,
-  Wrench,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, Settings as SettingsIcon, Map as MapIcon, Plug, Sparkles, Database, Shield, BookOpen } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { supabase } from '@/integrations/supabase/client';
@@ -33,8 +21,7 @@ const T = {
   panel: 'bg-[hsl(var(--brand-panel))]',
   line: 'border-[hsl(var(--brand-line))]',
   text: 'text-[hsl(var(--brand-text))]',
-  muted: 'text-[hsl(var(--brand-muted))]',
-};
+  muted: 'text-[hsl(var(--brand-muted))]' };
 
 // Admin/QA route ledger (Guide v3 §5).
 // Every admin/QA route mounted in App.tsx that is intentionally hidden
@@ -79,8 +66,7 @@ function useCalendarStatus() {
         .order('ran_at', { ascending: false })
         .limit(1);
       return data?.[0] ?? null;
-    },
-  });
+    } });
 }
 
 // Voice status — real dave-health-check (authed). Not a fake ping.
@@ -93,8 +79,7 @@ function useVoiceStatus() {
       const { data, error } = await trackedInvoke<any>('dave-health-check');
       if (error) throw error;
       return data as { apiKeySet: boolean; apiKeyValid: boolean; agentIdSet: boolean; tokenGenOk: boolean; error: string | null };
-    },
-  });
+    } });
 }
 
 
@@ -116,8 +101,7 @@ function Row({
   right,
   onClick,
   to,
-  expanded,
-}: {
+  expanded }: {
   icon: React.ReactNode;
   title: string;
   hint?: React.ReactNode;

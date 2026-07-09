@@ -413,7 +413,7 @@ describe('Fatigue Detection', () => {
   it('detects global fatigue', () => {
     const usages = Array.from({ length: 12 }, (_, i) => ({ dealId: `deal-${i}`, timestamp: new Date().toISOString() }));
     const signals = detectPlaybookFatigue('pb-1', usages);
-    const global = signals.find(s => s.dealId === '__global__');
+    const global = signals.find(s => s.dealId === '_global__');
     expect(global?.isFatigued).toBe(true);
   });
 

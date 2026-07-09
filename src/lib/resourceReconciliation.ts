@@ -7,14 +7,7 @@
  * Designed to run on-demand now and on a schedule later.
  */
 import { supabase } from '@/integrations/supabase/client';
-import {
-  validateResourceQuality,
-  CURRENT_ENRICHMENT_VERSION,
-  CURRENT_VALIDATION_VERSION,
-  CURRENT_QUALITY_VERSION,
-  QUALITY_THRESHOLDS,
-  type ResourceForValidation,
-} from './resourceQuality';
+import { validateResourceQuality, CURRENT_ENRICHMENT_VERSION, CURRENT_VALIDATION_VERSION, QUALITY_THRESHOLDS } from './resourceQuality';
 import { createLogger } from './logger';
 
 const log = createLogger('ResourceReconciliation');
@@ -359,7 +352,7 @@ export function detectResourceDrift(resource: {
 export async function assertFilterConsistency(
   userId: string,
   uiDeepEnrichCount: number,
-  uiReenrichCount: number,
+  _uiReenrichCount: number,
 ): Promise<void> {
   if (!import.meta.env.DEV) return;
 

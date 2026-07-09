@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Loader2, ChevronDown, Eye, X } from 'lucide-react';
+import { Sparkles, Loader2, ChevronDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -154,9 +154,9 @@ export function PrepWorkspace() {
         <div>
           <Label className="text-[10px] text-muted-foreground">Account</Label>
           <Select
-            value={accountId || '__none__'}
+            value={accountId || '_none__'}
             onValueChange={v => {
-              const id = v === '__none__' ? '' : v;
+              const id = v === '_none__' ? '' : v;
               setAccountId(id);
               setAccountName(accounts.find(a => a.id === id)?.name || '');
             }}
@@ -165,7 +165,7 @@ export function PrepWorkspace() {
               <SelectValue placeholder="Optional" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__none__">None</SelectItem>
+              <SelectItem value="_none__">None</SelectItem>
               {accounts.map(a => (
                 <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
               ))}

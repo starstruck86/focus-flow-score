@@ -325,7 +325,7 @@ export type RecommendedAction =
 export function getRecommendedActionFromQuality(
   status: string | undefined,
   tier: QualityTier | string | null | undefined,
-  failureReason: string | null | undefined,
+  _failureReason: string | null | undefined,
   failureCount: number,
 ): RecommendedAction {
   if (status === 'duplicate' || status === 'superseded') return 'ignore';

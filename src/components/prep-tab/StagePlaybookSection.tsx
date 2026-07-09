@@ -28,7 +28,7 @@ function CitationSourceIcon({ citation }: { citation: string }) {
   return <FileText className="h-2.5 w-2.5 text-muted-foreground shrink-0" />;
 }
 
-function TacticalItemRow({ item, icon: Icon, color, stageId, framework, sectionHeading, label }: {
+function TacticalItemRow({ item, icon: Icon, color, stageId, framework, sectionHeading, label: _label }: {
   item: TacticalItem;
   icon: typeof HelpCircle;
   color: string;
@@ -171,7 +171,7 @@ function groupByFramework(sections: PlaybookSection[]): { framework: string | nu
 }
 
 export function StagePlaybookSection({ stageId, stageLabel }: Props) {
-  const { playbook, isLoading, generate } = useStagePlaybook(stageId);
+  const { playbook, isLoading: _isLoading, generate } = useStagePlaybook(stageId);
   const { stageResources, keystoneResources } = useStageResources(stageId);
   const stageFrameworks = STAGE_FRAMEWORK_MAP[stageId] || [];
 

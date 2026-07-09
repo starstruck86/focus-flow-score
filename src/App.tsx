@@ -60,7 +60,7 @@ const DojoQA = lazy(() => import("./pages/DojoQA"));
 const Sharpen = lazy(() => import("./pages/Sharpen"));
 const Grind = lazy(() => import("./pages/Grind"));
 const WeeklyReview = lazy(() => import("./pages/WeeklyReview"));
-const Learn = lazy(() => import("./pages/Learn"));
+const _Learn = lazy(() => import("./pages/Learn"));
 const Skills = lazy(() => import("./pages/Skills"));
 const LearnLesson = lazy(() => import("./pages/LearnLesson"));
 const SkillBuilderSession = lazy(() => import("./pages/SkillBuilderSession"));
@@ -73,7 +73,7 @@ const PhaseEvidenceRunner = lazy(() => import("./pages/PhaseEvidenceRunner"));
 const StrategyOpsPanel = lazy(() => import("./pages/StrategyOpsPanel"));
 const CourseImports = lazy(() => import("./pages/CourseImports"));
 const CourseImportDetail = lazy(() => import("./pages/CourseImportDetail"));
-const Home = lazy(() => import("./pages/Home"));
+const _Home = lazy(() => import("./pages/Home"));
 const Benchmark = lazy(() => import("./pages/Benchmark"));
 const TerritorySetup = lazy(() => import("./pages/TerritorySetup"));
 const MeetingMode = lazy(() => import("./pages/MeetingMode"));
@@ -121,7 +121,7 @@ const queryClient = new QueryClient({
   },
 });
 // Expose for background stores (enrichment job store) that run outside React tree
-(window as any).__QUERY_CLIENT__ = queryClient;
+(window as any)._QUERY_CLIENT__ = queryClient;
 
 const ProtectedPage = ({ children, routeName }: { children: React.ReactNode; routeName: string }) => (
   <ProtectedRoute>

@@ -26,9 +26,7 @@ import {
   type AutoCorrectionAction,
   type DriftReport,
   type SystemModeState,
-  type HealthSnapshot,
-  type DecisionExplanation,
-} from './systemIntelligence';
+  type HealthSnapshot} from './systemIntelligence';
 
 const log = createLogger('SystemGovernance');
 
@@ -49,8 +47,7 @@ const DEFAULT_SWITCHES: KillSwitches = {
   RETRY_ENABLED: true,
   RECOMMENDATION_ENABLED: true,
   COACHING_ENABLED: true,
-  AUTO_LEARNING_ENABLED: true,
-};
+  AUTO_LEARNING_ENABLED: true };
 
 export function loadKillSwitches(): KillSwitches {
   try {
@@ -131,8 +128,7 @@ export function getSystemState(healthInputs?: HealthInputs): SystemState {
     killSwitches: switches,
     modeState,
     recentCorrections: corrections,
-    timestamp: new Date().toISOString(),
-  };
+    timestamp: new Date().toISOString() };
 }
 
 export function checkDrift(currentBaseline: {
@@ -142,8 +138,7 @@ export function checkDrift(currentBaseline: {
 }): DriftReport | null {
   return detectBaselineDrift({
     timestamp: new Date().toISOString(),
-    ...currentBaseline,
-  });
+    ...currentBaseline });
 }
 
 // ── Auto-Correction Facade ─────────────────────────────────
@@ -159,8 +154,7 @@ export function applyAutoCorrections(healthInputs: HealthInputs): {
   return {
     corrections: health.corrections,
     modeChanged,
-    newMode: health.mode.mode,
-  };
+    newMode: health.mode.mode };
 }
 
 // ── System Summary (for Dave / UI) ─────────────────────────
@@ -195,8 +189,7 @@ export function getSystemSummary(healthInputs?: HealthInputs): SystemSummary {
     activeAlertCount: state.activeAlerts.length,
     criticalAlertCount: critAlerts.length,
     topIssue,
-    recommendation,
-  };
+    recommendation };
 }
 
 // ── Audit / Telemetry ──────────────────────────────────────
@@ -228,6 +221,5 @@ export function computeRecommendationAudit(): RecommendationAudit {
     systemRightRate,
     userOverrideImpact: overrideImpact,
     topMisfires: regret.highRegretPlaybooks.slice(0, 5),
-    confidenceCalibration,
-  };
+    confidenceCalibration };
 }

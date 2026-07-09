@@ -158,7 +158,7 @@ export function useStrategyJob() {
     try {
       // Phase 3B SOP "SAFE BRIDGE" — Account Research only.
       // When the universal `tasks.account_research` SOP is enabled in
-      // Strategy Settings, attach the parsed contract under inputs.__sop
+      // Strategy Settings, attach the parsed contract under inputs._sop
       // so the orchestrator runs shadow input/output validation. The
       // server NEVER injects this into prompt builders — observation only.
       // Discovery Prep is intentionally untouched here (it goes through
@@ -178,8 +178,8 @@ export function useStrategyJob() {
 
       const enrichedInputs: Record<string, unknown> = {
         ...inputs,
-        __override: override,
-        ...(sopAttachment ? { __sop: sopAttachment } : {}),
+        _override: override,
+        ...(sopAttachment ? { _sop: sopAttachment } : {}),
       };
 
       const start = await callRunStrategyJob({

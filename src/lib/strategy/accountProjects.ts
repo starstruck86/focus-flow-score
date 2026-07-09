@@ -13,7 +13,7 @@
  */
 import { supabase } from '@/integrations/supabase/client';
 
-export const UNCATEGORIZED_FAMILY = '__uncategorized__';
+export const UNCATEGORIZED_FAMILY = '_uncategorized__';
 export const UNCATEGORIZED_LABEL = 'Uncategorized';
 
 export interface ProjectMemberAccount {

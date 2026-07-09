@@ -14,27 +14,13 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useDaveVoiceRuntime, type UseDaveVoiceRuntime } from '@/hooks/useDaveVoiceRuntime';
-import {
-  type VoiceSurface,
-  type SpeechQueueItem,
-  speak,
-  speakQueue,
-  listen,
-  runTurn,
-  interruptSpeech,
-  parseVoiceCommand,
-  type TurnConfig,
-  type TurnResult,
-  type VoiceCommand,
-  type ActivePlayback,
-} from '@/lib/daveVoiceRuntime';
+import { VoiceSurface, type SpeechQueueItem, speak, speakQueue, listen, runTurn, parseVoiceCommand, type TurnConfig, type TurnResult, type VoiceCommand} from '@/lib/daveVoiceRuntime';
 import {
   monitorConnectivity,
   OperationQueue,
   getSignalLossMessage,
   getSignalRestoredMessage,
-  type ConnectivityState,
-} from '@/lib/daveSignalRecovery';
+  type ConnectivityState } from '@/lib/daveSignalRecovery';
 import {
   saveVoiceSessionBuffer,
   loadVoiceSessionBuffer,
@@ -42,8 +28,7 @@ import {
   createEmptyBuffer,
   appendToTranscriptLog,
   updateBufferPosition,
-  type VoiceSessionBuffer,
-} from '@/lib/daveSessionBuffer';
+  type VoiceSessionBuffer } from '@/lib/daveSessionBuffer';
 import { PrefetchCache } from '@/lib/daveSessionPrefetch';
 import { createLogger } from '@/lib/logger';
 
@@ -119,8 +104,7 @@ export function useDaveAudioSession(config: DaveAudioSessionConfig): UseDaveAudi
     lastOnlineAt: Date.now(),
     lastOfflineAt: null,
     offlineDurationMs: 0,
-    dropCount: 0,
-  });
+    dropCount: 0 });
   const [daveMessage, setDaveMessage] = useState<string | null>(null);
   const [isActive, setIsActive] = useState(false);
   const [bufferState, setBufferState] = useState<VoiceSessionBuffer | null>(null);
@@ -176,8 +160,7 @@ export function useDaveAudioSession(config: DaveAudioSessionConfig): UseDaveAudi
       setBufferState(saved);
       logger.info('Restored voice session buffer', {
         surface: saved.surface,
-        position: saved.position,
-      });
+        position: saved.position });
     }
   }, [config.autoResume, config.surface]);
 
@@ -207,8 +190,7 @@ export function useDaveAudioSession(config: DaveAudioSessionConfig): UseDaveAudi
       onSegmentStart: () => runtime.updateState({ isSpeaking: true }),
       onSegmentEnd: (i) => {
         lastSpokenText.current = items[i]?.text ?? '';
-      },
-    });
+      } });
     runtime.updateState({ isSpeaking: false });
   }, [runtime]);
 
@@ -217,8 +199,7 @@ export function useDaveAudioSession(config: DaveAudioSessionConfig): UseDaveAudi
     try {
       const transcript = await listenFn(runtime.ttsConfig, {
         timeoutMs,
-        signal: runtime.abortRef.current.signal,
-      });
+        signal: runtime.abortRef.current.signal });
       runtime.updateState({ isListening: false, lastTranscript: transcript });
       return transcript;
     } catch {
@@ -321,8 +302,7 @@ export function useDaveAudioSession(config: DaveAudioSessionConfig): UseDaveAudi
     setPendingTranscript,
     buffer: bufferState,
     prefetchCache,
-    daveMessage,
-  };
+    daveMessage };
 }
 
 // Re-export the raw functions to avoid import conflicts

@@ -13,13 +13,7 @@
 
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import type { AppError } from '@/lib/appError';
-import {
-  recordSecurityEvent,
-  validateRequestShape,
-  detectCrossUserAccess,
-  recordServiceRoleUsage,
-  recordInternalPathUsage,
-} from './securityTelemetry';
+import { validateRequestShape, detectCrossUserAccess, recordInternalPathUsage } from './securityTelemetry';
 
 export interface SafeInvokeOptions {
   /** Function name */

@@ -14,7 +14,6 @@ import { DAY_ANCHORS, type DayAnchor } from '@/lib/dojo/v3/dayAnchors';
 import { loadActiveLane } from '@/lib/sessionDurability';
 import { getSubSkillsForAnchor } from './learnSubSkillMap';
 import { evaluateAllSubSkills } from './learnSubSkillEvaluator';
-import type { CourseWithModules, LearningProgress } from './types';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -316,7 +315,7 @@ async function getTodayAssignmentStatus(userId: string) {
 
 // ── Anchor → Skill mapping ────────────────────────────────────────
 
-const ANCHOR_SKILL_MAP: Record<string, string> = {
+const _ANCHOR_SKILL_MAP: Record<string, string> = {
   objection_handling: 'objection_handling',
   discovery_qualification: 'discovery',
   advanced_objection: 'objection_handling',

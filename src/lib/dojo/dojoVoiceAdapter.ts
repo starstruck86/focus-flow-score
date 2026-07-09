@@ -7,14 +7,14 @@
  * Does NOT contain audio logic — delegates entirely to daveVoiceRuntime.
  */
 
-import type { TtsConfig, TurnConfig, SpeechQueueItem, VoiceSession } from '@/lib/daveVoiceRuntime';
+import type { TtsConfig, SpeechQueueItem, VoiceSession } from '@/lib/daveVoiceRuntime';
 import { runTurn, speakQueue, createVoiceSession, logTranscript } from '@/lib/daveVoiceRuntime';
 import type { ActivePlayback } from '@/lib/daveVoiceRuntime';
 import type { DojoScenario } from './scenarios';
 import type { DojoScoreResult } from './types';
 import { createLogger } from '@/lib/logger';
 
-const logger = createLogger('DojoVoiceAdapter');
+const _logger = createLogger('DojoVoiceAdapter');
 
 // ── Feedback Formatting ────────────────────────────────────────────
 

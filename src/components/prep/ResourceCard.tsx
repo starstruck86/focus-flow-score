@@ -11,19 +11,14 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import {
-  ChevronDown, ChevronUp, MoreVertical, Eye, Trash2,
-  RotateCcw, Star, BookOpen, RefreshCw, Zap, HelpCircle,
-  CheckCircle2, AlertTriangle, TrendingUp, Loader2,
-} from 'lucide-react';
+import { ChevronDown, ChevronUp, MoreVertical, Eye, Trash2, RotateCcw, Star, BookOpen, CheckCircle2, AlertTriangle, TrendingUp, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
-import { deriveResourceInsight, type ResourceInsight } from '@/lib/resourceSignal';
+import { deriveResourceInsight } from '@/lib/resourceSignal';
 import { deriveProcessingState } from '@/lib/processingState';
 import { decodeHTMLEntities } from '@/lib/stringUtils';
-import { useResourceJobProgress, getJobLabel, isJobStale } from '@/store/useResourceJobProgress';
-import { routeFailure, getFailureBucketActions } from '@/lib/failureRouting';
+import { useResourceJobProgress, getJobLabel } from '@/store/useResourceJobProgress';
 import { deriveProcessingRoute, getRouteLabel } from '@/lib/processingRoute';
 import { ResourceOperationProgress } from '@/components/knowledge/ResourceOperationProgress';
 

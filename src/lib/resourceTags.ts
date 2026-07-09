@@ -113,7 +113,7 @@ const PERSONA_PATTERNS: Array<{ tag: string; patterns: RegExp[] }> = [
   { tag: 'ecommerce_lead', patterns: [/ecommerce.*lead/i, /head.*ecommerce/i] },
 ];
 
-const STAGE_PATTERNS: Array<{ tag: string; patterns: RegExp[] }> = [
+const _STAGE_PATTERNS: Array<{ tag: string; patterns: RegExp[] }> = [
   { tag: 'prospecting', patterns: [/prospect/i] },
   { tag: 'early_discovery', patterns: [/first.*call/i, /initial.*discovery/i] },
   { tag: 'demo_stage', patterns: [/\bdemo\b/i] },

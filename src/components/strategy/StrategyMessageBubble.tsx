@@ -1,13 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  Copy, Save, ChevronDown, ChevronUp, Database, FileText, Sparkles,
-  Brain, Upload as UploadIcon, MessageSquare, Eye, GitBranch, Cpu,
-  Mail, Target, Map, Zap, ArrowRight, Loader2,
-} from 'lucide-react';
+import { Copy, Save, ChevronDown, ChevronUp, Database, FileText, Sparkles, GitBranch, Cpu, Mail, Target, Map, Zap, ArrowRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { StrategyMessage } from '@/types/strategy';
 import { SourceInspectorPanel } from './SourceInspectorPanel';

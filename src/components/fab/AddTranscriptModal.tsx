@@ -16,7 +16,7 @@ import {
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/store/useStore';
@@ -137,7 +137,7 @@ export function AddTranscriptModal({
   };
 
   const [autoExtractTasks, setAutoExtractTasks] = useState(true);
-  const [extractedTasks, setExtractedTasks] = useState<any[]>([]);
+//   const [extractedTasks, setExtractedTasks] = useState<any[]>([]);
   const [extracting, setExtracting] = useState(false);
 
   const extractTasksFromTranscript = async (transcriptTitle: string) => {

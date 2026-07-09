@@ -1,14 +1,7 @@
 // Commission Calculation Engine for Quota CoPilot
 // Based on FY26 Incentive Plan
 
-import type { 
-  Opportunity, 
-  QuotaConfig, 
-  DealsLedgerEntry, 
-  CommissionSummary,
-  LedgerType,
-  PaymentTerms 
-} from '@/types';
+import type { Opportunity, QuotaConfig, DealsLedgerEntry, CommissionSummary } from '@/types';
 
 // Default quota configuration (FY26 - July 1 2025 to June 30 2026)
 export const DEFAULT_QUOTA_CONFIG: QuotaConfig = {

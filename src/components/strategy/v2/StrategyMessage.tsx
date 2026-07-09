@@ -8,7 +8,7 @@
  *
  * 32px gap to next message is owned by the parent stream.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Copy, Check } from 'lucide-react';
@@ -65,7 +65,7 @@ function CopyButton({ getText }: { getText: () => string }) {
 }
 
 
-const DIMENSION_ICONS: Record<string, string> = {
+const _DIMENSION_ICONS: Record<string, string> = {
   discovery: '🔍',
   deal_control: '⚔️',
   expansion_strategy: '📈',

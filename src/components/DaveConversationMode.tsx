@@ -3,7 +3,7 @@ import { trackedInvoke } from '@/lib/trackedInvoke';
 import type { Json } from '@/integrations/supabase/types';
 import { useConversation } from '@elevenlabs/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mic, MicOff, Volume2, MessageSquare, Loader2, Minimize2, Maximize2 } from 'lucide-react';
+import { X, Mic, MicOff, Volume2, Loader2, Minimize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type DaveSessionData } from '@/hooks/useDaveContext';
 import { useDaveConversation } from '@/hooks/useDaveConversation';
@@ -14,7 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { createClientTools } from './dave/clientTools';
 import { DaveDiagnosticsPanel, type DiagnosticData } from './dave/DaveDiagnosticsPanel';
 import { DaveConnectionBanner } from './dave/DaveConnectionBanner';
-import { classifyMicrophoneAccessError, releaseMicrophoneStream, requestMicrophoneAccess } from '@/lib/microphoneAccess';
+import { classifyMicrophoneAccessError, releaseMicrophoneStream } from '@/lib/microphoneAccess';
 import { useDaveConnectionManager } from '@/hooks/useDaveConnectionManager';
 
 interface Props {
@@ -89,11 +89,11 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
 
   const [isConnecting, setIsConnecting] = useState(false);
   const [needsTap, setNeedsTap] = useState(true);
-  const [showTranscript, setShowTranscript] = useState(false);
+//   const [showTranscript, setShowTranscript] = useState(false);
   const [transcript, setTranscript] = useState<Array<{ role: 'user' | 'agent'; text: string }>>([]);
   const [error, setError] = useState<string | null>(null);
   const [vadScore, setVadScore] = useState(0);
-  const [statusLog, setStatusLog] = useState<string[]>([]);
+  const [_statusLog, setStatusLog] = useState<string[]>([]);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const orbRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
@@ -400,7 +400,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       if (timeout) clearTimeout(timeout);
     } catch (err: any) {
       if (timeout) clearTimeout(timeout);
-      const rawMsg = err?.message || String(err);
+      const _rawMsg = err?.message || String(err);
       console.error('[Dave] Failed to start:', err);
 
       const friendlyMessage = classifyDaveStartupError(err);

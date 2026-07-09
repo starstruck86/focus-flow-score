@@ -71,7 +71,7 @@ export default function PostCallLog() {
   });
 
   const selectedPlaybookId = useMemo(() => {
-    if (!playOn || playTitle === '__other__') return null;
+    if (!playOn || playTitle === '_other__') return null;
     return (playbookOptions ?? []).find(p => p.title === playTitle)?.id ?? null;
   }, [playOn, playTitle, playbookOptions]);
 
@@ -116,7 +116,7 @@ export default function PostCallLog() {
     setSubmitting(true);
 
     const finalPlayTitle = playOn
-      ? (playTitle === '__other__' ? playOther.trim() : playTitle).trim() || null
+      ? (playTitle === '_other__' ? playOther.trim() : playTitle).trim() || null
       : null;
 
     const payload = {
@@ -335,10 +335,10 @@ export default function PostCallLog() {
                   {(playbookOptions ?? []).map(p => (
                     <SelectItem key={p.id} value={p.title}>{p.title}</SelectItem>
                   ))}
-                  <SelectItem value="__other__">Other (not in playbooks)</SelectItem>
+                  <SelectItem value="_other__">Other (not in playbooks)</SelectItem>
                 </SelectContent>
               </Select>
-              {playTitle === '__other__' && (
+              {playTitle === '_other__' && (
                 <Input
                   value={playOther}
                   onChange={e => setPlayOther(e.target.value)}

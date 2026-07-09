@@ -12,7 +12,7 @@ import { Sparkles, RefreshCw, Check, AlertTriangle, UserPlus, StickyNote } from 
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { Account, Contact } from '@/types';
+import type { Account } from '@/types';
 
 interface AccountSynopsisModalProps {
   open: boolean;

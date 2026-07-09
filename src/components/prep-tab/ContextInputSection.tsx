@@ -35,7 +35,7 @@ function parseStatusIcon(s: ParseStatus) {
 
 export function ContextInputSection({
   accounts, accountId, onAccountChange,
-  stage, onStageChange, persona, onPersonaChange,
+  stage, onStageChange: _onStageChange, persona, onPersonaChange,
   competitor, onCompetitorChange,
   contextItems, onContextItemsChange,
 }: Props) {
@@ -156,14 +156,14 @@ export function ContextInputSection({
         <div>
           <Label className="text-[10px] text-muted-foreground">Account</Label>
           <Select
-            value={accountId || '__none__'}
-            onValueChange={v => onAccountChange(v === '__none__' ? '' : v)}
+            value={accountId || '_none__'}
+            onValueChange={v => onAccountChange(v === '_none__' ? '' : v)}
           >
             <SelectTrigger className="h-8 text-xs">
               <SelectValue placeholder="Select account" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__none__">None</SelectItem>
+              <SelectItem value="_none__">None</SelectItem>
               {accounts.map(a => (
                 <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
               ))}

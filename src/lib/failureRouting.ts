@@ -4,7 +4,7 @@
  * Every failed enrich item maps to EXACTLY ONE failure bucket.
  * Each bucket defines: reason, next action, recovery path, and ProcessingState mapping.
  */
-import { detectResourceSubtype, classifyEnrichability, type ResourceSubtype } from '@/lib/salesBrain/resourceSubtype';
+import { detectResourceSubtype, type ResourceSubtype } from '@/lib/salesBrain/resourceSubtype';
 import type { FailureCategory } from '@/store/useEnrichmentJobStore';
 
 // ── Failure Buckets ────────────────────────────────────────
@@ -92,7 +92,7 @@ export const NON_RETRYABLE_BUCKETS: ReadonlySet<FailureBucket> = new Set([
 ]);
 
 /** Check if a bucket should be quarantined after repeated failures */
-export function shouldQuarantine(bucket: FailureBucket, sameBucketFailureCount: number): boolean {
+export function shouldQuarantine(_bucket: FailureBucket, sameBucketFailureCount: number): boolean {
   return sameBucketFailureCount >= 2;
 }
 
@@ -217,7 +217,7 @@ function determineBucket(
   subtype: ResourceSubtype,
   failureCategory: FailureCategory | undefined,
   errorMessage: string | undefined,
-  finalStatus?: string,
+  _finalStatus?: string,
 ): FailureBucket {
   // Source-type-first routing
   switch (subtype) {
@@ -321,7 +321,7 @@ function getSourceSpecificReason(
   }
 
   // For subtypes without specific templates, use the error message with bucket context
-  const bucketDef = BUCKET_DEFINITIONS[bucket];
+  const _bucketDef = BUCKET_DEFINITIONS[bucket];
   if (errorMessage && !isGenericError(errorMessage)) {
     return errorMessage;
   }

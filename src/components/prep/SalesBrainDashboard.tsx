@@ -1,23 +1,10 @@
 import { memo, useMemo, useState, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Brain, BookOpen, TrendingUp, AlertTriangle, Zap, Shield, ClipboardCheck, History, Tag } from 'lucide-react';
-import {
-  DOCTRINE_CHAPTERS,
-  getChapterLabel,
-  getDoctrineByChapter,
-  getBrainHealth,
-  loadChangelog,
-  getFreshnessColor,
-  getGovernanceColor,
-  getGovernanceLabel,
-  getDoctrineGovernanceStats,
-  isDoctrineEligibleForPropagation,
-  getLegacyHydratedCount,
-  type DoctrineChapter,
-} from '@/lib/salesBrain';
+import { DOCTRINE_CHAPTERS, getChapterLabel, getDoctrineByChapter, getBrainHealth, getFreshnessColor, getGovernanceColor, getGovernanceLabel, getDoctrineGovernanceStats, isDoctrineEligibleForPropagation, getLegacyHydratedCount, type DoctrineChapter } from '@/lib/salesBrain';
 import { cn } from '@/lib/utils';
 import { DoctrineReviewQueue } from './DoctrineReviewQueue';
 import { DoctrineChangeDigest } from './DoctrineChangeDigest';

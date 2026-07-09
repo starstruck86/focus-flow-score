@@ -9,17 +9,11 @@
  * Does NOT contain audio logic — delegates to daveVoiceRuntime.
  */
 
-import type { SpeechQueueItem, TurnConfig, VoiceSession, TtsConfig, ActivePlayback } from '@/lib/daveVoiceRuntime';
-import {
-  speakQueue,
-  runTurn,
-  createVoiceSession,
-  logTranscript,
-  parseVoiceCommand,
-} from '@/lib/daveVoiceRuntime';
+import type { SpeechQueueItem, VoiceSession, TtsConfig, ActivePlayback } from '@/lib/daveVoiceRuntime';
+import { speakQueue, runTurn, createVoiceSession, logTranscript } from '@/lib/daveVoiceRuntime';
 import { createLogger } from '@/lib/logger';
 
-const logger = createLogger('SkillBuilderVoiceAdapter');
+const _logger = createLogger('SkillBuilderVoiceAdapter');
 
 // ── Block Types ────────────────────────────────────────────────────
 

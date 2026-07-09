@@ -103,7 +103,7 @@ export function clearExpiredFlashes() {
 }
 
 export function deriveOutcomeStatus(
-  expectedTo: ControlPlaneState,
+  _expectedTo: ControlPlaneState,
   actualFrom: ControlPlaneState,
   actualTo: ControlPlaneState,
   opResult: { operationalized: boolean; needsReview: boolean; success: boolean },
@@ -169,7 +169,7 @@ export function reconcileOutcome(
 }
 
 function buildMismatchExplanation(
-  fromState: ControlPlaneState,
+  _fromState: ControlPlaneState,
   expectedTo: ControlPlaneState,
   actualTo: ControlPlaneState,
   actionKey: string,

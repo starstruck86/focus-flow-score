@@ -11,7 +11,7 @@ import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Target, ChevronUp, ChevronDown, ChevronRight, Quote, Crosshair } from 'lucide-react';
+import { Target, ChevronUp, ChevronDown, ChevronRight, Quote } from 'lucide-react';
 import { getSkillRubric, normalizeDimensionScores } from '@/lib/dojo/skillRubric';
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 
@@ -23,7 +23,7 @@ interface Props {
   defaultExpanded?: boolean;
 }
 
-export function ExplainableScoreCard({ dimensions, skill, totalScore, defaultExpanded = false }: Props) {
+export function ExplainableScoreCard({ dimensions, skill, totalScore: _totalScore, defaultExpanded = false }: Props) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const rubric = getSkillRubric(skill);
   const normalized = normalizeDimensionScores(dimensions);

@@ -6,7 +6,7 @@
 
 import { DIALS_PER_30_MIN } from '@/lib/mvpBlockModel';
 import { ensureMinimumCallBlocks, fillRemainingGaps } from '@/lib/planCallBlockGuarantee';
-import { validateCalendarInvariants, enforceCalendarImmutability, type CalendarAnchor } from '@/lib/calendarTimeInvariants';
+import { type CalendarAnchor } from '@/lib/calendarTimeInvariants';
 
 export interface RecastBlock {
   start_time: string;
@@ -221,7 +221,7 @@ export function recastDay(input: RecastInput): RecastResult {
   }
 
   // ── Rebuild timeline: interleave meetings with action blocks ──
-  const allKept = [...meetingBlocks, ...keptBlocks];
+  const _allKept = [...meetingBlocks, ...keptBlocks];
 
   // Sort by original start time for meetings, then fill gaps with action blocks
   const meetingSorted = meetingBlocks.slice().sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));

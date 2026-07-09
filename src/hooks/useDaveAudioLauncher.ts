@@ -5,21 +5,15 @@
  * Uses useDaveVoiceController for all audio operations.
  */
 
-import { useState, useCallback, useRef } from 'react';
-import { useDaveVoiceController, type DaveVoiceControllerConfig } from '@/hooks/useDaveVoiceController';
+import { useState, useCallback } from 'react';
+import { useDaveVoiceController } from '@/hooks/useDaveVoiceController';
 import {
   buildGreeting,
   processLaunchIntent,
   matchPreset,
   type LauncherPhase,
 } from '@/lib/daveAudioLauncher';
-import {
-  evaluateTransition,
-  buildResumeIntro,
-  type SessionOutcome,
-  type TransitionOffer,
-  type ResumeContext,
-} from '@/lib/daveSurfaceTransitions';
+import { evaluateTransition, buildResumeIntro, type SessionOutcome, type TransitionOffer } from '@/lib/daveSurfaceTransitions';
 import type { DaveRecommendation } from '@/lib/daveTrainingRouter';
 import { loadVoiceSessionBuffer } from '@/lib/daveSessionBuffer';
 import { loadActiveLoop } from '@/lib/daveClosedLoopStore';

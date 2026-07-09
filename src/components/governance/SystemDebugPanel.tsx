@@ -23,13 +23,7 @@ import { getDoctrineGovernanceStats, getLegacyHydratedCount } from '@/lib/salesB
 import { getActualUsageCounts } from '@/lib/salesBrain/doctrineUsage';
 import { getAudioPipelineHealth } from '@/lib/salesBrain/audioPipeline';
 import { loadMeasurementEvents } from '@/lib/accountPostAction';
-import {
-  useExecutionSession,
-  buildScorecard,
-  getNextBestAccounts,
-  evaluatePrepActionEnforcement,
-  FALLBACK_MATRIX,
-} from '@/lib/executionSession';
+import { useExecutionSession, getNextBestAccounts, evaluatePrepActionEnforcement, FALLBACK_MATRIX } from '@/lib/executionSession';
 
 export function SystemDebugPanel() {
   const [snapshot, setSnapshot] = useState<SystemDebugSnapshot | null>(null);

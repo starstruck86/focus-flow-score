@@ -217,7 +217,7 @@ async function persistAssignment(
  * Record that a unique anchor was completed for this block's current week.
  * Checks if all 5 anchors are done → advances the week.
  */
-async function recordAnchorCompletion(blockId: string, anchor: DayAnchor): Promise<void> {
+async function recordAnchorCompletion(blockId: string, _anchor: DayAnchor): Promise<void> {
   const completedAnchors = await getCompletedAnchorsThisWeek(blockId);
 
   // Update the session counter for compatibility

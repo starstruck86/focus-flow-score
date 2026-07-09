@@ -18,10 +18,10 @@ import {
   updateBufferPosition,
 } from '@/lib/daveSessionBuffer';
 import { OperationQueue } from '@/lib/daveSignalRecovery';
-import { makeOpKey, isOpCompleted, markOpCompleted, clearIdempotencyRecords, runIdempotent } from '@/lib/daveIdempotency';
+import { makeOpKey, clearIdempotencyRecords, runIdempotent } from '@/lib/daveIdempotency';
 import { createLogger } from '@/lib/logger';
 
-const logger = createLogger('DaveAudioFailureAudit');
+const _logger = createLogger('DaveAudioFailureAudit');
 
 // ── Result Type ─────────────────────────────────────────────
 

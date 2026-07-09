@@ -4,12 +4,7 @@
 
 import { CheckCircle2, AlertCircle, ArrowRight, Zap, Tag, Brain, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  type AutoOperationalizeResult,
-  type PipelineStage,
-  PIPELINE_STAGES,
-  getStageLabel,
-} from '@/lib/autoOperationalize';
+import { type AutoOperationalizeResult, PIPELINE_STAGES, getStageLabel } from '@/lib/autoOperationalize';
 
 interface Props {
   result: AutoOperationalizeResult;

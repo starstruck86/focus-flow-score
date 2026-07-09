@@ -4,13 +4,13 @@
  * Processing count now driven by real active job queue, not resource state.
  */
 import { useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, TrendingUp, XCircle, Zap, RefreshCw, Eye, Loader2, Clock } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, XCircle, Zap, Eye, Loader2, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
-import { deriveResourceTruth, type ResourceTruth, type LifecycleInfo } from '@/lib/resourceTruthState';
+import { deriveResourceTruth } from '@/lib/resourceTruthState';
 import { useActiveJobQueue } from '@/hooks/useActiveJobQueue';
 import { ProcessingQueuePanel } from './ProcessingQueuePanel';
 import { useResourceJobProgress, getJobLabel } from '@/store/useResourceJobProgress';
@@ -47,9 +47,9 @@ export function SystemHealthBar({ resources, lifecycleMap, audioJobsMap, onFilte
   // Also incorporate Zustand live job state (client-side orchestration)
   const liveJobs = useResourceJobProgress(s => s.resources);
   const batchActive = useResourceJobProgress(s => s.batchActive);
-  const batchTotal = useResourceJobProgress(s => s.batchTotal);
-  const batchProcessed = useResourceJobProgress(s => s.batchProcessed);
-  const batchJobType = useResourceJobProgress(s => s.batchJobType);
+  const _batchTotal = useResourceJobProgress(s => s.batchTotal);
+  const _batchProcessed = useResourceJobProgress(s => s.batchProcessed);
+  const _batchJobType = useResourceJobProgress(s => s.batchJobType);
 
   // Merge DB queue + Zustand live jobs for accurate processing count & panel data
   const { mergedJobs, mergedSummary, mergedProcessingCount } = useMemo(() => {

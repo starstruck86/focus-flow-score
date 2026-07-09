@@ -6,12 +6,7 @@
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Bug, X, ChevronDown, ChevronUp } from 'lucide-react';
-import {
-  getAudioDebugState,
-  describeMode,
-  type AudioDeliveryMode,
-  type AudioTelemetryEntry,
-} from '@/lib/daveAudioResilience';
+import { getAudioDebugState, describeMode, type AudioDeliveryMode } from '@/lib/daveAudioResilience';
 import { getRecentLifecycles, type PlaybackLifecycleSummary } from '@/lib/playbackLifecycle';
 import type { VoiceModeDiagnostics } from '@/hooks/useVoiceMode';
 

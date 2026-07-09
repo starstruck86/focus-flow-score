@@ -287,7 +287,7 @@ export default function ObservabilityDashboard() {
         </div>
         <p className="text-xs text-muted-foreground">
           Internal debug surface. All data is session-local, in-memory, and best-effort — lost on refresh.
-          {import.meta.env.DEV && <> Console: <code className="bg-muted px-1 rounded">window.__telemetry</code></>}
+          {import.meta.env.DEV && <> Console: <code className="bg-muted px-1 rounded">window._telemetry</code></>}
         </p>
 
         <Tabs defaultValue="jobs" className="w-full">

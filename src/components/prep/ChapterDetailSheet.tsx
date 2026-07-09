@@ -217,7 +217,7 @@ export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, 
   );
 }
 
-function KnowledgeCard({ item, onSelect, onApproveActivate, onActivate, onDeactivate, onPracticeTactic }: {
+function KnowledgeCard({ item, onSelect, onApproveActivate, onActivate: _onActivate, onDeactivate, onPracticeTactic }: {
   item: KnowledgeItem;
   onSelect: () => void;
   onApproveActivate: () => void;

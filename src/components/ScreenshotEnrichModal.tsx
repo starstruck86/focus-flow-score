@@ -3,7 +3,6 @@ import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, ImagePlus, X, CheckCircle2, AlertCircle, Loader2, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
@@ -129,7 +128,7 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account: preselected
         const ext = updatedFiles[i].file.name.split('.').pop() || 'png';
         const path = `${session.user.id}/${account.id}/${Date.now()}-${i}.${ext}`;
 
-        const { data, error } = await supabase.storage
+        const { data: _data, error } = await supabase.storage
           .from('enrichment-screenshots')
           .upload(path, updatedFiles[i].file, { upsert: true });
 

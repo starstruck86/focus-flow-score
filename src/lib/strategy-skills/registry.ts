@@ -3,7 +3,7 @@
  *
  * Read-only catalog of declarative skill manifests. NOT imported by
  * any runtime code (edge functions, hooks, components). Reachable
- * only from tests in `src/lib/strategy-skills/__tests__/`.
+ * only from tests in `src/lib/strategy-skills/_tests__/`.
  */
 import type { SkillManifest } from './types';
 import { conversationPovManifest } from './manifests/conversationPov';

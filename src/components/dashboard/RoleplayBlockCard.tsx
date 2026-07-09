@@ -24,7 +24,7 @@ interface RoleplayBlockCardProps {
   isMissedNoSlot?: boolean;
 }
 
-export const RoleplayBlockCard = memo(function RoleplayBlockCard({ blockStartTime, blockEndTime, isMissedNoSlot }: RoleplayBlockCardProps) {
+export const RoleplayBlockCard = memo(function RoleplayBlockCard({ blockStartTime: _blockStartTime, blockEndTime: _blockEndTime, isMissedNoSlot }: RoleplayBlockCardProps) {
   const today = todayInAppTz();
   const config = getRoleplayBlockConfig();
   const todayStatus = getTodayRoleplayStatus(today);

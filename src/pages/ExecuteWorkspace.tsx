@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Sparkles, Upload, Library, Save, BookmarkPlus,
   Star, RotateCcw, FileText, Copy, ChevronRight,
@@ -194,9 +193,9 @@ export default function ExecuteWorkspace() {
                 <div>
                   <Label className="text-xs">Account</Label>
                   <Select
-                    value={accountId || '__none__'}
+                    value={accountId || '_none__'}
                     onValueChange={v => {
-                      const id = v === '__none__' ? '' : v;
+                      const id = v === '_none__' ? '' : v;
                       setAccountId(id);
                       const acct = accounts.find(a => a.id === id);
                       setAccountName(acct?.name || '');
@@ -204,7 +203,7 @@ export default function ExecuteWorkspace() {
                   >
                     <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">No account</SelectItem>
+                      <SelectItem value="_none__">No account</SelectItem>
                       {accounts.map(a => (
                         <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                       ))}

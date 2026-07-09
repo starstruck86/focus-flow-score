@@ -20,7 +20,7 @@ import {
   Loader2, Zap, Lock, AlertOctagon, TriangleAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { deriveEnrichSession, type EnrichSession } from '@/lib/enrichSession';
+import { deriveEnrichSession } from '@/lib/enrichSession';
 import type {
   IngestionState,
   IngestionItem,
@@ -188,7 +188,7 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
   onResume,
   onCancel,
   onReset,
-  hasFailures,
+  hasFailures: _hasFailures,
   sourceItems,
   sourceLabel = 'items',
 }: BulkIngestionPanelProps) {

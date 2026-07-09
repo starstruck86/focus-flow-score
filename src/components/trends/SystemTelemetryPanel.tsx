@@ -9,10 +9,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Activity, AlertTriangle, 
-  Gauge, Brain, Zap, BarChart3
-} from 'lucide-react';
+import { AlertTriangle, Gauge, Brain, Zap, BarChart3 } from 'lucide-react';
 import { isSystemOSEnabled } from '@/lib/featureFlags';
 import { cn } from '@/lib/utils';
 import { useLiveTelemetry } from '@/hooks/useSystemState';

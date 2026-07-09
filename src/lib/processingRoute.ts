@@ -276,7 +276,7 @@ export function deriveProcessingRoute(resource: Resource): ProcessingRoute {
 
   // 3. Primary & secondary assets
   let primary_asset = selectPrimaryAsset(available_assets);
-  const secondary_assets = available_assets.filter(a => a !== primary_asset);
+  const _secondary_assets = available_assets.filter(a => a !== primary_asset);
   reason.push(`Primary asset: ${ASSET_LABELS[primary_asset]}`);
 
   // 4. Content type

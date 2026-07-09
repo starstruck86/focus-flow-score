@@ -14,16 +14,7 @@ import {
   isSessionAutopilotEnabled,
   isExecutionMomentumEnabled,
 } from '@/lib/featureFlags';
-import {
-  useExecutionSession,
-  getNextBestAccounts,
-  buildScorecard,
-  runEndOfBlockCleanup,
-  evaluatePrepActionEnforcement,
-  deriveEngagementStage,
-  buildTrustExplanation,
-  type DisciplineMode,
-} from '@/lib/executionSession';
+import { useExecutionSession, getNextBestAccounts, buildScorecard, runEndOfBlockCleanup, evaluatePrepActionEnforcement, buildTrustExplanation, type DisciplineMode } from '@/lib/executionSession';
 import { getAccountState } from '@/lib/accountExecutionState';
 
 async function resolveAccount(ctx: ToolContext, accountName: string) {
@@ -114,7 +105,7 @@ export function createExecutionSessionTools(ctx: ToolContext): ToolMap {
       if (isSessionAutopilotEnabled()) {
         const result = store.maybeAutoAdvance();
         if (result.advanced) {
-          const newSession = useExecutionSession.getState().activeSession;
+          const _newSession = useExecutionSession.getState().activeSession;
           lines.push(`🚀 ${result.reason}`);
         } else if (result.reason) {
           lines.push(`⏸️ ${result.reason}`);

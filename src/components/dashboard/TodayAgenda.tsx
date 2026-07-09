@@ -1,12 +1,12 @@
 // Today's Agenda - Unified timeline of meetings + tasks
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Clock, MapPin, CheckSquare, Building2, Video, AlertTriangle, Zap } from 'lucide-react';
+import { Calendar, MapPin, CheckSquare, Building2, Video, AlertTriangle, Zap } from 'lucide-react';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { useStore } from '@/store/useStore';
 import { format, differenceInMinutes, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { toAppTime, APP_TIMEZONE } from '@/lib/timeFormat';
+import { toAppTime } from '@/lib/timeFormat';
 import { Badge } from '@/components/ui/badge';
 import type { Task } from '@/types';
 
@@ -180,7 +180,7 @@ export function TodayAgenda() {
         </div>
       ) : (
         <div className="space-y-1">
-          {agenda.map((item, idx) => (
+          {agenda.map((item, _idx) => (
             <div
               key={`${item.type}-${item.id}`}
               className={cn(

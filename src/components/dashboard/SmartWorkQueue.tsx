@@ -1,7 +1,7 @@
 // Smart Work Queue: Daily Action Plan with sectioned priorities and one-click task creation
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTimeAllocation, type WorkItem, type WorkItemType } from '@/hooks/useTimeAllocation';
+import { useTimeAllocation, type WorkItem } from '@/hooks/useTimeAllocation';
 import { useStore } from '@/store/useStore';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -172,7 +172,7 @@ function Section({ title, icon: Icon, items, color, addedTasks, onAddTask, onDis
 }
 
 export function SmartWorkQueue() {
-  const { workQueue, totalArrAtRisk } = useTimeAllocation();
+  const { workQueue, totalArrAtRisk: _totalArrAtRisk } = useTimeAllocation();
   const { addTask, tasks } = useStore();
   const [addedTasks, setAddedTasks] = useState<Set<string>>(new Set());
   const { dismissedIds, dismiss: dismissItem } = useDismissedItems();

@@ -1,14 +1,9 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import {
-  PanelLeftOpen, PanelRightOpen, Search, Mail, Target, Map,
-  FileText, Send, Paperclip, Upload, Loader2, Zap, Database,
-  Building2, MessageSquare, ClipboardList, Link2, Link2Off,
-} from 'lucide-react';
+import { PanelLeftOpen, PanelRightOpen, Search, Mail, Target, Map, FileText, Send, Paperclip, Upload, Loader2, Zap, Building2, MessageSquare, Link2, Link2Off } from 'lucide-react';
 import { SafeRelinkDialog } from './SafeRelinkDialog';
 import { ThreadTrustBanner } from './ThreadTrustBanner';
 import { useThreadTrustState } from '@/hooks/strategy/useThreadTrustState';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -112,7 +107,7 @@ export function StrategyMainPanel({
   );
   const { uploads, uploadFiles, isUploading } = useStrategyUploads(thread?.id ?? null);
   const { isRunning: isTaskRunning, progressLabel: taskProgressLabel, result: taskResult, runDiscoveryPrep, applyRedline, rejectRedline, reset: resetTask } = useTaskExecution();
-  const { trustState, trustReason, conflicts, isDetecting, runDetect, refetch: refetchTrust } = useThreadTrustState(thread?.id ?? null);
+  const { trustState, trustReason, conflicts, isDetecting, runDetect, refetch: _refetchTrust } = useThreadTrustState(thread?.id ?? null);
   const [input, setInput] = useState('');
   const [depth, setDepth] = useState<typeof DEPTH_OPTIONS[number]>('Standard');
   

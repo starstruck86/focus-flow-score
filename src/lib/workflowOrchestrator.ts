@@ -12,9 +12,9 @@
 import { createLogger } from './logger';
 import { isEnabled } from './systemGovernance';
 import { shouldSuppressIntervention, recordIntervention } from './interventionGuard';
-import { computePersonalProfile, type PersonalProfile } from './systemIntelligence';
+import { computePersonalProfile } from './systemIntelligence';
 
-const log = createLogger('WorkflowOrchestrator');
+const _log = createLogger('WorkflowOrchestrator');
 
 // ── Types ──────────────────────────────────────────────────
 

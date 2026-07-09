@@ -673,8 +673,8 @@ export function useDeepReExtraction() {
 
       try {
         // Retrieve userId for protected-path enforcement
-        const { data: { session: __session } } = await supabase.auth.getSession();
-        const __userId = __session?.user?.id;
+        const { data: { session: _session } } = await supabase.auth.getSession();
+        const _userId = _session?.user?.id;
 
         const response = await authenticatedFetch({
           functionName: 'extract-tactics',
@@ -683,7 +683,7 @@ export function useDeepReExtraction() {
             deepMode: true,
             persist: true,
             jobMode: true,
-            ...(__userId ? { userId: __userId, mode: 'protected' } : {}),
+            ...(_userId ? { userId: _userId, mode: 'protected' } : {}),
           },
           componentName: 'useDeepReExtraction-jobMode',
           timeoutMs: 300_000, // 5 minute timeout for full job
@@ -828,8 +828,8 @@ export function useDeepReExtraction() {
       // Kept as safety fallback in case isBatched is ever dynamically false.
       try {
         // Retrieve userId for protected-path enforcement
-        const { data: { session: __fbSession } } = await supabase.auth.getSession();
-        const __fbUserId = __fbSession?.user?.id;
+        const { data: { session: _fbSession } } = await supabase.auth.getSession();
+        const _fbUserId = _fbSession?.user?.id;
 
         const response = await authenticatedFetch({
           functionName: 'extract-tactics',
@@ -838,7 +838,7 @@ export function useDeepReExtraction() {
             deepMode: true,
             persist: true,
             jobMode: true, // Always use jobMode for durability
-            ...(__fbUserId ? { userId: __fbUserId, mode: 'protected' } : {}),
+            ...(_fbUserId ? { userId: _fbUserId, mode: 'protected' } : {}),
           },
           componentName: 'useDeepReExtraction-fallback',
           timeoutMs: 300_000,
@@ -989,7 +989,7 @@ export function useDeepReExtraction() {
       );
 
       for (const settled of waveResults) {
-        const { item, result, error } = settled.status === 'fulfilled' ? settled.value : { item: wave[0], result: null, error: 'Promise rejected' };
+        const { item, result, error: _error } = settled.status === 'fulfilled' ? settled.value : { item: wave[0], result: null, error: 'Promise rejected' };
         processed++;
 
         if (result) {

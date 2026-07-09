@@ -9,27 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { usePlaybooks, type Playbook } from '@/hooks/usePlaybooks';
-import {
-  type PlaybookModel,
-  type PlaybookTrustStatus,
-  type PlaybookStatus,
-  scorePlaybookTrust,
-  classifyPlaybookTrust,
-  getPlaybookEligibility,
-  detectDecompositionNeeds,
-  type DecompositionSuggestion,
-} from '@/lib/playbookLifecycle';
-import {
-  BookOpen,
-  ShieldCheck,
-  ShieldAlert,
-  AlertTriangle,
-  Clock,
-  TrendingDown,
-  Merge,
-  Split,
-  BarChart3,
-} from 'lucide-react';
+import { type PlaybookModel, type PlaybookTrustStatus, type PlaybookStatus, scorePlaybookTrust, classifyPlaybookTrust, getPlaybookEligibility, detectDecompositionNeeds } from '@/lib/playbookLifecycle';
+import { BookOpen, ShieldCheck, ShieldAlert, AlertTriangle, Merge, Split, BarChart3 } from 'lucide-react';
 
 function toPlaybookModel(p: Playbook): PlaybookModel {
   const trust = scorePlaybookTrust([], { usageCount: 0, acceptanceRate: 0, roleplaysCompleted: 0 }, 0, 0, p.created_at);

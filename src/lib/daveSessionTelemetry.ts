@@ -246,7 +246,7 @@ export function getSessionTelemetry(windowMs = 7 * 24 * 3600 * 1000): TelemetryA
 
 /** Expose for console debugging */
 if (typeof window !== 'undefined' && import.meta.env.DEV) {
-  (window as any).__daveTelemetry = {
+  (window as any)._daveTelemetry = {
     getMetrics: getSessionTelemetry,
     getRaw: () => {
       try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }

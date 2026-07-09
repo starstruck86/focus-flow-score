@@ -1,12 +1,9 @@
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import {
-  TrendingUp, TrendingDown, BookOpen, Swords,
-  ArrowRight, AlertTriangle, Lightbulb,
-} from 'lucide-react';
-import { SKILL_LABELS, type SkillFocus } from '@/lib/dojo/scenarios';
+import { TrendingUp, TrendingDown, BookOpen, Swords, ArrowRight, Lightbulb } from 'lucide-react';
+import { type SkillFocus } from '@/lib/dojo/scenarios';
 import {
   deriveSessionInsights,
   getNextAction,

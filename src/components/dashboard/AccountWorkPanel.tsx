@@ -7,12 +7,12 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { Building2, Filter } from 'lucide-react';
+import { Building2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { AccountWorkCard } from '@/components/accounts/AccountWorkCard';
-import { useAllAccountWorkingViews, type AccountWorkingView } from '@/hooks/useAccountWorkingSummary';
+import { useAllAccountWorkingViews } from '@/hooks/useAccountWorkingSummary';
 import { isAccountExecutionModelEnabled } from '@/lib/featureFlags';
 import type { AccountReadiness } from '@/lib/accountExecutionState';
 

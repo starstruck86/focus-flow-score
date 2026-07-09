@@ -2,7 +2,7 @@
  * Skill Builder Audit Page — Internal QA surface
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Layout } from '@/components/Layout';
 import { SHELL } from '@/lib/layout';
 import { cn } from '@/lib/utils';

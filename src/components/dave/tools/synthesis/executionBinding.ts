@@ -21,7 +21,7 @@ import {
 
 // ── Types ───────────────────────────────────────────────────────
 
-interface BoundAction {
+interface _BoundAction {
   accountName: string;
   accountId: string;
   contactName?: string;

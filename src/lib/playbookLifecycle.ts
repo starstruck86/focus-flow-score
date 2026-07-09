@@ -8,9 +8,9 @@
  */
 
 import { createLogger } from './logger';
-import type { TrustStatus as ResourceTrustStatus, TrustScore as ResourceTrustScore } from './resourceTrust';
+import type { TrustStatus as ResourceTrustStatus } from './resourceTrust';
 
-const log = createLogger('PlaybookLifecycle');
+const _log = createLogger('PlaybookLifecycle');
 
 // ── Canonical Playbook Statuses ────────────────────────────
 export const PLAYBOOK_STATUSES = [
@@ -824,7 +824,7 @@ export type OutcomeTrustAction = 'promote' | 'monitor' | 'downgrade' | 'split_re
 
 export function determineOutcomeTrustAction(
   outcomeScore: PlaybookOutcomeScore,
-  currentTrust: PlaybookTrustStatus,
+  _currentTrust: PlaybookTrustStatus,
 ): OutcomeTrustAction {
   if (outcomeScore.confidence === 'insufficient') return 'monitor';
 
@@ -989,7 +989,7 @@ export function detectPlaybookFatigue(
   if (recentUsages.length >= FATIGUE_THRESHOLD_GLOBAL) {
     signals.push({
       playbookId,
-      dealId: '__global__',
+      dealId: '_global__',
       usageCount: recentUsages.length,
       isFatigued: true,
       suggestion: `Playbook used ${recentUsages.length}x in the last 14 days — diversify tactics`,

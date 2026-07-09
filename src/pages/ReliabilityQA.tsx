@@ -136,7 +136,7 @@ export default function ReliabilityQA() {
                   <p className="text-sm text-muted-foreground py-8 text-center">No crashes recorded this session.</p>
                 ) : (
                   <div className="space-y-3">
-                    {filteredCrashes.map((crash, i) => (
+                    {filteredCrashes.map((crash, _i) => (
                       <CrashCard key={crash.id} crash={crash} />
                     ))}
                   </div>

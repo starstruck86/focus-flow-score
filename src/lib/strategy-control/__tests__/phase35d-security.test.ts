@@ -43,7 +43,7 @@ describe("Phase 3.5D — Security Surface", () => {
     const hits: string[] = [];
     for (const f of files) {
       // Skip test files — they may reference the name for assertion purposes
-      if (f.includes("__tests__") || f.includes(".test.")) continue;
+      if (f.includes("_tests__") || f.includes(".test.")) continue;
       const content = fs.readFileSync(f, "utf-8");
       if (content.includes("run-enforcement-proof")) {
         hits.push(f.replace(PROJECT_ROOT + "/", ""));
@@ -69,7 +69,7 @@ describe("Phase 3.5D — Security Surface", () => {
     const hits: { file: string; line: number; text: string }[] = [];
     for (const f of files) {
       // Skip test files — they may reference patterns for assertion purposes
-      if (f.includes("__tests__") || f.includes(".test.")) continue;
+      if (f.includes("_tests__") || f.includes(".test.")) continue;
       const lines = fs.readFileSync(f, "utf-8").split("\n");
       for (let i = 0; i < lines.length; i++) {
         for (const pat of BYPASS_PATTERNS) {

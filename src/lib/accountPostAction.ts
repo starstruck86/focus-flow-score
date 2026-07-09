@@ -7,8 +7,8 @@
  * Feature-flagged via ENABLE_ACCOUNT_CENTRIC_EXECUTION.
  */
 
-import type { AccountExecutionEntry, OutcomeType, AccountReadiness } from '@/lib/accountExecutionState';
-import type { AccountWorkingSummary, OpportunityContext } from '@/lib/accountWorkingSummary';
+import type { AccountExecutionEntry } from '@/lib/accountExecutionState';
+import type { AccountWorkingSummary } from '@/lib/accountWorkingSummary';
 
 // ── Post-Action Decision Model ─────────────────────────────
 

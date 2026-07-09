@@ -2,7 +2,7 @@
  * Knowledge Control Plane — trust-first, lifecycle-driven, operable workspace.
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { RefreshCw, Filter, Clock, Info, ShieldCheck } from 'lucide-react';
+import { RefreshCw, Filter, Clock, Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -38,9 +38,9 @@ export function KnowledgeControlPlane() {
   const { summary, loading, refetch, isRefetching } = useCanonicalLifecycle();
   const {
     operationalizeWithOutcome, operationalizeBatchWithOutcome,
-    isRunning: opRunning, lastBulkOutcome, setLastBulkOutcome, outcomeRefreshKey,
+    isRunning: opRunning, lastBulkOutcome, setLastBulkOutcome: _setLastBulkOutcome, outcomeRefreshKey,
   } = useAutoOperationalize();
-  const { runBatch, isRunning: extractRunning } = useExtractionPipeline();
+  const { runBatch: _runBatch, isRunning: extractRunning } = useExtractionPipeline();
   const { jobs: queueJobs, summary: queueSummary, loading: queueLoading, refresh: queueRefresh } = useActiveJobQueue();
   const [filter, setFilter] = useState<ControlPlaneFilter>('all');
   const [activePresetId, setActivePresetId] = useState<string | null>(null);

@@ -6,15 +6,7 @@
  * realistic production failure modes.
  */
 import { describe, it, expect } from "vitest";
-import {
-  runArtifactGate,
-  checkTemplateFidelity,
-  checkReadability,
-  checkSectionCompleteness,
-  checkEvidenceDiscipline,
-  type ArtifactManifest,
-  type ArtifactGateResult,
-} from "../artifactGate";
+import { runArtifactGate, checkReadability, checkSectionCompleteness, checkEvidenceDiscipline, type ArtifactManifest, type ArtifactGateResult } from "../artifactGate";
 
 // ── Manifests ─────────────────────────────────────────────────────
 

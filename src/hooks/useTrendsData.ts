@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { format, subDays, startOfWeek, endOfWeek, eachDayOfInterval, isWeekend } from 'date-fns';
+import { format, subDays, startOfWeek, endOfWeek } from 'date-fns';
 
 export type TrendRange = '7d' | '14d' | '30d' | '90d';
 

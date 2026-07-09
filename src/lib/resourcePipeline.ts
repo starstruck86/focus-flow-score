@@ -404,7 +404,7 @@ async function stepActionExtraction(job: ResourceJob, jobId: string) {
   }
 }
 
-async function stepArtifactCreation(job: ResourceJob, resource: Record<string, unknown>) {
+async function stepArtifactCreation(job: ResourceJob, _resource: Record<string, unknown>) {
   // Invoke operationalize to create digest
   const result = await trackedInvoke<any>('operationalize-resource', {
     body: { resource_id: job.resource_id },

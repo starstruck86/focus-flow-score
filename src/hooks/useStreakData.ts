@@ -12,7 +12,7 @@ import {
   getLevelFromStreak,
   CheckInMethod,
 } from '@/types/streak';
-import { format, parseISO, getDay, startOfWeek, endOfWeek, eachDayOfInterval, isWeekend } from 'date-fns';
+import { format, getDay, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns';
 
 // Transform DB snake_case to camelCase
 function transformConfig(data: any): WorkScheduleConfig {

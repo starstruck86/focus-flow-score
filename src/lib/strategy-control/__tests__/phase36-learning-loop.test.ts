@@ -7,12 +7,7 @@
  * - Output is consistent across identical inputs
  */
 import { describe, it, expect } from "vitest";
-import {
-  accumulateFailurePatterns,
-  emptyFailurePatterns,
-  getArtifactFailureSummary,
-  type FailurePatterns,
-} from "../phase36-telemetry";
+import { accumulateFailurePatterns, emptyFailurePatterns, getArtifactFailureSummary } from "../phase36-telemetry";
 
 describe("Phase 3.6 — Learning Loop", () => {
   describe("Failure Pattern Recording", () => {

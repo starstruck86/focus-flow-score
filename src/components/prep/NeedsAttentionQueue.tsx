@@ -6,10 +6,7 @@ import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  XCircle, AlertTriangle, Zap, TrendingDown, Clock, Shield, Eye,
-  HelpCircle, ChevronDown, ChevronRight, CheckCircle2, Layers, Loader2, Activity,
-} from 'lucide-react';
+import { XCircle, AlertTriangle, Zap, Clock, Shield, Eye, HelpCircle, ChevronDown, ChevronRight, CheckCircle2, Layers, Loader2, Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { deriveResourceTruth, type BlockerType, type Blocker, BLOCKER_META } from '@/lib/resourceTruthState';
 import { diagnoseRootCause, ROOT_CAUSE_LABELS, ROOT_CAUSE_COLORS, type RootCauseDiagnosis } from '@/lib/rootCauseDiagnosis';

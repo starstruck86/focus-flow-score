@@ -11,11 +11,7 @@ import type { SubSkillProgress, SkillSubSkillSummary } from './learnSubSkillProg
 import { getSubSkillsForSkill, type SubSkillDefinition } from './learnSubSkillMap';
 import { getSkillTier } from './learnSkillLevels';
 import { evaluateAllSkillLevels } from './learnLevelEvaluator';
-import {
-  DIMENSION_TO_SUBSKILL,
-  SKILL_DIMENSION_KEYS,
-  DIMENSION_LABELS,
-} from './learnScoringSchema';
+import { DIMENSION_TO_SUBSKILL, SKILL_DIMENSION_KEYS } from './learnScoringSchema';
 
 // ── Session signal with structured dimensions ─────────────────────
 

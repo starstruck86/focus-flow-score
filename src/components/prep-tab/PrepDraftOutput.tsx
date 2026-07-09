@@ -5,9 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import {
-  Save, Copy, RotateCcw, FileText, Star, BookOpen, Briefcase,
-} from 'lucide-react';
+import { Copy, RotateCcw, FileText, Star, BookOpen, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSaveOutput, usePromoteOutputToTemplate } from '@/hooks/useExecutionOutputs';
 import { useCreateTemplate } from '@/hooks/useExecutionTemplates';
@@ -32,7 +30,7 @@ export function PrepDraftOutput({
 }: Props) {
   const saveOutput = useSaveOutput();
   const createTemplate = useCreateTemplate();
-  const promoteOutput = usePromoteOutputToTemplate();
+  const _promoteOutput = usePromoteOutputToTemplate();
 
   const handleCopy = () => {
     const text = subjectLine ? `Subject: ${subjectLine}\n\n${draft}` : draft;

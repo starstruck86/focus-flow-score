@@ -6,10 +6,7 @@
 import { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import {
-  Loader2, Activity, CheckCircle2, AlertTriangle,
-  Clock, Zap, RefreshCw, ArrowRight,
-} from 'lucide-react';
+import { Loader2, Activity, CheckCircle2, AlertTriangle, Clock, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useResourceJobProgress, getJobLabel, isJobStale } from '@/store/useResourceJobProgress';
 import type { Resource } from '@/hooks/useResources';

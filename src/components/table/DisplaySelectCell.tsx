@@ -1,5 +1,5 @@
 // Display-mode select cell - shows as badge/pill, click to edit
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import {
   Select,

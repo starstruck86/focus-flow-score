@@ -6,14 +6,7 @@
  * Feature-flagged via ENABLE_ROLEPLAY_GROUNDING.
  */
 
-import {
-  generateScenariosFromPlaybooks,
-  loadCachedScenarios,
-  saveCachedScenarios,
-  loadOutcomes,
-  type RoleplayScenario,
-  type RoleplayOutcome,
-} from '@/lib/roleplayKnowledge';
+import { generateScenariosFromPlaybooks, loadCachedScenarios, saveCachedScenarios, loadOutcomes, type RoleplayScenario } from '@/lib/roleplayKnowledge';
 
 // ── Freshness Model ────────────────────────────────────────
 

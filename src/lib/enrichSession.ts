@@ -59,7 +59,7 @@ const ACTIVE_STAGES = new Set([
   'fetching', 'classifying', 'saving', 'enriching', 'verifying',
 ]);
 
-const TERMINAL_STAGES = new Set([
+const _TERMINAL_STAGES = new Set([
   'complete', 'partial', 'needs_auth', 'unsupported', 'skipped', 'failed', 'needs_review', 'quarantined',
 ]);
 
@@ -221,7 +221,7 @@ function validateSessionInvariants(s: EnrichSession): void {
   }
 
   // Failed items should not also be counted as remaining
-  const failedIds = new Set(s.failedItems.map(i => i.id));
+  const _failedIds = new Set(s.failedItems.map(i => i.id));
   // This check is structural — if an item is in failedItems, its stage must be 'failed'
   for (const item of s.failedItems) {
     if (item.stage !== 'failed' && item.stage !== 'needs_review') {

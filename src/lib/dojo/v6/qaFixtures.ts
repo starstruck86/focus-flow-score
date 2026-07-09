@@ -5,7 +5,7 @@
  * Each fixture includes input + expected V6 behavior.
  */
 
-import type { MultiThreadAssessment, DealMomentum, MultiThreadContext } from './multiThreadTypes';
+import type { DealMomentum, MultiThreadContext } from './multiThreadTypes';
 
 // ── Fixture shape ─────────────────────────────────────────────────
 

@@ -35,7 +35,7 @@ export function JournalDashboardCard() {
   const [showScorecard, setShowScorecard] = useState(false);
 
   const { data: weekDays, isLoading } = useWeekJournalEntries(weekAnchor);
-  const { data: selectedEntry } = useJournalEntry(selectedDate);
+  const { data: _selectedEntry } = useJournalEntry(selectedDate);
 
   const currentWeekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
   const anchorWeekStart = startOfWeek(weekAnchor, { weekStartsOn: 1 });

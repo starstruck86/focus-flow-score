@@ -15,17 +15,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { 
-  Clock, Zap, Phone, Users, BookOpen, Coffee, 
-  BriefcaseBusiness, Target, RefreshCw, Star,
-  ChevronDown, ChevronUp, MessageSquare, Lightbulb,
-  ThumbsUp, ThumbsDown, RotateCcw, CheckCircle2,
-  ArrowRight, ExternalLink, Pencil, Check, X, GripVertical,
-  Rocket, Shield, MoreVertical, EyeOff, Link2, Building2,
-  Settings2, Hammer, AlertTriangle, TrendingUp, Mic,
-} from 'lucide-react';
+import { Clock, Zap, Phone, Users, BookOpen, Coffee, BriefcaseBusiness, Target, RefreshCw, Star, ChevronDown, ChevronUp, MessageSquare, Lightbulb, ThumbsUp, ThumbsDown, RotateCcw, CheckCircle2, ArrowRight, Pencil, Check, X, GripVertical, Rocket, Shield, MoreVertical, EyeOff, Link2, Building2, Settings2, Hammer, AlertTriangle, TrendingUp, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -33,13 +25,13 @@ import { CalendarScreenshotDrop } from './CalendarScreenshotDrop';
 import { DailyPlanPreferences } from './DailyPlanPreferences';
 import { RustBusterQuickLinks } from './RustBusterQuickLinks';
 import { isRustBusterBlock } from '@/lib/rustBusterLinks';
-import { useWeeklyResearchQueue, type AccountState, type WeeklyAssignments } from '@/hooks/useWeeklyResearchQueue';
+import { useWeeklyResearchQueue } from '@/hooks/useWeeklyResearchQueue';
 import type { CalendarScreenshotEvent } from '@/types/dashboard';
 import type { Json } from '@/integrations/supabase/types';
 import { generateTraceId } from '@/lib/appError';
 import { buildLocalFallbackPlan, getVisiblePlanBlocks, summarizePlanDelta, type RebuildFallbackBlock, type RebuildPlanBlock } from '@/lib/dailyPlanRebuild';
 import { QUEUE_CHANGED_EVENT } from '@/hooks/useWeeklyResearchQueue';
-import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, BLOCK_MVPS, clampWorkBlocksToHours } from '@/lib/mvpBlockModel';
+import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, BLOCK_MVPS } from '@/lib/mvpBlockModel';
 import { ensureMinimumCallBlocks } from '@/lib/planCallBlockGuarantee';
 import { useCalendarFreshness } from '@/hooks/useCalendarFreshness';
 import { getCurrentMinutesET, todayInAppTz } from '@/lib/timeFormat';
@@ -49,8 +41,8 @@ import { RoleplayBlockCard } from '@/components/dashboard/RoleplayBlockCard';
 import { ExecutionSignals } from '@/components/dashboard/ExecutionSignals';
 import { getRoleplayBlockConfig, findRoleplaySlot, createRoleplayBlock, getTodayRoleplayStatus, getRoleplayStreak, recordRoleplayBlockEvent } from '@/lib/dailyRoleplayBlock';
 import { buildPrepActionSignal, type PrepActionSignal } from '@/lib/loopReadiness';
-import { onPrepComplete, onActionComplete, rebuildLoopsIfNeeded, triggerScenarioRegenIfNeeded, checkScenarioFreshnessOnLoad } from '@/lib/loopRuntime';
-import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled } from '@/lib/featureFlags';
+import { onPrepComplete, onActionComplete, rebuildLoopsIfNeeded, checkScenarioFreshnessOnLoad } from '@/lib/loopRuntime';
+import { isLoopNativeSchedulerEnabled } from '@/lib/featureFlags';
 
 /** Inline contact count for linked account pills */
 const LinkedAccountContactCount = memo(function LinkedAccountContactCount({ accountId }: { accountId: string }) {
@@ -954,7 +946,7 @@ export function DailyTimeBlocks() {
   // Calculate progress
   const totalGoals = blocks.reduce((s, b) => s + b.goals.length, 0);
   const completedGoals = ((plan?.completed_goals || []) as string[]).length;
-  const progressPct = totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
+  const _progressPct = totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
 
   // Visual timeline: how far through the day
   const dayProgressPct = (() => {

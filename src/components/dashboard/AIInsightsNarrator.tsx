@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Brain, TrendingUp, TrendingDown, Minus, Lightbulb } from 'lucide-react';
+import { Brain, TrendingUp, TrendingDown, Lightbulb } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTrendsData } from '@/hooks/useTrendsData';
 

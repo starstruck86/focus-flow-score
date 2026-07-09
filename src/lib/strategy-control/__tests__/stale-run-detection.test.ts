@@ -9,7 +9,7 @@
  * 5. Batch suffixed steps resolve to base stage timeouts
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 
 // ── Inline the core timeout logic for unit testing ──────────────
 // (The actual staleRunWatchdog.ts runs in Deno; we mirror its logic here)
@@ -136,7 +136,7 @@ describe("Stale-run detection", () => {
 
   describe("no silent pending guarantee", () => {
     it("every watched stage has a finite timeout", () => {
-      for (const [stage, ms] of Object.entries(WATCHED_STAGE_TIMEOUTS_MS)) {
+      for (const [_stage, ms] of Object.entries(WATCHED_STAGE_TIMEOUTS_MS)) {
         expect(ms).toBeGreaterThan(0);
         expect(ms).toBeLessThan(HARD_PENDING_CEILING_MS);
         expect(Number.isFinite(ms)).toBe(true);

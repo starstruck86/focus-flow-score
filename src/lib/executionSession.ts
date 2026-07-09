@@ -9,26 +9,14 @@
 
 import { create } from 'zustand';
 import { todayInAppTz } from '@/lib/timeFormat';
-import {
-  getAccountState,
-  loadAccountStates,
-  recordAccountOutcome,
-  getUnworkedPreppedAccounts,
-  type AccountExecutionEntry,
-  type OutcomeType,
-  type AccountReadiness,
-} from '@/lib/accountExecutionState';
+import { getAccountState, loadAccountStates, recordAccountOutcome, type AccountExecutionEntry, type OutcomeType, type AccountReadiness } from '@/lib/accountExecutionState';
 import { appendTimelineEvent, type AccountEventType } from '@/lib/accountTimeline';
 import {
   getPostActionRecommendation,
   type PostActionRecommendation,
   type OpportunityEscalation,
 } from '@/lib/accountPostAction';
-import {
-  isExecutionSessionLayerEnabled,
-  isAccountExecutionModelEnabled,
-  loadFeatureFlags,
-} from '@/lib/featureFlags';
+import { loadFeatureFlags } from '@/lib/featureFlags';
 
 // ── Execution Mode ─────────────────────────────────────────
 

@@ -12,27 +12,11 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import {
-  Play, Square, RefreshCw, Loader2, CheckCircle2, XCircle, Clock,
-  ChevronDown, AlertTriangle, Zap, Filter, RotateCcw, BarChart3,
-} from 'lucide-react';
-import {
-  runBatchQueue,
-  type BatchProgress,
-  type ResourceJobState,
-  type ResourceJobStatus,
-  type BatchAction,
-  type BatchConfig,
-  type ExtractionAttempt,
-} from '@/lib/batchQueueProcessor';
+import { Play, Square, Loader2, CheckCircle2, XCircle, Clock, ChevronDown, AlertTriangle, Zap, RotateCcw, BarChart3 } from 'lucide-react';
+import { runBatchQueue, type BatchProgress, type ResourceJobState, type ResourceJobStatus, type BatchAction } from '@/lib/batchQueueProcessor';
 import { dispatchExtractionMethod, runEnrichmentOnly } from '@/lib/extractionMethodDispatch';
 import { normalizeSourceType } from '@/lib/sourceTypeNormalizer';
-import {
-  createBatchRun, finalizeBatchRun, persistJobRecords,
-  persistSingleJobRecord, updateBatchRunProgress,
-  hasActiveJobInDB, loadBatchRunHistory, computeBatchMetrics,
-  type BatchRunRecord,
-} from '@/lib/batchRunPersistence';
+import { createBatchRun, finalizeBatchRun, persistSingleJobRecord, updateBatchRunProgress, hasActiveJobInDB, loadBatchRunHistory, computeBatchMetrics } from '@/lib/batchRunPersistence';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';

@@ -121,7 +121,7 @@ export function SelectionActionBar({ selection, hasOpportunity, hasAccount, onAc
         whiteSpace: 'nowrap',
       }}
     >
-      {visible.map((a, i) => (
+      {visible.map((a, _i) => (
         <button
           key={a.key}
           onClick={() => onAction(a.key)}

@@ -5,13 +5,13 @@
 
 import { useState } from 'react';
 import { useResourceJobs, useJobDetails, useRetryJob, useStartPipeline } from '@/hooks/useResourceJobs';
-import { PIPELINE_STEPS, type JobStatus, type StepStatus } from '@/lib/resourcePipeline';
+import { PIPELINE_STEPS } from '@/lib/resourcePipeline';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import { Play, RefreshCw, ChevronDown, CheckCircle, XCircle, Loader2, Clock, AlertTriangle, Zap } from 'lucide-react';
+import { RefreshCw, ChevronDown, CheckCircle, XCircle, Loader2, Clock, AlertTriangle, Zap } from 'lucide-react';
 
 const STATUS_CONFIG: Record<string, { icon: typeof CheckCircle; color: string; label: string }> = {
   completed: { icon: CheckCircle, color: 'text-emerald-500', label: 'Done' },

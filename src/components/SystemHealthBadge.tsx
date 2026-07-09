@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSystemHealth } from '@/hooks/useSystemHealth';
-import { Activity, ExternalLink } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function SystemHealthBadge() {

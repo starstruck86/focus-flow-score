@@ -621,7 +621,7 @@ function buildSummaryTasks(tasks: any[], overdue: any[], dueToday: any[], upcomi
   return sentences.join(' ');
 }
 
-function buildDetailedTasks(tasks: any[], overdue: any[], dueToday: any[], upcoming: any[], p1s: any[], accountMap: Record<string, string>, today: string): string {
+function buildDetailedTasks(tasks: any[], overdue: any[], dueToday: any[], upcoming: any[], _p1s: any[], accountMap: Record<string, string>, _today: string): string {
   // Sort all tasks by priority score
   const allScored = tasks.map(t => ({ ...t, _priority: scoreTaskPriority(t, accountMap) }));
   allScored.sort((a, b) => b._priority.urgencyScore - a._priority.urgencyScore);
@@ -664,7 +664,7 @@ function buildDetailedTasks(tasks: any[], overdue: any[], dueToday: any[], upcom
 
 // ── Quota / pacing walkthrough ──────────────────────────────────
 
-export async function queryQuota(ctx: ToolContext, params: { question?: string }): Promise<string> {
+export async function queryQuota(ctx: ToolContext, _params: { question?: string }): Promise<string> {
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated';
 
@@ -728,7 +728,7 @@ export async function queryPipeline(ctx: ToolContext, params: { question?: strin
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated';
 
-  const filter = params.filter || (params.question ? parseFilterFromQuestion(params.question) : { mode: 'summary' as const });
+  const _filter = params.filter || (params.question ? parseFilterFromQuestion(params.question) : { mode: 'summary' as const });
 
   const { data: opps } = await supabase
     .from('opportunities')
@@ -797,7 +797,7 @@ export async function queryPipeline(ctx: ToolContext, params: { question?: strin
 
 // ── Dashboard overview walkthrough ──────────────────────────────
 
-export async function queryDashboard(ctx: ToolContext, params: { question?: string }): Promise<string> {
+export async function queryDashboard(ctx: ToolContext, _params: { question?: string }): Promise<string> {
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated';
 

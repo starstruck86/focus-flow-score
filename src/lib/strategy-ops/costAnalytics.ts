@@ -5,7 +5,7 @@
  * No derived tables. Read-only. Defensive.
  */
 import { supabase } from '@/integrations/supabase/client';
-import { parseCost, parseTokenUsage, parseArtifactGate, parseAnomalyFlags } from './queries';
+import { parseCost, parseTokenUsage, parseArtifactGate } from './queries';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */

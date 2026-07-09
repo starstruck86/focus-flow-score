@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileAudio, Upload, FileText, Bookmark } from 'lucide-react';
+import { FileAudio, FileText, Bookmark } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   getAudioStageLabel,
@@ -42,7 +42,7 @@ interface ManualTranscriptAssistProps {
 export const ManualTranscriptAssist = memo(function ManualTranscriptAssist({
   open,
   onOpenChange,
-  resourceId,
+  resourceId: _resourceId,
   resourceTitle,
   resourceUrl,
   audioJob,
@@ -51,7 +51,7 @@ export const ManualTranscriptAssist = memo(function ManualTranscriptAssist({
   const [mode, setMode] = useState<ManualAssistMode>('paste_transcript');
   const [content, setContent] = useState('');
   const subtype = detectAudioSubtype(resourceUrl);
-  const strategy = getAudioStrategy(subtype);
+  const _strategy = getAudioStrategy(subtype);
 
   const handleSubmit = useCallback(() => {
     if (mode === 'park_later') {

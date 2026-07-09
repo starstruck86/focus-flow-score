@@ -10,7 +10,7 @@
 
 import { createLogger } from './logger';
 
-const log = createLogger('DealExecutionEngine');
+const _log = createLogger('DealExecutionEngine');
 
 // ── Deal Memory ────────────────────────────────────────────
 

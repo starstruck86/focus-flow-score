@@ -9,7 +9,6 @@ import { describe, it, expect } from 'vitest';
 import { assessTrust, classifySource, computeTrustScore, type ResourceForTrust } from '@/lib/resourceTrust';
 import { planStrategy } from '@/lib/resourceStrategyPlanner';
 import { isValidTransition } from '@/lib/resourceLifecycle';
-import { validateResourceQuality, type ResourceForValidation } from '@/lib/resourceQuality';
 
 // ── Canary Resources ───────────────────────────────────────
 const CANARY = {

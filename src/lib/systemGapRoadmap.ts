@@ -109,7 +109,7 @@ function describeBusinessImpact(
 function generateIssueName(
   subtypeLabel: string,
   failureType: string,
-  buildType: string,
+  _buildType: string,
 ): string {
   const failureLabels: Record<string, string> = {
     binary_content: 'Binary content extraction missing',

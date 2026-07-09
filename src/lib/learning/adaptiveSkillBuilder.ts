@@ -27,7 +27,7 @@ export interface AdaptiveEmphasis {
  */
 export function deriveAdaptiveEmphasis(
   session: SkillSession,
-  content: TrainingContent,
+  _content: TrainingContent,
 ): AdaptiveEmphasis {
   // Priority 1: topBlocker
   if (session.topBlocker) {

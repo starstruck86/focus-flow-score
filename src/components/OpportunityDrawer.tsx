@@ -170,7 +170,7 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
     }
   };
 
-  const formatCurrency = (amount?: number) => {
+  const _formatCurrency = (amount?: number) => {
     if (!amount) return '—';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',

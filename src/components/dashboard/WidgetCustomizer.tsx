@@ -1,4 +1,4 @@
-import { GripVertical, Eye, EyeOff, RotateCcw, Maximize2, Minimize2 } from 'lucide-react';
+import { GripVertical, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Popover,
@@ -17,7 +17,7 @@ interface WidgetCustomizerProps {
   onResize?: (id: string, size: WidgetConfig['size']) => void;
 }
 
-export function WidgetCustomizer({ widgets, onToggle, onMove, onReset, onResize }: WidgetCustomizerProps) {
+export function WidgetCustomizer({ widgets, onToggle, onMove, onReset, onResize: _onResize }: WidgetCustomizerProps) {
   return (
     <Popover>
       <PopoverTrigger asChild>

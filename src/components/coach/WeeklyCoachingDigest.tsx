@@ -7,7 +7,7 @@ import { useAllTranscriptGrades, useBehavioralPatterns } from '@/hooks/useTransc
 import { useWeeklyPlaybookSummary } from '@/hooks/usePlaybookUsageTracking';
 import { startOfWeek, endOfWeek, parseISO, isWithinInterval, format } from 'date-fns';
 
-const GRADE_COLORS: Record<string, string> = {
+const _GRADE_COLORS: Record<string, string> = {
   'A+': 'text-grade-excellent', A: 'text-grade-excellent', 'A-': 'text-grade-excellent',
   'B+': 'text-grade-good', B: 'text-grade-good', 'B-': 'text-grade-good',
   'C+': 'text-grade-average', C: 'text-grade-average', 'C-': 'text-grade-average',

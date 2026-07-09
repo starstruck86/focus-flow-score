@@ -128,7 +128,7 @@ export function TriggeredBadge({ account }: { account: Account }) {
 
 // ── Enrich Button ───────────────────────────────────────
 
-export function EnrichButton({ account, compact = false }: { account: Account; compact?: boolean }) {
+export function EnrichButton({ account, compact: _compact = false }: { account: Account; compact?: boolean }) {
   const { enrichAccount, isEnriching } = useAccountEnrichment();
   const loading = isEnriching(account.id);
 
@@ -171,13 +171,13 @@ const SIGNAL_DEFS = [
   { key: 'marketingPlatformDetected', evidenceKey: 'marketing_platform', label: 'Marketing Platform', icon: Cpu, description: 'Detected marketing platform' },
 ] as const;
 
-const CONFIDENCE_ICONS = {
+const _CONFIDENCE_ICONS = {
   high: ShieldCheck,
   medium: ShieldAlert,
   low: ShieldQuestion,
 };
 
-const CONFIDENCE_COLORS = {
+const _CONFIDENCE_COLORS = {
   high: 'text-status-green',
   medium: 'text-status-yellow',
   low: 'text-muted-foreground',

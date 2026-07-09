@@ -322,7 +322,7 @@ export function StrategyShell() {
   const [canaryReadonly, setCanaryReadonly] = useState<CanaryReviewRow | null>(null);
   const [lastCanaryReview, setLastCanaryReview] = useState<CanaryReviewRow | null>(null);
   const [validationDrawerOpen, setValidationDrawerOpen] = useState(false);
-  const { isCanary, localEnabled, setLocalEnabled, isAllowlisted } = useCanaryMode();
+  const { isCanary, localEnabled: _localEnabled, setLocalEnabled, isAllowlisted } = useCanaryMode();
 
   useEffect(() => {
     if (!user) return;
@@ -491,7 +491,7 @@ export function StrategyShell() {
   const { uploads, uploadFiles } = useStrategyUploads(threadId);
   const { artifacts } = useStrategyArtifacts(threadId);
   const { active: activeRun, latestCompleted } = useThreadTaskRuns(threadId);
-  const { rows: allTaskRunsForThread } = useThreadTaskRuns(null); // no-op placeholder; per-thread indicators below
+  const { rows: _allTaskRunsForThread } = useThreadTaskRuns(null); // no-op placeholder; per-thread indicators below
 
   // Shell-level Strategy Job hook — used by pills that route directly into
   // the real task pipeline (currently: "Build account brief" only). The
@@ -1234,7 +1234,7 @@ export function StrategyShell() {
     navigate('/strategy/settings');
   }, [navigate]);
 
-  const handlePillSaved = useCallback(() => {
+  const _handlePillSaved = useCallback(() => {
     setPillsVersion((v) => v + 1);
   }, []);
 
@@ -1323,7 +1323,7 @@ export function StrategyShell() {
     // ── Account Brief routing ───────────────────────────────────────────
     // The "Build account brief" pill is the first workflow accelerator
     // wired into a real task pipeline (account_brief). It MUST create a
-    // task_runs row, attach the SOP via __sop, and run shadow validation.
+    // task_runs row, attach the SOP via _sop, and run shadow validation.
     // All other pills continue to fall through to the chat send path.
     if (def?.id === 'research.account_brief' && values) {
       const company = (values.account ?? '').trim();

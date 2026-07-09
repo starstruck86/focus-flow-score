@@ -13,11 +13,7 @@ import { Progress } from '@/components/ui/progress';
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import {
-  Zap, Play, RotateCcw, Sparkles, Filter, Tag, RefreshCw,
-  ChevronDown, XCircle, CheckCircle2, AlertTriangle, Clock,
-  TrendingUp, Loader2, Ban, Search, ArrowUpRight,
-} from 'lucide-react';
+import { Zap, Play, RotateCcw, Sparkles, Filter, RefreshCw, ChevronDown, XCircle, CheckCircle2, AlertTriangle, Clock, TrendingUp, Loader2, Ban, Search, ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useExtractionPipeline } from '@/hooks/useExtractionPipeline';
 import {

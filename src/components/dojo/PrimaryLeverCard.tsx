@@ -5,7 +5,7 @@
 
 import { Quote, Crosshair } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { selectPrimaryCoachingLever, normalizeDimensionScores, findBiggestMiss } from '@/lib/dojo/skillRubric';
+import { selectPrimaryCoachingLever, findBiggestMiss } from '@/lib/dojo/skillRubric';
 import type { SkillFocus } from '@/lib/dojo/scenarios';
 
 interface Props {
@@ -15,7 +15,7 @@ interface Props {
   compact?: boolean;
 }
 
-export function PrimaryLeverCard({ dimensions, skill, compact = false }: Props) {
+export function PrimaryLeverCard({ dimensions, skill, compact: _compact = false }: Props) {
   const lever = selectPrimaryCoachingLever(dimensions, skill);
   const biggestMiss = findBiggestMiss(dimensions, skill);
   if (!lever || !biggestMiss) return null;

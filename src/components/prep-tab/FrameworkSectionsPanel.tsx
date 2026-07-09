@@ -14,7 +14,7 @@ import type { StageFrameworkRole, FrameworkSection } from '@/data/stageFramework
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ChevronDown, ChevronRight, BookOpen, Lightbulb, Info, HelpCircle, MessageSquare, Eye, ArrowRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, BookOpen, Lightbulb, Info, HelpCircle, MessageSquare, Eye } from 'lucide-react';
 import { SectionFeedback, KIPlacementFeedback } from './PlaybookFeedbackControls';
 import { cn } from '@/lib/utils';
 
@@ -351,7 +351,7 @@ function FrameworkBlock({
   );
 }
 
-export function FrameworkSectionsPanel({ stageId, stageLabel }: Props) {
+export function FrameworkSectionsPanel({ stageId, stageLabel: _stageLabel }: Props) {
   const stageFrameworks = STAGE_FRAMEWORK_MAP[stageId] || [];
   const { data: allKIs = [] } = useStageKIs(stageId);
 

@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Columns, Maximize2, Minimize2 } from 'lucide-react';
+import { Columns, Minimize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TranscriptGrade, EvidenceItem } from '@/hooks/useTranscriptGrades';
 

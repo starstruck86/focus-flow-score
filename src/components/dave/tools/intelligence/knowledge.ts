@@ -28,22 +28,8 @@ import {
   rowToExtractedInsight,
   rowToTrendSignal,
 } from '@/data/intelligence';
-import {
-  recordStrategyEvent,
-  getUserPerformanceMap,
-  type StrategyPerformance,
-} from '@/data/strategy-outcomes';
-import {
-  getUserPipelineImpact,
-  computePipelineImpact,
-  formatPipelineImpact,
-  formatAggregatedImpact,
-  type StrategyPipelineImpact,
-} from '@/data/pipeline-impact';
-import {
-  getPipelineForecast,
-  formatForecast,
-} from '@/data/pipeline-forecast';
+import { recordStrategyEvent, getUserPerformanceMap } from '@/data/strategy-outcomes';
+import { getUserPipelineImpact, formatAggregatedImpact, type StrategyPipelineImpact } from '@/data/pipeline-impact';
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -64,7 +50,7 @@ function normaliseResource(r: any): NormalisedContent {
   };
 }
 
-function insightsFromDigest(digest: any, resource: NormalisedContent): ExtractedInsight[] {
+function insightsFromDigest(digest: any, _resource: NormalisedContent): ExtractedInsight[] {
   const takeaways: string[] = digest.takeaways || [];
   return takeaways.map((text: string, i: number) => ({
     id: `${digest.resource_id}-t${i}`,

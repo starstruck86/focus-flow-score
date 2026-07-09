@@ -6,7 +6,7 @@
  * (0..1 clamped) so callers can render a subtle top indicator (no spinner
  * overlay theatrics per §8).
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface Options {
   onRefresh: () => Promise<void> | void;

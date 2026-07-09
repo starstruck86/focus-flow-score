@@ -12,18 +12,7 @@
 
 import { useReducer, useCallback, useRef, useEffect } from 'react';
 import { createLogger } from '@/lib/logger';
-import {
-  type DaveConnectionMeta,
-  type DaveConnectionEvent,
-  type DaveConnectionState,
-  daveConnectionReducer,
-  createInitialMeta,
-  getBackoffDelay,
-  MAX_RECONNECT_ATTEMPTS,
-  HEARTBEAT_INTERVAL_MS,
-  HEARTBEAT_TIMEOUT_MS,
-  STABLE_CONNECTION_MS,
-} from '@/lib/daveConnectionManager';
+import { type DaveConnectionMeta, type DaveConnectionEvent, daveConnectionReducer, createInitialMeta, getBackoffDelay, MAX_RECONNECT_ATTEMPTS, HEARTBEAT_INTERVAL_MS, HEARTBEAT_TIMEOUT_MS } from '@/lib/daveConnectionManager';
 
 const logger = createLogger('DaveConnectionMgr');
 
@@ -261,16 +250,14 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
     const snapshot = {
       dumpedAt: new Date(now).toISOString(),
       meta: clone(metaRef.current),
-      eventHistory: clone(eventHistoryRef.current),
-    };
+      eventHistory: clone(eventHistoryRef.current) };
 
     const derived = {
       reconnectTimerActive: reconnectTimerRef.current != null,
       heartbeatRunning: heartbeatTimerRef.current != null,
       eventCount: snapshot.eventHistory.length,
       lastEventType: snapshot.eventHistory.at(-1)?.type ?? null,
-      lastEventAge: snapshot.eventHistory.length ? now - snapshot.eventHistory.at(-1)!.ts : null,
-    };
+      lastEventAge: snapshot.eventHistory.length ? now - snapshot.eventHistory.at(-1)!.ts : null };
 
     const fullDump = deepFreeze({ ...snapshot, derived });
 
@@ -317,6 +304,5 @@ export function useDaveConnectionManager(): UseDaveConnectionManager {
     reset,
     isReconnectExhausted: meta.reconnectAttemptCount >= MAX_RECONNECT_ATTEMPTS,
     eventHistory: eventHistoryRef.current,
-    dumpSummary,
-  };
+    dumpSummary };
 }

@@ -108,7 +108,7 @@ export function ExportMenu({ title, markdown, accountName }: ExportMenuProps) {
         Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
         Table, TableRow, TableCell, BorderStyle, WidthType, ShadingType,
         Header, Footer, PageNumber, PageBreak, TableOfContents,
-        TabStopType, TabStopPosition, LevelFormat,
+        TabStopType: _TabStopType, TabStopPosition: _TabStopPosition, LevelFormat: _LevelFormat,
       } = await import('docx');
       const { saveAs } = await import('file-saver');
 

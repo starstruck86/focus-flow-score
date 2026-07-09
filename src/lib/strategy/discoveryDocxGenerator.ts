@@ -1,8 +1,4 @@
-import {
-  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-  Header, Footer, AlignmentType, HeadingLevel, BorderStyle, WidthType,
-  ShadingType, PageNumber, PageBreak, LevelFormat,
-} from 'docx';
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, Header, Footer, AlignmentType, BorderStyle, WidthType, ShadingType, PageNumber, PageBreak, LevelFormat } from 'docx';
 
 // ── Constants ──
 const PAGE_WIDTH = 12240; // US Letter
@@ -24,7 +20,7 @@ const COLORS = {
 const cellBorder = { style: BorderStyle.SINGLE, size: 1, color: COLORS.borderLight };
 const cellBorders = { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder };
 const noBorder = { style: BorderStyle.NONE, size: 0, color: COLORS.white };
-const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
+const _noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
 const cardBorders = {
   top: { style: BorderStyle.SINGLE, size: 1, color: COLORS.headerBg },
   bottom: { style: BorderStyle.SINGLE, size: 1, color: COLORS.headerBg },

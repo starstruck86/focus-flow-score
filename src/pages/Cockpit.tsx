@@ -16,7 +16,7 @@ import { getLedgerMetrics } from '@/lib/recommendationLedger';
 import { getFrictionSummary } from '@/lib/frictionSignals';
 import { isVoiceOSEnabled } from '@/lib/featureFlags';
 import { cn } from '@/lib/utils';
-import { Zap, AlertTriangle, Radio, Shield, BarChart3, Brain, Mic, ChevronRight, Check, SkipForward, Ban } from 'lucide-react';
+import { Zap, AlertTriangle, Radio, Shield, BarChart3, Brain, Mic, ChevronRight, Check, SkipForward } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useActionMemory } from '@/hooks/useActionMemory';
 import { toast } from 'sonner';

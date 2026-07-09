@@ -15,10 +15,6 @@
  */
 
 import { describe, it, expect } from "vitest";
-import {
-  type Phase36RunMeta,
-  validateTelemetry,
-} from "../phase36-telemetry";
 
 // ═══════════════════════════════════════════════════════════════════
 // Evidence shape validators (pure, no DB)
@@ -33,7 +29,7 @@ interface TaskRunEvidence {
   created_at: string;
 }
 
-function assertPlannerTelemetry(meta: Record<string, unknown>, runId: string) {
+function _assertPlannerTelemetry(meta: Record<string, unknown>, runId: string) {
   const planner = meta.planner as Record<string, unknown> | undefined;
   expect(planner, `${runId}: meta.planner missing`).toBeDefined();
   expect(planner).toHaveProperty("plan_hash");
@@ -41,31 +37,31 @@ function assertPlannerTelemetry(meta: Record<string, unknown>, runId: string) {
   expect(planner).toHaveProperty("methodology_seeds_injected");
 }
 
-function assertArtifactGateTelemetry(meta: Record<string, unknown>, runId: string) {
+function _assertArtifactGateTelemetry(meta: Record<string, unknown>, runId: string) {
   const gate = meta.artifact_gate as Record<string, unknown> | undefined;
   expect(gate, `${runId}: meta.artifact_gate missing`).toBeDefined();
   expect(gate).toHaveProperty("pass");
   expect(gate).toHaveProperty("regen_attempts");
 }
 
-function assertPerformanceTelemetry(meta: Record<string, unknown>, runId: string) {
+function _assertPerformanceTelemetry(meta: Record<string, unknown>, runId: string) {
   const perf = meta.performance as Record<string, unknown> | undefined;
   expect(perf, `${runId}: meta.performance missing`).toBeDefined();
   expect(perf).toHaveProperty("total_latency_ms");
   expect(typeof (perf as any).total_latency_ms).toBe("number");
 }
 
-function assertAnomalyFlags(meta: Record<string, unknown>, runId: string) {
+function _assertAnomalyFlags(meta: Record<string, unknown>, runId: string) {
   const flags = meta.anomaly_flags as Record<string, unknown> | undefined;
   expect(flags, `${runId}: meta.anomaly_flags missing`).toBeDefined();
 }
 
-function assertFailureSemantics(run: TaskRunEvidence) {
+function _assertFailureSemantics(run: TaskRunEvidence) {
   expect(run.status).toBe("failed");
   expect(run.draft_output, `${run.id}: failed run must NOT have draft_output`).toBeNull();
 }
 
-function assertSuccessSemantics(run: TaskRunEvidence) {
+function _assertSuccessSemantics(run: TaskRunEvidence) {
   expect(run.status).toBe("completed");
   expect(run.draft_output, `${run.id}: completed run must HAVE draft_output`).not.toBeNull();
 }

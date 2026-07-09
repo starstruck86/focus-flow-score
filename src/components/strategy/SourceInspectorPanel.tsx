@@ -4,10 +4,7 @@
  */
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import {
-  ChevronDown, ChevronUp, Eye, Brain, Upload, FileText,
-  MessageSquare, Pin, Cpu,
-} from 'lucide-react';
+import { ChevronDown, ChevronUp, Eye, Brain, Upload, FileText, MessageSquare, Cpu } from 'lucide-react';
 
 interface RetrievalMeta {
   memoriesScored?: number;
@@ -30,7 +27,7 @@ interface Props {
   workflowType?: string;
 }
 
-export function SourceInspectorPanel({ sourcesUsed, retrievalMeta, modelUsed, providerUsed, fallbackUsed, workflowType }: Props) {
+export function SourceInspectorPanel({ sourcesUsed, retrievalMeta, modelUsed, providerUsed: _providerUsed, fallbackUsed: _fallbackUsed, workflowType }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   if (!retrievalMeta && !modelUsed) {

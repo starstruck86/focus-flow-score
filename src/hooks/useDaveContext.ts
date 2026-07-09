@@ -9,7 +9,7 @@ import { trackedInvoke } from '@/lib/trackedInvoke';
 const logger = createLogger('DaveContext');
 // URL no longer needed — authenticatedFetch builds it from functionName
 const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
-const CONCURRENCY_COOLDOWN_MS = 30_000; // 30s cooldown after concurrency limit
+const _CONCURRENCY_COOLDOWN_MS = 30_000; // 30s cooldown after concurrency limit
 
 export type DaveErrorType = 'concurrency_limit' | 'auth_failed' | 'agent_error' | 'unknown' | null;
 

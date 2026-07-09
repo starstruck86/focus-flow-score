@@ -46,7 +46,7 @@ export class RouteErrorBoundary extends Component<Props, State> {
       /ChunkLoadError/i.test(error?.name || '');
 
     if (isChunkLoadError) {
-      const KEY = '__chunk_reload_attempt__';
+      const KEY = '_chunk_reload_attempt__';
       const attempted = sessionStorage.getItem(KEY);
       if (!attempted) {
         sessionStorage.setItem(KEY, String(Date.now()));
@@ -99,7 +99,7 @@ export class RouteErrorBoundary extends Component<Props, State> {
     }
 
     // Successful render — clear the chunk-reload sentinel so the next stale-bundle event can self-heal.
-    try { sessionStorage.removeItem('__chunk_reload_attempt__'); } catch {}
+    try { sessionStorage.removeItem('_chunk_reload_attempt__'); } catch {}
     return this.props.children;
   }
 }

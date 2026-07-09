@@ -480,7 +480,7 @@ function scoreEvidence(text: string): number {
   return 1;
 }
 
-function scoreRelevance(text: string, inputTerms: string[], ctx?: ScoringContext): number {
+function scoreRelevance(text: string, inputTerms: string[], _ctx?: ScoringContext): number {
   if (inputTerms.length === 0) return 3;
   const lower = text.toLowerCase();
   const matched = inputTerms.filter(t => t.length > 2 && lower.includes(t.toLowerCase()));

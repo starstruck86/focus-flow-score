@@ -221,14 +221,14 @@ export default function Brief() {
               <div className="space-y-1.5">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Territory Account</p>
                 <Select
-                  value={selectedAccountId || '__none__'}
-                  onValueChange={(v) => setSelectedAccountId(v === '__none__' ? '' : v)}
+                  value={selectedAccountId || '_none__'}
+                  onValueChange={(v) => setSelectedAccountId(v === '_none__' ? '' : v)}
                 >
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Select account…" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">None selected</SelectItem>
+                    <SelectItem value="_none__">None selected</SelectItem>
                     {territoryAccounts.map((acc: any) => (
                       <SelectItem key={acc.id} value={acc.id}>
                         {acc.name}
