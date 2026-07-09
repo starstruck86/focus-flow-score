@@ -224,8 +224,13 @@ export default function TrainBandGate() {
 
         {data?.gate && phase === 'rep' && items[idx] && (
           <Card className="p-4">
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">
-              Item {idx + 1} / {items.length}
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                Item {idx + 1} / {items.length}
+              </div>
+              <span className="inline-flex items-center gap-1 rounded border border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] uppercase tracking-wider px-1.5 py-0.5 font-medium">
+                <AlertTriangle className="h-3 w-3" /> Gate
+              </span>
             </div>
             <p className="text-sm bg-muted/40 rounded p-3 mb-3">{items[idx].objection}</p>
             <Textarea
