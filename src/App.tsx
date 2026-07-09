@@ -90,6 +90,8 @@ const Competitive = lazy(() => import("./pages/Competitive"));
 const Playbooks = lazy(() => import("./pages/Playbooks"));
 // SignalInbox route merged into Digest tab (W5); /signals → /outreach.
 const OrgTree = lazy(() => import("./pages/OrgTree"));
+const Verticals = lazy(() => import("./pages/Verticals"));
+const VerticalDetail = lazy(() => import("./pages/VerticalDetail"));
 const TrainHome = lazy(() => import("./pages/train/TrainHome"));
 const TrainSpoke = lazy(() => import("./pages/train/TrainSpoke"));
 const TrainTopic = lazy(() => import("./pages/train/TrainTopic"));
@@ -171,6 +173,8 @@ const App = () => (
                   <Route path="/dashboard" element={<Navigate to="/today" replace />} />
 
                   <Route path="/outreach" element={<ProtectedPage routeName="Outreach"><WeeklyOutreach /></ProtectedPage>} />
+                  <Route path="/verticals" element={<ProtectedPage routeName="Verticals"><Suspense fallback={<LazyFallback text="Loading verticals…" />}><Verticals /></Suspense></ProtectedPage>} />
+                  <Route path="/verticals/:id" element={<ProtectedPage routeName="Vertical Detail"><Suspense fallback={<LazyFallback text="Loading vertical…" />}><VerticalDetail /></Suspense></ProtectedPage>} />
                   <Route path="/accounts/:id" element={<ProtectedPage routeName="Account Detail"><AccountDetail /></ProtectedPage>} />
                   <Route path="/opportunities/:id" element={<ProtectedPage routeName="Opportunity Detail"><OpportunityDetail /></ProtectedPage>} />
                   <Route path="/renewals" element={<ProtectedPage routeName="Renewals"><Renewals /></ProtectedPage>} />

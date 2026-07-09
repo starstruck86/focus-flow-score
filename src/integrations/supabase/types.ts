@@ -10520,6 +10520,50 @@ export type Database = {
         }
         Relationships: []
       }
+      vertical_briefs: {
+        Row: {
+          content_md: string | null
+          id: string
+          is_current: boolean
+          pov_deck_md: string | null
+          rendered_at: string
+          rendered_by: string
+          user_id: string
+          version: number
+          vertical_id: string
+        }
+        Insert: {
+          content_md?: string | null
+          id?: string
+          is_current?: boolean
+          pov_deck_md?: string | null
+          rendered_at?: string
+          rendered_by?: string
+          user_id: string
+          version?: number
+          vertical_id: string
+        }
+        Update: {
+          content_md?: string | null
+          id?: string
+          is_current?: boolean
+          pov_deck_md?: string | null
+          rendered_at?: string
+          rendered_by?: string
+          user_id?: string
+          version?: number
+          vertical_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vertical_briefs_vertical_id_fkey"
+            columns: ["vertical_id"]
+            isOneToOne: false
+            referencedRelation: "verticals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       verticals: {
         Row: {
           branch_relevance_map: string | null
