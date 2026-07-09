@@ -62,6 +62,20 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      // Inline fallback for scoped boundaries (label provided).
+      if (this.props.label) {
+        return (
+          <div
+            role="alert"
+            className={
+              this.props.className ??
+              'rounded-md border border-destructive/40 bg-destructive/5 text-destructive/90 text-xs px-3 py-2'
+            }
+          >
+            Something went wrong loading this section
+          </div>
+        );
+      }
       return (
         <div className="min-h-screen pt-[env(safe-area-inset-top)] flex flex-col items-center justify-center gap-4 bg-background px-4 text-center">
           <h1 className="text-2xl font-bold font-display text-foreground">Dynamic</h1>
