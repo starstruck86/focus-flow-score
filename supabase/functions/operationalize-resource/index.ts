@@ -33,6 +33,7 @@ serve(async (req) => {
       .from("resources")
       .select("*")
       .eq("id", resource_id)
+      .eq("user_id", user.id)
       .single();
     if (rErr || !resource) throw new Error("Resource not found");
 
