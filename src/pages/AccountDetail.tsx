@@ -154,6 +154,8 @@ export default function AccountDetail() {
 
   const account = accounts.find(a => a.id === id);
   const { setPageContext } = useCopilot();
+  const gapMap = useAccountGapScores(useMemo(() => (id ? [id] : []), [id]));
+  const gap = id ? gapMap[id] : undefined;
 
   useEffect(() => {
     if (!showDossier || !account || !user) return;
