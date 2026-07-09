@@ -44,7 +44,7 @@ Return ONLY valid JSON in this exact format:
   "warnings": ["Any parsing warnings"]
 }
 
-ACCOUNT fields: name, website, industry, priority (high/medium/low), tier (A/B/C), motion (new-logo/renewal/general), salesforceLink, notes, nextStep
+ACCOUNT fields: name, website, industry, priority (high/medium/low), tier (A/B/C), motion (new-logo/renewal/both/general — use "both" when unclear or mixed), salesforceLink, notes, nextStep
 OPPORTUNITY fields: name, stage (Prospect/Discover/Demo/Proposal/Negotiate/Closed Won/Closed Lost), status (active/stalled/closed-won/closed-lost), arr (number), closeDate (YYYY-MM-DD), nextStep, nextStepDate (YYYY-MM-DD), notes, dealType (new-logo/expansion/renewal/one-time), churnRisk (low/medium/high/certain), salesforceLink, priorContractArr, renewalArr, oneTimeAmount, termMonths
 CONTACT fields: name, title, email, linkedInUrl, department, seniority, buyerRole (economic_buyer/champion/technical_buyer/user_buyer/coach/influencer/blocker), influenceLevel (high/medium/low), notes, salesforceLink
 
