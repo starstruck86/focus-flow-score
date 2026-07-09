@@ -298,7 +298,7 @@ const App = () => (
                 <Route path="/simulate" element={<ProtectedPage routeName="Conversation Simulator"><Suspense fallback={<LazyFallback />}><Simulate /></Suspense></ProtectedPage>} />
                 <Route path="/competitive" element={<ProtectedPage routeName="Competitive Intel"><Suspense fallback={<LazyFallback />}><Competitive /></Suspense></ProtectedPage>} />
                 <Route path="/playbooks" element={<ProtectedPage routeName="Playbooks"><Suspense fallback={<LazyFallback />}><Playbooks /></Suspense></ProtectedPage>} />
-                <Route path="/signals" element={<ProtectedPage routeName="Signal Inbox"><Suspense fallback={<LazyFallback />}><SignalInbox /></Suspense></ProtectedPage>} />
+                <Route path="/signals" element={<Navigate to="/outreach" replace />} />
                 <Route path="/org-tree" element={<ProtectedPage routeName="Account Org Tree"><Suspense fallback={<LazyFallback />}><OrgTree /></Suspense></ProtectedPage>} />
                 <Route path="/train" element={<ProtectedPage routeName="Train · Home"><Suspense fallback={<LazyFallback />}><TrainHome /></Suspense></ProtectedPage>} />
                 <Route path="/train/:spoke" element={<ProtectedPage routeName="Train · Spoke"><Suspense fallback={<LazyFallback />}><TrainSpoke /></Suspense></ProtectedPage>} />
