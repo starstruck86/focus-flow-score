@@ -25,6 +25,7 @@ serve(async (req) => {
       });
     }
 
+    const { primary: model } = await getModelConfig('grade-mock-call');
     const { session_id } = await req.json();
     if (!session_id) throw new Error("session_id required");
 
