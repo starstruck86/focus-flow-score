@@ -6,6 +6,10 @@
  * output contract as the Strategy skill being compared.
  */
 
+import { getModelConfig } from '../_shared/getModelConfig.ts';
+
+let MODEL_NAME = "google/gemini-2.5-flash";
+
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
