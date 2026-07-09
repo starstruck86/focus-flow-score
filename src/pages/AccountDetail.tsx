@@ -57,14 +57,12 @@ const STATUS_COLORS: Record<AccountStatus, string> = {
   'meeting-booked': 'bg-primary/20 text-primary',
 };
 
-const STATUS_OPTIONS: { value: AccountStatus; label: string }[] = [
-  { value: 'researching', label: 'Researching' },
-  { value: 'prepped', label: 'Prepped' },
-  { value: 'active', label: 'Active' },
-  { value: 'inactive', label: 'Inactive' },
-  { value: 'disqualified', label: 'Disqualified' },
-  { value: 'meeting-booked', label: 'Meeting Booked' },
-];
+const MOTION_LABELS: Record<string, string> = {
+  'new-logo': 'Expansion target',
+  'renewal': 'Renewal',
+  'general': 'General',
+  'both': 'Expansion + Renewal',
+};
 
 async function generateDossier(account: any, _userId: string): Promise<string> {
   const [callsRes, signalsRes, footprintRes] = await Promise.all([
