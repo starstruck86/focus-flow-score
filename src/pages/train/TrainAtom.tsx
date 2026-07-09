@@ -525,11 +525,9 @@ function SituationBeat({
   lessonMd: string | null;
   conceptId: string;
   userId: string | null;
-  drillStats: { attempts: number; passes: number };
   onBackToTeach: () => void;
   onRespond: () => void;
 }) {
-  const hasScript = isNonEmpty(drill.drillTeachScript);
   const hasRubric = Array.isArray(drill.drillRubric) && drill.drillRubric.length > 0;
 
   return (
@@ -544,39 +542,17 @@ function SituationBeat({
           <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
             <Sparkles className="h-3.5 w-3.5" /> The situation
           </div>
-          <DrillModeBadge mode={drillMode} attempts={drillStats.attempts} />
+          <DrillModeBadge mode={drillMode} />
         </div>
         <p className="text-base leading-relaxed bg-muted/40 rounded p-4 mb-4">
           {drill.scenario || drill.when_to_use || 'Respond to this buyer situation.'}
         </p>
 
-        {/* LEARN mode: teach script + rubric fully visible BEFORE recording.
-            PRACTICE mode: teach script behind a Refresher toggle; rubric behind "Show the bar". */}
-        {hasScript && (
-          drillMode === 'learn' ? (
-            <div className="mb-3 rounded-md border border-primary/25 bg-primary/5 p-3">
-              <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-primary mb-2">
-                <BookOpen className="h-3.5 w-3.5" /> Teach beats
-              </div>
-              <TeachScriptBeats script={drill.drillTeachScript!} />
-            </div>
-          ) : (
-            <PeekPanel label="Refresher" icon={BookOpen}>
-              <TeachScriptBeats script={drill.drillTeachScript!} />
-            </PeekPanel>
-          )
-        )}
-
-        {hasRubric && (
-          drillMode === 'learn' ? (
-            <div className="mb-3">
-              <RubricChecklist rubric={drill.drillRubric!} />
-            </div>
-          ) : (
-            <PeekPanel label="Show the bar" icon={Target}>
-              <RubricChecklist rubric={drill.drillRubric!} compact />
-            </PeekPanel>
-          )
+        {/* PRACTICE: rubric visible before recording. GATE: hidden. */}
+        {drillMode === 'practice' && hasRubric && (
+          <div className="mb-3">
+            <RubricChecklist rubric={drill.drillRubric!} title="What good sounds like" />
+          </div>
         )}
 
         <div className="flex items-center justify-between gap-2 mt-4">
@@ -589,6 +565,25 @@ function SituationBeat({
     </div>
   );
 }
+
+function DrillModeBadge({ mode }: { mode: DrillMode }) {
+  if (mode === 'gate') {
+    return (
+      <Badge
+        variant="outline"
+        className="text-[10px] border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+      >
+        <Target className="h-3 w-3 mr-1" /> Gate
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] text-muted-foreground">
+      <GraduationCap className="h-3 w-3 mr-1" /> Practice
+    </Badge>
+  );
+}
+
 
 // Splits a teach script into visible beats. Handles bullet lists, numbered
 // lists, and blank-line-separated paragraphs. Falls back to a single block.
