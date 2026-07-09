@@ -96,7 +96,7 @@ ${session.skill_mode ? `- Skill Focus: ${session.skill_mode}` : ''}
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Grade this mock call simulation:\n\n${transcript.substring(0, 15000)}` },
