@@ -3435,6 +3435,7 @@ Deno.serve(async (req) => {
         .select("id, file_url, content, enrichment_status, failure_count, content_length, manual_content_present")
         .in("enrichment_status", ["not_enriched", "incomplete", "partial", "failed"])
         .like("file_url", "http%")
+        .eq("user_id", userId)
         .limit(batchLimit);
 
       if (qErr) throw new Error("Query failed");
