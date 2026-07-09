@@ -201,8 +201,8 @@ RULES:
         strategy_summary: plan.strategy_summary,
         quota_gap: quotaGap,
         days_remaining: daysRemaining,
-        // Reset completed since moves changed, but log old count
-        moves_completed: [],
+        // Preserve completed moves across regeneration (fetched into preservedCompleted above)
+        moves_completed: preservedCompleted,
       }, { onConflict: "user_id,week_start" })
       .select()
       .single();
