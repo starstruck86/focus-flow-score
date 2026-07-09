@@ -28,6 +28,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    MODEL_NAME = (await getModelConfig('clean-baseline')).primary;
     const body = await req.json();
     const { prompt, systemPrompt } = body as { prompt: string; systemPrompt?: string };
 
@@ -59,7 +60,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: MODEL_NAME,
         messages: [
           { role: "system", content: system },
           { role: "user", content: prompt },
@@ -94,7 +95,7 @@ Deno.serve(async (req) => {
         baseline_context_used: false,
         baseline_library_used: false,
         baseline_memory_used: false,
-        model: "google/gemini-2.5-flash",
+        model: MODEL_NAME,
       }),
       { status: 200, headers: { ...CORS, "Content-Type": "application/json" } },
     );
