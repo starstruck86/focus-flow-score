@@ -116,7 +116,7 @@ async function extractChunkViaVision(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: MODEL_NAME,
       messages: [{
         role: "user",
         content: [
