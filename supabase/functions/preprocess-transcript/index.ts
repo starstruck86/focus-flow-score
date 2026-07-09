@@ -6,6 +6,9 @@
  * This makes transcripts suitable for KI extraction by extract-tactics.
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
+
+let MODEL_NAME = "google/gemini-2.5-flash";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,6 +39,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    MODEL_NAME = (await getModelConfig('preprocess-transcript')).primary;
     const { transcript, episode_title, episode_guest, show_name } = await req.json();
 
     if (!transcript || transcript.length < 100) {
@@ -183,7 +187,7 @@ async function processChunk(apiKey: string, userContent: string): Promise<{ cont
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: MODEL_NAME,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userContent },
