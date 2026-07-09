@@ -515,7 +515,7 @@ function SituationBeat({
   lessonMd,
   conceptId,
   userId,
-  drillStats,
+  
   onBackToTeach,
   onRespond,
 }: {
