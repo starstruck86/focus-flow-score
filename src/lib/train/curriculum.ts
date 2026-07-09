@@ -153,6 +153,7 @@ export async function getConceptWithItems(
 
   const rubricMap = new Map<string, Array<{ c: string; must?: boolean }>>();
   const scriptMap = new Map<string, string>();
+  const modelAnswerMap = new Map<string, string>();
   for (const r of (rubricData as AnyRow[]) ?? []) {
     const kiId = String(r.ki_id);
     if (Array.isArray(r.drill_rubric)) {
@@ -160,6 +161,8 @@ export async function getConceptWithItems(
     }
     const s = (r.drill_teach_script as string | null) ?? null;
     if (s && s.trim().length > 0) scriptMap.set(kiId, s);
+    const m = (r.drill_model_answer as string | null) ?? null;
+    if (m && m.trim().length > 0) modelAnswerMap.set(kiId, m);
   }
 
   let kiMap = new Map<string, AnyRow>();
@@ -184,6 +187,7 @@ export async function getConceptWithItems(
           scenario: (l.drill_scenario as string | null) ?? null,
           drillRubric: rubricMap.get(String(l.ki_id)) ?? null,
           drillTeachScript: scriptMap.get(String(l.ki_id)) ?? null,
+          drillModelAnswer: modelAnswerMap.get(String(l.ki_id)) ?? null,
         },
         kiMap.get(String(l.ki_id)),
       ),
