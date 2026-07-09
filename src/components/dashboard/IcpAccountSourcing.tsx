@@ -160,7 +160,7 @@ export function IcpAccountSourcing() {
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-display flex items-center gap-2">
             <Crosshair className="h-4 w-4 text-primary" />
-            ICP Account Discovery
+            Account Discovery
           </CardTitle>
           <Button
             variant={hasResults ? 'ghost' : 'default'}

@@ -32,7 +32,7 @@ function buildContextString(p: TerritoryProfile | null): string {
     const q = new Intl.NumberFormat('en-US', { style: 'currency', currency: p.quota_currency || 'USD', minimumFractionDigits: 0 }).format(p.quota_amount);
     lines.push(`Quota: ${q} ${p.quota_type} quota. FY: ${p.fiscal_year_start} to ${p.fiscal_year_end}.`);
   }
-  if (p.motion) lines.push(`Sales motion: ${p.motion}`);
+  if (p.motion) lines.push(`Territory focus: ${p.motion}`);
   if (p.territory_description) lines.push(`Territory: ${p.territory_description}`);
   if (p.company_context) lines.push(`Company context: ${p.company_context}`);
   if (p.ki_library_summary) lines.push(`KI Library: ${p.ki_library_summary}`);
