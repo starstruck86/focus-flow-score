@@ -216,7 +216,7 @@ function SignalCard({ row }: { row: SignalRow }) {
   );
 }
 
-export function AccountRoom({ accountId, compact = false }: AccountRoomProps) {
+function AccountRoomContent({ accountId, compact = false }: AccountRoomProps) {
   const navigate = useNavigate();
   const {
     loading,
