@@ -644,7 +644,7 @@ function decodeHTMLEntities(text: string): string {
 
 async function aiRequest(apiKey: string, system: string, user: string, maxTokens = 16384, temperature = 0.2): Promise<any> {
   const body = JSON.stringify({
-    model: 'google/gemini-2.5-flash',
+    model: MODEL_NAME,
     messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
     max_tokens: maxTokens,
     temperature,
@@ -1545,6 +1545,8 @@ Deno.serve(async (req) => {
 
     if (isDryRun) console.log(`[extract] 🔬 BENCHMARK MODE — no DB writes`);
 
+    MODEL_NAME = (await getModelConfig('batch-extract-kis')).primary;
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -1685,7 +1687,7 @@ Deno.serve(async (req) => {
         await recordRunAndReconcile(supabase, {
           resourceId, userId: resource.user_id, startedAt, durationMs: Date.now() - startTime,
           status: 'failed', rawCount: 0, validatedCount: 0, savedCount: 0, duplicatesSkipped: 0,
-          model: 'google/gemini-2.5-flash', strategy, error: aiErr.message,
+          model: MODEL_NAME, strategy, error: aiErr.message,
           summary: `AI error on attempt ${attemptNumber}: ${aiErr.message}`,
           contentLength: resource.content.length, resourceType: resource.resource_type,
           isLesson, enrichmentStatus: newStatus,
@@ -1856,7 +1858,7 @@ Deno.serve(async (req) => {
           resourceId, userId: resource.user_id, startedAt, durationMs,
           status: retryEligible ? 'failed' : 'completed', rawCount: rawItems.length, validatedCount: validated.length,
           savedCount: 0, duplicatesSkipped: 0,
-          model: 'google/gemini-2.5-flash', strategy,
+          model: MODEL_NAME, strategy,
           summary: `Below threshold: 0 items on attempt ${attemptNumber}`,
           contentLength: resource.content.length, resourceType: resource.resource_type,
           isLesson, enrichmentStatus: newStatus,
@@ -1901,7 +1903,7 @@ Deno.serve(async (req) => {
             resourceId, userId: resource.user_id, startedAt, durationMs,
             status: 'completed', rawCount: rawItems.length, validatedCount: validated.length,
             savedCount: 0, duplicatesSkipped: 0,
-            model: 'google/gemini-2.5-flash', strategy,
+            model: MODEL_NAME, strategy,
             summary: `Summary-first rejected: degraded quality on attempt ${attemptNumber}`,
             contentLength: resource.content.length, resourceType: resource.resource_type,
             isLesson, enrichmentStatus: 'extraction_requires_review',
@@ -1943,7 +1945,7 @@ Deno.serve(async (req) => {
             resourceId, userId: resource.user_id, startedAt, durationMs,
             status: 'completed', rawCount: rawItems.length, validatedCount: validated.length,
             savedCount: 0, duplicatesSkipped: 0,
-            model: 'google/gemini-2.5-flash', strategy,
+            model: MODEL_NAME, strategy,
             summary: `No improvement over previous best on attempt ${attemptNumber}`,
             contentLength: resource.content.length, resourceType: resource.resource_type,
             isLesson, enrichmentStatus: 'extraction_requires_review',
@@ -2003,7 +2005,7 @@ Deno.serve(async (req) => {
           resourceId, userId: resource.user_id, startedAt, durationMs,
           status: retryEligible ? 'failed' : 'completed', rawCount: rawItems.length, validatedCount: validated.length,
           savedCount: 0, duplicatesSkipped: validated.length - deduped.length,
-          model: 'google/gemini-2.5-flash', strategy, error: invariantMsg,
+          model: MODEL_NAME, strategy, error: invariantMsg,
           summary: `Under floor: ${deduped.length}/${minKiFloor} on attempt ${attemptNumber}`,
           contentLength: resource.content.length, resourceType: resource.resource_type,
           isLesson, enrichmentStatus: newStatus,
@@ -2120,7 +2122,7 @@ Deno.serve(async (req) => {
         resourceId, userId: resource.user_id, startedAt, durationMs,
         status: 'failed', rawCount: rawItems.length, validatedCount: validated.length,
         savedCount: 0, duplicatesSkipped: 0,
-        model: 'google/gemini-2.5-flash', strategy, error: insertError.message,
+        model: MODEL_NAME, strategy, error: insertError.message,
         summary: `Insert failed on attempt ${attemptNumber}: ${insertError.message}`,
         contentLength: resource.content.length, resourceType: resource.resource_type,
         isLesson, enrichmentStatus: 'extraction_failed',
@@ -2173,7 +2175,7 @@ Deno.serve(async (req) => {
       resourceId, userId: resource.user_id, startedAt, durationMs,
       status: 'completed', rawCount: rawItems.length, validatedCount: validated.length,
       savedCount: rows.length, duplicatesSkipped: validated.length - deduped.length,
-      model: 'google/gemini-2.5-flash', strategy,
+      model: MODEL_NAME, strategy,
       summary: `Success: ${rows.length} KIs inserted, ${canonicalKiCount} total on attempt ${attemptNumber}`,
       contentLength: resource.content.length, resourceType: resource.resource_type,
       isLesson, enrichmentStatus: 'extracted',
