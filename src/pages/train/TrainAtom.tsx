@@ -373,10 +373,12 @@ export default function TrainAtom() {
   );
 }
 
-// ── Beat 1: CONCEPT ──────────────────────────────────────────────
+// ── Beat 1: CONCEPT — "The tactic" teach-first card (PRACTICE only shows
+// the four labeled beats; GATE hides them and jumps straight to the drill). ─
 function ConceptBeat({
   data,
-  authoredScript,
+  firstDrill,
+  drillMode,
   onContinue,
   hasDrills,
   hasEliteBeat,
@@ -384,7 +386,8 @@ function ConceptBeat({
   topic,
 }: {
   data: NonNullable<ReturnType<typeof useConceptAtom>['data']>;
-  authoredScript: string | null;
+  firstDrill: CurriculumKi | null;
+  drillMode: DrillMode;
   onContinue: () => void;
   hasDrills: boolean;
   hasEliteBeat: boolean;
@@ -394,55 +397,79 @@ function ConceptBeat({
   const t = data.teach;
   const navigate = useNavigate();
   const continueLabel = hasEliteBeat ? 'Continue →' : hasDrills ? 'Start drilling →' : 'Got it';
-  const hasAuthored = isNonEmpty(authoredScript);
+
+  // Assemble the four labeled beats. Prefer per-drill fields (ki_curriculum),
+  // fall back to concept exemplar KI. Empty beats are omitted.
+  const exemplar = t.kind === 'ki_exemplar' ? t.exemplar : undefined;
+  const tacticTitle = firstDrill?.title || exemplar?.title || data.concept.title;
+  const tactic =
+    firstDrill?.drillTeachScript ||
+    firstDrill?.tactic_summary ||
+    exemplar?.tactic_summary ||
+    null;
+  const useItWhen = firstDrill?.when_to_use || exemplar?.when_to_use || null;
+  const whyItMatters = firstDrill?.why_it_matters || exemplar?.why_it_matters || null;
+  const eliteSoundsLike =
+    firstDrill?.drillModelAnswer ||
+    data.concept.model_line_plain ||
+    (t.kind === 'ki_exemplar' ? t.modelLine ?? exemplar?.example_usage ?? null : null);
+
+  const beats: Array<{ label: string; body: string; tone: 'muted' | 'primary' }> = [];
+  if (isNonEmpty(tactic))         beats.push({ label: 'The tactic',      body: tactic!,         tone: 'muted' });
+  if (isNonEmpty(useItWhen))      beats.push({ label: 'Use it when',     body: useItWhen!,      tone: 'muted' });
+  if (isNonEmpty(whyItMatters))   beats.push({ label: 'Why it matters',  body: whyItMatters!,   tone: 'muted' });
+  if (isNonEmpty(eliteSoundsLike))beats.push({ label: 'Elite sounds like', body: eliteSoundsLike!, tone: 'primary' });
 
   return (
     <Card className="p-4">
-      <div className="flex items-center gap-2 mb-3 text-xs uppercase tracking-wider text-muted-foreground">
-        <BookOpen className="h-3.5 w-3.5" /> Concept
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+          <BookOpen className="h-3.5 w-3.5" /> The tactic
+        </div>
+        <DrillModeBadge mode={drillMode} />
       </div>
 
-      {t.kind === 'ki_exemplar' && (
-        <div className="space-y-4 text-sm">
-          <h3 className="text-base font-semibold">{t.exemplar.title}</h3>
-          {hasAuthored ? (
-            <section>
-              <p className="leading-relaxed whitespace-pre-wrap">{authoredScript}</p>
-            </section>
-          ) : (
-            <>
-              {isNonEmpty(t.exemplar.why_it_matters) && (
-                <section>
-                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Why this matters</div>
-                  <p className="leading-relaxed">{t.exemplar.why_it_matters}</p>
-                </section>
-              )}
-              {isNonEmpty(t.exemplar.when_to_use) && (
-                <section>
-                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">When to use it</div>
-                  <p className="leading-relaxed">{t.exemplar.when_to_use}</p>
-                </section>
-              )}
-            </>
-          )}
-        </div>
-      )}
+      <h3 className="text-base font-semibold mb-3">{tacticTitle}</h3>
 
       {t.kind === 'authored_md' && (
-        <div className="prose prose-sm dark:prose-invert max-w-none">
+        <div className="prose prose-sm dark:prose-invert max-w-none mb-4">
           <ReactMarkdown>{t.markdown}</ReactMarkdown>
         </div>
       )}
 
       {t.kind === 'authored' && (
-        <div className="text-sm text-muted-foreground">
+        <div className="text-sm text-muted-foreground mb-4">
           Authored teach beat: <code>{t.ref}</code>
         </div>
       )}
 
       {t.kind === 'pending' && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm mb-4">
           Teach beat coming soon — we'll start you on a provisional drill.
+        </div>
+      )}
+
+      {beats.length > 0 && (
+        <div className="space-y-3">
+          {beats.map((b) => (
+            <section
+              key={b.label}
+              className={cn(
+                'rounded-md border p-3',
+                b.tone === 'primary'
+                  ? 'border-primary/30 bg-primary/5'
+                  : 'border-border bg-muted/20',
+              )}
+            >
+              <div className={cn(
+                'text-[11px] uppercase tracking-wider mb-1 font-medium',
+                b.tone === 'primary' ? 'text-primary' : 'text-muted-foreground',
+              )}>
+                {b.label}
+              </div>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{b.body}</p>
+            </section>
+          ))}
         </div>
       )}
 
