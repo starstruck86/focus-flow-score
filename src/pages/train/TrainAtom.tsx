@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { Layout } from '@/components/Layout';
@@ -7,11 +7,39 @@ import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConceptAtom } from '@/hooks/train/useConceptAtom';
 import { runPracticeRep, writeTrainSession } from '@/lib/train/engine';
 import { TRAIN_TUNABLES, type CurriculumKi } from '@/types/train';
-import { Sparkles, BookOpen, RotateCcw, CheckCircle2, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { RubricChecklist, type RubricEvaluation } from '@/components/train/RubricChecklist';
+import { LessonPanel } from '@/components/train/LessonPanel';
+import { Sparkles, BookOpen, RotateCcw, CheckCircle2, ArrowLeft, AlertTriangle, GraduationCap, Target, Eye } from 'lucide-react';
+
+type Beat = 'concept' | 'elite' | 'situation' | 'respond' | 'feedback';
+type DrillMode = 'learn' | 'practice';
+
+// ── Per-drill attempt tracking (localStorage v1) ─────────────────
+function drillStatsKey(userId: string, kiId: string) {
+  return `train:drill-stats:${userId}:${kiId || 'promptonly'}`;
+}
+function readDrillStats(userId: string, kiId: string): { attempts: number; passes: number } {
+  try {
+    const raw = localStorage.getItem(drillStatsKey(userId, kiId));
+    if (!raw) return { attempts: 0, passes: 0 };
+    const parsed = JSON.parse(raw);
+    return { attempts: Number(parsed.attempts) || 0, passes: Number(parsed.passes) || 0 };
+  } catch { return { attempts: 0, passes: 0 }; }
+}
+function writeDrillStats(userId: string, kiId: string, stats: { attempts: number; passes: number }) {
+  try { localStorage.setItem(drillStatsKey(userId, kiId), JSON.stringify(stats)); } catch { /* ignore */ }
+}
+function pickDrillMode(attempts: number, passes: number): DrillMode {
+  // LEARN: 0-1 prior graded attempts. PRACTICE: 2+ attempts (until owned).
+  if (attempts <= 1 && passes < 2) return 'learn';
+  return 'practice';
+}
+
 
 type Beat = 'concept' | 'elite' | 'situation' | 'respond' | 'feedback';
 
