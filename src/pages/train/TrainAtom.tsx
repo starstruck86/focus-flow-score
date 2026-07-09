@@ -243,7 +243,6 @@ export default function TrainAtom() {
             lessonMd={data.concept.lesson_md ?? null}
             conceptId={data.concept.concept_id}
             userId={user?.id ?? null}
-            drillStats={drillStats}
             onBackToTeach={backToTeach}
             onRespond={() => setBeat('respond')}
           />
@@ -254,25 +253,20 @@ export default function TrainAtom() {
           <Card className="p-4">
             <div className="flex items-center justify-between mb-1">
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">The situation</div>
-              <DrillModeBadge mode={drillMode} attempts={drillStats.attempts} />
+              <DrillModeBadge mode={drillMode} />
             </div>
             <p className="text-xs text-muted-foreground bg-muted/30 rounded p-2 mb-3 line-clamp-3">
               {currentDrill.scenario || currentDrill.when_to_use || 'Respond to this buyer situation.'}
             </p>
 
-            {/* LEARN mode keeps rubric visible while user drafts.
-                PRACTICE mode hides behind a "Show the bar" peek. */}
-            {Array.isArray(currentDrill.drillRubric) && currentDrill.drillRubric.length > 0 && (
-              drillMode === 'learn' ? (
-                <div className="mb-3">
-                  <RubricChecklist rubric={currentDrill.drillRubric} compact />
-                </div>
-              ) : (
-                <PeekPanel label="Show the bar" icon={Target}>
-                  <RubricChecklist rubric={currentDrill.drillRubric} compact />
-                </PeekPanel>
-              )
+            {/* PRACTICE: "What good sounds like" checklist always visible before recording.
+                GATE: hidden until after grading. */}
+            {drillMode === 'practice' && Array.isArray(currentDrill.drillRubric) && currentDrill.drillRubric.length > 0 && (
+              <div className="mb-3">
+                <RubricChecklist rubric={currentDrill.drillRubric} title="What good sounds like" />
+              </div>
             )}
+
 
             <div className="flex items-center gap-2 mb-2 text-xs uppercase tracking-wider text-muted-foreground">
               <Sparkles className="h-3.5 w-3.5" /> Your response
