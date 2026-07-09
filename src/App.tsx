@@ -13,12 +13,8 @@ import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { JournalPromptManager } from "@/components/journal";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ReviewModeBanner } from "@/components/ReviewModeBanner";
-import { BackgroundJobIndicator } from "@/components/jobs/BackgroundJobIndicator";
-import { BackgroundJobDrawer } from "@/components/jobs/BackgroundJobDrawer";
 import { SessionResumePrompt } from "@/components/SessionResumePrompt";
-import { DurableJobRehydrator } from "@/components/jobs/DurableJobRehydrator";
-import '@/lib/pendingWriteSync'; // Register online listener for pending write queue
-import { SystemHealthBadge } from '@/components/SystemHealthBadge';
+import { DeferredStartupTasks } from "@/components/startup/DeferredStartupTasks";
 // Dashboard removed from routing (W5): /dashboard redirects to /today.
 import { lazy, Suspense } from "react";
 
@@ -153,10 +149,7 @@ const App = () => (
               <Sonner />
               <ReviewModeBanner />
               <OfflineBanner />
-              <DurableJobRehydrator />
-              <BackgroundJobIndicator />
-              <BackgroundJobDrawer />
-              <SystemHealthBadge />
+              <DeferredStartupTasks />
               
               
               <BrowserRouter>
