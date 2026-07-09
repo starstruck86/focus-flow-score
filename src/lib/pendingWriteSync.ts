@@ -55,16 +55,29 @@ export async function processPendingWrites(): Promise<number> {
   }
 }
 
-// Auto-sync when coming back online
-if (typeof window !== 'undefined') {
-  window.addEventListener('online', () => {
+// Explicit installer — called by DeferredStartupTasks after user is authed and
+// the browser is idle. Idempotent: safe to call more than once.
+let installed = false;
+
+export function installPendingWriteSync(): () => void {
+  if (installed || typeof window === 'undefined') return () => {};
+  installed = true;
+
+  const onOnline = () => {
     processPendingWrites().then(count => {
       if (count > 0) console.log(`[PendingWriteSync] Synced ${count} pending writes`);
     });
-  });
+  };
+  window.addEventListener('online', onOnline);
 
-  // Also try on page load
+  let timer: ReturnType<typeof setTimeout> | null = null;
   if (navigator.onLine) {
-    setTimeout(() => processPendingWrites(), 3000);
+    timer = setTimeout(() => processPendingWrites(), 3000);
   }
+
+  return () => {
+    window.removeEventListener('online', onOnline);
+    if (timer) clearTimeout(timer);
+    installed = false;
+  };
 }
