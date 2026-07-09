@@ -3403,6 +3403,7 @@ Deno.serve(async (req) => {
         .from("resources")
         .select("id, file_url, content, enrichment_status, content_status, failure_count, content_length, manual_content_present")
         .eq("id", resource_id)
+        .eq("user_id", userId)
         .single();
       if (rErr || !resource) throw new Error("Resource not found");
 
