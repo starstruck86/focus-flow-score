@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -37,6 +38,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const { primary: model } = await getModelConfig('generate-lesson-content');
 
     // Service client for writes
     const adminClient = createClient(supabaseUrl, serviceKey);
@@ -208,7 +211,7 @@ ${kiContext}`;
           Authorization: `Bearer ${lovableApiKey}`,
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
@@ -279,7 +282,7 @@ ${kiContext}`;
         source_ki_ids: sourceKiIds,
         generation_status: "complete",
         generated_at: new Date().toISOString(),
-        generation_model: "google/gemini-2.5-flash",
+        generation_model: model,
       })
       .eq("id", lessonId);
 

@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -6,7 +7,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MODEL = "google/gemini-2.5-flash";
 
 type Card = {
   ki_id: string;
@@ -53,7 +53,7 @@ async function callAI(lovableApiKey: string, userPrompt: string): Promise<Card[]
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${lovableApiKey}` },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
@@ -87,6 +87,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
+    const { primary: model } = await getModelConfig('generate-flashcards');
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
@@ -250,7 +251,7 @@ ${batch.map((b, i) => `--- ITEM ${i + 1} ---\n${b.prompt_block}`).join("\n\n")}`
         card_type: c.card_type,
         front: c.front,
         back: c.back,
-        generation_model: MODEL,
+        generation_model,
       }));
 
     let inserted = 0;

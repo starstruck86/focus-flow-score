@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -99,6 +100,7 @@ Deno.serve(async (req) => {
       });
     }
 
+    const { primary: model } = await getModelConfig('generate-stage-playbook');
     const { stage_id, resource_ids, keystone_resource_ids } = await req.json();
     if (!stage_id) {
       return new Response(JSON.stringify({ error: "stage_id required" }), {
@@ -281,7 +283,7 @@ Return ONLY valid JSON, no markdown fences.`;
         Authorization: `Bearer ${lovableKey}`,
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },

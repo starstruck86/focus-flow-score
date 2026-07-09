@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,6 +29,7 @@ Deno.serve(async (req) => {
       });
     }
 
+    const { primary: model } = await getModelConfig('generate-playbooks');
     const adminClient = createClient(supabaseUrl, supabaseKey);
 
     // 1. Fetch enriched resources with digests
@@ -113,7 +115,7 @@ Return ONLY the JSON array, no markdown.`;
         Authorization: `Bearer ${lovableKey}`,
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: resourceSummaries },

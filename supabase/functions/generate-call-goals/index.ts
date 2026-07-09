@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -24,6 +25,7 @@ serve(async (req) => {
       });
     }
 
+    const { primary: model } = await getModelConfig('generate-call-goals');
     const { opportunity_id } = await req.json();
     if (!opportunity_id) throw new Error("opportunity_id required");
 
@@ -125,7 +127,7 @@ ${existingGoals || 'None'}
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages: [
           { role: "system", content: "You are an elite sales coach. Generate laser-focused call objectives that drive deal progression. Be specific and prescriptive." },
           { role: "user", content: prompt },
