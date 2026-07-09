@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format, subDays, startOfWeek } from 'date-fns';
 import { useStore } from '@/store/useStore';
-import { calculatePaceToQuota, calculateSalesAgeResult, generateRecommendations, getCurrentWeekEnding, DEFAULT_QUOTA_TARGETS, type QuotaTargets, type DailyMetrics, type SalesAgeResult, type } from '@/lib/salesAgeCalculations';
+import { calculatePaceToQuota, calculateSalesAgeResult, generateRecommendations, getCurrentWeekEnding, DEFAULT_QUOTA_TARGETS, type QuotaTargets, type DailyMetrics, type SalesAgeResult } from '@/lib/salesAgeCalculations';
 import { calculateCommissionSummary, DEFAULT_QUOTA_CONFIG } from '@/lib/commissionCalculations';
 
 // Transform DB row to QuotaTargets

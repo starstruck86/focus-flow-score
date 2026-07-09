@@ -24,8 +24,7 @@ import {
   contentSimilarity,
   scoreRouteConfidence,
   clusterByContent,
-  resolveCluster,
-  type } from '../contentSignature';
+  resolveCluster } from '../contentSignature';
 
 // ── Test 1: Mixed doc with tactic + template + example ─────
 
