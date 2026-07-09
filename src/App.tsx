@@ -168,7 +168,7 @@ const App = () => (
                   <Route path="/today" element={<ProtectedPage routeName="Today"><Today /></ProtectedPage>} />
                   <Route path="/work" element={<ProtectedPage routeName="Work"><Suspense fallback={<LazyFallback text="Loading Work…" />}><Work /></Suspense></ProtectedPage>} />
                   <Route path="/train-hub" element={<ProtectedPage routeName="Train"><Suspense fallback={<LazyFallback text="Loading Train…" />}><TrainHub /></Suspense></ProtectedPage>} />
-                  <Route path="/dashboard" element={<ProtectedPage routeName="Dashboard"><Dashboard /></ProtectedPage>} />
+                  <Route path="/dashboard" element={<Navigate to="/today" replace />} />
 
                   <Route path="/outreach" element={<ProtectedPage routeName="Outreach"><WeeklyOutreach /></ProtectedPage>} />
                   <Route path="/accounts/:id" element={<ProtectedPage routeName="Account Detail"><AccountDetail /></ProtectedPage>} />
