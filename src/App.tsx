@@ -163,33 +163,33 @@ const App = () => (
                 <LastSurfaceTracker />
                 <ShortcutHintBanner />
                 <Routes>
-                  <Route path="/auth" element={<Auth />} />
-                  <Route path="/auth/callback" element={<AuthCallback />} />
+                  <Route path="/auth" element={<Suspense fallback={<LazyFallback text="Loading…" />}><Auth /></Suspense>} />
+                  <Route path="/auth/callback" element={<Suspense fallback={<LazyFallback text="Signing you in…" />}><AuthCallback /></Suspense>} />
                   <Route path="/" element={<Navigate to="/today" replace />} />
                   <Route path="/study" element={<ProtectedPage routeName="Study"><Suspense fallback={<LazyFallback text="Loading study hub…" />}><Study /></Suspense></ProtectedPage>} />
 
-                  <Route path="/today" element={<ProtectedPage routeName="Today"><Today /></ProtectedPage>} />
+                  <Route path="/today" element={<ProtectedPage routeName="Today"><Suspense fallback={<LazyFallback text="Loading Today…" />}><Today /></Suspense></ProtectedPage>} />
                   <Route path="/work" element={<ProtectedPage routeName="Work"><Suspense fallback={<LazyFallback text="Loading Work…" />}><Work /></Suspense></ProtectedPage>} />
                   <Route path="/train-hub" element={<ProtectedPage routeName="Train"><Suspense fallback={<LazyFallback text="Loading Train…" />}><TrainHub /></Suspense></ProtectedPage>} />
                   <Route path="/dashboard" element={<Navigate to="/today" replace />} />
 
-                  <Route path="/outreach" element={<ProtectedPage routeName="Outreach"><WeeklyOutreach /></ProtectedPage>} />
+                  <Route path="/outreach" element={<ProtectedPage routeName="Outreach"><Suspense fallback={<LazyFallback text="Loading…" />}><WeeklyOutreach /></Suspense></ProtectedPage>} />
                   <Route path="/verticals" element={<ProtectedPage routeName="Verticals"><Suspense fallback={<LazyFallback text="Loading verticals…" />}><Verticals /></Suspense></ProtectedPage>} />
                   <Route path="/verticals/:id" element={<ProtectedPage routeName="Vertical Detail"><Suspense fallback={<LazyFallback text="Loading vertical…" />}><VerticalDetail /></Suspense></ProtectedPage>} />
-                  <Route path="/accounts/:id" element={<ProtectedPage routeName="Account Detail"><AccountDetail /></ProtectedPage>} />
-                  <Route path="/opportunities/:id" element={<ProtectedPage routeName="Opportunity Detail"><OpportunityDetail /></ProtectedPage>} />
-                  <Route path="/renewals" element={<ProtectedPage routeName="Renewals"><Renewals /></ProtectedPage>} />
-                  <Route path="/tasks" element={<ProtectedPage routeName="Tasks"><Tasks /></ProtectedPage>} />
-                  <Route path="/recurring" element={<ProtectedPage routeName="Recurring Tasks"><RecurringTasks /></ProtectedPage>} />
-                  <Route path="/trends" element={<ProtectedPage routeName="Trends"><Trends /></ProtectedPage>} />
-                  <Route path="/quota" element={<ProtectedPage routeName="Quota"><Quota /></ProtectedPage>} />
-                  <Route path="/deals" element={<ProtectedPage routeName="Deals"><Deals /></ProtectedPage>} />
+                  <Route path="/accounts/:id" element={<ProtectedPage routeName="Account Detail"><Suspense fallback={<LazyFallback text="Loading account…" />}><AccountDetail /></Suspense></ProtectedPage>} />
+                  <Route path="/opportunities/:id" element={<ProtectedPage routeName="Opportunity Detail"><Suspense fallback={<LazyFallback text="Loading opportunity…" />}><OpportunityDetail /></Suspense></ProtectedPage>} />
+                  <Route path="/renewals" element={<ProtectedPage routeName="Renewals"><Suspense fallback={<LazyFallback text="Loading renewals…" />}><Renewals /></Suspense></ProtectedPage>} />
+                  <Route path="/tasks" element={<ProtectedPage routeName="Tasks"><Suspense fallback={<LazyFallback text="Loading tasks…" />}><Tasks /></Suspense></ProtectedPage>} />
+                  <Route path="/recurring" element={<ProtectedPage routeName="Recurring Tasks"><Suspense fallback={<LazyFallback text="Loading…" />}><RecurringTasks /></Suspense></ProtectedPage>} />
+                  <Route path="/trends" element={<ProtectedPage routeName="Trends"><Suspense fallback={<LazyFallback text="Loading…" />}><Trends /></Suspense></ProtectedPage>} />
+                  <Route path="/quota" element={<ProtectedPage routeName="Quota"><Suspense fallback={<LazyFallback text="Loading…" />}><Quota /></Suspense></ProtectedPage>} />
+                  <Route path="/deals" element={<ProtectedPage routeName="Deals"><Suspense fallback={<LazyFallback text="Loading deals…" />}><Deals /></Suspense></ProtectedPage>} />
                   {/* Game film (call grader) — primary at /grade, legacy /coach redirects */}
-                  <Route path="/grade" element={<ProtectedPage routeName="Game Film"><Coach /></ProtectedPage>} />
+                  <Route path="/grade" element={<ProtectedPage routeName="Game Film"><Suspense fallback={<LazyFallback text="Loading…" />}><Coach /></Suspense></ProtectedPage>} />
                   <Route path="/coach" element={<Navigate to="/grade" replace />} />
-                  <Route path="/regrade" element={<ProtectedPage routeName="Batch Regrade"><BatchRegrade /></ProtectedPage>} />
-                  <Route path="/prep" element={<ProtectedPage routeName="Sales Brain OS"><PrepHub /></ProtectedPage>} />
-                  <Route path="/settings" element={<ProtectedPage routeName="Settings"><Settings /></ProtectedPage>} />
+                  <Route path="/regrade" element={<ProtectedPage routeName="Batch Regrade"><Suspense fallback={<LazyFallback text="Loading…" />}><BatchRegrade /></Suspense></ProtectedPage>} />
+                  <Route path="/prep" element={<ProtectedPage routeName="Sales Brain OS"><Suspense fallback={<LazyFallback text="Loading…" />}><PrepHub /></Suspense></ProtectedPage>} />
+                  <Route path="/settings" element={<ProtectedPage routeName="Settings"><Suspense fallback={<LazyFallback text="Loading…" />}><Settings /></Suspense></ProtectedPage>} />
                   {/* /settings/legacy route removed (W5) */}
                   <Route path="/settings/territory" element={<ProtectedPage routeName="Territory Setup"><Suspense fallback={<LazyFallback />}><TerritorySetup /></Suspense></ProtectedPage>} />
                   <Route path="/strategy" element={
@@ -340,10 +340,10 @@ const App = () => (
                       </Suspense>
                     </ProtectedRoute>
                   } />
-                  <Route path="/brief" element={<ProtectedPage routeName="Pre-Call Brief"><Brief /></ProtectedPage>} />
+                  <Route path="/brief" element={<ProtectedPage routeName="Pre-Call Brief"><Suspense fallback={<LazyFallback text="Loading brief…" />}><Brief /></Suspense></ProtectedPage>} />
                   <Route path="/meeting" element={<ProtectedPage routeName="Meeting Mode"><Suspense fallback={<LazyFallback />}><MeetingMode /></Suspense></ProtectedPage>} />
                   <Route path="/post-call" element={<ProtectedPage routeName="Post-Call Log"><Suspense fallback={<LazyFallback />}><PostCallLog /></Suspense></ProtectedPage>} />
-                   <Route path="/progress" element={<ProtectedPage routeName="Progress"><Progress /></ProtectedPage>} />
+                   <Route path="/progress" element={<ProtectedPage routeName="Progress"><Suspense fallback={<LazyFallback text="Loading…" />}><Progress /></Suspense></ProtectedPage>} />
                    <Route path="/review" element={
                      <ProtectedRoute>
                        <Suspense fallback={<LazyFallback />}>
@@ -430,7 +430,7 @@ const App = () => (
                       </Suspense>
                     </ProtectedPage>
                   } />
-                  <Route path="*" element={<NotFound />} />
+                  <Route path="*" element={<Suspense fallback={<LazyFallback text="Loading…" />}><NotFound /></Suspense>} />
                 </Routes>
                 <SessionResumePrompt />
               </BrowserRouter>
