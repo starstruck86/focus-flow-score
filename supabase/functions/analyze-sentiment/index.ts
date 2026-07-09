@@ -1,4 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
+
+let MODEL_NAME = "google/gemini-2.5-flash-lite";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,6 +15,7 @@ serve(async (req) => {
   }
 
   try {
+    MODEL_NAME = (await getModelConfig('analyze-sentiment')).primary;
     const { reflection } = await req.json();
 
     if (!reflection || reflection.trim().length < 5) {
@@ -35,7 +39,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash-lite",
+          model: MODEL_NAME,
           messages: [
             {
               role: "system",

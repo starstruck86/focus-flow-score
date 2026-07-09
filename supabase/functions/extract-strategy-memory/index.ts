@@ -1,5 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
+
+let MODEL_NAME = "claude-haiku-4-5";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +20,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    MODEL_NAME = (await getModelConfig('extract-strategy-memory')).primary;
     const {
       userId,
       accountId,
@@ -94,7 +98,7 @@ Return {"memories": []} if nothing concrete and specific to capture.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5",
+        model: MODEL_NAME,
         max_tokens: 400,
         messages: [{ role: "user", content: extractionPrompt }],
       }),

@@ -12,6 +12,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { classifySituation } from "../_shared/strategy-router/situationClassifier.ts";
 import { retrieveLibraryContext } from "../_shared/strategy-core/index.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
+
+let MODEL_NAME = "claude-haiku-4-5-20251001";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -34,7 +37,7 @@ async function callClaude(messages: Array<{ role: string; content: string }>, sy
     method: "POST",
     headers: getAnthropicHeaders(),
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
+      model: MODEL_NAME,
       max_tokens: 512,
       temperature: 0.3,
       system,
@@ -56,6 +59,7 @@ serve(async (req) => {
   }
 
   try {
+    MODEL_NAME = (await getModelConfig('analyze-call')).primary;
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {

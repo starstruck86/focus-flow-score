@@ -1,4 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
+
+let MODEL_NAME = 'google/gemini-2.5-flash';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,6 +14,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
+    MODEL_NAME = (await getModelConfig('source-icp-accounts')).primary;
     const authHeader = req.headers.get('Authorization');
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -112,7 +116,7 @@ ${feedbackContext}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: MODEL_NAME,
         messages: [
           {
             role: 'system',

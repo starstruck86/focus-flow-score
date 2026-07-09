@@ -1,5 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { requireUser } from "../_shared/requireUser.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
+
+let MODEL_NAME = 'google/gemini-2.5-flash';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,6 +15,7 @@ serve(async (req) => {
   }
 
   try {
+    MODEL_NAME = (await getModelConfig('parse-claude-import')).primary;
     const auth = await requireUser(req, corsHeaders);
     if (!auth.ok) return auth.response;
 
@@ -75,7 +79,7 @@ ${text}`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: MODEL_NAME,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },

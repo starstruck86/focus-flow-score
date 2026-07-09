@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { requireUser } from "../_shared/requireUser.ts";
+import { getModelConfig } from "../_shared/getModelConfig.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,6 +13,8 @@ serve(async (req) => {
   try {
     const auth = await requireUser(req, corsHeaders);
     if (!auth.ok) return auth.response;
+
+    const { primary: defaultModelId } = await getModelConfig('elevenlabs-tts-stream');
 
     const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
     if (!ELEVENLABS_API_KEY) throw new Error("ELEVENLABS_API_KEY is not configured");
@@ -33,7 +36,7 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           text,
-          model_id: model_id || "eleven_turbo_v2_5",
+          model_id: model_id || defaultModelId || "eleven_turbo_v2_5",
           voice_settings: {
             stability: 0.45,
             similarity_boost: 0.8,

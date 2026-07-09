@@ -16,6 +16,9 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { callLovableAI, safeParseJSON } from "../_shared/strategy-orchestrator/providers.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
+
+let MODEL_NAME = "google/gemini-2.5-flash";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -146,6 +149,7 @@ function validateDerived(parsed: unknown): DerivedCard | null {
 
 async function deriveOne(sourceType: SourceType, row: Record<string, unknown>): Promise<DerivedCard | null> {
   try {
+    MODEL_NAME = (await getModelConfig('derive-library-cards')).primary;
     // NOTE: callLovableAI does not surface response_format; schema is enforced via
     // (a) explicit JSON-only system prompt and (b) validateDerived() below.
     // RESPONSE_SCHEMA is kept inline as documentation + future strict-mode upgrade.
@@ -154,7 +158,7 @@ async function deriveOne(sourceType: SourceType, row: Record<string, unknown>): 
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: buildUserPrompt(sourceType, row) },
     ], {
-      model: "google/gemini-2.5-flash",
+      model: MODEL_NAME,
       temperature: 0.2,
       maxTokens: 1200,
     });
