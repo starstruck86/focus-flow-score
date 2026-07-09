@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { logServiceRoleUsage, logCrossUserAccess, logValidationWarnings, logAuthMethod, logMissingUserScope } from '../_shared/securityLog.ts';
 import { logEnforcementEvent } from '../_shared/enforcementLog.ts';
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
