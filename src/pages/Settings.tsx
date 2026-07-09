@@ -58,7 +58,7 @@ const ADMIN_ROUTES: { path: string; label: string; group: string }[] = [
   { path: '/learn/skill-builder-audit', label: 'Skill-Builder Audit', group: 'Knowledge' },
 
   { path: '/dojo/qa', label: 'Dojo QA', group: 'Dojo' },
-  { path: '/dojo/v6-qa', label: 'Dojo V6 QA', group: 'Dojo' },
+  // /dojo/v6-qa retired (W5)
 
   { path: '/strategy/debug', label: 'Strategy Debug', group: 'Strategy' },
   { path: '/strategy/control', label: 'Strategy Control Panel', group: 'Strategy' },
