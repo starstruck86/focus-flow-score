@@ -110,7 +110,7 @@ export function ClaudeImportModal({ open, onClose }: ClaudeImportModalProps) {
               priority: 'medium',
               tier: 'B',
               accountStatus: 'researching',
-              motion: 'new-logo',
+              motion: 'both',
               techStack: [],
               techFitFlag: 'good',
               outreachStatus: 'not-started',
