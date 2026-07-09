@@ -89,7 +89,7 @@ Rules:
 - If you see a list/table of accounts, extract each row as a separate account
 - For renewal accounts, try to extract ARR and renewal_due date (format: YYYY-MM-DD)
 - Website should be just the domain (e.g. "example.com") without https://
-- Be smart about inferring motion: renewal-related context = "renewal", prospecting/new business = "new-logo"
+- Be smart about inferring motion: renewal-related context = "renewal", clearly net-new prospecting = "new-logo", unclear or mixed expansion context = "both" (default when uncertain)
 - Include contacts if you can identify people associated with accounts
 - Never fabricate data - only extract what's clearly visible`,
           },
