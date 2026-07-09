@@ -434,16 +434,13 @@ Deno.serve(async (req) => {
       console.log('batch-actionize: auth result', user?.id || 'no user', authErr?.message || 'no error', 'body.user_id:', body.user_id);
       
       if (user) {
-        userId = user.id;
-      } else if (body.user_id) {
-        // Fallback: validate user exists via admin client
-        const { data: targetUser } = await supabaseAdmin.auth.admin.getUserById(body.user_id);
-        if (!targetUser?.user) {
-          return new Response(JSON.stringify({ error: 'Invalid user_id' }), {
-            status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        // If body.user_id is also present, require it to match JWT (or ignore it).
+        if (body.user_id && body.user_id !== user.id) {
+          return new Response(JSON.stringify({ error: 'Forbidden: user_id mismatch' }), {
+            status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
-        userId = body.user_id;
+        userId = user.id;
       } else {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
