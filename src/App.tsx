@@ -15,14 +15,11 @@ import { OfflineBanner } from "@/components/OfflineBanner";
 import { ReviewModeBanner } from "@/components/ReviewModeBanner";
 import { SessionResumePrompt } from "@/components/SessionResumePrompt";
 import { DeferredStartupTasks } from "@/components/startup/DeferredStartupTasks";
+import { LazyFallback } from "@/components/LazyFallback";
+import { StoreBackedBoundary } from "@/components/StoreBackedBoundary";
 // Dashboard removed from routing (W5): /dashboard redirects to /today.
 import { lazy, Suspense } from "react";
 
-const LazyFallback = ({ text = "Loading…" }: { text?: string }) => (
-  <div className="min-h-screen pt-[env(safe-area-inset-top)] flex items-center justify-center bg-background">
-    <p className="text-muted-foreground">{text}</p>
-  </div>
-);
 
 const Today = lazy(() => import("./pages/Today"));
 const WeeklyOutreach = lazy(() => import("./pages/WeeklyOutreach"));
@@ -166,13 +163,13 @@ const App = () => (
                   <Route path="/train-hub" element={<ProtectedPage routeName="Train"><Suspense fallback={<LazyFallback text="Loading Train…" />}><TrainHub /></Suspense></ProtectedPage>} />
                   <Route path="/dashboard" element={<Navigate to="/today" replace />} />
 
-                  <Route path="/outreach" element={<ProtectedPage routeName="Outreach"><Suspense fallback={<LazyFallback text="Loading…" />}><WeeklyOutreach /></Suspense></ProtectedPage>} />
+                  <Route path="/outreach" element={<ProtectedPage routeName="Outreach"><StoreBackedBoundary><Suspense fallback={<LazyFallback text="Loading…" />}><WeeklyOutreach /></Suspense></StoreBackedBoundary></ProtectedPage>} />
                   <Route path="/verticals" element={<ProtectedPage routeName="Verticals"><Suspense fallback={<LazyFallback text="Loading verticals…" />}><Verticals /></Suspense></ProtectedPage>} />
                   <Route path="/verticals/:id" element={<ProtectedPage routeName="Vertical Detail"><Suspense fallback={<LazyFallback text="Loading vertical…" />}><VerticalDetail /></Suspense></ProtectedPage>} />
-                  <Route path="/accounts/:id" element={<ProtectedPage routeName="Account Detail"><Suspense fallback={<LazyFallback text="Loading account…" />}><AccountDetail /></Suspense></ProtectedPage>} />
-                  <Route path="/opportunities/:id" element={<ProtectedPage routeName="Opportunity Detail"><Suspense fallback={<LazyFallback text="Loading opportunity…" />}><OpportunityDetail /></Suspense></ProtectedPage>} />
-                  <Route path="/renewals" element={<ProtectedPage routeName="Renewals"><Suspense fallback={<LazyFallback text="Loading renewals…" />}><Renewals /></Suspense></ProtectedPage>} />
-                  <Route path="/tasks" element={<ProtectedPage routeName="Tasks"><Suspense fallback={<LazyFallback text="Loading tasks…" />}><Tasks /></Suspense></ProtectedPage>} />
+                  <Route path="/accounts/:id" element={<ProtectedPage routeName="Account Detail"><StoreBackedBoundary><Suspense fallback={<LazyFallback text="Loading account…" />}><AccountDetail /></Suspense></StoreBackedBoundary></ProtectedPage>} />
+                  <Route path="/opportunities/:id" element={<ProtectedPage routeName="Opportunity Detail"><StoreBackedBoundary><Suspense fallback={<LazyFallback text="Loading opportunity…" />}><OpportunityDetail /></Suspense></StoreBackedBoundary></ProtectedPage>} />
+                  <Route path="/renewals" element={<ProtectedPage routeName="Renewals"><StoreBackedBoundary><Suspense fallback={<LazyFallback text="Loading renewals…" />}><Renewals /></Suspense></StoreBackedBoundary></ProtectedPage>} />
+                  <Route path="/tasks" element={<ProtectedPage routeName="Tasks"><StoreBackedBoundary><Suspense fallback={<LazyFallback text="Loading tasks…" />}><Tasks /></Suspense></StoreBackedBoundary></ProtectedPage>} />
                   <Route path="/recurring" element={<ProtectedPage routeName="Recurring Tasks"><Suspense fallback={<LazyFallback text="Loading…" />}><RecurringTasks /></Suspense></ProtectedPage>} />
                   <Route path="/trends" element={<ProtectedPage routeName="Trends"><Suspense fallback={<LazyFallback text="Loading…" />}><Trends /></Suspense></ProtectedPage>} />
                   <Route path="/quota" element={<ProtectedPage routeName="Quota"><Suspense fallback={<LazyFallback text="Loading…" />}><Quota /></Suspense></ProtectedPage>} />
