@@ -415,6 +415,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    const { primary: model } = await getModelConfig('dojo-score');
     const { scenario, userResponse, retryCount, focusReminder, ki: rawKi, gold: rawGold } = await req.json();
     if (!scenario || !userResponse) {
       return new Response(JSON.stringify({ error: "Missing scenario or userResponse" }), {
