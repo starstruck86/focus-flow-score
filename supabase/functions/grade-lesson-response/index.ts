@@ -14,6 +14,7 @@ serve(async (req) => {
   }
 
   try {
+    const { primary: model } = await getModelConfig('grade-lesson-response');
     const authHeader = req.headers.get("authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Missing authorization" }), {

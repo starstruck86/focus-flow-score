@@ -12,6 +12,7 @@ serve(async (req) => {
   }
 
   try {
+    const { primary: model } = await getModelConfig('parse-account-synopsis');
     const { text, accountContext } = await req.json();
 
     if (!text || typeof text !== 'string') {

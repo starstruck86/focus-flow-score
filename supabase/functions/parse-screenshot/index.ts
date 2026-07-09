@@ -15,6 +15,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const { primary: model } = await getModelConfig('parse-screenshot');
     const auth = await requireUser(req, corsHeaders);
     if (!auth.ok) return auth.response;
     const userId = auth.userId;

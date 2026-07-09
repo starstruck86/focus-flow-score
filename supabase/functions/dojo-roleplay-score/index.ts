@@ -79,6 +79,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    const { primary: model } = await getModelConfig('dojo-roleplay-score');
     const { scenario, conversation, skillFocus } = await req.json();
     if (!scenario || !conversation || !skillFocus) {
       return new Response(JSON.stringify({ error: "Missing scenario, conversation, or skillFocus" }), {

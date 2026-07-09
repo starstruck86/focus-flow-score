@@ -12,6 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const { primary: model } = await getModelConfig('detect-knowledge-gaps');
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {

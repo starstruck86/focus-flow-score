@@ -62,6 +62,7 @@ serve(async (req) => {
   }
 
   try {
+    const { primary: model } = await getModelConfig('extract-scenarios');
     const { transcript, title, callType } = await req.json();
 
     if (!transcript || transcript.length < 200) {

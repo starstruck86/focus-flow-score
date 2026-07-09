@@ -71,6 +71,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    const { primary: model } = await getModelConfig('dojo-review-score');
     const body = await req.json();
     const { scenario, skillFocus, action } = body;
     if (!scenario || !skillFocus || !action) {

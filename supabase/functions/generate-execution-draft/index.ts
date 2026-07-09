@@ -13,6 +13,7 @@ serve(async (req) => {
   }
 
   try {
+    const { primary: model } = await getModelConfig('generate-execution-draft');
     const body = await req.json();
     const {
       // New command-center fields

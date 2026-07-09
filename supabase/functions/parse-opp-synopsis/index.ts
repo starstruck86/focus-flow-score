@@ -12,6 +12,7 @@ serve(async (req) => {
   }
 
   try {
+    const { primary: model } = await getModelConfig('parse-opp-synopsis');
     const { text, opportunityContext } = await req.json();
 
     if (!text || typeof text !== 'string') {

@@ -10,6 +10,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    const { primary: model } = await getModelConfig('grade-objection-drill');
     const { objection, category, context, difficulty, response } = await req.json();
     if (!objection || !response) {
       return new Response(JSON.stringify({ error: "Missing objection or response" }), {
