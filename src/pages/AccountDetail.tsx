@@ -64,6 +64,15 @@ const MOTION_LABELS: Record<string, string> = {
   'both': 'Expansion + Renewal',
 };
 
+const STATUS_OPTIONS: { value: AccountStatus; label: string }[] = [
+  { value: 'researching', label: 'Researching' },
+  { value: 'prepped', label: 'Prepped' },
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+  { value: 'disqualified', label: 'Disqualified' },
+  { value: 'meeting-booked', label: 'Meeting Booked' },
+];
+
 async function generateDossier(account: any, _userId: string): Promise<string> {
   const [callsRes, signalsRes, footprintRes] = await Promise.all([
     supabase.from('call_logs').select('*')
