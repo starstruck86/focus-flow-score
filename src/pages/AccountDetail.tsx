@@ -57,6 +57,13 @@ const STATUS_COLORS: Record<AccountStatus, string> = {
   'meeting-booked': 'bg-primary/20 text-primary',
 };
 
+const MOTION_LABELS: Record<string, string> = {
+  'new-logo': 'Expansion target',
+  'renewal': 'Renewal',
+  'general': 'General',
+  'both': 'Expansion + Renewal',
+};
+
 const STATUS_OPTIONS: { value: AccountStatus; label: string }[] = [
   { value: 'researching', label: 'Researching' },
   { value: 'prepped', label: 'Prepped' },
@@ -290,7 +297,7 @@ Style: Direct, peer-to-peer, no buzzwords. Max 150 words.`;
                     </Badge>
                     <GapScorePill gap={gap} />
                     {account.motion && (
-                      <Badge variant="outline" className="text-[10px]">{account.motion}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{MOTION_LABELS[account.motion] || account.motion}</Badge>
                     )}
                   </div>
                   <div className="flex items-center gap-2 mt-2">

@@ -567,7 +567,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
     sections.push(
       `ACCOUNTS (${accounts.length}):\n` +
       accounts.map((a: any) =>
-        `- ${a.name} [id:${a.id}] [${a.tier || "—"}/${a.priority || "—"}] status:${a.account_status || "—"} motion:${a.motion || "—"}${a.industry ? ` ind:${a.industry}` : ""}${a.icp_fit_score ? ` icp:${a.icp_fit_score}` : ""}${a.last_touch_date ? ` lastTouch:${a.last_touch_date}` : ""}${a.next_step ? ` next:${a.next_step}` : ""}${a.notes ? ` notes:${trunc(a.notes, 80)}` : ""}`
+        `- ${a.name} [id:${a.id}] [${a.tier || "—"}/${a.priority || "—"}] status:${a.account_status || "—"} focus:${a.motion || "—"}${a.industry ? ` ind:${a.industry}` : ""}${a.icp_fit_score ? ` icp:${a.icp_fit_score}` : ""}${a.last_touch_date ? ` lastTouch:${a.last_touch_date}` : ""}${a.next_step ? ` next:${a.next_step}` : ""}${a.notes ? ` notes:${trunc(a.notes, 80)}` : ""}`
       ).join("\n")
     );
   }
