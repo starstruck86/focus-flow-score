@@ -250,8 +250,13 @@ export default function TrainBandGate() {
         {phase === 'item_scored' && lastResult && items[idx] && (
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Item {idx + 1} / {items.length}
+              <div className="flex items-center gap-2">
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Item {idx + 1} / {items.length}
+                </div>
+                <span className="inline-flex items-center gap-1 rounded border border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] uppercase tracking-wider px-1.5 py-0.5 font-medium">
+                  <AlertTriangle className="h-3 w-3" /> Gate
+                </span>
               </div>
               <div className={cn('rounded border px-2 py-0.5 text-sm font-semibold', scoreColor(lastResult.score))}>
                 {lastResult.score}
