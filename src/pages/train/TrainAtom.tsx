@@ -17,28 +17,8 @@ import { LessonPanel } from '@/components/train/LessonPanel';
 import { Sparkles, BookOpen, RotateCcw, CheckCircle2, ArrowLeft, AlertTriangle, GraduationCap, Target, Eye } from 'lucide-react';
 
 type Beat = 'concept' | 'elite' | 'situation' | 'respond' | 'feedback';
-type DrillMode = 'learn' | 'practice';
+export type DrillMode = 'practice' | 'gate';
 
-// ── Per-drill attempt tracking (localStorage v1) ─────────────────
-function drillStatsKey(userId: string, kiId: string) {
-  return `train:drill-stats:${userId}:${kiId || 'promptonly'}`;
-}
-function readDrillStats(userId: string, kiId: string): { attempts: number; passes: number } {
-  try {
-    const raw = localStorage.getItem(drillStatsKey(userId, kiId));
-    if (!raw) return { attempts: 0, passes: 0 };
-    const parsed = JSON.parse(raw);
-    return { attempts: Number(parsed.attempts) || 0, passes: Number(parsed.passes) || 0 };
-  } catch { return { attempts: 0, passes: 0 }; }
-}
-function writeDrillStats(userId: string, kiId: string, stats: { attempts: number; passes: number }) {
-  try { localStorage.setItem(drillStatsKey(userId, kiId), JSON.stringify(stats)); } catch { /* ignore */ }
-}
-function pickDrillMode(attempts: number, passes: number): DrillMode {
-  // LEARN: 0-1 prior graded attempts. PRACTICE: 2+ attempts (until owned).
-  if (attempts <= 1 && passes < 2) return 'learn';
-  return 'practice';
-}
 
 
 function isNonEmpty(s: string | null | undefined): s is string {
