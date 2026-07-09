@@ -298,43 +298,42 @@ function formatRichText(text: string): React.ReactNode {
 
 
 export function SignalDetailPanel({ account }: { account: Account }) {
-  const score = account.icpScoreOverride ?? account.icpFitScore;
-  const tier = account.tierOverride || account.lifecycleTier;
   const { enrichAccount, isEnriching } = useAccountEnrichment();
   const [expanded, setExpanded] = React.useState(true);
   const [screenshotOpen, setScreenshotOpen] = useState(false);
   const evidence = account.enrichmentEvidence || {};
 
+  // Footprint evidence maps directly to the branch_pov surface that each
+  // detected signal supports (mobile app → deep_linking, email/sms →
+  // email_to_app, etc). These labels replace the retired "fit scoring"
+  // framing — nothing here contributes to a fit score.
+  const EVIDENCE_TO_POV: Record<string, string> = {
+    mobileApp: 'deep_linking',
+    emailSmsCapture: 'email_to_app / sms_to_app',
+    directEcommerce: 'web_to_app',
+    loyaltyMembership: 'universal_ads',
+    categoryComplexity: 'aio',
+    marketingPlatformDetected: 'universal_ads',
+  };
+
   return (
     <div className="space-y-4 p-4 bg-muted/30 rounded-lg border border-border/50">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h4 className="text-sm font-semibold">ICP Intelligence</h4>
-          {score != null && (
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className={cn('font-mono', TIER_STYLES[tier || '4'] || TIER_STYLES['4'])}>
-                Tier {tier}
-              </Badge>
-              <span className="text-sm font-mono font-bold">{score}/100</span>
-              {account.confidenceScore != null && (
-                <span className="text-xs text-muted-foreground">({account.confidenceScore}% confidence)</span>
-              )}
-            </div>
-          )}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <h4 className="text-sm font-semibold">Footprint Evidence</h4>
+          <span className="text-[10px] text-muted-foreground">Detected surfaces → POV cells</span>
         </div>
         <div className="flex items-center gap-1">
-          {score != null && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setExpanded(!expanded)}
-              className="h-7 text-xs gap-1"
-            >
-              {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              {expanded ? 'Collapse' : 'Expand'}
-            </Button>
-          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setExpanded(!expanded)}
+            className="h-7 text-xs gap-1"
+          >
+            {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {expanded ? 'Collapse' : 'Expand'}
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -352,7 +351,7 @@ export function SignalDetailPanel({ account }: { account: Account }) {
             className="h-7 text-xs gap-1"
           >
             <RefreshCw className={cn('h-3 w-3', isEnriching(account.id) && 'animate-spin')} />
-            {account.lastEnrichedAt ? 'Re-enrich' : 'Auto-detect'}
+            {account.lastEnrichedAt ? 'Re-detect' : 'Auto-detect'}
           </Button>
         </div>
       </div>
