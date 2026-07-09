@@ -449,11 +449,11 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
           if (raw) {
             const parsed = JSON.parse(raw);
             if (parsed?.state) {
-              const dbAcctIds = new Set(dbAccounts.map(a => a.id));
-              const dbOppIdSet = new Set(dbOpps.map(o => o.id));
-              const dbRenIdSet = new Set(dbRenewals.map(r => r.id));
-              const dbContactIdSet = new Set(dbContacts.map(c => c.id));
-              const dbTaskIdSet = new Set(dbTasks.map(t => t.id));
+              const dbAcctIds = new Set<string>(dbAccounts.map(a => a.id));
+              const dbOppIdSet = new Set<string>(dbOpps.map(o => o.id));
+              const dbRenIdSet = new Set<string>(dbRenewals.map(r => r.id));
+              const dbContactIdSet = new Set<string>(dbContacts.map(c => c.id));
+              const dbTaskIdSet = new Set<string>(dbTasks.map(t => t.id));
 
               const quarantine: Record<string, unknown[]> = (parsed.state.__quarantinedLocalOnly as Record<string, unknown[]>) || {};
               const partition = <T extends { id: string }>(arr: T[] | undefined, keep: Set<string>, key: string) => {
