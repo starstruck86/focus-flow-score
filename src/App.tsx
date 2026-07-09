@@ -388,13 +388,7 @@ const App = () => (
                       </Suspense>
                     </ProtectedRoute>
                   } />
-                  <Route path="/smoke-test" element={
-                    <ProtectedRoute>
-                      <Suspense fallback={<LazyFallback />}>
-                        <SmokeTest />
-                      </Suspense>
-                    </ProtectedRoute>
-                  } />
+                  {/* /smoke-test route removed (W5) */}
                   <Route path="/admin/lifecycle-reconciliation" element={
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback text="Loading reconciliation…" />}>
