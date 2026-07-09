@@ -20,7 +20,7 @@ describe("security regressions — source-invariant guards", () => {
     expect(src).toMatch(/typedUpsert/);
     expect(src).toMatch(/typedDelete/);
     // Expect an error-check / throw pattern near writes
-    expect(src).toMatch(/if\s*\(\s*error\s*\)\s*throw|assertOk|throw new Error/);
+    expect(src).toMatch(/if\s*\(\s*error\s*\)\s*\{[\s\S]{0,200}throw\s+(error|new Error)/);
   });
 
   const authGuardedProxies = [
