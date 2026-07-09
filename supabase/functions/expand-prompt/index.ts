@@ -9,6 +9,9 @@
  * contract: any failure returns { expanded: original, wasExpanded: false }.
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
+
+let MODEL_NAME = "claude-haiku-4-5-20251001";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -85,6 +88,7 @@ serve(async (req) => {
 
   let originalContent = "";
   try {
+    MODEL_NAME = (await getModelConfig('expand-prompt')).primary;
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return respond({ error: "Unauthorized" }, 401);
 
@@ -116,7 +120,7 @@ serve(async (req) => {
         headers: getAnthropicHeaders(),
         signal: ctrl.signal,
         body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
+          model: MODEL_NAME,
           max_tokens: MAX_OUTPUT_TOKENS,
           temperature: TEMPERATURE,
           system: EXPANSION_SYSTEM_PROMPT,
