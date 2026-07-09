@@ -19,7 +19,7 @@ import { SessionResumePrompt } from "@/components/SessionResumePrompt";
 import { DurableJobRehydrator } from "@/components/jobs/DurableJobRehydrator";
 import '@/lib/pendingWriteSync'; // Register online listener for pending write queue
 import { SystemHealthBadge } from '@/components/SystemHealthBadge';
-import Dashboard from "./pages/Dashboard";
+// Dashboard removed from routing (W5): /dashboard redirects to /today.
 import Today from "./pages/Today";
 import WeeklyOutreach from "./pages/WeeklyOutreach";
 import Renewals from "./pages/Renewals";
