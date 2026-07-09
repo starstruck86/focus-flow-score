@@ -122,6 +122,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, label: string): 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
+    const { primary: model } = await getModelConfig('car-mode-audio-score');
     const body = (await req.json()) as Body;
     if (!body.audioBase64 || body.audioBase64.length < 200) {
       return new Response(JSON.stringify({ error: "empty audio" }), {
