@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -37,7 +38,7 @@ Extract any field updates found in the text. Only return fields that have clear 
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
+        model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Extract opportunity field updates from this text:\n\n${text}` },
