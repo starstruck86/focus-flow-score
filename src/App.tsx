@@ -286,13 +286,7 @@ const App = () => (
                       </Suspense>
                     </ProtectedRoute>
                   } />
-                  <Route path="/dojo/v6-qa" element={
-                    <ProtectedRoute>
-                      <Suspense fallback={<LazyFallback />}>
-                        <DojoV6QA />
-                      </Suspense>
-                    </ProtectedRoute>
-                  } />
+                  {/* /dojo/v6-qa route removed (W5) */}
                   <Route path="/sharpen" element={
                     <ProtectedRoute>
                       <Suspense fallback={<LazyFallback />}>
