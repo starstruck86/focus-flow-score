@@ -71,6 +71,8 @@ export interface CurriculumKi extends CurriculumKiRef {
   modelLinePlain?: string | null;
   /** Optional per-drill rubric from ki_curriculum.drill_rubric. */
   drillRubric?: Array<{ c: string; must?: boolean }> | null;
+  /** Optional elite-sounding model answer from ki_curriculum.drill_model_answer. */
+  drillModelAnswer?: string | null;
   /** Authored teach script (from ki_curriculum.drill_teach_script). Used by
    * Car Mode verbatim and by TrainAtom to override the raw why/when prose. */
   drillTeachScript?: string | null;
