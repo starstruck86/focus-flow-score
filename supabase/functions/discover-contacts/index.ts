@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -522,6 +523,7 @@ async function discoverForSingleAccount({
   maxContacts,
   discoveryMode,
   division,
+  model,
 }: {
   supabase: any;
   userId: string;
@@ -534,6 +536,7 @@ async function discoverForSingleAccount({
   maxContacts?: number;
   discoveryMode?: string;
   division?: string;
+  model: string;
 }) {
   const { data: account, error: accountError } = await supabase
     .from('accounts')
@@ -629,7 +632,7 @@ async function discoverForSingleAccount({
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
+      model,
       messages: [
         {
           role: 'system',
@@ -880,6 +883,7 @@ Deno.serve(async (req) => {
     }
 
     const userId = user.id;
+    const { primary: model } = await getModelConfig('discover-contacts');
     const body = await req.json();
 
     // Support batch mode: if accountIds array is provided, run for each
@@ -904,6 +908,7 @@ Deno.serve(async (req) => {
         maxContacts: body.maxContacts,
         discoveryMode: body.discoveryMode,
         division: body.division,
+        model,
       });
 
       if (result.error) {
@@ -924,6 +929,7 @@ Deno.serve(async (req) => {
           maxContacts: body.maxContacts,
           focusPrompt: body.focusPrompt,
           division: body.division,
+          model,
         });
         results.push(result);
         console.log(`Batch discover: ${result.accountName || accountId} — ${result.new_contacts || 0} new contacts`);

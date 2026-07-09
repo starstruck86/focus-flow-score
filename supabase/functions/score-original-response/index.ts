@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,6 +48,7 @@ serve(async (req) => {
   }
 
   try {
+    const { primary: model } = await getModelConfig('score-original-response');
     const { scenario, repResponse } = await req.json();
 
     if (!scenario?.skillFocus || !scenario?.objection || !repResponse) {
@@ -106,7 +108,7 @@ Return a JSON object with: score (0-100), topMistake (from valid list), feedback
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },

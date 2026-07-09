@@ -1,11 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-trace-id",
 };
 
-async function searchResources(query: string) {
+async function searchResources(query: string, model: string) {
   const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
   if (!PERPLEXITY_API_KEY) throw new Error("PERPLEXITY_API_KEY not configured");
 
@@ -48,7 +49,7 @@ async function searchResources(query: string) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model,
       messages: [
         {
           role: "system",
@@ -131,7 +132,7 @@ RULES:
   return parsed.resources;
 }
 
-async function buildCompetitorIntel(companyName: string, websiteUrl: string, context: string) {
+async function buildCompetitorIntel(companyName: string, websiteUrl: string, context: string, model: string) {
   const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
   if (!FIRECRAWL_API_KEY) throw new Error("FIRECRAWL_API_KEY not configured");
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -263,7 +264,7 @@ Create an exhaustive competitive intelligence battlecard. Be specific with facts
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-pro",
+      model,
       messages: [
         {
           role: "system",
@@ -415,11 +416,12 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    const { primary: model } = await getModelConfig('discover-resources');
     const { type, query, companyName, websiteUrl, context } = await req.json();
 
     if (type === "resource-search") {
       if (!query) throw new Error("Query is required");
-      const resources = await searchResources(query);
+      const resources = await searchResources(query, model);
       return new Response(JSON.stringify({ resources }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -427,7 +429,7 @@ serve(async (req) => {
 
     if (type === "competitor-intel") {
       if (!companyName || !websiteUrl) throw new Error("Company name and website URL are required");
-      const result = await buildCompetitorIntel(companyName, websiteUrl, context || "");
+      const result = await buildCompetitorIntel(companyName, websiteUrl, context || "", model);
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

@@ -11,6 +11,7 @@
 // ════════════════════════════════════════════════════════════════
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,7 +20,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const MODEL = "google/gemini-2.5-flash";
 const TIMEOUT_MS = 12_000;
 const MAX_TOKENS = 400;
 
@@ -82,6 +82,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const { primary: model } = await getModelConfig('classify-signal');
     const body = await req.json().catch(() => ({}));
     const rawText: string = (body?.rawText ?? "").toString().trim();
     const userId: string = (body?.userId ?? "").toString().trim();
@@ -129,7 +130,7 @@ Deno.serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: MODEL,
+          model,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: userMsg },

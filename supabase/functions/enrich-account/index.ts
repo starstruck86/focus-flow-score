@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 import { requireUser } from "../_shared/requireUser.ts";
 
 const corsHeaders = {
@@ -181,7 +182,7 @@ async function tryFirecrawl(formattedUrl: string, accountName: string): Promise<
 }
 
 // ─── Channel 2: Firecrawl markdown + Lovable AI analysis ───
-async function tryFirecrawlMarkdownWithAI(formattedUrl: string, accountName: string): Promise<{ signals: any; source: string } | null> {
+async function tryFirecrawlMarkdownWithAI(formattedUrl: string, accountName: string, model: string): Promise<{ signals: any; source: string } | null> {
   const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!FIRECRAWL_API_KEY || !LOVABLE_API_KEY) {
@@ -229,7 +230,7 @@ async function tryFirecrawlMarkdownWithAI(formattedUrl: string, accountName: str
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model,
         messages: [
           { role: 'system', content: SIGNAL_SCHEMA_PROMPT },
           { role: 'user', content: `Company: "${accountName}" — Website: ${formattedUrl}\n\nPage content:\n${pageContent}` },
@@ -311,7 +312,7 @@ async function tryPerplexitySignals(accountName: string, formattedUrl: string): 
 }
 
 // ─── Channel 4: Lovable AI only (uses model knowledge, no live scraping) ───
-async function tryLovableAIOnly(accountName: string, formattedUrl: string): Promise<{ signals: any; source: string } | null> {
+async function tryLovableAIOnly(accountName: string, formattedUrl: string, model: string): Promise<{ signals: any; source: string } | null> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) {
     console.log('Channel:LovableAI — not configured, skipping');
@@ -326,7 +327,7 @@ async function tryLovableAIOnly(accountName: string, formattedUrl: string): Prom
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model,
         messages: [
           { role: 'system', content: SIGNAL_SCHEMA_PROMPT },
           {
@@ -557,6 +558,7 @@ Deno.serve(async (req) => {
     if (!auth.ok) return auth.response;
     const userId = auth.userId;
 
+    const { primary: model } = await getModelConfig('enrich-account');
     const { url, accountName, accountId, industry } = await req.json();
 
     // Ownership check when accountId provided
@@ -624,7 +626,7 @@ Deno.serve(async (req) => {
     // Channel 2: Firecrawl markdown → Lovable AI analysis
     if (!signalResult) {
       console.log('Falling back to Channel 2: Firecrawl markdown + AI');
-      signalResult = await tryFirecrawlMarkdownWithAI(formattedUrl, accountName || '');
+      signalResult = await tryFirecrawlMarkdownWithAI(formattedUrl, accountName || '', model);
     }
 
     // Channel 3: Perplexity web search (no scraping — searches the web)
@@ -636,7 +638,7 @@ Deno.serve(async (req) => {
     // Channel 4: Lovable AI model knowledge (last resort)
     if (!signalResult) {
       console.log('Falling back to Channel 4: AI model knowledge');
-      signalResult = await tryLovableAIOnly(accountName || '', formattedUrl);
+      signalResult = await tryLovableAIOnly(accountName || '', formattedUrl, model);
     }
 
     const [companyIntel, caseStudies] = await Promise.all([companyIntelPromise, caseStudyPromise]);

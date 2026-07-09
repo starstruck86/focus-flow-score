@@ -6,6 +6,7 @@
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,6 +31,7 @@ serve(async (req) => {
       });
     }
 
+    const { primary: model } = await getModelConfig('playbook-roleplay');
     const { messages, scenario, mode, knowledgeGrounding, dojoMode } = await req.json();
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -84,7 +86,7 @@ Be direct. Be specific. Quote their actual words. This is coaching, not praise.`
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages: [
           { role: "system", content: systemPrompt },
           ...messages,

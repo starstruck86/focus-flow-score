@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,6 +19,7 @@ serve(async (req) => {
   }
 
   try {
+    const { primary: model } = await getModelConfig('score-micro-drill');
     const { skill, prompt, instruction, response } = await req.json();
 
     if (!skill || !prompt || !response || response.length < 10) {
@@ -64,7 +66,7 @@ Return a JSON object with exactly these fields: score, strength, miss, betterVer
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
