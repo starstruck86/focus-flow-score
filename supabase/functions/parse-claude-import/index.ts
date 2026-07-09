@@ -12,6 +12,9 @@ serve(async (req) => {
   }
 
   try {
+    const auth = await requireUser(req, corsHeaders);
+    if (!auth.ok) return auth.response;
+
     const { text, existingAccounts, existingOpportunities, existingContacts } = await req.json();
 
     if (!text || typeof text !== 'string') {
