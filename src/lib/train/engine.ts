@@ -147,6 +147,8 @@ export interface PracticeRepResult {
   progress: number;       // 0..1 after this rep
   reps: number;           // total reps in this sub-level
   gatePassedAt: string | null;
+  /** Per-rubric-line evaluation from the grader ({c, met, note}[]). */
+  goldCriteria: Array<{ c: string; met: boolean; note?: string }>;
 }
 
 export async function runPracticeRep(input: PracticeRepInput): Promise<PracticeRepResult> {
