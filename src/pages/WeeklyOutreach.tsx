@@ -513,6 +513,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
   };
 
   const sortedAccounts = useMemo(() => sortFunnelGroup(accounts, groupSort), [accounts, groupSort]);
+  const gapScores = useAccountGapScores(useMemo(() => accounts.map(a => a.id), [accounts]));
 
   if (accounts.length === 0 && isCollapsed) return null;
 
