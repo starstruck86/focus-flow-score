@@ -62,7 +62,7 @@ Extract as many fields as you can identify. Return ONLY valid JSON with this str
       "name": "Company name (REQUIRED)",
       "website": "Company website URL",
       "industry": "Industry or vertical",
-      "motion": "new-logo or renewal (infer from context - if it mentions renewal dates/contracts it's renewal, otherwise new-logo)",
+      "motion": "new-logo, renewal, or both (infer from context - renewal dates/contracts = 'renewal'; unclear or mixed expansion context = 'both'; clearly net-new prospecting = 'new-logo')",
       "tier": "A, B, or C (infer from size/revenue if possible, otherwise null)",
       "ecommerce": "Ecommerce platform if visible (Shopify, BigCommerce, etc.)",
       "mar_tech": "Marketing tech stack if visible",
@@ -89,7 +89,7 @@ Rules:
 - If you see a list/table of accounts, extract each row as a separate account
 - For renewal accounts, try to extract ARR and renewal_due date (format: YYYY-MM-DD)
 - Website should be just the domain (e.g. "example.com") without https://
-- Be smart about inferring motion: renewal-related context = "renewal", prospecting/new business = "new-logo"
+- Be smart about inferring motion: renewal-related context = "renewal", clearly net-new prospecting = "new-logo", unclear or mixed expansion context = "both" (default when uncertain)
 - Include contacts if you can identify people associated with accounts
 - Never fabricate data - only extract what's clearly visible`,
           },

@@ -74,7 +74,7 @@ export function IcpAccountSourcing() {
         website: account.website || null,
         industry: account.industry || null,
         account_status: 'researching',
-        motion: 'new-logo',
+        motion: 'both',
         tier: 'B',
         notes: `**ICP Sourced** (Score: ${account.fit_score})\n\n${account.icp_fit_reason}\n\n**Signal:** ${account.trigger_signal || 'N/A'}${account.news_snippet ? `\n\n**News:** ${account.news_snippet}` : ''}`,
       }).select().single();
