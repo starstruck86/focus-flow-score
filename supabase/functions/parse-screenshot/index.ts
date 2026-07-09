@@ -238,7 +238,8 @@ Combine data from ALL screenshots into a single unified result. If the same fiel
         const { error: dbError } = await supabase
           .from('accounts')
           .update(updates)
-          .eq('id', accountId);
+          .eq('id', accountId)
+          .eq('user_id', userId);
 
         if (dbError) console.error('DB write error:', dbError);
         else console.log('Screenshot enrichment persisted for', accountId);
