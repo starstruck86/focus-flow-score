@@ -547,3 +547,162 @@ function EliteBeat({
     </Card>
   );
 }
+
+// ── Beat 3: SITUATION (teach-before-test) ────────────────────────
+function SituationBeat({
+  drill,
+  drillMode,
+  drillIdx,
+  lessonMd,
+  conceptId,
+  userId,
+  drillStats,
+  onBackToTeach,
+  onRespond,
+}: {
+  drill: CurriculumKi;
+  drillMode: DrillMode;
+  drillIdx: number;
+  lessonMd: string | null;
+  conceptId: string;
+  userId: string | null;
+  drillStats: { attempts: number; passes: number };
+  onBackToTeach: () => void;
+  onRespond: () => void;
+}) {
+  const hasScript = isNonEmpty(drill.drillTeachScript);
+  const hasRubric = Array.isArray(drill.drillRubric) && drill.drillRubric.length > 0;
+
+  return (
+    <div>
+      {/* Lesson panel — only on the concept's first drill, and only when authored. */}
+      {drillIdx === 0 && isNonEmpty(lessonMd) && (
+        <LessonPanel conceptId={conceptId} markdown={lessonMd} userId={userId} />
+      )}
+
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+            <Sparkles className="h-3.5 w-3.5" /> The situation
+          </div>
+          <DrillModeBadge mode={drillMode} attempts={drillStats.attempts} />
+        </div>
+        <p className="text-base leading-relaxed bg-muted/40 rounded p-4 mb-4">
+          {drill.scenario || drill.when_to_use || 'Respond to this buyer situation.'}
+        </p>
+
+        {/* LEARN mode: teach script + rubric fully visible BEFORE recording.
+            PRACTICE mode: teach script behind a Refresher toggle; rubric behind "Show the bar". */}
+        {hasScript && (
+          drillMode === 'learn' ? (
+            <div className="mb-3 rounded-md border border-primary/25 bg-primary/5 p-3">
+              <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-primary mb-2">
+                <BookOpen className="h-3.5 w-3.5" /> Teach beats
+              </div>
+              <TeachScriptBeats script={drill.drillTeachScript!} />
+            </div>
+          ) : (
+            <PeekPanel label="Refresher" icon={BookOpen}>
+              <TeachScriptBeats script={drill.drillTeachScript!} />
+            </PeekPanel>
+          )
+        )}
+
+        {hasRubric && (
+          drillMode === 'learn' ? (
+            <div className="mb-3">
+              <RubricChecklist rubric={drill.drillRubric!} />
+            </div>
+          ) : (
+            <PeekPanel label="Show the bar" icon={Target}>
+              <RubricChecklist rubric={drill.drillRubric!} compact />
+            </PeekPanel>
+          )
+        )}
+
+        <div className="flex items-center justify-between gap-2 mt-4">
+          <Button variant="ghost" size="sm" onClick={onBackToTeach}>
+            <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Back to teach
+          </Button>
+          <Button onClick={onRespond}>Respond →</Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// Splits a teach script into visible beats. Handles bullet lists, numbered
+// lists, and blank-line-separated paragraphs. Falls back to a single block.
+function TeachScriptBeats({ script }: { script: string }) {
+  const beats = useMemo(() => {
+    const trimmed = script.trim();
+    // Numbered/bulleted lines
+    const listLines = trimmed
+      .split('\n')
+      .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').trim())
+      .filter((l) => l.length > 0);
+    if (listLines.length >= 2 && trimmed.match(/^\s*(?:[-*•]|\d+[.)])\s+/m)) return listLines;
+    // Blank-line paragraphs
+    const paras = trimmed.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+    if (paras.length >= 2) return paras;
+    // Sentence fallback
+    const sents = trimmed.split(/(?<=[.!?])\s+(?=[A-Z])/).filter((s) => s.length > 8);
+    if (sents.length >= 2) return sents;
+    return [trimmed];
+  }, [script]);
+
+  return (
+    <ol className="space-y-1.5">
+      {beats.map((b, i) => (
+        <li key={i} className="flex gap-2 text-sm leading-snug">
+          <span className="mt-0.5 h-4 w-4 shrink-0 rounded-full bg-primary/15 text-primary text-[10px] font-semibold flex items-center justify-center tabular-nums">
+            {i + 1}
+          </span>
+          <span>{b}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function DrillModeBadge({ mode, attempts }: { mode: DrillMode; attempts: number }) {
+  if (mode === 'learn') {
+    return (
+      <Badge variant="outline" className="text-[10px] border-primary/40 text-primary">
+        <GraduationCap className="h-3 w-3 mr-1" /> Learn mode
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] text-muted-foreground">
+      <Target className="h-3 w-3 mr-1" /> Practice · {attempts} prior
+    </Badge>
+  );
+}
+
+function PeekPanel({
+  label,
+  icon: Icon,
+  children,
+}: {
+  label: string;
+  icon: typeof BookOpen;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mb-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <Icon className="h-3 w-3" />
+        {open ? 'Hide' : label}
+        <Eye className="h-3 w-3" />
+      </button>
+      {open && <div className="mt-2">{children}</div>}
+    </div>
+  );
+}
+
