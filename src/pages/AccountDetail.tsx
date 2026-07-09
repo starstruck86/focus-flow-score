@@ -439,6 +439,10 @@ Style: Direct, peer-to-peer, no buzzwords. Max 150 words.`;
           </DialogContent>
         </Dialog>
 
+        {/* The Account Room — truth-model command center */}
+        <AccountRoom accountId={account.id} />
+
+        <Separator />
 
         {/* Timeline — living record of this account */}
         <AccountTimeline accountId={account.id} />
