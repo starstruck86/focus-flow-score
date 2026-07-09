@@ -42,7 +42,6 @@ export interface CapabilityContext {
 
 // ── Suppression ────────────────────────────────────────────
 
-const SUPPRESSION_KEY = 'capability-prompt-history';
 const MAX_IGNORES_BEFORE_SUPPRESS = 3;
 
 

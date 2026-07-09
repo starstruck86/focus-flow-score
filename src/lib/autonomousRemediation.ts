@@ -225,13 +225,6 @@ function checkExitCondition(_item: RemediationItem, score: number, contradiction
 
 // ── Failure escalation ────────────────────────────────────
 
-function shouldEscalateToQuarantine(item: RemediationItem, currentBucket: string): boolean {
-  // If same failure bucket occurs twice → quarantine
-  const sameBucketCount = item.failureHistory.filter(h => h.bucket === currentBucket).length;
-  return sameBucketCount >= 2;
-}
-
-
 // ── Build items from verification ─────────────────────────
 
 export function buildRemediationItems(
