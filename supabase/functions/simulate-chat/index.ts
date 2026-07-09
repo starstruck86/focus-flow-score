@@ -27,6 +27,9 @@ serve(async (req) => {
   }
 
   try {
+    const auth = await requireUser(req, corsHeaders);
+    if (!auth.ok) return auth.response;
+
     const body = await req.json();
     const { messages, system, isGradeMode, accountContext } = body;
 
