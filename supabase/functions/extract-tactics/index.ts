@@ -1887,6 +1887,8 @@ Deno.serve(async (req) => {
       userId = user.id;
     }
 
+    MODEL_NAME = (await getModelConfig('extract-tactics')).primary;
+
     const body = await req.json();
     logValidationWarnings('extract-tactics', body, ['resourceId']);
     let { title, content, description, tags, resourceType, deepMode, resourceId, userId: bodyUserId, persist,
