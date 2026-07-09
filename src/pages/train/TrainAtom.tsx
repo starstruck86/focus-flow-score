@@ -269,31 +269,46 @@ export default function TrainAtom() {
           />
         )}
 
-        {/* BEAT 3 — SITUATION */}
+        {/* BEAT 3 — SITUATION + TEACH-BEFORE-TEST */}
         {data && beat === 'situation' && currentDrill && (
-          <Card className="p-4">
-            <div className="flex items-center gap-2 mb-3 text-xs uppercase tracking-wider text-muted-foreground">
-              <Sparkles className="h-3.5 w-3.5" /> The situation
-            </div>
-            <p className="text-base leading-relaxed bg-muted/40 rounded p-4 mb-4">
-              {currentDrill.scenario || currentDrill.when_to_use || 'Respond to this buyer situation.'}
-            </p>
-            <div className="flex items-center justify-between gap-2">
-              <Button variant="ghost" size="sm" onClick={backToTeach}>
-                <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Back to teach
-              </Button>
-              <Button onClick={() => setBeat('respond')}>Respond →</Button>
-            </div>
-          </Card>
+          <SituationBeat
+            drill={currentDrill}
+            drillMode={drillMode}
+            drillIdx={drillIdx}
+            lessonMd={data.concept.lesson_md ?? null}
+            conceptId={data.concept.concept_id}
+            userId={user?.id ?? null}
+            drillStats={drillStats}
+            onBackToTeach={backToTeach}
+            onRespond={() => setBeat('respond')}
+          />
         )}
 
         {/* BEAT 4 — RESPOND */}
         {data && beat === 'respond' && currentDrill && (
           <Card className="p-4">
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">The situation</div>
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">The situation</div>
+              <DrillModeBadge mode={drillMode} attempts={drillStats.attempts} />
+            </div>
             <p className="text-xs text-muted-foreground bg-muted/30 rounded p-2 mb-3 line-clamp-3">
               {currentDrill.scenario || currentDrill.when_to_use || 'Respond to this buyer situation.'}
             </p>
+
+            {/* LEARN mode keeps rubric visible while user drafts.
+                PRACTICE mode hides behind a "Show the bar" peek. */}
+            {Array.isArray(currentDrill.drillRubric) && currentDrill.drillRubric.length > 0 && (
+              drillMode === 'learn' ? (
+                <div className="mb-3">
+                  <RubricChecklist rubric={currentDrill.drillRubric} compact />
+                </div>
+              ) : (
+                <PeekPanel label="Show the bar" icon={Target}>
+                  <RubricChecklist rubric={currentDrill.drillRubric} compact />
+                </PeekPanel>
+              )
+            )}
+
             <div className="flex items-center gap-2 mb-2 text-xs uppercase tracking-wider text-muted-foreground">
               <Sparkles className="h-3.5 w-3.5" /> Your response
             </div>
@@ -323,9 +338,32 @@ export default function TrainAtom() {
                 Sub-level progress: {Math.round(result.progress * 100)}% · {result.reps} reps
               </div>
             </div>
+
+            {/* Per-criterion pass/fail from the grader — shown BEFORE the prose
+                so the rep sees exactly which bar they met or missed. */}
+            {currentDrill && Array.isArray(currentDrill.drillRubric) && currentDrill.drillRubric.length > 0 && (
+              <div className="mb-4">
+                <RubricChecklist
+                  rubric={currentDrill.drillRubric}
+                  results={result.goldCriteria}
+                />
+              </div>
+            )}
+
             <div className="text-sm whitespace-pre-wrap mb-4">{result.feedback || '—'}</div>
 
-            {isNonEmpty(modelLine) && (
+            {/* Model answer reveal — always after grading in LEARN & PRACTICE. */}
+            {currentDrill && isNonEmpty(currentDrill.drillModelAnswer) && (
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-4 mb-4">
+                <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-primary mb-2">
+                  <GraduationCap className="h-3.5 w-3.5" /> How elite sounds
+                </div>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{currentDrill.drillModelAnswer}</p>
+              </div>
+            )}
+
+            {/* Concept-level model line — still shown when no per-drill model answer. */}
+            {(!currentDrill || !isNonEmpty(currentDrill.drillModelAnswer)) && isNonEmpty(modelLine) && (
               <div className="rounded-md border border-primary/30 bg-primary/5 p-4 mb-4">
                 <div className="text-[11px] uppercase tracking-wider text-primary mb-2">
                   How an elite AE handled it
@@ -333,6 +371,7 @@ export default function TrainAtom() {
                 <p className="text-sm leading-relaxed">{modelLine}</p>
               </div>
             )}
+
 
             {(() => {
               const passed = result.score >= TRAIN_TUNABLES.subLevelPassThreshold;
