@@ -195,31 +195,40 @@ serve(async (req) => {
       battlePlanRes,
     ] = await Promise.all([
       supabase.from("calendar_events").select("*")
+        .eq("user_id", userId)
         .gte("start_time", todayBounds.start)
         .lte("start_time", todayBounds.end)
         .order("start_time"),
       supabase.from("daily_journal_entries").select("*")
+        .eq("user_id", userId)
         .eq("date", targetDate).maybeSingle(),
       supabase.from("accounts").select("id, name, tier, account_status, last_touch_date, cadence_name, contact_status, motion")
+        .eq("user_id", userId)
         .in("account_status", ["active", "prepped", "researching"])
         .order("priority_score", { ascending: false }).limit(15),
       supabase.from("ai_feedback").select("*")
+        .eq("user_id", userId)
         .eq("feature", "time_blocks")
         .order("created_at", { ascending: false }).limit(10),
-      supabase.from("quota_targets").select("*").maybeSingle(),
+      supabase.from("quota_targets").select("*").eq("user_id", userId).maybeSingle(),
       supabase.from("daily_time_blocks").select("blocks, block_feedback, feedback_rating, feedback_text, plan_date")
+        .eq("user_id", userId)
         .order("plan_date", { ascending: false }).limit(3),
       supabase.from("opportunities").select("id, name, stage, status, arr, close_date, next_step, next_step_date, deal_type, account_id")
+        .eq("user_id", userId)
         .in("status", ["active", "stalled"])
         .order("close_date", { ascending: true }).limit(20),
       supabase.from("renewals").select("id, account_name, arr, renewal_due, next_step, health_status, churn_risk")
+        .eq("user_id", userId)
         .order("renewal_due", { ascending: true }).limit(15),
       supabase.from("tasks").select("id, title, priority, due_date, motion, category, status")
+        .eq("user_id", userId)
         .in("status", ["next", "in-progress"])
         .order("due_date", { ascending: true }).limit(20),
-      supabase.from("daily_plan_preferences").select("*").maybeSingle(),
+      supabase.from("daily_plan_preferences").select("*").eq("user_id", userId).maybeSingle(),
       // This week's journal entries (to know what's already been done)
       supabase.from("daily_journal_entries").select("date, dials, conversations, meetings_set, opportunities_created, daily_score")
+        .eq("user_id", userId)
         .gte("date", weekMondayStr)
         .lte("date", weekFridayStr)
         .order("date"),
@@ -228,12 +237,14 @@ serve(async (req) => {
         const weekStartBounds = getEasternDayBoundsUTC(weekMondayStr);
         const weekEndBounds = getEasternDayBoundsUTC(weekFridayStr);
         return supabase.from("calendar_events").select("start_time, end_time, all_day, title")
+          .eq("user_id", userId)
           .gte("start_time", weekStartBounds.start)
           .lte("start_time", weekEndBounds.end)
           .order("start_time");
       })(),
       // Weekly battle plan
       supabase.from("weekly_battle_plans").select("*")
+        .eq("user_id", userId)
         .gte("week_start", weekMondayStr)
         .lte("week_start", weekFridayStr)
         .order("created_at", { ascending: false })
