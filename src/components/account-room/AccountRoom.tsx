@@ -405,3 +405,11 @@ function AccountRoomContent({ accountId, compact = false }: AccountRoomProps) {
     </div>
   );
 }
+
+export function AccountRoom(props: AccountRoomProps) {
+  return (
+    <ErrorBoundary label={`Account Room:${props.accountId}`}>
+      <AccountRoomContent {...props} />
+    </ErrorBoundary>
+  );
+}
