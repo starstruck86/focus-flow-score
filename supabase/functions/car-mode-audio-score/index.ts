@@ -13,6 +13,7 @@
 // Input:  { audioBase64, mimeType, scenario, spokenTask, modelAnswer, rubric, responseShape? }
 // Output: { has_clear_speech, transcript, score, passed, criteria, top_fix, elite_line, summary }
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
