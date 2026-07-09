@@ -288,7 +288,7 @@ Style: Direct, peer-to-peer, no buzzwords. Max 150 words.`;
                     <Badge className={cn("text-[10px]", STATUS_COLORS[account.accountStatus])}>
                       {account.accountStatus}
                     </Badge>
-                    <IcpScorePill account={account} />
+                    <GapScorePill gap={gap} />
                     {account.motion && (
                       <Badge variant="outline" className="text-[10px]">{account.motion}</Badge>
                     )}
