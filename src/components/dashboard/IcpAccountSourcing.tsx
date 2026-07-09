@@ -1,4 +1,4 @@
-// ICP Account Sourcing — AI-powered prospect discovery with feedback loop, auto-enrich on promote, "more like this"
+// Account Discovery — AI-powered account discovery with feedback loop, auto-enrich on promote, "more like this"
 import { useState } from 'react';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -55,7 +55,7 @@ export function IcpAccountSourcing() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['icp-sourced-accounts'] });
       setFeedback('');
-      toast.success('Found 5 new prospect accounts');
+      toast.success('Found 5 account candidates');
     },
     onError: (err: Error) => toast.error('Account sourcing failed', { description: err.message }),
     onSettled: () => setIsSourcing(false),
@@ -128,7 +128,7 @@ export function IcpAccountSourcing() {
     onSuccess: ({ companyName }) => {
       qc.invalidateQueries({ queryKey: ['icp-sourced-accounts'] });
       qc.invalidateQueries({ queryKey: ['accounts'] });
-      toast.success(`${companyName} promoted to CRM`, {
+      toast.success(`${companyName} added to your account list`, {
         description: 'Auto-enriching + discovering contacts...',
       });
     },
@@ -160,7 +160,7 @@ export function IcpAccountSourcing() {
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-display flex items-center gap-2">
             <Crosshair className="h-4 w-4 text-primary" />
-            ICP Account Sourcing
+            ICP Account Discovery
           </CardTitle>
           <Button
             variant={hasResults ? 'ghost' : 'default'}
@@ -172,7 +172,7 @@ export function IcpAccountSourcing() {
             {isSourcing ? (
               <RefreshCw className="h-3.5 w-3.5 animate-spin" />
             ) : !hasResults ? (
-              <><Sparkles className="h-3.5 w-3.5" />Find Prospects</>
+              <><Sparkles className="h-3.5 w-3.5" />Find Accounts</>
             ) : (
               <RefreshCw className="h-3.5 w-3.5" />
             )}
@@ -185,7 +185,7 @@ export function IcpAccountSourcing() {
         ) : !hasResults ? (
           <div className="text-center py-8 text-muted-foreground">
             <Crosshair className="h-10 w-10 mx-auto mb-2 opacity-20" />
-            <p className="text-sm">AI-powered prospect discovery</p>
+            <p className="text-sm">AI-powered account discovery</p>
             <p className="text-xs mt-1">Finds 5 ICP-matching accounts based on buying signals</p>
           </div>
         ) : (
