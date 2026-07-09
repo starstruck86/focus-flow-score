@@ -76,13 +76,8 @@ export default function TrainAtom() {
       (isNonEmpty(exemplar?.why_it_matters) || isNonEmpty(exemplar?.when_to_use) || isNonEmpty(exemplar?.title)));
   const hasEliteBeat = isNonEmpty(modelLine) || isNonEmpty(exemplar?.when_not_to_use);
 
-  // Load per-drill stats whenever the current KI changes.
-  useEffect(() => {
-    if (!user || !currentDrill) return;
-    setDrillStats(readDrillStats(user.id, currentDrill.ki_id));
-  }, [user, currentDrill]);
-
-  const drillMode: DrillMode = pickDrillMode(drillStats.attempts, drillStats.passes);
+  // TrainAtom is always PRACTICE. GATE mode is owned by TrainBandGate.
+  const drillMode: DrillMode = 'practice';
 
   async function handleSubmit() {
     if (!user || !currentDrill || !data) return;
@@ -108,14 +103,6 @@ export default function TrainAtom() {
       });
       setSessionLatest(r.score);
       setSessionBest((b) => Math.max(b, r.score));
-      // Persist per-drill attempt + pass state (drives LEARN → PRACTICE progression).
-      const passed = r.score >= TRAIN_TUNABLES.subLevelPassThreshold;
-      const nextStats = {
-        attempts: drillStats.attempts + 1,
-        passes: drillStats.passes + (passed ? 1 : 0),
-      };
-      writeDrillStats(user.id, currentDrill.ki_id, nextStats);
-      setDrillStats(nextStats);
       setBeat('feedback');
     } catch (e) {
       setResult({
