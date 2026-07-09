@@ -14,7 +14,7 @@ import { runPracticeRep, writeTrainSession } from '@/lib/train/engine';
 import { TRAIN_TUNABLES, type CurriculumKi } from '@/types/train';
 import { RubricChecklist, type RubricEvaluation } from '@/components/train/RubricChecklist';
 import { LessonPanel } from '@/components/train/LessonPanel';
-import { Sparkles, BookOpen, RotateCcw, CheckCircle2, ArrowLeft, AlertTriangle, GraduationCap, Target, Eye } from 'lucide-react';
+import { Sparkles, BookOpen, RotateCcw, CheckCircle2, ArrowLeft, AlertTriangle, GraduationCap, Target } from 'lucide-react';
 
 type Beat = 'concept' | 'elite' | 'situation' | 'respond' | 'feedback';
 export type DrillMode = 'practice' | 'gate';
