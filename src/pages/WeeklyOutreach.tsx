@@ -635,7 +635,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                       </TableCell>
                       <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
-                          <IcpScorePill account={account} />
+                          <GapScorePill gap={gapScores[account.id]} />
                           <EnrichButton account={account} />
                           <TriggeredBadge account={account} />
                         </div>
