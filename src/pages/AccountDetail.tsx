@@ -20,6 +20,9 @@ import { ResourceLinksPanel } from '@/components/ResourceLinksPanel';
 import { TouchLogButtons } from '@/components/TouchLogButtons';
 import { LifecycleTierBadge, IcpScorePill, EnrichButton } from '@/components/LifecycleIntelligence';
 import { CollapsibleSection, LinkPill, LastTouchIndicator, safeFormat } from '@/components/detail';
+import { AccountRoom } from '@/components/account-room/AccountRoom';
+import { GapScorePill } from '@/components/account-room/GapScorePill';
+import { useAccountGapScores } from '@/hooks/useAccountGapScores';
 import { useDebouncedUpdate } from '@/hooks/useDebouncedUpdate';
 import {
   ArrowLeft, ChevronRight, Building2, Target, Users,
