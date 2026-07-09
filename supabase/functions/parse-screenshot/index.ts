@@ -61,12 +61,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'No images provided' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     console.log(`Parsing ${imageUrls.length} screenshots for account: ${accountName}`);
 
