@@ -1,5 +1,6 @@
 // Car Mode scorer — grades spoken response vs model answer + rubric using Lovable AI Gateway.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getModelConfig } from '../_shared/getModelConfig.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
