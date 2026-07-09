@@ -4,6 +4,8 @@ import { normalizeError, recordError } from '@/lib/appError';
 
 interface Props {
   children: ReactNode;
+  label?: string;
+  className?: string;
 }
 
 interface State {
