@@ -298,43 +298,42 @@ function formatRichText(text: string): React.ReactNode {
 
 
 export function SignalDetailPanel({ account }: { account: Account }) {
-  const score = account.icpScoreOverride ?? account.icpFitScore;
-  const tier = account.tierOverride || account.lifecycleTier;
   const { enrichAccount, isEnriching } = useAccountEnrichment();
   const [expanded, setExpanded] = React.useState(true);
   const [screenshotOpen, setScreenshotOpen] = useState(false);
   const evidence = account.enrichmentEvidence || {};
 
+  // Footprint evidence maps directly to the branch_pov surface that each
+  // detected signal supports (mobile app → deep_linking, email/sms →
+  // email_to_app, etc). These labels replace the retired "fit scoring"
+  // framing — nothing here contributes to a fit score.
+  const EVIDENCE_TO_POV: Record<string, string> = {
+    mobileApp: 'deep_linking',
+    emailSmsCapture: 'email_to_app / sms_to_app',
+    directEcommerce: 'web_to_app',
+    loyaltyMembership: 'universal_ads',
+    categoryComplexity: 'aio',
+    marketingPlatformDetected: 'universal_ads',
+  };
+
   return (
     <div className="space-y-4 p-4 bg-muted/30 rounded-lg border border-border/50">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h4 className="text-sm font-semibold">ICP Intelligence</h4>
-          {score != null && (
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className={cn('font-mono', TIER_STYLES[tier || '4'] || TIER_STYLES['4'])}>
-                Tier {tier}
-              </Badge>
-              <span className="text-sm font-mono font-bold">{score}/100</span>
-              {account.confidenceScore != null && (
-                <span className="text-xs text-muted-foreground">({account.confidenceScore}% confidence)</span>
-              )}
-            </div>
-          )}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <h4 className="text-sm font-semibold">Footprint Evidence</h4>
+          <span className="text-[10px] text-muted-foreground">Detected surfaces → POV cells</span>
         </div>
         <div className="flex items-center gap-1">
-          {score != null && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setExpanded(!expanded)}
-              className="h-7 text-xs gap-1"
-            >
-              {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              {expanded ? 'Collapse' : 'Expand'}
-            </Button>
-          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setExpanded(!expanded)}
+            className="h-7 text-xs gap-1"
+          >
+            {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {expanded ? 'Collapse' : 'Expand'}
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -352,17 +351,17 @@ export function SignalDetailPanel({ account }: { account: Account }) {
             className="h-7 text-xs gap-1"
           >
             <RefreshCw className={cn('h-3 w-3', isEnriching(account.id) && 'animate-spin')} />
-            {account.lastEnrichedAt ? 'Re-enrich' : 'Auto-detect'}
+            {account.lastEnrichedAt ? 'Re-detect' : 'Auto-detect'}
           </Button>
         </div>
       </div>
       
       <ScreenshotEnrichModal open={screenshotOpen} onOpenChange={setScreenshotOpen} account={account} />
 
-      {/* Discovery Cards */}
-      {score != null && expanded ? (
+      {/* Evidence cards */}
+      {expanded ? (
         <div className="space-y-3">
-          {/* Tech Stack Discovery - always show first if we have data */}
+          {/* Tech Stack Discovered */}
           {(evidence.ecommerce_platform || evidence.marketing_platform || evidence.other_tech_detected) && (
             <div className="p-3 rounded-md border border-primary/20 bg-primary/5">
               <div className="flex items-center gap-1.5 mb-2">
@@ -395,12 +394,13 @@ export function SignalDetailPanel({ account }: { account: Account }) {
             </div>
           )}
 
-          {/* Signal Discovery Grid */}
+          {/* Detected Surface Grid — each card labels the branch_pov cell it supports */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {SIGNAL_DEFS.map(({ key, evidenceKey, label, icon: Icon }) => {
               const value = (account as any)[key];
               const isDetected = key === 'marketingPlatformDetected' ? !!value : value === true;
               const details = evidence[evidenceKey];
+              const povTarget = EVIDENCE_TO_POV[key];
 
               return (
                 <div
@@ -412,21 +412,26 @@ export function SignalDetailPanel({ account }: { account: Account }) {
                 >
                   <Icon className={cn('h-3.5 w-3.5 shrink-0 mt-0.5', isDetected ? 'text-status-green' : 'text-muted-foreground')} />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-medium">{label}</span>
                       {key === 'marketingPlatformDetected' && value ? (
                         <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">{value}</Badge>
                       ) : (
                         <span className={cn('text-[10px]', isDetected ? 'text-status-green' : 'text-muted-foreground')}>
-                          {isDetected ? '✓' : '✗'}
+                          {isDetected ? '✓ detected' : '✗ not detected'}
                         </span>
+                      )}
+                      {isDetected && povTarget && (
+                        <Badge variant="outline" className="text-[9px] font-mono border-primary/40 text-primary">
+                          → {povTarget}
+                        </Badge>
                       )}
                     </div>
                     {details ? (
                       <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{details}</p>
                     ) : (
                       <p className="text-[10px] text-muted-foreground/60 mt-0.5 italic">
-                        {isDetected ? 'Detected — re-enrich for details' : 'Not detected'}
+                        {isDetected ? 'Detected — re-detect for details' : 'Not detected'}
                       </p>
                     )}
                   </div>
@@ -456,23 +461,25 @@ export function SignalDetailPanel({ account }: { account: Account }) {
                   <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{evidence.crm_lifecycle_team_size}</p>
                 ) : (
                   <p className="text-[10px] text-muted-foreground/60 mt-0.5 italic">
-                    {account.crmLifecycleTeamSize != null ? 'Re-enrich for details' : 'Unknown'}
+                    {account.crmLifecycleTeamSize != null ? 'Re-detect for details' : 'Unknown'}
                   </p>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Enrichment Summary - structured display */}
+          {!account.lastEnrichedAt && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+              <Info className="h-3.5 w-3.5" />
+              Click "Auto-detect" to detect footprint evidence for this account.
+              {!account.website && ' We\'ll auto-find the website for you.'}
+            </div>
+          )}
+
+          {/* Enrichment Summary — structured display */}
           {account.enrichmentSourceSummary && (
             <EnrichmentSummaryPanel summary={account.enrichmentSourceSummary} evidence={evidence} />
           )}
-        </div>
-      ) : score == null ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-          <Info className="h-3.5 w-3.5" />
-          Click "{account.website ? 'Auto-detect' : 'Auto-detect'}" to analyze this account for ICP signals.
-          {!account.website && ' We\'ll auto-find the website for you.'}
         </div>
       ) : null}
 

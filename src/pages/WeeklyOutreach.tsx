@@ -144,6 +144,9 @@ import { useUndoDelete } from '@/hooks/useUndoDelete';
 import { emitSaveStatus } from '@/components/SaveIndicator';
 import { TouchLogButtons } from '@/components/TouchLogButtons';
 import { LifecycleTierBadge, IcpScorePill, TriggeredBadge, EnrichButton, SignalDetailPanel } from '@/components/LifecycleIntelligence';
+import { AccountRoom } from '@/components/account-room/AccountRoom';
+import { GapScorePill } from '@/components/account-room/GapScorePill';
+import { useAccountGapScores } from '@/hooks/useAccountGapScores';
 import { useAccountEnrichment } from '@/hooks/useAccountEnrichment';
 // Bulk enrichment panel retired from Territory (W3). Hook still available for programmatic use.
 import { useBulkEnrichment } from '@/hooks/useBulkEnrichment';
@@ -510,6 +513,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
   };
 
   const sortedAccounts = useMemo(() => sortFunnelGroup(accounts, groupSort), [accounts, groupSort]);
+  const gapScores = useAccountGapScores(useMemo(() => accounts.map(a => a.id), [accounts]));
 
   if (accounts.length === 0 && isCollapsed) return null;
 
@@ -553,7 +557,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                       <SortableHeader sortKey="name" currentSort={groupSort} onSort={handleGroupSort} className="w-[18%]">Account</SortableHeader>
                   <TableHead className="w-[10%]">Website</TableHead>
                   <SortableHeader sortKey="accountStatus" currentSort={groupSort} onSort={handleGroupSort} className="w-[10%]">Status</SortableHeader>
-                  <SortableHeader sortKey="icpFitScore" currentSort={groupSort} onSort={handleGroupSort} className="w-[5%]">ICP</SortableHeader>
+                  <SortableHeader sortKey="icpFitScore" currentSort={groupSort} onSort={handleGroupSort} className="w-[5%]">Gap</SortableHeader>
                   <SortableHeader sortKey="tier" currentSort={groupSort} onSort={handleGroupSort} className="w-[5%]">Tier</SortableHeader>
                   <SortableHeader sortKey="contactStatus" currentSort={groupSort} onSort={handleGroupSort} className="w-[8%]">Contacts</SortableHeader>
                   <SortableHeader sortKey="lastTouchDate" currentSort={groupSort} onSort={handleGroupSort} className="w-[6%]">Last Touch</SortableHeader>
@@ -631,7 +635,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                       </TableCell>
                       <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
-                          <IcpScorePill account={account} />
+                          <GapScorePill gap={gapScores[account.id]} />
                           <EnrichButton account={account} />
                           <TriggeredBadge account={account} />
                         </div>
@@ -732,8 +736,12 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                     {expandedAccountId === account.id && (
                       <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
                         <TableCell colSpan={99} className="pt-0 pb-3">
-                          <div className="space-y-3">
+                          <div className="space-y-4">
+                            {/* Truth-model command center */}
+                            <AccountRoom accountId={account.id} compact />
+                            {/* Footprint evidence (repurposed ICP detection surfaces) */}
                             <SignalDetailPanel account={account} />
+                            {/* Stakeholders (existing per-account) */}
                             <AccountContactsField
                               accountId={account.id}
                               contacts={account.accountContacts || []}

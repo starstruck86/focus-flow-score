@@ -20,6 +20,9 @@ import { ResourceLinksPanel } from '@/components/ResourceLinksPanel';
 import { TouchLogButtons } from '@/components/TouchLogButtons';
 import { LifecycleTierBadge, IcpScorePill, EnrichButton } from '@/components/LifecycleIntelligence';
 import { CollapsibleSection, LinkPill, LastTouchIndicator, safeFormat } from '@/components/detail';
+import { AccountRoom } from '@/components/account-room/AccountRoom';
+import { GapScorePill } from '@/components/account-room/GapScorePill';
+import { useAccountGapScores } from '@/hooks/useAccountGapScores';
 import { useDebouncedUpdate } from '@/hooks/useDebouncedUpdate';
 import {
   ArrowLeft, ChevronRight, Building2, Target, Users,
@@ -151,6 +154,8 @@ export default function AccountDetail() {
 
   const account = accounts.find(a => a.id === id);
   const { setPageContext } = useCopilot();
+  const gapMap = useAccountGapScores(useMemo(() => (id ? [id] : []), [id]));
+  const gap = id ? gapMap[id] : undefined;
 
   useEffect(() => {
     if (!showDossier || !account || !user) return;
@@ -283,7 +288,7 @@ Style: Direct, peer-to-peer, no buzzwords. Max 150 words.`;
                     <Badge className={cn("text-[10px]", STATUS_COLORS[account.accountStatus])}>
                       {account.accountStatus}
                     </Badge>
-                    <IcpScorePill account={account} />
+                    <GapScorePill gap={gap} />
                     {account.motion && (
                       <Badge variant="outline" className="text-[10px]">{account.motion}</Badge>
                     )}
@@ -434,6 +439,10 @@ Style: Direct, peer-to-peer, no buzzwords. Max 150 words.`;
           </DialogContent>
         </Dialog>
 
+        {/* The Account Room — truth-model command center */}
+        <AccountRoom accountId={account.id} />
+
+        <Separator />
 
         {/* Timeline — living record of this account */}
         <AccountTimeline accountId={account.id} />
