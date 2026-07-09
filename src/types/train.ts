@@ -38,6 +38,8 @@ export interface ConceptRow {
   drill_prompt: string | null;
   /** AE-facing plain-English version of the exemplar's model line. */
   model_line_plain: string | null;
+  /** Optional long-form lesson markdown (rendered as top LessonPanel). */
+  lesson_md?: string | null;
   notes: string | null;
 
 }
@@ -69,6 +71,8 @@ export interface CurriculumKi extends CurriculumKiRef {
   modelLinePlain?: string | null;
   /** Optional per-drill rubric from ki_curriculum.drill_rubric. */
   drillRubric?: Array<{ c: string; must?: boolean }> | null;
+  /** Optional elite-sounding model answer from ki_curriculum.drill_model_answer. */
+  drillModelAnswer?: string | null;
   /** Authored teach script (from ki_curriculum.drill_teach_script). Used by
    * Car Mode verbatim and by TrainAtom to override the raw why/when prose. */
   drillTeachScript?: string | null;

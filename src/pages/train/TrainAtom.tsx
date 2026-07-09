@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { Layout } from '@/components/Layout';
@@ -7,13 +7,39 @@ import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConceptAtom } from '@/hooks/train/useConceptAtom';
 import { runPracticeRep, writeTrainSession } from '@/lib/train/engine';
 import { TRAIN_TUNABLES, type CurriculumKi } from '@/types/train';
-import { Sparkles, BookOpen, RotateCcw, CheckCircle2, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { RubricChecklist, type RubricEvaluation } from '@/components/train/RubricChecklist';
+import { LessonPanel } from '@/components/train/LessonPanel';
+import { Sparkles, BookOpen, RotateCcw, CheckCircle2, ArrowLeft, AlertTriangle, GraduationCap, Target, Eye } from 'lucide-react';
 
 type Beat = 'concept' | 'elite' | 'situation' | 'respond' | 'feedback';
+type DrillMode = 'learn' | 'practice';
+
+// ── Per-drill attempt tracking (localStorage v1) ─────────────────
+function drillStatsKey(userId: string, kiId: string) {
+  return `train:drill-stats:${userId}:${kiId || 'promptonly'}`;
+}
+function readDrillStats(userId: string, kiId: string): { attempts: number; passes: number } {
+  try {
+    const raw = localStorage.getItem(drillStatsKey(userId, kiId));
+    if (!raw) return { attempts: 0, passes: 0 };
+    const parsed = JSON.parse(raw);
+    return { attempts: Number(parsed.attempts) || 0, passes: Number(parsed.passes) || 0 };
+  } catch { return { attempts: 0, passes: 0 }; }
+}
+function writeDrillStats(userId: string, kiId: string, stats: { attempts: number; passes: number }) {
+  try { localStorage.setItem(drillStatsKey(userId, kiId), JSON.stringify(stats)); } catch { /* ignore */ }
+}
+function pickDrillMode(attempts: number, passes: number): DrillMode {
+  // LEARN: 0-1 prior graded attempts. PRACTICE: 2+ attempts (until owned).
+  if (attempts <= 1 && passes < 2) return 'learn';
+  return 'practice';
+}
+
 
 function isNonEmpty(s: string | null | undefined): s is string {
   return !!s && s.trim().length > 0;
@@ -29,7 +55,15 @@ export default function TrainAtom() {
   const [drillIdx, setDrillIdx] = useState(0);
   const [response, setResponse] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ score: number; feedback: string; progress: number; reps: number } | null>(null);
+  const [result, setResult] = useState<{
+    score: number;
+    feedback: string;
+    progress: number;
+    reps: number;
+    goldCriteria: RubricEvaluation[];
+  } | null>(null);
+  // Per-drill localStorage stats — recomputed when drill changes or after a rep.
+  const [drillStats, setDrillStats] = useState<{ attempts: number; passes: number }>({ attempts: 0, passes: 0 });
   const [sessionBest, setSessionBest] = useState(0);
   const [sessionLatest, setSessionLatest] = useState(0);
   const [startedAt] = useState(() => new Date().toISOString());
@@ -62,6 +96,14 @@ export default function TrainAtom() {
       (isNonEmpty(exemplar?.why_it_matters) || isNonEmpty(exemplar?.when_to_use) || isNonEmpty(exemplar?.title)));
   const hasEliteBeat = isNonEmpty(modelLine) || isNonEmpty(exemplar?.when_not_to_use);
 
+  // Load per-drill stats whenever the current KI changes.
+  useEffect(() => {
+    if (!user || !currentDrill) return;
+    setDrillStats(readDrillStats(user.id, currentDrill.ki_id));
+  }, [user, currentDrill]);
+
+  const drillMode: DrillMode = pickDrillMode(drillStats.attempts, drillStats.passes);
+
   async function handleSubmit() {
     if (!user || !currentDrill || !data) return;
     setSubmitting(true);
@@ -77,12 +119,32 @@ export default function TrainAtom() {
         userResponse: response,
         skillFocus: topic,
       });
-      setResult({ score: r.score, feedback: r.feedback, progress: r.progress, reps: r.reps });
+      setResult({
+        score: r.score,
+        feedback: r.feedback,
+        progress: r.progress,
+        reps: r.reps,
+        goldCriteria: r.goldCriteria ?? [],
+      });
       setSessionLatest(r.score);
       setSessionBest((b) => Math.max(b, r.score));
+      // Persist per-drill attempt + pass state (drives LEARN → PRACTICE progression).
+      const passed = r.score >= TRAIN_TUNABLES.subLevelPassThreshold;
+      const nextStats = {
+        attempts: drillStats.attempts + 1,
+        passes: drillStats.passes + (passed ? 1 : 0),
+      };
+      writeDrillStats(user.id, currentDrill.ki_id, nextStats);
+      setDrillStats(nextStats);
       setBeat('feedback');
     } catch (e) {
-      setResult({ score: 0, feedback: `Scoring failed: ${(e as Error).message}`, progress: 0, reps: 0 });
+      setResult({
+        score: 0,
+        feedback: `Scoring failed: ${(e as Error).message}`,
+        progress: 0,
+        reps: 0,
+        goldCriteria: [],
+      });
       setBeat('feedback');
     } finally {
       setSubmitting(false);
@@ -207,31 +269,46 @@ export default function TrainAtom() {
           />
         )}
 
-        {/* BEAT 3 — SITUATION */}
+        {/* BEAT 3 — SITUATION + TEACH-BEFORE-TEST */}
         {data && beat === 'situation' && currentDrill && (
-          <Card className="p-4">
-            <div className="flex items-center gap-2 mb-3 text-xs uppercase tracking-wider text-muted-foreground">
-              <Sparkles className="h-3.5 w-3.5" /> The situation
-            </div>
-            <p className="text-base leading-relaxed bg-muted/40 rounded p-4 mb-4">
-              {currentDrill.scenario || currentDrill.when_to_use || 'Respond to this buyer situation.'}
-            </p>
-            <div className="flex items-center justify-between gap-2">
-              <Button variant="ghost" size="sm" onClick={backToTeach}>
-                <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Back to teach
-              </Button>
-              <Button onClick={() => setBeat('respond')}>Respond →</Button>
-            </div>
-          </Card>
+          <SituationBeat
+            drill={currentDrill}
+            drillMode={drillMode}
+            drillIdx={drillIdx}
+            lessonMd={data.concept.lesson_md ?? null}
+            conceptId={data.concept.concept_id}
+            userId={user?.id ?? null}
+            drillStats={drillStats}
+            onBackToTeach={backToTeach}
+            onRespond={() => setBeat('respond')}
+          />
         )}
 
         {/* BEAT 4 — RESPOND */}
         {data && beat === 'respond' && currentDrill && (
           <Card className="p-4">
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">The situation</div>
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">The situation</div>
+              <DrillModeBadge mode={drillMode} attempts={drillStats.attempts} />
+            </div>
             <p className="text-xs text-muted-foreground bg-muted/30 rounded p-2 mb-3 line-clamp-3">
               {currentDrill.scenario || currentDrill.when_to_use || 'Respond to this buyer situation.'}
             </p>
+
+            {/* LEARN mode keeps rubric visible while user drafts.
+                PRACTICE mode hides behind a "Show the bar" peek. */}
+            {Array.isArray(currentDrill.drillRubric) && currentDrill.drillRubric.length > 0 && (
+              drillMode === 'learn' ? (
+                <div className="mb-3">
+                  <RubricChecklist rubric={currentDrill.drillRubric} compact />
+                </div>
+              ) : (
+                <PeekPanel label="Show the bar" icon={Target}>
+                  <RubricChecklist rubric={currentDrill.drillRubric} compact />
+                </PeekPanel>
+              )
+            )}
+
             <div className="flex items-center gap-2 mb-2 text-xs uppercase tracking-wider text-muted-foreground">
               <Sparkles className="h-3.5 w-3.5" /> Your response
             </div>
@@ -261,9 +338,32 @@ export default function TrainAtom() {
                 Sub-level progress: {Math.round(result.progress * 100)}% · {result.reps} reps
               </div>
             </div>
+
+            {/* Per-criterion pass/fail from the grader — shown BEFORE the prose
+                so the rep sees exactly which bar they met or missed. */}
+            {currentDrill && Array.isArray(currentDrill.drillRubric) && currentDrill.drillRubric.length > 0 && (
+              <div className="mb-4">
+                <RubricChecklist
+                  rubric={currentDrill.drillRubric}
+                  results={result.goldCriteria}
+                />
+              </div>
+            )}
+
             <div className="text-sm whitespace-pre-wrap mb-4">{result.feedback || '—'}</div>
 
-            {isNonEmpty(modelLine) && (
+            {/* Model answer reveal — always after grading in LEARN & PRACTICE. */}
+            {currentDrill && isNonEmpty(currentDrill.drillModelAnswer) && (
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-4 mb-4">
+                <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-primary mb-2">
+                  <GraduationCap className="h-3.5 w-3.5" /> How elite sounds
+                </div>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{currentDrill.drillModelAnswer}</p>
+              </div>
+            )}
+
+            {/* Concept-level model line — still shown when no per-drill model answer. */}
+            {(!currentDrill || !isNonEmpty(currentDrill.drillModelAnswer)) && isNonEmpty(modelLine) && (
               <div className="rounded-md border border-primary/30 bg-primary/5 p-4 mb-4">
                 <div className="text-[11px] uppercase tracking-wider text-primary mb-2">
                   How an elite AE handled it
@@ -271,6 +371,7 @@ export default function TrainAtom() {
                 <p className="text-sm leading-relaxed">{modelLine}</p>
               </div>
             )}
+
 
             {(() => {
               const passed = result.score >= TRAIN_TUNABLES.subLevelPassThreshold;
@@ -446,3 +547,162 @@ function EliteBeat({
     </Card>
   );
 }
+
+// ── Beat 3: SITUATION (teach-before-test) ────────────────────────
+function SituationBeat({
+  drill,
+  drillMode,
+  drillIdx,
+  lessonMd,
+  conceptId,
+  userId,
+  drillStats,
+  onBackToTeach,
+  onRespond,
+}: {
+  drill: CurriculumKi;
+  drillMode: DrillMode;
+  drillIdx: number;
+  lessonMd: string | null;
+  conceptId: string;
+  userId: string | null;
+  drillStats: { attempts: number; passes: number };
+  onBackToTeach: () => void;
+  onRespond: () => void;
+}) {
+  const hasScript = isNonEmpty(drill.drillTeachScript);
+  const hasRubric = Array.isArray(drill.drillRubric) && drill.drillRubric.length > 0;
+
+  return (
+    <div>
+      {/* Lesson panel — only on the concept's first drill, and only when authored. */}
+      {drillIdx === 0 && isNonEmpty(lessonMd) && (
+        <LessonPanel conceptId={conceptId} markdown={lessonMd} userId={userId} />
+      )}
+
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+            <Sparkles className="h-3.5 w-3.5" /> The situation
+          </div>
+          <DrillModeBadge mode={drillMode} attempts={drillStats.attempts} />
+        </div>
+        <p className="text-base leading-relaxed bg-muted/40 rounded p-4 mb-4">
+          {drill.scenario || drill.when_to_use || 'Respond to this buyer situation.'}
+        </p>
+
+        {/* LEARN mode: teach script + rubric fully visible BEFORE recording.
+            PRACTICE mode: teach script behind a Refresher toggle; rubric behind "Show the bar". */}
+        {hasScript && (
+          drillMode === 'learn' ? (
+            <div className="mb-3 rounded-md border border-primary/25 bg-primary/5 p-3">
+              <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-primary mb-2">
+                <BookOpen className="h-3.5 w-3.5" /> Teach beats
+              </div>
+              <TeachScriptBeats script={drill.drillTeachScript!} />
+            </div>
+          ) : (
+            <PeekPanel label="Refresher" icon={BookOpen}>
+              <TeachScriptBeats script={drill.drillTeachScript!} />
+            </PeekPanel>
+          )
+        )}
+
+        {hasRubric && (
+          drillMode === 'learn' ? (
+            <div className="mb-3">
+              <RubricChecklist rubric={drill.drillRubric!} />
+            </div>
+          ) : (
+            <PeekPanel label="Show the bar" icon={Target}>
+              <RubricChecklist rubric={drill.drillRubric!} compact />
+            </PeekPanel>
+          )
+        )}
+
+        <div className="flex items-center justify-between gap-2 mt-4">
+          <Button variant="ghost" size="sm" onClick={onBackToTeach}>
+            <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Back to teach
+          </Button>
+          <Button onClick={onRespond}>Respond →</Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// Splits a teach script into visible beats. Handles bullet lists, numbered
+// lists, and blank-line-separated paragraphs. Falls back to a single block.
+function TeachScriptBeats({ script }: { script: string }) {
+  const beats = useMemo(() => {
+    const trimmed = script.trim();
+    // Numbered/bulleted lines
+    const listLines = trimmed
+      .split('\n')
+      .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').trim())
+      .filter((l) => l.length > 0);
+    if (listLines.length >= 2 && trimmed.match(/^\s*(?:[-*•]|\d+[.)])\s+/m)) return listLines;
+    // Blank-line paragraphs
+    const paras = trimmed.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+    if (paras.length >= 2) return paras;
+    // Sentence fallback
+    const sents = trimmed.split(/(?<=[.!?])\s+(?=[A-Z])/).filter((s) => s.length > 8);
+    if (sents.length >= 2) return sents;
+    return [trimmed];
+  }, [script]);
+
+  return (
+    <ol className="space-y-1.5">
+      {beats.map((b, i) => (
+        <li key={i} className="flex gap-2 text-sm leading-snug">
+          <span className="mt-0.5 h-4 w-4 shrink-0 rounded-full bg-primary/15 text-primary text-[10px] font-semibold flex items-center justify-center tabular-nums">
+            {i + 1}
+          </span>
+          <span>{b}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function DrillModeBadge({ mode, attempts }: { mode: DrillMode; attempts: number }) {
+  if (mode === 'learn') {
+    return (
+      <Badge variant="outline" className="text-[10px] border-primary/40 text-primary">
+        <GraduationCap className="h-3 w-3 mr-1" /> Learn mode
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] text-muted-foreground">
+      <Target className="h-3 w-3 mr-1" /> Practice · {attempts} prior
+    </Badge>
+  );
+}
+
+function PeekPanel({
+  label,
+  icon: Icon,
+  children,
+}: {
+  label: string;
+  icon: typeof BookOpen;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mb-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <Icon className="h-3 w-3" />
+        {open ? 'Hide' : label}
+        <Eye className="h-3 w-3" />
+      </button>
+      {open && <div className="mt-2">{children}</div>}
+    </div>
+  );
+}
+
