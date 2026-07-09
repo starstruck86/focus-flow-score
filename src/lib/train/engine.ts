@@ -205,6 +205,9 @@ export async function runPracticeRep(input: PracticeRepInput): Promise<PracticeR
     progress: Number(comp.progress ?? 0),
     reps: Number(comp.reps ?? 0),
     gatePassedAt: comp.gate_passed_at ?? null,
+    goldCriteria: Array.isArray(scored.raw?.gold_criteria)
+      ? (scored.raw.gold_criteria as Array<{ c: string; met: boolean; note?: string }>)
+      : [],
   };
 }
 
