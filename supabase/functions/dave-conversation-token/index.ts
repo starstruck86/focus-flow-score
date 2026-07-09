@@ -274,7 +274,6 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const tzOffsetHours = body.tzOffsetHours ?? 0;
     const conversationHistory = body.conversationHistory ?? "";
 
     const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
@@ -356,7 +355,7 @@ Deno.serve(async (req) => {
     if (contextString.length > 20000) {
       contextString = contextString.slice(0, 20000) + "\n\n[Context trimmed for performance]";
     }
-    const firstMessage = buildFirstMessage(crmContext, tzOffsetHours);
+    const firstMessage = buildFirstMessage(crmContext);
 
     console.log(`dave-conversation-token completed in ${Date.now() - t0}ms | user: ${userId} | context: ${contextString.length} chars | firstMessage: ${firstMessage.length} chars`);
 
@@ -792,7 +791,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
   return { sections, calendarCount, firstMeeting, overdueCount, pendingReminders, hasLastSession };
 }
 
-function buildFirstMessage(ctx: CrmContext, _tzOffsetHours: number): string {
+function buildFirstMessage(ctx: CrmContext): string {
   const bt = getBostonTime();
 
   let msg = `${bt.dayOfWeek}, ${bt.monthName} ${ordinal(bt.dayNum)} — ${bt.timeStr} Boston time. `;

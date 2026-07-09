@@ -389,7 +389,7 @@ async function stepActionExtraction(job: ResourceJob, jobId: string) {
   if (combinedSummary.length < 50) return;
 
   const result = await trackedInvoke<{ actions: unknown[] }>('extract-tasks', {
-    body: { text: combinedSummary, source: 'resource_pipeline' },
+    body: { transcript_content: combinedSummary, transcript_title: 'Resource pipeline summary', source: 'resource_pipeline' },
     traceId: job.trace_id,
     componentName: 'ResourcePipeline',
   });
