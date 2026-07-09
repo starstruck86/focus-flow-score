@@ -102,7 +102,7 @@ const FlashDeck = lazy(() => import("./pages/FlashDeck"));
 const Study = lazy(() => import("./pages/Study"));
 const Work = lazy(() => import("./pages/Work"));
 const TrainHub = lazy(() => import("./pages/TrainHub"));
-const SettingsLegacy = lazy(() => import("./pages/SettingsLegacy"));
+// SettingsLegacy route removed (W5); component file preserved.
 const NavUsage = lazy(() => import("./pages/NavUsage"));
 
 import { useLastSurface } from "@/hooks/useLastSurface";
