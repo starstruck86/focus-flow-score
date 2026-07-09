@@ -174,9 +174,7 @@ Combine data from ALL screenshots into a single unified result. If the same fiel
     // Write to DB if accountId provided
     if (accountId) {
       try {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-        const supabase = createClient(supabaseUrl, supabaseKey);
+        const supabase = auth.supabaseUser;
 
         const updates: Record<string, any> = {
           mar_tech: marTechString,
