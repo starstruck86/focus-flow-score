@@ -112,13 +112,10 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
-      if (count && count > 0 && forceRegenerate) {
-        await supabase
-          .from("daily_digest_items")
-          .delete()
-          .eq("user_id", userId)
-          .eq("digest_date", todayStr);
-      }
+      // NOTE: on forceRegenerate we defer the delete until after new digest items are
+      // built and validated — see the insert block below. This prevents wiping the
+      // user's digest when generation fails mid-flight.
+      const shouldReplaceExisting = !!(count && count > 0 && forceRegenerate);
 
       const sorted = [...userAccts].sort((a, b) => {
         const tierOrder: Record<string, number> = { A: 0, B: 1, C: 2 };
@@ -345,6 +342,17 @@ IMPORTANT: Headlines should be factual and specific — include names, numbers, 
       }
 
       if (digestItems.length > 0) {
+        if (shouldReplaceExisting) {
+          const { error: delErr } = await supabase
+            .from("daily_digest_items")
+            .delete()
+            .eq("user_id", userId)
+            .eq("digest_date", todayStr);
+          if (delErr) {
+            console.error(`Failed to delete stale digest for ${userId} — preserving old rows:`, delErr);
+            continue;
+          }
+        }
         const { error: insertError } = await supabase
           .from("daily_digest_items")
           .insert(digestItems);

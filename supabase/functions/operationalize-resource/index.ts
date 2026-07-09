@@ -33,6 +33,7 @@ serve(async (req) => {
       .from("resources")
       .select("*")
       .eq("id", resource_id)
+      .eq("user_id", user.id)
       .single();
     if (rErr || !resource) throw new Error("Resource not found");
 
@@ -61,7 +62,7 @@ serve(async (req) => {
             const markdown = (scrapeData.data?.markdown || scrapeData.markdown || "").slice(0, 15000);
             if (markdown.length > 50) {
               resource.content = markdown;
-              await supabase.from("resources").update({ content: markdown, content_status: "enriched" }).eq("id", resource_id);
+              await supabase.from("resources").update({ content: markdown, content_status: "enriched" }).eq("id", resource_id).eq("user_id", user.id);
               console.log(`Auto-enriched resource ${resource_id}: ${markdown.length} chars`);
             }
           }

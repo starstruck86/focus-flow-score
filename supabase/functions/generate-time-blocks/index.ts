@@ -136,9 +136,12 @@ serve(async (req) => {
     // Use service role client for all DB operations (works for both paths)
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const { date, confirmedScreenshotEvents, rebuildContext } = await req.json();
+    const { date, confirmedScreenshotEvents, rebuildContext, fullReset } = await req.json();
     const targetDate = date || new Date().toISOString().split("T")[0];
     const requestSource = rebuildContext?.source || "generate";
+    // Preserve same-day progress by default. Only wipe when the caller explicitly asks
+    // for a full reset (e.g. user-initiated "Start over"), never on background regens.
+    const isFullReset = fullReset === true || rebuildContext?.fullReset === true;
     logStage("request_parsed", `request parsed for ${requestSource}`, {
       dismissedCount: Array.isArray(rebuildContext?.dismissed_blocks) ? rebuildContext.dismissed_blocks.length : 0,
       linkedCount: Array.isArray(rebuildContext?.linked_opportunities) ? rebuildContext.linked_opportunities.length : 0,
@@ -1617,6 +1620,26 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
 
     // Upsert the plan with all data persisted — reset dismissals on rebuild
     logStage("plan_persist_started", "writing rebuilt plan to database");
+    // Preserve same-day user progress unless explicit full reset requested.
+    let preservedCompletedGoals: unknown[] = [];
+    let preservedBlockFeedback: unknown[] = [];
+    let preservedDismissedIndices: unknown[] = [];
+    let preservedRecastAt: string | null = null;
+    if (!isFullReset) {
+      const { data: existingPlan } = await supabase
+        .from("daily_time_blocks")
+        .select("completed_goals, block_feedback, dismissed_block_indices, recast_at")
+        .eq("user_id", userId)
+        .eq("plan_date", targetDate)
+        .maybeSingle();
+      if (existingPlan) {
+        preservedCompletedGoals = (existingPlan.completed_goals as unknown[]) || [];
+        preservedBlockFeedback = (existingPlan.block_feedback as unknown[]) || [];
+        preservedDismissedIndices = (existingPlan.dismissed_block_indices as unknown[]) || [];
+        preservedRecastAt = (existingPlan.recast_at as string | null) ?? null;
+      }
+    }
+
     const { data: saved, error: saveError } = await supabase
       .from("daily_time_blocks")
       .upsert({
@@ -1627,10 +1650,10 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         focus_hours_available: focusHoursAvailable,
         ai_reasoning: (isFallback ? '[FALLBACK] ' : '') + (plan.day_strategy || ''),
         key_metric_targets: { ...finalMetricTargets, loop_metadata: loopMetadata },
-        completed_goals: [],
-        block_feedback: [],
-        dismissed_block_indices: [],
-        recast_at: null,
+        completed_goals: preservedCompletedGoals,
+        block_feedback: preservedBlockFeedback,
+        dismissed_block_indices: preservedDismissedIndices,
+        recast_at: preservedRecastAt,
       }, { onConflict: "user_id,plan_date" })
       .select()
       .single();
