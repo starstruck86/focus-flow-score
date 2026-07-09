@@ -9,6 +9,7 @@ import { LoadingState, EmptyState, ErrorState } from '@/components/StateComponen
 import { GapScorePill } from '@/components/account-room/GapScorePill';
 import { useAccountGapScores } from '@/hooks/useAccountGapScores';
 import { useVerticalDetail } from '@/hooks/useVerticalDetail';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 function CalloutBlock({ tone = 'primary', children }: { tone?: 'primary' | 'amber'; children: React.ReactNode }) {
   const cls =
