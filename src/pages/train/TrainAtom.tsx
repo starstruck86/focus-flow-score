@@ -41,8 +41,6 @@ function pickDrillMode(attempts: number, passes: number): DrillMode {
 }
 
 
-type Beat = 'concept' | 'elite' | 'situation' | 'respond' | 'feedback';
-
 function isNonEmpty(s: string | null | undefined): s is string {
   return !!s && s.trim().length > 0;
 }
