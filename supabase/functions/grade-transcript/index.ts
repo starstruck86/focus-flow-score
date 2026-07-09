@@ -44,6 +44,7 @@ serve(async (req) => {
       }
       userId = user.id;
     }
+    const { primary: model } = await getModelConfig('grade-transcript');
     if (!transcript_id) throw new Error("transcript_id required");
 
     const { data: transcript, error: tErr } = await supabase
