@@ -250,7 +250,7 @@ const TRANSCRIPT_CHUNK_OVERLAP = 1500;
 const DOC_SINGLE_PASS_THRESHOLD = 32000;
 const TRANSCRIPT_SINGLE_PASS_THRESHOLD = 30000;
 const MAX_TOKENS = 16384;
-const MODEL_NAME = 'google/gemini-2.5-flash';
+let MODEL_NAME = 'google/gemini-2.5-flash';
 
 // ══════════════════════════════════════════════════════
 // CONTENT CATEGORY — explicit, passed through entire pipeline
