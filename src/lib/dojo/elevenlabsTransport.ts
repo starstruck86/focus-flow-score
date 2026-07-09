@@ -152,6 +152,9 @@ export async function speakChunk(
 
       let response: Response;
       try {
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data: { session } } = await supabase.auth.getSession();
+        const authToken = session?.access_token ?? config.supabaseAnonKey;
         response = await fetch(
           `${config.supabaseUrl}/functions/v1/elevenlabs-tts-stream`,
           {
@@ -159,7 +162,7 @@ export async function speakChunk(
             headers: {
               'Content-Type': 'application/json',
               apikey: config.supabaseAnonKey,
-              Authorization: `Bearer ${config.supabaseAnonKey}`,
+              Authorization: `Bearer ${authToken}`,
             },
             body: JSON.stringify(body),
             signal: attemptAbort.signal,
