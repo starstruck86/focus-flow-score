@@ -35,6 +35,7 @@ function hydrateKi(
     scenario?: string | null;
     drillRubric?: Array<{ c: string; must?: boolean }> | null;
     drillTeachScript?: string | null;
+    drillModelAnswer?: string | null;
   },
   ki: AnyRow | undefined,
 ): CurriculumKi | null {
