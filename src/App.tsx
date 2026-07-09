@@ -73,7 +73,7 @@ const SkillBuilderSession = lazy(() => import("./pages/SkillBuilderSession"));
 const SkillBuilderAudit = lazy(() => import("./pages/SkillBuilderAudit"));
 const ReliabilityQA = lazy(() => import("./pages/ReliabilityQA"));
 const ObservabilityDashboard = lazy(() => import("./pages/ObservabilityDashboard"));
-const SmokeTest = lazy(() => import("./pages/SmokeTest"));
+// SmokeTest route removed from routing (W5); component file preserved.
 const LifecycleReconciliation = lazy(() => import("./pages/LifecycleReconciliation"));
 const PhaseEvidenceRunner = lazy(() => import("./pages/PhaseEvidenceRunner"));
 const StrategyOpsPanel = lazy(() => import("./pages/StrategyOpsPanel"));
