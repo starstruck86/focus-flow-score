@@ -489,6 +489,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const { primary: primaryModel, fallback: fallbackModel } = await getModelConfig('territory-copilot');
     const body = await req.json();
     const { messages, mode: requestedMode, accountId, pageContext } = body as {
       messages: any[];
