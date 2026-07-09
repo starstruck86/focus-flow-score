@@ -30,6 +30,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useAccountRoom, type PovRow, type RiskRow, type SignalRow } from '@/hooks/useAccountRoom';
 import { GapScorePill } from './GapScorePill';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 interface AccountRoomProps {
   accountId: string;
