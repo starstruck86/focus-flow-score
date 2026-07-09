@@ -638,7 +638,7 @@ Deno.serve(async (req) => {
     }
 
     const useProModel = mode === "deep" || mode === "deal-strategy" || mode === "resource-qa";
-    const model = useProModel ? "google/gemini-2.5-pro" : "google/gemini-3-flash-preview";
+    const model = useProModel ? (fallbackModel || "google/gemini-2.5-pro") : primaryModel;
     const systemPrompt = buildSystemPrompt(ctx, mode, researchData, pageContext);
 
     // First call: non-streaming with tools to get potential tool calls
