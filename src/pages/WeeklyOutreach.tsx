@@ -557,7 +557,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                       <SortableHeader sortKey="name" currentSort={groupSort} onSort={handleGroupSort} className="w-[18%]">Account</SortableHeader>
                   <TableHead className="w-[10%]">Website</TableHead>
                   <SortableHeader sortKey="accountStatus" currentSort={groupSort} onSort={handleGroupSort} className="w-[10%]">Status</SortableHeader>
-                  <SortableHeader sortKey="icpFitScore" currentSort={groupSort} onSort={handleGroupSort} className="w-[5%]">ICP</SortableHeader>
+                  <SortableHeader sortKey="icpFitScore" currentSort={groupSort} onSort={handleGroupSort} className="w-[5%]">Gap</SortableHeader>
                   <SortableHeader sortKey="tier" currentSort={groupSort} onSort={handleGroupSort} className="w-[5%]">Tier</SortableHeader>
                   <SortableHeader sortKey="contactStatus" currentSort={groupSort} onSort={handleGroupSort} className="w-[8%]">Contacts</SortableHeader>
                   <SortableHeader sortKey="lastTouchDate" currentSort={groupSort} onSort={handleGroupSort} className="w-[6%]">Last Touch</SortableHeader>
