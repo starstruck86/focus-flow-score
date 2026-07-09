@@ -313,7 +313,7 @@ ${kiContext}`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model,
         max_tokens: 4096,
         system: systemPrompt,
         messages: [
