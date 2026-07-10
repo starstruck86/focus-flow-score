@@ -23,7 +23,7 @@ export default function AuthCallback() {
       done = true;
       // For OAuth consent returns, use a full-location change so the query
       // string (authorization_id) is preserved and re-parsed.
-      if (next && next.startsWith('/.lovable/oauth/consent')) {
+      if (next && (next.startsWith('/.lovable/oauth/consent') || next.startsWith('/oauth/consent'))) {
         window.location.href = next;
         return;
       }
