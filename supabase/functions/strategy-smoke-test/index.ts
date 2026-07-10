@@ -104,7 +104,7 @@ async function infraAnthropicTool(): Promise<TestResult> {
       headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       signal: controller.signal,
       body: JSON.stringify({
-        model: "claude-sonnet-4-5-20250929", max_tokens: 200,
+        model: "claude-sonnet-4-6", max_tokens: 200,
         messages: [{ role: "user", content: "Generate a test email subject line about product updates." }],
         tools: [{ name: "test_tool", description: "Return a subject line.", input_schema: { type: "object", properties: { subject: { type: "string" } }, required: ["subject"] } }],
         tool_choice: { type: "tool", name: "test_tool" }, temperature: 0.3,
