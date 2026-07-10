@@ -39,7 +39,7 @@ async function callClaude(
   }
 
   const start = Date.now();
-  const model = "claude-sonnet-4-5-20250929";
+  const model = "claude-sonnet-4-6";
 
   try {
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
