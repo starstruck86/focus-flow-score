@@ -5,13 +5,44 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SafePage } from "@/components/SafePage";
 
-// Beta-namespace wrapper — types may not surface on all @supabase/supabase-js versions.
-type OAuthApi = {
-  getAuthorizationDetails: (id: string) => Promise<{ data: any; error: { message: string } | null }>;
-  approveAuthorization: (id: string) => Promise<{ data: any; error: { message: string } | null }>;
-  denyAuthorization: (id: string) => Promise<{ data: any; error: { message: string } | null }>;
-};
-const oauth = (supabase.auth as unknown as { oauth: OAuthApi }).oauth;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
+/**
+ * Direct REST calls to the Supabase Auth OAuth 2.1 authorization endpoints.
+ * Used instead of `supabase.auth.oauth.*` because the SDK version pinned in
+ * this app does not yet expose that namespace. Endpoints:
+ *   GET  /auth/v1/oauth/authorizations/:id
+ *   POST /auth/v1/oauth/authorizations/:id/consent   body: { action: 'approve'|'deny' }
+ */
+async function callOAuth(
+  authorizationId: string,
+  accessToken: string,
+  method: "GET" | "POST",
+  action?: "approve" | "deny",
+): Promise<{ data: any; error: { message: string } | null }> {
+  const suffix = method === "POST" ? "/consent" : "";
+  const url = `${SUPABASE_URL}/auth/v1/oauth/authorizations/${encodeURIComponent(authorizationId)}${suffix}`;
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: method === "POST" ? JSON.stringify({ action }) : undefined,
+    });
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : null;
+    if (!res.ok) {
+      return { data: null, error: { message: data?.msg ?? data?.error_description ?? data?.error ?? `HTTP ${res.status}` } };
+    }
+    return { data, error: null };
+  } catch (e: any) {
+    return { data: null, error: { message: e?.message ?? "Network error" } };
+  }
+}
 
 export default function OAuthConsent() {
   const [params] = useSearchParams();
@@ -24,40 +55,37 @@ export default function OAuthConsent() {
     let active = true;
     (async () => {
       if (!authorizationId) return setError("Missing authorization_id");
+      if (!SUPABASE_URL || !SUPABASE_KEY) return setError("OAuth server is not configured for this build.");
       const { data: sess } = await supabase.auth.getSession();
       if (!sess.session) {
         const next = window.location.pathname + window.location.search;
         window.location.href = "/auth?next=" + encodeURIComponent(next);
         return;
       }
-      try {
-        const { data, error } = await oauth.getAuthorizationDetails(authorizationId);
-        if (!active) return;
-        if (error) return setError(error.message);
-        const immediate = data?.redirect_url ?? data?.redirect_to;
-        if (immediate && !data?.client) { window.location.href = immediate; return; }
-        setDetails(data);
-      } catch (e: any) {
-        if (active) setError(e?.message ?? "Failed to load authorization request");
-      }
+      const { data, error } = await callOAuth(authorizationId, sess.session.access_token, "GET");
+      if (!active) return;
+      if (error) return setError(error.message);
+      const immediate = data?.redirect_url ?? data?.redirect_to;
+      if (immediate && !data?.client) { window.location.href = immediate; return; }
+      setDetails(data);
     })();
     return () => { active = false; };
   }, [authorizationId]);
 
   async function decide(approve: boolean) {
     setBusy(true);
-    try {
-      const { data, error } = approve
-        ? await oauth.approveAuthorization(authorizationId)
-        : await oauth.denyAuthorization(authorizationId);
-      if (error) { setBusy(false); return setError(error.message); }
-      const target = data?.redirect_url ?? data?.redirect_to;
-      if (!target) { setBusy(false); return setError("No redirect returned by the authorization server."); }
-      window.location.href = target;
-    } catch (e: any) {
-      setBusy(false);
-      setError(e?.message ?? "Authorization failed");
-    }
+    const { data: sess } = await supabase.auth.getSession();
+    if (!sess.session) { setBusy(false); return setError("Session expired. Please sign in again."); }
+    const { data, error } = await callOAuth(
+      authorizationId,
+      sess.session.access_token,
+      "POST",
+      approve ? "approve" : "deny",
+    );
+    if (error) { setBusy(false); return setError(error.message); }
+    const target = data?.redirect_url ?? data?.redirect_to;
+    if (!target) { setBusy(false); return setError("No redirect returned by the authorization server."); }
+    window.location.href = target;
   }
 
   if (error) {
