@@ -33,6 +33,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 const AccountDetail = lazy(() => import("./pages/AccountDetail"));
 const OpportunityDetail = lazy(() => import("./pages/OpportunityDetail"));
 const Auth = lazy(() => import("./pages/Auth"));
+const OAuthConsent = lazy(() => import("./pages/OAuthConsent"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const Coach = lazy(() => import("./pages/Coach"));
 const PrepHub = lazy(() => import("./pages/PrepHub"));
@@ -157,6 +158,7 @@ const App = () => (
                 <Routes>
                   <Route path="/auth" element={<Suspense fallback={<LazyFallback text="Loading…" />}><Auth /></Suspense>} />
                   <Route path="/auth/callback" element={<Suspense fallback={<LazyFallback text="Signing you in…" />}><AuthCallback /></Suspense>} />
+                  <Route path="/.lovable/oauth/consent" element={<Suspense fallback={<LazyFallback text="Loading…" />}><OAuthConsent /></Suspense>} />
                   <Route path="/" element={<Navigate to="/today" replace />} />
                   <Route path="/study" element={<ProtectedPage routeName="Study"><Suspense fallback={<LazyFallback text="Loading study hub…" />}><Study /></Suspense></ProtectedPage>} />
 
