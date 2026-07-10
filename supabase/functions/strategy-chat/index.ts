@@ -1941,6 +1941,28 @@ async function buildContextPack(
       pack.recentSignals = (signalsRes.data ?? []) as any[];
     })());
 
+    // Dossier Strategic POV: pull the "## 00 — STRATEGIC POV" section only.
+    // Dossiers can be 12–29k chars; we ONLY inject the opening reframe /
+    // named opportunities / THE SENTENCE. Falls back to null on any miss.
+    promises.push((async () => {
+      const { data: dos } = await supabase.from('account_dossiers')
+        .select('content_md, version')
+        .eq('account_id', thread.linked_account_id)
+        .eq('is_current', true)
+        .maybeSingle();
+      if (!dos?.content_md) { pack.strategicPov = null; return; }
+      const md: string = dos.content_md;
+      // Match a top-level "## 00 …" or "## STRATEGIC POV …" heading; capture
+      // until the next "## " heading (not "### ") or end of document.
+      const re = /^##[ \t]+(?:0*0\b[^\n]*|strategic\s+pov[^\n]*)\n([\s\S]*?)(?=\n##[ \t]+(?!#)|$)/im;
+      const m = md.match(re);
+      if (!m) { pack.strategicPov = null; return; }
+      const section = m[0].trim();
+      const MAX = 3500;
+      const text = section.length > MAX ? section.slice(0, MAX) + '\n…(truncated)' : section;
+      pack.strategicPov = { text, version: dos.version ?? null };
+    })());
+
     // G2: subsidiaries rollup + branch_pov for the linked account (additive only)
     promises.push((async () => {
       const parentId = thread.linked_account_id;
