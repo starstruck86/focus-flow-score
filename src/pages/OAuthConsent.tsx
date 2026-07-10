@@ -5,43 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SafePage } from "@/components/SafePage";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+// The `supabase.auth.oauth` namespace is beta and may not be typed on the
+// installed SDK version. Guard at runtime and use a local typed shape.
+type OAuthNamespace = {
+  getAuthorizationDetails: (id: string) => Promise<{ data: any; error: { message: string } | null }>;
+  approveAuthorization: (id: string) => Promise<{ data: any; error: { message: string } | null }>;
+  denyAuthorization: (id: string) => Promise<{ data: any; error: { message: string } | null }>;
+};
 
-/**
- * Direct REST calls to the Supabase Auth OAuth 2.1 authorization endpoints.
- * Used instead of `supabase.auth.oauth.*` because the SDK version pinned in
- * this app does not yet expose that namespace. Endpoints:
- *   GET  /auth/v1/oauth/authorizations/:id
- *   POST /auth/v1/oauth/authorizations/:id/consent   body: { action: 'approve'|'deny' }
- */
-async function callOAuth(
-  authorizationId: string,
-  accessToken: string,
-  method: "GET" | "POST",
-  action?: "approve" | "deny",
-): Promise<{ data: any; error: { message: string } | null }> {
-  const suffix = method === "POST" ? "/consent" : "";
-  const url = `${SUPABASE_URL}/auth/v1/oauth/authorizations/${encodeURIComponent(authorizationId)}${suffix}`;
-  try {
-    const res = await fetch(url, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: method === "POST" ? JSON.stringify({ action }) : undefined,
-    });
-    const text = await res.text();
-    const data = text ? JSON.parse(text) : null;
-    if (!res.ok) {
-      return { data: null, error: { message: data?.msg ?? data?.error_description ?? data?.error ?? `HTTP ${res.status}` } };
-    }
-    return { data, error: null };
-  } catch (e: any) {
-    return { data: null, error: { message: e?.message ?? "Network error" } };
-  }
+function getOAuth(): OAuthNamespace | null {
+  const anyAuth = supabase.auth as any;
+  const oauth = anyAuth?.oauth;
+  if (!oauth || typeof oauth.getAuthorizationDetails !== "function") return null;
+  return oauth as OAuthNamespace;
 }
 
 export default function OAuthConsent() {
@@ -55,37 +31,39 @@ export default function OAuthConsent() {
     let active = true;
     (async () => {
       if (!authorizationId) return setError("Missing authorization_id");
-      if (!SUPABASE_URL || !SUPABASE_KEY) return setError("OAuth server is not configured for this build.");
+      const oauth = getOAuth();
+      if (!oauth) return setError("OAuth client is unavailable in this build. Please refresh or contact support.");
+
       const { data: sess } = await supabase.auth.getSession();
       if (!sess.session) {
         const next = window.location.pathname + window.location.search;
         window.location.href = "/auth?next=" + encodeURIComponent(next);
         return;
       }
-      const { data, error } = await callOAuth(authorizationId, sess.session.access_token, "GET");
+      const { data, error } = await oauth.getAuthorizationDetails(authorizationId);
       if (!active) return;
       if (error) return setError(error.message);
       const immediate = data?.redirect_url ?? data?.redirect_to;
-      if (immediate && !data?.client) { window.location.href = immediate; return; }
+      if (immediate) {
+        window.location.assign(immediate);
+        return;
+      }
       setDetails(data);
     })();
     return () => { active = false; };
   }, [authorizationId]);
 
   async function decide(approve: boolean) {
+    const oauth = getOAuth();
+    if (!oauth) return setError("OAuth client is unavailable in this build.");
     setBusy(true);
-    const { data: sess } = await supabase.auth.getSession();
-    if (!sess.session) { setBusy(false); return setError("Session expired. Please sign in again."); }
-    const { data, error } = await callOAuth(
-      authorizationId,
-      sess.session.access_token,
-      "POST",
-      approve ? "approve" : "deny",
-    );
+    const { data, error } = approve
+      ? await oauth.approveAuthorization(authorizationId)
+      : await oauth.denyAuthorization(authorizationId);
     if (error) { setBusy(false); return setError(error.message); }
     const target = data?.redirect_url ?? data?.redirect_to;
     if (!target) { setBusy(false); return setError("No redirect returned by the authorization server."); }
-    window.location.href = target;
+    window.location.assign(target);
   }
 
   if (error) {
