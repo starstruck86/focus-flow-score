@@ -2330,14 +2330,33 @@ function packToPromptSection(pack: ContextPack): string {
   }
 
   // Dossier Strategic POV — the reframe / named opportunities / THE SENTENCE
+  let __dossierIncluded = false;
+  let __dossierChars = 0;
+  let __dossierSkipReason: string | null = null;
   if (pack.strategicPov?.text) {
     const v = pack.strategicPov.version != null ? ` v${pack.strategicPov.version}` : '';
     const block = `\n### Account Strategic POV (from dossier${v})\n${pack.strategicPov.text}`;
     if (charBudget - block.length > 0) {
       sections.push(block);
       charBudget -= block.length;
+      __dossierIncluded = true;
+      __dossierChars = block.length;
+    } else {
+      __dossierSkipReason = `budget_exceeded (needed ${block.length}, had ${charBudget})`;
     }
+  } else {
+    __dossierSkipReason = 'no_strategic_pov_extracted';
   }
+  try {
+    console.log('[dossier-inject]', JSON.stringify({
+      included: __dossierIncluded,
+      chars: __dossierChars,
+      version: pack.strategicPov?.version ?? null,
+      pov_text_len: pack.strategicPov?.text?.length ?? 0,
+      skip_reason: __dossierSkipReason,
+      linked_account_id: (pack as any)?.account?.id ?? null,
+    }));
+  } catch { /* noop */ }
 
   // G2: Branch POV (linked account's owned point-of-view rows)
   if (pack.branchPov && pack.branchPov.length > 0) {
