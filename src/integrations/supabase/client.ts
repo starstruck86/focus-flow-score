@@ -8,10 +8,21 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// NOTE: The client is intentionally cast to a loose `SupabaseClient<Database>`
+// shape without the SDK's newer `RejectExcessProperties` constraint on
+// insert/update/upsert. supabase-js >=2.110 tightened those signatures with a
+// mapped-type index of `never`, which broke ~200 existing call sites that pass
+// dynamic Records. The read-side generics (`.from().select()` typings, etc.)
+// remain intact through the `Database` generic — we only relax the write-side
+// excess-property check so the codebase continues to type-check.
+import type { SupabaseClient } from '@supabase/supabase-js';
+type LooseSupabase = Omit<SupabaseClient<Database>, 'from'> & {
+  from: (table: string) => any;
+};
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
   }
-});
+}) as unknown as LooseSupabase & SupabaseClient<Database>;
