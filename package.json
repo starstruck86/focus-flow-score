@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "analyze": "ANALYZE=true vite build"
+    "analyze": "ANALYZE=true vite build",
+    "postinstall": "bash scripts/patch-postgrest-types.sh || true"
   },
   "dependencies": {
     "@elevenlabs/react": "^0.14.3",
