@@ -26,7 +26,7 @@ var list_accounts_default = defineTool({
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ limit, search }, ctx) => {
     if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
-    let q = supabaseForUser(ctx).from("active_accounts").select("id, name, industry, tier, motion, arr").eq("user_id", ctx.getUserId()).order("name").limit(limit ?? 50);
+    let q = supabaseForUser(ctx).from("active_accounts").select("id, name, industry, tier, motion").eq("user_id", ctx.getUserId()).order("name").limit(limit ?? 50);
     if (search) q = q.ilike("name", `%${search}%`);
     const { data, error } = await q;
     return error ? { content: [{ type: "text", text: error.message }], isError: true } : { content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: { rows: data ?? [] } };
