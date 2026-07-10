@@ -39,7 +39,7 @@ async function callClaude(
   }
 
   const start = Date.now();
-  const model = "claude-sonnet-4-5-20250929";
+  const model = "claude-sonnet-4-6";
 
   try {
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -121,8 +121,8 @@ async function callOpenAI(
       ],
       tools: [tool],
       tool_choice: { type: "function", function: { name: tool.function.name } },
-      temperature: 0.5,
-      max_tokens: 4096,
+      // gpt-5 series requires `max_completion_tokens` (not `max_tokens`) and does not accept custom `temperature`.
+      max_completion_tokens: 4096,
     }),
   });
 

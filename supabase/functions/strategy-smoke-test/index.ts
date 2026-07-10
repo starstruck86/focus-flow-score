@@ -49,7 +49,8 @@ async function infraOpenAI(): Promise<TestResult> {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       signal: controller.signal,
-      body: JSON.stringify({ model: "gpt-5-mini", messages: [{ role: "user", content: "Say: ok" }], max_tokens: 10, temperature: 0 }),
+      // gpt-5 series requires `max_completion_tokens` (not `max_tokens`) and does not accept custom `temperature`.
+      body: JSON.stringify({ model: "gpt-5-mini", messages: [{ role: "user", content: "Say: ok" }], max_completion_tokens: 10 }),
     });
     if (!resp.ok) { const t = await resp.text().catch(() => ""); throw new Error(`HTTP ${resp.status}: ${t.slice(0, 100)}`); }
     const data = await resp.json();
@@ -103,7 +104,7 @@ async function infraAnthropicTool(): Promise<TestResult> {
       headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       signal: controller.signal,
       body: JSON.stringify({
-        model: "claude-sonnet-4-5-20250929", max_tokens: 200,
+        model: "claude-sonnet-4-6", max_tokens: 200,
         messages: [{ role: "user", content: "Generate a test email subject line about product updates." }],
         tools: [{ name: "test_tool", description: "Return a subject line.", input_schema: { type: "object", properties: { subject: { type: "string" } }, required: ["subject"] } }],
         tool_choice: { type: "tool", name: "test_tool" }, temperature: 0.3,
@@ -116,7 +117,7 @@ async function infraAnthropicTool(): Promise<TestResult> {
     assert(structured?.subject, "Missing subject in tool output");
     const ms = Date.now() - start;
     console.log(`[smoke-test][infra] provider_connectivity_anthropic_tool PASS latency=${ms}ms`);
-    return { test: "provider_connectivity_anthropic_tool", category: "infra", passed: true, provider: "anthropic", model: "claude-sonnet-4-5-20250929", fallback: false, latency_ms: ms };
+    return { test: "provider_connectivity_anthropic_tool", category: "infra", passed: true, provider: "anthropic", model: "claude-sonnet-4-6", fallback: false, latency_ms: ms };
   } catch (e: any) {
     console.error(`[smoke-test][infra] provider_connectivity_anthropic_tool FAIL: ${e.message}`);
     return { test: "provider_connectivity_anthropic_tool", category: "infra", passed: false, error: e.message };
