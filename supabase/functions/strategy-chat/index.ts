@@ -2322,6 +2322,16 @@ function packToPromptSection(pack: ContextPack): string {
     sections.push(sigSection);
   }
 
+  // Dossier Strategic POV — the reframe / named opportunities / THE SENTENCE
+  if (pack.strategicPov?.text) {
+    const v = pack.strategicPov.version != null ? ` v${pack.strategicPov.version}` : '';
+    const block = `\n### Account Strategic POV (from dossier${v})\n${pack.strategicPov.text}`;
+    if (charBudget - block.length > 0) {
+      sections.push(block);
+      charBudget -= block.length;
+    }
+  }
+
   // G2: Branch POV (linked account's owned point-of-view rows)
   if (pack.branchPov && pack.branchPov.length > 0) {
     let povSection = `\n### Branch POV (${pack.branchPov.length})`;
