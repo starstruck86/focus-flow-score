@@ -41,7 +41,7 @@ export default defineTool({
     const sb = supabaseForUser(ctx);
     const userId = ctx.getUserId();
     const [{ data: acct, error: aErr }, { data: opps }, { data: dossier }] = await Promise.all([
-      sb.from("active_accounts").select("id, name, industry, tier, motion, arr, notes").eq("user_id", userId).eq("id", account_id).maybeSingle(),
+      sb.from("active_accounts").select("id, name, industry, tier, motion, notes").eq("user_id", userId).eq("id", account_id).maybeSingle(),
       sb.from("opportunities").select("id, name, stage, amount, close_date").eq("user_id", userId).eq("account_id", account_id).order("close_date", { ascending: true }),
       sb.from("account_dossiers").select("markdown, updated_at").eq("user_id", userId).eq("account_id", account_id).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
     ]);

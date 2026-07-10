@@ -22,7 +22,7 @@ export default defineTool({
     if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
     let q = supabaseForUser(ctx)
       .from("active_accounts")
-      .select("id, name, industry, tier, motion, arr")
+      .select("id, name, industry, tier, motion")
       .eq("user_id", ctx.getUserId())
       .order("name")
       .limit(limit ?? 50);
