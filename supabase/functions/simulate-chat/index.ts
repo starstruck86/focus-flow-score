@@ -33,6 +33,7 @@ serve(async (req) => {
 
     const body = await req.json();
     const { messages, system, isGradeMode, accountContext } = body;
+    const { primary: modelId } = await getModelConfig('simulate-chat');
 
     const accountSection = accountContext?.account ? `
 You are roleplaying as a senior marketing or technology executive at ${accountContext.account.name}, a ${accountContext.account.tier ?? 'target'}-tier ${accountContext.account.industry ?? 'enterprise'} company${accountContext.account.hq_city ? ` based in ${accountContext.account.hq_city}` : ''}.
@@ -71,7 +72,7 @@ Grade this conversation on a 0-100 scale. Return ONLY valid JSON:
 }`;
 
       const gradeRes = await callAnthropic({
-        model: 'claude-haiku-4-5-20251001',
+        model: modelId,
         max_tokens: 600,
         messages: [{ role: 'user', content: gradePrompt }],
       });
@@ -90,7 +91,7 @@ Grade this conversation on a 0-100 scale. Return ONLY valid JSON:
     }
 
     const response = await callAnthropic({
-      model: 'claude-haiku-4-5-20251001',
+      model: modelId,
       max_tokens: 250,
       system: accountSection ? `${accountSection}\n\n${system ?? ''}` : system,
       messages,
