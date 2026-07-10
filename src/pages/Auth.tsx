@@ -30,7 +30,7 @@ export default function Auth() {
     if (!loading && session && user) {
       // Use a full-location change when returning to an OAuth consent URL so
       // React Router picks up the query string correctly.
-      if (next.startsWith('/.lovable/oauth/consent')) {
+      if (next.startsWith('/.lovable/oauth/consent') || next.startsWith('/oauth/consent')) {
         window.location.href = next;
       } else {
         navigate(next);
