@@ -5,19 +5,42 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SafePage } from "@/components/SafePage";
 
-// The `supabase.auth.oauth` namespace is beta and may not be typed on the
-// installed SDK version. Guard at runtime and use a local typed shape.
-type OAuthNamespace = {
-  getAuthorizationDetails: (id: string) => Promise<{ data: any; error: { message: string } | null }>;
-  approveAuthorization: (id: string) => Promise<{ data: any; error: { message: string } | null }>;
-  denyAuthorization: (id: string) => Promise<{ data: any; error: { message: string } | null }>;
-};
+// REST-based OAuth consent implementation.
+// The installed @supabase/supabase-js does not reliably expose
+// `supabase.auth.oauth.*` in production bundles, so we call the documented
+// Supabase Auth OAuth endpoints directly with the user's access token.
 
-function getOAuth(): OAuthNamespace | null {
-  const anyAuth = supabase.auth as any;
-  const oauth = anyAuth?.oauth;
-  if (!oauth || typeof oauth.getAuthorizationDetails !== "function") return null;
-  return oauth as OAuthNamespace;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
+async function authFetch(path: string, accessToken: string, init: RequestInit = {}) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${accessToken}`,
+      ...(init.headers ?? {}),
+    },
+  });
+  const text = await res.text();
+  let json: any = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* keep null */ }
+  if (!res.ok) {
+    const message = json?.error_description || json?.message || json?.error || `HTTP ${res.status}`;
+    return { data: null as any, error: { message } };
+  }
+  return { data: json, error: null as null };
+}
+
+async function getAuthorizationDetails(id: string, token: string) {
+  return authFetch(`/oauth/authorizations/${encodeURIComponent(id)}`, token);
+}
+async function approveAuthorization(id: string, token: string) {
+  return authFetch(`/oauth/authorizations/${encodeURIComponent(id)}/approve`, token, { method: "POST" });
+}
+async function denyAuthorization(id: string, token: string) {
+  return authFetch(`/oauth/authorizations/${encodeURIComponent(id)}/deny`, token, { method: "POST" });
 }
 
 export default function OAuthConsent() {
@@ -26,25 +49,28 @@ export default function OAuthConsent() {
   const [details, setDetails] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     (async () => {
       if (!authorizationId) return setError("Missing authorization_id");
-      const oauth = getOAuth();
-      if (!oauth) return setError("OAuth client is unavailable in this build. Please refresh or contact support.");
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return setError("Auth is not configured for this build.");
 
       const { data: sess } = await supabase.auth.getSession();
-      if (!sess.session) {
+      const accessToken = sess.session?.access_token;
+      if (!accessToken) {
         const next = window.location.pathname + window.location.search;
         window.location.href = "/auth?next=" + encodeURIComponent(next);
         return;
       }
-      const { data, error } = await oauth.getAuthorizationDetails(authorizationId);
+      setToken(accessToken);
+
+      const { data, error } = await getAuthorizationDetails(authorizationId, accessToken);
       if (!active) return;
       if (error) return setError(error.message);
       const immediate = data?.redirect_url ?? data?.redirect_to;
-      if (immediate) {
+      if (immediate && !data?.client) {
         window.location.assign(immediate);
         return;
       }
@@ -54,12 +80,11 @@ export default function OAuthConsent() {
   }, [authorizationId]);
 
   async function decide(approve: boolean) {
-    const oauth = getOAuth();
-    if (!oauth) return setError("OAuth client is unavailable in this build.");
+    if (!token) return setError("Session expired. Please sign in again.");
     setBusy(true);
     const { data, error } = approve
-      ? await oauth.approveAuthorization(authorizationId)
-      : await oauth.denyAuthorization(authorizationId);
+      ? await approveAuthorization(authorizationId, token)
+      : await denyAuthorization(authorizationId, token);
     if (error) { setBusy(false); return setError(error.message); }
     const target = data?.redirect_url ?? data?.redirect_to;
     if (!target) { setBusy(false); return setError("No redirect returned by the authorization server."); }
