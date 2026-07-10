@@ -1963,9 +1963,26 @@ async function buildContextPack(
       nextRe.lastIndex = bodyStart;
       const nextMatch = nextRe.exec(md);
       const endIdx = nextMatch ? nextMatch.index : md.length;
-      const section = md.slice(startIdx, endIdx).trim();
+      let section = md.slice(startIdx, endIdx).trim();
       if (!section) { pack.strategicPov = null; return; }
-      const MAX = 3500;
+      // Also capture an immediately-preceding "## KEY NUMBERS" section if present —
+      // it holds the cleanest citable dollar figures and should travel with the POV.
+      const preSlice = md.slice(0, startIdx);
+      const keyNumsRe = /^##[ \t]+key\s+numbers[^\n]*$/gim;
+      let lastKN: RegExpExecArray | null = null;
+      let m: RegExpExecArray | null;
+      while ((m = keyNumsRe.exec(preSlice)) !== null) lastKN = m;
+      if (lastKN && lastKN.index != null) {
+        const knStart = lastKN.index;
+        const knBodyStart = knStart + lastKN[0].length;
+        const knNextRe = /\n##[ \t]+(?!#)/g;
+        knNextRe.lastIndex = knBodyStart;
+        const knNext = knNextRe.exec(md);
+        const knEnd = knNext && knNext.index <= startIdx ? knNext.index : startIdx;
+        const knSection = md.slice(knStart, knEnd).trim();
+        if (knSection) section = knSection + '\n\n' + section;
+      }
+      const MAX = 5000;
       const text = section.length > MAX ? section.slice(0, MAX) + '\n…(truncated)' : section;
       pack.strategicPov = { text, version: dos.version ?? null };
     })());
@@ -2335,7 +2352,7 @@ function packToPromptSection(pack: ContextPack): string {
   let __dossierSkipReason: string | null = null;
   if (pack.strategicPov?.text) {
     const v = pack.strategicPov.version != null ? ` v${pack.strategicPov.version}` : '';
-    const usageDirective = `\n\n**How to use the Account Strategic POV above:** This section contains hard-won, account-specific intelligence — a named reframe, named opportunities with dollar figures, and a pre-written "Sentence" for opening high-stakes conversations. When relevant to the user's question, USE THIS MATERIAL DIRECTLY: cite the specific dollar figures verbatim, name the opportunities by their given names (not generic descriptions like "the mobile initiative"), and when the user asks about opening a conversation, making a strategic pitch, or framing the account, offer THE SENTENCE close to verbatim rather than paraphrasing it into generic advice. Do not water down specific numbers into vague language like "significant investment" or "meaningful spend" — use the actual figures. Do not re-derive a reframe when one is already provided; lead with the one above.`;
+    const usageDirective = `\n\n**How to use the Account Strategic POV above:** This section contains hard-won, account-specific intelligence — a named reframe, named opportunities with dollar figures, and a pre-written "Sentence" for opening high-stakes conversations. When relevant to the user's question, USE THIS MATERIAL DIRECTLY: cite the specific dollar figures verbatim, name the opportunities by their given names (not generic descriptions like "the mobile initiative"), and when the user asks about opening a conversation, making a strategic pitch, or framing the account, offer THE SENTENCE close to verbatim rather than paraphrasing it into generic advice. Do not water down specific numbers into vague language like "significant investment" or "meaningful spend" — use the actual figures. Do not re-derive a reframe when one is already provided; lead with the one above.\n\n**Minimum bar (non-negotiable):** When answering, you MUST cite at least one specific dollar figure from the material above (not a rounded or vague restatement), and when the user's question involves opening a conversation, pitching, or framing the account strategically, output THE SENTENCE as its own standalone quoted paragraph — not paraphrased into your own words, not blended into surrounding sentences. If a named opportunity from the material is relevant, use its exact given name (e.g. "The Tentpole Proof Engine", not "the tentpole initiative").`;
     const block = `\n### Account Strategic POV (from dossier${v})\n${pack.strategicPov.text}${usageDirective}`;
     if (charBudget - block.length > 0) {
       sections.push(block);
