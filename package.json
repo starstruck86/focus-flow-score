@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "analyze": "ANALYZE=true vite build"
+    "analyze": "ANALYZE=true vite build",
+    "postinstall": "bash scripts/patch-postgrest-types.sh || true"
   },
   "dependencies": {
     "@elevenlabs/react": "^0.14.3",
@@ -47,7 +48,7 @@
     "@radix-ui/react-toggle-group": "^1.1.10",
     "@radix-ui/react-tooltip": "^1.2.7",
     "@radix-ui/react-visually-hidden": "^1.2.4",
-    "@supabase/supabase-js": "2.49.1",
+    "@supabase/supabase-js": "^2.110.2",
     "@tanstack/react-query": "^5.83.0",
     "@tiptap/extension-highlight": "^3.20.4",
     "@tiptap/extension-image": "^3.20.4",
