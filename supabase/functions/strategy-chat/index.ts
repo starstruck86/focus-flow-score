@@ -1963,9 +1963,26 @@ async function buildContextPack(
       nextRe.lastIndex = bodyStart;
       const nextMatch = nextRe.exec(md);
       const endIdx = nextMatch ? nextMatch.index : md.length;
-      const section = md.slice(startIdx, endIdx).trim();
+      let section = md.slice(startIdx, endIdx).trim();
       if (!section) { pack.strategicPov = null; return; }
-      const MAX = 3500;
+      // Also capture an immediately-preceding "## KEY NUMBERS" section if present —
+      // it holds the cleanest citable dollar figures and should travel with the POV.
+      const preSlice = md.slice(0, startIdx);
+      const keyNumsRe = /^##[ \t]+key\s+numbers[^\n]*$/gim;
+      let lastKN: RegExpExecArray | null = null;
+      let m: RegExpExecArray | null;
+      while ((m = keyNumsRe.exec(preSlice)) !== null) lastKN = m;
+      if (lastKN && lastKN.index != null) {
+        const knStart = lastKN.index;
+        const knBodyStart = knStart + lastKN[0].length;
+        const knNextRe = /\n##[ \t]+(?!#)/g;
+        knNextRe.lastIndex = knBodyStart;
+        const knNext = knNextRe.exec(md);
+        const knEnd = knNext && knNext.index <= startIdx ? knNext.index : startIdx;
+        const knSection = md.slice(knStart, knEnd).trim();
+        if (knSection) section = knSection + '\n\n' + section;
+      }
+      const MAX = 5000;
       const text = section.length > MAX ? section.slice(0, MAX) + '\n…(truncated)' : section;
       pack.strategicPov = { text, version: dos.version ?? null };
     })());
