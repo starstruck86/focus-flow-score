@@ -1,78 +1,84 @@
-# Phase 2 — Explicit `any` Remediation Plan (read-only scan complete)
+# P1c-REAL — Plan (with security-gate resolution first)
 
-## Scan summary
+## Stage 0 — Publish gate (BLOCKS everything until you pick)
 
-| Bucket | Files scanned | Explicit `any` findings |
+The 5 edge-fn criticals from the prior wave are fixed and verified. Publish is still gated by **3 pre-existing criticals**, all outside P1a/b/c scope. Pick one:
+
+**0a. Fix the 3 (recommended, ~S total, keeps posture clean):**
+- `xss_export_docwrite` — add HTML-escape helper + DOMPurify pass in `src/components/prep/ExportMenu.tsx handlePdf()`. ~15 min.
+- `approved_users_email_branch_exposure` — drop email branch from SELECT policy; email-match handled server-side at login (already have an approval check function). Migration + verify nobody currently relies on the email fallback path. ~10 min.
+- `SUPA_security_definer_view` — identify the definer view via `pg_views`, flip to `security_invoker=true` if callers are authed, otherwise add explicit grants and keep. ~10 min.
+
+**0b. Ignore + publish now:** mark all 3 with written justifications via `manage_security_finding`, publish, revisit in a hardening wave.
+
+**0c. Publish without touching (not possible):** the publish tool hard-blocks on critical findings — cannot bypass.
+
+Default if you don't specify: **0a**.
+
+## Stage 1 — Publish current committed state
+`preview_ui--publish` → report live URL + commit SHA + scan-clean line.
+
+## Stage 2 — P1c-REAL atomic wave
+
+### R1 — Layout embed API
+Add `embedded?: boolean` prop to `src/components/Layout.tsx`. When true, suppress: header, `GlobalWeekStrip`, `ActivityRings`, `DayTimeline`, `Breadcrumbs`, `BottomNav`, `BackToToday`. Keep: Dave FAB mount point, safe-area padding, `--shell-nav-height` publisher (hub sets its own rail height). Zero behavior change when prop is absent — verified by rendering each of the 6 targets standalone first.
+
+### R2 — Opt-in the 6 embedding targets
+Add `embedded` prop pass-through (or read `useSearchParams().get('embedded')==='1'`) in each of the 6 page components:
+Strategy, WeeklyOutreach, Deals, Renewals, Study, Dojo.
+
+**Per-page verification table (fail → skip that page, leave it on its own route, report):**
+
+| Page | Standalone (unchanged) | Embedded (no dup chrome) |
 |---|---|---|
-| Auth guards & contexts | `AuthContext.tsx`, `ProtectedRoute.tsx`, `authenticatedFetch.ts`, `useMutationGuard.ts` | **0** (clean) |
-| `useDataSync` row mappers | `src/hooks/useDataSync.ts` | **0** (only reference is a comment on line 284 noting the old `from(table as any)` pattern was already removed) |
-| Resource / extraction pipeline | `resourcePipeline.ts`, `extractionPipeline.ts`, `pipelineContract.ts`, `processingState.ts` | **~55** (heavy) |
-| Edge functions calling AI providers | 40+ `index.ts` files + `_shared/getModelConfig.ts` | **~700+** total (top offenders: strategy-chat 126, generate-time-blocks 80, extract-tactics 58, strategy-benchmark-runner 53, batch-extract-kis 45, territory-copilot 44) |
+| Strategy | check | check |
+| WeeklyOutreach | check | check |
+| Deals | check | check |
+| Renewals | check | check |
+| Study | check | check |
+| Dojo | check | check |
 
-**Headline finding:** the two most security-adjacent buckets (auth & useDataSync) are already `any`-free. Remaining risk lives in the pipeline layer and the AI response-parsing paths.
+Method: mount each page twice in a scratch route, diff DOM structure; screenshot both via Playwright.
 
----
+### R3 — Build /work and /train-hub
 
-## Prioritized remediation order
+`src/pages/Work.tsx`: 4 URL-driven tabs (`?tab=desk|pipeline|territory|strategy`):
+- Desk = thin composition (existing Dashboard quick-actions extracted)
+- Pipeline = `<Deals embedded/>` + `<Renewals embedded/>` (sub-tabs or stacked)
+- Territory = `<WeeklyOutreach embedded/>` + Whitespace-coming placeholder panel
+- Strategy = `<Strategy embedded/>`
 
-### P0 — AI response envelope parsing in edge functions (highest runtime risk)
-The dangerous `any` uses are the ones that touch untrusted provider payloads: `data.choices?.[0]?.message?.content`, `data.content?.[0]?.text`, tool-call arg parsing, and JSON.parse of model output. These currently flow as `any` into downstream DB writes and client responses.
+`src/pages/TrainHub.tsx`: tabs Study / Skills / Review — `<Study embedded/>`, Skills tab (Dojo entry card + Car Mode tile + belt/gate card), Review links tab.
 
-Recommended order:
-1. **`_shared/getModelConfig.ts`** — small, foundational. Type the config row + return shape first so every downstream function inherits typed model info. (est. 1–3 `any`.)
-2. **`_shared/` helper — add `AnthropicResponse`, `OpenAIChatResponse`, `LovableGatewayResponse`, `PerplexityResponse`, `ElevenLabsSTTResponse` narrow types** (new file, e.g. `_shared/aiResponseTypes.ts`). Not a fix on its own, but unblocks every P0 function.
-3. **`strategy-chat/index.ts` (126)** — largest surface, writes citations + telemetry. Highest blast radius; do after the shared types exist.
-4. **`grade-transcript` (17), `strategy-transform-output` (11), `strategy-smoke-test` (22)** — recently touched; small, high-value wins that also re-verify smoke-test contract.
-5. **Score/grade family:** `dojo-score`, `dojo-review-score`, `dojo-roleplay-score`, `car-mode-score`, `car-mode-audio-score`, `grade-mock-call`, `score-original-response`, `score-micro-drill` — same JSON-out-of-model shape; typing one gives a template for the rest.
-6. **Extraction family:** `batch-extract-kis` (45), `extract-tactics` (58), `extract-scenarios`, `extract-tasks`, `extract-strategy-memory`, `preprocess-transcript` — these write KIs to DB, so bad parsing = corrupt training corpus.
-7. **Voice/audio:** `elevenlabs-stt`, `elevenlabs-transcribe`, `transcribe-audio`, `elevenlabs-tts-stream`, `dave-conversation-token` (31) — provider payload shapes are stable and small; quick wins.
-8. **Remaining chat/generation functions** (generate-time-blocks 80, territory-copilot 44, weekly-battle-plan 12, daily-digest 6, simulate-chat, clean-baseline, pdf-ocr, expand-prompt, voice-command, analyze-call, analyze-sentiment, analyze-deal-outcome, discover-*, parse-*, prioritize-accounts, source-icp-accounts, suggest-*, generate-*, playbook-roleplay, mock-call, branch-intelligence, etc.).
+Hub-level single header; amber accent on `/work*`, jade on `/train-hub*`.
 
-**Risk if left as `any`:** silent shape drift when a provider changes response envelope (already bit us with `claude-sonnet-4-20250514` retirement and `max_tokens` → `max_completion_tokens`); malformed JSON.parse can throw uncaught and 500 the function; typos in `.choices[0].message.content` go undetected.
+### R4 — One rail
+New `src/components/nav/PrimaryRail.tsx` with 3 items: Today / Work / Train + Dave FAB. Remove renders of `BottomNav` (both rows), `StrategyGlobalNavBar`, `BackToToday` from `Layout.tsx`. Active tint amber on `/work*`, jade on `/train-hub*`, neutral on `/today`.
 
-### P1 — `src/lib/extractionPipeline.ts` (~40 `any`)
-Every DB call uses `(supabase as any).from(...)`, and helpers `computePriorityScore(resource: any)`, `diagnoseBlockReason(resource: any)`, `assignQueue(resource: any, ...)`, plus `.map((r: any) => ...)`, `.map((k: any) => ...)`, `recentJobs: any[]`, `catch (err: any)`.
+### R5 — Flip route constants
+`src/lib/routes.ts` (or wherever `ROUTES.work` / `ROUTES.train` live): point `work → '/work'`, `train → '/train-hub'`. Update `ROUTE_ALIASES` in `src/components/dave/tools/navigation.ts` accordingly. `/dashboard → /` still held.
 
-**Why risky:** this file writes to `resources`, `extraction_pipeline_jobs`, `knowledge_items`. `(supabase as any)` defeats generated `Database` types, so column renames / removals compile silently. Priority scoring on `resource: any` means a missing field is `undefined` and scores land at 0 — invisible corruption of the queue.
+### R6 — Acceptance
+Print the Step-0 reachability table with NEW access path per destination. Verify:
+- every old Dave voice target still resolves (from prior audit)
+- tab deep links (`/work?tab=pipeline` etc.) work
+- resume pill (`user_settings.last_surface_path`) lands inside hub tabs when path includes `?tab=`
+- one nav system per route class
+- `tsgo --noEmit` green
+- **publish to production** → report live URL + commit SHA
 
-**Remediation:** import `Database` from `@/integrations/supabase/types`, alias `Resource = Tables<'resources'>`, `PipelineJob = Tables<'extraction_pipeline_jobs'>`, `KnowledgeItem = Tables<'knowledge_items'>`. Replace `(supabase as any).from('X')` with typed `supabase.from('X')` — the `as any` is only there because the file predates the generated types being current. If a column is genuinely missing from generated types, that's a schema-vs-types drift bug to log, not paper over.
+### Rollback (per element, reversible)
+- Layout embed prop: default-false; removing the prop pass in a target restores full chrome.
+- New hubs: routes are additive; deleting `Work.tsx`/`TrainHub.tsx` + removing routes reverts.
+- Rail: keep old `BottomNav`/`StrategyGlobalNavBar` files in tree (unimported) — restore by re-mounting.
+- Route flip: revert 2 lines in `ROUTES` + 2 lines in `ROUTE_ALIASES`.
 
-### P2 — `src/lib/resourcePipeline.ts` (~10 `any`)
-Mostly `metadata: (…) as any`, `trackedInvoke<any>`, and `(result.data as any).summary / .tasks`.
+## Risk / skip discipline
+Any page failing R2 verification stays on its old route, is NOT embedded in a hub, gets a note in the acceptance table (e.g. "Renewals: standalone only this wave"). Hubs still ship for the pages that pass.
 
-**Why risky:** the `result.data as any` reads land straight in DB updates (`extracted_actions`, `summary`). Same class of bug as P0 — untyped model output written to app tables.
+## What I need from you
+1. Stage 0 pick: **0a** (fix 3), **0b** (ignore 3), or leave default (0a).
+2. Confirm PrimaryRail label preference: "Today / Work / Train" as spec'd (or different).
+3. Confirm embed mechanism: `embedded` prop pass-through (cleaner) vs URL param (`?embedded=1`, works with plain `<iframe>`-free embedding but leaks into browser history). I recommend **prop**.
 
-**Remediation:** define response DTOs per edge function (`EnrichResourceResponse`, `OperationalizeResourceResponse`, `ExtractTasksResponse`) in `src/lib/edgeFunctionTypes.ts` and thread them through `trackedInvoke<T>` / `invokeEnrichResource<T>` generics. Type `metadata` as `Json` from generated types instead of `any`.
-
-### P3 — `src/lib/processingState.ts` (~6 `any`)
-All are `(resource as any).content_length / .manual_content_present / .resolution_method`.
-
-**Why risky:** these three fields drive whether a resource is treated as "resolved via manual content" — a silent typo demotes recovered resources back to failed state.
-
-**Remediation:** widen the shared `Resource` type (or create `ResourceWithRecovery`) so these three columns are first-class. Confirm the columns exist in the generated `Database` type; if they do, the cast is unnecessary and can just be deleted.
-
-### P4 — `src/lib/pipelineContract.ts` (2 `any`)
-`ENRICHED_STATUSES.includes(resource.enrichment_status as any)` twice.
-
-**Why risky:** low. Just a `readonly string[].includes(x)` TS narrowing quirk.
-
-**Remediation:** either widen `ENRICHED_STATUSES` to `readonly EnrichmentStatus[]` or use `(ENRICHED_STATUSES as readonly string[]).includes(resource.enrichment_status ?? '')`. Trivial.
-
-### P5 — Auth & useDataSync
-**No action.** Confirmed clean. Note in the tracking doc so future scanners don't re-open.
-
----
-
-## Suggested execution shape (when we move to build mode)
-
-1. **Batch A (foundations, ~1 session):** P4 pipelineContract, P3 processingState, add `_shared/aiResponseTypes.ts`, add `src/lib/edgeFunctionTypes.ts`, type `_shared/getModelConfig.ts`. No behavior change; typecheck must stay green.
-2. **Batch B (pipeline hardening, ~1 session):** P2 resourcePipeline + P1 extractionPipeline. Requires re-verifying generated `Database` types are current; may surface real schema drift to log.
-3. **Batch C (edge functions, staged):** P0 in the priority sub-order above, one function group per deploy so smoke tests catch shape regressions early. Never batch strategy-chat with other functions.
-
-## Non-goals for Phase 2
-- Do **not** enable `noImplicitAny` compiler flag in this phase — corpus is too large; treat as a Phase 3 gate after Batches A–C land.
-- Do **not** touch `src/integrations/supabase/types.ts` (auto-generated).
-- Do **not** rewrite pipeline logic while retyping — pure type work only, matches the discipline used in the Motion rename tranche.
-
-## Reporting artifact
-After each batch, produce a short diff of `rg -c ": any\b|<any>|as any\b|any\[\]" <files>` before/after so the burn-down is visible.
+Answer these three and I run Stages 0→2 straight through with no further check-ins until the final acceptance report.
