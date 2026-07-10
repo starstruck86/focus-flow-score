@@ -2335,7 +2335,8 @@ function packToPromptSection(pack: ContextPack): string {
   let __dossierSkipReason: string | null = null;
   if (pack.strategicPov?.text) {
     const v = pack.strategicPov.version != null ? ` v${pack.strategicPov.version}` : '';
-    const block = `\n### Account Strategic POV (from dossier${v})\n${pack.strategicPov.text}`;
+    const usageDirective = `\n\n**How to use the Account Strategic POV above:** This section contains hard-won, account-specific intelligence — a named reframe, named opportunities with dollar figures, and a pre-written "Sentence" for opening high-stakes conversations. When relevant to the user's question, USE THIS MATERIAL DIRECTLY: cite the specific dollar figures verbatim, name the opportunities by their given names (not generic descriptions like "the mobile initiative"), and when the user asks about opening a conversation, making a strategic pitch, or framing the account, offer THE SENTENCE close to verbatim rather than paraphrasing it into generic advice. Do not water down specific numbers into vague language like "significant investment" or "meaningful spend" — use the actual figures. Do not re-derive a reframe when one is already provided; lead with the one above.`;
+    const block = `\n### Account Strategic POV (from dossier${v})\n${pack.strategicPov.text}${usageDirective}`;
     if (charBudget - block.length > 0) {
       sections.push(block);
       charBudget -= block.length;
