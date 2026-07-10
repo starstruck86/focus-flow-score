@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,8 +9,18 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
+// Only allow same-origin relative paths so OAuth consent redirects can't be
+// weaponized to send the user off-site.
+function safeNext(raw: string | null): string {
+  if (!raw) return '/';
+  if (!raw.startsWith('/') || raw.startsWith('//')) return '/';
+  return raw;
+}
+
 export default function Auth() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const next = useMemo(() => safeNext(params.get('next')), [params]);
   const { session, user, loading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,13 +28,19 @@ export default function Auth() {
 
   useEffect(() => {
     if (!loading && session && user) {
-      navigate('/');
+      // Use a full-location change when returning to an OAuth consent URL so
+      // React Router picks up the query string correctly.
+      if (next.startsWith('/.lovable/oauth/consent')) {
+        window.location.href = next;
+      } else {
+        navigate(next);
+      }
     }
-  }, [session, user, loading, navigate]);
+  }, [session, user, loading, navigate, next]);
 
   const handleGoogleSignIn = async () => {
     const { error } = await lovable.auth.signInWithOAuth('google', {
-      redirect_uri: `${window.location.origin}/auth/callback`,
+      redirect_uri: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
     });
     if (error) {
       console.error('Sign in error:', error);
@@ -41,6 +57,7 @@ export default function Auth() {
       toast.error(error.message);
     }
   };
+
 
   if (loading) {
     return (
