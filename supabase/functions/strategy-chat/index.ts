@@ -1796,6 +1796,7 @@ interface ContextPack {
   }>;
   subsidiariesTotalCount?: number;
   branchPov?: Array<{ surface: string; target_status: string | null; conviction: number | null; ratified: boolean | null }>;
+  strategicPov?: { text: string; version: number | null } | null;
   retrievalMeta: {
     memoriesScored: number;
     uploadsIncluded: number;
@@ -1938,6 +1939,35 @@ async function buildContextPack(
       pack.branchFootprint = fpRes.data ?? null;
       pack.recentCalls = (callsRes.data ?? []) as any[];
       pack.recentSignals = (signalsRes.data ?? []) as any[];
+    })());
+
+    // Dossier Strategic POV: pull the "## 00 — STRATEGIC POV" section only.
+    // Dossiers can be 12–29k chars; we ONLY inject the opening reframe /
+    // named opportunities / THE SENTENCE. Falls back to null on any miss.
+    promises.push((async () => {
+      const { data: dos } = await supabase.from('account_dossiers')
+        .select('content_md, version')
+        .eq('account_id', thread.linked_account_id)
+        .eq('is_current', true)
+        .maybeSingle();
+      if (!dos?.content_md) { pack.strategicPov = null; return; }
+      const md: string = dos.content_md;
+      // Locate the "## 00 …" or "## STRATEGIC POV …" heading, then slice
+      // to the next top-level "## " heading (not "### ") or EOF.
+      const startRe = /^##[ \t]+(?:0*0\b[^\n]*|strategic\s+pov[^\n]*)$/im;
+      const startMatch = md.match(startRe);
+      if (!startMatch || startMatch.index == null) { pack.strategicPov = null; return; }
+      const startIdx = startMatch.index;
+      const bodyStart = startIdx + startMatch[0].length;
+      const nextRe = /\n##[ \t]+(?!#)/g;
+      nextRe.lastIndex = bodyStart;
+      const nextMatch = nextRe.exec(md);
+      const endIdx = nextMatch ? nextMatch.index : md.length;
+      const section = md.slice(startIdx, endIdx).trim();
+      if (!section) { pack.strategicPov = null; return; }
+      const MAX = 3500;
+      const text = section.length > MAX ? section.slice(0, MAX) + '\n…(truncated)' : section;
+      pack.strategicPov = { text, version: dos.version ?? null };
     })());
 
     // G2: subsidiaries rollup + branch_pov for the linked account (additive only)
@@ -2297,6 +2327,16 @@ function packToPromptSection(pack: ContextPack): string {
       sigSection += line; charBudget -= line.length;
     }
     sections.push(sigSection);
+  }
+
+  // Dossier Strategic POV — the reframe / named opportunities / THE SENTENCE
+  if (pack.strategicPov?.text) {
+    const v = pack.strategicPov.version != null ? ` v${pack.strategicPov.version}` : '';
+    const block = `\n### Account Strategic POV (from dossier${v})\n${pack.strategicPov.text}`;
+    if (charBudget - block.length > 0) {
+      sections.push(block);
+      charBudget -= block.length;
+    }
   }
 
   // G2: Branch POV (linked account's owned point-of-view rows)
