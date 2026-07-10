@@ -11285,6 +11285,14 @@ export type Database = {
       }
       is_approved_user: { Args: { _user_id: string }; Returns: boolean }
       monitor_counts: { Args: never; Returns: Json }
+      morning_line_signals: {
+        Args: never
+        Returns: {
+          account_name: string
+          days_old: number
+          so_what: string
+        }[]
+      }
       signal_dimension_weakness: {
         Args: {
           p_signal_score: number
