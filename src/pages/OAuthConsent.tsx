@@ -6,9 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SafePage } from "@/components/SafePage";
 
 // REST-based OAuth consent implementation.
-// The installed @supabase/supabase-js does not reliably expose
-// `supabase.auth.oauth.*` in production bundles, so we call the documented
-// Supabase Auth OAuth endpoints directly with the user's access token.
+// The browser client has not reliably exposed the OAuth helper namespace in
+// production bundles, so this page talks to the auth OAuth REST endpoints
+// directly with the signed-in user's access token.
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -33,7 +33,7 @@ async function authFetch(path: string, accessToken: string, init: RequestInit = 
   return { data: json, error: null as null };
 }
 
-async function getAuthorizationDetails(id: string, token: string) {
+async function fetchAuthorizationRequest(id: string, token: string) {
   return authFetch(`/oauth/authorizations/${encodeURIComponent(id)}`, token);
 }
 async function approveAuthorization(id: string, token: string) {
@@ -66,7 +66,7 @@ export default function OAuthConsent() {
       }
       setToken(accessToken);
 
-      const { data, error } = await getAuthorizationDetails(authorizationId, accessToken);
+      const { data, error } = await fetchAuthorizationRequest(authorizationId, accessToken);
       if (!active) return;
       if (error) return setError(error.message);
       const immediate = data?.redirect_url ?? data?.redirect_to;
