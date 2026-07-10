@@ -37,10 +37,16 @@ async function fetchAuthorizationRequest(id: string, token: string) {
   return authFetch(`/oauth/authorizations/${encodeURIComponent(id)}`, token);
 }
 async function approveAuthorization(id: string, token: string) {
-  return authFetch(`/oauth/authorizations/${encodeURIComponent(id)}/approve`, token, { method: "POST" });
+  return authFetch(`/oauth/authorizations/${encodeURIComponent(id)}/consent`, token, {
+    method: "POST",
+    body: JSON.stringify({ action: "approve" }),
+  });
 }
 async function denyAuthorization(id: string, token: string) {
-  return authFetch(`/oauth/authorizations/${encodeURIComponent(id)}/deny`, token, { method: "POST" });
+  return authFetch(`/oauth/authorizations/${encodeURIComponent(id)}/consent`, token, {
+    method: "POST",
+    body: JSON.stringify({ action: "deny" }),
+  });
 }
 
 export default function OAuthConsent() {
