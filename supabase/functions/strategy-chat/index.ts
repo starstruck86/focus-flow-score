@@ -1952,12 +1952,19 @@ async function buildContextPack(
         .maybeSingle();
       if (!dos?.content_md) { pack.strategicPov = null; return; }
       const md: string = dos.content_md;
-      // Match a top-level "## 00 …" or "## STRATEGIC POV …" heading; capture
-      // until the next "## " heading (not "### ") or end of document.
-      const re = /^##[ \t]+(?:0*0\b[^\n]*|strategic\s+pov[^\n]*)\n([\s\S]*?)(?=\n##[ \t]+(?!#)|$)/im;
-      const m = md.match(re);
-      if (!m) { pack.strategicPov = null; return; }
-      const section = m[0].trim();
+      // Locate the "## 00 …" or "## STRATEGIC POV …" heading, then slice
+      // to the next top-level "## " heading (not "### ") or EOF.
+      const startRe = /^##[ \t]+(?:0*0\b[^\n]*|strategic\s+pov[^\n]*)$/im;
+      const startMatch = md.match(startRe);
+      if (!startMatch || startMatch.index == null) { pack.strategicPov = null; return; }
+      const startIdx = startMatch.index;
+      const bodyStart = startIdx + startMatch[0].length;
+      const nextRe = /\n##[ \t]+(?!#)/g;
+      nextRe.lastIndex = bodyStart;
+      const nextMatch = nextRe.exec(md);
+      const endIdx = nextMatch ? nextMatch.index : md.length;
+      const section = md.slice(startIdx, endIdx).trim();
+      if (!section) { pack.strategicPov = null; return; }
       const MAX = 3500;
       const text = section.length > MAX ? section.slice(0, MAX) + '\n…(truncated)' : section;
       pack.strategicPov = { text, version: dos.version ?? null };
