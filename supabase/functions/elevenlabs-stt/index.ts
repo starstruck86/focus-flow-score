@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { requireUser } from "../_shared/requireUser.ts";
+import { getModelConfig } from "../_shared/getModelConfig.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,7 +23,8 @@ serve(async (req) => {
 
     const apiFormData = new FormData();
     apiFormData.append("file", audioFile);
-    apiFormData.append("model_id", "scribe_v2");
+    const { primary: modelId } = await getModelConfig('elevenlabs-stt');
+    apiFormData.append("model_id", modelId || "scribe_v2");
     apiFormData.append("language_code", "eng");
 
     const response = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {

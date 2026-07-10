@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getModelConfig } from "../_shared/getModelConfig.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,6 +29,7 @@ Deno.serve(async (req: Request) => {
     const perplexityKey = Deno.env.get("PERPLEXITY_API_KEY");
     const cronSecret = Deno.env.get("CRON_SECRET");
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const { primary: modelId } = await getModelConfig('daily-digest');
 
     // Dual-mode auth: cron sends x-cron-secret, clients send a real user JWT.
     const isCron = !!cronSecret && req.headers.get("x-cron-secret") === cronSecret;
@@ -183,7 +185,7 @@ IMPORTANT: Headlines should be factual and specific — include names, numbers, 
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: "sonar-pro",
+              model: modelId,
               messages: [
                 { role: "system", content: "You are a precise sales intelligence analyst. Return ONLY valid JSON arrays. No markdown, no explanation. Be thorough — never miss a signal." },
                 { role: "user", content: prompt },
