@@ -51,6 +51,7 @@ serve(async (req) => {
 
   try {
     const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
+    const { primary: sttModelId } = await getModelConfig('transcribe-audio');
     if (!ELEVENLABS_API_KEY) {
       return jsonResp(
         { success: false, failureCode: "TRANSCRIPTION_PROVIDER_ERROR", failureReason: "ELEVENLABS_API_KEY not configured", stage: "init" },
@@ -164,7 +165,7 @@ serve(async (req) => {
 
       const fd = new FormData();
       fd.append("file", file);
-      fd.append("model_id", "scribe_v2");
+      fd.append("model_id", sttModelId || "scribe_v2");
       fd.append("language_code", "eng");
 
       let retries = 0;
