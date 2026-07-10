@@ -49,7 +49,8 @@ async function infraOpenAI(): Promise<TestResult> {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       signal: controller.signal,
-      body: JSON.stringify({ model: "gpt-5-mini", messages: [{ role: "user", content: "Say: ok" }], max_tokens: 10, temperature: 0 }),
+      // gpt-5 series requires `max_completion_tokens` (not `max_tokens`) and does not accept custom `temperature`.
+      body: JSON.stringify({ model: "gpt-5-mini", messages: [{ role: "user", content: "Say: ok" }], max_completion_tokens: 10 }),
     });
     if (!resp.ok) { const t = await resp.text().catch(() => ""); throw new Error(`HTTP ${resp.status}: ${t.slice(0, 100)}`); }
     const data = await resp.json();
