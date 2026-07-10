@@ -11,7 +11,9 @@ type OAuthApi = {
   approveAuthorization: (id: string) => Promise<{ data: any; error: { message: string } | null }>;
   denyAuthorization: (id: string) => Promise<{ data: any; error: { message: string } | null }>;
 };
-const oauth = (supabase.auth as unknown as { oauth: OAuthApi }).oauth;
+const oauth = (supabase.auth as unknown as { oauth?: OAuthApi }).oauth;
+const OAUTH_UNAVAILABLE =
+  "This build of the Supabase client does not expose the OAuth 2.1 authorization API (supabase.auth.oauth). Upgrade @supabase/supabase-js to a version that includes the OAuth server methods.";
 
 export default function OAuthConsent() {
   const [params] = useSearchParams();
