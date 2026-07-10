@@ -1796,6 +1796,7 @@ interface ContextPack {
   }>;
   subsidiariesTotalCount?: number;
   branchPov?: Array<{ surface: string; target_status: string | null; conviction: number | null; ratified: boolean | null }>;
+  strategicPov?: { text: string; version: number | null } | null;
   retrievalMeta: {
     memoriesScored: number;
     uploadsIncluded: number;
