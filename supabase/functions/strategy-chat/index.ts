@@ -7958,16 +7958,17 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
         }
       }
     }
-    return new Response(
-      JSON.stringify({
-        text: auditedVisible,
-        provider: result.provider,
-        model: result.model,
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const sseChunk = `data: ${JSON.stringify({
+      choices: [{ delta: { content: auditedVisible } }],
+      citations_json: __citationsJson,
+    })}\n\ndata: [DONE]\n\n`;
+    return new Response(sseChunk, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
       },
-    );
+    });
   }
 
   // Stream the response with read timeout protection.
@@ -8291,11 +8292,23 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           console.warn("[strategy-sop][behavior-check] failed (ignored):", String(bcErr).slice(0, 200));
         }
 
-        // Step 4: emit the entire guarded+audited text in ONE SSE
-        // delta, then [DONE]. Client renders this atomically — no
-        // first-token-drop risk.
+        // Build structured citations up front so we can emit them in the
+        // same SSE payload the client renders atomically.
+        const __streamCitationsJson = buildCitationsJson({
+          resourceHits,
+          kiHits: kiHitList,
+          libraryKis,
+          libraryPlaybooks,
+        });
+
+        // Step 4: emit the entire guarded+audited text and its citations
+        // in ONE SSE delta, then [DONE]. Client renders this atomically —
+        // no first-token-drop risk.
         const sseChunk = `data: ${
-          JSON.stringify({ choices: [{ delta: { content: finalVisible } }] })
+          JSON.stringify({
+            choices: [{ delta: { content: finalVisible } }],
+            citations_json: __streamCitationsJson,
+          })
         }\n\ndata: [DONE]\n\n`;
         controller.enqueue(new TextEncoder().encode(sseChunk));
         controller.close();
@@ -8415,13 +8428,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
             String(shErr).slice(0, 200),
           );
         }
-        // BOLT 3 — citations + playbook usage (stream path).
-        const __streamCitationsJson = buildCitationsJson({
-          resourceHits,
-          kiHits: kiHitList,
-          libraryKis,
-          libraryPlaybooks,
-        });
+        // BOLT 3 — persist citations built above alongside the streamed message.
         await supabase.from("strategy_messages").insert({
           thread_id: threadId,
           user_id: userId,

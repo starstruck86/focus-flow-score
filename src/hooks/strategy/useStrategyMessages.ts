@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import type { StrategyMessage } from '@/types/strategy';
+import type { StrategyCitations, StrategyMessage } from '@/types/strategy';
 import { toast } from 'sonner';
 import { mapSendErrorToFriendlyMessage } from './sendErrorMapping';
 import { buildGlobalInstructionsPayload } from '@/lib/strategy/buildGlobalInstructionsPayload';
@@ -175,17 +175,21 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
       const assistantId = `ast-${Date.now()}`;
       let textBuffer = '';
 
-      const updateAssistant = (text: string) => {
+      const updateAssistant = (text: string, citationsJson?: StrategyCitations | null) => {
         setMessages(prev => {
           const last = prev[prev.length - 1];
           if (last?.id === assistantId) {
             return prev.map((m, i) => i === prev.length - 1
-              ? { ...m, content_json: { text } } : m);
+              ? {
+                ...m,
+                content_json: { text },
+                citations_json: citationsJson === undefined ? m.citations_json : citationsJson,
+              } : m);
           }
           return [...prev, {
             id: assistantId, thread_id: threadId, user_id: user.id,
             role: 'assistant', message_type: 'chat',
-            content_json: { text }, citations_json: null,
+            content_json: { text }, citations_json: citationsJson ?? null,
             created_at: new Date().toISOString(),
           }];
         });
@@ -208,7 +212,9 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
           try {
             const parsed = JSON.parse(jsonStr);
             const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) { assistantText += delta; updateAssistant(assistantText); }
+            const citations = parsed.citations_json as StrategyCitations | null | undefined;
+            if (delta) assistantText += delta;
+            if (delta || citations !== undefined) updateAssistant(assistantText, citations);
           } catch {
             textBuffer = line + '\n' + textBuffer;
             break;
@@ -227,7 +233,9 @@ export function useStrategyMessages(threadId: string | null, opts?: UseStrategyM
           try {
             const parsed = JSON.parse(jsonStr);
             const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) { assistantText += delta; updateAssistant(assistantText); }
+            const citations = parsed.citations_json as StrategyCitations | null | undefined;
+            if (delta) assistantText += delta;
+            if (delta || citations !== undefined) updateAssistant(assistantText, citations);
           } catch { /* partial leftover */ }
         }
       }
