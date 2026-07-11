@@ -21,6 +21,7 @@ import {
   renderStandardBlock,
   selectExemplars,
 } from "./libraryStandard.ts";
+import { buildEvidencePolicy } from "./semanticPrompt.ts";
 
 // ─── Stub Supabase client ────────────────────────────────────────
 //
@@ -50,9 +51,15 @@ function stubSupabaseWithCards(
   return {
     from(_table: string) {
       const builder = {
-        select(_cols: string) { return builder; },
-        eq(_col: string, _val: unknown) { return builder; },
-        in(_col: string, _vals: unknown[]) { return builder; },
+        select(_cols: string) {
+          return builder;
+        },
+        eq(_col: string, _val: unknown) {
+          return builder;
+        },
+        in(_col: string, _vals: unknown[]) {
+          return builder;
+        },
         limit(_n: number) {
           return Promise.resolve(
             opts?.errorMessage
@@ -103,7 +110,8 @@ Deno.test("Pass A: selects 2–4 exemplars when scopes match", async () => {
       id: "card-cccccccc-1111-2222-3333-cccccccccccc",
       library_role: "standard",
       title: "PoV Specificity",
-      the_move: "Name the leakage and attach an economic frame for retail buyers",
+      the_move:
+        "Name the leakage and attach an economic frame for retail buyers",
       applies_to_contexts: ["retail"],
     }),
     // Decoy with no scope match — should not be selected.
@@ -249,7 +257,7 @@ Deno.test("Pass A: source_ids overlap with retrieval also demotes the card", asy
   assert(!set.exemplars.some((e) => e.id === "card-derived"));
 });
 
-Deno.test("Pass A: rendered STANDARDS block contains the do-not-cite instruction", async () => {
+Deno.test("Pass A: STANDARDS renderer is data-only and fixed policy owns citation rule", async () => {
   const cards: CardRow[] = [
     baseCard({
       library_role: "pattern",
@@ -271,11 +279,24 @@ Deno.test("Pass A: rendered STANDARDS block contains the do-not-cite instruction
     scopes: ["retail"],
   });
   assertEquals(set.injected, true);
-  const text = renderStandardBlock(set);
+  const text = renderStandardBlock(set, { dataOnly: true });
   assertStringIncludes(text, "WHAT GOOD LOOKS LIKE");
-  assertStringIncludes(text, "Do NOT cite these unless");
-  assertStringIncludes(text, "STANDARDS guide HOW to answer. RESOURCES are facts you may cite.");
   assertStringIncludes(text, "=== END STANDARDS ===");
+  assert(!text.includes("Do NOT cite"));
+  const policy = buildEvidencePolicy({
+    rules: {
+      libraryUse: "relevant",
+      webMode: "off",
+      citationMode: "light",
+      contextMode: "thread_first",
+    },
+    mode: "strong",
+  });
+  assertStringIncludes(
+    policy,
+    "Standards/exemplars/patterns shape quality",
+  );
+  assertStringIncludes(policy, "not citations");
 });
 
 Deno.test("Pass A: renderStandardBlock returns empty string when not injected", async () => {

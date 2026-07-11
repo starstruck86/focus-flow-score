@@ -417,9 +417,6 @@ export function renderWorkingThesisStateBlock(
 
   const lines: string[] = [];
   lines.push("=== CURRENT WORKING THESIS STATE ===");
-  lines.push(
-    "This is the running thesis you and the seller built across prior conversations on this account. Treat it as the live operating model. Do NOT silently restart. Do NOT re-litigate killed hypotheses unless the seller introduces NEW evidence that revives them.",
-  );
   if (state.current_thesis) {
     lines.push(
       `CURRENT THESIS (${state.confidence}): ${state.current_thesis}`,
@@ -433,9 +430,7 @@ export function renderWorkingThesisStateBlock(
     for (const e of state.supporting_evidence) lines.push(`  - ${e}`);
   }
   if (state.killed_hypotheses.length) {
-    lines.push(
-      "DEAD HYPOTHESES (do not revive without new evidence — name them as dead if relevant):",
-    );
+    lines.push("DEAD HYPOTHESES:");
     for (const k of state.killed_hypotheses) {
       lines.push(`  - "${k.hypothesis}" — killed by: ${k.killed_by}`);
     }
@@ -444,9 +439,6 @@ export function renderWorkingThesisStateBlock(
     lines.push("OPEN QUESTIONS (still unresolved):");
     for (const q of state.open_questions) lines.push(`  - ${q}`);
   }
-  lines.push(
-    "BEHAVIOR: When the seller adds new evidence, explicitly state whether it CONFIRMS, WEAKENS, or KILLS the current thesis — then give the updated thesis. Do not act like this is a fresh conversation.",
-  );
   return lines.join("\n");
 }
 

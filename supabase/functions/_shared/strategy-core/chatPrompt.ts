@@ -150,6 +150,72 @@ export interface StrategyChatPromptParts {
   }>;
 }
 
+/**
+ * Data-only context builder used by the semantic strategy-chat shell. It
+ * preserves WorkspaceContract contextMode ordering without constructing the
+ * retired fixed Strategy Core stack.
+ */
+export function buildStrategyChatEvidenceBlocks(
+  args: BuildStrategyChatPromptArgs,
+): StrategyChatPromptParts["evidenceBlocks"] {
+  const contextBlocks: OrderableContextBlock[] = [];
+  const lib = (args.libraryContext || "").trim();
+  if (lib) {
+    contextBlocks.push({
+      kind: "library",
+      label: "internal_library",
+      text: `=== INTERNAL LIBRARY ===\n${lib}`,
+    });
+  }
+  const acct = (args.accountContext || "").trim();
+  if (acct) {
+    contextBlocks.push({
+      kind: "account",
+      label: "account_context",
+      text: `=== ACCOUNT CONTEXT ===\n${acct}`,
+    });
+  }
+  const resources = (args.resourceContextBlock || "").trim();
+  if (resources) {
+    contextBlocks.push({
+      kind: "library",
+      label: "library_resources",
+      text: resources,
+    });
+  }
+  const totals = (args.libraryTotalsBlock || "").trim();
+  if (totals) {
+    contextBlocks.push({
+      kind: "library",
+      label: "library_totals",
+      text: totals,
+    });
+  }
+  const thesis = (args.workingThesisBlock || "").trim();
+  if (thesis) {
+    contextBlocks.push({
+      kind: "thread",
+      label: "working_thesis",
+      text: thesis,
+    });
+  }
+  const thread = (args.contextSection || "").trim();
+  if (thread) {
+    contextBlocks.push({
+      kind: "thread",
+      label: "context_section",
+      text: thread,
+    });
+  }
+  const ordered = args.workspaceContract
+    ? orderContextBlocks(contextBlocks, args.workspaceContract.retrievalRules)
+    : contextBlocks;
+  return ordered.map((block) => ({
+    id: block.label ?? block.kind,
+    text: block.text,
+  }));
+}
+
 export function buildStrategyChatSystemPromptParts(
   args: BuildStrategyChatPromptArgs,
 ): StrategyChatPromptParts {

@@ -46,6 +46,7 @@ export {
 } from "./situationIntelligenceRetrieval.ts";
 
 export {
+  buildStrategyChatEvidenceBlocks,
   buildStrategyChatSystemPromptParts,
   buildStrategyChatSystemPrompt,
   shouldUseStrategyCorePrompt,

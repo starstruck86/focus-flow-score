@@ -14,6 +14,7 @@ import {
   userAskedForPriorUse,
   userAskedForResource,
 } from "./resourceRetrieval.ts";
+import { buildResourceGroundingPolicy } from "./semanticPrompt.ts";
 
 // ── Fake supabase client ──────────────────────────────────────────
 interface Recorded {
@@ -136,7 +137,18 @@ Deno.test("retrieveResourceContext: returns exact match before category match an
   assertEquals(out.hits[0].matchKind, "category_intent");
   assertStringIncludes(out.contextBlock, "LIBRARY RESOURCES");
   assertStringIncludes(out.contextBlock, "RESOURCE[");
-  assertStringIncludes(out.contextBlock, "Never fabricate");
+  assert(!out.contextBlock.includes("Never fabricate"));
+  assertStringIncludes(
+    buildResourceGroundingPolicy({
+      hasHits: true,
+      userAskedForResource: true,
+      hasPicked: false,
+      hasStructuredPicked: false,
+      hasUnstructuredPicked: false,
+      hasEmptyPicked: false,
+    }),
+    "never fabricate",
+  );
 });
 
 // ── retrieveResourceContext: admit-absence path ───────────────────
@@ -148,11 +160,18 @@ Deno.test("retrieveResourceContext: emits silent admit-absence block when nothin
   });
   assertEquals(out.hits.length, 0);
   assertEquals(out.userAskedForResource, true);
-  // Block exists for behavior guidance, but must NOT instruct the model
-  // to narrate the search to the user.
-  assertStringIncludes(out.contextBlock, "do not surface this to the user");
-  assertStringIncludes(out.contextBlock, "Do NOT announce that you searched");
-  assertStringIncludes(out.contextBlock, "Do NOT invent");
+  // Evidence stays data-only; the bounded fixed policy owns behavior.
+  assertStringIncludes(out.contextBlock, "no matching resources");
+  const policy = buildResourceGroundingPolicy({
+    hasHits: false,
+    userAskedForResource: true,
+    hasPicked: false,
+    hasStructuredPicked: false,
+    hasUnstructuredPicked: false,
+    hasEmptyPicked: false,
+  });
+  assertStringIncludes(policy, "narrate searching");
+  assertStringIncludes(policy, "never fabricate");
   // Regression guard: legacy scan-narration phrasing must be gone.
   if (out.contextBlock.includes("I scanned your library")) {
     throw new Error("Legacy scan-narration phrasing leaked back into context block");
@@ -227,7 +246,18 @@ Deno.test("renderResourceContextBlock: lists titles and forces RESOURCE[<title>]
   });
   assertStringIncludes(block, "AE Operating System - Business Case Template");
   assertStringIncludes(block, "RESOURCE[abcdef01]");
-  assertStringIncludes(block, "EXACT title");
+  assert(!block.includes("EXACT title"));
+  assertStringIncludes(
+    buildResourceGroundingPolicy({
+      hasHits: true,
+      userAskedForResource: true,
+      hasPicked: false,
+      hasStructuredPicked: false,
+      hasUnstructuredPicked: false,
+      hasEmptyPicked: false,
+    }),
+    "Prefer exact titles",
+  );
 });
 
 // ── Apostrophe / possessive extraction (regression for "Kevin Dorsey's") ──
@@ -493,7 +523,17 @@ Deno.test("renderResourceContextBlock: surfaces body-match flag and snippet", ()
   assertStringIncludes(block, "body-match");
   assertStringIncludes(block, "snippet:");
   assertStringIncludes(block, "ROI calculation");
-  assertStringIncludes(block, "body, not the title");
+  assertStringIncludes(
+    buildResourceGroundingPolicy({
+      hasHits: true,
+      userAskedForResource: true,
+      hasPicked: false,
+      hasStructuredPicked: false,
+      hasUnstructuredPicked: false,
+      hasEmptyPicked: false,
+    }),
+    "describe body/description matches honestly",
+  );
 });
 
 // ── Source-shape detection ────────────────────────────────────────
@@ -557,9 +597,17 @@ Deno.test("renderResourceContextBlock: emits STRUCTURED contract for structured 
     inferredCategories: [],
   });
   assertStringIncludes(block, "source-shape: structured");
-  assertStringIncludes(block, "STRUCTURED SOURCE");
-  assertStringIncludes(block, "Mirror the source's actual section structure");
-  assertStringIncludes(block, "NEVER respond with only a question");
+  const policy = buildResourceGroundingPolicy({
+    hasHits: true,
+    userAskedForResource: true,
+    hasPicked: true,
+    hasStructuredPicked: true,
+    hasUnstructuredPicked: false,
+    hasEmptyPicked: false,
+  });
+  assertStringIncludes(policy, "STRUCTURED pick");
+  assertStringIncludes(policy, "Mirror real headings/order/labels");
+  assertStringIncludes(policy, "Scaffold precedes");
 });
 
 Deno.test("renderResourceContextBlock: emits UNSTRUCTURED contract for transcript picked resources", () => {
@@ -580,7 +628,15 @@ Deno.test("renderResourceContextBlock: emits UNSTRUCTURED contract for transcrip
     inferredCategories: [],
   });
   assertStringIncludes(block, "source-shape: unstructured");
-  assertStringIncludes(block, "UNSTRUCTURED SOURCE");
-  assertStringIncludes(block, "EXTRACT the reusable substance");
-  assertStringIncludes(block, 'NEVER answer only with "I need a fact');
+  const policy = buildResourceGroundingPolicy({
+    hasHits: true,
+    userAskedForResource: true,
+    hasPicked: true,
+    hasStructuredPicked: false,
+    hasUnstructuredPicked: true,
+    hasEmptyPicked: false,
+  });
+  assertStringIncludes(policy, "UNSTRUCTURED pick");
+  assertStringIncludes(policy, "Extract actual questions");
+  assertStringIncludes(policy, "seller-ready scaffold");
 });

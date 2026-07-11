@@ -493,14 +493,21 @@ function renderExemplarLines(ex: ExemplarRef): string {
  * explicit "do not cite STANDARDS unless borrowing" instruction so
  * STANDARDS can never be confused with citation-eligible RESOURCEs.
  */
-export function renderStandardBlock(set: ExemplarSet): string {
+export function renderStandardBlock(
+  set: ExemplarSet,
+  opts: { dataOnly?: boolean } = {},
+): string {
   if (!set.injected || set.exemplars.length === 0) return "";
   const body = set.exemplars.map(renderExemplarLines).join("\n\n");
   return [
     "=== WHAT GOOD LOOKS LIKE (standards from your library) ===",
-    "These are quality patterns from your own library. Use them to shape STRUCTURE, POSTURE, and BAR.",
-    "Do NOT cite these unless you directly borrow specific language or a specific claim.",
-    "STANDARDS guide HOW to answer. RESOURCES are facts you may cite.",
+    ...(opts.dataOnly
+      ? []
+      : [
+        "These are quality patterns from your own library. Use them to shape STRUCTURE, POSTURE, and BAR.",
+        "Do NOT cite these unless you directly borrow specific language or a specific claim.",
+        "STANDARDS guide HOW to answer. RESOURCES are facts you may cite.",
+      ]),
     "",
     body,
     "=== END STANDARDS ===",
