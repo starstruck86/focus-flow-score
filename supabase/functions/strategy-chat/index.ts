@@ -8184,6 +8184,50 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
      console.warn("[strategy-sop][prompt-trace] failed (ignored):", String(traceErr).slice(0, 200));
    }
 
+   // ── Additive prompt-composition telemetry (Option B) ──
+   // Shadow the actual string-concatenated prompt as a segment plan so we can
+   // report honest fixed/runtime/evidence sizes without altering the prompt
+   // sent to the model. No behavior change; log-only. See Codex prompt-
+   // consolidation plan — full segment-based assembly deferred pending the
+   // behavior-preservation ledger for the ~9 wrapper blocks in this handler.
+   try {
+     const _activePromptPath: "v1" | "v2" = v2Active ? "v2" : "v1";
+     const _evidenceText = renderEvidencePacket({
+       territory: territoryProfileBlock || "",
+       account: rawAccountContext || "",
+       currentState: currentStateResult?.promptBlock || "",
+       library: rawLibraryContext || "",
+       resources: rawResourceContextBlock || "",
+       workingThesis: rawWorkingThesisBlock || "",
+       threadContext: contextSection || "",
+     });
+     const _segments: PromptSegment[] = [
+       { id: "fixed.territory", kind: "fixed_instruction", text: territoryProfileBlock || "" },
+       { id: "fixed.objective", kind: "fixed_instruction", text: strategyObjectiveBlock || "" },
+       { id: "fixed.core", kind: "fixed_instruction", text: systemPrompt || "" },
+       { id: "runtime.sop-authority", kind: "runtime_instruction", text: sopAuthorityBlock || "" },
+       { id: "fixed.decision-layer", kind: "fixed_instruction", text: decisionLayerBlock || "" },
+       { id: "evidence.packet", kind: "retrieved_evidence", text: _evidenceText },
+     ].filter((s) => s.text && s.text.trim().length > 0);
+     const _plan = composePrompt(_segments);
+     console.log(
+       "[strategy-chat][prompt-size]",
+       JSON.stringify(
+         buildPromptSizeLog({
+           path: _activePromptPath,
+           plan: _plan,
+           priorMessages,
+           currentUser: content,
+         }),
+       ),
+     );
+   } catch (telemetryErr) {
+     console.warn(
+       "[strategy-chat][prompt-size] telemetry failed (non-fatal):",
+       (telemetryErr as Error)?.message,
+     );
+   }
+
    const messages = [
      { role: "system" as const, content: effectiveSystemPrompt },
     ...priorMessages.map((m) => ({
