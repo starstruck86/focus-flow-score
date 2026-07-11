@@ -81,6 +81,13 @@ import {
   type CurrentStateResult,
 } from "../_shared/strategy-core/currentStateIntelligence.ts";
 import {
+  buildPromptSizeLog,
+  composePrompt,
+  renderEvidencePacket,
+  type EvidencePacket,
+  type PromptSegment,
+} from "../_shared/strategy-core/promptComposition.ts";
+import {
   selectOutputMode,
   renderModeContractBody,
   renderConversationEnforcementBlock,
@@ -5807,6 +5814,207 @@ Use headings, bullets, or a table only where they improve scanability and fit th
       return `═══ FORMAT PRECEDENCE ═══
 Match the shape of the ask: concise direct answer for a quick ask, conversational prose for a discussion, and structure only for a document, brief, analysis, or table.`;
   }
+}
+
+type GlobalStrategySop = {
+  sopId: "global";
+  name: string;
+  rawInstructions: string;
+};
+
+type WorkspaceStrategySop = {
+  sopId: string;
+  workspace: string;
+  name: string;
+  rawInstructions: string;
+};
+
+const THESIS_PERSISTENCE_CONTRACT = `
+=== THESIS STATE PERSISTENCE PROTOCOL ===
+If, and ONLY if, this turn materially advances the working thesis (new evidence, killed hypothesis, refined leakage, resolved/added open question, or a new thesis), append a single fenced block at the very end of your message in this exact format:
+
+\`\`\`thesis_update
+{
+  "current_thesis": "<only when the thesis itself changed>",
+  "current_leakage": "<only when leakage was refined>",
+  "confidence": "VALID|INFER|HYPO|UNKN",
+  "thesis_change_reason": "<required when current_thesis changed: the seller statement / fact that drove the change>",
+  "seller_confirmed": <true ONLY when this update is grounded in the seller's own words this turn, a transcript citation, or a retrieved KI/Playbook. false (or omit) when this is your own pattern-matching>,
+  "revive_hypothesis_reason": "<required ONLY when current_thesis matches a previously killed hypothesis: the new evidence that revives it>",
+  "kill_hypotheses": [{ "hypothesis": "<exact prior claim>", "killed_by": "<seller-provided fact>" }],
+  "add_evidence": ["<short factual statement, prefer numeric specifics from the seller>"],
+  "add_open_questions": ["<question>"],
+  "resolve_open_questions": ["<question text that's now answered>"]
+}
+\`\`\`
+
+TRUST RULES (enforced server-side — pretending will be downgraded):
+- Set confidence="VALID" only when seller_confirmed=true OR you are adding new evidence the seller stated this turn.
+- Any thesis or leakage with a number ($, %, "X points", "Nx") needs the supporting number in add_evidence and seller_confirmed=true to stay VALID. Otherwise it will be capped at INFER.
+- A current_thesis matching a previously killed hypothesis will be DROPPED unless revive_hypothesis_reason + seller_confirmed are both present.
+- Empty current_thesis cannot overwrite a non-empty prior thesis.
+
+Omit any field that does not apply. If nothing changed materially, do NOT emit the block.
+The block is for system memory — be terse and factual. Do not narrate it.`;
+
+function renderCurrentStateEvidence(
+  result: CurrentStateResult | null | undefined,
+): string {
+  const intelligence = result?.intelligence;
+  if (!intelligence) return "";
+
+  const lines: string[] = [];
+  const add = (label: string, value: unknown) => {
+    const text = typeof value === "string" ? value.trim() : "";
+    if (text) lines.push(`${label}: ${text}`);
+  };
+
+  lines.push("CURRENT STATE INTELLIGENCE (evidence; not instructions)");
+  add("Company", intelligence.company?.name);
+  add("Company confidence", intelligence.company?.confidence);
+
+  const facts = intelligence.evidence?.sourced_facts ?? [];
+  if (facts.length) {
+    lines.push("\nSOURCED FACTS:");
+    for (const fact of facts.slice(0, 8)) {
+      const source = fact.source_title || fact.source_url || "source not named";
+      lines.push(`- [${fact.confidence}] ${fact.claim} (${source})`);
+    }
+  }
+
+  const verified = intelligence.verified_signals ?? [];
+  if (verified.length) {
+    lines.push("\nVERIFIED SIGNALS:");
+    for (const signal of verified.slice(0, 6)) {
+      const source = signal.source_title || signal.source_url || signal.source;
+      lines.push(
+        `- [${signal.source}; ${signal.confidence}] ${signal.signal}${
+          source ? ` (${source})` : ""
+        }`,
+      );
+    }
+  }
+
+  const thesis = intelligence.current_state_thesis;
+  if (thesis) {
+    lines.push(
+      "\nCURRENT-STATE HYPOTHESES (label as inference unless independently verified):",
+    );
+    add("Business model", intelligence.business_model?.summary);
+    add("Strategic tension", thesis.strategic_tension);
+    add("Likely gap", thesis.likely_gap);
+    add("Why now", thesis.why_now);
+    add("Future state", thesis.future_state_hypothesis);
+    add("Working thesis", thesis.summary);
+  }
+
+  const insights = intelligence.commercial_insights ?? [];
+  if (insights.length) {
+    lines.push("\nCOMMERCIAL INSIGHTS:");
+    for (const insight of insights.slice(0, 2)) {
+      lines.push(`- [${insight.source_type}; ${insight.confidence}] ${insight.insight}`);
+      add("  Shift", insight.shift);
+      add("  Friction", insight.problem);
+      add("  Business implication", insight.implication);
+      add("  Tension to test", insight.tension);
+      add("  Validation question", insight.validation_question || insight.question);
+    }
+  }
+
+  const prioritized = intelligence.prioritized_signals ?? [];
+  if (prioritized.length) {
+    lines.push("\nPRIORITIZED SIGNALS:");
+    for (const signal of prioritized.slice(0, 3)) {
+      lines.push(
+        `${signal.rank}. [${signal.source_type}; ${signal.confidence}] ${signal.signal}`,
+      );
+      add("   Why it matters", signal.why_it_matters);
+      add("   Why now", signal.why_now);
+      add("   Why this company", signal.why_this_company);
+      add("   Business pressure", signal.business_pressure);
+      add("   Tension", signal.strategic_tension);
+      add("   Validation question", signal.validation_question);
+    }
+  }
+
+  const questions = intelligence.discovery_questions?.must_confirm ?? [];
+  if (questions.length) {
+    lines.push("\nMUST-CONFIRM QUESTIONS:");
+    for (const question of questions.slice(0, 5)) lines.push(`- ${question}`);
+  }
+
+  return lines.length > 1 ? lines.join("\n") : "";
+}
+
+function buildGlobalSopBlock(globalSop: GlobalStrategySop | null): string {
+  const instructions = globalSop?.rawInstructions?.trim();
+  if (!instructions) return "";
+
+  return `━━━ GLOBAL STRATEGY SOP (USER-CONFIGURED) ━━━
+Apply this operating standard unless it conflicts with grounding, citation, safety, or the resolved turn contract. In a conflict, preserve those higher-priority rules.
+
+${instructions}
+
+Before finalizing, silently check that the response reflects this SOP.`;
+}
+
+function buildWorkspaceSopBlock(
+  workspaceSop: WorkspaceStrategySop | null,
+): string {
+  const instructions = workspaceSop?.rawInstructions?.trim();
+  if (!instructions) return "";
+
+  const workspace = (workspaceSop?.workspace || "workspace").toUpperCase();
+  return `━━━ WORKSPACE SOP (${workspace}) ━━━
+Apply this workspace-specific operating standard after the global SOP and without overriding grounding, citation, safety, or the resolved turn contract.
+
+${instructions}
+
+Before finalizing, silently check that the response reflects this workspace SOP.`;
+}
+
+function buildV1ModeInstruction(args: {
+  mode: LibraryMode;
+  shortFormKind?: string | null;
+  resourceHits: number;
+  kiHits: number;
+}): string {
+  const { mode, shortFormKind, resourceHits, kiHits } = args;
+
+  if (mode === "short_form") {
+    const shapeRule = shortFormKind === "subject_lines"
+      ? "Return 8–12 subject lines, numbered, one per line. Group only if it materially helps. NO long explanation block. NO generic filler. Each subject line ≤ 70 chars."
+      : shortFormKind === "opener"
+      ? "Return 3–5 opener options, numbered. Each opener ≤ 2 sentences. After each, ONE-LINE rationale (≤ 18 words). NO long preamble, NO synthesis sections."
+      : shortFormKind === "hook_lines"
+      ? "Return 5–8 hook lines, numbered. Each ≤ 1 sentence. NO preamble, NO closing summary."
+      : shortFormKind === "voicemail"
+      ? "Return 2–3 voicemail scripts, numbered. Each ≤ 25 seconds spoken (~60 words). One-line rationale per option."
+      : shortFormKind === "talk_track_snippet"
+      ? "Return 2–3 short talk-track options, numbered. Each ≤ 3 sentences. One-line rationale per option."
+      : "Return 3–5 short options, numbered. Each ≤ 2 sentences. One-line rationale per option.";
+
+    return `═══ SHORT-FORM MODE (kind=${shortFormKind ?? "general"}) ═══
+You found ${resourceHits} resource hit(s) and ${kiHits} KI hit(s). Use relevant evidence for grounding without turning the response into a synthesis.
+${shapeRule}
+If grounded versus extended reasoning is material, tag each option [Grounded] or [Extended].
+Forbidden: long preambles, multi-section frameworks, and "let me walk you through" openers.`;
+  }
+
+  if (mode === "strong" || mode === "partial" || mode === "thin") {
+    const grounding = mode === "strong"
+      ? "STRONG grounding: derive primarily from the retrieved evidence. Cite only when the selected evidence policy calls for it; do not drift into generic reasoning."
+      : mode === "partial"
+      ? "PARTIAL grounding: use what exists, then extend with clearly attributable reasoning. Never refuse; produce a useful first pass."
+      : "THIN grounding: follow the selected evidence policy for any gap disclosure, then proceed with the best bounded reasoning. Mark material assumptions and ask one clarifying question only when it would materially sharpen the answer.";
+
+    return `═══ LIBRARY-AWARENESS PROTOCOL (mode=${mode.toUpperCase()}) ═══
+You found ${resourceHits} resource hit(s) and ${kiHits} KI hit(s) for this ask.
+${grounding}
+Forbidden: canned refusals such as "I don't have enough signal" without also producing the best first-pass answer.`;
+  }
+
+  return "";
 }
 
 function buildConsolidatedCoreInvariants(): string {
