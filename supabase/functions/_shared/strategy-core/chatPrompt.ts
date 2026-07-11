@@ -137,17 +137,22 @@ export interface BuildStrategyChatPromptArgs {
 }
 
 /**
- * Build the composed Strategy Core chat system prompt.
- *
- * Callers MUST decide whether to use this composed prompt or fall back
- * to a generic prompt. The rule is: only use this when there is enough
- * real context (account-linked thread, or library hits) to justify the
- * elite-strategist frame. Forcing it onto context-less small talk would
- * just produce theatrical strategy-speak — exactly what we want to avoid.
+ * The same Strategy Core prompt split into immutable instructions and
+ * workspace-ordered retrieved context. Strategy chat uses this to keep V1
+ * and V2 on one evidence surface without changing the legacy builder's
+ * output for any other caller.
  */
-export function buildStrategyChatSystemPrompt(
+export interface StrategyChatPromptParts {
+  fixedInstructions: string;
+  evidenceBlocks: Array<{
+    id: string;
+    text: string;
+  }>;
+}
+
+export function buildStrategyChatSystemPromptParts(
   args: BuildStrategyChatPromptArgs,
-): string {
+): StrategyChatPromptParts {
   const depthLabel = args.depth && DEPTH_INSTRUCTIONS[args.depth]
     ? args.depth
     : "Standard";
@@ -229,9 +234,32 @@ export function buildStrategyChatSystemPrompt(
     ? orderContextBlocks(contextBlocks, args.workspaceContract.retrievalRules)
     : contextBlocks;
 
-  for (const b of ordered) parts.push(b.text);
+  return {
+    fixedInstructions: parts.join("\n\n"),
+    evidenceBlocks: ordered.map((block) => ({
+      id: block.label,
+      text: block.text,
+    })),
+  };
+}
 
-  return parts.join("\n\n");
+/**
+ * Build the composed Strategy Core chat system prompt.
+ *
+ * Callers MUST decide whether to use this composed prompt or fall back
+ * to a generic prompt. The rule is: only use this when there is enough
+ * real context (account-linked thread, or library hits) to justify the
+ * elite-strategist frame. Forcing it onto context-less small talk would
+ * just produce theatrical strategy-speak — exactly what we want to avoid.
+ */
+export function buildStrategyChatSystemPrompt(
+  args: BuildStrategyChatPromptArgs,
+): string {
+  const parts = buildStrategyChatSystemPromptParts(args);
+  return [
+    parts.fixedInstructions,
+    ...parts.evidenceBlocks.map((block) => block.text),
+  ].join("\n\n");
 }
 
 /**

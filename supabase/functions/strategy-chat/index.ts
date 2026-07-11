@@ -7,7 +7,7 @@ import {
   buildPendingLookupAction,
   buildPromptCompositionLog,
   buildRetrievalDecisionLog,
-  buildStrategyChatSystemPrompt,
+  buildStrategyChatSystemPromptParts,
   buildWorkspaceOverlay,
   logPromptComposition,
   decideLibraryQuery,
@@ -83,8 +83,6 @@ import {
 import {
   buildPromptSizeLog,
   composePrompt,
-  renderEvidencePacket,
-  type EvidencePacket,
   type PromptSegment,
 } from "../_shared/strategy-core/promptComposition.ts";
 import {
@@ -5947,30 +5945,58 @@ function renderCurrentStateEvidence(
 }
 
 function buildGlobalSopBlock(globalSop: GlobalStrategySop | null): string {
-  const instructions = globalSop?.rawInstructions?.trim();
-  if (!instructions) return "";
+  if (!globalSop || globalSop.rawInstructions.length === 0) return "";
 
-  return `━━━ GLOBAL STRATEGY SOP (USER-CONFIGURED) ━━━
-Apply this operating standard unless it conflicts with grounding, citation, safety, or the resolved turn contract. In a conflict, preserve those higher-priority rules.
+  return `
 
-${instructions}
+━━━ GLOBAL STRATEGY SOP (OPERATING STANDARD) ━━━
+You MUST follow the operating standard below when producing your response.
+This defines how you:
+- think
+- structure answers
+- determine depth
+- use research
+- produce outputs
 
-Before finalizing, silently check that the response reflects this SOP.`;
+These instructions apply to ALL responses unless they conflict with:
+- grounding rules
+- citation requirements
+- safety constraints
+
+If a conflict exists:
+- preserve grounding and safety
+- otherwise follow this SOP
+
+${globalSop.rawInstructions}
+
+Before finalizing your response, ensure it reflects this SOP.
+If it does not: improve it before returning.
+`;
 }
 
 function buildWorkspaceSopBlock(
   workspaceSop: WorkspaceStrategySop | null,
 ): string {
-  const instructions = workspaceSop?.rawInstructions?.trim();
-  if (!instructions) return "";
+  if (!workspaceSop || workspaceSop.rawInstructions.length === 0) return "";
 
-  const workspace = (workspaceSop?.workspace || "workspace").toUpperCase();
-  return `━━━ WORKSPACE SOP (${workspace}) ━━━
-Apply this workspace-specific operating standard after the global SOP and without overriding grounding, citation, safety, or the resolved turn contract.
+  return `
 
-${instructions}
+━━━ WORKSPACE SOP (${(workspaceSop.workspace ?? "workspace").toString().toUpperCase()} MODE) ━━━
+You MUST operate in this workspace mode.
 
-Before finalizing, silently check that the response reflects this workspace SOP.`;
+This defines:
+- how you approach the task
+- how you structure output
+- how much depth to apply
+- how to balance expansion vs precision
+
+This modifies how you apply the global SOP for this specific task.
+
+${workspaceSop.rawInstructions}
+
+Before finalizing your response, ensure it reflects this SOP.
+If it does not: improve it before returning.
+`;
 }
 
 function buildV1ModeInstruction(args: {
@@ -5994,28 +6020,50 @@ function buildV1ModeInstruction(args: {
       ? "Return 2–3 short talk-track options, numbered. Each ≤ 3 sentences. One-line rationale per option."
       : "Return 3–5 short options, numbered. Each ≤ 2 sentences. One-line rationale per option.";
 
-    return `═══ SHORT-FORM MODE (kind=${shortFormKind ?? "general"}) ═══
-You found ${resourceHits} resource hit(s) and ${kiHits} KI hit(s). Use relevant evidence for grounding without turning the response into a synthesis.
+    return `
+
+═══ SHORT-FORM MODE (kind=${shortFormKind}) ═══
+You found ${resourceHits} resource hit(s) and ${kiHits} KI hit(s).
+USE the library voice/angles for grounding, but DO NOT produce a long synthesis structure.
 ${shapeRule}
-If grounded versus extended reasoning is material, tag each option [Grounded] or [Extended].
-Forbidden: long preambles, multi-section frameworks, and "let me walk you through" openers.`;
+If grounded vs extended distinction is material, tag each option [Grounded] or [Extended].
+Forbidden: long preambles, multi-section frameworks, "let me walk you through" openers.`;
   }
 
   if (mode === "strong" || mode === "partial" || mode === "thin") {
     const grounding = mode === "strong"
-      ? "STRONG grounding: derive primarily from the retrieved evidence. Cite only when the selected evidence policy calls for it; do not drift into generic reasoning."
+      ? "STRONG grounding: derive primarily from the cited resources/KIs. Cite explicitly. Do NOT drift into generic reasoning."
       : mode === "partial"
-      ? "PARTIAL grounding: use what exists, then extend with clearly attributable reasoning. Never refuse; produce a useful first pass."
-      : "THIN grounding: follow the selected evidence policy for any gap disclosure, then proceed with the best bounded reasoning. Mark material assumptions and ask one clarifying question only when it would materially sharpen the answer.";
+      ? "PARTIAL grounding: USE what exists, then EXTEND with reasoning. Mark sections as **Grounded** (from library) vs **Extended** (your reasoning). Never refuse — produce a first-pass answer."
+      : "THIN grounding: open with one honest line stating what was found (e.g. 'Found 1 weakly related resource and no supporting KIs'). Then proceed using general reasoning. Mark assumptions. Offer one specific clarifying question at the end if it would materially sharpen the output. NEVER refuse, NEVER produce a one-line stop.";
 
-    return `═══ LIBRARY-AWARENESS PROTOCOL (mode=${mode.toUpperCase()}) ═══
+    return `
+
+═══ LIBRARY-AWARENESS PROTOCOL (mode=${mode.toUpperCase()}) ═══
 You found ${resourceHits} resource hit(s) and ${kiHits} KI hit(s) for this ask.
 ${grounding}
-Forbidden: canned refusals such as "I don't have enough signal" without also producing the best first-pass answer.`;
+Forbidden: canned refusals like "I don't have enough signal" without ALSO producing the best first-pass answer you can.`;
   }
 
   return "";
 }
+
+type ChatPromptAssembly = {
+  /** Shared V1/V2 base in exact legacy V1 order. */
+  baseSegments: PromptSegment[];
+  workingThesis: WorkingThesisState | null;
+  resourceHits: Array<{ id: string; title: string }>;
+  kiHits: Array<{ id: string; title: string; chapter: string | null }>;
+  libraryKis: Array<{ id: string; title: string }>;
+  libraryPlaybooks: Array<{ id: string; title: string }>;
+  retrievalDebug: any | null;
+  retrievalDiagnostics: any;
+  retrievalSucceeded: boolean;
+  intent: IntentResult;
+  outputModeDecision: OutputModeDecision;
+  currentStateResult: CurrentStateResult | null;
+  behaviorIntent: BehaviorIntentResult;
+};
 
 function buildConsolidatedCoreInvariants(): string {
   return `═══ CORE INVARIANTS ═══
@@ -6485,28 +6533,7 @@ async function buildChatSystemPrompt(args: {
    * values fall back to the `work` contract.
    */
   workspaceKeyRaw?: string | null;
-}): Promise<{
-  prompt: string;
-  workingThesis: WorkingThesisState | null;
-  resourceHits: Array<{ id: string; title: string }>;
-  kiHits: Array<{ id: string; title: string; chapter: string | null }>;
-  retrievalDebug: any | null;
-  retrievalDiagnostics: any;
-  retrievalSucceeded: boolean;
-  intent: IntentResult;
-  modeLockBlock: string;
-  /** Universal output-mode decision (computed once per turn). */
-  outputModeDecision: OutputModeDecision;
-  /** Raw context blocks — surfaced so V2 can reuse the same retrieval. */
-  rawAccountContext?: string;
-  rawLibraryContext?: string;
-  rawResourceContextBlock?: string;
-  rawWorkingThesisBlock?: string;
-  /** Current State Intelligence result — surfaced for combined logging at handler. */
-  currentStateResult?: CurrentStateResult | null;
-  /** Behavior-intent classification — surfaced for guard + telemetry. */
-  behaviorIntent?: BehaviorIntentResult;
-}> {
+}): Promise<ChatPromptAssembly> {
   const {
     supabase,
     userId,
@@ -6729,7 +6756,11 @@ async function buildChatSystemPrompt(args: {
       ? `\n${currentStateResult.promptBlock}\n`
       : "";
     return {
-      prompt: `${_genericBase}${_csBlock}`,
+      baseSegments: [{
+        id: "fixed.generic",
+        kind: "fixed_instruction",
+        text: `${_genericBase}${_csBlock}`,
+      }],
       workingThesis: null,
       resourceHits: [],
       kiHits: [],
@@ -6739,7 +6770,6 @@ async function buildChatSystemPrompt(args: {
       retrievalDiagnostics: buildRetrievalDiagnostics({ userContent, resources: null, retrievalError: null, intent }),
       retrievalSucceeded: false,
       intent,
-      modeLockBlock,
       outputModeDecision,
       currentStateResult,
       behaviorIntent,
@@ -6938,7 +6968,16 @@ async function buildChatSystemPrompt(args: {
 
   if (!useCore) {
     return {
-      prompt: buildGenericChatSystemPrompt(depth, contextSection, modeLockBlock, behaviorContractBlock),
+      baseSegments: [{
+        id: "fixed.generic",
+        kind: "fixed_instruction",
+        text: buildGenericChatSystemPrompt(
+          depth,
+          contextSection,
+          modeLockBlock,
+          behaviorContractBlock,
+        ),
+      }],
       workingThesis: null,
       resourceHits: [],
       kiHits: [],
@@ -6948,46 +6987,14 @@ async function buildChatSystemPrompt(args: {
       retrievalDiagnostics,
       retrievalSucceeded: !!resources && !retrievalError,
       intent,
-      modeLockBlock,
       outputModeDecision,
+      currentStateResult,
       behaviorIntent,
     };
   }
 
   const workingThesisBlock = renderWorkingThesisStateBlock(workingThesis);
-
-  // Behavior contract for the model: emit a fenced thesis_update JSON
-  // block at the END of the answer when the thesis materially changed.
-  // This is the seam between assistant prose and persisted state.
-  const persistenceContract = `
-=== THESIS STATE PERSISTENCE PROTOCOL ===
-If, and ONLY if, this turn materially advances the working thesis (new evidence, killed hypothesis, refined leakage, resolved/added open question, or a new thesis), append a single fenced block at the very end of your message in this exact format:
-
-\`\`\`thesis_update
-{
-  "current_thesis": "<only when the thesis itself changed>",
-  "current_leakage": "<only when leakage was refined>",
-  "confidence": "VALID|INFER|HYPO|UNKN",
-  "thesis_change_reason": "<required when current_thesis changed: the seller statement / fact that drove the change>",
-  "seller_confirmed": <true ONLY when this update is grounded in the seller's own words this turn, a transcript citation, or a retrieved KI/Playbook. false (or omit) when this is your own pattern-matching>,
-  "revive_hypothesis_reason": "<required ONLY when current_thesis matches a previously killed hypothesis: the new evidence that revives it>",
-  "kill_hypotheses": [{ "hypothesis": "<exact prior claim>", "killed_by": "<seller-provided fact>" }],
-  "add_evidence": ["<short factual statement, prefer numeric specifics from the seller>"],
-  "add_open_questions": ["<question>"],
-  "resolve_open_questions": ["<question text that's now answered>"]
-}
-\`\`\`
-
-TRUST RULES (enforced server-side — pretending will be downgraded):
-- Set confidence="VALID" only when seller_confirmed=true OR you are adding new evidence the seller stated this turn.
-- Any thesis or leakage with a number ($, %, "X points", "Nx") needs the supporting number in add_evidence and seller_confirmed=true to stay VALID. Otherwise it will be capped at INFER.
-- A current_thesis matching a previously killed hypothesis will be DROPPED unless revive_hypothesis_reason + seller_confirmed are both present.
-- Empty current_thesis cannot overwrite a non-empty prior thesis.
-
-Omit any field that does not apply. If nothing changed materially, do NOT emit the block.
-The block is for system memory — be terse and factual. Do not narrate it.`;
-
-  const composedCorePrompt = buildStrategyChatSystemPrompt({
+  const composedCoreParts = buildStrategyChatSystemPromptParts({
     depth,
     contextSection,
     accountContext: assembled?.contextBlock || "",
@@ -7066,13 +7073,42 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     ? `\n${currentStateResult.promptBlock}\n`
     : "";
 
-  // Prepend the MODE LOCK so it's the FIRST thing the model reads,
-  // before Strategy Core identity / thinking order / output contract.
-  // This binds asset-type selection regardless of how rich the rest of
-  // the system prompt becomes. The CURRENT STATE INTELLIGENCE block,
-  // when present, sits adjacent to the readability contract so the
-  // model treats it as a generation-shaping directive for THIS turn.
-  const prompt = `${modeLockBlock}\n\n${behaviorContractBlock}\n\n${composedCorePrompt}\n${readabilityContract}${currentStateBlock}\n\n${persistenceContract}`;
+  // Preserve the legacy V1 sequence exactly while exposing every source
+  // component as a ledger entry. `evidenceBlocks` already reflects the
+  // WorkspaceContract's contextMode ordering from chatPrompt.ts.
+  const baseSegments: PromptSegment[] = [
+    { id: "fixed.mode-lock", kind: "fixed_instruction", text: modeLockBlock },
+    { id: "fixed.behavior-contract", kind: "fixed_instruction", text: behaviorContractBlock },
+    {
+      id: "fixed.strategy-core",
+      kind: "fixed_instruction",
+      text: composedCoreParts.fixedInstructions,
+    },
+    ...composedCoreParts.evidenceBlocks.map((block) => ({
+      id: `evidence.core.${block.id}`,
+      kind: "retrieved_evidence" as const,
+      text: block.text,
+    })),
+    {
+      id: "fixed.response-format",
+      kind: "fixed_instruction",
+      text: readabilityContract,
+    },
+    {
+      // The renderer currently emits both live evidence and its own
+      // authority/gate wording. Keep that raw block intact instead of using
+      // the lossy compact renderer; it remains invocation-scoped evidence
+      // for prompt-size accounting.
+      id: "evidence.current-state",
+      kind: "retrieved_evidence",
+      text: currentStateBlock,
+    },
+    {
+      id: "fixed.thesis-persistence",
+      kind: "fixed_instruction",
+      text: THESIS_PERSISTENCE_CONTRACT,
+    },
+  ];
 
   const resourceHits = (resources?.hits || []).map((h) => ({
     id: h.id,
@@ -7093,7 +7129,7 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     .map((p: any) => ({ id: p?.id, title: p?.title }))
     .filter((p: any) => p.id && p.title);
   return {
-    prompt,
+    baseSegments,
     workingThesis,
     resourceHits,
     kiHits,
@@ -7103,12 +7139,7 @@ The block is for system memory — be terse and factual. Do not narrate it.`;
     retrievalDiagnostics,
     retrievalSucceeded: !!resources && !retrievalError,
     intent,
-    modeLockBlock,
     outputModeDecision,
-    rawAccountContext: assembled?.contextBlock || "",
-    rawLibraryContext: library?.contextString || "",
-    rawResourceContextBlock: resources?.contextBlock || "",
-    rawWorkingThesisBlock: workingThesisBlock || "",
     currentStateResult,
     behaviorIntent,
   };
@@ -7153,23 +7184,14 @@ async function handleChat(
   globalInstructions: CleanGlobalInstructions | null = null,
   // Phase 3A — workspace SOP advisory text. When non-null, appended after
   // V1 mode-lock / V2 / synthesis preamble and BEFORE global instructions.
-  workspaceSop: {
-    sopId: string;
-    workspace: string;
-    name: string;
-    rawInstructions: string;
-  } | null = null,
+  workspaceSop: WorkspaceStrategySop | null = null,
   // Phase W3 — workspace key (validated upstream). Used by retrieval
   // enforcement to resolve the WorkspaceContract from the server-side
   // registry. Null/unknown falls back to `work` inside the resolver.
   workspaceKeyRaw: string | null = null,
   // Phase 2 (Global SOP) — advisory text. When non-null, appended AFTER
   // core/V1/V2/synthesis preamble and BEFORE the workspace SOP block.
-  globalSop: {
-    sopId: 'global';
-    name: string;
-    rawInstructions: string;
-  } | null = null,
+  globalSop: GlobalStrategySop | null = null,
 ) {
   // W5: resolve the workspace contract once for handleChat scope so
   // the citation enforcer can read `citationMode` for both the
@@ -7353,7 +7375,7 @@ async function handleChat(
   if (forceFallback) route._smokeTestForceFail = true;
 
   const {
-    prompt: systemPrompt,
+    baseSegments,
     workingThesis: priorThesis,
     resourceHits,
     kiHits: kiHitList,
@@ -7363,10 +7385,6 @@ async function handleChat(
     retrievalDiagnostics,
     retrievalSucceeded,
     intent,
-    rawAccountContext,
-    rawLibraryContext,
-    rawResourceContextBlock,
-    rawWorkingThesisBlock,
     outputModeDecision,
     currentStateResult,
     behaviorIntent,
@@ -7412,61 +7430,8 @@ async function handleChat(
   );
 
   // ── Phase 7B — SOP AUTHORITY UPGRADE ──
-  // Build SOP blocks with strong, directive framing and inject them HIGH in
-  // the prompt — immediately after the core identity (systemPrompt) and
-  // BEFORE the V1/V2/synthesis reasoning preamble. This ensures SOPs act as
-  // behavioral authority layers, not passive trailing text. They still must
-  // not override grounding, citation, or safety rules — that precedence is
-  // stated explicitly inside the block.
-  const buildGlobalSopBlock = (): string => {
-    if (!globalSop || globalSop.rawInstructions.length === 0) return "";
-    return `
-
-━━━ GLOBAL STRATEGY SOP (OPERATING STANDARD) ━━━
-You MUST follow the operating standard below when producing your response.
-This defines how you:
-- think
-- structure answers
-- determine depth
-- use research
-- produce outputs
-
-These instructions apply to ALL responses unless they conflict with:
-- grounding rules
-- citation requirements
-- safety constraints
-
-If a conflict exists:
-- preserve grounding and safety
-- otherwise follow this SOP
-
-${globalSop.rawInstructions}
-
-Before finalizing your response, ensure it reflects this SOP.
-If it does not: improve it before returning.
-`;
-  };
-  const buildWorkspaceSopBlock = (): string => {
-    if (!workspaceSop || workspaceSop.rawInstructions.length === 0) return "";
-    return `
-
-━━━ WORKSPACE SOP (${(workspaceSop.workspace ?? "workspace").toString().toUpperCase()} MODE) ━━━
-You MUST operate in this workspace mode.
-
-This defines:
-- how you approach the task
-- how you structure output
-- how much depth to apply
-- how to balance expansion vs precision
-
-This modifies how you apply the global SOP for this specific task.
-
-${workspaceSop.rawInstructions}
-
-Before finalizing your response, ensure it reflects this SOP.
-If it does not: improve it before returning.
-`;
-  };
+  // The exact legacy wording now lives in module-level pure renderers so it
+  // can become independently ordered runtime segments below.
   const strategyObjectiveBlock = `\n\n━━━ STRATEGY OBJECTIVE ━━━
 
 You are not here to give correct answers.
@@ -7634,7 +7599,9 @@ Rules:
 
 ━━━ END LIBRARY USAGE RULES ━━━
 `;
-  const sopAuthorityBlock = `${libraryUsageBlock}${buildGlobalSopBlock()}${buildWorkspaceSopBlock()}`;
+  const globalSopBlock = buildGlobalSopBlock(globalSop);
+  const workspaceSopBlock = buildWorkspaceSopBlock(workspaceSop);
+  const sopAuthorityBlock = `${libraryUsageBlock}${globalSopBlock}${workspaceSopBlock}`;
   // Phase 7D — Strategy Decision Layer.
   // Sits AFTER SOPs and BEFORE reasoning/synthesis preamble in both V1 and V2.
   // Controls behavior (expansion vs compression, research vs synthesis,
@@ -7766,55 +7733,58 @@ Do NOT defer work by asking the operator what they meant before producing anythi
     console.log(`[territory-profile] fetch failed — skipping: ${String(e)}`);
   }
 
-  // Inject a small thinking-path preamble into the system prompt for grounded
-  // modes so the assistant opens with what it found and what it's extending.
-  // The preamble is appended; the model must obey the original mode-lock too.
-  // SOPs are prepended via sopAuthorityBlock so they sit between core identity
-  // and the reasoning preamble.
-  let effectiveSystemPrompt = `${territoryProfileBlock}${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}`;
-  if (mode === "short_form") {
-    // SHORT-FORM mode-lock: tight output shape, no synthesis scaffolding.
-    const shapeRule = shortFormKind === "subject_lines"
-      ? "Return 8–12 subject lines, numbered, one per line. Group only if it materially helps. NO long explanation block. NO generic filler. Each subject line ≤ 70 chars."
-      : shortFormKind === "opener"
-      ? "Return 3–5 opener options, numbered. Each opener ≤ 2 sentences. After each, ONE-LINE rationale (≤ 18 words). NO long preamble, NO synthesis sections."
-      : shortFormKind === "hook_lines"
-      ? "Return 5–8 hook lines, numbered. Each ≤ 1 sentence. NO preamble, NO closing summary."
-      : shortFormKind === "voicemail"
-      ? "Return 2–3 voicemail scripts, numbered. Each ≤ 25 seconds spoken (~60 words). One-line rationale per option."
-      : shortFormKind === "talk_track_snippet"
-      ? "Return 2–3 short talk-track options, numbered. Each ≤ 3 sentences. One-line rationale per option."
-      : "Return 3–5 short options, numbered. Each ≤ 2 sentences. One-line rationale per option.";
-    const preamble = `
-
-═══ SHORT-FORM MODE (kind=${shortFormKind}) ═══
-You found ${resourceHits.length} resource hit(s) and ${kiHits} KI hit(s).
-USE the library voice/angles for grounding, but DO NOT produce a long synthesis structure.
-${shapeRule}
-If grounded vs extended distinction is material, tag each option [Grounded] or [Extended].
-Forbidden: long preambles, multi-section frameworks, "let me walk you through" openers.`;
-    effectiveSystemPrompt = `${territoryProfileBlock}${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}${preamble}`;
-  } else if (mode === "strong" || mode === "partial" || mode === "thin") {
-    const preamble = `
-
-═══ LIBRARY-AWARENESS PROTOCOL (mode=${mode.toUpperCase()}) ═══
-You found ${resourceHits.length} resource hit(s) and ${kiHits} KI hit(s) for this ask.
-${
-  mode === "strong"
-    ? "STRONG grounding: derive primarily from the cited resources/KIs. Cite explicitly. Do NOT drift into generic reasoning."
-    : mode === "partial"
-    ? "PARTIAL grounding: USE what exists, then EXTEND with reasoning. Mark sections as **Grounded** (from library) vs **Extended** (your reasoning). Never refuse — produce a first-pass answer."
-    : "THIN grounding: open with one honest line stating what was found (e.g. 'Found 1 weakly related resource and no supporting KIs'). Then proceed using general reasoning. Mark assumptions. Offer one specific clarifying question at the end if it would materially sharpen the output. NEVER refuse, NEVER produce a one-line stop."
-}
-Forbidden: canned refusals like "I don't have enough signal" without ALSO producing the best first-pass answer you can.`;
-    effectiveSystemPrompt = `${territoryProfileBlock}${strategyObjectiveBlock}${systemPrompt}${sopAuthorityBlock}${decisionLayerBlock}${preamble}`;
-  }
+  // Authoritative assembly order. The first eight entries reproduce the
+  // shipped V1 wrapper order; V2 adds its own dispatcher contracts later
+  // instead of replacing the shared core/evidence surface.
+  let promptSegments: PromptSegment[] = [
+    {
+      id: "evidence.territory",
+      kind: "retrieved_evidence",
+      text: territoryProfileBlock,
+    },
+    {
+      id: "fixed.strategy-objective",
+      kind: "fixed_instruction",
+      text: strategyObjectiveBlock,
+    },
+    ...baseSegments,
+    {
+      id: "fixed.library-usage",
+      kind: "fixed_instruction",
+      text: libraryUsageBlock,
+    },
+    {
+      id: "runtime.global-sop",
+      kind: "runtime_instruction",
+      text: globalSopBlock,
+    },
+    {
+      id: "runtime.workspace-sop",
+      kind: "runtime_instruction",
+      text: workspaceSopBlock,
+    },
+    {
+      id: "fixed.decision-layer",
+      kind: "fixed_instruction",
+      text: decisionLayerBlock,
+    },
+    {
+      id: "fixed.v1-mode",
+      kind: "fixed_instruction",
+      text: buildV1ModeInstruction({
+        mode,
+        shortFormKind,
+        resourceHits: resourceHits.length,
+        kiHits,
+      }),
+    },
+  ];
 
   // ═══════════════════════════════════════════════════════════════
   // V2 REASONING BRANCH — gated by STRATEGY_V2_REASONING flag.
-  // When ON: replace effectiveSystemPrompt with the V2 operator-grade
-  // prompt built by the dispatcher. V1 mode-lock preamble above is
-  // overwritten (not deleted) so V1 path stays intact when flag is off.
+  // When ON: add V2's operator-grade identity/reasoning to the common
+  // ledger and replace only the V1-specific preamble. V1 remains unchanged
+  // when the flag is off.
   // ═══════════════════════════════════════════════════════════════
   let v2Decision: any = null;
   let v2EvidenceBase: any = null;
@@ -7835,27 +7805,34 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
           hasEntityContext: !!accountId,
           mentionsKnownEntity: !!(pack.account?.name && new RegExp(`\\b${pack.account.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(content || "")),
         },
-        // Phase 2.5 fix: thread the SAME retrieval the V1 prompt uses into V2.
-        // Without these, strong-signal synthesis had no library to cite —
-        // which is exactly what produced the vague "your KI on…" failures.
-        accountContext: rawAccountContext || contextSection || undefined,
-        libraryContext: rawLibraryContext || undefined,
-        resourceContextBlock: rawResourceContextBlock || undefined,
-        workingThesisBlock: rawWorkingThesisBlock || (priorThesis ? JSON.stringify(priorThesis) : undefined),
+        // The common ledger already contains the exact V1 evidence blocks in
+        // workspace-resolved order. Do not serialize a V2-only copy here.
         // Pass literal hit lists so the audit can verify citation discipline.
         resourceTitles: resourceHits.map((h) => h.title),
         kiIds: kiHitList.map((k) => k.id),
         kiTitles: kiHitList.map((k) => k.title),
       });
       v2Decision = v2.decision;
-      // Phase 7C-followup — SOP Authority Ordering parity with V1:
-      // Compose: STRATEGY OBJECTIVE → V2 IDENTITY → SOP AUTHORITY → V2 REASONING.
-      // This puts SOP authority BEFORE the V2 reasoning/dispatcher contract,
-      // matching V1's order (objective → identity → SOPs → reasoning preamble).
+      // V2 is additive: keep its identity in its legacy pre-SOP position,
+      // keep its reasoning after the decision layer, and preserve the shared
+      // V1 turn/evidence ledger between them. This fixes the old replacement
+      // path, which silently discarded mode lock, behavior, workspace
+      // context, Current State, and thesis persistence.
       const v2Identity = (v2 as any).identity ?? "";
       const v2Reasoning = (v2 as any).reasoning ?? v2.systemPrompt;
-      effectiveSystemPrompt =
-        `${territoryProfileBlock}${strategyObjectiveBlock}${v2Identity}${sopAuthorityBlock}${decisionLayerBlock}\n\n${v2Reasoning}`;
+      promptSegments = promptSegments.filter(
+        (segment) => segment.id !== "fixed.v1-mode",
+      );
+      promptSegments.splice(2, 0, {
+        id: "fixed.v2-identity",
+        kind: "fixed_instruction",
+        text: v2Identity,
+      });
+      promptSegments.push({
+        id: "fixed.v2-reasoning",
+        kind: "fixed_instruction",
+        text: v2Reasoning,
+      });
       // Stash prior turn for wrong-question check later.
       v2EvidenceBase = {
         decision: v2.decision,
@@ -7903,6 +7880,11 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     }
   }
 
+  // `v2Active` reports the requested flag state; only a successful dispatch
+  // changes the assembled prompt. Keep telemetry and Global Instructions on
+  // the actual path when V2 falls back to V1.
+  const promptPath: "v1" | "v2" = v2Decision ? "v2" : "v1";
+
   // Turn-binding fix: pack.recentMessages was built BEFORE the current user
   // message was inserted, so it does NOT contain the current ask. We must
   // append the current user content explicitly, otherwise the model answers
@@ -7916,11 +7898,9 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     .filter((m, idx, arr) =>
       !(idx === arr.length - 1 && m.role === "user" && m.text === content)
     );
-  // Phase 7B — SOP injection now happens HIGH in the prompt (immediately
-  // after core identity, before reasoning preamble). The legacy late-stage
-  // GLOBAL/WORKSPACE SOP advisory blocks were removed so SOPs no longer sit
-  // beneath the reasoning preamble where the model deprioritized them.
-  // See sopAuthorityBlock above and its application in V1 + V2 paths.
+  // SOP authority remains high in the ledger: library usage → global SOP →
+  // workspace SOP → decision layer → V1/V2 reasoning. `sopAuthorityBlock`
+  // above is retained solely for its legacy injection telemetry.
 
   // ── Brainstorm enforcement moved to FINAL system-prompt layer ──
   // See injection block immediately AFTER applyGlobalInstructions below.
@@ -7961,7 +7941,11 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
     standardContextBlock = buildStandardContextPersistenceBlock(exemplarSet);
     const standardsText = renderStandardBlock(exemplarSet);
     if (standardsText) {
-      effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n${standardsText}\n`;
+      promptSegments.push({
+        id: "evidence.standards",
+        kind: "retrieved_evidence",
+        text: standardsText,
+      });
     }
   } catch (passAErr) {
     console.warn(
@@ -7975,8 +7959,17 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
   // future grounded-strategy path all flow through the same injection.
   // Returns the original prompt unchanged when payload is null/empty →
   // exact baseline behavior preserved.
-  const giPath: GIPath = v2Active ? "v2" : (mode === "strong" || mode === "partial" || mode === "thin" || mode === "short_form" ? "synthesis" : "v1");
-  effectiveSystemPrompt = applyGlobalInstructions(effectiveSystemPrompt, globalInstructions, giPath);
+  const giPath: GIPath = promptPath === "v2"
+    ? "v2"
+    : (mode === "strong" || mode === "partial" || mode === "thin" || mode === "short_form" ? "synthesis" : "v1");
+  // Preserve applyGlobalInstructions' renderer and injected/skipped telemetry,
+  // but make the result a late runtime segment rather than mutating the
+  // assembled string. Passing an empty prefix returns the exact block.
+  promptSegments.push({
+    id: "runtime.global-instructions",
+    kind: "runtime_instruction",
+    text: applyGlobalInstructions("", globalInstructions, giPath),
+  });
 
   // ── FINAL LAYER: Conversation-mode enforcement (HARD RULES) ──
   // Universal — fires whenever the universal output-mode selector
@@ -8105,7 +8098,13 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       workspaceSop?.workspace ?? null,
       { currentStateDigest: _csDigest, currentStateUsed: _csUsed },
     );
-    effectiveSystemPrompt = `${effectiveSystemPrompt}${convoBlock}`;
+    // MUST remain the final non-empty prompt segment. Its Current State
+    // digest and recency are part of the conversation-mode contract.
+    promptSegments.push({
+      id: "fixed.conversation-enforcement-final",
+      kind: "fixed_instruction",
+      text: convoBlock,
+    });
     console.log(
       `[strategy-sop] injected-conversation-enforcement-final ${JSON.stringify({
         workspace: workspaceSop?.workspace ?? null,
@@ -8119,6 +8118,21 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
       })}`,
     );
   }
+
+  const promptPlan = composePrompt(promptSegments);
+  const effectiveSystemPrompt = promptPlan.systemPrompt;
+
+  console.log(
+    "[strategy-chat][prompt-size]",
+    JSON.stringify(
+      buildPromptSizeLog({
+        path: promptPath,
+        plan: promptPlan,
+        priorMessages,
+        currentUser: content,
+      }),
+    ),
+  );
 
    // ── Phase 7A: SOP Execution Trace (observability only, no behavior change) ──
    try {
@@ -8137,7 +8151,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
      const workspaceSopApplied = wsSopLen > 0 && /WORKSPACE SOP/i.test(effectiveSystemPrompt);
      const globalInstructionsApplied = giLen > 0;
 
-     const path = v2Active ? "v2" : "v1";
+     const path = promptPath;
      // SOP authority is injected before reasoning in BOTH paths post-Phase 7C
      // followup. Detect by checking that the GLOBAL/WORKSPACE SOP markers
      // appear in the prompt BEFORE the V1 reasoning preamble or V2 mode
@@ -8168,6 +8182,10 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
          system_prompt_length: effectiveSystemPrompt.length,
          system_prompt_preview: effectiveSystemPrompt.slice(0, 1200),
          injection_order: injectionOrder,
+         segment_order: promptPlan.segments.map((segment) => segment.id),
+         fixed_instruction_chars: promptPlan.fixedInstructionChars,
+         runtime_instruction_chars: promptPlan.runtimeInstructionChars,
+         retrieved_evidence_chars: promptPlan.retrievedEvidenceChars,
        })}`,
      );
 
@@ -8182,50 +8200,6 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
      );
    } catch (traceErr) {
      console.warn("[strategy-sop][prompt-trace] failed (ignored):", String(traceErr).slice(0, 200));
-   }
-
-   // ── Additive prompt-composition telemetry (Option B) ──
-   // Shadow the actual string-concatenated prompt as a segment plan so we can
-   // report honest fixed/runtime/evidence sizes without altering the prompt
-   // sent to the model. No behavior change; log-only. See Codex prompt-
-   // consolidation plan — full segment-based assembly deferred pending the
-   // behavior-preservation ledger for the ~9 wrapper blocks in this handler.
-   try {
-     const _activePromptPath: "v1" | "v2" = v2Active ? "v2" : "v1";
-     const _evidenceText = renderEvidencePacket({
-       territory: territoryProfileBlock || "",
-       account: rawAccountContext || "",
-       currentState: currentStateResult?.promptBlock || "",
-       library: rawLibraryContext || "",
-       resources: rawResourceContextBlock || "",
-       workingThesis: rawWorkingThesisBlock || "",
-       threadContext: contextSection || "",
-     });
-     const _segments: PromptSegment[] = [
-       { id: "fixed.territory", kind: "fixed_instruction", text: territoryProfileBlock || "" },
-       { id: "fixed.objective", kind: "fixed_instruction", text: strategyObjectiveBlock || "" },
-       { id: "fixed.core", kind: "fixed_instruction", text: systemPrompt || "" },
-       { id: "runtime.sop-authority", kind: "runtime_instruction", text: sopAuthorityBlock || "" },
-       { id: "fixed.decision-layer", kind: "fixed_instruction", text: decisionLayerBlock || "" },
-       { id: "evidence.packet", kind: "retrieved_evidence", text: _evidenceText },
-     ].filter((s) => s.text && s.text.trim().length > 0);
-     const _plan = composePrompt(_segments);
-     console.log(
-       "[strategy-chat][prompt-size]",
-       JSON.stringify(
-         buildPromptSizeLog({
-           path: _activePromptPath,
-           plan: _plan,
-           priorMessages,
-           currentUser: content,
-         }),
-       ),
-     );
-   } catch (telemetryErr) {
-     console.warn(
-       "[strategy-chat][prompt-size] telemetry failed (non-fatal):",
-       (telemetryErr as Error)?.message,
-     );
    }
 
    const messages = [
@@ -9913,4 +9887,3 @@ function applyGlobalInstructions(
   );
   return `${systemPrompt}${block}`;
 }
-
