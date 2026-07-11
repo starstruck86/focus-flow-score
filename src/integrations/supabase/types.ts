@@ -743,6 +743,24 @@ export type Database = {
         }
         Relationships: []
       }
+      agent_cron_map: {
+        Row: {
+          agent: string
+          created_at: string
+          jobname: string
+        }
+        Insert: {
+          agent: string
+          created_at?: string
+          jobname: string
+        }
+        Update: {
+          agent?: string
+          created_at?: string
+          jobname?: string
+        }
+        Relationships: []
+      }
       agent_events: {
         Row: {
           account_id: string | null
