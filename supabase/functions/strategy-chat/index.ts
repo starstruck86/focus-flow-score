@@ -63,6 +63,8 @@ import {
   buildEnforcementPersistenceBlock,
   logEnforcementDryRun,
   runEnforcementDryRun,
+  retrieveSituationIntelligence,
+  type SituationIntelligenceResult,
 } from "../_shared/strategy-core/index.ts";
 import {
   assembleRoutingEvidence as v2AssembleEvidence,
@@ -74,7 +76,10 @@ import {
 } from "../_shared/strategy-core/v2/index.ts";
 import { routeRequest, type RoutingDecision } from "../_shared/strategy-router/index.ts";
 import { logRoutingDecision } from "../_shared/strategy-router/log.ts";
-import { classifySituation } from "../_shared/strategy-router/situationClassifier.ts";
+import {
+  classifySituation,
+  isIntelligenceClassificationCandidate,
+} from "../_shared/strategy-router/situationClassifier.ts";
 
 import {
   runCurrentStatePreflight,
@@ -83,6 +88,7 @@ import {
 import {
   buildPromptSizeLog,
   composePrompt,
+  renderEvidencePacket,
   type PromptSegment,
 } from "../_shared/strategy-core/promptComposition.ts";
 import {
@@ -180,6 +186,8 @@ function buildCitationsJson(args: {
   kiHits: Array<{ id: string; title: string; chapter?: string | null }>;
   libraryKis: Array<{ id: string; title: string }>;
   libraryPlaybooks: Array<{ id: string; title: string }>;
+  competitiveIntel?: Array<{ id: string; title: string }>;
+  verticalBrief?: { id: string; title: string } | null;
 }): Record<string, unknown> | null {
   const dedupById = <T extends { id: string; title: string }>(rows: T[]) => {
     const seen = new Set<string>();
@@ -198,13 +206,20 @@ function buildCitationsJson(args: {
     ...(args.libraryKis || []),
   ]);
   const playbooks = dedupById(args.libraryPlaybooks || []);
-  const total = resources.length + kis.length + playbooks.length;
+  const competitiveIntel = dedupById(args.competitiveIntel || []);
+  const verticalBriefs = dedupById(
+    args.verticalBrief ? [args.verticalBrief] : [],
+  );
+  const total = resources.length + kis.length + playbooks.length +
+    competitiveIntel.length + verticalBriefs.length;
   if (total === 0) return null;
   return {
-    version: 1,
+    version: competitiveIntel.length > 0 || verticalBriefs.length > 0 ? 2 : 1,
     resources,
     kis,
     playbooks,
+    competitive_intel: competitiveIntel,
+    vertical_briefs: verticalBriefs,
     stamped_at: new Date().toISOString(),
   };
 }
@@ -1845,7 +1860,9 @@ async function buildContextPack(
     .select(
       "linked_account_id, linked_opportunity_id, linked_territory_id, title",
     )
-    .eq("id", threadId).single();
+    .eq("id", threadId)
+    .eq("user_id", userId)
+    .single();
   if (!thread) return pack;
 
   const rawQuery = `${userQuery || ""} ${thread.title || ""}`;
@@ -1903,9 +1920,12 @@ async function buildContextPack(
     promises.push((async () => {
       const { data: acct } = await supabase.from("accounts")
         .select(
-          "id, name, industry, tier, website, notes, outreach_status, tech_stack, tags",
+          "id, name, industry, vertical_id, tier, website, notes, outreach_status, tech_stack, tags",
         )
-        .eq("id", thread.linked_account_id).single();
+        .eq("id", thread.linked_account_id)
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .single();
       pack.account = acct;
       const { data: mem } = await supabase.from("account_strategy_memory")
         .select(
@@ -1998,6 +2018,7 @@ async function buildContextPack(
       const [childRes, povRes] = await Promise.all([
         supabase.from('accounts')
           .select('id, name')
+          .eq('user_id', userId)
           .eq('parent_account_id', parentId)
           .is('deleted_at', null)
           .limit(50),
@@ -2036,8 +2057,9 @@ async function buildContextPack(
           .in('account_id', childIds),
         supabase.from('account_risks')
           .select('account_id, risk_type, severity, status')
+          .eq('user_id', userId)
           .in('account_id', childIds)
-          .neq('status', 'resolved')
+          .in('status', ['identified', 'monitoring', 'mitigating', 'realized'])
           .limit(200),
         supabase.from('account_signals')
           .select('linked_account_id, created_at')
@@ -6063,6 +6085,7 @@ type ChatPromptAssembly = {
   outputModeDecision: OutputModeDecision;
   currentStateResult: CurrentStateResult | null;
   behaviorIntent: BehaviorIntentResult;
+  situationIntelligence: SituationIntelligenceResult | null;
 };
 
 function buildConsolidatedCoreInvariants(): string {
@@ -6746,7 +6769,19 @@ async function buildChatSystemPrompt(args: {
     freeformGroundingRe.test(userContent || "") ||
     userAskedForResource(userContent) ||
     inferTopicScopes(userContent).length > 0;
-  if (!accountId && (!contextSection || contextSection.length < 200) && pickedResourceIds.length === 0 && !groundedAsk) {
+  // This regex only lets a likely intelligence ask reach the classifier.
+  // It never authorizes a database read; the normalized classifier plan is
+  // the sole retrieval gate and fails closed at low confidence.
+  const looksLikeIntelligenceAsk = isIntelligenceClassificationCandidate(
+    userContent,
+  );
+  if (
+    !accountId &&
+    (!contextSection || contextSection.length < 200) &&
+    pickedResourceIds.length === 0 &&
+    !groundedAsk &&
+    !looksLikeIntelligenceAsk
+  ) {
     // Even on the generic small-talk path, if Current State produced
     // an inferred block (e.g. user mentioned a company in chat), we
     // append it so the model is never blind to context that was
@@ -6773,6 +6808,7 @@ async function buildChatSystemPrompt(args: {
       outputModeDecision,
       currentStateResult,
       behaviorIntent,
+      situationIntelligence: null,
     };
   }
 
@@ -6824,6 +6860,7 @@ async function buildChatSystemPrompt(args: {
     userId,
     userContent: __effectiveUserContent,
     accountContext: __classifierAccountContext,
+    allowNoPlaybookClassification: true,
   });
 
   // derivedScopes is the situation-scoped replacement for the legacy
@@ -6849,7 +6886,14 @@ async function buildChatSystemPrompt(args: {
   });
 
   let retrievalError: { message: string; stack?: string | null; stage?: string } | null = null;
-  const [assembled, library, workingThesis, resources, libraryTotals] = await Promise.all([
+  const [
+    assembled,
+    library,
+    workingThesis,
+    resources,
+    libraryTotals,
+    situationIntelligence,
+  ] = await Promise.all([
     accountId
       ? assembleStrategyContext({
           supabase,
@@ -6920,7 +6964,73 @@ async function buildChatSystemPrompt(args: {
       );
       return null;
     }),
+    // The classifier's normalized plan—not the candidate regex above—is the
+    // only authority that can read either intelligence layer. The retriever
+    // applies per-table ownership filters and returns empty evidence on every
+    // miss or failure so chat remains fail-soft.
+    retrieveSituationIntelligence({
+      supabase,
+      userId,
+      account: pack.account
+        ? {
+          id: pack.account.id,
+          vertical_id: pack.account.vertical_id,
+          industry: pack.account.industry,
+        }
+        : null,
+      situation,
+    }).catch(() => {
+      console.warn(
+        "[strategy-chat] retrieveSituationIntelligence failed unexpectedly; using empty evidence",
+      );
+      return {
+        competitiveContext: "",
+        verticalContext: "",
+        competitiveSources: [],
+        verticalSource: null,
+        telemetry: {
+          competitive: {
+            requested: situation.retrieval.competitive.include,
+            queried: false,
+            matched: 0,
+            reason: "retriever_unavailable",
+            truncated: false,
+            error: "unexpected_retriever_failure",
+          },
+          vertical: {
+            requested: situation.retrieval.vertical.include,
+            queried: false,
+            matched: false,
+            reason: "retriever_unavailable",
+            truncated: false,
+            error: "unexpected_retriever_failure",
+          },
+        },
+      } satisfies SituationIntelligenceResult;
+    }),
   ]);
+
+  console.log(
+    "[strategy-chat] situation_intelligence",
+    safeJson({
+      situation: situation.situation,
+      confidence: situation.confidence,
+      competitive: situationIntelligence?.telemetry.competitive ?? {
+        requested: situation.retrieval.competitive.include,
+        queried: false,
+        matched: 0,
+        reason: "retriever_unavailable",
+        truncated: false,
+      },
+      vertical: situationIntelligence?.telemetry.vertical ?? {
+        requested: situation.retrieval.vertical.include,
+        queried: false,
+        matched: false,
+        reason: "retriever_unavailable",
+        truncated: false,
+      },
+    }),
+  );
 
 
 
@@ -6962,6 +7072,8 @@ async function buildChatSystemPrompt(args: {
     libraryCounts: library?.counts,
     contextSectionLength: contextSection?.length ?? 0,
   }) || !!resources?.userAskedForResource || pickedResourceIds.length > 0
+    || !!situationIntelligence?.competitiveContext
+    || !!situationIntelligence?.verticalContext
     || intent.intent === "synthesis"
     || intent.intent === "creation"
     || intent.intent === "evaluation";
@@ -6990,6 +7102,7 @@ async function buildChatSystemPrompt(args: {
       outputModeDecision,
       currentStateResult,
       behaviorIntent,
+      situationIntelligence,
     };
   }
 
@@ -7072,6 +7185,14 @@ async function buildChatSystemPrompt(args: {
   const currentStateBlock = currentStateResult?.promptBlock
     ? `\n${currentStateResult.promptBlock}\n`
     : "";
+  // Option A's live shared surface is the base-segment ledger. Render the
+  // two new layers through the existing EvidencePacket boundary, then add
+  // that one data-only segment to the ledger both V1 and V2 preserve.
+  const situationIntelligenceBlock = renderEvidencePacket({
+    competitiveIntelligence:
+      situationIntelligence?.competitiveContext || "",
+    industryBrief: situationIntelligence?.verticalContext || "",
+  });
 
   // Preserve the legacy V1 sequence exactly while exposing every source
   // component as a ledger entry. `evidenceBlocks` already reflects the
@@ -7102,6 +7223,11 @@ async function buildChatSystemPrompt(args: {
       id: "evidence.current-state",
       kind: "retrieved_evidence",
       text: currentStateBlock,
+    },
+    {
+      id: "evidence.situation-intelligence",
+      kind: "retrieved_evidence",
+      text: situationIntelligenceBlock,
     },
     {
       id: "fixed.thesis-persistence",
@@ -7142,6 +7268,7 @@ async function buildChatSystemPrompt(args: {
     outputModeDecision,
     currentStateResult,
     behaviorIntent,
+    situationIntelligence,
   };
 }
 
@@ -7388,6 +7515,7 @@ async function handleChat(
     outputModeDecision,
     currentStateResult,
     behaviorIntent,
+    situationIntelligence,
   } = await buildChatSystemPrompt({
     supabase,
     userId,
@@ -7401,6 +7529,13 @@ async function handleChat(
   });
   const accountId: string | null = pack.account?.id ?? null;
   const opportunityId: string | null = pack.opportunity?.id ?? null;
+  const intelligenceRetrieval = situationIntelligence?.telemetry ?? null;
+  const intelligenceSources = situationIntelligence
+    ? {
+      competitive_intel: situationIntelligence.competitiveSources,
+      vertical_brief: situationIntelligence.verticalSource,
+    }
+    : null;
 
   // ── 4-MODE LIBRARY DECISION (replaces binary refusal gate) ──
   // Library is a foundation, not a gate. Always produce output.
@@ -8253,6 +8388,8 @@ Do NOT defer work by asking the operator what they meant before producing anythi
               intended_provider: route.primaryProvider,
               intended_model: route.model,
               routing_reason: route._routingReason,
+              intelligence_retrieval: intelligenceRetrieval,
+              intelligence_sources: intelligenceSources,
               v2: {
                 version: "v2",
                 mode: v2EvidenceBase!.decision.mode,
@@ -8313,6 +8450,8 @@ Do NOT defer work by asking the operator what they meant before producing anythi
               error_type: result.error.type,
               error_message: result.error.message,
               routing_reason: route._routingReason,
+              intelligence_retrieval: intelligenceRetrieval,
+              intelligence_sources: intelligenceSources,
               v2: v2EvidenceBase
                 ? {
                   ...v2EvidenceBase.decision && {},
@@ -8573,6 +8712,8 @@ Do NOT defer work by asking the operator what they meant before producing anythi
           fallback_used: result.fallbackUsed,
           routing_reason: route._routingReason,
           retrieval_debug: retrievalDebug ?? null,
+          intelligence_retrieval: intelligenceRetrieval,
+          intelligence_sources: intelligenceSources,
           short_form_diagnostics: mode === "short_form" ? {
             kind: shortFormKind ?? null,
             prompt_chars: (content || "").length,
@@ -8656,6 +8797,8 @@ Do NOT defer work by asking the operator what they meant before producing anythi
       kiHits: kiHitList,
       libraryKis,
       libraryPlaybooks,
+      competitiveIntel: situationIntelligence?.competitiveSources ?? [],
+      verticalBrief: situationIntelligence?.verticalSource ?? null,
     });
     await supabase.from("strategy_messages").insert({
       thread_id: threadId,
@@ -9095,6 +9238,8 @@ Do NOT defer work by asking the operator what they meant before producing anythi
           kiHits: kiHitList,
           libraryKis,
           libraryPlaybooks,
+          competitiveIntel: situationIntelligence?.competitiveSources ?? [],
+          verticalBrief: situationIntelligence?.verticalSource ?? null,
         });
 
         // Step 4: emit the entire guarded+audited text and its citations
@@ -9143,6 +9288,8 @@ Do NOT defer work by asking the operator what they meant before producing anythi
               fallback_used: false,
               routing_reason: route._routingReason,
               retrieval_debug: retrievalDebug ?? null,
+              intelligence_retrieval: intelligenceRetrieval,
+              intelligence_sources: intelligenceSources,
               hybrid_guard_checked: hybridGuard.checked,
               hybrid_guard_passed: hybridGuard.passed,
               hybrid_guard_failure_reasons: hybridGuard.failure_reasons,

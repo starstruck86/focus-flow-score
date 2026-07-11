@@ -32,6 +32,8 @@ export interface StrategyCitations {
   resources?: StrategyCitationSource[];
   kis?: StrategyCitationSource[];
   playbooks?: StrategyCitationSource[];
+  competitive_intel?: StrategyCitationSource[];
+  vertical_briefs?: StrategyCitationSource[];
   stamped_at?: string;
   [key: string]: unknown;
 }

@@ -1,10 +1,15 @@
-import { BookOpen, Brain, FileText } from 'lucide-react';
+import { BookOpen, Brain, Building2, FileText, Swords } from 'lucide-react';
 import type {
   StrategyCitationSource,
   StrategyCitations,
 } from '@/types/strategy';
 
-type SourceKind = 'resource' | 'ki' | 'playbook';
+type SourceKind =
+  | 'resource'
+  | 'ki'
+  | 'playbook'
+  | 'competitive_intel'
+  | 'vertical_brief';
 
 interface DisplaySource extends StrategyCitationSource {
   kind: SourceKind;
@@ -14,6 +19,8 @@ const SOURCE_META: Record<SourceKind, { label: string; Icon: typeof FileText }> 
   resource: { label: 'Resource', Icon: FileText },
   ki: { label: 'Knowledge item', Icon: Brain },
   playbook: { label: 'Playbook', Icon: BookOpen },
+  competitive_intel: { label: 'Competitive intel', Icon: Swords },
+  vertical_brief: { label: 'Industry POV', Icon: Building2 },
 };
 
 function validSources(value: unknown, kind: SourceKind): DisplaySource[] {
@@ -32,6 +39,8 @@ export function parseCitationSources(citations: StrategyCitations | null | undef
     ...validSources(citations.resources, 'resource'),
     ...validSources(citations.kis, 'ki'),
     ...validSources(citations.playbooks, 'playbook'),
+    ...validSources(citations.competitive_intel, 'competitive_intel'),
+    ...validSources(citations.vertical_briefs, 'vertical_brief'),
   ];
   const seen = new Set<string>();
   return sources.filter((source) => {

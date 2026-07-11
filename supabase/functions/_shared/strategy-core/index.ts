@@ -41,6 +41,11 @@ export {
 } from "./contextAssembly.ts";
 
 export {
+  retrieveSituationIntelligence,
+  type SituationIntelligenceResult,
+} from "./situationIntelligenceRetrieval.ts";
+
+export {
   buildStrategyChatSystemPromptParts,
   buildStrategyChatSystemPrompt,
   shouldUseStrategyCorePrompt,

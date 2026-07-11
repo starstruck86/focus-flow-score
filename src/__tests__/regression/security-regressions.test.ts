@@ -45,6 +45,16 @@ describe("security regressions — source-invariant guards", () => {
     expect(src).toMatch(/\.eq\(\s*['"]user_id['"]/);
   });
 
+  it("strategy-chat verifies thread and account ownership before context retrieval", () => {
+    const src = read("supabase/functions/strategy-chat/index.ts");
+    expect(src).toMatch(
+      /from\("strategy_threads"\)[\s\S]{0,300}\.eq\("id", threadId\)[\s\S]{0,120}\.eq\("user_id", userId\)/,
+    );
+    expect(src).toMatch(
+      /from\("accounts"\)[\s\S]{0,350}\.eq\("id", thread\.linked_account_id\)[\s\S]{0,120}\.eq\("user_id", userId\)/,
+    );
+  });
+
   it("parse-screenshot enforces ownership via .eq('user_id', ...)", () => {
     const src = read("supabase/functions/parse-screenshot/index.ts");
     expect(src).toMatch(/\.eq\(\s*['"]user_id['"]/);

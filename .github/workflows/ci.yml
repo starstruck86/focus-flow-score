@@ -12,7 +12,18 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.2
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: >-
+          deno check --no-lock
+          supabase/functions/strategy-chat/index.ts
+          supabase/functions/analyze-call/index.ts
+      - run: >-
+          deno test --no-lock
+          supabase/functions/_shared/strategy-router/situationClassifier_test.ts
+          supabase/functions/_shared/strategy-core/situationIntelligenceRetrieval_test.ts
       - run: npm audit --omit=dev --audit-level=high

@@ -146,7 +146,7 @@ Do NOT use placeholder text. Do NOT hedge. State the action directly.`;
 
     const userMsg = `Call summary: ${summary}${expansion_signal_text ? `\n\nExpansion signal: ${expansion_signal_text}` : ""}
 
-Situation classified: ${situation.situation} (confidence: ${situation.confidence.toFixed(2)})
+Situation classified: ${situation.situation} (confidence: ${situation.confidence})
 
 ${kiContext ? `Relevant knowledge items:\n${kiContext.slice(0, 2000)}` : "No library context available."}
 
