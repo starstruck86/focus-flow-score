@@ -8428,13 +8428,7 @@ Forbidden: canned refusals like "I don't have enough signal" without ALSO produc
             String(shErr).slice(0, 200),
           );
         }
-        // BOLT 3 — citations + playbook usage (stream path).
-        const __streamCitationsJson = buildCitationsJson({
-          resourceHits,
-          kiHits: kiHitList,
-          libraryKis,
-          libraryPlaybooks,
-        });
+        // BOLT 3 — persist citations built above alongside the streamed message.
         await supabase.from("strategy_messages").insert({
           thread_id: threadId,
           user_id: userId,
