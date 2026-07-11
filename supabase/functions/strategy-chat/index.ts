@@ -81,6 +81,13 @@ import {
   type CurrentStateResult,
 } from "../_shared/strategy-core/currentStateIntelligence.ts";
 import {
+  buildPromptSizeLog,
+  composePrompt,
+  renderEvidencePacket,
+  type EvidencePacket,
+  type PromptSegment,
+} from "../_shared/strategy-core/promptComposition.ts";
+import {
   selectOutputMode,
   renderModeContractBody,
   renderConversationEnforcementBlock,
