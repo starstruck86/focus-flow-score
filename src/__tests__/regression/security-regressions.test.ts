@@ -55,6 +55,42 @@ describe("security regressions — source-invariant guards", () => {
     );
   });
 
+  it("strategy-chat has one classifier-gated web path with stream citation parity", () => {
+    const src = read("supabase/functions/strategy-chat/index.ts");
+    // The older Current State Perplexity side path must remain disabled so it
+    // cannot bypass retrieval.webResearch.include or duplicate the bounded call.
+    expect(src).toMatch(/runCurrentStatePreflight\([\s\S]{0,900}webCapabilityAvailable:\s*false/);
+    expect(src).toMatch(/const __classifierWebRequested\s*=\s*[\s\S]{0,150}situation\.retrieval\.webResearch\.include\s*&&[\s\S]{0,80}__deterministicCurrentFactNeed/);
+    expect(src).toMatch(/classifierRequiresCurrentExternalFacts:\s*__classifierWebRequested/);
+    expect(src).toMatch(/const __webRequested\s*=\s*__classifierWebRequested\s*\|\|\s*__workspaceRequiresWebResearch/);
+    // Both non-stream and stream citation builders must receive the same set.
+    expect(src.match(/webSources:\s*webResearch\?\.sources\s*\?\?\s*\[\]/g)).toHaveLength(2);
+    expect(src).toMatch(/web_sources:\s*webSources/);
+  });
+
+  it("strategy-chat preserves required Deep Research before generic exit", () => {
+    const src = read("supabase/functions/strategy-chat/index.ts");
+    const resolveAt = src.indexOf(
+      "const __resolvedContract = resolveServerWorkspaceContract(workspaceKeyRaw)",
+    );
+    const genericExitAt = src.indexOf("!__workspaceRequiresWebResearch", resolveAt);
+    const classifierAt = src.indexOf("const situation = await classifySituation", resolveAt);
+    expect(resolveAt).toBeGreaterThan(-1);
+    expect(genericExitAt).toBeGreaterThan(resolveAt);
+    expect(classifierAt).toBeGreaterThan(genericExitAt);
+  });
+
+  it("strategy-chat minimizes context sent to the external web provider", () => {
+    const src = read("supabase/functions/strategy-chat/index.ts");
+    const call = src.match(/retrieveCurrentWebResearch\(\{[\s\S]{0,500}?\}\)/)?.[0] ?? "";
+    expect(call).toMatch(/accountContext:\s*__webAccountContext/);
+    expect(call).not.toMatch(/__classifierAccountContext|tech_stack|tags|opportunity|stage/i);
+    const publicContext = src.match(/const __webAccountCtxParts[\s\S]{0,500}?const __webAccountContext/)?.[0] ?? "";
+    expect(publicContext).toMatch(/pack\.account\?\.name/);
+    expect(publicContext).toMatch(/pack\.account\?\.industry/);
+    expect(publicContext).not.toMatch(/tech_stack|tags|opportunity|stage/i);
+  });
+
   it("parse-screenshot enforces ownership via .eq('user_id', ...)", () => {
     const src = read("supabase/functions/parse-screenshot/index.ts");
     expect(src).toMatch(/\.eq\(\s*['"]user_id['"]/);

@@ -26,4 +26,6 @@ jobs:
           deno test --no-lock
           supabase/functions/_shared/strategy-router/situationClassifier_test.ts
           supabase/functions/_shared/strategy-core/situationIntelligenceRetrieval_test.ts
+          supabase/functions/_shared/strategy-core/webResearchRetrieval_test.ts
+          supabase/functions/_shared/strategy-core/retrievalEnforcement_test.ts
       - run: npm audit --omit=dev --audit-level=high

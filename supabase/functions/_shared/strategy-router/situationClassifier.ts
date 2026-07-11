@@ -22,6 +22,7 @@ export interface SituationRetrievalPlan {
     categoryHints: string[];
   };
   vertical: { include: boolean };
+  webResearch: { include: boolean };
 }
 
 export interface SituationResult {
@@ -69,13 +70,44 @@ const CLASSIFIER_TIMEOUT_MS = 12_000;
  * never authorizes a database query; only the normalized retrieval plan can.
  */
 export function isIntelligenceClassificationCandidate(text: string): boolean {
-  return /\b(competitor|competitive|compete|vs\.?|versus|against|incumbent|battlecard|beat|replace|alternative(?:s)?\s+to|rip[-\s]+and[-\s]+replace|displace(?:ment)?|build[-\s]?vs[-\s]?buy|industry|vertical|market|landscape|adjust|apps[\s-]?flyer|kochava|singular)\b/i
-    .test(text || "");
+  const value = text || "";
+  const intelligenceLayer =
+    /\b(competitor|competitive|compete|vs\.?|versus|against|incumbent|battlecard|beat|replace|alternative(?:s)?\s+to|rip[-\s]+and[-\s]+replace|displace(?:ment)?|build[-\s]?vs[-\s]?buy|industry|vertical|market|landscape|adjust|apps[\s-]?flyer|kochava|singular)\b/i
+      .test(value);
+  if (intelligenceLayer) return true;
+
+  return requiresCurrentExternalFacts(value);
+}
+
+/**
+ * Deterministic half of automatic web authorization. This deliberately does
+ * not include generic competitive/industry intent: the classifier must opt in
+ * AND the user's own words must ask for a volatile external fact. Explicit
+ * Deep Research is authorized separately by its workspace contract.
+ */
+export function requiresCurrentExternalFacts(text: string): boolean {
+  const value = text || "";
+  const explicitVerification =
+    /\b(search|look[ -]?up|research|verify|check|fact[ -]?check|web|online)\b/i
+      .test(value);
+  const freshness =
+    /\b(current|currently|latest|recent|recently|today|right now|as of|this (?:week|month|quarter|year)|newly|just announced)\b/i
+      .test(value);
+  const volatileExternalFact =
+    /\b(news|announcement|earnings|filing|funding|fundraise|acquisition|acquired|merger|m&a|layoffs?|hiring|leadership|executive|ceo|cfo|cro|cmo|pricing|price change|product launch|product release|platform policy|app store policy|regulation|regulatory|law|legislation|market (?:share|size|data|growth|conditions)|stock price)\b/i
+      .test(value);
+  const currentLeaderLookup =
+    /\b(?:who (?:is|are)|name|identify)\b[\s\S]{0,80}\b(?:ceo|cfo|cro|cmo|chief executive|chief financial|chief revenue|chief marketing)\b/i
+      .test(value);
+
+  return currentLeaderLookup ||
+    (volatileExternalFact && (explicitVerification || freshness));
 }
 
 const EMPTY_RETRIEVAL_PLAN: SituationRetrievalPlan = {
   competitive: { include: false, competitorNames: [], categoryHints: [] },
   vertical: { include: false },
+  webResearch: { include: false },
 };
 
 const GENERAL_FALLBACK: SituationResult = {
@@ -131,7 +163,8 @@ function buildPrompt(
     '  "derivedScopes": string[],      // 2–4 topic keywords for retrieval (e.g. ["competitive","adjust","displacement"])',
     '  "retrieval": {',
     '    "competitive": { "include": boolean, "competitorNames": string[], "categoryHints": string[] },',
-    '    "vertical": { "include": boolean }',
+    '    "vertical": { "include": boolean },',
+    '    "webResearch": { "include": boolean }',
     "  }",
     "}",
     "",
@@ -141,9 +174,11 @@ function buildPrompt(
     "- derivedScopes are concept/tactic/problem-type terms, not the rep's literal words. No stopwords, no account names.",
     "- competitive.include is true ONLY for a named competitor, competitive/displacement evaluation, build-vs-buy, vendor consolidation, or when competitor-specific positioning would materially change the answer.",
     "- vertical.include is true ONLY when ACCOUNT CONTEXT identifies a linked account and the ask needs industry/vertical POV, account research, discovery strategy, market framing, or vertical-specific messaging. It is false without a linked account, and for generic rewrites, small copy assets, and unrelated tactical asks.",
+    "- webResearch.include is true ONLY when correctness materially depends on current external facts likely to have changed since internal evidence was created: recent company news, filings/earnings, leadership, funding/M&A, product/pricing/platform-policy changes, regulation, or current market data. It may also be true for an explicit request to verify or look up one of those current facts.",
+    "- webResearch.include is false for general strategic reasoning, brainstorming, evergreen explanation, drafting/rewriting, internal deal or account current-state questions, questions answerable from supplied context, a named competitor/industry alone, hypotheticals, and vague asks such as 'what's new?'. Uncertainty means false.",
     "- competitorNames may use names in the rep question or ACCOUNT CONTEXT. Never invent a competitor and never return the account name. Max 3.",
     "- categoryHints are narrow catalog categories such as MMP or build-vs-buy. Max 2.",
-    '- confidence="low" MUST set both retrieval include flags to false.',
+    '- confidence="low" MUST set every retrieval include flag to false. webResearch.include additionally requires confidence="high".',
     "- With no available playbooks, playbookId/playbookTitle MUST be null, but still classify the situation and return a retrieval plan.",
     "",
     "AVAILABLE PLAYBOOKS:",
@@ -214,6 +249,7 @@ function normalizeRetrievalPlan(
     return {
       competitive: { include: false, competitorNames: [], categoryHints: [] },
       vertical: { include: false },
+      webResearch: { include: false },
     };
   }
 
@@ -228,6 +264,11 @@ function normalizeRetrievalPlan(
       !Array.isArray(plan.vertical)
     ? plan.vertical as Record<string, unknown>
     : null;
+  const webResearch = plan.webResearch &&
+      typeof plan.webResearch === "object" &&
+      !Array.isArray(plan.webResearch)
+    ? plan.webResearch as Record<string, unknown>
+    : null;
   const competitiveInclude = competitive?.include === true;
 
   return {
@@ -241,6 +282,12 @@ function normalizeRetrievalPlan(
         : [],
     },
     vertical: { include: vertical?.include === true },
+    // Automatic external research has a deliberately higher bar than the
+    // internal competitive/vertical reads. Whole-situation confidence must be
+    // high and the field must be the literal boolean true.
+    webResearch: {
+      include: confidence === "high" && webResearch?.include === true,
+    },
   };
 }
 
@@ -398,6 +445,7 @@ export async function classifySituation(
           result.retrieval.competitive.competitorNames.length,
         category_hint_count: result.retrieval.competitive.categoryHints.length,
         vertical_requested: result.retrieval.vertical.include,
+        web_research_requested: result.retrieval.webResearch.include,
         latency_ms: latency,
       }),
     );

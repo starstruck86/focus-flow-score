@@ -203,7 +203,7 @@ export function evaluateLibraryCoverage(
   return "no_relevant_hits";
 }
 
-// ─── Web gating (advisory in MVP) ────────────────────────────────
+// ─── Web gating ──────────────────────────────────────────────────
 
 export type WebGateDecision =
   | { shouldQuery: false; reason: WebGateSkipReason }
@@ -216,17 +216,25 @@ export type WebGateSkipReason =
 
 export type WebGateRunReason =
   | "required_for_current_facts"
-  | "opportunistic_signal";
+  | "opportunistic_signal"
+  | "classifier_current_external_facts";
 
 export interface WebGateInputs {
   /**
    * Whether the calling surface has a real web/search tool available
-   * to invoke. The Strategy chat path currently has none, so this is
-   * `false` and we log only.
+   * to invoke. A false value preserves an honest no-op and telemetry.
    */
   webCapabilityAvailable: boolean;
   /** Whether the existing surface has decided to call the web tool. */
   legacyWouldQuery: boolean;
+  /**
+   * Per-turn automatic authorization. The caller must set this only after a
+   * high-confidence classifier opt-in AND its independent deterministic
+   * current-fact gate agree. It may override a workspace's static `off`
+   * posture because the answer would otherwise depend on an unverified
+   * current external fact.
+   */
+  classifierRequiresCurrentExternalFacts?: boolean;
 }
 
 /** Decide whether to invoke the web retriever for this turn. */
@@ -235,6 +243,15 @@ export function decideWebQuery(
   inputs: WebGateInputs,
 ): WebGateDecision {
   const mode: WebMode = rules.webMode;
+  if (inputs.classifierRequiresCurrentExternalFacts === true) {
+    if (!inputs.webCapabilityAvailable) {
+      return { shouldQuery: false, reason: "no_web_capability_wired" };
+    }
+    return {
+      shouldQuery: true,
+      reason: "classifier_current_external_facts",
+    };
+  }
   if (mode === "off") {
     return { shouldQuery: false, reason: "web_mode_off" };
   }

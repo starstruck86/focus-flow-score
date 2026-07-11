@@ -17,9 +17,9 @@ import {
   decideLibraryQuery,
   decideWebQuery,
   evaluateLibraryCoverage,
+  type OrderableContextBlock,
   orderContextBlocks,
   resolveServerWorkspaceContract,
-  type OrderableContextBlock,
 } from "./retrievalEnforcement.ts";
 import { getWorkspaceContract } from "./workspaceContracts.ts";
 
@@ -179,6 +179,28 @@ Deno.test("webMode: off → never queries", () => {
   });
   assertEquals(d.shouldQuery, false);
   assertEquals(d.reason, "web_mode_off");
+});
+
+Deno.test("classifier-confirmed current fact need overrides static webMode off", () => {
+  const rules = getWorkspaceContract("brainstorm").retrievalRules;
+  const d = decideWebQuery(rules, {
+    webCapabilityAvailable: true,
+    legacyWouldQuery: false,
+    classifierRequiresCurrentExternalFacts: true,
+  });
+  assertEquals(d.shouldQuery, true);
+  assertEquals(d.reason, "classifier_current_external_facts");
+});
+
+Deno.test("classifier-confirmed current fact need fails honestly without capability", () => {
+  const rules = getWorkspaceContract("work").retrievalRules;
+  const d = decideWebQuery(rules, {
+    webCapabilityAvailable: false,
+    legacyWouldQuery: false,
+    classifierRequiresCurrentExternalFacts: true,
+  });
+  assertEquals(d.shouldQuery, false);
+  assertEquals(d.reason, "no_web_capability_wired");
 });
 
 Deno.test("webMode: required_for_current_facts but no capability → skip honestly", () => {

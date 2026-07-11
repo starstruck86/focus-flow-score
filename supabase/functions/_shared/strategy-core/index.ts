@@ -46,6 +46,14 @@ export {
 } from "./situationIntelligenceRetrieval.ts";
 
 export {
+  normalizeWebResearchResponse,
+  retrieveCurrentWebResearch,
+  type WebResearchFinding,
+  type WebResearchResult,
+  type WebResearchSource,
+} from "./webResearchRetrieval.ts";
+
+export {
   buildStrategyChatSystemPromptParts,
   buildStrategyChatSystemPrompt,
   shouldUseStrategyCorePrompt,

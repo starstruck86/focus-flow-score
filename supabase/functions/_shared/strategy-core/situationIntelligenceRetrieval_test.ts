@@ -128,6 +128,7 @@ function situation(options: {
         categoryHints: options.hints ?? [],
       },
       vertical: { include: options.vertical ?? false },
+      webResearch: { include: false },
     },
   };
 }

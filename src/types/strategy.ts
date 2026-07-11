@@ -25,6 +25,8 @@ export interface StrategyThread {
 export interface StrategyCitationSource {
   id: string;
   title: string;
+  url?: string;
+  published_at?: string;
 }
 
 export interface StrategyCitations {
@@ -34,6 +36,7 @@ export interface StrategyCitations {
   playbooks?: StrategyCitationSource[];
   competitive_intel?: StrategyCitationSource[];
   vertical_briefs?: StrategyCitationSource[];
+  web_sources?: StrategyCitationSource[];
   stamped_at?: string;
   [key: string]: unknown;
 }

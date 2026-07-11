@@ -65,6 +65,9 @@ import {
   runEnforcementDryRun,
   retrieveSituationIntelligence,
   type SituationIntelligenceResult,
+  retrieveCurrentWebResearch,
+  type WebResearchResult,
+  type WebResearchSource,
 } from "../_shared/strategy-core/index.ts";
 import {
   assembleRoutingEvidence as v2AssembleEvidence,
@@ -79,6 +82,7 @@ import { logRoutingDecision } from "../_shared/strategy-router/log.ts";
 import {
   classifySituation,
   isIntelligenceClassificationCandidate,
+  requiresCurrentExternalFacts,
 } from "../_shared/strategy-router/situationClassifier.ts";
 
 import {
@@ -178,9 +182,8 @@ function withRoutingMeta(
 
 // ── BOLT 3 helpers ─────────────────────────────────────────────
 // Structured citations for strategy_messages.citations_json.
-// Kept intentionally minimal (id + title) so the operator UI /
-// audit surfaces can attribute each assistant turn to the exact
-// resource/KI/playbook rows that shaped the prompt.
+// Internal rows stay minimal (id + title). Validated web sources also retain
+// their URL and publication date so the live UI can render useful provenance.
 function buildCitationsJson(args: {
   resourceHits: Array<{ id: string; title: string }>;
   kiHits: Array<{ id: string; title: string; chapter?: string | null }>;
@@ -188,6 +191,7 @@ function buildCitationsJson(args: {
   libraryPlaybooks: Array<{ id: string; title: string }>;
   competitiveIntel?: Array<{ id: string; title: string }>;
   verticalBrief?: { id: string; title: string } | null;
+  webSources?: WebResearchSource[];
 }): Record<string, unknown> | null {
   const dedupById = <T extends { id: string; title: string }>(rows: T[]) => {
     const seen = new Set<string>();
@@ -210,16 +214,64 @@ function buildCitationsJson(args: {
   const verticalBriefs = dedupById(
     args.verticalBrief ? [args.verticalBrief] : [],
   );
+  const webSources = (() => {
+    const seen = new Set<string>();
+    const out: Array<{
+      id: string;
+      title: string;
+      url: string;
+      published_at: string;
+    }> = [];
+    for (const source of args.webSources || []) {
+      if (out.length === 3) break;
+      const title = typeof source?.title === "string"
+        ? source.title.trim()
+        : "";
+      const publishedAt = typeof source?.publishedAt === "string"
+        ? source.publishedAt.trim()
+        : "";
+      let url = "";
+      try {
+        const parsed = new URL(source?.url || "");
+        if (
+          (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+          !parsed.username && !parsed.password
+        ) {
+          parsed.hash = "";
+          url = parsed.toString();
+        }
+      } catch {
+        // Invalid web provenance never reaches persisted citations.
+      }
+      if (
+        !title || !url || !/^\d{4}-\d{2}-\d{2}$/.test(publishedAt) ||
+        seen.has(url)
+      ) continue;
+      seen.add(url);
+      out.push({
+        id: url,
+        title,
+        url,
+        published_at: publishedAt,
+      });
+    }
+    return out;
+  })();
   const total = resources.length + kis.length + playbooks.length +
-    competitiveIntel.length + verticalBriefs.length;
+    competitiveIntel.length + verticalBriefs.length + webSources.length;
   if (total === 0) return null;
   return {
-    version: competitiveIntel.length > 0 || verticalBriefs.length > 0 ? 2 : 1,
+    version: webSources.length > 0
+      ? 3
+      : competitiveIntel.length > 0 || verticalBriefs.length > 0
+      ? 2
+      : 1,
     resources,
     kis,
     playbooks,
     competitive_intel: competitiveIntel,
     vertical_briefs: verticalBriefs,
+    web_sources: webSources,
     stamped_at: new Date().toISOString(),
   };
 }
@@ -6086,6 +6138,7 @@ type ChatPromptAssembly = {
   currentStateResult: CurrentStateResult | null;
   behaviorIntent: BehaviorIntentResult;
   situationIntelligence: SituationIntelligenceResult | null;
+  webResearch: WebResearchResult | null;
 };
 
 function buildConsolidatedCoreInvariants(): string {
@@ -6621,11 +6674,11 @@ async function buildChatSystemPrompt(args: {
       threadHasLinkedAccount: !!pack.account?.id,
       isTaskPipeline: false, // chat path; task pipelines bypass buildPromptOnce
       intentTag: intent?.intent ?? null,
-      // Verified-first model: when Perplexity is configured we can
-      // ground signals in real-time web research; otherwise the
-      // current-state layer falls back to model recall tagged as
-      // source:"inference" so it never masquerades as web-sourced.
-      webCapabilityAvailable: !!Deno.env.get("PERPLEXITY_API_KEY"),
+      // Live web research is owned by the later, high-bar situation plan so
+      // every automatic query is bounded, dated, and citable. Current State
+      // stays inference-only here; leaving its older implicit Perplexity path
+      // enabled would duplicate calls and bypass webResearch.include.
+      webCapabilityAvailable: false,
     });
     console.log(
       "[strategy-chat] current_state_preflight",
@@ -6769,9 +6822,16 @@ async function buildChatSystemPrompt(args: {
     freeformGroundingRe.test(userContent || "") ||
     userAskedForResource(userContent) ||
     inferTopicScopes(userContent).length > 0;
+  // Resolve the server-owned workspace contract before the generic-chat exit:
+  // Deep Research's required current-facts path must remain reachable even on
+  // a clean thread with no linked account or internal evidence.
+  const __resolvedContract = resolveServerWorkspaceContract(workspaceKeyRaw);
+  const __retrievalRules = __resolvedContract.retrievalRules;
+  const __workspaceRequiresWebResearch =
+    __retrievalRules.webMode === "required_for_current_facts";
   // This regex only lets a likely intelligence ask reach the classifier.
-  // It never authorizes a database read; the normalized classifier plan is
-  // the sole retrieval gate and fails closed at low confidence.
+  // It never authorizes a database or external read. Automatic web research
+  // additionally requires the deterministic current-fact gate below.
   const looksLikeIntelligenceAsk = isIntelligenceClassificationCandidate(
     userContent,
   );
@@ -6780,7 +6840,8 @@ async function buildChatSystemPrompt(args: {
     (!contextSection || contextSection.length < 200) &&
     pickedResourceIds.length === 0 &&
     !groundedAsk &&
-    !looksLikeIntelligenceAsk
+    !looksLikeIntelligenceAsk &&
+    !__workspaceRequiresWebResearch
   ) {
     // Even on the generic small-talk path, if Current State produced
     // an inferred block (e.g. user mentioned a company in chat), we
@@ -6809,18 +6870,16 @@ async function buildChatSystemPrompt(args: {
       currentStateResult,
       behaviorIntent,
       situationIntelligence: null,
+      webResearch: null,
     };
   }
 
   // ── W3 — Retrieval Enforcement ────────────────────────────────
   // Resolve the workspace contract server-side (never trust the
   // client). The contract's retrievalRules drive whether we query the
-  // library and how the assembled context block is ordered. Web mode
-  // is honored advisory-only here because strategy-chat has no live
-  // web tool wired in MVP.
-  const __resolvedContract = resolveServerWorkspaceContract(workspaceKeyRaw);
-  const __retrievalRules = __resolvedContract.retrievalRules;
-
+  // library and how the assembled context block is ordered. Static web mode
+  // and the high-confidence per-turn classifier signal are reconciled below
+  // before the bounded live-search sidecar runs.
   // Pull the same context the prep doc gets, in parallel with library
   // retrieval AND the working thesis state for this account AND the
   // newly-added resource retrieval (exact / near-exact title + entity
@@ -6842,6 +6901,16 @@ async function buildChatSystemPrompt(args: {
   }
   if (pack.opportunity?.stage) __accountCtxParts.push(`Opp stage: ${pack.opportunity.stage}`);
   const __classifierAccountContext = __accountCtxParts.join(" | ");
+  // External web lookup gets only public entity-disambiguation fields. CRM
+  // tags, tech stack, opportunity stage, and other deal state remain local.
+  const __webAccountCtxParts: string[] = [];
+  if (pack.account?.name) {
+    __webAccountCtxParts.push(`Account: ${pack.account.name}`);
+  }
+  if (pack.account?.industry) {
+    __webAccountCtxParts.push(`Industry: ${pack.account.industry}`);
+  }
+  const __webAccountContext = __webAccountCtxParts.join(" | ");
 
   // Easy Prompt (task 3.1) — expand terse asks into a full Branch
   // expansion-AE instruction BEFORE the situation classifier, library
@@ -6862,6 +6931,16 @@ async function buildChatSystemPrompt(args: {
     accountContext: __classifierAccountContext,
     allowNoPlaybookClassification: true,
   });
+  // Automatic research needs two independent signals: the classifier's
+  // literal high-confidence opt-in and a narrow deterministic fact shape in
+  // the user's own words. The required Deep Research contract is the explicit
+  // override and does not depend on classifier availability.
+  const __deterministicCurrentFactNeed = requiresCurrentExternalFacts(
+    __effectiveUserContent,
+  );
+  const __classifierWebRequested =
+    situation.retrieval.webResearch.include &&
+    __deterministicCurrentFactNeed;
 
   // derivedScopes is the situation-scoped replacement for the legacy
   // keyword soup. If the classifier returned "general" / no scopes
@@ -6879,10 +6958,12 @@ async function buildChatSystemPrompt(args: {
     derivedScopes: scopes,
     legacyWouldQuery: scopes.length > 0,
   });
+  const __webRequested = __classifierWebRequested ||
+    __workspaceRequiresWebResearch;
   const __webDecision = decideWebQuery(__retrievalRules, {
-    // strategy-chat has no live web/search adapter wired today.
-    webCapabilityAvailable: false,
+    webCapabilityAvailable: !!Deno.env.get("PERPLEXITY_API_KEY"),
     legacyWouldQuery: false,
+    classifierRequiresCurrentExternalFacts: __classifierWebRequested,
   });
 
   let retrievalError: { message: string; stack?: string | null; stage?: string } | null = null;
@@ -6893,6 +6974,7 @@ async function buildChatSystemPrompt(args: {
     resources,
     libraryTotals,
     situationIntelligence,
+    webResearch,
   ] = await Promise.all([
     accountId
       ? assembleStrategyContext({
@@ -7008,6 +7090,34 @@ async function buildChatSystemPrompt(args: {
         },
       } satisfies SituationIntelligenceResult;
     }),
+    // One bounded live-search sidecar. The normalized classifier flag is the
+    // only automatic authorization; required Deep Research remains the other
+    // explicit path. The retriever has no non-search fallback and returns only
+    // findings backed by provider search-result title/URL/date metadata.
+    retrieveCurrentWebResearch({
+      requested: __webRequested,
+      userContent: __effectiveUserContent,
+      accountContext: __webAccountContext,
+    }).catch(() => {
+      console.warn(
+        "[strategy-chat] retrieveCurrentWebResearch failed unexpectedly; using empty evidence",
+      );
+      return {
+        context: "",
+        findings: [],
+        sources: [],
+        telemetry: {
+          requested: __webRequested,
+          queried: false,
+          matched: 0,
+          sourceCount: 0,
+          reason: "retriever_unavailable",
+          truncated: false,
+          latencyMs: 0,
+          error: "unexpected_web_retriever_failure",
+        },
+      } satisfies WebResearchResult;
+    }),
   ]);
 
   console.log(
@@ -7015,6 +7125,9 @@ async function buildChatSystemPrompt(args: {
     safeJson({
       situation: situation.situation,
       confidence: situation.confidence,
+      web_research_classifier_include:
+        situation.retrieval.webResearch.include,
+      web_research_deterministic_match: __deterministicCurrentFactNeed,
       competitive: situationIntelligence?.telemetry.competitive ?? {
         requested: situation.retrieval.competitive.include,
         queried: false,
@@ -7029,6 +7142,7 @@ async function buildChatSystemPrompt(args: {
         reason: "retriever_unavailable",
         truncated: false,
       },
+      web_research: webResearch.telemetry,
     }),
   );
 
@@ -7051,7 +7165,7 @@ async function buildChatSystemPrompt(args: {
       libraryHitCount: __libraryHitCount,
       libraryCoverageState: __libraryCoverageState,
       webDecision: __webDecision,
-      webHitCount: 0,
+      webHitCount: webResearch.findings.length,
       surface: "strategy-chat",
     }),
   );
@@ -7074,6 +7188,8 @@ async function buildChatSystemPrompt(args: {
   }) || !!resources?.userAskedForResource || pickedResourceIds.length > 0
     || !!situationIntelligence?.competitiveContext
     || !!situationIntelligence?.verticalContext
+    || __webRequested
+    || !!webResearch.context
     || intent.intent === "synthesis"
     || intent.intent === "creation"
     || intent.intent === "evaluation";
@@ -7103,6 +7219,7 @@ async function buildChatSystemPrompt(args: {
       currentStateResult,
       behaviorIntent,
       situationIntelligence,
+      webResearch,
     };
   }
 
@@ -7186,13 +7303,21 @@ async function buildChatSystemPrompt(args: {
     ? `\n${currentStateResult.promptBlock}\n`
     : "";
   // Option A's live shared surface is the base-segment ledger. Render the
-  // two new layers through the existing EvidencePacket boundary, then add
-  // that one data-only segment to the ledger both V1 and V2 preserve.
+  // situation-gated layers through the existing EvidencePacket boundary,
+  // then add that one data-only segment to the ledger both V1 and V2 preserve.
   const situationIntelligenceBlock = renderEvidencePacket({
+    webResearch: webResearch.context,
     competitiveIntelligence:
       situationIntelligence?.competitiveContext || "",
     industryBrief: situationIntelligence?.verticalContext || "",
   });
+  const webResearchPolicyBlock = __webRequested
+    ? webResearch.context
+      ? `═══ CURRENT WEB EVIDENCE DISCIPLINE ═══
+Use current web findings only for the current external facts they verify. Put WEB["Exact source title"] near every material web-derived claim, and state the listed publication date when timing affects the conclusion. Cite only titles present in Current web research; never turn these sources into internal-library evidence or extend them beyond what the finding supports.`
+      : `═══ CURRENT WEB EVIDENCE UNAVAILABLE ═══
+This turn required a current external fact check, but no verified dated finding was returned. Do not answer the missing current fact from model memory, imply that research succeeded, or fabricate a source. Mark that fact unverified/unknown and give only advice that does not depend on it.`
+    : "";
 
   // Preserve the legacy V1 sequence exactly while exposing every source
   // component as a ledger entry. `evidenceBlocks` already reflects the
@@ -7228,6 +7353,11 @@ async function buildChatSystemPrompt(args: {
       id: "evidence.situation-intelligence",
       kind: "retrieved_evidence",
       text: situationIntelligenceBlock,
+    },
+    {
+      id: "fixed.web-research-discipline",
+      kind: "fixed_instruction",
+      text: webResearchPolicyBlock,
     },
     {
       id: "fixed.thesis-persistence",
@@ -7269,6 +7399,7 @@ async function buildChatSystemPrompt(args: {
     currentStateResult,
     behaviorIntent,
     situationIntelligence,
+    webResearch,
   };
 }
 
@@ -7516,6 +7647,7 @@ async function handleChat(
     currentStateResult,
     behaviorIntent,
     situationIntelligence,
+    webResearch,
   } = await buildChatSystemPrompt({
     supabase,
     userId,
@@ -7529,11 +7661,17 @@ async function handleChat(
   });
   const accountId: string | null = pack.account?.id ?? null;
   const opportunityId: string | null = pack.opportunity?.id ?? null;
-  const intelligenceRetrieval = situationIntelligence?.telemetry ?? null;
-  const intelligenceSources = situationIntelligence
+  const intelligenceRetrieval = situationIntelligence || webResearch
     ? {
-      competitive_intel: situationIntelligence.competitiveSources,
-      vertical_brief: situationIntelligence.verticalSource,
+      ...(situationIntelligence?.telemetry ?? {}),
+      web_research: webResearch?.telemetry ?? null,
+    }
+    : null;
+  const intelligenceSources = situationIntelligence || webResearch
+    ? {
+      competitive_intel: situationIntelligence?.competitiveSources ?? [],
+      vertical_brief: situationIntelligence?.verticalSource ?? null,
+      web_sources: webResearch?.sources ?? [],
     }
     : null;
 
@@ -8799,6 +8937,7 @@ Do NOT defer work by asking the operator what they meant before producing anythi
       libraryPlaybooks,
       competitiveIntel: situationIntelligence?.competitiveSources ?? [],
       verticalBrief: situationIntelligence?.verticalSource ?? null,
+      webSources: webResearch?.sources ?? [],
     });
     await supabase.from("strategy_messages").insert({
       thread_id: threadId,
@@ -9240,6 +9379,7 @@ Do NOT defer work by asking the operator what they meant before producing anythi
           libraryPlaybooks,
           competitiveIntel: situationIntelligence?.competitiveSources ?? [],
           verticalBrief: situationIntelligence?.verticalSource ?? null,
+          webSources: webResearch?.sources ?? [],
         });
 
         // Step 4: emit the entire guarded+audited text and its citations

@@ -26,6 +26,7 @@ export interface EvidencePacket {
   territory?: string | null;
   account?: string | null;
   currentState?: string | null;
+  webResearch?: string | null;
   competitiveIntelligence?: string | null;
   industryBrief?: string | null;
   library?: string | null;
@@ -78,6 +79,7 @@ export function renderEvidencePacket(packet: EvidencePacket): string {
     renderEvidenceSection("Territory context", packet.territory),
     renderEvidenceSection("Account context", packet.account),
     renderEvidenceSection("Current State intelligence", packet.currentState),
+    renderEvidenceSection("Current web research", packet.webResearch),
     renderEvidenceSection(
       "Competitive intelligence",
       packet.competitiveIntelligence,
@@ -165,8 +167,7 @@ export function buildPromptSizeLog(args: {
   return {
     event: "strategy-chat.prompt-size",
     path: args.path,
-    total_prompt_chars:
-      args.plan.systemPrompt.length +
+    total_prompt_chars: args.plan.systemPrompt.length +
       conversationHistoryChars +
       currentUserChars,
     system_prompt_chars: args.plan.systemPrompt.length,
