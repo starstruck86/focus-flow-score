@@ -237,7 +237,7 @@ export function buildStrategyChatSystemPromptParts(
   return {
     fixedInstructions: parts.join("\n\n"),
     evidenceBlocks: ordered.map((block) => ({
-      id: block.label,
+      id: block.label ?? block.kind,
       text: block.text,
     })),
   };
