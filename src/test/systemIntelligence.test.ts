@@ -318,8 +318,10 @@ describe('Time-Aware Strategy', () => {
   });
 
   it('calculates deal age', () => {
-    const now = new Date(2026, 2, 25);
-    const created = new Date(2026, 1, 25); // 28 days ago
+    // Spans the US daylight-saving transition: still 28 calendar days even
+    // though the elapsed duration is one hour short of 28 full 24-hour days.
+    const now = new Date('2026-03-25T00:00:00-04:00');
+    const created = new Date('2026-02-25T00:00:00-05:00');
     const ctx = buildTemporalContext(now, created);
     expect(ctx.dealAgeDays).toBe(28);
   });
