@@ -2082,6 +2082,42 @@ export type Database = {
           },
         ]
       }
+      competitive_intel: {
+        Row: {
+          build_vs_buy_talking_points: Json
+          category: string | null
+          competitor_name: string
+          created_at: string
+          displacement_questions: Json
+          evidence: Json
+          id: string
+          positioning: string | null
+          source_url: string | null
+        }
+        Insert: {
+          build_vs_buy_talking_points?: Json
+          category?: string | null
+          competitor_name: string
+          created_at?: string
+          displacement_questions?: Json
+          evidence?: Json
+          id?: string
+          positioning?: string | null
+          source_url?: string | null
+        }
+        Update: {
+          build_vs_buy_talking_points?: Json
+          category?: string | null
+          competitor_name?: string
+          created_at?: string
+          displacement_questions?: Json
+          evidence?: Json
+          id?: string
+          positioning?: string | null
+          source_url?: string | null
+        }
+        Relationships: []
+      }
       contacts: {
         Row: {
           account_id: string | null
