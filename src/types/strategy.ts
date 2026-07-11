@@ -22,6 +22,20 @@ export interface StrategyThread {
   cloned_from_thread_id?: string | null;
 }
 
+export interface StrategyCitationSource {
+  id: string;
+  title: string;
+}
+
+export interface StrategyCitations {
+  version?: number;
+  resources?: StrategyCitationSource[];
+  kis?: StrategyCitationSource[];
+  playbooks?: StrategyCitationSource[];
+  stamped_at?: string;
+  [key: string]: unknown;
+}
+
 export interface StrategyMessage {
   id: string;
   thread_id: string;
@@ -29,7 +43,7 @@ export interface StrategyMessage {
   role: string;
   message_type: string;
   content_json: Record<string, unknown>;
-  citations_json: Record<string, unknown> | null;
+  citations_json: StrategyCitations | null;
   created_at: string;
 }
 
