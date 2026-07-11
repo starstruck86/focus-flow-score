@@ -413,8 +413,12 @@ export function buildTemporalContext(now: Date, dealCreatedAt?: Date): TemporalC
   const quarterProgress = ((quarterMonth - 1) + dayProgress) / 3;
   const isEndOfQuarter = quarterMonth === 3 && now.getDate() > 15;
 
+  // Compare local calendar dates through UTC so daylight-saving transitions
+  // do not turn an exact calendar-day span into a 23- or 25-hour interval.
+  const calendarDayUtc = (date: Date) =>
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
   const dealAgeDays = dealCreatedAt
-    ? Math.floor((now.getTime() - dealCreatedAt.getTime()) / (1000 * 60 * 60 * 24))
+    ? Math.floor((calendarDayUtc(now) - calendarDayUtc(dealCreatedAt)) / (1000 * 60 * 60 * 24))
     : 0;
 
   return {

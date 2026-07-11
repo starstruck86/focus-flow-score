@@ -1,7 +1,7 @@
 /**
  * Phase 4D — Targeted Remediation Framework
  *
- * Feature-flagged. Default OFF. Does NOT weaken gates or bypass artifact gate.
+ * Feature-flagged. Default OFF. Artifact gating remains mandatory and unchanged.
  * Selects the minimal fix strategy based on failure classification.
  *
  * This module is declaration-only on the client side. The actual remediation

@@ -13,7 +13,7 @@
  *
  * Rules:
  *  - Gate ALWAYS re-runs after remediation
- *  - Does NOT weaken gates or bypass artifact gate
+ *  - Artifact gating remains mandatory and unchanged
  *  - Does NOT change behavior when flag is off
  */
 

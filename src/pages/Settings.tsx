@@ -178,7 +178,7 @@ export default function Settings() {
 
   return (
     <Layout>
-      <div className={`min-h-screen ${T.ink} pb-24`}>
+      <div data-testid="settings-page" className={`min-h-screen ${T.ink} pb-24`}>
         <header className={`sticky top-0 z-10 ${T.ink} border-b ${T.line} px-4 py-3`}>
           <div className="flex items-center gap-2">
             <SettingsIcon className={`h-5 w-5 ${T.muted}`} />

@@ -27,23 +27,28 @@ describe("TelemetryCollector", () => {
     expect(tc.getRows()).toHaveLength(1);
   });
 
-  it("startStage captures timing automatically", async () => {
-    const tc = new TelemetryCollector(RUN_ID, USER_ID, TASK_TYPE);
-    const stage = tc.startStage("research", { provider: "perplexity", model: "sonar-pro" });
+  it("startStage captures timing automatically", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+      const tc = new TelemetryCollector(RUN_ID, USER_ID, TASK_TYPE);
+      const stage = tc.startStage("research", { provider: "perplexity", model: "sonar-pro" });
 
-    // Simulate some work
-    await new Promise((r) => setTimeout(r, 10));
+      vi.advanceTimersByTime(10);
 
-    const row = stage.finish({
-      success: true,
-      usage: { input_tokens: 500, output_tokens: 800, total_tokens: 1300 },
-    });
+      const row = stage.finish({
+        success: true,
+        usage: { input_tokens: 500, output_tokens: 800, total_tokens: 1300 },
+      });
 
-    expect(row.duration_ms).toBeGreaterThanOrEqual(10);
-    expect(row.provider).toBe("perplexity");
-    expect(row.model).toBe("sonar-pro");
-    expect(row.input_tokens).toBe(500);
-    expect(row.output_tokens).toBe(800);
+      expect(row.duration_ms).toBe(10);
+      expect(row.provider).toBe("perplexity");
+      expect(row.model).toBe("sonar-pro");
+      expect(row.input_tokens).toBe(500);
+      expect(row.output_tokens).toBe(800);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("aggregateTokens sums across stages", () => {
