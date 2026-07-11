@@ -41,9 +41,11 @@ export {
 } from "./contextAssembly.ts";
 
 export {
+  buildStrategyChatSystemPromptParts,
   buildStrategyChatSystemPrompt,
   shouldUseStrategyCorePrompt,
   type BuildStrategyChatPromptArgs,
+  type StrategyChatPromptParts,
 } from "./chatPrompt.ts";
 
 export {
