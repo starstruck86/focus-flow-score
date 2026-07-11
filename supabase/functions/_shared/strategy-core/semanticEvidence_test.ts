@@ -4,7 +4,10 @@ import {
   assertStringIncludes,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { formatLibraryContext } from "../strategy-orchestrator/libraryRetrieval.ts";
-import { buildStrategyChatEvidenceBlocks } from "./chatPrompt.ts";
+import {
+  buildStrategyChatEvidenceBlocks,
+  buildStrategyChatSystemPromptParts,
+} from "./chatPrompt.ts";
 import { renderStandardBlock } from "./libraryStandard.ts";
 import { renderLibraryTotalsBlock } from "./libraryTotals.ts";
 import { renderResourceContextBlock } from "./resourceRetrieval.ts";
@@ -195,10 +198,41 @@ Deno.test("semantic evidence: strategy-chat uses data-only Current State project
     'segment.id === "runtime.global-sop"',
   );
   assertStringIncludes(source, "promptSegments.splice(");
+  assertStringIncludes(
+    source,
+    'const requiredLibraryWorkspace =\n    __retrievalRules.libraryUse === "required"',
+  );
+  assertStringIncludes(source, "!requiredLibraryWorkspace &&");
+  assertStringIncludes(
+    source,
+    '|| __retrievalRules.libraryUse === "required"',
+  );
   assertEquals(
     (source.match(/const hybrid = enforceHybridSchema\(/g) ?? []).length,
+    1,
+    "hybrid rewrite must remain streaming-only",
+  );
+  assertEquals(
+    (source.match(/const hybridGuard = evaluateHybridGuard\(/g) ?? []).length,
+    1,
+    "non-stream must retain telemetry without rewriting output",
+  );
+  assertEquals(
+    (source.match(/hasCiteableLibraryEvidence: citeableLibraryHitCount > 0/g) ??
+      [])
+      .length,
     2,
-    "hybrid guard/rewrite must run on stream and non-stream paths",
+    "both output paths must make citation telemetry evidence-aware",
+  );
+  assertEquals(
+    (source.match(/requiresLiteralLibraryCitation,/g) ?? []).length,
+    2,
+    "both output paths must honor the active literal-citation posture",
+  );
+  assertEquals(
+    (source.match(/citationMode: effectiveCitationMode/g) ?? []).length,
+    2,
+    "forced literal posture must make W5 verify citations on both paths",
   );
   assertStringIncludes(
     source,
@@ -208,4 +242,13 @@ Deno.test("semantic evidence: strategy-chat uses data-only Current State project
     !/id:\s*"evidence\.current-state"[\s\S]{0,180}promptBlock/.test(source),
     "raw Current State prompt contract leaked back into evidence.current-state",
   );
+});
+
+Deno.test("semantic evidence: durable identity defers volatile facts to Territory", () => {
+  const fixed = buildStrategyChatSystemPromptParts({
+    depth: "Standard",
+  }).fixedInstructions;
+  assertStringIncludes(fixed, "Live Territory Profile evidence");
+  assert(!fixed.includes("$1.4M"));
+  assert(!fixed.includes("14 enterprise accounts"));
 });

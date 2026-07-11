@@ -16,6 +16,10 @@
 
 import type { V2AskShape, V2Mode } from "./operatorDispatcher.ts";
 import { type RubricScores, scoreRubric } from "./reasoningRubric.ts";
+import {
+  countLiteralLibraryCitations,
+  hasLiteralLibraryCitation,
+} from "../citationSyntax.ts";
 
 export interface QualityAuditResult {
   scores: RubricScores;
@@ -24,8 +28,6 @@ export interface QualityAuditResult {
 }
 
 const VAGUE_LIBRARY_RE = /\b(your\s+(?:KI|ki)\s+on\s+\w+|your\s+library\s+(?:suggests|shows|argues|on)|from\s+your\s+library|your\s+playbook\s+(?:suggests|shows)|your\s+resources?\s+(?:show|suggest))\b/i;
-const LITERAL_RESOURCE_RE = /RESOURCE\[\s*"?[^\]"]+"?\s*\]/;
-const LITERAL_KI_RE = /KI\[\s*[a-f0-9]{6,}\s*\]/i;
 const POV_QUICK_RE = /\b(the (?:dominant|real|core|key|single biggest|highest-leverage)|what (?:actually|really) matters|i'?d (?:lead|weight|prioritize)|the call is|commit to|matters more than)\b/i;
 const TRADEOFF_RE = /\b(ignore|table stakes|deprioriti[sz]e|skip|noise|overrated|overweight|correlation,?\s*not\s*cause|doesn't move (?:the )?(?:number|deal|needle))\b/i;
 const COMMERCIAL_RE = /\b(pipeline|velocity|win[\s-]rate|acv|arr|churn|payback|cost of inaction|deal[\s-]?slip|no[\s-]decision|cycle time|forecast|conversion rate|quota|attainment|expansion[\s-]?arr|footprint|whitespace|sub-?entity|qbr|usage trends|renewal risk|mmp consolidation|attribution accuracy|displacement)\b/i;
@@ -82,9 +84,7 @@ export function auditQuality(args: {
   // flagged when they dominate or substitute for literal citations). The
   // strict variant lets us verify we're improving signal, not hiding fails.
   const vagueRefCount = (text.match(/\b(?:your\s+(?:KI|ki)\s+on\s+\w+|your\s+library\s+(?:suggests|shows|argues|on)|from\s+your\s+library|your\s+playbook\s+(?:suggests|shows)|your\s+resources?\s+(?:show|suggest))\b/gi) || []).length;
-  const literalCiteCount =
-    (text.match(/RESOURCE\[\s*"?[^\]"]+"?\s*\]/g) || []).length +
-    (text.match(/KI\[\s*[a-f0-9]{6,}\s*\]/gi) || []).length;
+  const literalCiteCount = countLiteralLibraryCitations(text);
   if (totalStrong >= 5 && vagueRefCount >= 1) {
     flags.push("vague_library_references_strict");
   }
@@ -121,7 +121,7 @@ export function auditQuality(args: {
     resourceHitCount >= 5;
   if (isStrongSynth) {
     const hasPOV = POV_QUICK_RE.test(text);
-    const hasLiteralCitation = LITERAL_RESOURCE_RE.test(text) || LITERAL_KI_RE.test(text);
+    const hasLiteralCitation = hasLiteralLibraryCitation(text);
     const hasTradeoff = TRADEOFF_RE.test(text);
     const hasCommercial = COMMERCIAL_RE.test(text);
 

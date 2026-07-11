@@ -15,6 +15,7 @@
 // ════════════════════════════════════════════════════════════════
 
 import type { V2AskShape, V2Mode } from "./operatorDispatcher.ts";
+import { countLiteralLibraryCitations } from "../citationSyntax.ts";
 
 export type RubricDimension =
   | "correctness"
@@ -227,10 +228,6 @@ const VAGUE_LIBRARY_REFERENCE_MARKERS = [
   /\bper\s+your\s+(?:notes|materials)\b/i,
 ];
 
-// Phase 2.5: literal citation patterns (PASS markers when strong hits exist)
-const LITERAL_RESOURCE_CITATION_RE = /RESOURCE\[\s*"?[^\]"]+"?\s*\]/g;
-const LITERAL_KI_CITATION_RE = /KI\[\s*[a-f0-9]{6,}\s*\]/gi;
-
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
@@ -309,9 +306,7 @@ export function scoreRubric(args: ScoreRubricInput): RubricScores {
   let libraryLeverage: number;
   let libraryLeverageStrict: number;
   if (args.hadLibraryHits) {
-    const literalResourceCites = (text.match(LITERAL_RESOURCE_CITATION_RE) || []).length;
-    const literalKiCites = (text.match(LITERAL_KI_CITATION_RE) || []).length;
-    const literalCites = literalResourceCites + literalKiCites;
+    const literalCites = countLiteralLibraryCitations(text);
 
     if (totalStrongHits >= 5) {
       // STRICT (Phase 2.5)
@@ -375,9 +370,7 @@ export function scoreRubric(args: ScoreRubricInput): RubricScores {
   // Otherwise → mark FAIL (overall capped at 0.35)
   if (isStrongSignalSynthesis) {
     const hasPOV = povHits >= 1;
-    const literalCount =
-      (text.match(LITERAL_RESOURCE_CITATION_RE) || []).length +
-      (text.match(LITERAL_KI_CITATION_RE) || []).length;
+    const literalCount = countLiteralLibraryCitations(text);
     const hasLiteralCitation = literalCount >= 1;
     const hasTradeoff = whatDoesntMatterHits >= 1;
     const hasCommercial = commercialHits >= 1;

@@ -16,19 +16,24 @@ import {
   buildCompactWorkspaceDelta,
   buildConsolidatedCoreInvariants,
   buildCurrentStateReasoningPolicy,
+  buildEvidencePolicy,
   buildResolvedTurnContract,
   buildResourceGroundingPolicy,
   buildSemanticPromptSegments,
   buildThesisContinuityPolicy,
   buildV2ReasoningDelta,
   buildV2StrongSynthesisTail,
+  renderLibraryDisclosureContract,
+  resolveLibraryDisclosurePlan,
   type SemanticChatIntent,
   type SemanticLibraryMode,
   type SemanticV2Decision,
   THESIS_PERSISTENCE_CONTRACT,
 } from "./semanticPrompt.ts";
+import { STRICT_LIBRARY_CITATION_INSTRUCTION } from "./citationSyntax.ts";
 import { WORKSPACE_CONTRACTS } from "./workspaceContracts.ts";
 import type { WorkspaceContract } from "./workspaceContractTypes.ts";
+import type { LibraryCoverageState } from "./retrievalEnforcement.ts";
 
 const INTENTS: SemanticChatIntent[] = [
   "bootstrap",
@@ -126,6 +131,7 @@ function buildWorstCase(args: {
   v2Decision?: SemanticV2Decision | null;
   outputMode?: "conversation" | "structured" | "preserve" | "adaptive";
   behaviorIntent?: (typeof BEHAVIORS)[number];
+  libraryCoverageState?: LibraryCoverageState;
 }): ReturnType<typeof composePrompt> {
   const base: PromptSegment[] = [
     {
@@ -166,6 +172,13 @@ function buildWorstCase(args: {
       mode: args.outputMode ?? OUTPUT.mode,
     },
     workspaceContract: args.contract,
+    libraryCoverageState: args.libraryCoverageState ??
+      (args.contract.retrievalRules.libraryUse === "required" &&
+          args.libraryMode === "thin"
+        ? "required_missing"
+        : args.libraryMode === "thin"
+        ? "no_relevant_hits"
+        : "used"),
     libraryMode: args.libraryMode,
     shortFormKind: args.shortFormKind,
     v2Decision: args.v2Decision,
@@ -248,6 +261,28 @@ Deno.test("semantic prompt: exhaustive fixed-instruction matrix stays within 20k
                     outputMode,
                     behaviorIntent,
                   });
+                  assertEquals(
+                    plan.segments.filter((segment) =>
+                      segment.id === "fixed.library-disclosure"
+                    ).length,
+                    1,
+                  );
+                  const competingDisclosureText = plan.segments
+                    .filter((segment) =>
+                      segment.id !== "fixed.library-disclosure"
+                    )
+                    .map((segment) => segment.text)
+                    .join("\n");
+                  for (
+                    const retiredCommand of [
+                      "Open once with *Extended",
+                      "Resources that would close this gap",
+                      "With zero relevant hits, disclose once",
+                      "Mark only a material extension beyond the evidence",
+                    ]
+                  ) {
+                    assert(!competingDisclosureText.includes(retiredCommand));
+                  }
                   if (plan.fixedInstructionChars > maximum) {
                     maximum = plan.fixedInstructionChars;
                     maximumCase = [
@@ -373,6 +408,356 @@ Deno.test("semantic prompt: V2 synthesis sentinel markers remain intact", () => 
     }),
     "",
   );
+  assertStringIncludes(tail, "it alone owns namespace syntax");
+  for (const competingSyntax of ["RESOURCE[", "KI[", "CARD[", "PLAYBOOK["]) {
+    assert(!tail.includes(competingSyntax));
+  }
+});
+
+Deno.test("semantic prompt: strict citation syntax has one canonical owner", () => {
+  const policy = buildEvidencePolicy({
+    rules: WORKSPACE_CONTRACTS.library.retrievalRules,
+    mode: "strong",
+    forceLiteralCitations: true,
+  });
+  assertStringIncludes(policy, STRICT_LIBRARY_CITATION_INSTRUCTION);
+  assert(!policy.includes("CARD["));
+
+  const tail = buildV2StrongSynthesisTail({
+    decision: { mode: "A_strong", askShape: "synthesis_framework" },
+    totalHits: 5,
+  });
+  assertStringIncludes(tail, "follow Evidence Policy");
+  assert(!tail.includes('only listed RESOURCE["title"] or KI[id]'));
+
+  const plan = buildWorstCase({
+    contract: WORKSPACE_CONTRACTS.library,
+    intent: "synthesis",
+    depth: "Deep",
+    libraryMode: "strong",
+    v2Decision: { mode: "A_strong", askShape: "synthesis_framework" },
+  });
+  assertEquals(
+    plan.segments
+      .filter((segment) =>
+        segment.kind === "fixed_instruction" &&
+        /(?:RESOURCE|KI|CARD|PLAYBOOK)\[/.test(segment.text)
+      )
+      .map((segment) => segment.id),
+    ["fixed.evidence-policy"],
+  );
+});
+
+Deno.test("semantic prompt: library disclosure resolves every collision to one outcome", () => {
+  const plan = (
+    overrides: Partial<Parameters<typeof resolveLibraryDisclosurePlan>[0]> = {},
+  ) =>
+    resolveLibraryDisclosurePlan({
+      intent: "freeform",
+      behaviorIntent: BEHAVIORS[2],
+      outputModeDecision: { ...OUTPUT, mode: "structured" },
+      rules: WORKSPACE_CONTRACTS.work.retrievalRules,
+      coverageState: "used",
+      mode: "general",
+      v2Decision: null,
+      ...overrides,
+    });
+
+  const libraryThin = plan({
+    rules: WORKSPACE_CONTRACTS.library.retrievalRules,
+    coverageState: "required_missing",
+    mode: "thin",
+    v2Decision: { mode: "D_thin", askShape: "account_brief" },
+  });
+  assertEquals(libraryThin, {
+    kind: "library_required_gap",
+    placement: "section",
+    includeLibrarySummary: true,
+    reason: "library_required",
+  });
+  const libraryText = renderLibraryDisclosureContract(libraryThin);
+  assertEquals(libraryText.match(/## Sources used/g)?.length, 1);
+  assertEquals(libraryText.match(/## Gaps/g)?.length, 1);
+  assert(!libraryText.includes("Resources that would close this gap"));
+
+  assertEquals(
+    plan({
+      rules: WORKSPACE_CONTRACTS.library.retrievalRules,
+      coverageState: "required_missing",
+      mode: "thin",
+      outputModeDecision: { ...OUTPUT, mode: "conversation" },
+      v2Decision: { mode: "D_thin", askShape: "account_brief" },
+    }).placement,
+    "inline",
+  );
+  assertEquals(
+    plan({
+      intent: "creation",
+      rules: WORKSPACE_CONTRACTS.library.retrievalRules,
+      coverageState: "required_missing",
+      mode: "thin",
+      v2Decision: { mode: "D_thin", askShape: "account_brief" },
+    }).placement,
+    "creation_gaps",
+  );
+
+  for (
+    const [intent, placement] of [
+      ["analysis", "analysis_thesis"],
+      ["synthesis", "synthesis_attribution"],
+      ["creation", "creation_gaps"],
+      ["evaluation", "evaluation_attribution"],
+    ] as const
+  ) {
+    const resolved = plan({
+      intent,
+      rules: WORKSPACE_CONTRACTS.library.retrievalRules,
+      coverageState: "required_missing",
+      mode: "general",
+    });
+    assertEquals(resolved.placement, placement);
+    const rendered = renderLibraryDisclosureContract(resolved);
+    assertStringIncludes(
+      rendered,
+      placement === "analysis_thesis"
+        ? "Account thesis"
+        : placement === "creation_gaps"
+        ? "Gaps / Missing Anchors"
+        : "Source Attribution",
+    );
+    assertStringIncludes(rendered, "including Application");
+    assertStringIncludes(rendered, "selected outcome");
+  }
+
+  for (const mode of ["general", "partial"] as const) {
+    assertEquals(
+      plan({
+        rules: WORKSPACE_CONTRACTS.library.retrievalRules,
+        coverageState: "required_missing",
+        mode,
+      }).kind,
+      "library_required_gap",
+    );
+  }
+  assertEquals(
+    plan({
+      rules: WORKSPACE_CONTRACTS.library.retrievalRules,
+      coverageState: "used",
+      mode: "thin",
+    }).kind,
+    "library_summary",
+  );
+
+  for (
+    const v2Decision of [
+      { mode: "D_thin", askShape: "general" },
+      { mode: "A_strong", askShape: "general" },
+      { mode: "B_partial", askShape: "general" },
+    ] as const
+  ) {
+    const rendered = renderLibraryDisclosureContract(plan({
+      rules: WORKSPACE_CONTRACTS.library.retrievalRules,
+      coverageState: "used",
+      mode: v2Decision.mode === "D_thin" ? "thin" : "partial",
+      v2Decision,
+    }));
+    assertEquals(rendered.match(/## Sources used/g)?.length, 1);
+    assertEquals(rendered.match(/## Gaps/g)?.length, 1);
+    assert(!rendered.includes("Open once with *Extended"));
+  }
+
+  for (const outputMode of ["structured", "adaptive"] as const) {
+    assertEquals(
+      plan({
+        rules: WORKSPACE_CONTRACTS.library.retrievalRules,
+        coverageState: "required_missing",
+        mode: "general",
+        outputModeDecision: { ...OUTPUT, mode: outputMode },
+        behaviorIntent: BEHAVIORS[0],
+      }).placement,
+      "inline",
+    );
+  }
+
+  assertEquals(
+    plan({
+      rules: WORKSPACE_CONTRACTS.library.retrievalRules,
+      coverageState: "required_missing",
+      mode: "general",
+      behaviorIntent: BEHAVIORS[3],
+    }).reason,
+    "closed_turn",
+  );
+
+  for (
+    const intent of [
+      "bootstrap",
+      "template",
+      "email",
+      "message",
+      "pitch",
+      "account_brief",
+      "ninety_day_plan",
+      "next_steps",
+      "provenance",
+    ] as const
+  ) {
+    assertEquals(
+      plan({
+        intent,
+        rules: WORKSPACE_CONTRACTS.library.retrievalRules,
+        coverageState: "required_missing",
+        mode: "thin",
+        v2Decision: { mode: "D_thin", askShape: "account_brief" },
+      }).reason,
+      "closed_turn",
+    );
+  }
+
+  for (
+    const shortPlan of [
+      plan({
+        rules: WORKSPACE_CONTRACTS.library.retrievalRules,
+        coverageState: "required_missing",
+        mode: "short_form",
+      }),
+      plan({
+        rules: WORKSPACE_CONTRACTS.library.retrievalRules,
+        coverageState: "required_missing",
+        mode: "thin",
+        v2Decision: { mode: "D_thin", askShape: "short_form" },
+      }),
+    ]
+  ) {
+    assertEquals(shortPlan.reason, "short_form");
+    assertEquals(shortPlan.kind, "none");
+  }
+
+  const v2Thin = plan({
+    mode: "thin",
+    v2Decision: { mode: "D_thin", askShape: "account_brief" },
+  });
+  assertEquals(v2Thin.kind, "v2_thin_notice");
+  const v2ThinText = renderLibraryDisclosureContract(v2Thin);
+  assertEquals(
+    v2ThinText.match(/Extended — limited library signal/g)?.length,
+    1,
+  );
+  assert(!v2ThinText.includes("Resources that would close this gap"));
+
+  for (
+    const extensionPlan of [
+      plan({
+        mode: "strong",
+        v2Decision: { mode: "A_strong", askShape: "general" },
+      }),
+      plan({
+        mode: "partial",
+        v2Decision: { mode: "B_partial", askShape: "general" },
+      }),
+      plan({ mode: "partial", v2Decision: null }),
+    ]
+  ) {
+    assertEquals(extensionPlan.kind, "material_extension");
+  }
+  assertEquals(plan({ mode: "thin" }).reason, "ordinary_thin");
+});
+
+Deno.test("semantic prompt: every closed asset suppresses visible library disclosure", () => {
+  for (
+    const intent of [
+      "bootstrap",
+      "template",
+      "email",
+      "message",
+      "pitch",
+      "account_brief",
+      "ninety_day_plan",
+      "next_steps",
+      "provenance",
+    ] as const
+  ) {
+    const prompt = buildWorstCase({
+      contract: WORKSPACE_CONTRACTS.library,
+      intent,
+      depth: "Deep",
+      libraryMode: "thin",
+      libraryCoverageState: "required_missing",
+      v2Decision: { mode: "D_thin", askShape: "account_brief" },
+      outputMode: "structured",
+    });
+    const disclosure = prompt.segments.find((segment) =>
+      segment.id === "fixed.library-disclosure"
+    );
+    assertStringIncludes(disclosure?.text ?? "", "Outcome: NONE (closed_turn)");
+    assert(!prompt.systemPrompt.includes("Extended — limited library signal"));
+    assert(!prompt.systemPrompt.includes("Extended beyond your library"));
+    assert(!prompt.systemPrompt.includes("I don't see that exact resource"));
+    assert(!prompt.systemPrompt.includes("body is not loaded"));
+    assert(!prompt.systemPrompt.includes("name one gap"));
+    assertStringIncludes(
+      prompt.systemPrompt,
+      "Closed/short Turn owns visible shape",
+    );
+  }
+});
+
+Deno.test("semantic prompt: Library plus V2 thin emits one disclosure segment", () => {
+  const prompt = buildWorstCase({
+    contract: WORKSPACE_CONTRACTS.library,
+    intent: "freeform",
+    depth: "Standard",
+    libraryMode: "thin",
+    v2Decision: { mode: "D_thin", askShape: "account_brief" },
+    outputMode: "structured",
+    behaviorIntent: BEHAVIORS[2],
+  });
+  assertEquals(
+    prompt.segments.filter((segment) =>
+      segment.id === "fixed.library-disclosure"
+    ).length,
+    1,
+  );
+  assertEquals(prompt.systemPrompt.match(/## Gaps/g)?.length, 1);
+  assertEquals(prompt.systemPrompt.match(/## Sources used/g)?.length, 1);
+  assert(!prompt.systemPrompt.includes("Open once with *Extended"));
+  assert(!prompt.systemPrompt.includes("Resources that would close this gap"));
+  assert(
+    !prompt.systemPrompt.includes("With zero relevant hits, disclose once"),
+  );
+});
+
+Deno.test("semantic prompt: required Library folds resource absence into its sole disclosure", () => {
+  const prompt = buildWorstCase({
+    contract: WORKSPACE_CONTRACTS.library,
+    intent: "freeform",
+    depth: "Deep",
+    libraryMode: "thin",
+    libraryCoverageState: "required_missing",
+    v2Decision: null,
+    outputMode: "structured",
+    behaviorIntent: BEHAVIORS[2],
+  });
+  const resource =
+    prompt.segments.find((segment) => segment.id === "fixed.resource-grounding")
+      ?.text ?? "";
+  assertStringIncludes(
+    resource,
+    "Library Disclosure's selected location",
+  );
+  for (
+    const competingCommand of [
+      'open "Using <exact title>',
+      "name one gap",
+      "say the body is not loaded",
+      "I don't see that exact resource",
+      "ask at most one useful refinement",
+    ]
+  ) {
+    assert(!resource.includes(competingCommand), competingCommand);
+  }
+  assertEquals(prompt.systemPrompt.match(/## Sources used/g)?.length, 1);
+  assertEquals(prompt.systemPrompt.match(/## Gaps/g)?.length, 1);
 });
 
 Deno.test("semantic prompt: distinct legacy rules have one executable destination", () => {
@@ -390,6 +775,19 @@ Deno.test("semantic prompt: distinct legacy rules have one executable destinatio
   const synthesis = turn("synthesis", "partial");
   assertStringIncludes(synthesis, "at least two actual sources per pattern");
   assertStringIncludes(synthesis, "Mark each major section **Grounded**");
+  const synthesisSections = [
+    "**1. Pattern Extraction**",
+    "**2. <Artifact Name> — Dimensions**",
+    "**3. Weighting Rationale**",
+    "**4. Example Scoring**",
+    "**5. Source Attribution**",
+  ];
+  for (let index = 1; index < synthesisSections.length; index++) {
+    assert(
+      synthesis.indexOf(synthesisSections[index - 1]) <
+        synthesis.indexOf(synthesisSections[index]),
+    );
+  }
   const evaluation = turn("evaluation", "strong");
   assertStringIncludes(evaluation, "Use three to six dimensions");
   const shortForm = buildResolvedTurnContract({
@@ -443,10 +841,29 @@ Deno.test("semantic prompt: distinct legacy rules have one executable destinatio
     evaluated,
     "exactly the highest-leverage one to three fixes, numbered in priority order",
   );
+  assert(
+    evaluated.indexOf("**4. Improvements (Grounded)**") <
+      evaluated.indexOf("**5. Optional Rewrite**"),
+  );
+  assert(
+    evaluated.indexOf("**5. Optional Rewrite**") <
+      evaluated.indexOf("**6. Source Attribution**"),
+  );
+  assert(
+    evaluated.indexOf("**6. Source Attribution**") <
+      evaluated.indexOf("═══ APPLICATION ═══"),
+  );
 
   const currentState = buildCurrentStateReasoningPolicy(true);
   assertStringIncludes(currentState, "never skip/reorder");
   assertStringIncludes(currentState, "Rewrite once unless all five pass");
+  assertStringIncludes(
+    buildConsolidatedCoreInvariants({
+      depth: "Standard",
+      strategyContext: true,
+    }),
+    "Territory Profile—not fixed identity—owns current role/company/quota/account count/motion/team/dates",
+  );
 
   const artifactTurn = buildResolvedTurnContract({
     intent: { intent: "freeform" },
@@ -468,11 +885,11 @@ Deno.test("semantic prompt: distinct legacy rules have one executable destinatio
   });
   assertStringIncludes(
     v2,
-    "*Extended beyond your library on: [specific topic]. Add a resource on this to ground next time.*",
+    "Library Disclosure alone owns coverage/gap/extension wording",
   );
   for (const mode of ["B_partial", "D_thin"] as const) {
     const shortV2 = buildV2ReasoningDelta({ mode, askShape: "short_form" });
-    assertStringIncludes(shortV2, "Short-form adds no extension marker");
+    assertStringIncludes(shortV2, "Library Disclosure alone owns");
     assert(!shortV2.includes("Extended beyond your library"));
     assert(!shortV2.includes("limited library signal"));
   }
@@ -547,5 +964,53 @@ Deno.test("conversation final reconciles path count by behavior without embeddin
       requestedEntryCount: explicit,
     }),
     "Return exactly 8 distinct conversational entries",
+  );
+  for (
+    const [text, expected] of [
+      ["Give me 4 conversation paths", 4],
+      ["Write four scripts", 4],
+      ["Draft 6 messages", 6],
+      ["Create three talk tracks", 3],
+      ["Return 5 versions", 5],
+    ] as const
+  ) {
+    assertEquals(detectRequestedEntryCount(text), expected, text);
+  }
+  assertEquals(detectRequestedEntryCount("Give me 21 options"), null);
+  assertEquals(detectRequestedEntryCount("Give me thirteen options"), null);
+});
+
+Deno.test("required Library conversation preserves one inline disclosure through the final contract", () => {
+  const prompt = buildWorstCase({
+    contract: WORKSPACE_CONTRACTS.library,
+    intent: "freeform",
+    depth: "Standard",
+    libraryMode: "thin",
+    libraryCoverageState: "required_missing",
+    v2Decision: null,
+    outputMode: "conversation",
+    behaviorIntent: BEHAVIORS[2],
+  });
+  const disclosures = prompt.segments.filter((segment) =>
+    segment.id === "fixed.library-disclosure"
+  );
+  assertEquals(disclosures.length, 1);
+  assertStringIncludes(
+    disclosures[0].text,
+    "LIBRARY_REQUIRED_GAP (inline)",
+  );
+  assertEquals(prompt.systemPrompt.match(/## Sources used/g)?.length ?? 0, 0);
+  assertEquals(prompt.systemPrompt.match(/## Gaps/g)?.length ?? 0, 0);
+  assertEquals(
+    prompt.segments.at(-1)?.id,
+    "fixed.conversation-enforcement-final",
+  );
+  assertStringIncludes(
+    prompt.segments.at(-1)?.text ?? "",
+    "If Library Disclosure selects one inline source/coverage statement",
+  );
+  assertStringIncludes(
+    prompt.segments.at(-1)?.text ?? "",
+    "Never narrate the search/retrieval process",
   );
 });

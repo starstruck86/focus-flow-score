@@ -9,7 +9,7 @@
 //
 //   1. Finds anything the model wrote that LOOKS like a resource
 //      citation:
-//        • RESOURCE["..."] / RESOURCE[id] (the contract form)
+//        • RESOURCE["..."] (the contract form)
 //        • "<title>" template / calculator / playbook / example
 //          (informal references the model often slips into)
 //   2. Validates each citation against the actual retrieved hit set
@@ -61,10 +61,12 @@ export interface CitationAuditOptions {
    */
   kiHits?: CitationAuditHit[];
   /**
-   * Optional CARD hit set. Same semantics as kiHits but for CARD[…]
-   * citations.
+   * Optional CARD hit set retained for backward-compatible scanning. CARD is
+   * not a canonical Strategy Chat source namespace and always fails audit.
    */
   cardHits?: CitationAuditHit[];
+  /** Optional PLAYBOOK hit set. Only title citations are canonical. */
+  playbookHits?: CitationAuditHit[];
 }
 
 export interface CitationAuditResult {
@@ -129,43 +131,35 @@ export function auditResourceCitations(
     return { text, modified: false, verifiedTitles: [], unverifiedCitations: [] };
   }
 
-  const { titles, idShorts } = buildTitleIndex(hits);
+  const { titles } = buildTitleIndex(hits);
   const closedSet = options.closedSet === true && hits.length > 0;
 
   const verified: string[] = [];
   const unverified: string[] = [];
   let modified = false;
 
-  // ── 1. RESOURCE["title"] / RESOURCE[id] form ───────────────────
-  // Match either bracketed id-shorts or quoted titles inside RESOURCE[…].
+  // ── 1. RESOURCE["title"] form ───────────────────────────────────
+  // Bare resource IDs are scanned but deliberately fail: Evidence Policy
+  // requires the visible title for Resource attribution.
   let out = text.replace(
-    /RESOURCE\[\s*("?)([^\]"]+?)\1\s*\]/g,
-    (_full, _q, inner: string) => {
+    /(?<![A-Z0-9_-])RESOURCE\[\s*("?)([^\]"]+?)\1\s*\]/gi,
+    (_full, quote: string, inner: string) => {
       const trimmed = inner.trim();
-      // id-short form: 8 hex chars
-      if (/^[a-f0-9]{8}$/i.test(trimmed)) {
-        if (idShorts.has(trimmed.toLowerCase())) {
-          verified.push(trimmed);
-          return `RESOURCE[${trimmed}]`;
-        }
+      // Non-canonical id-short form. It fails even when the id belongs to a
+      // real hit so presence telemetry cannot bless competing syntax.
+      if (!quote && /^[a-f0-9]+$/i.test(trimmed)) {
         unverified.push(trimmed);
         modified = true;
         return `⚠ UNVERIFIED[${trimmed}]`;
       }
+      if (!quote) {
+        unverified.push(trimmed);
+        modified = true;
+        return `⚠ UNVERIFIED["${trimmed}"]`;
+      }
       // title form
       const norm = normalize(trimmed);
-      // Allow exact OR substring match against any retrieved title —
-      // the prompt asks for exact, but tolerating "contains" prevents
-      // false alarms when the model trims a long title.
-      let hit = titles.has(norm);
-      if (!hit) {
-        for (const t of titles) {
-          if (t.includes(norm) || norm.includes(t)) {
-            hit = true;
-            break;
-          }
-        }
-      }
+      const hit = titles.has(norm);
       if (hit) {
         verified.push(trimmed);
         return `RESOURCE["${trimmed}"]`;
@@ -176,23 +170,35 @@ export function auditResourceCitations(
     },
   );
 
-  // ── 2. KI[…] and CARD[…] form (additive — only when caller threads
+  // ── 2. KI[…], CARD[…], and PLAYBOOK[…] forms (only when the caller threads
   //        the relevant hit set through; otherwise we leave these alone
   //        to preserve prior behavior).
   //        Runs BEFORE the informal-quoted-string scanner so that titles
   //        like "Command of the Message Framework" wrapped in KI["…"]
   //        are not double-flagged by the artifact-word heuristic.
   const auditNamespacedCitation = (
-    ns: "KI" | "CARD",
+    ns: "KI" | "CARD" | "PLAYBOOK",
     nsHits: CitationAuditHit[] | undefined,
+    allowIdFallback: boolean,
+    allowTitle: boolean,
   ) => {
-    if (!nsHits || nsHits.length === 0) return;
+    // Omitted means legacy caller did not provide that namespace. An explicit
+    // empty array is a closed empty set, so every such citation is fabricated.
+    if (nsHits === undefined) return;
     const { titles: nsTitles, idShorts: nsIdShorts } = buildTitleIndex(nsHits);
-    const re = new RegExp(`${ns}\\[\\s*("?)([^\\]"]+?)\\1\\s*\\]`, "g");
-    out = out.replace(re, (_full, _q, inner: string) => {
+    const re = new RegExp(
+      `(?<![A-Z0-9_-])${ns}\\[\\s*("?)([^\\]"]+?)\\1\\s*\\]`,
+      "gi",
+    );
+    out = out.replace(re, (_full, quote: string, inner: string) => {
       const trimmed = inner.trim();
-      // id-short form: 6-12 hex chars (the format we render in prompts)
-      if (/^[a-f0-9]{6,12}$/i.test(trimmed)) {
+      // Canonical KI fallback is exactly the rendered 8-character short id.
+      if (!quote && /^[a-f0-9]+$/i.test(trimmed)) {
+        if (!allowIdFallback || trimmed.length !== 8) {
+          unverified.push(`${ns}:${trimmed}`);
+          modified = true;
+          return `⚠ UNVERIFIED-${ns}[${trimmed}]`;
+        }
         if (nsIdShorts.has(trimmed.slice(0, 8).toLowerCase())) {
           verified.push(`${ns}:${trimmed}`);
           return `${ns}[${trimmed}]`;
@@ -201,17 +207,19 @@ export function auditResourceCitations(
         modified = true;
         return `⚠ UNVERIFIED-${ns}[${trimmed}]`;
       }
+      if (!quote) {
+        unverified.push(`${ns}:${trimmed}`);
+        modified = true;
+        return `⚠ UNVERIFIED-${ns}["${trimmed}"]`;
+      }
       // title form
       const norm = normalize(trimmed);
-      let hit = nsTitles.has(norm);
-      if (!hit) {
-        for (const t of nsTitles) {
-          if (t.includes(norm) || norm.includes(t)) {
-            hit = true;
-            break;
-          }
-        }
+      if (!allowTitle) {
+        unverified.push(`${ns}:${trimmed}`);
+        modified = true;
+        return `⚠ UNVERIFIED-${ns}["${trimmed}"]`;
       }
+      const hit = nsTitles.has(norm);
       if (hit) {
         verified.push(`${ns}:${trimmed}`);
         return `${ns}["${trimmed}"]`;
@@ -221,14 +229,15 @@ export function auditResourceCitations(
       return `⚠ UNVERIFIED-${ns}["${trimmed}"]`;
     });
   };
-  auditNamespacedCitation("KI", options.kiHits);
-  auditNamespacedCitation("CARD", options.cardHits);
+  auditNamespacedCitation("KI", options.kiHits, true, true);
+  auditNamespacedCitation("CARD", options.cardHits, false, false);
+  auditNamespacedCitation("PLAYBOOK", options.playbookHits, false, true);
 
   // ── 3. Informal "<Title>" + artifact-word references ──────────
   // We only flag quoted strings that sit next to an artifact word, so
   // we don't spuriously annotate seller quotes from a transcript.
-  // We also skip anything already wrapped by RESOURCE[…] / KI[…] /
-  // CARD[…] / UNVERIFIED[…] (handled above) to avoid double-flagging.
+  // We also skip anything already wrapped by a namespaced citation or its
+  // UNVERIFIED replacement (handled above) to avoid double-flagging.
   //
   // CLOSED-SET MODE: when the user explicitly picked a resource, the
   // artifact-word requirement is relaxed — any quoted phrase that
@@ -253,11 +262,13 @@ export function auditResourceCitations(
 
   const quotedRe = /["“]([A-Z][^"“”]{2,80})["”]/g;
   out = out.replace(quotedRe, (full, inner: string, offset: number) => {
-    // Skip if this quoted string is the value of a RESOURCE[…] / KI[…] /
-    // CARD[…] / UNVERIFIED[…] / UNVERIFIED-KI[…] / UNVERIFIED-CARD[…]
-    // bracket (already audited above).
-    const before = out.slice(Math.max(0, offset - 20), offset);
-    if (/(?:RESOURCE|KI|CARD|UNVERIFIED(?:-KI|-CARD)?)\[\s*$/.test(before)) return full;
+    // Skip namespaced/UNVERIFIED brackets already audited above.
+    const before = out.slice(Math.max(0, offset - 40), offset);
+    if (
+      /(?:RESOURCE|KI|CARD|PLAYBOOK|UNVERIFIED(?:-KI|-CARD|-PLAYBOOK)?)\[\s*$/.test(
+        before,
+      )
+    ) return full;
 
     const window = out.slice(Math.max(0, offset - 60), Math.min(out.length, offset + full.length + 60)).toLowerCase();
     const looksLikeArtifact = ARTIFACT_WORDS.some((w) => window.includes(w));

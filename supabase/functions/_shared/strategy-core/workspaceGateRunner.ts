@@ -30,6 +30,7 @@
 import type {
   CitationCheckResult,
 } from "./citationEnforcement.ts";
+import { hasLiteralLibraryCitation } from "./citationSyntax.ts";
 import type {
   RetrievalDecisionLog,
 } from "./retrievalEnforcement.ts";
@@ -370,7 +371,7 @@ const REGISTRY: Record<string, GateImpl> = {
     const referenced =
       libraryUsed ||
       (retrievalDecision?.libraryCoverageState === "used") ||
-      /\bRESOURCE\[[^\]]+\]/.test(assistantText);
+      hasLiteralLibraryCitation(assistantText);
     return referenced
       ? { outcome: "pass", detail: "context referenced" }
       : { outcome: "skipped", detail: "no available context to reference" };
@@ -408,7 +409,7 @@ const REGISTRY: Record<string, GateImpl> = {
     const grounded =
       libraryUsed ||
       retrievalDecision?.libraryCoverageState === "used" ||
-      /\bRESOURCE\[[^\]]+\]/.test(assistantText);
+      hasLiteralLibraryCitation(assistantText);
     return grounded
       ? { outcome: "pass", detail: "recommendation grounded" }
       : { outcome: "fail", detail: "recommendation without grounded context" };

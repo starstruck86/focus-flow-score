@@ -2,7 +2,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   assembleStrategyContext,
-  auditResourceCitations,
   buildCitationCheckLog,
   buildPendingLookupAction,
   buildPromptCompositionLog,
@@ -23,6 +22,7 @@ import {
   loadWorkingThesisState,
   logCitationCheck,
   logRetrievalDecision,
+  type LibraryCoverageState,
   type LookupIntent,
   mergeWorkingThesisState,
   type PendingLookupAction,
@@ -62,6 +62,8 @@ import {
   computeSchemaHealth,
   buildEnforcementPersistenceBlock,
   logEnforcementDryRun,
+  hasLiteralLibraryCitation,
+  missingRequiredLibraryCitation,
   runEnforcementDryRun,
   retrieveSituationIntelligence,
   type SituationIntelligenceResult,
@@ -188,6 +190,19 @@ function withRoutingMeta(
 // Kept intentionally minimal (id + title) so the operator UI /
 // audit surfaces can attribute each assistant turn to the exact
 // resource/KI/playbook rows that shaped the prompt.
+function dedupCitationSources<T extends { id: string; title: string }>(
+  rows: T[],
+): Array<{ id: string; title: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ id: string; title: string }> = [];
+  for (const row of rows) {
+    if (!row?.id || !row?.title || seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push({ id: row.id, title: row.title });
+  }
+  return out;
+}
+
 function buildCitationsJson(args: {
   resourceHits: Array<{ id: string; title: string }>;
   kiHits: Array<{ id: string; title: string; chapter?: string | null }>;
@@ -196,25 +211,14 @@ function buildCitationsJson(args: {
   competitiveIntel?: Array<{ id: string; title: string }>;
   verticalBrief?: { id: string; title: string } | null;
 }): Record<string, unknown> | null {
-  const dedupById = <T extends { id: string; title: string }>(rows: T[]) => {
-    const seen = new Set<string>();
-    const out: Array<{ id: string; title: string }> = [];
-    for (const r of rows) {
-      if (!r?.id || !r?.title) continue;
-      if (seen.has(r.id)) continue;
-      seen.add(r.id);
-      out.push({ id: r.id, title: r.title });
-    }
-    return out;
-  };
-  const resources = dedupById(args.resourceHits || []);
-  const kis = dedupById([
+  const resources = dedupCitationSources(args.resourceHits || []);
+  const kis = dedupCitationSources([
     ...(args.kiHits || []),
     ...(args.libraryKis || []),
   ]);
-  const playbooks = dedupById(args.libraryPlaybooks || []);
-  const competitiveIntel = dedupById(args.competitiveIntel || []);
-  const verticalBriefs = dedupById(
+  const playbooks = dedupCitationSources(args.libraryPlaybooks || []);
+  const competitiveIntel = dedupCitationSources(args.competitiveIntel || []);
+  const verticalBriefs = dedupCitationSources(
     args.verticalBrief ? [args.verticalBrief] : [],
   );
   const total = resources.length + kis.length + playbooks.length +
@@ -4027,6 +4031,8 @@ function enforceModeLock(
   opts: {
     resourceHits?: Array<{ id: string; title: string }>;
     libraryMode?: LibraryMode;
+    hasCiteableLibraryEvidence?: boolean;
+    requiresLiteralLibraryCitation?: boolean;
   } = {},
 ): GuardResult {
   let text = rawText.trim();
@@ -4034,6 +4040,8 @@ function enforceModeLock(
   let modified = false;
   let shouldRegenerate = false;
   const resourceHits = opts.resourceHits ?? [];
+  const hasCiteableLibraryEvidence =
+    opts.hasCiteableLibraryEvidence ?? resourceHits.length > 0;
 
   if (!text) {
     return { text, modified: false, violations: ["empty"], shouldRegenerate: true };
@@ -4532,21 +4540,25 @@ function enforceModeLock(
         modified = true;
       }
 
-      // STRUCTURAL GUARD: require all 5 sections + a table + cited sources.
-      // If any are missing, flag for one strict regeneration.
+      // STRUCTURAL AUDIT: record missing sections/table/citations. The current
+      // call sites log `shouldRegenerate`; they do not retry or block output.
       const hasPattern = /\bpattern\s+extraction\b/i.test(text);
       const hasDimensions = /\bdimensions?\b/i.test(text) && /\|.*\|.*\|/.test(text);
       const hasWeighting = /\bweight(ing)?\s+rationale\b/i.test(text);
       const hasExample = /\bexample\s+scoring\b/i.test(text);
       const hasAttribution = /\bsource\s+attribution\b/i.test(text);
-      const hasCitations = /(KI\[[a-z0-9_-]+\]|PLAYBOOK\[[a-z0-9_-]+\]|RESOURCE\[[a-z0-9_-]+\])/i.test(text);
-
       if (!hasPattern) { violations.push("synthesis_missing_pattern_extraction"); shouldRegenerate = true; }
       if (!hasDimensions) { violations.push("synthesis_missing_dimensions_table"); shouldRegenerate = true; }
       if (!hasWeighting) { violations.push("synthesis_missing_weighting_rationale"); shouldRegenerate = true; }
       if (!hasExample) { violations.push("synthesis_missing_example_scoring"); shouldRegenerate = true; }
       if (!hasAttribution) { violations.push("synthesis_missing_source_attribution"); shouldRegenerate = true; }
-      if (!hasCitations) { violations.push("synthesis_missing_source_citations"); shouldRegenerate = true; }
+      if (
+        opts.requiresLiteralLibraryCitation === true &&
+        missingRequiredLibraryCitation(hasCiteableLibraryEvidence, text)
+      ) {
+        violations.push("synthesis_missing_source_citations");
+        shouldRegenerate = true;
+      }
 
       // Equal-weight detector: extract weight cells from the table and flag
       // if all weights are identical (e.g. all 20% across 5 dims).
@@ -4625,14 +4637,20 @@ function enforceModeLock(
         modified = true;
       }
 
-      // STRUCTURAL GUARD: require Source Basis + Reused vs Created sections + citations.
+      // STRUCTURAL AUDIT: require the two sections, and require a citation only
+      // when citeable evidence exists. Reporting only; no retry/block here.
       const hasSourceBasis = /\bsource\s+basis\b/i.test(text);
       const hasReusedCreated = /\breused\s+vs\s+created\b/i.test(text) ||
         (/\breused\b/i.test(text) && /\bcreated\b/i.test(text));
-      const hasCitationsC = /(KI\[[a-z0-9_-]+\]|PLAYBOOK\[[a-z0-9_-]+\]|RESOURCE\[[a-z0-9_-]+\])/i.test(text);
       if (!hasSourceBasis) { violations.push("creation_missing_source_basis"); shouldRegenerate = true; }
       if (!hasReusedCreated) { violations.push("creation_missing_reused_vs_created"); shouldRegenerate = true; }
-      if (!hasCitationsC) { violations.push("creation_missing_source_citations"); shouldRegenerate = true; }
+      if (
+        opts.requiresLiteralLibraryCitation === true &&
+        missingRequiredLibraryCitation(hasCiteableLibraryEvidence, text)
+      ) {
+        violations.push("creation_missing_source_citations");
+        shouldRegenerate = true;
+      }
       if (!hasApplicationAppendix(text)) {
         violations.push("creation_missing_application_appendix");
         shouldRegenerate = true;
@@ -4685,18 +4703,23 @@ function enforceModeLock(
         modified = true;
       }
 
-      // STRUCTURAL GUARD.
+      // STRUCTURAL AUDIT. Reporting only; no retry/block here.
       const hasOverallScore = /\boverall\b[\s:]*\d{1,2}\s*\/\s*10/i.test(text) ||
         /\boverall\s+score\b/i.test(text);
       const hasBreakdownTable = /\|.*\|.*\|/.test(text);
       const hasImprovements = /\bimprovements?\b/i.test(text);
       const hasAttributionE = /\bsource\s+attribution\b/i.test(text);
-      const hasCitationsE = /(KI\[[a-z0-9_-]+\]|PLAYBOOK\[[a-z0-9_-]+\]|RESOURCE\[[a-z0-9_-]+\])/i.test(text);
       if (!hasOverallScore) { violations.push("evaluation_missing_overall_score"); shouldRegenerate = true; }
       if (!hasBreakdownTable) { violations.push("evaluation_missing_breakdown_table"); shouldRegenerate = true; }
       if (!hasImprovements) { violations.push("evaluation_missing_improvements"); shouldRegenerate = true; }
       if (!hasAttributionE) { violations.push("evaluation_missing_source_attribution"); shouldRegenerate = true; }
-      if (!hasCitationsE) { violations.push("evaluation_missing_source_citations"); shouldRegenerate = true; }
+      if (
+        opts.requiresLiteralLibraryCitation === true &&
+        missingRequiredLibraryCitation(hasCiteableLibraryEvidence, text)
+      ) {
+        violations.push("evaluation_missing_source_citations");
+        shouldRegenerate = true;
+      }
 
       // Vague-critique fingerprint.
       if (/\b(be more concise|stronger cta|improve (the )?tone|good start|with some polish|nice work)\b/i.test(text)) {
@@ -4899,8 +4922,9 @@ function buildRetrievalDiagnostics(args: {
 
 // ── HYBRID CONTRACT GUARD ──
 // Detects whether account_brief / ninety_day_plan output actually followed
-// the hybrid contract. A shared deterministic repackager runs before citation
-// audit on both streaming and non-streaming paths; it never invents claims.
+// the hybrid contract. Non-stream logs only. Streaming may run one deterministic
+// repackager after citation audit; the repackager may fill empty sections with
+// generic baseline copy but does not fabricate source citations.
 function evaluateHybridGuard(
   intent: string,
   text: string,
@@ -4946,7 +4970,8 @@ function evaluateHybridGuard(
 
 // ── HYBRID DETERMINISTIC REWRITE (no second LLM call) ──
 // Repackages an off-contract hybrid output into the required ## schema by
-// preserving original content. No new claims, no fabricated citations.
+// preserving mapped original content and using explicit generic fallback copy
+// for empty sections. No fabricated citations.
 function rewriteHybridOutput(
   intent: string,
   text: string,
@@ -5424,6 +5449,7 @@ type ChatPromptAssembly = {
   useStrategyCore: boolean;
   hasDossierEvidence: boolean;
   resourceGrounding: ResourceGroundingContext;
+  libraryCoverageState: LibraryCoverageState;
   workingThesis: WorkingThesisState | null;
   resourceHits: Array<{ id: string; title: string }>;
   kiHits: Array<{ id: string; title: string; chapter: string | null }>;
@@ -5661,7 +5687,10 @@ async function buildChatSystemPrompt(args: {
   const looksLikeIntelligenceAsk = isIntelligenceClassificationCandidate(
     userContent,
   );
+  const requiredLibraryWorkspace =
+    __retrievalRules.libraryUse === "required";
   if (
+    !requiredLibraryWorkspace &&
     !accountId &&
     (!contextSection || contextSection.length < 200) &&
     pickedResourceIds.length === 0 &&
@@ -5702,6 +5731,7 @@ async function buildChatSystemPrompt(args: {
         hasUnstructuredPicked: false,
         hasEmptyPicked: false,
       },
+      libraryCoverageState: "not_needed",
       workingThesis: null,
       resourceHits: [],
       kiHits: [],
@@ -5939,8 +5969,20 @@ async function buildChatSystemPrompt(args: {
 
 
   // Coverage state evaluation + structured retrieval-decision telemetry.
-  const __libraryHitCount = (library?.knowledgeItems?.length ?? 0) +
-    (library?.playbooks?.length ?? 0);
+  const __libraryHitIds = new Set<string>();
+  for (const hit of resources?.hits ?? []) {
+    if (hit?.id) __libraryHitIds.add(`resource:${hit.id}`);
+  }
+  for (const hit of resources?.kiHits ?? []) {
+    if (hit?.id) __libraryHitIds.add(`ki:${hit.id}`);
+  }
+  for (const hit of library?.knowledgeItems ?? []) {
+    if (hit?.id) __libraryHitIds.add(`ki:${hit.id}`);
+  }
+  for (const hit of library?.playbooks ?? []) {
+    if (hit?.id) __libraryHitIds.add(`playbook:${hit.id}`);
+  }
+  const __libraryHitCount = __libraryHitIds.size;
   const __libraryCoverageState = evaluateLibraryCoverage({
     rules: __retrievalRules,
     libraryHitCount: __libraryHitCount,
@@ -5976,6 +6018,7 @@ async function buildChatSystemPrompt(args: {
   }) || !!resources?.userAskedForResource || pickedResourceIds.length > 0
     || !!situationIntelligence?.competitiveContext
     || !!situationIntelligence?.verticalContext
+    || __retrievalRules.libraryUse === "required"
     || intent.intent === "synthesis"
     || intent.intent === "creation"
     || intent.intent === "evaluation";
@@ -6014,6 +6057,7 @@ async function buildChatSystemPrompt(args: {
         hasUnstructuredPicked: false,
         hasEmptyPicked: false,
       },
+      libraryCoverageState: __libraryCoverageState,
       workingThesis: null,
       resourceHits: [],
       kiHits: [],
@@ -6172,6 +6216,7 @@ async function buildChatSystemPrompt(args: {
     useStrategyCore: true,
     hasDossierEvidence: contextSection.includes("### Account Strategic POV"),
     resourceGrounding,
+    libraryCoverageState: __libraryCoverageState,
     workingThesis,
     resourceHits,
     kiHits,
@@ -6422,6 +6467,7 @@ async function handleChat(
     useStrategyCore,
     hasDossierEvidence,
     resourceGrounding,
+    libraryCoverageState,
     workingThesis: priorThesis,
     resourceHits,
     kiHits: kiHitList,
@@ -6446,6 +6492,24 @@ async function handleChat(
     pickedResourceIds,
     workspaceKeyRaw,
   });
+  const citationKiHits = dedupCitationSources([
+    ...kiHitList,
+    ...libraryKis,
+  ]);
+  const citationPlaybookHits = dedupCitationSources(libraryPlaybooks);
+  const citeableLibraryHitCount = resourceHits.length +
+    citationKiHits.length + citationPlaybookHits.length;
+  const citeableLibraryHits = [
+    ...resourceHits,
+    ...citationKiHits,
+    ...citationPlaybookHits,
+  ];
+  const citationAuditOptions = {
+    closedSet: pickedResourceIds.length > 0,
+    kiHits: citationKiHits,
+    cardHits: [],
+    playbookHits: citationPlaybookHits,
+  };
   const accountId: string | null = pack.account?.id ?? null;
   const opportunityId: string | null = pack.opportunity?.id ?? null;
   const intelligenceRetrieval = situationIntelligence?.telemetry ?? null;
@@ -6646,6 +6710,11 @@ async function handleChat(
     ((v2Decision.mode === "A_strong" || v2Decision.mode === "B_partial") &&
       resourceHits.length >= 3)
   );
+  const requiresLiteralLibraryCitation = forceLiteralCitations ||
+    __retrievalRules.citationMode === "strict";
+  const effectiveCitationMode = requiresLiteralLibraryCitation
+    ? "strict" as const
+    : __retrievalRules.citationMode;
 
   // One authoritative semantic assembly. Runtime SOP headers remain in their
   // legacy relative order and precede the turn's reasoning contracts.
@@ -6658,6 +6727,7 @@ async function handleChat(
     behaviorIntent,
     outputModeDecision,
     workspaceContract: __resolvedContract.contract,
+    libraryCoverageState,
     libraryMode: effectiveLibraryMode,
     shortFormKind,
     v2Decision,
@@ -7079,6 +7149,8 @@ async function handleChat(
     const guarded = enforceModeLock(rawVisible, intent, {
       resourceHits,
       libraryMode: effectiveLibraryMode,
+      hasCiteableLibraryEvidence: citeableLibraryHitCount > 0,
+      requiresLiteralLibraryCitation,
     });
     if (guarded.modified || guarded.violations.length) {
       console.log(
@@ -7117,12 +7189,26 @@ async function handleChat(
         }),
       );
     }
-    const hybrid = enforceHybridSchema(
-      intent.intent,
-      behaviorGuard.text,
-      "non-stream",
-    );
-    const visible = hybrid.text;
+    // Preserve the baseline non-stream path: inspect hybrid shape for
+    // telemetry, but do not deterministically rewrite this fallback output.
+    const hybridGuard = evaluateHybridGuard(intent.intent, behaviorGuard.text);
+    if (hybridGuard.checked) {
+      console.log(JSON.stringify({
+        diag: "hybrid_guard_result",
+        path: "non-stream",
+        intent: intent.intent,
+        passed: hybridGuard.passed,
+        failure_reasons: hybridGuard.failure_reasons,
+        output_head: behaviorGuard.text.slice(0, 200),
+      }));
+    }
+    const hybrid = {
+      guardBefore: hybridGuard,
+      guardAfter: hybridGuard,
+      rewriteApplied: false,
+      rewriteReason: null as string | null,
+    };
+    const visible = behaviorGuard.text;
     // Citation audit (W5): governed by `retrievalRules.citationMode`
     // from the resolved workspace contract. SHADOW/REPORTING ONLY in
     // W5 — `auditedText` returns the original assistant text for all
@@ -7132,13 +7218,18 @@ async function handleChat(
     const w5Citation = runCitationCheck({
       assistantText: visible,
       libraryHits: resourceHits,
-      libraryUsed: resourceHits.length > 0,
+      libraryUsed: citeableLibraryHitCount > 0,
       workspace: __resolvedContract.workspace,
       contractVersion: __resolvedContract.contractVersion,
-      citationMode: __retrievalRules.citationMode,
-      auditOptions: { closedSet: pickedResourceIds.length > 0 },
+      citationMode: effectiveCitationMode,
+      auditOptions: citationAuditOptions,
     });
-    const audit = w5Citation.audit ?? auditResourceCitations(visible, [], { closedSet: false });
+    const audit = w5Citation.audit ?? {
+      text: visible,
+      modified: false,
+      verifiedTitles: [],
+      unverifiedCitations: [],
+    };
     if (w5Citation.audit?.modified) {
       console.log(
         `[citation-audit] non-stream mode=${w5Citation.citationMode}: ${w5Citation.audit.unverifiedCitations.length} unverified citation(s) flagged${pickedResourceIds.length > 0 ? " (closed-set)" : ""}`,
@@ -7161,8 +7252,8 @@ async function handleChat(
         inputs: {
           contract: __resolvedContract.contract,
           assistantText: auditedVisible,
-          libraryHits: resourceHits,
-          libraryUsed: resourceHits.length > 0,
+          libraryHits: citeableLibraryHits,
+          libraryUsed: citeableLibraryHitCount > 0,
           citationCheck: w5Citation,
         },
         surface: "strategy-chat",
@@ -7210,7 +7301,7 @@ async function handleChat(
           userPrompt: content,
           gateSummary: w6GateSummary,
           citationCheck: w5Citation,
-          libraryHits: resourceHits,
+          libraryHits: citeableLibraryHits,
           // W7.5 — calibration-aware overlay (shadow-only, additive).
           calibration: calibrationResult,
         },
@@ -7276,6 +7367,8 @@ async function handleChat(
           actual_model: result.model,
           fallback_used: result.fallbackUsed,
           routing_reason: route._routingReason,
+          workspace_citation_mode: __retrievalRules.citationMode,
+          effective_citation_mode: effectiveCitationMode,
           retrieval_debug: retrievalDebug ?? null,
           intelligence_retrieval: intelligenceRetrieval,
           intelligence_sources: intelligenceSources,
@@ -7550,6 +7643,8 @@ async function handleChat(
         const guarded = enforceModeLock(rawVisible, intent, {
           resourceHits,
           libraryMode: effectiveLibraryMode,
+          hasCiteableLibraryEvidence: citeableLibraryHitCount > 0,
+          requiresLiteralLibraryCitation,
         });
         if (guarded.modified || guarded.violations.length) {
           console.log(
@@ -7586,12 +7681,7 @@ async function handleChat(
             }),
           );
         }
-        const hybrid = enforceHybridSchema(
-          intent.intent,
-          behaviorGuard.text,
-          "stream",
-        );
-        const visible = hybrid.text;
+        const visible = behaviorGuard.text;
 
         // Step 3: citation audit on the GUARDED text (W5: governed
         // by `retrievalRules.citationMode`). SHADOW/REPORTING ONLY —
@@ -7601,13 +7691,18 @@ async function handleChat(
         const w5Citation = runCitationCheck({
           assistantText: visible,
           libraryHits: resourceHits,
-          libraryUsed: resourceHits.length > 0,
+          libraryUsed: citeableLibraryHitCount > 0,
           workspace: __resolvedContract.workspace,
           contractVersion: __resolvedContract.contractVersion,
-          citationMode: __retrievalRules.citationMode,
-          auditOptions: { closedSet: pickedResourceIds.length > 0 },
+          citationMode: effectiveCitationMode,
+          auditOptions: citationAuditOptions,
         });
-        const audit = w5Citation.audit ?? auditResourceCitations(visible, [], { closedSet: false });
+        const audit = w5Citation.audit ?? {
+          text: visible,
+          modified: false,
+          verifiedTitles: [],
+          unverifiedCitations: [],
+        };
         if (w5Citation.audit?.modified) {
           console.log(
             `[citation-audit] stream mode=${w5Citation.citationMode}: ${w5Citation.audit.unverifiedCitations.length} unverified citation(s) flagged${pickedResourceIds.length > 0 ? " (closed-set)" : ""}`,
@@ -7633,8 +7728,8 @@ async function handleChat(
             inputs: {
               contract: __resolvedContract.contract,
               assistantText: auditedVisible,
-              libraryHits: resourceHits,
-              libraryUsed: resourceHits.length > 0,
+              libraryHits: citeableLibraryHits,
+              libraryUsed: citeableLibraryHitCount > 0,
               citationCheck: w5Citation,
             },
             surface: "strategy-chat",
@@ -7683,7 +7778,7 @@ async function handleChat(
               userPrompt: content,
               gateSummary: w6GateSummary,
               citationCheck: w5Citation,
-              libraryHits: resourceHits,
+              libraryHits: citeableLibraryHits,
               // W7.5 — calibration-aware overlay (shadow-only, additive).
               calibration: calibrationResult,
             },
@@ -7717,7 +7812,14 @@ async function handleChat(
         }
 
 
-        const finalVisible = auditedVisible;
+        // Preserve the baseline streaming order: W5 observes the guarded text,
+        // then the hybrid helper may repackage it once before persistence/SSE.
+        const hybrid = enforceHybridSchema(
+          intent.intent,
+          auditedVisible,
+          "stream",
+        );
+        const finalVisible = hybrid.text;
 
         assertRoutingEvidence({
           finalText: finalVisible,
@@ -7737,7 +7839,7 @@ async function handleChat(
           const containsExecSummary = /executive summary|tl;dr|top-line|bottom line/i.test(txt);
           const trimmed = txt.trim();
           const containsQuestions = /\?\s*$/.test(trimmed) || (txt.match(/\?/g)?.length ?? 0) >= 2;
-          const containsCitations = /(RESOURCE\[|KI\[|CARD\[)/.test(txt);
+          const containsCitations = hasLiteralLibraryCitation(txt);
           const estimatedDepth = len < 500 ? "low" : len <= 1500 ? "medium" : "high";
 
           console.log(
@@ -7831,6 +7933,8 @@ async function handleChat(
               actual_model: result.model,
               fallback_used: false,
               routing_reason: route._routingReason,
+              workspace_citation_mode: __retrievalRules.citationMode,
+              effective_citation_mode: effectiveCitationMode,
               retrieval_debug: retrievalDebug ?? null,
               intelligence_retrieval: intelligenceRetrieval,
               intelligence_sources: intelligenceSources,

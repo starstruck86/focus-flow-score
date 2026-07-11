@@ -97,6 +97,13 @@ export {
 } from "./citationAudit.ts";
 
 export {
+  countLiteralLibraryCitations,
+  hasLiteralLibraryCitation,
+  missingRequiredLibraryCitation,
+  STRICT_LIBRARY_CITATION_INSTRUCTION,
+} from "./citationSyntax.ts";
+
+export {
   emptyWorkingThesisState,
   extractThesisPatchFromProse,
   loadWorkingThesisState,

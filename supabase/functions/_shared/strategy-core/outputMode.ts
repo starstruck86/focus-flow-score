@@ -260,13 +260,11 @@ export function detectRequestedEntryCount(
     twelve: 12,
   };
   const match = (userContent || "").toLowerCase().match(
-    /\b(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:(?:distinct|different|expansion|commercial|creative|strategic|conversation|discovery)\s+){0,3}(?:ideas?|angles?|options?|ways?|hooks?|openers?|questions?|entries)\b/,
+    /\b(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:(?:distinct|different|expansion|commercial|creative|strategic|conversation|discovery)\s+){0,3}(?:ideas?|angles?|options?|ways?|paths?|hooks?|openers?|questions?|entries|scripts?|messages?|drafts?|versions?|talk[\s-]?tracks?)\b/,
   );
   if (!match) return null;
   const parsed = /^\d+$/.test(match[1]) ? Number(match[1]) : words[match[1]];
-  return Number.isFinite(parsed) && parsed >= 1 && parsed <= 20
-    ? parsed
-    : null;
+  return Number.isFinite(parsed) && parsed >= 1 && parsed <= 20 ? parsed : null;
 }
 
 export function renderConversationEnforcementBlock(
@@ -311,7 +309,7 @@ This final segment is the last word on conversation delivery. ${shapeRule}
 - ${substanceRule}
 - ${contextClause}
 - Use a Branch capability or competitor only when it sharpens the call. Replace generic analytics/engagement language and consultant verbs with the actual tension and move.
-- Library evidence may sharpen the POV, but do not announce retrieval or turn a play/framework title into a heading. Follow the active citation posture only when attribution is material.
+- Never narrate the search/retrieval process or turn a source title into a heading. Follow the active citation posture when attribution is material. If Library Disclosure selects one inline source/coverage statement, include that single evidence-truth statement without adding structure.
 
 Before sending, silently verify the path is specific, conversational, complete, and usable in a real pre-call note. Rewrite once if not. This is not optional.
 `;

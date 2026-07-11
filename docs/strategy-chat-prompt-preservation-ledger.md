@@ -73,14 +73,14 @@ lines.
 | `reasoningCore.ts:49-51` economics                                       |                                 182 | Diagnose → quantify → validate → propose                                                                                      | `fixed.core-invariants`; turn-specific CFO rule in `fixed.turn-contract`                                       | merged duplicate                                            |
 | `chatPrompt.ts:46-90` output contract                                    |                               4,531 | Direct answer, asset delivery, strategic threshold, citation/count/lookup rules                                               | Operator rules → Core; shape → Turn; library rules → Evidence Policy                                           | merged duplicate                                            |
 | `chatPrompt.ts:92-99` depth                                              |                              69-156 | Fast/Standard/Deep response depth                                                                                             | `fixed.core-invariants` depth line                                                                             | preserved                                                   |
-| `workspacePrompt.ts:139-228` workspace overlay                           |                         3,220-4,288 | Mission, posture, reasoning path, formatting, failures, escalation                                                            | `fixed.workspace-delta`; retrieval/citation clauses → Evidence Policy                                          | preserved / merged duplicate                                |
+| `workspacePrompt.ts:139-228` workspace overlay                           |                         3,220-4,288 | Mission, posture, reasoning path, formatting, failures, escalation                                                            | `fixed.workspace-delta`; retrieval/citation clauses → Evidence Policy / Library Disclosure                     | preserved / merged duplicate                                |
 | `strategy-chat/index.ts:5667-5697` response-format contract              |                           729-1,000 | Explicit user override and output-mode shape                                                                                  | `fixed.turn-contract` format precedence                                                                        | preserved / merged duplicate                                |
 | `strategy-chat/index.ts:5830-5856` thesis persistence                    |                               1,990 | Exact hidden `thesis_update` fence/schema and trust rules                                                                     | `fixed.thesis-persistence`                                                                                     | preserved                                                   |
 | `strategy-chat/index.ts:7586-7601` library usage                         |                               1,092 | Silent relevant use, selective citation, no retrieval theater                                                                 | `fixed.evidence-policy`                                                                                        | merged duplicate                                            |
 | `strategy-chat/index.ts:7609-7641` decision layer                        |                               1,669 | Workspace posture and value-before-clarification                                                                              | `fixed.workspace-delta` + Core ambiguity rule                                                                  | merged duplicate                                            |
-| `strategy-chat/index.ts:6002-6049` V1 library mode                       |                               0-547 | Strong/partial/thin/short-form behavior and Grounded/Extended labels                                                          | Evidence posture → Evidence Policy; short-form/section labels → Turn                                           | preserved / merged duplicate                                |
+| `strategy-chat/index.ts:6002-6049` V1 library mode                       |                               0-547 | Strong/partial/thin/short-form behavior and Grounded/Extended labels                                                          | Evidence posture → Evidence Policy; visible gap/extension outcome → Library Disclosure; shape → Turn           | preserved / merged duplicate                                |
 | `v2/extendedReasoningContract.ts:27-50` V2 identity                      |                               3,220 | POV, tradeoffs, commercial outcome, next moves                                                                                | `fixed.core-invariants`                                                                                        | merged duplicate                                            |
-| `v2/extendedReasoningContract.ts:53-320` V2 reasoning                    |          943-5,960 plus title lists | Mode, ask shape, extension, citations, rubric, synthesis recency                                                              | Evidence → Evidence Policy; shape → Turn; route label → `fixed.v2-route-delta`; locked tail → final V2 segment | preserved / merged duplicate                                |
+| `v2/extendedReasoningContract.ts:53-320` V2 reasoning                    |          943-5,960 plus title lists | Mode, ask shape, extension, citations, rubric, synthesis recency                                                              | Strategy Chat does not call this legacy builder; its live equivalents map to Evidence Policy, Library Disclosure, Turn, `fixed.v2-route-delta`, and the final V2 segment | retired from live assembly / semantics preserved |
 | `outputMode.ts:238-315` conversation final                               |           2,434 plus dynamic digest | Highest-recency prose-only conversation gate                                                                                  | `fixed.conversation-enforcement-final` with data removed                                                       | preserved                                                   |
 | `strategy-chat/index.ts:5947-5974` Global SOP wrapper                    |                   payload + wrapper | User-authored global operating standard                                                                                       | `runtime.global-sop` with exact marker/wording                                                                 | preserved                                                   |
 | `strategy-chat/index.ts:5977-6000` Workspace SOP wrapper                 |                   payload + wrapper | Workspace-specific user SOP                                                                                                   | `runtime.workspace-sop`, after Global SOP                                                                      | preserved                                                   |
@@ -127,26 +127,44 @@ These were contradictory before consolidation; preserving both was impossible.
 2. **Current State says “Return ONLY conversation strategy” on every intent.**
    Current State now contributes data and reasoning only. Turn owns visible
    shape; conversation final applies only to freeform conversation delivery.
-3. **Conversation count is both max two and typical three-to-five.** An explicit
-   user count wins. Otherwise `conversation_strategy` gets one primary plus one
+3. **Conversation count is both max two and typical three-to-five.** A recognized
+   explicit count wins: numeric 1–20 or spelled one–twelve, followed by up to
+   three supported modifiers and then a supported noun (including ideas, angles,
+   options, paths, scripts, messages, drafts, versions, and talk tracks). Otherwise
+   `conversation_strategy` gets one primary plus one
    backup; `idea_generation` gets three-to-five, or at least five in Brainstorm.
-4. **Library gap disclosure has four incompatible forms.** Library-required
-   workspace discloses once in its required `## Gaps`; ordinary thin mode
-   proceeds silently with material assumptions; V2 D-thin keeps its one opening
-   line and resource-gap close; partial/A-strong V2 uses one end extension line;
-   short-form adds none.
+4. **Library gap disclosure has four incompatible forms.** One deterministic
+   `resolveLibraryDisclosurePlan()` now selects exactly one outcome in
+   `fixed.library-disclosure`: short-form/closed Turn adds none; authoritative
+   Library-workspace coverage (used or `required_missing`) gets one integrated
+   source/gap outcome: compatible structured freeform ends with exactly one
+   `## Sources used` then one `## Gaps`; prose stays inline; synthesis/evaluation
+   use Source Attribution; creation uses Source Basis plus Gaps; analysis uses
+   Account thesis. Any D-thin or A/B/V1-partial notice is folded into that sole
+   gap location. Non-required D-thin uses one merged notice, A/B or V1-partial
+   uses one material-extension notice, and ordinary non-required thin proceeds
+   silently. Workspace, Evidence Policy, and V2 route blocks delegate and cannot
+   add another notice. Resource Grounding preserves missing/no-match/empty-body
+   truth but folds it into the selected disclosure location, with no separate
+   preface, gap note, or follow-up.
 5. **Message/pitch/next-step say “nothing else” while a shared Application layer
    requires an appendix.** Exact asset wins. Application remains for analysis
    and for synthesis/creation/evaluation; the latter three are server-audited
    and flagged by the post-generation guard.
 6. **V1 account brief/90-day are facts/timeline-first while V2 says POV-first.**
-   The shared stream/non-stream post-generation hybrid guard enforces V1's exact
-   schema, so that effective schema is canonical; V2 POV moves into Operator
-   Read.
-7. **V1 synthesis is rigid while V2 calls ask shapes guidance.** The active
-   server guard requires the V1 sections/table/citations, so the exact schema is
+   The resolved Turn prompt makes the exact V1-compatible schema canonical and
+   moves V2 POV into Operator Read. On the streaming path, the baseline hybrid
+   helper checks header presence/legacy openings and can repackage detected
+   drift after citation audit, including generic fallback copy for empty
+   sections; the non-stream fallback logs the same check but does not rewrite.
+   Neither proves every content obligation or header order, and the helper's
+   guarantee is limited to not fabricating source citations.
+7. **V1 synthesis is rigid while V2 calls ask shapes guidance.** The resolved
+   Turn prompt makes the exact sections/table/weight/example/attribution schema
    canonical; distinct V2 POV/weighting/overrated/consequence/moves requirements
-   are preserved inside it.
+   live inside it. Post-generation mode-lock records structural drift but does
+   not currently retry or block. Literal-citation absence is audited only when
+   the active Evidence Policy actually requires literal syntax.
 8. **Picked structured source permits `[TBD]` while the server strips it outside
    templates.** Effective server behavior wins: use `needs: <missing input>` in
    Artifacts or `To confirm:`/omission elsewhere.
@@ -161,30 +179,48 @@ These were contradictory before consolidation; preserving both was impossible.
     asset.** PRIMARY remains priority evidence, but only relevant
     steps/questions apply inside the Turn schema.
 12. **Hard-coded quota/account-count identity can become stale against Territory
-    Profile.** The durable Branch remit remains fixed; live quota, account
-    count, role, and team facts come from territory evidence.
+    Profile.** Volatile quota/account-count language was removed from the legacy
+    identity helper. The durable Branch remit remains fixed, while an explicit
+    authority rule makes Territory Profile the owner of current role, company,
+    quota, account count, motion, team, and dates.
 13. **Brainstorm labels/minimums conflict with universal conversation prose.**
-    Explicit count wins; otherwise Brainstorm still produces at least five.
+    A recognized explicit count wins; otherwise Brainstorm still produces at least five.
     Conversation-final owns unlabeled prose, while non-conversation Brainstorm
     keeps `[Angle: ...]` labels and its `Next move:` tail.
 14. **Library `[Source: title]`, V2 natural attribution, strict namespace
-    citations, and asset-specific placement conflict.** Evidence Policy owns
-    syntax: strict turns use literal `RESOURCE`/`KI`/`CARD`/`PLAYBOOK` forms;
-    lighter turns use natural title attribution. Turn owns placement: Account
-    Brief confines material library-derived claims/citations to Next Moves, and
-    30/60/90 confines them to Engage/Advance. Workspace blocks no longer define
-    a second syntax or placement rule.
+    citations, and asset-specific placement conflict.** One shared citation
+    syntax constant owns exact-title `RESOURCE`/`KI`/`PLAYBOOK` forms and an
+    exactly-eight-hex KI-id fallback; lighter turns use natural title attribution. Resource
+    Grounding and the final V2 synthesis tail delegate to Evidence Policy and
+    define no namespace syntax.
+    Turn owns placement: Account Brief confines material library-derived claims
+    to Next Moves, and 30/60/90 confines them to Engage/Advance. CARD citations
+    and legacy CARD/PLAYBOOK id fallbacks are deliberately retired: standards/
+    exemplars are quality-only context, live Playbook evidence always includes a
+    title, and `citations_json`/the source-badge UI have no Card source path. The
+    shadow auditor treats CARD as unverified even when a legacy caller supplies
+    card hits. The older locked V2 builder is not
+    assembled by Strategy Chat; its historical RESOURCE/KI wording is therefore
+    non-live and cannot override this shell.
 15. **Refine requires headings while Preserve forbids newly imposed shape.**
     Explicit user/input shape wins; absent one, Refine keeps the Improved
     version, Changes, and bounded variant sections.
 16. **Conversation mode once forbade naming source/playbook titles while strict
-    evidence rules require material attribution.** Evidence integrity wins:
-    material citations follow Evidence Policy, but titles never become idea
-    headings and retrieval is never announced.
+    evidence rules require material attribution.** Evidence Policy wins prompt
+    precedence, but W5 remains shadow/reporting-only and does not rewrite or
+    block output. Material titles never become idea headings and retrieval is
+    never announced. Namespace counting is shared, excludes UNVERIFIED tokens,
+    and Strategy Chat supplies its Resource, retrieved-KI, library-KI, and
+    Playbook hit sets to the shadow verifier. When V2 forces literal syntax,
+    W5's effective mode becomes strict even if the workspace's raw mode is not;
+    both raw and effective modes remain in routing telemetry.
 17. **Picked-resource adaptation wants a `Using <title>...` preface while exact
     email/message/pitch assets require their own first line.** Turn wins: the
-    preface appears only when commentary is allowed; otherwise grounding and
-    citation happen silently inside the locked asset.
+    preface appears only when commentary is allowed and Library Disclosure has
+    no visible outcome; otherwise grounding/citation stays inside Turn or folds
+    into the single selected disclosure location. Closed/short Turns also
+    suppress missing/no-match/empty-resource prefaces and follow-ups while
+    omitting unsupported claims, so silence never implies a missing body was read.
 18. **Thesis continuity asks for visible CONFIRMS/WEAKENS/KILLS commentary while
     locked assets forbid appendices.** Show that commentary only when Turn
     permits it; otherwise persist the change solely through hidden metadata.
@@ -198,15 +234,17 @@ These were contradictory before consolidation; preserving both was impossible.
     `artifact_creation` wins: its requested structure survives, conversation
     affects tone only, and universal conversation-final is not appended.
 22. **V2 evaluation says the prioritized changes end the response while the
-    V1/server-audited schema requires Rewrite, Attribution, and Application
-    after Improvements.** The enforced schema wins physical order. V2's distinct
-    highest-leverage, one-to-three, priority-order semantics live in
-    Improvements rather than at the physical response end.
+    evaluation schema places Optional Rewrite (only when applicable), Source
+    Attribution, and Application after Improvements.** The resolved Turn prompt
+    owns that physical order. V2's highest-leverage, one-to-three, priority-order
+    semantics live in Improvements. The structural audit reports drift but does
+    not regenerate.
 23. **Creation requires two-to-five actual Source Basis entries while its
     zero-source path forbids fabrication and still requires the asset.** Actual
     sources are listed when available; otherwise Source Basis says "None."
     without retrieval narration, every Reused-vs-Created line is Created
-    (extended), and the asset is still delivered.
+    (extended), and the asset is still delivered. Citation telemetry now requires
+    a citation only when citeable Resource/KI/Playbook evidence exists.
 
 ## After: canonical order and accounting
 
@@ -222,14 +260,15 @@ The live initial ledger is:
 8. `runtime.workspace-sop` (when present)
 9. `fixed.turn-contract`
 10. `fixed.evidence-policy`
-11. `fixed.resource-grounding` (when applicable)
-12. `fixed.dossier-grounding` (when applicable)
-13. `fixed.current-state-reasoning` (when Current State ran)
-14. `fixed.thesis-continuity` (when applicable)
-15. `fixed.thesis-persistence` (Strategy Core paths)
-16. `fixed.v2-route-delta` (V2 path)
-17. `runtime.global-instructions` (when present)
-18. exactly one highest-recency final segment when required: conversation
+11. `fixed.library-disclosure` (one resolved outcome on every turn)
+12. `fixed.resource-grounding` (when applicable)
+13. `fixed.dossier-grounding` (when applicable)
+14. `fixed.current-state-reasoning` (when Current State ran)
+15. `fixed.thesis-continuity` (when applicable)
+16. `fixed.thesis-persistence` (Strategy Core paths)
+17. `fixed.v2-route-delta` (V2 path; disclosure-free)
+18. `runtime.global-instructions` (when present)
+19. exactly one highest-recency final segment when required: conversation
     enforcement or locked V2 synthesis tail
 
 Exhaustive pure tests enumerate every workspace, intent, depth, library mode,
@@ -258,7 +297,8 @@ hard 20,000 budget. Runtime fails closed before the provider call at 20,000.
 
 Every distinct baseline rule is assigned above to one canonical destination.
 Equivalent copies are marked **merged duplicate**. The twenty-three impossible
-combinations are marked **retired conflict** with their effective precedence and
-guard behavior. No instruction is silently dropped, no dynamic evidence is
-counted as fixed instruction, and no SOP/V2/thesis regex marker is left
-dangling.
+combinations have explicit prompt precedence; post-generation checks are called
+"enforced" only where they actually mutate/block, and otherwise are identified
+as telemetry/shadow audit. No instruction is silently dropped, no dynamic
+evidence is counted as fixed instruction, and no SOP/V2/thesis regex marker is
+left dangling.
