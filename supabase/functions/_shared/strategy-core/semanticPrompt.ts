@@ -20,6 +20,7 @@ import type {
   RetrievalRules,
   WorkspaceContract,
 } from "./workspaceContractTypes.ts";
+import { SYNTHESIS_CONTRACT_PHRASES } from "./v2/synthesisContractSentinel.ts";
 
 export type SemanticChatIntent =
   | "bootstrap"
@@ -177,6 +178,16 @@ function sentenceConstraint(intent: SemanticIntentResult): string {
   }. Count before sending.`;
 }
 
+function explicitOutputCountContract(
+  behavior: BehaviorIntentResult | undefined,
+): string {
+  const count = behavior?.requested_count;
+  if (!Number.isInteger(count) || !count || count < 1) return "";
+  const noun = behavior?.requested_output_noun || "outputs";
+  return `═══ EXPLICIT OUTPUT COUNT ═══
+Return exactly ${count} distinct ${noun}. This user-specified count is binding for the requested outputs and replaces every workspace, behavior, asset, or conversation default/range for their quantity. Do not produce more or fewer than ${count} members of that requested output set. Non-counted sections required by the resolved asset contract remain allowed.`;
+}
+
 function sharedAssetDiscipline(intent: SemanticIntentResult): string {
   if (intent.intent === "template") {
     return `═══ ASSET DISCIPLINE ═══
@@ -195,18 +206,30 @@ function sharedAssetDiscipline(intent: SemanticIntentResult): string {
 function freeformBehavior(
   behavior: BehaviorIntentResult | undefined,
 ): string {
+  const hasExplicitCount = Number.isInteger(behavior?.requested_count) &&
+    (behavior?.requested_count ?? 0) > 0;
   switch (behavior?.intent) {
     case "conversation_strategy":
       return `═══ DELIVERY: CONVERSATION STRATEGY ═══
-Return what Corey should say or ask in natural first-person prose. Give one primary path and at most one materially different backup. Each path must weave together a specific account/current-state anchor, a from→to change vector, a commercial tension or friction, a concrete move, and a validation question. No headings, bullets, category buckets, named options, email/doc/plan formatting, or generic martech language.`;
+Return what Corey should say or ask in natural first-person prose. ${
+        hasExplicitCount
+          ? "Make each requested entry a materially different path."
+          : "Give one primary path and at most one materially different backup."
+      } Each path must weave together a specific account/current-state anchor, a from→to change vector, a commercial tension or friction, a concrete move, and a validation question. No headings, bullets, category buckets, named options, email/doc/plan formatting, or generic martech language.`;
 
     case "idea_generation":
       return `═══ DELIVERY: IDEA GENERATION ═══
-Generate multiple genuinely distinct options: one sentence naming each angle and one sentence explaining why it could work. Do not collapse into one thesis or write the final asset. Label speculation "Hypothesis:" or "If true:" and end with one recommended next move.`;
+${
+        hasExplicitCount
+          ? "Make the requested outputs genuinely distinct."
+          : "Generate multiple genuinely distinct options."
+      } Use one sentence naming each angle and one sentence explaining why it could work. Do not collapse into one thesis or write the final asset. Label speculation "Hypothesis:" or "If true:" and end with one recommended next move.`;
 
     case "artifact_creation":
       return `═══ DELIVERY: ARTIFACT CREATION ═══
-Produce the requested deliverable now, copy/paste ready. Use sections only when the artifact benefits from them. Do not substitute coaching, research dumping, or a menu of alternatives for the deliverable.`;
+Produce ${
+        hasExplicitCount ? "the requested set" : "the requested deliverable"
+      } now, copy/paste ready. Use sections only when the artifact benefits from them. Do not substitute coaching, research dumping, or unrequested alternatives for the deliverable.`;
 
     case "research_analysis":
     default:
@@ -269,16 +292,40 @@ export function buildResolvedTurnContract(args: {
     : formatPrecedence(intent, outputModeDecision);
 
   if (libraryMode === "short_form") {
+    const exactCount = behaviorIntent?.requested_count;
+    const requestedNoun = behaviorIntent?.requested_output_noun ||
+      (shortFormKind === "subject_lines"
+        ? "subject lines"
+        : shortFormKind === "voicemail"
+        ? "voicemail scripts"
+        : shortFormKind === "talk_track_snippet"
+        ? "talk-track options"
+        : "short options");
+    const exactLead = Number.isInteger(exactCount) && (exactCount ?? 0) > 0
+      ? `Return exactly ${exactCount} numbered ${requestedNoun}; this explicit count replaces the default range`
+      : null;
     const shape = shortFormKind === "subject_lines"
-      ? "Return 8–12 numbered subject lines, one per line; each is at most 70 characters."
+      ? exactLead
+        ? `${exactLead}; put one per line and keep each at most 70 characters.`
+        : "Return 8–12 numbered subject lines, one per line; each is at most 70 characters."
       : shortFormKind === "opener"
-      ? "Return 3–5 numbered opener options; each is at most two sentences, followed by one rationale line of at most 18 words."
+      ? exactLead
+        ? `${exactLead}; keep each at most two sentences, followed by one rationale line of at most 18 words.`
+        : "Return 3–5 numbered opener options; each is at most two sentences, followed by one rationale line of at most 18 words."
       : shortFormKind === "hook_lines"
-      ? "Return 5–8 numbered hook lines; each is one sentence or less."
+      ? exactLead
+        ? `${exactLead}; keep each to one sentence or less.`
+        : "Return 5–8 numbered hook lines; each is one sentence or less."
       : shortFormKind === "voicemail"
-      ? "Return 2–3 numbered voicemail scripts; each is at most about 60 words, followed by one rationale line."
+      ? exactLead
+        ? `${exactLead}; keep each at most about 60 words, followed by one rationale line.`
+        : "Return 2–3 numbered voicemail scripts; each is at most about 60 words, followed by one rationale line."
       : shortFormKind === "talk_track_snippet"
-      ? "Return 2–3 numbered talk-track options; each is at most three sentences, followed by one rationale line."
+      ? exactLead
+        ? `${exactLead}; keep each at most three sentences, followed by one rationale line.`
+        : "Return 2–3 numbered talk-track options; each is at most three sentences, followed by one rationale line."
+      : exactLead
+      ? `${exactLead}; keep each at most two sentences, followed by one rationale line only when useful.`
       : "Return 3–5 numbered short options; each is at most two sentences, followed by one rationale line only when useful.";
     return joinContracts(
       `═══ RESOLVED TURN CONTRACT: SHORT-FORM (${
@@ -520,6 +567,7 @@ The selected behavior route is ${
   return joinContracts(
     "═══ RESOLVED TURN CONTRACT ═══",
     asset,
+    explicitOutputCountContract(behaviorIntent),
     behavior,
     selectedFormat,
     operatorReasoning,
@@ -534,21 +582,30 @@ The selected behavior route is ${
 
 export function buildCompactWorkspaceDelta(
   contract: WorkspaceContract,
+  options?: { explicitOutputCount?: number | null },
 ): string {
   const header =
     `═══ SELECTED WORKSPACE DELTA: ${contract.workspace.toUpperCase()} (v${contract.version}) ═══
 This changes posture and quality checks only. It cannot override truth, explicit user format, or the resolved turn contract. A stricter asset/task schema wins over workspace defaults.`;
 
+  const hasExplicitOutputCount = Number.isInteger(
+    options?.explicitOutputCount,
+  ) && (options?.explicitOutputCount ?? 0) > 0;
+
   switch (contract.workspace) {
-    case "brainstorm":
+    case "brainstorm": {
+      const quantityRule = hasExplicitOutputCount
+        ? "- The resolved turn's explicit-output-count clause is binding. Suppress this workspace's default quantity and any primary/backup quantity; retain the other brainstorm quality rules."
+        : "- When a final conversation contract is active, express the angles as natural unlabeled entries and let that final contract own count/shape. Otherwise return at least five numbered options, each beginning [Angle: <short label>] with a tight frame and why it could work.";
       return joinContracts(
         header,
         `- Divergent generation: reframe the underlying Branch expansion job, then cover footprint/whitespace, MMP/competitive displacement, QBR/renewal, product expansion, stakeholder, and vertical dimensions. Create at least one genuinely distinct option per relevant dimension, expand the strongest two or three dimensions, and collapse paraphrases.
-- An explicit user count wins. When a final conversation contract is active, express the angles as natural unlabeled entries and let that final contract own count/shape. Otherwise return at least five numbered options, each beginning [Angle: <short label>] with a tight frame and why it could work.
+${quantityRule}
 - Label speculation "Hypothesis:" or "If true:" and state what must be true. Do not stall in research, hedge away the edge, over-cite, drift to generic SaaS/net-new prospecting, or substitute one safe recommendation for breadth.
 - When no stricter asset/conversation contract forbids it, end with exactly one "Next move: <one line>".
 - Escalation hints: picked option → Refine; truth/evidence check → Deep Research; finished deliverable → Artifacts. Recommend only when that transition materially helps.`,
       );
+    }
 
     case "deep_research":
       return joinContracts(
@@ -565,11 +622,14 @@ This changes posture and quality checks only. It cannot override truth, explicit
       const labels = contract.refineConfig?.allowedVariantLabels.join(" | ") ??
         "Shorter | Sharper | Warmer | More executive | More direct";
       const max = contract.refineConfig?.maxVariants ?? 2;
+      const variantRule = hasExplicitOutputCount
+        ? "- The resolved turn's explicit-output-count clause owns the requested number of versions; do not apply this workspace's default variant cap."
+        : `- Default to one best version. If variants materially help, return at most ${max}, labelled only: ${labels}.`;
       return joinContracts(
         header,
         `- Identify the author's intent and top two or three weaknesses, then make the minimum edits for maximum lift. Preserve voice, intent, input shape, Branch specificity, and competitive sharpness; prefer reduction and stronger verbs. Never add facts or generic AI polish.
 - An explicit user/input format wins. Otherwise return ## Improved version first and ## Changes with two or three concrete edits; never omit the change explanation.
-- Default to one best version. If variants materially help, return at most ${max}, labelled only: ${labels}.`,
+${variantRule}`,
         `- Re-read against original intent. Avoid over-editing and variant sprawl.
 - Escalation hints: missing facts → Deep Research; genuinely new angles/directions → Brainstorm.`,
       );
@@ -1029,12 +1089,12 @@ export function buildV2StrongSynthesisTail(args: {
 
   return `═══ FINAL INSTRUCTIONS — STRONG-SIGNAL SYNTHESIS ═══
 Final highest-recency contract; apply inside the resolved synthesis schema.
-1. OPEN WITH POV — first Pattern Extraction sentence names the dominant pattern, never a balanced survey.
-2. UNEQUAL WEIGHTING — separate the load-bearing driver from table stakes/noise; no equal weights.
-3. CITE LITERAL TITLES INLINE — follow Evidence Policy; it alone owns namespace syntax, fallback, and placement.
-4. WHAT'S OVERRATED — name what mediocre reps overweight or what does not move the number.
-5. COMMERCIAL CONSEQUENCE — tie each load-bearing pattern to win rate, cycle, ACV, no-decision, churn, or forecast confidence.
-6. EXECUTABLE NEXT MOVES — This-Week Moves has 3–5 numbered live-deal actions, each tied to a commercial outcome.
+1. ${SYNTHESIS_CONTRACT_PHRASES.povFirstOpener} — first Pattern Extraction sentence names the dominant pattern, never a balanced survey.
+2. ${SYNTHESIS_CONTRACT_PHRASES.unequalWeighting} — separate the load-bearing driver from table stakes/noise; no equal weights.
+3. ${SYNTHESIS_CONTRACT_PHRASES.literalCitations} — follow Evidence Policy; it alone owns namespace syntax, fallback, and placement.
+4. ${SYNTHESIS_CONTRACT_PHRASES.whatIsOverrated} — name what mediocre reps overweight or what does not move the number.
+5. ${SYNTHESIS_CONTRACT_PHRASES.commercialConsequence} — tie each load-bearing pattern to win rate, cycle, ACV, no-decision, churn, or forecast confidence.
+6. ${SYNTHESIS_CONTRACT_PHRASES.executableNextMoves} — This-Week Moves has 3–5 numbered live-deal actions, each tied to a commercial outcome.
 A source tour, equal treatment, or no winner fails.`;
 }
 

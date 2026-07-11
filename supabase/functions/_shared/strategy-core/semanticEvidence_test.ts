@@ -238,6 +238,13 @@ Deno.test("semantic evidence: strategy-chat uses data-only Current State project
     source,
     'behaviorIntent.intent !== "artifact_creation"',
   );
+  assertStringIncludes(
+    source,
+    "situationIntelligence?.competitiveSources || []",
+  );
+  assertStringIncludes(source, "cardHits: citationCardHits");
+  assertStringIncludes(source, "citationCardHits.length");
+  assertStringIncludes(source, "totalHits: citeableLibraryHitCount");
   assert(
     !/id:\s*"evidence\.current-state"[\s\S]{0,180}promptBlock/.test(source),
     "raw Current State prompt contract leaked back into evidence.current-state",
@@ -251,4 +258,29 @@ Deno.test("semantic evidence: durable identity defers volatile facts to Territor
   assertStringIncludes(fixed, "Live Territory Profile evidence");
   assert(!fixed.includes("$1.4M"));
   assert(!fixed.includes("14 enterprise accounts"));
+});
+
+Deno.test("semantic evidence: obsolete V2 identity and parallel prompt API are removed", () => {
+  const orchestrator = Deno.readTextFileSync(
+    new URL("./v2/orchestrator.ts", import.meta.url),
+  );
+  const publicApi = Deno.readTextFileSync(
+    new URL("./v2/index.ts", import.meta.url),
+  );
+  for (const source of [orchestrator, publicApi]) {
+    assert(!source.includes("buildV2Prompt"));
+    assert(!source.includes("V2OrchestratorPrompt"));
+    assert(!source.includes("14 enterprise accounts"));
+    assert(!source.includes("$1.4M"));
+  }
+  let obsoleteBuilderExists = true;
+  try {
+    Deno.statSync(
+      new URL("./v2/extendedReasoningContract.ts", import.meta.url),
+    );
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) obsoleteBuilderExists = false;
+    else throw error;
+  }
+  assertEquals(obsoleteBuilderExists, false);
 });

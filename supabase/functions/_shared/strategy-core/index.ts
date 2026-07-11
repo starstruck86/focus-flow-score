@@ -99,9 +99,18 @@ export {
 export {
   countLiteralLibraryCitations,
   hasLiteralLibraryCitation,
+  LIBRARY_CITATION_ID_FALLBACK_NAMESPACES,
+  LIBRARY_CITATION_TITLE_NAMESPACES,
   missingRequiredLibraryCitation,
   STRICT_LIBRARY_CITATION_INSTRUCTION,
 } from "./citationSyntax.ts";
+
+export {
+  detectExplicitOutputCount,
+  detectExplicitOutputRequest,
+  type ExplicitOutputCategory,
+  type ExplicitOutputRequest,
+} from "./explicitOutputRequest.ts";
 
 export {
   emptyWorkingThesisState,

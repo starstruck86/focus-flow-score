@@ -1,44 +1,33 @@
 // ════════════════════════════════════════════════════════════════
 // Strategy V2 — Orchestrator
 //
-// Single entry point for the V2 reasoning path. Composes:
+// Shared runtime helpers for the V2 reasoning path. Exposes:
 //
 //   1. Dispatcher → mode + ask shape + override + signal score
-//   2. Prompt build → system prompt with mode/shape contracts + rubric
-//   3. Provider call → hands off to caller (strategy-chat owns LLM call)
-//   4. Wrong-question guard → ONE hard pre-send check, one regen budget
-//   5. Async quality audit → fires after response sent, persists scores
+//   2. Wrong-question diagnostic → post-generation shadow telemetry
+//   3. Async quality audit → fires after response sent, persists scores
+//   4. Routing evidence assembly → persists the V2 decision and outcomes
 //
 // Returns everything the caller needs to:
-//   - send the prompt to the provider
 //   - validate the response
 //   - persist evidence to routing_decision
 //
-// Critical: this orchestrator does NOT call the LLM itself. It builds
-// the prompt, then the caller (strategy-chat/index.ts) calls the
-// provider, then calls back into validateAndAudit() with the result.
-// This keeps streaming, provider selection, fallback logic in the
-// caller where it already lives.
+// Critical: this orchestrator does NOT build prompts or call the LLM.
+// The caller (strategy-chat/index.ts) owns semantic prompt composition,
+// provider selection, streaming, and fallback behavior; this module owns
+// dispatch, response validation/audit, and routing evidence assembly.
 // ════════════════════════════════════════════════════════════════
 
 import {
+  dispatch,
   type DispatchDecision,
   type DispatchSignals,
-  dispatch,
 } from "./operatorDispatcher.ts";
-import { buildV2SystemPromptParts } from "./extendedReasoningContract.ts";
 import { auditQuality, type QualityAuditResult } from "./qualityAudit.ts";
-import { checkWrongQuestion, type WrongQuestionResult } from "./wrongQuestionGuard.ts";
-
-export interface V2OrchestratorPrompt {
-  decision: DispatchDecision;
-  systemPrompt: string;
-  // Phase 7C-followup: split parts so callers can interleave SOP authority
-  // blocks between operator identity and the V2 reasoning/dispatcher contract.
-  identity: string;
-  reasoning: string;
-  userText: string; // cleaned (override stripped)
-}
+import {
+  checkWrongQuestion,
+  type WrongQuestionResult,
+} from "./wrongQuestionGuard.ts";
 
 export interface V2RoutingDecisionEvidence {
   version: "v2";
@@ -70,56 +59,11 @@ export interface V2RoutingDecisionEvidence {
   // silent. Treated as a risk in validation reports.
   claude_fallback?: boolean;
   // Phase 3: contract-drift sentinel — assembled prompt was missing one or
-  // more of the 5 non-negotiables for strong-signal synthesis. Logged only.
+  // more of the 6 non-negotiables for strong-signal synthesis. Logged only.
   contract_drift?: { missing: string[] } | null;
 }
 
-// ═══ Step 1: Build prompt ═══
-export function buildV2Prompt(args: {
-  rawUserText: string;
-  signals: DispatchSignals;
-  accountContext?: string;
-  libraryContext?: string;
-  resourceContextBlock?: string;
-  workingThesisBlock?: string;
-  resourceTitles?: string[];
-  kiIds?: string[];
-  kiTitles?: string[];
-}): V2OrchestratorPrompt {
-  const decision = dispatch({
-    rawUserText: args.rawUserText,
-    signals: args.signals,
-  });
-
-  // Audience hint — checked once, used by both prompt and rubric scoring
-  const audienceMentioned =
-    /\b(cfo|ceo|coo|cto|vp|director|champion|economic\s+buyer|technical\s+buyer|healthcare|fintech|retail|saas|manufacturing)\b/i
-      .test(decision.cleanedUserText);
-
-  const builderArgs = {
-    decision,
-    accountContext: args.accountContext,
-    libraryContext: args.libraryContext,
-    resourceContextBlock: args.resourceContextBlock,
-    workingThesisBlock: args.workingThesisBlock,
-    audienceMentioned,
-    resourceTitles: args.resourceTitles,
-    kiIds: args.kiIds,
-    kiTitles: args.kiTitles,
-  };
-  const { identity, reasoning } = buildV2SystemPromptParts(builderArgs);
-  const systemPrompt = `${identity}\n\n${reasoning}`;
-
-  return {
-    decision,
-    systemPrompt,
-    identity,
-    reasoning,
-    userText: decision.cleanedUserText,
-  };
-}
-
-// ═══ Step 2: Validate response (hard wrong-question check) ═══
+// ═══ Step 1: Post-generation wrong-question diagnostic (shadow) ═══
 export function validateResponse(args: {
   userPrompt: string;
   responseBody: string;
@@ -128,7 +72,7 @@ export function validateResponse(args: {
   return checkWrongQuestion(args);
 }
 
-// ═══ Step 3: Async audit (never blocks) ═══
+// ═══ Step 2: Async audit (never blocks) ═══
 export function auditResponse(args: {
   decision: DispatchDecision;
   body: string;
@@ -136,6 +80,7 @@ export function auditResponse(args: {
   resourceTitles?: string[];
   kiIds?: string[];
   kiTitles?: string[];
+  cardIds?: string[];
 }): QualityAuditResult {
   const audienceMentioned =
     /\b(cfo|ceo|coo|cto|vp|director|champion|economic\s+buyer|technical\s+buyer|healthcare|fintech|retail|saas|manufacturing)\b/i
@@ -150,6 +95,7 @@ export function auditResponse(args: {
     resourceTitles: args.resourceTitles,
     kiIds: args.kiIds,
     kiTitles: args.kiTitles,
+    cardIds: args.cardIds,
   });
 }
 
@@ -198,17 +144,22 @@ export function assembleRoutingEvidence(args: {
 
   if (args.provider) evidence.provider = args.provider;
   if (args.model) evidence.model = args.model;
-  if (typeof args.regenCount === "number") evidence.regen_count = args.regenCount;
+  if (typeof args.regenCount === "number") {
+    evidence.regen_count = args.regenCount;
+  }
 
   // Phase 3: explicit Claude fallback flag. Fires when synthesis_framework +
   // A_strong was intended-routed to Claude (anthropic) but the actual provider
   // ended up being something else. NEVER silent — surfaces as a risk in
   // routing_decision.v2.claude_fallback.
-  const intendedClaude =
-    args.intendedProvider === "anthropic" &&
+  const intendedClaude = args.intendedProvider === "anthropic" &&
     decision.askShape === "synthesis_framework" &&
     decision.mode === "A_strong";
-  if (intendedClaude && (args.fallbackUsed === true || (args.provider && args.provider !== "anthropic"))) {
+  if (
+    intendedClaude &&
+    (args.fallbackUsed === true ||
+      (args.provider && args.provider !== "anthropic"))
+  ) {
     evidence.claude_fallback = true;
   }
 

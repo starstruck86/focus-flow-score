@@ -34,6 +34,10 @@ import { STRICT_LIBRARY_CITATION_INSTRUCTION } from "./citationSyntax.ts";
 import { WORKSPACE_CONTRACTS } from "./workspaceContracts.ts";
 import type { WorkspaceContract } from "./workspaceContractTypes.ts";
 import type { LibraryCoverageState } from "./retrievalEnforcement.ts";
+import {
+  type BehaviorIntentResult,
+  classifyBehaviorIntent,
+} from "./behaviorIntent.ts";
 
 const INTENTS: SemanticChatIntent[] = [
   "bootstrap",
@@ -130,7 +134,7 @@ function buildWorstCase(args: {
   shortFormKind?: string | null;
   v2Decision?: SemanticV2Decision | null;
   outputMode?: "conversation" | "structured" | "preserve" | "adaptive";
-  behaviorIntent?: (typeof BEHAVIORS)[number];
+  behaviorIntent?: BehaviorIntentResult;
   libraryCoverageState?: LibraryCoverageState;
 }): ReturnType<typeof composePrompt> {
   const base: PromptSegment[] = [
@@ -145,7 +149,9 @@ function buildWorstCase(args: {
     {
       id: "fixed.workspace-delta",
       kind: "fixed_instruction",
-      text: buildCompactWorkspaceDelta(args.contract),
+      text: buildCompactWorkspaceDelta(args.contract, {
+        explicitOutputCount: args.behaviorIntent?.requested_count,
+      }),
     },
     {
       id: "evidence.core.account",
@@ -421,7 +427,9 @@ Deno.test("semantic prompt: strict citation syntax has one canonical owner", () 
     forceLiteralCitations: true,
   });
   assertStringIncludes(policy, STRICT_LIBRARY_CITATION_INSTRUCTION);
-  assert(!policy.includes("CARD["));
+  for (const namespace of ["RESOURCE", "KI", "CARD", "PLAYBOOK"]) {
+    assertStringIncludes(policy, `${namespace}["title"]`);
+  }
 
   const tail = buildV2StrongSynthesisTail({
     decision: { mode: "A_strong", askShape: "synthesis_framework" },
@@ -978,6 +986,104 @@ Deno.test("conversation final reconciles path count by behavior without embeddin
   }
   assertEquals(detectRequestedEntryCount("Give me 21 options"), null);
   assertEquals(detectRequestedEntryCount("Give me thirteen options"), null);
+  for (
+    const factual of [
+      "We sent 4 messages yesterday—what should I do next?",
+      "The buyer reviewed 4 scripts",
+      "I have 4 options already; choose one",
+    ]
+  ) {
+    assertEquals(detectRequestedEntryCount(factual), null, factual);
+  }
+});
+
+Deno.test("explicit counted output replaces behavior defaults in the Turn contract", () => {
+  for (const text of ["give me 4 scripts", "4 messages", "4 paths"]) {
+    const behaviorIntent = classifyBehaviorIntent(text, {
+      hasAccountContext: true,
+    });
+    const turn = buildResolvedTurnContract({
+      intent: { intent: "freeform" },
+      behaviorIntent,
+      outputModeDecision: OUTPUT,
+      libraryMode: "general",
+    });
+    assertStringIncludes(turn, "exactly 4", text);
+    assert(!turn.includes("at most one materially different backup"), text);
+    assert(!turn.includes("Generate multiple genuinely distinct"), text);
+  }
+});
+
+Deno.test("explicit output count survives creation and short-form intent routes", () => {
+  for (
+    const text of [
+      "Write 4 cold call scripts",
+      "Give me 4 outreach messages",
+    ]
+  ) {
+    const behaviorIntent = classifyBehaviorIntent(text, {
+      hasAccountContext: true,
+    });
+    const creationTurn = buildResolvedTurnContract({
+      intent: { intent: "creation" },
+      behaviorIntent,
+      outputModeDecision: OUTPUT,
+      libraryMode: "general",
+    });
+    assertStringIncludes(creationTurn, "exactly 4", text);
+    assertStringIncludes(creationTurn, "═══ APPLICATION ═══", text);
+    assertStringIncludes(
+      creationTurn,
+      "Non-counted sections required by the resolved asset contract remain allowed.",
+      text,
+    );
+    assert(!creationTurn.includes("appendix item beyond"), text);
+    assert(
+      !creationTurn.includes("at most one materially different backup"),
+      text,
+    );
+    assert(
+      !creationTurn.includes("Generate multiple genuinely distinct"),
+      text,
+    );
+  }
+
+  const countedTalkTracks = classifyBehaviorIntent(
+    "Write 4 talk-track scripts",
+    { hasAccountContext: true },
+  );
+  const shortTurn = buildResolvedTurnContract({
+    intent: { intent: "message" },
+    behaviorIntent: countedTalkTracks,
+    outputModeDecision: OUTPUT,
+    libraryMode: "short_form",
+    shortFormKind: "talk_track_snippet",
+  });
+  assertStringIncludes(shortTurn, "exactly 4");
+  assert(!shortTurn.includes("2–3 numbered"));
+  assert(!shortTurn.includes("3–5 numbered"));
+});
+
+Deno.test("assembled counted brainstorm prompt omits competing quantity defaults", () => {
+  const countedBehavior = classifyBehaviorIntent(
+    "Give me 4 paths and recommend one",
+    { hasAccountContext: true },
+  );
+  const prompt = buildWorstCase({
+    contract: WORKSPACE_CONTRACTS.brainstorm,
+    intent: "freeform",
+    depth: "Standard",
+    libraryMode: "general",
+    outputMode: "conversation",
+    behaviorIntent: countedBehavior,
+  });
+  assertStringIncludes(prompt.systemPrompt, "exactly 4");
+  assert(!prompt.systemPrompt.includes("at least five numbered options"));
+  assert(
+    !prompt.systemPrompt.includes("at most one materially different backup"),
+  );
+  assert(!prompt.systemPrompt.includes("Return 2–3 numbered"));
+  assert(!prompt.systemPrompt.includes("Return 3–5 numbered"));
 });
 
 Deno.test("required Library conversation preserves one inline disclosure through the final contract", () => {

@@ -79,8 +79,8 @@ lines.
 | `strategy-chat/index.ts:7586-7601` library usage                         |                               1,092 | Silent relevant use, selective citation, no retrieval theater                                                                 | `fixed.evidence-policy`                                                                                        | merged duplicate                                            |
 | `strategy-chat/index.ts:7609-7641` decision layer                        |                               1,669 | Workspace posture and value-before-clarification                                                                              | `fixed.workspace-delta` + Core ambiguity rule                                                                  | merged duplicate                                            |
 | `strategy-chat/index.ts:6002-6049` V1 library mode                       |                               0-547 | Strong/partial/thin/short-form behavior and Grounded/Extended labels                                                          | Evidence posture → Evidence Policy; visible gap/extension outcome → Library Disclosure; shape → Turn           | preserved / merged duplicate                                |
-| `v2/extendedReasoningContract.ts:27-50` V2 identity                      |                               3,220 | POV, tradeoffs, commercial outcome, next moves                                                                                | `fixed.core-invariants`                                                                                        | merged duplicate                                            |
-| `v2/extendedReasoningContract.ts:53-320` V2 reasoning                    |          943-5,960 plus title lists | Mode, ask shape, extension, citations, rubric, synthesis recency                                                              | Strategy Chat does not call this legacy builder; its live equivalents map to Evidence Policy, Library Disclosure, Turn, `fixed.v2-route-delta`, and the final V2 segment | retired from live assembly / semantics preserved |
+| deleted `v2/extendedReasoningContract.ts:27-50` V2 identity              |                               3,220 | POV, tradeoffs, commercial outcome, next moves                                                                                | `fixed.core-invariants`; dormant stale identity API removed                                                     | merged duplicate / obsolete builder deleted                 |
+| deleted `v2/extendedReasoningContract.ts:53-320` V2 reasoning            |          943-5,960 plus title lists | Mode, ask shape, extension, citations, rubric, synthesis recency                                                              | Evidence Policy, Library Disclosure, Turn, `fixed.v2-route-delta`, and final V2 segment; shared sentinel retains drift telemetry | retired from live assembly / obsolete builder deleted |
 | `outputMode.ts:238-315` conversation final                               |           2,434 plus dynamic digest | Highest-recency prose-only conversation gate                                                                                  | `fixed.conversation-enforcement-final` with data removed                                                       | preserved                                                   |
 | `strategy-chat/index.ts:5947-5974` Global SOP wrapper                    |                   payload + wrapper | User-authored global operating standard                                                                                       | `runtime.global-sop` with exact marker/wording                                                                 | preserved                                                   |
 | `strategy-chat/index.ts:5977-6000` Workspace SOP wrapper                 |                   payload + wrapper | Workspace-specific user SOP                                                                                                   | `runtime.workspace-sop`, after Global SOP                                                                      | preserved                                                   |
@@ -179,29 +179,29 @@ These were contradictory before consolidation; preserving both was impossible.
     asset.** PRIMARY remains priority evidence, but only relevant
     steps/questions apply inside the Turn schema.
 12. **Hard-coded quota/account-count identity can become stale against Territory
-    Profile.** Volatile quota/account-count language was removed from the legacy
-    identity helper. The durable Branch remit remains fixed, while an explicit
-    authority rule makes Territory Profile the owner of current role, company,
-    quota, account count, motion, team, and dates.
+    Profile.** Volatile quota/account-count language was removed from the live
+    durable identity, and the dormant V2 builder that retained a second stale
+    identity was deleted. An explicit authority rule makes Territory Profile
+    the sole owner of current role, company, quota, account count, motion,
+    team, and dates.
 13. **Brainstorm labels/minimums conflict with universal conversation prose.**
     A recognized explicit count wins; otherwise Brainstorm still produces at least five.
     Conversation-final owns unlabeled prose, while non-conversation Brainstorm
     keeps `[Angle: ...]` labels and its `Next move:` tail.
 14. **Library `[Source: title]`, V2 natural attribution, strict namespace
     citations, and asset-specific placement conflict.** One shared citation
-    syntax constant owns exact-title `RESOURCE`/`KI`/`PLAYBOOK` forms and an
-    exactly-eight-hex KI-id fallback; lighter turns use natural title attribution. Resource
+    syntax constant owns exact-title `RESOURCE`/`KI`/`CARD`/`PLAYBOOK` forms
+    and exactly-eight-hex KI/CARD fallbacks; lighter turns use natural title attribution. Resource
     Grounding and the final V2 synthesis tail delegate to Evidence Policy and
     define no namespace syntax.
     Turn owns placement: Account Brief confines material library-derived claims
-    to Next Moves, and 30/60/90 confines them to Engage/Advance. CARD citations
-    and legacy CARD/PLAYBOOK id fallbacks are deliberately retired: standards/
-    exemplars are quality-only context, live Playbook evidence always includes a
-    title, and `citations_json`/the source-badge UI have no Card source path. The
-    shadow auditor treats CARD as unverified even when a legacy caller supplies
-    card hits. The older locked V2 builder is not
-    assembled by Strategy Chat; its historical RESOURCE/KI wording is therefore
-    non-live and cannot override this shell.
+    to Next Moves, and 30/60/90 confines them to Engage/Advance. CARD is a live
+    namespace for the exact classifier-retrieved competitive-intel set; W5
+    validates it fail-closed and `citations_json.competitive_intel` drives its
+    existing source badge. Library standards remain quality-only unless they
+    are separately supplied as citable card evidence. The obsolete V2 prompt
+    builder and stale identity were deleted; only the shared synthesis-marker
+    sentinel remains, so it cannot reintroduce narrower RESOURCE/KI syntax.
 15. **Refine requires headings while Preserve forbids newly imposed shape.**
     Explicit user/input shape wins; absent one, Refine keeps the Improved
     version, Changes, and bounded variant sections.
@@ -210,8 +210,9 @@ These were contradictory before consolidation; preserving both was impossible.
     precedence, but W5 remains shadow/reporting-only and does not rewrite or
     block output. Material titles never become idea headings and retrieval is
     never announced. Namespace counting is shared, excludes UNVERIFIED tokens,
-    and Strategy Chat supplies its Resource, retrieved-KI, library-KI, and
-    Playbook hit sets to the shadow verifier. When V2 forces literal syntax,
+    and Strategy Chat supplies its Resource, retrieved-KI, library-KI,
+    classifier-retrieved CARD, and Playbook hit sets to the shadow verifier.
+    When V2 forces literal syntax,
     W5's effective mode becomes strict even if the workspace's raw mode is not;
     both raw and effective modes remain in routing telemetry.
 17. **Picked-resource adaptation wants a `Using <title>...` preface while exact
@@ -244,7 +245,7 @@ These were contradictory before consolidation; preserving both was impossible.
     sources are listed when available; otherwise Source Basis says "None."
     without retrieval narration, every Reused-vs-Created line is Created
     (extended), and the asset is still delivered. Citation telemetry now requires
-    a citation only when citeable Resource/KI/Playbook evidence exists.
+    a citation only when citeable Resource/KI/CARD/Playbook evidence exists.
 
 ## After: canonical order and accounting
 

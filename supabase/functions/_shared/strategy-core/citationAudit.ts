@@ -61,8 +61,8 @@ export interface CitationAuditOptions {
    */
   kiHits?: CitationAuditHit[];
   /**
-   * Optional CARD hit set retained for backward-compatible scanning. CARD is
-   * not a canonical Strategy Chat source namespace and always fails audit.
+   * Optional CARD hit set. Exact title and exact-eight-character short-id
+   * citations are canonical when the caller supplied the retrieved card set.
    */
   cardHits?: CitationAuditHit[];
   /** Optional PLAYBOOK hit set. Only title citations are canonical. */
@@ -230,7 +230,7 @@ export function auditResourceCitations(
     });
   };
   auditNamespacedCitation("KI", options.kiHits, true, true);
-  auditNamespacedCitation("CARD", options.cardHits, false, false);
+  auditNamespacedCitation("CARD", options.cardHits, true, true);
   auditNamespacedCitation("PLAYBOOK", options.playbookHits, false, true);
 
   // ── 3. Informal "<Title>" + artifact-word references ──────────

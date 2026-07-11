@@ -45,6 +45,7 @@ export function auditQuality(args: {
   resourceTitles?: string[];
   kiIds?: string[];
   kiTitles?: string[];
+  cardIds?: string[];
 }): QualityAuditResult {
   const scores = scoreRubric({
     body: args.body,
@@ -55,12 +56,14 @@ export function auditQuality(args: {
     resourceTitles: args.resourceTitles,
     kiIds: args.kiIds,
     kiTitles: args.kiTitles,
+    cardIds: args.cardIds,
   });
   const flags: string[] = [];
   const text = args.body || "";
   const resourceHitCount = args.resourceTitles?.length || 0;
   const kiHitCount = args.kiIds?.length || 0;
-  const totalStrong = resourceHitCount + kiHitCount;
+  const cardHitCount = args.cardIds?.length || 0;
+  const totalStrong = resourceHitCount + kiHitCount + cardHitCount;
 
   if (scores.operatorPOV < 0.5) flags.push("low_operator_pov");
   // missing_decision_logic (strict + relaxed) is emitted in the Phase 3 block below.
@@ -118,7 +121,7 @@ export function auditQuality(args: {
   const isStrongSynth =
     args.askShape === "synthesis_framework" &&
     args.mode === "A_strong" &&
-    resourceHitCount >= 5;
+    totalStrong >= 5;
   if (isStrongSynth) {
     const hasPOV = POV_QUICK_RE.test(text);
     const hasLiteralCitation = hasLiteralLibraryCitation(text);

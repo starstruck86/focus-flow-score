@@ -5,15 +5,27 @@
  * redefining narrower namespace regexes that drift from Evidence Policy.
  */
 
+export const LIBRARY_CITATION_TITLE_NAMESPACES = [
+  "RESOURCE",
+  "KI",
+  "CARD",
+  "PLAYBOOK",
+] as const;
+
+export const LIBRARY_CITATION_ID_FALLBACK_NAMESPACES = [
+  "KI",
+  "CARD",
+] as const;
+
 export const STRICT_LIBRARY_CITATION_INSTRUCTION =
-  'Use only listed-source citation forms: RESOURCE["title"], KI["title"], or PLAYBOOK["title"]. Prefer titles; KI[abc12345] is allowed only when no title exists. Never use a vague or fabricated reference.';
+  'Use only listed-source citation forms: RESOURCE["title"], KI["title"], CARD["title"], or PLAYBOOK["title"]. Prefer titles; KI[abc12345] or CARD[abc12345] is allowed only when no title exists. Never use a vague or fabricated reference.';
 
 const TITLE_CITATION_SOURCE = String
-  .raw`(?<![a-z0-9_-])(?:RESOURCE|KI|PLAYBOOK)\[\s*"[^"\]\r\n]+"\s*\]`;
-const KI_ID_CITATION_SOURCE = String
-  .raw`(?<![a-z0-9_-])KI\[\s*[a-f0-9]{8}\s*\]`;
+  .raw`(?<![a-z0-9_-])(?:RESOURCE|KI|CARD|PLAYBOOK)\[\s*"[^"\]\r\n]+"\s*\]`;
+const ID_CITATION_SOURCE = String
+  .raw`(?<![a-z0-9_-])(?:KI|CARD)\[\s*[a-f0-9]{8}\s*\]`;
 const LITERAL_LIBRARY_CITATION_SOURCE =
-  `(?:${TITLE_CITATION_SOURCE}|${KI_ID_CITATION_SOURCE})`;
+  `(?:${TITLE_CITATION_SOURCE}|${ID_CITATION_SOURCE})`;
 
 export function countLiteralLibraryCitations(text: string): number {
   if (!text) return 0;

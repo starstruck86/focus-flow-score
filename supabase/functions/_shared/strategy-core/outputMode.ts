@@ -25,6 +25,8 @@
 //   3. workspace default.
 // ════════════════════════════════════════════════════════════════
 
+import { detectExplicitOutputCount } from "./explicitOutputRequest.ts";
+
 export type OutputMode = "conversation" | "structured" | "preserve" | "adaptive";
 
 export type ExplicitFormatKind =
@@ -245,26 +247,7 @@ export interface ConversationEnforcementOpts {
 export function detectRequestedEntryCount(
   userContent: string | null | undefined,
 ): number | null {
-  const words: Record<string, number> = {
-    one: 1,
-    two: 2,
-    three: 3,
-    four: 4,
-    five: 5,
-    six: 6,
-    seven: 7,
-    eight: 8,
-    nine: 9,
-    ten: 10,
-    eleven: 11,
-    twelve: 12,
-  };
-  const match = (userContent || "").toLowerCase().match(
-    /\b(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:(?:distinct|different|expansion|commercial|creative|strategic|conversation|discovery)\s+){0,3}(?:ideas?|angles?|options?|ways?|paths?|hooks?|openers?|questions?|entries|scripts?|messages?|drafts?|versions?|talk[\s-]?tracks?)\b/,
-  );
-  if (!match) return null;
-  const parsed = /^\d+$/.test(match[1]) ? Number(match[1]) : words[match[1]];
-  return Number.isFinite(parsed) && parsed >= 1 && parsed <= 20 ? parsed : null;
+  return detectExplicitOutputCount(userContent);
 }
 
 export function renderConversationEnforcementBlock(

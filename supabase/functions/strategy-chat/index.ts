@@ -3575,15 +3575,14 @@ function classifyChatIntent(
 }
 
 // ── POST-GENERATION MODE-LOCK GUARD ────────────────────────
-// Validates model output against the classified intent and either
-// (a) hard-truncates the offending tail or (b) flags the response
-// for a single strict regeneration. We DO NOT silently retry — the
-// caller decides whether to regenerate.
+// Validates model output against the classified intent. Deterministic checks
+// may trim or rewrite the response; structural failures set a diagnostic
+// `shouldRegenerate` flag that live callers log but do not retry or block on.
 interface GuardResult {
   text: string;
   modified: boolean;
   violations: string[];
-  /** True when violation is severe enough that caller should regenerate once. */
+  /** Diagnostic recommendation only; live callers do not regenerate. */
   shouldRegenerate: boolean;
 }
 
@@ -3666,9 +3665,9 @@ function stripApplicationAppendix(text: string): string {
 
 // ── OPERATOR-GRADE REASONING GUARD ─────────────────────────────
 // Detects book-smart fingerprints in synthesis/creation/evaluation outputs.
-// Returns a list of violations; caller decides whether to regen.
+// Returns violations plus a diagnostic flag; live callers do not regenerate.
 //
-// What we look for (any 2+ failures → regen with strict reasoning preamble):
+// What we look for (any 2+ failures → `shouldRegenerate` telemetry):
 //   1. No CONSEQUENCE vocabulary — outcome must tie to pipeline / velocity /
 //      win rate / churn / expansion / ACV / payback / cost-of-inaction.
 //   2. No DECISION LOGIC — no IF/THEN, "if X then Y", "when X, do Y".
@@ -5524,6 +5523,8 @@ async function buildChatSystemPrompt(args: {
       suppressed_behaviors: behaviorIntent.suppressed,
       matched_signal: behaviorIntent.matched_signal,
       confidence: behaviorIntent.confidence,
+      requested_count: behaviorIntent.requested_count ?? null,
+      requested_output_noun: behaviorIntent.requested_output_noun ?? null,
       has_account_context: _hasAccountContext,
     }),
   );
@@ -5708,7 +5709,9 @@ async function buildChatSystemPrompt(args: {
         {
           id: "fixed.workspace-delta",
           kind: "fixed_instruction",
-          text: buildSemanticWorkspaceDelta(__resolvedContract.contract),
+          text: buildSemanticWorkspaceDelta(__resolvedContract.contract, {
+            explicitOutputCount: behaviorIntent.requested_count,
+          }),
         },
         {
           id: "evidence.core.context-section",
@@ -6034,7 +6037,9 @@ async function buildChatSystemPrompt(args: {
         {
           id: "fixed.workspace-delta",
           kind: "fixed_instruction",
-          text: buildSemanticWorkspaceDelta(__resolvedContract.contract),
+          text: buildSemanticWorkspaceDelta(__resolvedContract.contract, {
+            explicitOutputCount: behaviorIntent.requested_count,
+          }),
         },
         {
           id: "evidence.core.context-section",
@@ -6161,7 +6166,9 @@ async function buildChatSystemPrompt(args: {
     {
       id: "fixed.workspace-delta",
       kind: "fixed_instruction",
-      text: buildSemanticWorkspaceDelta(__resolvedContract.contract),
+      text: buildSemanticWorkspaceDelta(__resolvedContract.contract, {
+        explicitOutputCount: behaviorIntent.requested_count,
+      }),
     },
     ...coreEvidenceBlocks.map((block) => ({
       id: `evidence.core.${block.id}`,
@@ -6496,18 +6503,26 @@ async function handleChat(
     ...kiHitList,
     ...libraryKis,
   ]);
+  // Competitive-intel rows are the live CARD evidence supplied by the
+  // classifier-gated intelligence layer. Use the exact retrieved set for
+  // validation; never treat the global catalog as an open citation set.
+  const citationCardHits = dedupCitationSources(
+    situationIntelligence?.competitiveSources || [],
+  );
   const citationPlaybookHits = dedupCitationSources(libraryPlaybooks);
   const citeableLibraryHitCount = resourceHits.length +
-    citationKiHits.length + citationPlaybookHits.length;
+    citationKiHits.length + citationCardHits.length +
+    citationPlaybookHits.length;
   const citeableLibraryHits = [
     ...resourceHits,
     ...citationKiHits,
+    ...citationCardHits,
     ...citationPlaybookHits,
   ];
   const citationAuditOptions = {
     closedSet: pickedResourceIds.length > 0,
     kiHits: citationKiHits,
-    cardHits: [],
+    cardHits: citationCardHits,
     playbookHits: citationPlaybookHits,
   };
   const accountId: string | null = pack.account?.id ?? null;
@@ -6638,8 +6653,8 @@ async function handleChat(
       })();
       const signals = {
         strongResourceHits: resourceHits.length,
-        strongKiHits: kiHits,
-        totalHits: resourceHits.length + kiHits,
+        strongKiHits: citationKiHits.length,
+        totalHits: citeableLibraryHitCount,
         hasEntityContext: !!accountId,
         mentionsKnownEntity: !!(pack.account?.name && new RegExp(`\\b${pack.account.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(content || "")),
       };
@@ -6656,6 +6671,7 @@ async function handleChat(
         resourceTitles: resourceHits.map((h) => h.title),
         kiIds: kiHitList.map((k) => k.id),
         kiTitles: kiHitList.map((k) => k.title),
+        cardIds: citationCardHits.map((card) => card.id),
       };
       console.log(
         `[v2] mode=${v2.mode} ask_shape=${v2.askShape} signal=${v2.signalScore} override=${v2.override ?? "none"}`,
@@ -6704,11 +6720,11 @@ async function handleChat(
     : v2Decision?.mode === "C_general"
     ? "general"
     : mode;
-  const totalLibraryHits = resourceHits.length + kiHits;
+  const totalLibraryHits = citeableLibraryHitCount;
   const forceLiteralCitations = !!v2Decision && (
     (v2Decision.askShape === "synthesis_framework" && totalLibraryHits >= 3) ||
     ((v2Decision.mode === "A_strong" || v2Decision.mode === "B_partial") &&
-      resourceHits.length >= 3)
+      totalLibraryHits >= 3)
   );
   const requiresLiteralLibraryCitation = forceLiteralCitations ||
     __retrievalRules.citationMode === "strict";
@@ -6853,7 +6869,8 @@ async function handleChat(
       {
         currentStateUsed: _csUsed,
         behaviorIntent: behaviorIntent.intent,
-        requestedEntryCount: detectRequestedEntryCount(content),
+        requestedEntryCount: behaviorIntent.requested_count ??
+          detectRequestedEntryCount(content),
       },
     );
     promptSegments.push({
@@ -7399,10 +7416,11 @@ async function handleChat(
             const aud = v2AuditResponse({
               decision: v2EvidenceBase.decision,
               body: auditedVisible || "",
-              hadLibraryHits: (resourceHits.length + kiHits) > 0,
+              hadLibraryHits: citeableLibraryHitCount > 0,
               resourceTitles: v2EvidenceBase.resourceTitles,
               kiIds: v2EvidenceBase.kiIds,
               kiTitles: v2EvidenceBase.kiTitles,
+              cardIds: v2EvidenceBase.cardIds,
             });
             // Phase 3: contract-drift sentinel (logged, never blocks).
             // Phase 3: contract-drift sentinel (logged, never blocks).
@@ -7968,10 +7986,11 @@ async function handleChat(
                 const aud = v2AuditResponse({
                   decision: v2EvidenceBase.decision,
                   body: finalVisible || "",
-                  hadLibraryHits: (resourceHits.length + kiHits) > 0,
+                  hadLibraryHits: citeableLibraryHitCount > 0,
                   resourceTitles: v2EvidenceBase.resourceTitles,
                   kiIds: v2EvidenceBase.kiIds,
                   kiTitles: v2EvidenceBase.kiTitles,
+                  cardIds: v2EvidenceBase.cardIds,
                 });
                 // Phase 3: contract-drift sentinel (logged, never blocks).
                 let drift: { missing: string[] } | null = null;

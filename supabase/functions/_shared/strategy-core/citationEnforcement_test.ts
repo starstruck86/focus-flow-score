@@ -275,13 +275,18 @@ Deno.test("strict requires canonical syntax while light accepts exact informal a
   assertEquals(canonical.issues.length, 0);
 });
 
-Deno.test("strict mode recognizes KI-only and PLAYBOOK-only citeable evidence", () => {
+Deno.test("strict mode recognizes KI-only, CARD-only, and PLAYBOOK-only citeable evidence", () => {
   const ki = { id: "cccccccc3333", title: "Quantifying Pain" };
+  const card = { id: "eeeeeeee5555", title: "Competitive Displacement" };
   const playbook = { id: "dddddddd4444", title: "Champion Went Quiet" };
   const cases: Array<[string, CitationAuditOptions]> = [
       [
         `Use KI["Quantifying Pain"].`,
         { kiHits: [ki] },
+      ],
+      [
+        `Use CARD["Competitive Displacement"].`,
+        { cardHits: [card] },
       ],
       [
         `Use PLAYBOOK["Champion Went Quiet"].`,

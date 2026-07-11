@@ -131,6 +131,7 @@ function citableLibraryHitCount(inputs: CitationCheckInputs): number {
   };
   add("RESOURCE", inputs.libraryHits);
   add("KI", inputs.auditOptions?.kiHits);
+  add("CARD", inputs.auditOptions?.cardHits);
   add("PLAYBOOK", inputs.auditOptions?.playbookHits);
   return keyed.size;
 }

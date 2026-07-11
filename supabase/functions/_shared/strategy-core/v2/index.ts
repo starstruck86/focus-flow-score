@@ -4,7 +4,7 @@
 // Single import surface for strategy-chat/index.ts:
 //
 //   import {
-//     buildV2Prompt,
+//     dispatch,
 //     validateResponse,
 //     auditResponse,
 //     assembleRoutingEvidence,
@@ -19,10 +19,8 @@
 export {
   assembleRoutingEvidence,
   auditResponse,
-  buildV2Prompt,
   dispatch,
   validateResponse,
-  type V2OrchestratorPrompt,
   type V2RoutingDecisionEvidence,
 } from "./orchestrator.ts";
 
@@ -37,7 +35,10 @@ export {
   type V2Override,
 } from "./operatorDispatcher.ts";
 
-export { assertSynthesisContractIntact } from "./extendedReasoningContract.ts";
+export {
+  assertSynthesisContractIntact,
+  SYNTHESIS_CONTRACT_PHRASES,
+} from "./synthesisContractSentinel.ts";
 
 export {
   type QualityAuditResult,

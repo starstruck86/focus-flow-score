@@ -1,17 +1,17 @@
 // ════════════════════════════════════════════════════════════════
 // Strategy V2 — Wrong-Question Guard
 //
-// The ONLY hard pre-send check in V2. Catches the failure mode
-// from the screenshots: model answering a different question than
-// the user asked.
+// Post-generation diagnostic for the failure mode from the screenshots:
+// the model answering a different question than the user asked. Live
+// strategy-chat records this as shadow telemetry; it does not retry, block,
+// or mutate the response.
 //
 // Approach: lightweight lexical + semantic overlap between the
 // user's prompt and the response opener. No embedding API call —
 // pure deterministic token overlap, which is fast, cheap, and
 // catches the cross-contamination cases we saw in production.
 //
-// Returns { passed, score, reason }. Caller decides whether to
-// regen (one-shot budget, never loop). Persisted as evidence.
+// Returns { passed, score, reason } for routing evidence persistence.
 // ════════════════════════════════════════════════════════════════
 
 const STOPWORDS = new Set([

@@ -10,17 +10,19 @@ import {
   STRICT_LIBRARY_CITATION_INSTRUCTION,
 } from "./citationSyntax.ts";
 
-Deno.test("citation syntax accepts every canonical title namespace and KI fallback id", () => {
+Deno.test("citation syntax accepts every canonical title namespace and KI/CARD fallback ids", () => {
   const text = [
     'RESOURCE["Discovery Masterclass"]',
     'KI["Quantifying Pain"]',
+    'CARD["Competitive Displacement Pattern"]',
     'PLAYBOOK["Champion Went Quiet"]',
     "KI[abc12345]",
+    "CARD[def67890]",
   ].join(" ");
 
-  assertEquals(countLiteralLibraryCitations(text), 4);
+  assertEquals(countLiteralLibraryCitations(text), 6);
   assertEquals(hasLiteralLibraryCitation(text), true);
-  for (const token of ["RESOURCE", "KI", "PLAYBOOK"]) {
+  for (const token of ["RESOURCE", "KI", "CARD", "PLAYBOOK"]) {
     assertStringIncludes(STRICT_LIBRARY_CITATION_INSTRUCTION, `${token}[`);
   }
 });
@@ -29,8 +31,8 @@ Deno.test("citation syntax rejects vague, malformed, and non-canonical id forms"
   const text = [
     "your library suggests",
     "RESOURCE[abc12345]",
-    "CARD[abc12345]",
-    'CARD["Quality Pattern"]',
+    "CARD[aaaaaa]",
+    "CARD[aaaaaaaaffff]",
     "KI[aaaaaa]",
     "KI[aaaaaaaaffff]",
     'RESOURCE["unterminated]',

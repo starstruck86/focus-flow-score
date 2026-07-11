@@ -170,21 +170,28 @@ Deno.test("KI id citation: still accepted when id matches", () => {
   assertStringIncludes(out.text, "KI[aaaaaaaa]");
 });
 
-Deno.test("CARD title citation: rejected because CARD is not canonical", () => {
+Deno.test("CARD title citation: accepted when title matches", () => {
   const text = `Use CARD["Discovery - Call Coaching"] for the prep.`;
   const out = auditResourceCitations(text, [], { cardHits: CARD_HITS });
-  assertEquals(out.modified, true);
-  assertStringIncludes(
-    out.text,
-    `⚠ UNVERIFIED-CARD["Discovery - Call Coaching"]`,
+  assertEquals(out.modified, false);
+  assertEquals(
+    out.verifiedTitles.includes("CARD:Discovery - Call Coaching"),
+    true,
   );
 });
 
-Deno.test("CARD id citation: rejected because CARD is not canonical", () => {
+Deno.test("CARD fallback accepts exactly eight matching hex characters", () => {
   const text = `Pull from CARD[cccccccc] in your library.`;
   const out = auditResourceCitations(text, [], { cardHits: CARD_HITS });
-  assertEquals(out.modified, true);
-  assertStringIncludes(out.text, "⚠ UNVERIFIED-CARD[cccccccc]");
+  assertEquals(out.modified, false);
+  assertEquals(out.verifiedTitles.includes("CARD:cccccccc"), true);
+  for (const id of ["cccccc", "ccccccccffff"]) {
+    const malformed = auditResourceCitations(`CARD[${id}]`, [], {
+      cardHits: CARD_HITS,
+    });
+    assertEquals(malformed.modified, true);
+    assertEquals(malformed.verifiedTitles.length, 0);
+  }
 });
 
 const PLAYBOOK_HITS = [

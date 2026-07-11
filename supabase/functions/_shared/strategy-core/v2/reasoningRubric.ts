@@ -10,7 +10,7 @@
 //   - Punish balanced-survey patterns
 //
 // Used by:
-//   - extendedReasoningContract.ts (rubric injected into prompt)
+//   - semanticPrompt.ts (live Strategy Chat prompt shell)
 //   - qualityAudit.ts (post-gen scoring)
 // ════════════════════════════════════════════════════════════════
 
@@ -242,6 +242,7 @@ export interface ScoreRubricInput {
   resourceTitles?: string[];
   kiIds?: string[];
   kiTitles?: string[];
+  cardIds?: string[];
 }
 
 export function scoreRubric(args: ScoreRubricInput): RubricScores {
@@ -251,11 +252,12 @@ export function scoreRubric(args: ScoreRubricInput): RubricScores {
 
   const resourceHitCount = args.resourceTitles?.length || 0;
   const kiHitCount = args.kiIds?.length || 0;
-  const totalStrongHits = resourceHitCount + kiHitCount;
+  const cardHitCount = args.cardIds?.length || 0;
+  const totalStrongHits = resourceHitCount + kiHitCount + cardHitCount;
   const isStrongSignalSynthesis =
     args.askShape === "synthesis_framework" &&
     args.mode === "A_strong" &&
-    resourceHitCount >= 5;
+    totalStrongHits >= 5;
 
   // commercialSharpness — Phase 2: stricter, needs 3+ commercial terms for full credit
   let commercialHits = 0;

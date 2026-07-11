@@ -6,9 +6,18 @@ all 6 Phase 3 validation prompts. If any of these change, this contract
 must be re-locked with the new snapshot date and a note explaining the
 deliberate change.
 
+**Documentation maintenance note — 2026-07-11 (not a new behavioral
+re-lock):** Restored the live `CARD` citation namespace and moved the
+prompt/sentinel phrase authority into `semanticPrompt.ts` +
+`synthesisContractSentinel.ts`. The six behavioral markers are unchanged;
+this note corrects the former five-marker documentation count. Citation and
+assembled-prompt regression tests cover the restored four-namespace contract.
+The two historical Phase 2.6 prompts and six Phase 3 prompts were not rerun, so
+this maintenance update does not claim a new validation snapshot.
+
 ## Trigger conditions
 - `ask_shape == "synthesis_framework"`
-- `mode == "A_strong"` (or `(synthesis_framework && total_hits >= 3)` for the citation block)
+- and either `mode == "A_strong"` or `total_hits >= 3`
 
 ## Routing
 - `primaryProvider = "anthropic"`
@@ -17,22 +26,24 @@ deliberate change.
 - On fallback, persist `claude_fallback: true` flag in `routing_decision.v2`.
   **Never silent.**
 
-## The 5 non-negotiables (must all be present in every strong-signal
-##                          synthesis output — checked by tail block in
-##                          `extendedReasoningContract.ts` and audited by
-##                          `qualityAudit.ts`)
+## The 6 non-negotiables
+The live tail in `semanticPrompt.ts` instructs all six in every strong-signal
+synthesis output.
 1. **POV-first opener** — first sentence commits to the dominant pattern.
    Forbidden openers: "Operators converge…" / "There are several patterns…" /
    "Both approaches have merit" / "It depends" — unless immediately followed
    by a named winner.
-2. **Literal citations** — `RESOURCE["title"]` or `KI[id]` form. Vague refs
+2. **Literal citations** — the shared Evidence Policy form: exact-title
+   `RESOURCE`/`KI`/`CARD`/`PLAYBOOK`, with exact-eight-hex KI/CARD fallback. Vague refs
    like "your KI on discovery" are FAILURES when `total_hits >= 5`.
 3. **Unequal weighting** — explicit ranking: load-bearing vs noise vs
    table-stakes. Pattern lists without weighting fail.
-4. **Commercial consequence** — every load-bearing claim ties to win rate,
+4. **What's overrated** — name at least one commonly overvalued approach or
+   artifact explicitly; do not hide the tradeoff inside a balanced survey.
+5. **Commercial consequence** — every load-bearing claim ties to win rate,
    cycle time, ACV, no-decision rate, churn, or forecast confidence.
    "Improves discovery" does NOT count.
-5. **Numbered next moves** — 3–5 specific moves the rep runs THIS WEEK on a
+6. **Numbered next moves** — 3–5 specific moves the rep runs THIS WEEK on a
    live deal. Each tied to a commercial outcome.
 
 ## Tail-block placement
@@ -56,7 +67,12 @@ Phase 2.6.
   weighting, commercial framing.
 
 ## Contract-drift sentinel (logged, never blocks)
-`extendedReasoningContract.ts` exports `assertSynthesisContractIntact()`
-which scans the assembled system prompt for the 5 non-negotiable phrases.
+`synthesisContractSentinel.ts` exports `assertSynthesisContractIntact()`
+which scans the assembled system prompt for the 6 non-negotiable phrases.
 If any are missing on a strong-signal synthesis turn, a `contract_drift`
 flag is logged in `routing_decision.v2.contract_drift`.
+
+This sentinel checks prompt construction, not generated-output compliance.
+Post-generation `qualityAudit.ts` scores the broader response, while its hard
+strong-synthesis stop rule checks four properties: POV, literal citation,
+tradeoff, and commercial framing. It does not claim to hard-enforce all six.
