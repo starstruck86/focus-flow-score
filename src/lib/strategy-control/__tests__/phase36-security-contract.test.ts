@@ -2,8 +2,8 @@
  * Phase 3.6 — Security Contract Tests.
  *
  * Guarantees:
- * - Every edge function has auth check OR validation key
- * - No Deno.serve() without auth
+ * - Every edge function has auth check OR a narrow public metadata contract
+ * - No Deno.serve() without auth except an explicitly verified public endpoint
  * - No bypass patterns in production code
  * - No anon-only diagnostic endpoints
  */
@@ -40,6 +40,16 @@ const AUTH_PATTERNS = [
   /401/,
 ];
 
+const PUBLIC_METADATA_FUNCTIONS = new Set(["version"]);
+
+function hasAuthOrApprovedPublicMetadata(
+  name: string,
+  source: string,
+): boolean {
+  return AUTH_PATTERNS.some(pattern => pattern.test(source)) ||
+    PUBLIC_METADATA_FUNCTIONS.has(name);
+}
+
 // Patterns that indicate a bypass
 const BYPASS_PATTERNS = [
   /skip[_ ]?artifact[_ ]?gate/i,
@@ -62,17 +72,41 @@ describe("Phase 3.6 — Security Contract", () => {
 
   describe("Auth Enforcement", () => {
     for (const fn of edgeFunctions) {
-      it(`${fn} has auth check or validation key`, () => {
+      it(`${fn} has auth or an approved public metadata contract`, () => {
         const source = readEdgeFunctionSource(fn);
         if (!source) return; // no index.ts, skip
 
         // Must have Deno.serve to be a real function
         if (!source.includes("Deno.serve")) return;
 
-        const hasAuth = AUTH_PATTERNS.some(p => p.test(source));
-        expect(hasAuth).toBe(true);
+        expect(hasAuthOrApprovedPublicMetadata(fn, source)).toBe(true);
       });
     }
+
+    it("version is a constrained public metadata endpoint", () => {
+      expect([...PUBLIC_METADATA_FUNCTIONS]).toEqual(["version"]);
+
+      const source = readEdgeFunctionSource("version");
+      expect(source).toContain("Deno.serve(createVersionHandler())");
+
+      const helper = fs.readFileSync(
+        path.resolve("supabase/functions/_shared/versionResponse.ts"),
+        "utf-8",
+      );
+      expect(helper).toContain("Deno.env.get(name)");
+      expect(helper).toContain('"DENO_DEPLOYMENT_ID" | "SB_REGION"');
+      expect(helper).not.toMatch(
+        /createClient|\.from\(|fetch\(|SB_EXECUTION_ID|SUPABASE_SERVICE_ROLE_KEY/,
+      );
+
+      const config = fs.readFileSync(
+        path.resolve("supabase/config.toml"),
+        "utf-8",
+      );
+      expect(config).toMatch(
+        /\[functions\.version\]\s+verify_jwt\s*=\s*false/,
+      );
+    });
   });
 
   describe("No Bypass Patterns in Production", () => {
@@ -138,16 +172,15 @@ describe("Phase 3.6 — Security Contract", () => {
     });
   });
 
-  describe("Deno.serve Without Auth Guard", () => {
-    it("no edge function serves without any auth mechanism", () => {
+  describe("Deno.serve Access Guard", () => {
+    it("no edge function serves without auth or an approved public metadata contract", () => {
       const unguarded: string[] = [];
       for (const fn of edgeFunctions) {
         const source = readEdgeFunctionSource(fn);
         if (!source) continue;
         if (!source.includes("Deno.serve")) continue;
 
-        const hasAuth = AUTH_PATTERNS.some(p => p.test(source));
-        if (!hasAuth) unguarded.push(fn);
+        if (!hasAuthOrApprovedPublicMetadata(fn, source)) unguarded.push(fn);
       }
       expect(unguarded).toEqual([]);
     });
