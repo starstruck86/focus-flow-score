@@ -5794,6 +5794,7 @@ async function buildChatSystemPrompt(args: {
     userId,
     userContent: __effectiveUserContent,
     accountContext: __classifierAccountContext,
+    accountName: pack.account?.name ?? null,
     allowNoPlaybookClassification: true,
   });
 
@@ -7226,12 +7227,10 @@ async function handleChat(
       rewriteReason: null as string | null,
     };
     const visible = behaviorGuard.text;
-    // Citation audit (W5): governed by `retrievalRules.citationMode`
-    // from the resolved workspace contract. SHADOW/REPORTING ONLY in
-    // W5 — `auditedText` returns the original assistant text for all
-    // modes; telemetry still reports what the auditor would have
-    // changed. Closed-set mode (user picked a resource via /library)
-    // is preserved across all modes.
+    // Citation audit (W5): citation requirements remain governed by the
+    // resolved workspace posture. Strategy Chat additionally publishes
+    // deterministic authenticity rewrites so a tag that does not resolve to
+    // retrieved evidence is visibly marked UNVERIFIED in every posture.
     const w5Citation = runCitationCheck({
       assistantText: visible,
       libraryHits: resourceHits,
@@ -7240,6 +7239,7 @@ async function handleChat(
       contractVersion: __resolvedContract.contractVersion,
       citationMode: effectiveCitationMode,
       auditOptions: citationAuditOptions,
+      enforceCitationAuthenticity: true,
     });
     const audit = w5Citation.audit ?? {
       text: visible,
@@ -7701,11 +7701,9 @@ async function handleChat(
         }
         const visible = behaviorGuard.text;
 
-        // Step 3: citation audit on the GUARDED text (W5: governed
-        // by `retrievalRules.citationMode`). SHADOW/REPORTING ONLY —
-        // `auditedText` returns the original assistant text for all
-        // modes; telemetry still reports `modified` when the auditor
-        // would have rewritten. Closed-set mode is preserved.
+        // Step 3: citation audit on the GUARDED text. Citation requirements
+        // remain posture-driven; Strategy Chat publishes deterministic
+        // authenticity rewrites so unresolved tags are visibly UNVERIFIED.
         const w5Citation = runCitationCheck({
           assistantText: visible,
           libraryHits: resourceHits,
@@ -7714,6 +7712,7 @@ async function handleChat(
           contractVersion: __resolvedContract.contractVersion,
           citationMode: effectiveCitationMode,
           auditOptions: citationAuditOptions,
+          enforceCitationAuthenticity: true,
         });
         const audit = w5Citation.audit ?? {
           text: visible,

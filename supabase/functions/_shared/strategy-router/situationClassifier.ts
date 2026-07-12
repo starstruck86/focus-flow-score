@@ -13,6 +13,15 @@
 
 export type SituationConfidence = "high" | "medium" | "low";
 
+export type ExplicitCompetitiveIntentKind =
+  | "competitive_intel"
+  | "named_competitor";
+
+export interface ExplicitCompetitiveIntent {
+  kind: ExplicitCompetitiveIntentKind;
+  competitorNames: string[];
+}
+
 export interface SituationRetrievalPlan {
   competitive: {
     include: boolean;
@@ -20,6 +29,8 @@ export interface SituationRetrievalPlan {
     competitorNames: string[];
     /** Narrow catalog categories (for example, MMP or build-vs-buy); max two. */
     categoryHints: string[];
+    /** Server-authored authorization marker; never accepted from model JSON. */
+    explicitIntent?: ExplicitCompetitiveIntentKind;
   };
   vertical: { include: boolean };
 }
@@ -40,6 +51,8 @@ export interface ClassifySituationArgs {
   userContent: string;
   /** Pre-formatted account context block (e.g. assembled.contextBlock). */
   accountContext?: string;
+  /** Structured linked-account name, used only to exclude false competitor names. */
+  accountName?: string | null;
   /** Override model for tests. */
   model?: string;
   /**
@@ -63,13 +76,261 @@ const MIN_CONTENT_LEN = 10;
 const MAX_OUTPUT_TOKENS = 400;
 const CLASSIFIER_TIMEOUT_MS = 12_000;
 
+const STRONG_COMPETITIVE_CUE_RE =
+  /(?:\bcompetitive\s+(?:intel(?:ligence)?|analysis|research|brief(?:ing)?|evidence)\b|\bcompetitors?\b|\bbattle[\s-]?cards?\b|\bagainst\b|\bversus\b|\bvs\b\.?)/i;
+
+// `beat`, `replace`, and `displace` are ordinary sales/copy verbs unless their
+// direct object is explicitly competitive. Keep this grammar deliberately
+// narrower than the classification-only pre-gate below.
+const COMPETITIVE_ACTION_SOURCE =
+  String.raw`(?:beat(?:s|ing)?(?:\s+out)?|replac(?:e|es|ed|ing)|displac(?:e|es|ed|ing))`;
+const COMPETITIVE_OBJECT_MODIFIERS_SOURCE =
+  String.raw`(?:(?:a|an|the|my|our|your|their|this|that|current|existing|legacy|incumbent)\s+){0,4}`;
+const COMPETITIVE_OBJECT_SOURCE =
+  String.raw`(?:competitors?|vendors?|providers?|incumbents?|mmp(?:s)?|apps[\s-]?flyer|airbridge|kochava)`;
+const QUALIFIED_COMPETITIVE_ACTION_RE = new RegExp(
+  String.raw`\b${COMPETITIVE_ACTION_SOURCE}\b\s+${COMPETITIVE_OBJECT_MODIFIERS_SOURCE}${COMPETITIVE_OBJECT_SOURCE}\b`,
+  "i",
+);
+
+const KNOWN_COMPETITOR_NON_ACTION_CUE_PREFIX = String.raw`(?:\b(?:against|versus|vs\.?)\s+(?:the\s+)?|\b(?:battle[\s-]?cards?|competitive\s+(?:intel(?:ligence)?|analysis|research|brief(?:ing)?|evidence))\s+(?:on|about|for)\s+(?:the\s+)?)`;
+const KNOWN_COMPETITOR_ACTION_CUE_PREFIX =
+  String.raw`(?:\b${COMPETITIVE_ACTION_SOURCE}\b\s+${COMPETITIVE_OBJECT_MODIFIERS_SOURCE})`;
+
+function knownCompetitorCuePattern(
+  aliasSource: string,
+  allowCaseInsensitiveAction = true,
+): RegExp {
+  const prefix = allowCaseInsensitiveAction
+    ? `(?:${KNOWN_COMPETITOR_NON_ACTION_CUE_PREFIX}|${KNOWN_COMPETITOR_ACTION_CUE_PREFIX})`
+    : KNOWN_COMPETITOR_NON_ACTION_CUE_PREFIX;
+  return new RegExp(
+    `${prefix}(?:${aliasSource})\\b`,
+    "i",
+  );
+}
+
+const KNOWN_COMPETITORS: Array<{
+  name: string;
+  canonicalPattern: RegExp;
+  cueBoundPattern: RegExp;
+}> = [
+  {
+    name: "Adjust",
+    canonicalPattern: /\bAdjust\b/,
+    cueBoundPattern: knownCompetitorCuePattern("adjust", false),
+  },
+  {
+    name: "AppsFlyer",
+    canonicalPattern: /\b(?:AppsFlyer|Apps Flyer)\b/,
+    cueBoundPattern: knownCompetitorCuePattern(String.raw`apps[\s-]?flyer`),
+  },
+  {
+    name: "Airbridge",
+    canonicalPattern: /\bAirbridge\b/,
+    cueBoundPattern: knownCompetitorCuePattern("airbridge"),
+  },
+  {
+    name: "Kochava",
+    canonicalPattern: /\bKochava\b/,
+    cueBoundPattern: knownCompetitorCuePattern("kochava"),
+  },
+  {
+    name: "Singular",
+    canonicalPattern: /\bSingular\b/,
+    cueBoundPattern: knownCompetitorCuePattern("singular", false),
+  },
+];
+
+const CONTEXTUAL_AGAINST_VERB_SOURCE =
+  String.raw`(?:[Pp]osition(?:ed|ing|s)?|[Cc]ompet(?:e|es|ed|ing)|[Dd]ifferentiat(?:e|es|ed|ing)|[Ss]ell|[Ss]elling|[Ss]old|[Pp]itch(?:ed|ing|es)?|[Ee]valuat(?:e|ed|ing|es)|[Cc]ompar(?:e|ed|ing|es)|[Ww]in|[Ww]ins|[Ww]inning|[Ww]on)`;
+const CONTEXTUAL_AGAINST_OBJECT_SOURCE =
+  String.raw`(?:us|ourselves|our|the|this|that|product|platform|offering|solution|team|company|deal|account|opportunity)`;
+const SENTENCE_CASE_ACTION_SOURCE =
+  String.raw`(?:[Bb]eat(?:s|ing)?(?:\s+out)?|[Rr]eplac(?:e|es|ed|ing)|[Dd]isplac(?:e|es|ed|ing))`;
+const UNKNOWN_COMPETITOR_CUE_SOURCE = [
+  String.raw`\b(?:[Vv]ersus|[Vv][Ss])\b\.?`,
+  String.raw`\b${CONTEXTUAL_AGAINST_VERB_SOURCE}\b(?:\s+${CONTEXTUAL_AGAINST_OBJECT_SOURCE}){0,4}\s+\b[Aa]gainst\b`,
+  String.raw`\b${SENTENCE_CASE_ACTION_SOURCE}\b\s+${COMPETITIVE_OBJECT_MODIFIERS_SOURCE}`,
+  String.raw`\b[Bb]attle[\s-]?[Cc]ards?\b\s+(?:on|about|for)\b`,
+  String.raw`\b[Cc]ompetitive\s+(?:intel(?:ligence)?|analysis|research|brief(?:ing)?|evidence)\b\s+(?:on|about)\b`,
+  String.raw`\b[Cc]ompetitors?\b(?:\s+(?:is|are|named|like)\b)?`,
+].join("|");
+const TITLE_CASE_ENTITY_SOURCE =
+  String.raw`[A-Z][A-Za-z0-9&.'’_-]*(?:\s+[A-Z][A-Za-z0-9&.'’_-]*){0,2}`;
+const CUE_BOUND_COMPETITOR_NAME_RE = new RegExp(
+  String.raw`(?:${UNKNOWN_COMPETITOR_CUE_SOURCE})\s*(?:is\s+)?[:—–-]?\s*(?:the\s+)?(${TITLE_CASE_ENTITY_SOURCE})`,
+  "g",
+);
+
+function normalizeEntityKey(value: string): string {
+  return (value || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/(?:['’]s)\b/gu, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+const NON_ENTITY_CAPTURE_WORDS = new Set([
+  "a",
+  "an",
+  "changing",
+  "competitor",
+  "competitors",
+  "current",
+  "deck",
+  "existing",
+  "forecast",
+  "forecasts",
+  "goal",
+  "goals",
+  "higher",
+  "incumbent",
+  "incumbents",
+  "my",
+  "mmp",
+  "mmps",
+  "number",
+  "our",
+  "paragraph",
+  "pipeline",
+  "prices",
+  "pricing",
+  "process",
+  "processes",
+  "product",
+  "provider",
+  "providers",
+  "quarter",
+  "quota",
+  "revenue",
+  "strategy",
+  "target",
+  "targets",
+  "that",
+  "the",
+  "their",
+  "this",
+  "vendor",
+  "vendors",
+  "workflow",
+  "workflows",
+  "your",
+  "wording",
+]);
+
+function isPlausibleCapturedCompetitor(value: string): boolean {
+  const words = normalizeEntityKey(value).split(" ").filter(Boolean);
+  return words.length > 0 &&
+    !words.some((word) => NON_ENTITY_CAPTURE_WORDS.has(word));
+}
+
+function cleanCapturedCompetitor(value: string): string {
+  return value.trim()
+    .replace(/(?:['’]s)\s*$/u, "")
+    .replace(/[.;:]+$/u, "")
+    .trim();
+}
+
+function isExcludedEntityKey(key: string, excludedKeys: string[]): boolean {
+  return excludedKeys.some((excluded) =>
+    key === excluded || key.startsWith(`${excluded} `)
+  );
+}
+
+function isCanonicalKnownCompetitorUse(
+  content: string,
+  competitor: (typeof KNOWN_COMPETITORS)[number],
+): boolean {
+  if (!competitor.canonicalPattern.test(content)) return false;
+  if (competitor.name !== "Adjust" && competitor.name !== "Singular") {
+    return true;
+  }
+
+  // Adjust and Singular are also ordinary English words. Canonical case alone
+  // cannot authorize retrieval; require grammar that treats the token as a
+  // product/company entity. Explicit competitive cues/actions are handled by
+  // cueBoundPattern above.
+  const entity = competitor.name;
+  const entityAsSubject = new RegExp(
+    String.raw`\b${entity}(?:['’]s\b|\s+(?:is|has|can|does|offers?|supports?|lacks?|vs\.?|versus|against)\b)`,
+  );
+  const entityAsObject = new RegExp(
+    String.raw`\b(?:[Aa]bout|[Cc]ompare|[Ee]valuate|[Rr]esearch|[Aa]ssess)\s+(?:the\s+)?${entity}\b`,
+  );
+  const entityAsNamedModifier = new RegExp(
+    String.raw`\bthe\s+${entity}\s+(?:platform|product|pricing|capabilit(?:y|ies)|strengths?|weaknesses?|positioning)\b`,
+  );
+  return entityAsSubject.test(content) || entityAsObject.test(content) ||
+    entityAsNamedModifier.test(content);
+}
+
+/**
+ * High-bar deterministic authorization for explicit competitive asks.
+ * This is intentionally narrower than `isIntelligenceClassificationCandidate`:
+ * broad words may reach the LLM, but they may not bypass a low-confidence plan.
+ */
+export function detectExplicitCompetitiveIntent(
+  userContent: string,
+  accountName: string | null = null,
+): ExplicitCompetitiveIntent | null {
+  const content = (userContent || "")
+    .normalize("NFKC")
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!content) return null;
+
+  const rawNames: string[] = [];
+  for (const competitor of KNOWN_COMPETITORS) {
+    if (
+      competitor.cueBoundPattern.test(content) ||
+      isCanonicalKnownCompetitorUse(content, competitor)
+    ) rawNames.push(competitor.name);
+  }
+  for (const match of content.matchAll(CUE_BOUND_COMPETITOR_NAME_RE)) {
+    if (match[1] && isPlausibleCapturedCompetitor(match[1])) {
+      rawNames.push(cleanCapturedCompetitor(match[1]));
+    }
+  }
+
+  const accountKey = normalizeEntityKey(accountName || "");
+  const excludedKeys = accountKey ? [accountKey] : [];
+  const seen = new Set<string>();
+  const competitorNames: string[] = [];
+  for (const name of normalizeBoundedStrings(rawNames, 10)) {
+    const key = normalizeEntityKey(name);
+    if (!key || isExcludedEntityKey(key, excludedKeys) || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    competitorNames.push(name);
+    if (competitorNames.length === 3) break;
+  }
+
+  const strongCue = STRONG_COMPETITIVE_CUE_RE.test(content);
+  const qualifiedAction = QUALIFIED_COMPETITIVE_ACTION_RE.test(content);
+  if (!strongCue && !qualifiedAction && competitorNames.length === 0) {
+    return null;
+  }
+
+  return {
+    kind: competitorNames.length > 0
+      ? "named_competitor"
+      : "competitive_intel",
+    competitorNames,
+  };
+}
+
 /**
  * Classification-only pre-gate for contextless chat turns. This deliberately
  * recognizes intent shapes rather than a closed competitor allowlist. A match
  * never authorizes a database query; only the normalized retrieval plan can.
  */
 export function isIntelligenceClassificationCandidate(text: string): boolean {
-  return /\b(competitor|competitive|compete|vs\.?|versus|against|incumbent|battlecard|beat|replace|alternative(?:s)?\s+to|rip[-\s]+and[-\s]+replace|displace(?:ment)?|build[-\s]?vs[-\s]?buy|industry|vertical|market|landscape|adjust|apps[\s-]?flyer|kochava|singular)\b/i
+  if (detectExplicitCompetitiveIntent(text) !== null) return true;
+  return /\b(competitor|competitive|compete|vs\.?|versus|against|incumbent|battle[\s-]?cards?|beat|replace|alternative(?:s)?\s+to|rip[-\s]+and[-\s]+replace|displace(?:ment)?|build[-\s]?vs[-\s]?buy|industry|vertical|market|landscape|adjust|apps[\s-]?flyer|airbridge|kochava|singular)\b/i
     .test(text || "");
 }
 
@@ -249,9 +510,17 @@ function normalizeRetrievalPlan(
 export function normalizeSituationResult(
   raw: unknown,
   validIds: Map<string, string>,
+  options: {
+    explicitCompetitiveIntent?: ExplicitCompetitiveIntent | null;
+    excludedCompetitiveNames?: string[];
+  } = {},
 ): SituationResult {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return GENERAL_FALLBACK;
+    return applyExplicitCompetitiveIntent(
+      GENERAL_FALLBACK,
+      options.explicitCompetitiveIntent ?? null,
+      options.excludedCompetitiveNames ?? [],
+    );
   }
   const obj = raw as Record<string, unknown>;
 
@@ -290,14 +559,63 @@ export function normalizeSituationResult(
     : [];
   const retrieval = normalizeRetrievalPlan(obj.retrieval, confidence);
 
+  return applyExplicitCompetitiveIntent(
+    {
+      situation,
+      playbookId,
+      playbookTitle: playbookId ? playbookTitle : null,
+      confidence,
+      rationale,
+      derivedScopes,
+      retrieval,
+    },
+    options.explicitCompetitiveIntent ?? null,
+    options.excludedCompetitiveNames ?? [],
+  );
+}
+
+function applyExplicitCompetitiveIntent(
+  result: SituationResult,
+  explicitIntent: ExplicitCompetitiveIntent | null,
+  excludedNames: string[] = [],
+): SituationResult {
+  if (!explicitIntent) return result;
+
+  const excludedKeys = excludedNames.map(normalizeEntityKey).filter(Boolean);
+  // A deterministically detected named competitor is authoritative. Model
+  // output may refine a generic explicit request, but it may never broaden a
+  // server-detected named request with additional titles.
+  const classifierNames = explicitIntent.kind === "named_competitor"
+    ? []
+    : result.retrieval.competitive.competitorNames;
+  const competitorNames = normalizeBoundedStrings([
+    ...explicitIntent.competitorNames,
+    ...classifierNames,
+  ], 10).filter((name) =>
+    !isExcludedEntityKey(normalizeEntityKey(name), excludedKeys)
+  ).slice(0, 3);
+  const derivedScopes = normalizeBoundedStrings([
+    "competitive",
+    ...competitorNames,
+    ...result.derivedScopes,
+  ], 10).filter((scope) => scope.length <= 60).slice(0, 6);
+  const resolvedExplicitIntent: ExplicitCompetitiveIntentKind =
+    competitorNames.length > 0
+      ? "named_competitor"
+      : explicitIntent.kind;
+
   return {
-    situation,
-    playbookId,
-    playbookTitle: playbookId ? playbookTitle : null,
-    confidence,
-    rationale,
+    ...result,
     derivedScopes,
-    retrieval,
+    retrieval: {
+      ...result.retrieval,
+      competitive: {
+        ...result.retrieval.competitive,
+        include: true,
+        competitorNames,
+        explicitIntent: resolvedExplicitIntent,
+      },
+    },
   };
 }
 
@@ -305,16 +623,26 @@ export async function classifySituation(
   args: ClassifySituationArgs,
 ): Promise<SituationResult> {
   const start = Date.now();
+  const content = (args.userContent || "").trim();
+  const explicitCompetitiveIntent = detectExplicitCompetitiveIntent(
+    content,
+    args.accountName ?? null,
+  );
+  const fallback = () =>
+    applyExplicitCompetitiveIntent(
+      GENERAL_FALLBACK,
+      explicitCompetitiveIntent,
+      args.accountName ? [args.accountName] : [],
+    );
   try {
-    const content = (args.userContent || "").trim();
-    if (content.length < MIN_CONTENT_LEN) return GENERAL_FALLBACK;
+    if (content.length < MIN_CONTENT_LEN) return fallback();
 
     const key = Deno.env.get("LOVABLE_API_KEY");
     if (!key) {
       console.warn(
         "[situation-classifier] LOVABLE_API_KEY missing, falling back",
       );
-      return GENERAL_FALLBACK;
+      return fallback();
     }
 
     const { data: pbRows, error: pbErr } = await args.supabase
@@ -328,11 +656,11 @@ export async function classifySituation(
         "[situation-classifier] playbook fetch failed:",
         pbErr.message,
       );
-      return GENERAL_FALLBACK;
+      return fallback();
     }
     const playbooks: PlaybookRow[] = (pbRows ?? []) as PlaybookRow[];
     if (!playbooks.length && !args.allowNoPlaybookClassification) {
-      return GENERAL_FALLBACK;
+      return fallback();
     }
 
     const validIds = new Map(playbooks.map((p) => [p.id, p.title]));
@@ -375,7 +703,7 @@ export async function classifySituation(
           errText.slice(0, 200)
         }`,
       );
-      return GENERAL_FALLBACK;
+      return fallback();
     }
 
     const data = await resp.json().catch(() => null) as
@@ -383,7 +711,10 @@ export async function classifySituation(
       | null;
     const text = data?.choices?.[0]?.message?.content || "";
     const parsed = extractJson(text);
-    const result = normalizeSituationResult(parsed, validIds);
+    const result = normalizeSituationResult(parsed, validIds, {
+      explicitCompetitiveIntent,
+      excludedCompetitiveNames: args.accountName ? [args.accountName] : [],
+    });
 
     const latency = Date.now() - start;
     console.log(
@@ -394,6 +725,8 @@ export async function classifySituation(
         playbook_menu_count: playbooks.length,
         derived_scope_count: result.derivedScopes.length,
         competitive_requested: result.retrieval.competitive.include,
+        competitive_explicit_intent:
+          result.retrieval.competitive.explicitIntent ?? null,
         competitor_name_count:
           result.retrieval.competitive.competitorNames.length,
         category_hint_count: result.retrieval.competitive.categoryHints.length,
@@ -407,6 +740,6 @@ export async function classifySituation(
       "[situation-classifier] threw, falling back:",
       (e as Error).message,
     );
-    return GENERAL_FALLBACK;
+    return fallback();
   }
 }

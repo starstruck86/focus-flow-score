@@ -322,6 +322,9 @@ Deno.test("semantic prompt: exhaustive fixed-instruction matrix stays within 20k
       }
     }
   }
+  console.log(
+    `[prompt-budget] maximum_fixed_instruction_chars=${maximum} case=${maximumCase}`,
+  );
   // Keep meaningful headroom for future gated Competitive/Industry policies.
   assert(
     maximum <= 17_500,
@@ -453,6 +456,34 @@ Deno.test("semantic prompt: strict citation syntax has one canonical owner", () 
       )
       .map((segment) => segment.id),
     ["fixed.evidence-policy"],
+  );
+});
+
+Deno.test("semantic prompt: source-derived facts require tags while unsourced prose stays clean", () => {
+  const exactInstruction =
+    `- Facts drawn from Retrieved Intelligence MUST carry a valid RESOURCE["title"], KI["title"], CARD["title"], or PLAYBOOK["title"] tag; no uncited source claims. Reasoning, opinion, and general knowledge stay untagged.`;
+  for (
+    const contract of [
+      WORKSPACE_CONTRACTS.work,
+      WORKSPACE_CONTRACTS.brainstorm,
+      WORKSPACE_CONTRACTS.library,
+    ]
+  ) {
+    const policy = buildEvidencePolicy({
+      rules: contract.retrievalRules,
+      mode: "general",
+    });
+
+    assertEquals(policy.split(exactInstruction).length - 1, 1);
+  }
+
+  assertEquals(
+    WORKSPACE_CONTRACTS.work.retrievalRules.citationMode,
+    "light",
+  );
+  assertEquals(
+    WORKSPACE_CONTRACTS.brainstorm.retrievalRules.citationMode,
+    "none_unless_library_used",
   );
 });
 

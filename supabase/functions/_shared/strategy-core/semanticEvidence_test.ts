@@ -234,6 +234,11 @@ Deno.test("semantic evidence: strategy-chat uses data-only Current State project
     2,
     "forced literal posture must make W5 verify citations on both paths",
   );
+  assertEquals(
+    (source.match(/enforceCitationAuthenticity: true/g) ?? []).length,
+    2,
+    "both strategy-chat output paths must publish authenticity rewrites",
+  );
   assertStringIncludes(
     source,
     'behaviorIntent.intent !== "artifact_creation"',

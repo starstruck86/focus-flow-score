@@ -3,7 +3,11 @@ import {
   assertEquals,
   assertStringIncludes,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import type { SituationResult } from "../strategy-router/situationClassifier.ts";
+import {
+  detectExplicitCompetitiveIntent,
+  normalizeSituationResult,
+  type SituationResult,
+} from "../strategy-router/situationClassifier.ts";
 import { retrieveSituationIntelligence } from "./situationIntelligenceRetrieval.ts";
 
 type Filter = {
@@ -113,6 +117,7 @@ function situation(options: {
   names?: string[];
   hints?: string[];
   scopes?: string[];
+  explicitIntent?: "competitive_intel" | "named_competitor";
 } = {}): SituationResult {
   return {
     situation: "competitive-evaluation",
@@ -126,6 +131,9 @@ function situation(options: {
         include: options.competitive ?? false,
         competitorNames: options.names ?? [],
         categoryHints: options.hints ?? [],
+        ...(options.explicitIntent
+          ? { explicitIntent: options.explicitIntent }
+          : {}),
       },
       vertical: { include: options.vertical ?? false },
     },
@@ -201,6 +209,218 @@ Deno.test("low classifier confidence fails closed even if both flags are true", 
   assertEquals(result.telemetry.vertical.reason, "low_confidence");
   assertEquals(result.telemetry.competitive.queried, false);
   assertEquals(result.telemetry.vertical.queried, false);
+});
+
+Deno.test("server-authored named-competitor intent bypasses only the competitive low-confidence guard", async () => {
+  const fake = makeFakeSupabase((query) => {
+    if (query.table === "competitive_intel") {
+      return {
+        data: [catalogRow({
+          id: "adjust",
+          competitor_name: "Adjust",
+          source_url: "https://example.com/adjust",
+        })],
+        error: null,
+      };
+    }
+    throw new Error(`unexpected table ${query.table}`);
+  });
+  const result = await retrieveSituationIntelligence({
+    supabase: fake,
+    userId: "user-1",
+    account: null,
+    situation: situation({
+      confidence: "low",
+      competitive: true,
+      names: ["Adjust"],
+      scopes: [],
+      explicitIntent: "named_competitor",
+    }),
+  });
+
+  assertEquals(result.competitiveSources.map((source) => source.title), [
+    "Adjust",
+  ]);
+  assertEquals(result.telemetry.competitive.reason, "matched");
+  assertEquals(result.telemetry.vertical.reason, "classifier_not_requested");
+});
+
+Deno.test("named matching treats AppsFlyer and Apps Flyer as the same exact entity", async () => {
+  const fake = makeFakeSupabase((query) => {
+    if (query.table === "competitive_intel") {
+      return {
+        data: [catalogRow({
+          id: "appsflyer",
+          competitor_name: "Apps Flyer",
+          source_url: "https://example.com/appsflyer",
+        })],
+        error: null,
+      };
+    }
+    throw new Error(`unexpected table ${query.table}`);
+  });
+  const result = await retrieveSituationIntelligence({
+    supabase: fake,
+    userId: "user-1",
+    account: null,
+    situation: situation({
+      confidence: "low",
+      competitive: true,
+      names: ["AppsFlyer"],
+      scopes: [],
+      explicitIntent: "named_competitor",
+    }),
+  });
+
+  assertEquals(result.competitiveSources.map((source) => source.title), [
+    "Apps Flyer",
+  ]);
+  assertEquals(result.telemetry.competitive.reason, "matched");
+});
+
+Deno.test("explicit broad competitive-intel intent uses a bounded catalog fallback", async () => {
+  const rows = Array.from({ length: 4 }, (_, index) =>
+    catalogRow({
+      id: `catalog-${index}`,
+      competitor_name: `Catalog ${index}`,
+      category: `Category ${index}`,
+      positioning: `Positioning ${index}`,
+      source_url: `https://example.com/catalog-${index}`,
+      created_at: `2026-07-0${index + 1}T00:00:00Z`,
+    }));
+  const fake = makeFakeSupabase((query) => {
+    if (query.table === "competitive_intel") {
+      return { data: rows, error: null };
+    }
+    throw new Error(`unexpected table ${query.table}`);
+  });
+  const result = await retrieveSituationIntelligence({
+    supabase: fake,
+    userId: "user-1",
+    account: null,
+    situation: situation({
+      confidence: "low",
+      competitive: true,
+      scopes: [],
+      explicitIntent: "competitive_intel",
+    }),
+  });
+
+  assertEquals(result.competitiveSources.map((source) => source.title), [
+    "Catalog 3",
+    "Catalog 2",
+    "Catalog 1",
+  ]);
+  assertEquals(result.telemetry.competitive.matched, 3);
+  assertEquals(
+    result.telemetry.competitive.reason,
+    "matched_explicit_broad",
+  );
+  assertEquals(result.telemetry.competitive.truncated, true);
+});
+
+Deno.test("field case: explicit competitive intel survives low classifier output end to end", async () => {
+  const explicitCompetitiveIntent = detectExplicitCompetitiveIntent(
+    "Give me an expansion angle and cite competitive intel for Capital One.",
+    "Capital One",
+  );
+  const normalized = normalizeSituationResult({
+    confidence: "low",
+    retrieval: {
+      competitive: {
+        include: false,
+        competitorNames: ["Capital One"],
+        categoryHints: [],
+      },
+      vertical: { include: true },
+    },
+  }, new Map(), {
+    explicitCompetitiveIntent,
+    excludedCompetitiveNames: ["Capital One"],
+  });
+  const fake = makeFakeSupabase((query) => {
+    if (query.table === "competitive_intel") {
+      return {
+        data: [catalogRow({
+          id: "adjust",
+          competitor_name: "Adjust",
+          source_url: "https://example.com/adjust",
+        })],
+        error: null,
+      };
+    }
+    throw new Error(`unexpected table ${query.table}`);
+  });
+
+  const result = await retrieveSituationIntelligence({
+    supabase: fake,
+    userId: "user-1",
+    account: null,
+    situation: normalized,
+  });
+
+  assertEquals(normalized.confidence, "low");
+  assertEquals(normalized.retrieval.competitive.explicitIntent, "competitive_intel");
+  assertEquals(normalized.retrieval.vertical.include, false);
+  assertEquals(result.competitiveSources.map((source) => source.title), [
+    "Adjust",
+  ]);
+  assertEquals(result.telemetry.competitive.reason, "matched_explicit_broad");
+});
+
+Deno.test("named-competitor intent never broad-falls-back when its title is absent", async () => {
+  const fake = makeFakeSupabase((query) => {
+    if (query.table === "competitive_intel") {
+      return {
+        data: [catalogRow({
+          id: "adjust",
+          competitor_name: "Adjust",
+          source_url: "https://example.com/adjust",
+        })],
+        error: null,
+      };
+    }
+    throw new Error(`unexpected table ${query.table}`);
+  });
+  const result = await retrieveSituationIntelligence({
+    supabase: fake,
+    userId: "user-1",
+    account: null,
+    situation: situation({
+      confidence: "low",
+      competitive: true,
+      names: ["Absent Vendor"],
+      hints: ["Other"],
+      scopes: [],
+      explicitIntent: "named_competitor",
+    }),
+  });
+
+  assertEquals(result.competitiveSources, []);
+  assertEquals(result.telemetry.competitive.matched, 0);
+  assertEquals(result.telemetry.competitive.reason, "no_positive_match");
+});
+
+Deno.test("malformed named intent without a title fails closed before catalog access", async () => {
+  const fake = makeFakeSupabase(() => {
+    throw new Error("a named request without a title must not reach the catalog");
+  });
+  const result = await retrieveSituationIntelligence({
+    supabase: fake,
+    userId: "user-1",
+    account: null,
+    situation: situation({
+      confidence: "low",
+      competitive: true,
+      names: [],
+      hints: ["MMP"],
+      explicitIntent: "named_competitor",
+    }),
+  });
+
+  assertEquals(fake.queries.length, 0);
+  assertEquals(result.competitiveSources, []);
+  assertEquals(result.telemetry.competitive.reason, "named_competitor_missing");
 });
 
 Deno.test("competitive retrieval scopes account risks and deterministically ranks a bounded global catalog", async () => {
