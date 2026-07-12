@@ -18,11 +18,18 @@ Claude, Codex, and Cowork must read **CURRENT STATE** and scan the most recent *
 
 ### SESSION END — ONLY AFTER A SYSTEM-STATE CHANGE
 
-If a session shipped code, deployed, changed production data or configuration, or altered architecture, refresh **CURRENT STATE** and append a dated **SESSION LOG** entry in the same commit. Use the heading `## YYYY-MM-DD — Author — Title` with **Who**, **What**, and **SHAs**; place the newest entry first and never edit, delete, or reorder prior entries. Read-only or advisory sessions that changed nothing do not add a log entry.
+If a session shipped code, deployed, changed production data or configuration, or altered architecture, record that state under these rules:
+
+1. **Use the work PR.** Refresh **CURRENT STATE** and add the dated **SESSION LOG** entry to the same branch and PR as the work that caused the change, before that PR merges. Reference the PR number and the latest substantive branch-head SHA known before the state/log commit; never reference the post-merge commit SHA.
+2. **Never open a standalone log PR.** A PR whose only purpose is a state or log entry is prohibited.
+3. **Batch non-PR state changes.** Production deploys, production database edits, verification, and other state changes without their own repository PR must fold into the next repository PR's entry or be batched into an already-open work PR at session end—never one PR per event.
+4. **Keep immutable history.** Use the heading `## YYYY-MM-DD — Author — Title` with **Who**, **What**, and **SHAs**; place the newest entry first and never edit, delete, or reorder prior entries.
+
+Read-only or advisory sessions that changed nothing do not add a log entry.
 
 ### WRITE CAPABILITY
 
-Codex and Claude write this file through the repository. When Claude cannot push, Claude drafts the update and hands the commit to Codex. Cowork mirrors the state to Drive, but the repository remains the source of truth. Log state changes, not attendance.
+Codex and Claude write this file through the repository. Claude drafts entries and hands them to Codex to include in the relevant work PR when Claude cannot push. Cowork mirrors the state to Drive, but the repository remains the source of truth. Log state changes, not attendance.
 
 ## DYNAMIC — MASTER STATE & ROADMAP
 
@@ -94,6 +101,12 @@ Trust-but-verify held throughout the session: it caught an unmerged PR before a 
 # SESSION LOG
 
 > Append-only, newest first. Add each new immutable entry directly below this note; never rewrite prior entries.
+
+## 2026-07-12 — Codex — State logging mechanics refined
+
+- **Who:** Codex, at Corey Hartin's direction.
+- **What:** Merged PR #9 as the final standalone log-only PR under the old pattern. In PR #10, refined the shared protocol so CURRENT STATE and SESSION LOG updates travel with the substantive work PR before merge, standalone log PRs are prohibited, non-PR state changes are batched into an open or next work PR, and Claude hands drafted entries to Codex for inclusion when Claude cannot push.
+- **SHAs:** PR #9 head `c7caf99934e5eeede9f7fe17d2c19e715c59ee2f`; PR #10 substantive head `232a43b09b30c6011d0a1adea29db7a2f54ad122`.
 
 ## 2026-07-12 — Codex — Frontend type-safety restored / CI blind spot closed
 
