@@ -102,6 +102,12 @@ Trust-but-verify held throughout the session: it caught an unmerged PR before a 
 
 > Append-only, newest first. Add each new immutable entry directly below this note; never rewrite prior entries.
 
+## 2026-07-12 — Codex — State logging mechanics refined
+
+- **Who:** Codex, at Corey Hartin's direction.
+- **What:** Merged PR #9 as the final standalone log-only PR under the old pattern. In PR #10, refined the shared protocol so CURRENT STATE and SESSION LOG updates travel with the substantive work PR before merge, standalone log PRs are prohibited, non-PR state changes are batched into an open or next work PR, and Claude hands drafted entries to Codex for inclusion when Claude cannot push.
+- **SHAs:** PR #9 head `c7caf99934e5eeede9f7fe17d2c19e715c59ee2f`; PR #10 substantive head `232a43b09b30c6011d0a1adea29db7a2f54ad122`.
+
 ## 2026-07-12 — Codex — Frontend type-safety restored / CI blind spot closed
 
 - **Who:** Codex (rebase, verification, and merge).
