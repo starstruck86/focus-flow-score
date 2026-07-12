@@ -40,8 +40,9 @@ import {
   type OrderableContextBlock,
 } from "./retrievalEnforcement.ts";
 import type { WorkspaceContract } from "./workspaceContractTypes.ts";
+import { STRICT_LIBRARY_CITATION_INSTRUCTION } from "./citationSyntax.ts";
 
-const CHAT_IDENTITY = `You are Corey Hartin's AI strategy partner — a Senior Account Executive at Branch.io running a $1.4M expansion quota across 14 enterprise accounts in media/entertainment, travel, retail, and financial services. All 14 accounts are existing Branch customers. Your job is to help Corey expand Branch's footprint within these accounts, protect renewals, and displace Adjust, AppsFlyer, and other competitors. You speak in Branch vocabulary: deep linking, deferred deep linking, Universal Ads, Email-to-App, SMS-to-App, Web-to-App, QR, AIO, Advanced Privacy, branch_footprint, whitespace, sub-entity expansion, mobile measurement partner (MMP), attribution, app-to-web, conversion funnel, QBR, expansion-ARR. You think in terms of: which Branch products are they using vs. not using (the footprint gap), what's the whitespace, how do they measure success (QBR cadence, usage trends), what competitive pressure exists (Adjust, AppsFlyer, Kochava, Singular), and what's the renewal risk. You produce work Corey can copy and use right now — opinionated, commercially sharp, grounded in his real accounts and internal library. You do NOT sound like a generic assistant or a consultant.`;
+const CHAT_IDENTITY = `You are Corey's AI strategy partner for enterprise expansion at Branch.io. Help expand Branch's footprint within existing customers, protect renewals, and displace Adjust, AppsFlyer, and other relevant competitors. Live Territory Profile evidence—not this durable remit—owns Corey's current role, company, quota, account count, motion, team, and dates. You speak in Branch vocabulary: deep linking, deferred deep linking, Universal Ads, Email-to-App, SMS-to-App, Web-to-App, QR, AIO, Advanced Privacy, branch_footprint, whitespace, sub-entity expansion, mobile measurement partner (MMP), attribution, app-to-web, conversion funnel, QBR, expansion-ARR. You think in terms of: which Branch products are they using vs. not using (the footprint gap), what's the whitespace, how do they measure success (QBR cadence, usage trends), what competitive pressure exists (Adjust, AppsFlyer, Kochava, Singular), and what's the renewal risk. You produce work Corey can copy and use right now — opinionated, commercially sharp, grounded in his real accounts and internal library. You do NOT sound like a generic assistant or a consultant.`;
 
 const CHAT_OUTPUT_CONTRACT = `═══ ELITE OPERATOR CONTRACT (every response) ═══
 1. DIRECT ANSWER on the first line — give the thing they asked for, no setup.
@@ -68,12 +69,8 @@ Only when the user explicitly asks for analysis, thesis, deal review, leakage, o
 For everyday "what should I send / say / do / use", skip the strategic frame — just deliver the asset.
 
 ═══ CITATIONS ═══
-When you pull a real internal item, PREFER its human-readable title:
-  • KI["Command of the Message Framework"]  (preferred when you can see the title)
-  • CARD["Discovery - Call Coaching"]       (preferred when you can see the title)
-  • PLAYBOOK["Negotiation Playbook v3"]     (preferred when you can see the title)
-  • RESOURCE["Exact Resource Title"]        (always title form)
-Use the short-id fallback (KI[abc12345], CARD[abc12345], PLAYBOOK[abc12345]) ONLY when no title is visible to you in the context blocks above. Never fabricate a title — if you don't know it, use the id form. If you have no real source at all, say so in one short clause and proceed with your best operator answer.
+${STRICT_LIBRARY_CITATION_INSTRUCTION}
+If you have no real source at all, say so in one short clause and proceed with your best operator answer.
 
 ═══ LIBRARY COUNT DISCIPLINE (HARD RULE — NO HALLUCINATED NUMBERS) ═══
 Never assert a numeric count of the user's resources, KIs, playbooks, or library items unless that exact number appears in a "=== LIBRARY TOTALS ===" or "=== LIBRARY RESOURCES ===" block above. Specifically:
@@ -148,6 +145,72 @@ export interface StrategyChatPromptParts {
     id: string;
     text: string;
   }>;
+}
+
+/**
+ * Data-only context builder used by the semantic strategy-chat shell. It
+ * preserves WorkspaceContract contextMode ordering without constructing the
+ * retired fixed Strategy Core stack.
+ */
+export function buildStrategyChatEvidenceBlocks(
+  args: BuildStrategyChatPromptArgs,
+): StrategyChatPromptParts["evidenceBlocks"] {
+  const contextBlocks: OrderableContextBlock[] = [];
+  const lib = (args.libraryContext || "").trim();
+  if (lib) {
+    contextBlocks.push({
+      kind: "library",
+      label: "internal_library",
+      text: `=== INTERNAL LIBRARY ===\n${lib}`,
+    });
+  }
+  const acct = (args.accountContext || "").trim();
+  if (acct) {
+    contextBlocks.push({
+      kind: "account",
+      label: "account_context",
+      text: `=== ACCOUNT CONTEXT ===\n${acct}`,
+    });
+  }
+  const resources = (args.resourceContextBlock || "").trim();
+  if (resources) {
+    contextBlocks.push({
+      kind: "library",
+      label: "library_resources",
+      text: resources,
+    });
+  }
+  const totals = (args.libraryTotalsBlock || "").trim();
+  if (totals) {
+    contextBlocks.push({
+      kind: "library",
+      label: "library_totals",
+      text: totals,
+    });
+  }
+  const thesis = (args.workingThesisBlock || "").trim();
+  if (thesis) {
+    contextBlocks.push({
+      kind: "thread",
+      label: "working_thesis",
+      text: thesis,
+    });
+  }
+  const thread = (args.contextSection || "").trim();
+  if (thread) {
+    contextBlocks.push({
+      kind: "thread",
+      label: "context_section",
+      text: thread,
+    });
+  }
+  const ordered = args.workspaceContract
+    ? orderContextBlocks(contextBlocks, args.workspaceContract.retrievalRules)
+    : contextBlocks;
+  return ordered.map((block) => ({
+    id: block.label ?? block.kind,
+    text: block.text,
+  }));
 }
 
 export function buildStrategyChatSystemPromptParts(

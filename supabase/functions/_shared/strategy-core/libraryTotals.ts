@@ -94,10 +94,6 @@ export function renderLibraryTotalsBlock(totals: LibraryTotals): string {
   }
   if (!lines.length) return "";
   lines.push(`computed_at: ${totals.computed_at}`);
-  lines.push(
-    "Source: exact Postgres COUNT over the user's library (not vector retrieval). " +
-      "These are the ONLY numbers you may quote for library counts. If a number you " +
-      "want to cite is not in this block, say you cannot verify it.",
-  );
+  lines.push("count_scope: exact Postgres COUNT over this user's library");
   return `=== LIBRARY TOTALS ===\n${lines.join("\n")}`;
 }

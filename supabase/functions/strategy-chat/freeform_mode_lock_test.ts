@@ -1,78 +1,44 @@
-// ════════════════════════════════════════════════════════════════
-// Regression test: FREEFORM mode-lock must not instruct the model to
-// produce clarification-only / one-line "what's missing" responses.
-//
-// Root cause being guarded: the FREEFORM mode-lock block is BINDING
-// and appears before the Strategy Decision Layer. Any "one-line stop"
-// or "say what's missing" carve-out in this block overrides the
-// Decision Layer and causes clarification-first replies in workspaces
-// like Brainstorm.
-// ════════════════════════════════════════════════════════════════
+import {
+  assert,
+  assertStringIncludes,
+} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { buildResolvedTurnContract } from "../_shared/strategy-core/semanticPrompt.ts";
 
-import { assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-
-const SOURCE = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
-
-// Extract the FREEFORM case block from buildModeLockBlock(...)
-function extractFreeformBlock(src: string): string {
-  const start = src.indexOf("MODE LOCK: FREEFORM");
-  assert(start > -1, "FREEFORM mode lock block not found in index.ts");
-  // Grab a generous window — the block ends at the next `case` / `}` boundary.
-  const window = src.slice(start, start + 3000);
-  const end = window.search(/\n\s*}\s*\n/);
-  return end > -1 ? window.slice(0, end) : window;
-}
-
-const freeformBlock = extractFreeformBlock(SOURCE);
-
-Deno.test("FREEFORM mode lock: does not instruct 'one-line answer ... and stop'", () => {
-  assert(
-    !/one-line answer/i.test(freeformBlock),
-    "FREEFORM block still references a 'one-line answer' carve-out",
-  );
-  assert(
-    !/give that and stop/i.test(freeformBlock),
-    "FREEFORM block still tells the model to give a one-line answer and stop",
-  );
-  assert(
-    !/SMALLEST useful output/.test(freeformBlock),
-    "FREEFORM block still instructs the SMALLEST useful output (collapses Brainstorm)",
-  );
+const freeform = buildResolvedTurnContract({
+  intent: { intent: "freeform" },
+  behaviorIntent: {
+    intent: "research_analysis",
+    suppressed: [],
+    matched_signal: "test",
+    confidence: "low",
+  },
+  outputModeDecision: {
+    mode: "adaptive",
+    reason: "test",
+    workspace_default_mode: "adaptive",
+    explicit_format_override: null,
+    conversation_trigger_matched: null,
+  },
+  libraryMode: "general",
 });
 
-Deno.test("FREEFORM mode lock: contains binding ambiguity-handling rule", () => {
-  assert(
-    /AMBIGUITY HANDLING\s*[—-]\s*BINDING/i.test(freeformBlock),
-    "FREEFORM block missing binding AMBIGUITY HANDLING section",
-  );
-  assert(
-    /assume the most reasonable interpretation/i.test(freeformBlock),
-    "FREEFORM block must instruct model to assume reasonable interpretation",
-  );
-  assert(
-    /ONLY after delivering value/i.test(freeformBlock),
-    "FREEFORM block must require value-first before clarifying questions",
-  );
+Deno.test("semantic FREEFORM: never authorizes a clarification-only stop", () => {
+  assert(!/one-line answer/i.test(freeform));
+  assert(!/give that and stop/i.test(freeform));
+  assertStringIncludes(freeform, "Do not default to");
+  assertStringIncludes(freeform, "clarification-only reply");
 });
 
-Deno.test("FREEFORM mode lock: forbids clarification-only as primary response", () => {
-  assert(
-    /FORBIDDEN: clarification-only responses/i.test(freeformBlock),
-    "FREEFORM block must explicitly forbid clarification-only primary responses",
-  );
+Deno.test("semantic FREEFORM: value and assumption precede refinement", () => {
+  assertStringIncludes(freeform, "Choose the most reasonable interpretation");
+  assertStringIncludes(freeform, "state one material assumption briefly");
+  assertStringIncludes(freeform, "deliver value");
+  assertStringIncludes(freeform, "one optional refinement question");
 });
 
-// ── ZERO-PLACEHOLDER rule must no longer teach 'say what's missing in ONE short line' ──
-Deno.test("ZERO-PLACEHOLDER rule: removes the 'one short line of what's missing' carve-out", () => {
-  const zpStart = SOURCE.indexOf("ZERO-PLACEHOLDER RULE");
-  assert(zpStart > -1, "ZERO-PLACEHOLDER rule not found");
-  const zpBlock = SOURCE.slice(zpStart, zpStart + 2000);
-  assert(
-    !/say in ONE short line exactly what's missing/i.test(zpBlock),
-    "ZERO-PLACEHOLDER rule still authorizes clarification-only one-line replies",
-  );
-  assert(
-    /convert the missing facts into 1[–-]3 follow-up questions at the END/i.test(zpBlock),
-    "ZERO-PLACEHOLDER rule should require missing facts become end-of-response follow-ups",
-  );
+Deno.test("semantic asset discipline: missing facts become end questions, not placeholders", () => {
+  assertStringIncludes(freeform, "ZERO-PLACEHOLDER RULE");
+  assertStringIncludes(freeform, "Deliver the strongest useful result first");
+  assertStringIncludes(freeform, "follow-up questions at the end");
+  assert(!/say in ONE short line exactly what's missing/i.test(freeform));
 });

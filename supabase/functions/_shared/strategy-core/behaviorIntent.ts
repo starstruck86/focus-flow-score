@@ -20,6 +20,8 @@
  * It is intentionally narrow: format/behavior only — not content rules.
  */
 
+import { detectExplicitOutputRequest } from "./explicitOutputRequest.ts";
+
 export type BehaviorIntent =
   | "conversation_strategy"
   | "idea_generation"
@@ -31,6 +33,10 @@ export interface BehaviorIntentResult {
   suppressed: BehaviorIntent[];
   matched_signal: string;
   confidence: "high" | "medium" | "low";
+  /** Exact output count selected by a request, never a factual mention. */
+  requested_count?: number;
+  /** Parsed plural output phrase used to keep Turn and final count aligned. */
+  requested_output_noun?: string;
 }
 
 const ALL_INTENTS: BehaviorIntent[] = [
@@ -103,11 +109,16 @@ export function classifyBehaviorIntent(
 ): BehaviorIntentResult {
   const text = (userContent || "").trim();
   const hasAccount = ctx?.hasAccountContext === true;
+  const explicitOutput = detectExplicitOutputRequest(text);
 
-  const artifact = firstMatch(text, ARTIFACT_PATTERNS);
+  const artifact = explicitOutput?.category === "artifact"
+    ? `explicit_counted_artifact:${explicitOutput.noun}`
+    : firstMatch(text, ARTIFACT_PATTERNS);
   const convo = firstMatch(text, CONVERSATION_PATTERNS);
   const research = firstMatch(text, RESEARCH_PATTERNS);
-  const idea = firstMatch(text, IDEA_GENERATION_PATTERNS);
+  const idea = explicitOutput?.category === "alternatives"
+    ? `explicit_counted_alternatives:${explicitOutput.noun}`
+    : firstMatch(text, IDEA_GENERATION_PATTERNS);
 
   // Resolve in precedence order. "Approach to conversation" beats
   // "give me a few ways" because the framing is operator-facing.
@@ -130,7 +141,7 @@ export function classifyBehaviorIntent(
   } else if (idea) {
     intent = "idea_generation";
     matched = idea;
-    confidence = "medium";
+    confidence = explicitOutput ? "high" : "medium";
   } else {
     intent = hasAccount ? "conversation_strategy" : "research_analysis";
     matched = hasAccount ? "default_account_attached" : "default_no_account";
@@ -138,7 +149,18 @@ export function classifyBehaviorIntent(
   }
 
   const suppressed = ALL_INTENTS.filter((i) => i !== intent);
-  return { intent, suppressed, matched_signal: matched, confidence };
+  return {
+    intent,
+    suppressed,
+    matched_signal: matched,
+    confidence,
+    ...(explicitOutput
+      ? {
+        requested_count: explicitOutput.count,
+        requested_output_noun: explicitOutput.noun,
+      }
+      : {}),
+  };
 }
 
 // ─── Prompt contract ────────────────────────────────────────────────

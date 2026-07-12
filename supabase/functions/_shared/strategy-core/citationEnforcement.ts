@@ -50,6 +50,7 @@ import {
   type CitationAuditResult,
   auditResourceCitations,
 } from "./citationAudit.ts";
+import { countLiteralLibraryCitations } from "./citationSyntax.ts";
 import type {
   CitationMode,
   WorkspaceKey,
@@ -118,11 +119,21 @@ export interface CitationCheckResult {
 
 /** Count obvious citation forms in `text`. Conservative: under-counts is OK. */
 function countCitationLikeTokens(text: string): number {
-  if (!text) return 0;
-  // RESOURCE[…] (already-validated form) + verified inline ⚠ UNVERIFIED.
-  const resourceMatches = text.match(/RESOURCE\[[^\]]+\]/g) ?? [];
-  // Don't count UNVERIFIED — those failed audit.
-  return resourceMatches.length;
+  return countLiteralLibraryCitations(text);
+}
+
+function citableLibraryHitCount(inputs: CitationCheckInputs): number {
+  const keyed = new Set<string>();
+  const add = (namespace: string, hits: CitationAuditHit[] | undefined) => {
+    for (const hit of hits ?? []) {
+      if (hit?.id) keyed.add(`${namespace}:${hit.id}`);
+    }
+  };
+  add("RESOURCE", inputs.libraryHits);
+  add("KI", inputs.auditOptions?.kiHits);
+  add("CARD", inputs.auditOptions?.cardHits);
+  add("PLAYBOOK", inputs.auditOptions?.playbookHits);
+  return keyed.size;
 }
 
 /**
@@ -145,6 +156,7 @@ export function runCitationCheck(
 
   const issues: CitationIssue[] = [];
   const text = assistantText ?? "";
+  const citableHits = citableLibraryHitCount(inputs);
 
   // ── Mode: none ─────────────────────────────────────────────────
   // Don't audit. Don't modify. Just report citation count.
@@ -163,7 +175,7 @@ export function runCitationCheck(
   // Skip audit entirely when no library hits were used. Otherwise
   // run audit in shadow and record presence/absence as an issue.
   if (citationMode === "none_unless_library_used") {
-    if (!libraryUsed || libraryHits.length === 0) {
+    if (!libraryUsed || citableHits === 0) {
       return {
         citationMode,
         citationsFound: countCitationLikeTokens(text),
@@ -178,7 +190,7 @@ export function runCitationCheck(
     if (citationsFound === 0) {
       issues.push({
         code: "library_used_without_attribution",
-        detail: `Library returned ${libraryHits.length} hit(s) but assistant produced no citations.`,
+        detail: `Library returned ${citableHits} citeable hit(s) but assistant produced no citations.`,
       });
     }
     if (audit.unverifiedCitations.length > 0) {
@@ -203,10 +215,10 @@ export function runCitationCheck(
   if (citationMode === "light") {
     const audit = auditResourceCitations(text, libraryHits, auditOptions);
     const citationsFound = audit.verifiedTitles.length;
-    if (libraryHits.length > 0 && citationsFound === 0) {
+    if (citableHits > 0 && citationsFound === 0) {
       issues.push({
         code: "missing_citations",
-        detail: `Library hits available (${libraryHits.length}) but no verified citations in output.`,
+        detail: `Library hits available (${citableHits}) but no verified citations in output.`,
       });
     }
     if (audit.unverifiedCitations.length > 0) {
@@ -232,17 +244,21 @@ export function runCitationCheck(
   // strategy-chat behavior) must pass `enableLegacyCitationRewrite:
   // true`. That opt-in is outside the W5 shadow-only contract.
   const audit = auditResourceCitations(text, libraryHits, auditOptions);
-  const citationsFound = audit.verifiedTitles.length;
+  // Strict posture has one syntax authority. Count only canonical namespace
+  // tokens that survived verification; an exact bare quoted title remains a
+  // valid informal attribution signal in lighter postures but cannot satisfy
+  // strict Evidence Policy.
+  const citationsFound = countLiteralLibraryCitations(audit.text);
   if (audit.unverifiedCitations.length > 0) {
     issues.push({
       code: "unverified_citation",
       detail: `${audit.unverifiedCitations.length} unverified citation(s).`,
     });
   }
-  if (libraryHits.length > 0 && citationsFound === 0) {
+  if (citableHits > 0 && citationsFound === 0) {
     issues.push({
       code: "missing_citations",
-      detail: `Library hits available (${libraryHits.length}) but no verified citations in output.`,
+      detail: `Library hits available (${citableHits}) but no verified citations in output.`,
     });
   }
   return {

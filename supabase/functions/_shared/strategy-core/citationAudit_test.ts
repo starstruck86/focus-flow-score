@@ -23,11 +23,12 @@ Deno.test("auditResourceCitations: passes a verified RESOURCE[\"title\"] citatio
   assertEquals(out.verifiedTitles.length, 1);
 });
 
-Deno.test("auditResourceCitations: passes a verified RESOURCE[id-short] through unchanged", () => {
+Deno.test("auditResourceCitations: rejects RESOURCE[id-short] even when the id exists", () => {
   const text = `Use RESOURCE[11111111] for the structure.`;
   const out = auditResourceCitations(text, HITS);
-  assertEquals(out.modified, false);
-  assertEquals(out.verifiedTitles.includes("11111111"), true);
+  assertEquals(out.modified, true);
+  assertStringIncludes(out.text, "⚠ UNVERIFIED[11111111]");
+  assertEquals(out.verifiedTitles.includes("11111111"), false);
 });
 
 Deno.test("auditResourceCitations: rewrites a fabricated RESOURCE[\"title\"] to UNVERIFIED and appends banner", () => {
@@ -66,12 +67,12 @@ Deno.test("auditResourceCitations: does NOT touch quoted seller statements (no a
   assertEquals(out.modified, false);
 });
 
-Deno.test("auditResourceCitations: tolerates substring title matches (model trimming)", () => {
-  // Model writes a shortened version of the real title.
+Deno.test("auditResourceCitations: rejects shortened resource titles", () => {
   const text = `Use RESOURCE["Business Case Template"] as the base.`;
   const out = auditResourceCitations(text, HITS);
-  assertEquals(out.modified, false, `expected substring tolerance, got: ${out.text}`);
-  assertEquals(out.verifiedTitles.length, 1);
+  assertEquals(out.modified, true);
+  assertEquals(out.verifiedTitles.length, 0);
+  assertStringIncludes(out.text, `⚠ UNVERIFIED["Business Case Template"]`);
 });
 
 Deno.test("auditResourceCitations: handles multiple citations — mixed verified and fabricated", () => {
@@ -173,13 +174,52 @@ Deno.test("CARD title citation: accepted when title matches", () => {
   const text = `Use CARD["Discovery - Call Coaching"] for the prep.`;
   const out = auditResourceCitations(text, [], { cardHits: CARD_HITS });
   assertEquals(out.modified, false);
-  assertStringIncludes(out.text, `CARD["Discovery - Call Coaching"]`);
+  assertEquals(
+    out.verifiedTitles.includes("CARD:Discovery - Call Coaching"),
+    true,
+  );
 });
 
-Deno.test("CARD id citation: still accepted when id matches", () => {
+Deno.test("CARD fallback accepts exactly eight matching hex characters", () => {
   const text = `Pull from CARD[cccccccc] in your library.`;
   const out = auditResourceCitations(text, [], { cardHits: CARD_HITS });
   assertEquals(out.modified, false);
+  assertEquals(out.verifiedTitles.includes("CARD:cccccccc"), true);
+  for (const id of ["cccccc", "ccccccccffff"]) {
+    const malformed = auditResourceCitations(`CARD[${id}]`, [], {
+      cardHits: CARD_HITS,
+    });
+    assertEquals(malformed.modified, true);
+    assertEquals(malformed.verifiedTitles.length, 0);
+  }
+});
+
+const PLAYBOOK_HITS = [
+  {
+    id: "dddddddd-9999-0000-1111-222222222222",
+    title: "Champion Went Quiet",
+  },
+];
+
+Deno.test("PLAYBOOK title citation: accepted when title matches", () => {
+  const text = `Use PLAYBOOK["Champion Went Quiet"] for the next move.`;
+  const out = auditResourceCitations(text, [], {
+    playbookHits: PLAYBOOK_HITS,
+  });
+  assertEquals(out.modified, false);
+  assertEquals(
+    out.verifiedTitles.includes("PLAYBOOK:Champion Went Quiet"),
+    true,
+  );
+});
+
+Deno.test("PLAYBOOK id citation: rejected because title form is canonical", () => {
+  const text = `Use PLAYBOOK[dddddddd] for the next move.`;
+  const out = auditResourceCitations(text, [], {
+    playbookHits: PLAYBOOK_HITS,
+  });
+  assertEquals(out.modified, true);
+  assertStringIncludes(out.text, "⚠ UNVERIFIED-PLAYBOOK[dddddddd]");
 });
 
 Deno.test("KI fabricated title: flagged with UNVERIFIED-KI when audit has KI hit set", () => {
@@ -207,8 +247,53 @@ Deno.test("KI/CARD scanning is OFF by default (backward compat)", () => {
   assertStringIncludes(out.text, "KI[deadbeef]");
 });
 
-Deno.test("KI substring tolerance: trimmed title still verifies", () => {
+Deno.test("explicit empty namespace hit sets reject fabricated citations", () => {
+  const text = `KI["Invented"] CARD["Invented"] PLAYBOOK["Invented"]`;
+  const out = auditResourceCitations(text, [], {
+    kiHits: [],
+    cardHits: [],
+    playbookHits: [],
+  });
+  assertEquals(out.modified, true);
+  assertEquals(out.unverifiedCitations.length, 3);
+  assertStringIncludes(out.text, "⚠ UNVERIFIED-KI");
+  assertStringIncludes(out.text, "⚠ UNVERIFIED-CARD");
+  assertStringIncludes(out.text, "⚠ UNVERIFIED-PLAYBOOK");
+});
+
+Deno.test("already-unverified namespace tokens are not audited twice", () => {
+  const text = `⚠ UNVERIFIED-KI["Bogus"] ⚠ UNVERIFIED-PLAYBOOK["Nope"]`;
+  const out = auditResourceCitations(text, [], {
+    kiHits: [],
+    playbookHits: [],
+  });
+  assertEquals(out.modified, false);
+  assertEquals(out.text, text);
+});
+
+Deno.test("KI shortened or ambiguous titles do not verify", () => {
   const text = `Apply KI["Command of the Message"] now.`;
   const out = auditResourceCitations(text, [], { kiHits: KI_HITS });
-  assertEquals(out.modified, false, `expected substring match; got: ${out.text}`);
+  assertEquals(out.modified, true);
+  assertEquals(out.verifiedTitles.length, 0);
+  for (const fragment of ["a", "Message"]) {
+    const ambiguous = auditResourceCitations(`KI["${fragment}"]`, [], {
+      kiHits: KI_HITS,
+    });
+    assertEquals(ambiguous.modified, true);
+    assertEquals(ambiguous.verifiedTitles.length, 0);
+  }
+});
+
+Deno.test("KI fallback accepts exactly 8 hex characters", () => {
+  for (const id of ["aaaaaa", "aaaaaaaaffff"]) {
+    const out = auditResourceCitations(`KI[${id}]`, [], { kiHits: KI_HITS });
+    assertEquals(out.modified, true);
+    assertEquals(out.verifiedTitles.length, 0);
+  }
+  const exact = auditResourceCitations("KI[aaaaaaaa]", [], {
+    kiHits: KI_HITS,
+  });
+  assertEquals(exact.modified, false);
+  assertEquals(exact.verifiedTitles.length, 1);
 });

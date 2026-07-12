@@ -25,6 +25,8 @@
 //   3. workspace default.
 // ════════════════════════════════════════════════════════════════
 
+import { detectExplicitOutputCount } from "./explicitOutputRequest.ts";
+
 export type OutputMode = "conversation" | "structured" | "preserve" | "adaptive";
 
 export type ExplicitFormatKind =
@@ -226,13 +228,26 @@ export function renderModeContractBody(
 // ─────────────────────────────────────────────────────────────────
 export interface ConversationEnforcementOpts {
   /**
-   * Compact summary of Current State Intelligence facts/hypotheses for THIS turn.
-   * When present, it is inlined into the enforcement block so the model
-   * cannot bypass context by flipping into conversation mode.
+   * @deprecated Retained for call-site compatibility. Current State stays in
+   * retrieved-evidence segments and is never copied into fixed instructions.
    */
   currentStateDigest?: string | null;
   /** True when Current State Intelligence ran and produced a usable block. */
   currentStateUsed?: boolean;
+  /** Resolved behavior route; reconciles one-path strategy with brainstorm breadth. */
+  behaviorIntent?:
+    | "conversation_strategy"
+    | "idea_generation"
+    | "research_analysis"
+    | "artifact_creation";
+  /** Explicit user-requested number of options/angles/ideas, when present. */
+  requestedEntryCount?: number | null;
+}
+
+export function detectRequestedEntryCount(
+  userContent: string | null | undefined,
+): number | null {
+  return detectExplicitOutputCount(userContent);
 }
 
 export function renderConversationEnforcementBlock(
@@ -241,76 +256,44 @@ export function renderConversationEnforcementBlock(
 ): string {
   const ws = (workspace || "work").toLowerCase();
   const csUsed = !!opts.currentStateUsed;
-  const csDigest = (opts.currentStateDigest || "").trim();
-  const contextClause = csUsed && csDigest
-    ? `
-
-CONTEXT YOU MUST USE (Current State Intelligence — already attached above):
-${csDigest}
-
-Every conversation entry MUST visibly reflect at least one specific fact,
-hypothesis, or tension from the block above. If a draft entry could be said
-to any company in any industry, REWRITE it before responding.`
-    : csUsed
-      ? `
-
-A Current State Intelligence block is attached above. Every conversation
-entry MUST visibly reflect at least one specific fact, hypothesis, or
-tension from it. Generic, company-agnostic lines are a violation.`
-      : `
-
-No Current State Intelligence block attached for this turn. Lead with what
-you'd actually want to learn about THIS account before forming a POV — do
-NOT fall back to generic category buckets.`;
+  const contextClause = csUsed
+    ? "Use the Current State evidence above. Every path must visibly reflect at least one specific verified fact, hypothesis, change, or tension from it."
+    : "No Current State evidence is attached. Use other account/thread evidence; if none exists, state the one material unknown instead of inventing specificity.";
+  const requestedCount = opts.requestedEntryCount;
+  const countRule = requestedCount
+    ? `Return exactly ${requestedCount} distinct conversational entries; the user's explicit count wins.`
+    : opts.behaviorIntent === "idea_generation" && ws === "brainstorm"
+    ? "Return at least five genuinely distinct conversational entries because Brainstorm owns breadth."
+    : opts.behaviorIntent === "idea_generation"
+    ? "Return 3–5 genuinely distinct conversational entries because this turn asks for breadth."
+    : opts.behaviorIntent === "conversation_strategy"
+    ? "Return one primary path and at most one materially different backup; each path is 90–180 words."
+    : "Match the ask: one primary path by default, with additional entries only when distinct options are genuinely requested.";
+  const substanceRule = opts.behaviorIntent === "idea_generation"
+    ? "Each entry needs a genuinely different angle, one specific account/evidence anchor when available, and a concrete why-it-could-work. After all entries give one overall recommended next move; do not force a full script or validation question into every idea."
+    : opts.behaviorIntent === "research_analysis"
+    ? "Each entry carries verified fact or labeled inference, decision implication, and the material unknown. Keep it analysis—not a coaching script, finished artifact, or forced say/do move."
+    : opts.behaviorIntent === "artifact_creation"
+    ? "The resolved artifact contract owns substance and visible shape. Deliver that copy/paste-ready asset; do not add competing conversation paths or analysis commentary."
+    : "Each path weaves together a specific evidence anchor, from→to change, non-obvious friction, Corey's actual words/move, and the validation question.";
+  const shapeRule = opts.behaviorIntent === "artifact_creation"
+    ? "The resolved artifact remains authoritative; conversation mode cannot replace it."
+    : "Do not produce a brief, structured strategy list, email, doc, or plan.";
 
   return `
 
 ━━━ CONVERSATION MODE ENFORCEMENT (HARD RULES) ━━━
 
 OUTPUT MODE: CONVERSATION (workspace: ${ws}).
-You are NOT producing a structured list of strategies, a brief, or a
-deliverable. You are thinking with Corey — giving him the actual things
-he might say, ask, or push on. Write the way a sharp operator would
-think out loud right before the call.
-${contextClause}
+This final segment is the last word on conversation delivery. ${shapeRule}
 
-FORMAT RULES (NON-NEGOTIABLE):
-1. NO ## headings, titles, bold idea-names, "Approach 1" labels, or any
-   named angle. No "Topic:", no "Idea:", no "Reframe X as Y" headers.
-2. NO structured cards, sections, or category buckets (e.g. no
-   "Acquisition / Activation / Retention", no "Discovery / Demo / Close").
-3. Each idea is a short paragraph (2–5 sentences) in natural prose.
-   First person is encouraged: "I'd…", "I might…", "One way I'd…",
-   "Honestly, I'd…", "I'd probably open by…".
-4. A bare numbered or dashed list of paragraphs is acceptable ONLY if
-   each item starts in first person and carries no label.
-5. Length matches the ask. Typical shape: 3–5 distinct conversation
-   entries, optionally followed by one short prose line on which 1–2
-   you'd actually lead with.
+- ${countRule}
+- Natural first-person prose only. No ## headings, titles, bold labels, named angles, cards, category buckets, "Option A," or idea-list lead-ins. A bare divider between prose paths is allowed.
+- ${substanceRule}
+- ${contextClause}
+- Use a Branch capability or competitor only when it sharpens the call. Replace generic analytics/engagement language and consultant verbs with the actual tension and move.
+- Never narrate the search/retrieval process or turn a source title into a heading. Follow the active citation posture when attribution is material. If Library Disclosure selects one inline source/coverage statement, include that single evidence-truth statement without adding structure.
 
-CONTENT RULES:
-- Anchor every entry in this specific situation (use Current State
-  Intelligence + any account context). If an entry could be said to any
-  company, rewrite it or drop it.
-- Each entry must contain a real point of view, tension, or
-  provocation — not a description of a capability or a category.
-- No consultant verbs as the move ("highlight", "leverage",
-  "emphasize", "showcase"). Replace with what Corey would actually
-  say or ask.
-- Library use: pull from the library to sharpen the POV, but do NOT
-  name the play, cite a framework by title in-line, or announce that
-  you searched. The library should make the entry sharper, not turn
-  it into a label.
-
-SELF-CHECK BEFORE RESPONDING:
-- Does any line read like a heading, title, or named approach? Rewrite.
-- Does every entry start in first person or natural conversational
-  voice? If not, fix it.
-- Does every entry visibly reflect Current State context (when
-  attached above)? If not, rewrite.
-- Could this be pasted into a real pre-call note as talking points? If
-  not, rewrite.
-
-This is NOT optional. Do not ignore these rules.
+Before sending, silently verify the path is specific, conversational, complete, and usable in a real pre-call note. Rewrite once if not. This is not optional.
 `;
 }

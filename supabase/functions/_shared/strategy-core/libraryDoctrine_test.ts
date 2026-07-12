@@ -50,6 +50,7 @@ import {
   type CalibrationInputs,
   runLibraryCalibration,
 } from "./libraryCalibration.ts";
+import { buildEvidencePolicy } from "./semanticPrompt.ts";
 
 // ─── Fixtures ─────────────────────────────────────────────────────
 
@@ -147,20 +148,32 @@ Deno.test("Doctrine #2: Pass B reuses ExemplarSet id verbatim (no re-selection)"
   assertEquals(block.exemplarSetId, set.exemplarSetId);
 });
 
-Deno.test("Doctrine #3: rendered STANDARDS block contains DO NOT CITE instruction", () => {
+Deno.test("Doctrine #3: STANDARDS data and fixed citation policy remain separated", () => {
   const set = injectedSet([
     makeExemplar("ex-1"),
     makeExemplar("ex-2"),
   ]);
-  const block = renderStandardBlock(set);
-  assert(block.length > 0, "Block should render when injected.");
-  // Case-insensitive check — exact wording is implementation detail,
-  // but the prohibition must be present.
-  const lower = block.toLowerCase();
+  const defaultBlock = renderStandardBlock(set);
   assert(
-    lower.includes("do not cite") || lower.includes("don't cite") ||
-      lower.includes("not for citation"),
-    `STANDARDS block must include a DO-NOT-CITE instruction. Got:\n${block}`,
+    defaultBlock.includes("Do NOT cite"),
+    "non-strategy-chat consumers keep the original directive-bearing block",
+  );
+  const block = renderStandardBlock(set, { dataOnly: true });
+  assert(block.length > 0, "Block should render when injected.");
+  assert(!block.toLowerCase().includes("do not cite"));
+  const policy = buildEvidencePolicy({
+    rules: {
+      libraryUse: "relevant",
+      webMode: "off",
+      citationMode: "light",
+      contextMode: "thread_first",
+    },
+    mode: "strong",
+  });
+  assert(
+    policy.includes("Standards/exemplars/patterns shape quality") &&
+      policy.includes("not citations"),
+    `fixed evidence policy lost the STANDARDS citation boundary:\n${policy}`,
   );
 });
 
@@ -199,7 +212,8 @@ Deno.test("Doctrine #5: Pass B never emits improvedDraft in Phase 1", () => {
   });
   assert(
     !("improvedDraft" in (result as unknown as Record<string, unknown>)) ||
-      (result as unknown as Record<string, unknown>).improvedDraft === undefined,
+      (result as unknown as Record<string, unknown>).improvedDraft ===
+        undefined,
     "improvedDraft must not be present in Phase 1.",
   );
 });

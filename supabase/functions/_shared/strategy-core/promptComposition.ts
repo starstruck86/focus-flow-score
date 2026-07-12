@@ -61,6 +61,22 @@ export interface PromptSizeLog {
   segments: Record<string, { kind: PromptSegmentKind; chars: number }>;
 }
 
+export interface PromptOrderTrace {
+  segmentOrder: string[];
+  globalSopApplied: boolean;
+  workspaceSopApplied: boolean;
+  globalInstructionsApplied: boolean;
+  sopBeforeReasoning: boolean;
+}
+
+const REASONING_SEGMENT_IDS = [
+  "fixed.turn-contract",
+  "fixed.evidence-policy",
+  "fixed.current-state-reasoning",
+  "fixed.v2-route-delta",
+  "fixed.v2-strong-synthesis-final",
+] as const;
+
 function normalizedText(value: string | null | undefined): string {
   return (value || "").trim();
 }
@@ -165,8 +181,7 @@ export function buildPromptSizeLog(args: {
   return {
     event: "strategy-chat.prompt-size",
     path: args.path,
-    total_prompt_chars:
-      args.plan.systemPrompt.length +
+    total_prompt_chars: args.plan.systemPrompt.length +
       conversationHistoryChars +
       currentUserChars,
     system_prompt_chars: args.plan.systemPrompt.length,
@@ -180,5 +195,36 @@ export function buildPromptSizeLog(args: {
     fixed_instruction_over_budget:
       args.plan.fixedInstructionChars > FIXED_INSTRUCTION_BUDGET_CHARS,
     segments: segmentLedger,
+  };
+}
+
+/**
+ * Segment-id based SOP/order trace. Never inspect prompt prose: user-authored
+ * SOPs and retrieved evidence can contain arbitrary marker-like text.
+ */
+export function buildPromptOrderTrace(
+  segments: PromptSegment[],
+): PromptOrderTrace {
+  const segmentOrder = segments.map((segment) => segment.id);
+  const globalSopIdx = segmentOrder.indexOf("runtime.global-sop");
+  const workspaceSopIdx = segmentOrder.indexOf("runtime.workspace-sop");
+  const globalInstructionsIdx = segmentOrder.indexOf(
+    "runtime.global-instructions",
+  );
+  const sopIdx = [globalSopIdx, workspaceSopIdx]
+    .filter((idx) => idx >= 0)
+    .sort((a, b) => a - b)[0] ?? Number.POSITIVE_INFINITY;
+  const reasoningIdx = REASONING_SEGMENT_IDS
+    .map((id) => segmentOrder.indexOf(id))
+    .filter((idx) => idx >= 0)
+    .sort((a, b) => a - b)[0] ?? Number.POSITIVE_INFINITY;
+
+  return {
+    segmentOrder,
+    globalSopApplied: globalSopIdx >= 0,
+    workspaceSopApplied: workspaceSopIdx >= 0,
+    globalInstructionsApplied: globalInstructionsIdx >= 0,
+    sopBeforeReasoning: sopIdx !== Number.POSITIVE_INFINITY &&
+      sopIdx < reasoningIdx,
   };
 }

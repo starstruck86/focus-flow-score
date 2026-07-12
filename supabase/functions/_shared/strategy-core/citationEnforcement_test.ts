@@ -16,6 +16,7 @@ import {
   type CitationCheckInputs,
 } from "./citationEnforcement.ts";
 import { resolveServerWorkspaceContract } from "./retrievalEnforcement.ts";
+import type { CitationAuditOptions } from "./citationAudit.ts";
 
 const HITS = [
   { id: "aaaaaaaa1111", title: "Q2 Business Case Template" },
@@ -227,6 +228,99 @@ Deno.test("light mode: presence-level check, shadow rewrite", () => {
   assertEquals(result.auditedText, text);
   assertEquals(
     result.issues.some((i) => i.code === "unverified_citation"),
+    true,
+  );
+});
+
+Deno.test("strict requires canonical syntax while light accepts exact informal attribution", () => {
+  const informal = `Use the exact structure from "Q2 Business Case Template".`;
+  const light = runCitationCheck(
+    baseInputs({
+      citationMode: "light",
+      libraryHits: HITS,
+      libraryUsed: true,
+      assistantText: informal,
+    }),
+  );
+  assertEquals(light.citationsFound, 1);
+  assertEquals(
+    light.issues.some((issue) => issue.code === "missing_citations"),
+    false,
+  );
+
+  const strict = runCitationCheck(
+    baseInputs({
+      citationMode: "strict",
+      libraryHits: HITS,
+      libraryUsed: true,
+      assistantText: informal,
+    }),
+  );
+  assertEquals(strict.audit?.verifiedTitles.length, 1);
+  assertEquals(strict.citationsFound, 0);
+  assertEquals(
+    strict.issues.some((issue) => issue.code === "missing_citations"),
+    true,
+  );
+
+  const canonical = runCitationCheck(
+    baseInputs({
+      citationMode: "strict",
+      libraryHits: HITS,
+      libraryUsed: true,
+      assistantText: `Use RESOURCE["Q2 Business Case Template"].`,
+    }),
+  );
+  assertEquals(canonical.citationsFound, 1);
+  assertEquals(canonical.issues.length, 0);
+});
+
+Deno.test("strict mode recognizes KI-only, CARD-only, and PLAYBOOK-only citeable evidence", () => {
+  const ki = { id: "cccccccc3333", title: "Quantifying Pain" };
+  const card = { id: "eeeeeeee5555", title: "Competitive Displacement" };
+  const playbook = { id: "dddddddd4444", title: "Champion Went Quiet" };
+  const cases: Array<[string, CitationAuditOptions]> = [
+      [
+        `Use KI["Quantifying Pain"].`,
+        { kiHits: [ki] },
+      ],
+      [
+        `Use CARD["Competitive Displacement"].`,
+        { cardHits: [card] },
+      ],
+      [
+        `Use PLAYBOOK["Champion Went Quiet"].`,
+        { playbookHits: [playbook] },
+      ],
+  ];
+  for (const [assistantText, auditOptions] of cases) {
+    const result = runCitationCheck(
+      baseInputs({
+        citationMode: "strict",
+        libraryUsed: true,
+        assistantText,
+        auditOptions,
+      }),
+    );
+    assertEquals(result.citationsFound, 1);
+    assertEquals(result.issues.length, 0);
+  }
+});
+
+Deno.test("unverified namespace replacements do not count as citations", () => {
+  const result = runCitationCheck(
+    baseInputs({
+      citationMode: "strict",
+      libraryUsed: true,
+      auditOptions: {
+        kiHits: [{ id: "aaaaaaaa1111", title: "Real KI" }],
+      },
+      assistantText: `KI["Invented KI"]`,
+    }),
+  );
+  assertEquals(result.citationsFound, 0);
+  assertEquals(
+    result.issues.some((issue) => issue.code === "unverified_citation"),
     true,
   );
 });

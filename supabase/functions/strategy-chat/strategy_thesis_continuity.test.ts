@@ -36,6 +36,7 @@ import {
   validateWorkingThesisState,
   type WorkingThesisState,
 } from "../_shared/strategy-core/index.ts";
+import { buildThesisContinuityPolicy } from "../_shared/strategy-core/semanticPrompt.ts";
 
 const ACCOUNT_ID = "lima-one-continuity";
 
@@ -154,9 +155,10 @@ Deno.test("continuity: next-turn prompt block names dead hypotheses explicitly",
     block,
     "Broker channel is the primary growth lever",
   );
-  // The block MUST instruct the model not to silently restart.
-  assertStringIncludes(block, "Do NOT silently restart");
-  assertStringIncludes(block, "CONFIRMS, WEAKENS, or KILLS");
+  // Behavior lives in a bounded fixed segment; the state block is data-only.
+  const policy = buildThesisContinuityPolicy(true);
+  assertStringIncludes(policy, "never silently restart");
+  assertStringIncludes(policy, "CONFIRMS/WEAKENS/KILLS");
 });
 
 // ──────────────────────────────────────────────────────────────────
@@ -284,20 +286,26 @@ Deno.test("prompt-behavior: composed prompt forces CONFIRMS/WEAKENS/KILLS framin
   };
 
   const block = renderWorkingThesisStateBlock(state);
-  const sys = buildStrategyChatSystemPrompt({
-    depth: "Standard",
-    accountContext: "Account: Lima One",
-    workingThesisBlock: block,
-  });
+  const sys = [
+    buildStrategyChatSystemPrompt({
+      depth: "Standard",
+      accountContext: "Account: Lima One",
+      workingThesisBlock: block,
+    }),
+    buildThesisContinuityPolicy(true),
+  ].join("\n\n");
 
   // Instruction surface: the model is told to label the new fact's
   // effect on the thesis, not drop it in silently.
-  assertStringIncludes(sys, "CONFIRMS, WEAKENS, or KILLS");
+  assertStringIncludes(sys, "CONFIRMS/WEAKENS/KILLS");
   // It is told explicitly NOT to restart.
-  assertStringIncludes(sys, "Do NOT silently restart");
+  assertStringIncludes(sys, "never silently restart");
   // Dead hypotheses header is present so the model names them.
   assertStringIncludes(sys, "DEAD HYPOTHESES");
-  assertStringIncludes(sys, "do not revive without new evidence");
+  assertStringIncludes(
+    sys,
+    "Revive a dead hypothesis only with new evidence",
+  );
   // All four fixture ingredients are visible in the composed prompt.
   assertStringIncludes(sys, "Retention economics");
   assertStringIncludes(sys, "Broker channel is the primary growth lever");
@@ -377,11 +385,14 @@ Deno.test("continuity: golden Lima One arc survives merge + session reopen", () 
   // A NEW session composes its system prompt from the rehydrated
   // state. The new-session prompt MUST carry the whole arc forward.
   const block = renderWorkingThesisStateBlock(reopened);
-  const sys = buildStrategyChatSystemPrompt({
-    depth: "Standard",
-    accountContext: "Account: Lima One\nIndustry: Private Lending",
-    workingThesisBlock: block,
-  });
+  const sys = [
+    buildStrategyChatSystemPrompt({
+      depth: "Standard",
+      accountContext: "Account: Lima One\nIndustry: Private Lending",
+      workingThesisBlock: block,
+    }),
+    buildThesisContinuityPolicy(true),
+  ].join("\n\n");
 
   // The new-session prompt starts from the retention thesis.
   assertStringIncludes(sys, "retention");
@@ -394,7 +405,7 @@ Deno.test("continuity: golden Lima One arc survives merge + session reopen", () 
   );
   // The instruction to CONFIRM/WEAKEN/KILL against the running
   // thesis is present in the system prompt, not just the block.
-  assertStringIncludes(sys, "CONFIRMS, WEAKENS, or KILLS");
+  assertStringIncludes(sys, "CONFIRMS/WEAKENS/KILLS");
   // And the gating says: yes, use Strategy Core here.
   assertEquals(shouldUseStrategyCorePrompt({ hasAccount: true }), true);
 });

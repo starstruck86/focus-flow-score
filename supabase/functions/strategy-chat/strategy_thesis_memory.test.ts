@@ -16,6 +16,7 @@ import {
   saveWorkingThesisState,
   type WorkingThesisState,
 } from "../_shared/strategy-core/thesisMemory.ts";
+import { buildThesisContinuityPolicy } from "../_shared/strategy-core/semanticPrompt.ts";
 
 // ──────────────────────────────────────────────────────────────────
 // Tiny in-memory fake of the supabase chain we use.
@@ -275,7 +276,11 @@ Deno.test("render: prompt block surfaces thesis, dead hypotheses, and open quest
   assertStringIncludes(block, "Broker channel is the lever.");
   assertStringIncludes(block, "OPEN QUESTIONS");
   assertStringIncludes(block, "Why is repeat rate so low?");
-  assertStringIncludes(block, "do not revive");
+  assert(!block.includes("do not revive"));
+  assertStringIncludes(
+    buildThesisContinuityPolicy(true),
+    "Revive a dead hypothesis only with new evidence",
+  );
 });
 
 // Empty state → empty block (no theatrical header on a brand-new account).

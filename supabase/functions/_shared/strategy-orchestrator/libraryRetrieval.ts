@@ -23,6 +23,8 @@ interface RetrieveOpts {
    * `playbooks` array — even if scope-based scoring missed it.
    */
   preferredPlaybookId?: string | null;
+  /** Strategy-chat separates retrieved data from fixed instructions. */
+  dataOnlyContext?: boolean;
 }
 
 /** Score a row by counting scope keyword hits across searchable fields. */
@@ -277,7 +279,9 @@ export async function retrieveLibraryContext(
     }
   }
 
-  const contextString = formatLibraryContext(knowledgeItems, playbooks);
+  const contextString = formatLibraryContext(knowledgeItems, playbooks, {
+    dataOnly: opts.dataOnlyContext,
+  });
 
   console.log(`[library-retrieval] scopes=[${opts.scopes.join(",")}] dims=[${scopedDimensions.join(",")}] → ${knowledgeItems.length} KIs, ${playbooks.length} playbooks${opts.preferredPlaybookId ? ` preferred=${opts.preferredPlaybookId}` : ""}`);
 
@@ -297,6 +301,7 @@ export async function retrieveLibraryContext(
 export function formatLibraryContext(
   knowledgeItems: RetrievedKI[],
   playbooks: RetrievedPlaybook[],
+  opts: { dataOnly?: boolean } = {},
 ): string {
   const kiBlock = knowledgeItems.length
     ? knowledgeItems.map((k) =>
@@ -313,7 +318,8 @@ export function formatLibraryContext(
         const isPrimary = idx === 0;
         const lines: string[] = [
           `PLAYBOOK[${p.id.slice(0, 8)}] ${p.title}` +
-            (p.problem_type ? ` (${p.problem_type})` : ""),
+            (p.problem_type ? ` (${p.problem_type})` : "") +
+            (isPrimary ? " [PRIMARY]" : ""),
         ];
         if (p.when_to_use) {
           lines.push(`  When to Use: ${p.when_to_use}`);
@@ -354,8 +360,15 @@ export function formatLibraryContext(
       }).join("\n\n")
     : "";
 
+  const kiHeader = opts.dataOnly
+    ? "=== INTERNAL KNOWLEDGE ITEMS ==="
+    : "=== INTERNAL KNOWLEDGE ITEMS (use these — they are the company's tested intellectual property) ===";
+  const playbookHeader = opts.dataOnly
+    ? "=== RETRIEVED PLAYBOOKS (PRIMARY is marked in the data) ==="
+    : "=== PLAYBOOK ACTIVATION — run every step and question from the PRIMARY playbook; use supporting playbooks for additional context ===";
+
   return [
-    kiBlock ? `=== INTERNAL KNOWLEDGE ITEMS (use these — they are the company's tested intellectual property) ===\n${kiBlock}` : "",
-    pbBlock ? `=== PLAYBOOK ACTIVATION — run every step and question from the PRIMARY playbook; use supporting playbooks for additional context ===\n${pbBlock}` : "",
+    kiBlock ? `${kiHeader}\n${kiBlock}` : "",
+    pbBlock ? `${playbookHeader}\n${pbBlock}` : "",
   ].filter(Boolean).join("\n\n");
 }

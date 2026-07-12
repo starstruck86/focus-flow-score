@@ -18,8 +18,8 @@
 //      example / calculator / business case / playbook / framework /
 //      checklist), do a category-style title scan as a backstop.
 //   5. Return BOTH a structured payload (so callers can reason about
-//      "did we find anything?") and a prompt-ready context block that
-//      enforces the admit-absence contract.
+//      "did we find anything?") and a prompt-ready data block. Strategy-chat
+//      owns the behavioral grounding contract in a separate fixed segment.
 //
 // What this module deliberately does NOT do:
 //   - It does not invent a new schema. No new tables, no new columns.
@@ -1051,13 +1051,11 @@ export async function retrieveResourceContext(
 // ── Prompt block ──────────────────────────────────────────────────
 
 /**
- * Render a self-contained block for the system prompt. The contract:
- *   - When hits exist: list them with id + title + match reason and
- *     instruct the model to cite by exact title.
- *   - When the user asked for a resource and no hits: tell the model
- *     to admit absence and offer to help build it from scratch — and
- *     forbid invented titles.
+ * Render a self-contained data block for the system prompt:
+ *   - When hits exist: list them with id + title + match reason.
+ *   - When the user asked for a resource and no hits: record that state.
  *   - When the user did NOT ask for a resource: emit nothing.
+ * Behavioral grounding and citation rules belong in fixed instructions.
  */
 export function renderResourceContextBlock(args: {
   hits: RetrievedResource[];
@@ -1091,13 +1089,7 @@ export function renderResourceContextBlock(args: {
   if (!haveAnything) {
     return [
       header,
-      `(internal: no library hits for this topic — do not surface this to the user)`,
-      ``,
-      `BEHAVIOR (mandatory — do NOT refuse):`,
-      `- Proceed directly with your strongest answer using general operator reasoning. Do NOT announce that you searched the library. Do NOT mention that nothing was found. Do NOT narrate the absence of results.`,
-      `- Mark genuine assumptions clearly when relevant, but do not preface the answer with a search disclaimer.`,
-      `- Do NOT invent a specific template/calculator/playbook by name.`,
-      `- End with ONE short clarifying question only if it would materially sharpen the next pass.`,
+      `(no matching resources or knowledge items)`,
     ].join("\n");
   }
 
@@ -1105,11 +1097,7 @@ export function renderResourceContextBlock(args: {
   lines.push(
     `Retrieved ${hits.length} resource${hits.length === 1 ? "" : "s"}${
       kiHits.length > 0 ? ` and ${kiHits.length} KI${kiHits.length === 1 ? "" : "s"}` : ""
-    } from the user's library. ` +
-      `Cite resources by EXACT title in the form RESOURCE["<title>"]. ` +
-      `For KIs, PREFER the title form KI["<exact title>"] (every KI below shows its title in quotes); ` +
-      `fall back to KI[<short id>] only if you cannot reproduce the title verbatim. ` +
-      `Do NOT invent additional titles.`,
+    } from the user's library.`,
   );
   if (inferredTopics.length > 0) {
     lines.push(
@@ -1159,20 +1147,19 @@ export function renderResourceContextBlock(args: {
       lines.push(`    --- END BODY EXCERPT ---`);
     } else if (withBody && !h.bodyExcerpt) {
       lines.push(
-        `    NOTE: This picked resource has no stored body content. ` +
-          `You CANNOT mirror its structure or claims — say so plainly to the user.`,
+        `    body-status: not loaded`,
       );
     }
   };
 
   if (hasPicked) {
-    lines.push(`### PRIMARY PICKED RESOURCE${pickedHits.length === 1 ? "" : "S"} (treat as the primary source)`);
+    lines.push(`### USER-PICKED RESOURCE${pickedHits.length === 1 ? "" : "S"}`);
     for (const h of pickedHits) renderHit(h, true);
     lines.push("");
   }
 
   if (otherHits.length > 0) {
-    if (hasPicked) lines.push(`### Other retrieved (secondary — for context only, do NOT pivot to these)`);
+    if (hasPicked) lines.push(`### OTHER RETRIEVED RESOURCES`);
     for (const h of otherHits) renderHit(h, false);
     lines.push("");
   }
@@ -1192,81 +1179,8 @@ export function renderResourceContextBlock(args: {
     lines.push("");
   }
 
-  if (hasPicked) {
-    const pickedTitles = pickedHits.map((h) => `"${h.title}"`).join(", ");
-    lines.push(
-      `PRIORITY: One or more resources are flagged USER-PICKED above — the user explicitly selected them this turn. Your answer MUST be grounded in those resources. Cite them by exact title. Do not pivot to a different resource unless the user's question is unrelated.`,
-    );
-    lines.push(
-      `CLOSED RESOURCE SET: The user picked ${pickedTitles} this turn. You may ONLY name resources that appear in the PICKED or RETRIEVED list above. Do NOT infer adjacent versions, quarters (Q1/Q2/Q3/Q4), editions, years, or similarly named assets. Do NOT rename the picked asset. Do NOT invent sibling playbooks or "related" documents. If unsure, cite ONLY the exact picked title verbatim.`,
-    );
-    if (pickedHits.length === 1) {
-      const t = pickedHits[0].title;
-      lines.push(
-        `INTERPRETATION: If the user says "this", "adapt this", "use this", or similar without naming another resource, "this" refers to "${t}". Default to phrasing like: Using "${t}"… / Based on "${t}"…`,
-      );
-    }
-    // ── Source-shape-aware grounding contract ──
-    // The model now sees a `source-shape:` tag per picked resource and
-    // MUST follow the matching response pattern. This kills the failure
-    // mode where the model collapses every picked resource into a
-    // one-line refusal ("give me one fact to anchor on").
-    const shapes = new Set(pickedHits.map((h) => h.sourceShape || "empty"));
-    const hasStructured = shapes.has("structured");
-    const hasUnstructured = shapes.has("unstructured");
-    const hasEmpty = shapes.has("empty");
-
-    lines.push(`GROUNDING DEPTH (mandatory when adapting a picked resource):`);
-    lines.push(
-      `  Universal: never invent metrics, dates, customer names, ROI numbers, or quotes that are not in the BODY EXCERPT. Mark genuinely missing deal-specific facts as [TBD: <what's needed>] — never as a substitute for reading the source.`,
-    );
-
-    if (hasStructured) {
-      lines.push(``);
-      lines.push(`  STRUCTURED SOURCE (source-shape: structured) — required response shape:`);
-      lines.push(`    1. Open with: Using "<exact title>" as the base… (one short line, no preamble).`);
-      lines.push(`    2. Mirror the source's actual section structure — reuse its headings, ordering, and labels verbatim where they appear (e.g. Situation / Ask / Value / Outcome). Do NOT impose a generic business-case scaffold the source does not contain.`);
-      lines.push(`    3. Reuse the source's language, framings, and any concrete numbers it actually contains. Substitute deal-specific values the user has provided in this thread; mark missing fields as [TBD: …].`);
-      lines.push(`    4. End with ONE short missing-anchor question (account, deal size, timing, champion name) — only ONE, after the scaffold is rendered, never instead of it.`);
-      lines.push(`    5. NEVER respond with only a question. The scaffold MUST appear first.`);
-    }
-
-    if (hasUnstructured) {
-      lines.push(``);
-      lines.push(`  UNSTRUCTURED SOURCE (source-shape: unstructured — transcript / podcast / loose prose) — required response shape:`);
-      lines.push(`    1. Open with: Using "<exact title>" as the source… (one short line, no preamble).`);
-      lines.push(`    2. Do NOT pretend it is a ready-made template. EXTRACT the reusable substance from the BODY EXCERPT — pick what the source actually contains:`);
-      lines.push(`         • key questions to ask`);
-      lines.push(`         • discovery checklist items`);
-      lines.push(`         • talk-track lines or framings`);
-      lines.push(`         • objection responses`);
-      lines.push(`         • business-case angles or value framings`);
-      lines.push(`         • numbered method/steps`);
-      lines.push(`       Convert what's there into a seller-ready scaffold the user can use right now. Quote or near-quote the source for any specific phrasings — do not paraphrase into generic advice.`);
-      lines.push(`    3. After the scaffold, add one short note naming what the source does NOT cover for this use case (e.g. "the source doesn't include pricing framing — want me to draft that fresh?").`);
-      lines.push(`    4. End with ONE short missing-anchor question — only ONE, after the scaffold is rendered, never instead of it.`);
-      lines.push(`    5. NEVER answer only with "I need a fact to anchor this on." If the BODY EXCERPT contains reusable material, you MUST produce a scaffold first.`);
-    }
-
-    if (hasEmpty) {
-      lines.push(``);
-      lines.push(`  EMPTY SOURCE (source-shape: empty) — body is not loaded:`);
-      lines.push(`    Say so plainly: "I can see <title> in your library, but its body isn't loaded — I can only adapt at the structural level." Then offer to (a) work from the title's apparent topic with a generic scaffold the user can edit, or (b) wait for them to upload/paste the body. Do NOT invent the contents.`);
-    }
-  }
-  lines.push(`RULES (mandatory):`);
-  lines.push(
-    `- If the user named a specific resource and it is NOT in the list above, say so plainly: "I don't see that exact resource in your library."`,
-  );
-  lines.push(
-    `- Never fabricate a template, calculator, or example that is not in this list.`,
-  );
-  lines.push(
-    `- Prefer suggesting the closest match by EXACT title rather than describing one generically.`,
-  );
-  lines.push(
-    `- For hits flagged "body-match" or "desc-match": the title may not contain the user's words. State this honestly, e.g. "the closest thing in your library is RESOURCE[\"…\"] — the topic appears in the body, not the title."`,
-  );
+  // Usage rules for picked resources and source shapes live in the bounded
+  // fixed.resource-grounding segment. This renderer remains data-only.
 
   return lines.join("\n");
 }
