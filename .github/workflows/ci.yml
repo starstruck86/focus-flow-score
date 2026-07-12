@@ -32,6 +32,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run edge:mcp-attestation:test
+      - run: npm run edge:runtime-attestation:test
       - name: Verify MCP attestation codegen is reproducible
         env:
           VITE_SUPABASE_PROJECT_ID: odbjjklumdsuqdvkgwyv

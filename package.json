@@ -16,7 +16,8 @@
     "analyze": "ANALYZE=true vite build && node scripts/postprocess-mcp-attestation.mjs",
     "edge:manifest": "node scripts/generate-edge-build-manifest.mjs",
     "edge:mcp-attestation:check": "node scripts/postprocess-mcp-attestation.mjs --check",
-    "edge:mcp-attestation:test": "node --test scripts/postprocess-mcp-attestation_test.mjs"
+    "edge:mcp-attestation:test": "node --test scripts/postprocess-mcp-attestation_test.mjs",
+    "edge:runtime-attestation:test": "node --test scripts/verify-edge-attestations_test.mjs"
   },
   "dependencies": {
     "@elevenlabs/react": "^0.14.3",

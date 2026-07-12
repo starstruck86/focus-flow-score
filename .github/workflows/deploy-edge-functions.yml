@@ -99,6 +99,7 @@ jobs:
           npm run typecheck
           npm test
           npm run edge:mcp-attestation:test
+          npm run edge:runtime-attestation:test
           npm run build
           npm run edge:mcp-attestation:check
           grep -q 'var projectRef = "odbjjklumdsuqdvkgwyv"' \
@@ -196,109 +197,26 @@ jobs:
       EXPECTED_SOURCE_COMMIT: ${{ needs.deploy.outputs.source_sha }}
       SUPABASE_PROJECT_REF: odbjjklumdsuqdvkgwyv
     steps:
-      - name: Verify four independent runtime attestations
+      - name: Check out the deployed source verifier
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.deploy.outputs.source_sha }}
+          clean: true
+          persist-credentials: false
+
+      - name: Prove verifier source matches the deployed commit
         shell: bash
         run: |
           set -euo pipefail
-
-          functions=(strategy-chat analyze-call mcp version)
-          deployment_ids=()
-          evidence_file="$RUNNER_TEMP/edge-attestation-evidence.ndjson"
-          : > "$evidence_file"
-          temp_dir="$(mktemp -d)"
-          trap 'rm -rf "$temp_dir"' EXIT
-
-          header_value() {
-            local header_name="$1"
-            local header_file="$2"
-            awk -F ':' -v target="$header_name" '
-              tolower($1) == tolower(target) {
-                value = substr($0, index($0, ":") + 1)
-                sub(/^[[:space:]]+/, "", value)
-                sub(/\r$/, "", value)
-              }
-              END { print value }
-            ' "$header_file"
-          }
-
-          for function_name in "${functions[@]}"; do
-            matched=false
-            observed_status=""
-            observed_verified=""
-            observed_function=""
-            observed_source=""
-            observed_deployment=""
-            observed_scope=""
-            observed_cache=""
-            observed_max_age=""
-
-            for attempt in {1..12}; do
-              header_file="$temp_dir/${function_name}.headers"
-              if ! observed_status="$(
-                  curl --silent --show-error \
-                    --proto '=https' \
-                    --tlsv1.2 \
-                    --connect-timeout 10 \
-                    --max-time 30 \
-                    --request OPTIONS \
-                    --dump-header "$header_file" \
-                    --output /dev/null \
-                    --write-out '%{http_code}' \
-                    "https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/${function_name}?attestation_run=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${attempt}"
-                )"; then
-                observed_status="curl_error"
-                : > "$header_file"
-              fi
-              observed_verified="$(header_value X-Edge-Attestation-Verified "$header_file")"
-              observed_function="$(header_value X-Edge-Function "$header_file")"
-              observed_source="$(header_value X-Edge-Source-Commit "$header_file")"
-              observed_deployment="$(header_value X-Edge-Deployment-Id "$header_file")"
-              observed_scope="$(header_value X-Edge-Proof-Scope "$header_file")"
-              observed_cache="$(header_value Cache-Control "$header_file")"
-              observed_max_age="$(header_value Access-Control-Max-Age "$header_file")"
-
-              if { [[ "$observed_status" == "200" ]] || \
-                [[ "$observed_status" == "204" ]]; } && \
-                [[ "$observed_verified" == "true" ]] && \
-                [[ "$observed_function" == "$function_name" ]] && \
-                [[ "$observed_source" == "$EXPECTED_SOURCE_COMMIT" ]] && \
-                [[ "$observed_deployment" =~ ^${SUPABASE_PROJECT_REF}_.+ ]] && \
-                [[ "$observed_scope" == "edge-function-bundle" ]] && \
-                [[ "$observed_cache" == "no-store" ]] && \
-                [[ "$observed_max_age" == "0" ]]; then
-                matched=true
-                break
-              fi
-              if [[ "$attempt" != "12" ]]; then
-                sleep 5
-              fi
-            done
-
-            jq -cn \
-              --arg function "$function_name" \
-              --arg source_commit "$observed_source" \
-              --arg deployment_id "$observed_deployment" \
-              --arg proof_scope "$observed_scope" \
-              --arg verified "$observed_verified" \
-              --arg http_status "$observed_status" \
-              '{function, source_commit, deployment_id, proof_scope,
-                verified: ($verified == "true"), http_status}' \
-              | tee -a "$evidence_file"
-
-            if [[ "$matched" != "true" ]]; then
-              printf 'Runtime attestation mismatch for %s.\n' "$function_name" >&2
-              exit 1
-            fi
-            deployment_ids+=("$observed_deployment")
-          done
-
-          unique_deployments="$(printf '%s\n' "${deployment_ids[@]}" | sort -u | wc -l | tr -d ' ')"
-          if [[ "$unique_deployments" != "4" ]]; then
-            printf 'Expected four distinct deployment IDs; observed %s.\n' \
-              "$unique_deployments" >&2
+          if [[ "$(git rev-parse HEAD)" != "$EXPECTED_SOURCE_COMMIT" ]]; then
+            printf 'Verifier checkout does not match the deployed source.\n' >&2
+            exit 1
+          fi
+          if [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
+            printf 'Verifier checkout is not clean.\n' >&2
             exit 1
           fi
 
-          printf 'Verified all four edge bundles at source commit %s:\n' \
-            "$EXPECTED_SOURCE_COMMIT"
-          cat "$evidence_file"
+      - name: Verify four independent runtime attestations
+        shell: bash
+        run: bash scripts/verify-edge-attestations.sh
