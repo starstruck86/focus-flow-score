@@ -7,6 +7,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import type { Json, TablesUpdate } from '@/integrations/supabase/types';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -208,10 +209,22 @@ export async function saveBlockSnapshot(
   snapshotType: 'benchmark' | 'retest',
   snapshot: BlockSnapshot,
 ): Promise<void> {
-  const field = snapshotType === 'benchmark' ? 'benchmark_snapshot' : 'retest_snapshot';
+  const snapshotJson: Json = Object.fromEntries(
+    Object.entries(snapshot).map(([anchor, metrics]) => [
+      anchor,
+      {
+        avgScore: metrics.avgScore,
+        topMistake: metrics.topMistake,
+        focusAppliedRate: metrics.focusAppliedRate,
+      },
+    ]),
+  );
+  const update: TablesUpdate<'training_blocks'> = snapshotType === 'benchmark'
+    ? { benchmark_snapshot: snapshotJson }
+    : { retest_snapshot: snapshotJson };
   await supabase
     .from('training_blocks')
-    .update({ [field]: snapshot })
+    .update(update)
     .eq('id', blockId);
 }
 

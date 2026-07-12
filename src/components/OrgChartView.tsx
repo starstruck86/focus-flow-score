@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -55,6 +56,10 @@ interface ContactNode {
   seniority: string | null;
 }
 
+type ContactInsert = TablesInsert<'contacts'>;
+type ContactUpdate = TablesUpdate<'contacts'>;
+type ContactCreateInput = Omit<ContactInsert, 'account_id' | 'user_id' | 'status'>;
+
 export function OrgChartView({ accountId, accountName, website, industry }: OrgChartViewProps) {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -82,7 +87,7 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
   });
 
   const updateContact = useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: Record<string, any> }) => {
+    mutationFn: async ({ id, updates }: { id: string; updates: ContactUpdate }) => {
       const { error } = await supabase.from('contacts').update(updates).eq('id', id);
       if (error) throw error;
     },
@@ -102,13 +107,14 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
   });
 
   const addContactMut = useMutation({
-    mutationFn: async (contact: any) => {
-      const { error } = await supabase.from('contacts').insert({
+    mutationFn: async (contact: ContactCreateInput) => {
+      const payload: ContactInsert = {
         ...contact,
         account_id: accountId,
         user_id: user!.id,
         status: 'target',
-      });
+      };
+      const { error } = await supabase.from('contacts').insert(payload);
       if (error) throw error;
     },
     onSuccess: async () => {
@@ -139,14 +145,15 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
       if (newContacts.length === 0) { toast.info('No new contacts found'); return; }
 
       for (const c of newContacts) {
-        await supabase.from('contacts').insert({
+        const payload: ContactInsert = {
           name: c.name, title: c.title, department: c.department || null,
           seniority: c.seniority || null, buyer_role: c.buyer_role || 'unknown',
           influence_level: c.influence_level || 'medium', linkedin_url: c.linkedin_url || null,
           reporting_to: c.reporting_to || null, notes: c.notes || null,
           account_id: accountId, user_id: user.id, ai_discovered: true,
           discovery_source: 'org-chart-ai', status: 'target',
-        });
+        };
+        await supabase.from('contacts').insert(payload);
       }
 
       qc.invalidateQueries({ queryKey: ['org-chart-contacts', accountId] });
@@ -205,12 +212,13 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
       for (const contact of allContacts) {
         const { data: existing } = await supabase.from('contacts').select('id').eq('account_id', accountId).ilike('name', contact.name).maybeSingle();
         if (!existing) {
-          await supabase.from('contacts').insert({
+          const payload: ContactInsert = {
             user_id: user.id, account_id: accountId, name: contact.name,
             title: contact.title || null, email: contact.email || null,
             department: contact.department || null, status: 'target',
             buyer_role: 'unknown', influence_level: 'medium', discovery_source: 'screenshot-drop',
-          });
+          };
+          await supabase.from('contacts').insert(payload);
           added++;
         }
       }

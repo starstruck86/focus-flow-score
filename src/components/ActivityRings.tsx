@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useStore } from '@/store/useStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Minus, Plus, X } from 'lucide-react';
@@ -17,6 +18,10 @@ interface RingConfig {
   colorVar: string;
   glowVar: string;
 }
+
+type DailyJournalInsert = TablesInsert<'daily_journal_entries'>;
+type DailyJournalUpdate = TablesUpdate<'daily_journal_entries'>;
+type RingDbField = 'dials' | 'conversations' | 'manual_emails';
 
 const RINGS: RingConfig[] = [
   {
@@ -239,7 +244,7 @@ export function ActivityRings() {
   );
 
   // Persist a ring update to DB so manual taps survive reload
-  const persistToDb = useCallback(async (dbField: string, value: number) => {
+  const persistToDb = useCallback(async (dbField: RingDbField, value: number) => {
     if (!user?.id) return;
     const today = format(new Date(), 'yyyy-MM-dd');
     const { data: existing } = await supabase
@@ -250,12 +255,23 @@ export function ActivityRings() {
       .limit(1);
 
     if (existing?.length) {
+      const updatePayload: DailyJournalUpdate = {
+        updated_at: new Date().toISOString(),
+      };
+      updatePayload[dbField] = value;
+
       await supabase.from('daily_journal_entries')
-        .update({ [dbField]: value, updated_at: new Date().toISOString() })
+        .update(updatePayload)
         .eq('id', existing[0].id);
     } else {
+      const insertPayload: DailyJournalInsert = {
+        user_id: user.id,
+        date: today,
+      };
+      insertPayload[dbField] = value;
+
       await supabase.from('daily_journal_entries')
-        .insert({ user_id: user.id, date: today, [dbField]: value });
+        .insert(insertPayload);
     }
   }, [user?.id]);
 

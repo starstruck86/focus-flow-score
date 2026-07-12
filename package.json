@@ -9,11 +9,10 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b --force --pretty false",
     "test": "vitest run",
     "test:watch": "vitest",
-    "analyze": "ANALYZE=true vite build",
-    "postinstall": "bash scripts/patch-postgrest-types.sh || true"
+    "analyze": "ANALYZE=true vite build"
   },
   "dependencies": {
     "@elevenlabs/react": "^0.14.3",

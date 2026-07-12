@@ -2,7 +2,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { emitDataChanged } from '@/lib/daveEvents';
 import { ACCOUNT_FIELDS } from '../../toolTypes';
+import type { TablesUpdate } from '@/integrations/supabase/types';
 import type { ToolContext } from '../../toolTypes';
+
+type BulkTable = 'accounts' | 'opportunities' | 'tasks';
+type BulkUpdate = TablesUpdate<BulkTable>;
 
 export async function bulkUpdate(ctx: ToolContext, params: { entity: string; filter_field: string; filter_value: string; update_field: string; update_value: string }): Promise<string> {
   const userId = await ctx.getUserId();
@@ -28,7 +32,7 @@ export async function bulkUpdate(ctx: ToolContext, params: { entity: string; fil
     return `Invalid update field "${params.update_field}" for ${entity}. Valid: ${VALID_FIELDS[entity].join(', ')}`;
   }
 
-  const table = entity as 'accounts' | 'opportunities' | 'tasks';
+  const table = entity as BulkTable;
 
   const { data: matches, count } = await supabase
     .from(table)
@@ -41,9 +45,13 @@ export async function bulkUpdate(ctx: ToolContext, params: { entity: string; fil
   if (!matchCount) return `No ${entity} found matching ${params.filter_field} = "${params.filter_value}"`;
 
   const ids = (matches || []).map(m => m.id);
+  const updates: BulkUpdate = {
+    [updateField]: params.update_value,
+    updated_at: new Date().toISOString(),
+  };
   const { error } = await supabase
     .from(table)
-    .update({ [updateField]: params.update_value, updated_at: new Date().toISOString() })
+    .update(updates)
     .in('id', ids);
 
   if (error) return `Bulk update failed: ${error.message}`;
