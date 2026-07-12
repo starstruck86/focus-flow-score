@@ -95,6 +95,12 @@ Trust-but-verify held throughout the session: it caught an unmerged PR before a 
 
 > Append-only, newest first. Add each new immutable entry directly below this note; never rewrite prior entries.
 
+## 2026-07-12 — Codex — Frontend type-safety restored / CI blind spot closed
+
+- **Who:** Codex (rebase, verification, and merge).
+- **What:** Merged PR #5 (`03d77dd`), removing the postinstall type-safety bypass, changing `typecheck` to full-project `tsc -b`, and fixing 28 `RejectExcessProperties` errors. CI now catches frontend type errors. Frontend-only; no Supabase Edge Function files were touched.
+- **SHAs:** PR head `03d77dd93a515b77cccd6d323bce1c5e2cf7bbcb`; merge commit `7c4b8eb39301092c652923ffea3f7d81dfa9d7c3`.
+
 ## 2026-07-11 — Claude + Codex + Lovable — Strategy trust layer shipped to prod (night)
 
 - **Who:** Claude (coordinator/verification), Codex (build), and Lovable (production database/deploy).
