@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesUpdate } from '@/integrations/supabase/types';
 import { generateTraceId, normalizeError, recordError } from './appError';
 import { trackedInvoke } from './trackedInvoke';
 import { invokeEnrichResource } from './invokeEnrichResource';
@@ -138,7 +139,7 @@ async function markStepFailed(stepId: string, error: unknown) {
 }
 
 async function updateJobStatus(jobId: string, status: JobStatus, errorInfo?: { category: string; message: string }) {
-  const update: Record<string, unknown> = { status };
+  const update: TablesUpdate<'resource_jobs'> = { status };
   if (status === 'running' || status === 'queued') update.started_at = new Date().toISOString();
   if (status === 'completed' || status === 'failed') update.ended_at = new Date().toISOString();
   if (errorInfo) {

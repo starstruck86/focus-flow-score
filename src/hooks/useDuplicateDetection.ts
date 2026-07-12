@@ -2,6 +2,7 @@ import { useMemo, useEffect, useState } from 'react';
 import { useDbOpportunities, useUpdateOpportunity, useDeleteOpportunity } from '@/hooks/useAccountsData';
 import { useStore } from '@/store/useStore';
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesUpdate } from '@/integrations/supabase/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -232,7 +233,7 @@ export function useDuplicateDetection() {
     const mergedStage = stagesRanked[0]?.stage || allOpps.find(o => o.stage)?.stage || null;
 
     // Update the keep record with combined data
-    const updates: Record<string, any> = {};
+    const updates: TablesUpdate<'opportunities'> = {};
     if (mergedNotes) updates.notes = mergedNotes;
     if (mergedNextStep) updates.next_step = mergedNextStep;
     if (mergedNextStepDate) updates.next_step_date = mergedNextStepDate;

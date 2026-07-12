@@ -7,6 +7,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesUpdate } from '@/integrations/supabase/types';
 import { detectAudioSubtype, scoreTranscriptQuality, getAudioFailureDescription } from './audioPipeline';
 import type { AudioPipelineStage, AudioFailureCode, TranscriptQualityResult } from './audioPipeline';
 
@@ -175,7 +176,7 @@ export async function resolvePodcastEpisode(
     const result = await resp.json();
 
     // Persist resolution results to DB
-    const updatePayload: Record<string, any> = {
+    const updatePayload: TablesUpdate<'audio_jobs'> = {
       audio_subtype: result.subtype || job.audio_subtype,
       platform_source_type: result.subtype || null,
       metadata_json: result.metadata || {},

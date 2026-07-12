@@ -1,7 +1,10 @@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { emitDataChanged } from '@/lib/daveEvents';
+import type { TablesUpdate } from '@/integrations/supabase/types';
 import type { ToolContext } from '../../toolTypes';
+
+type RenewalUpdate = TablesUpdate<'renewals'>;
 
 export async function lookupRenewal(ctx: ToolContext, params: { timeframe?: string }): Promise<string> {
   const userId = await ctx.getUserId();
@@ -41,7 +44,11 @@ export async function updateRenewal(ctx: ToolContext, params: { accountName: str
   const { data: renewals } = await supabase.from('renewals').select('id, account_name').eq('user_id', userId).ilike('account_name', `%${params.accountName}%`).limit(1);
   if (!renewals?.length) return `Renewal for "${params.accountName}" not found`;
 
-  const { error } = await supabase.from('renewals').update({ [dbField]: params.value, updated_at: new Date().toISOString() }).eq('id', renewals[0].id);
+  const updates: RenewalUpdate = {
+    [dbField]: params.value,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await supabase.from('renewals').update(updates).eq('id', renewals[0].id);
 
   if (error) return `Failed to update renewal: ${error.message}`;
   emitDataChanged('renewals');

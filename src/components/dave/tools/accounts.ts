@@ -3,7 +3,10 @@ import { toast } from 'sonner';
 import { emitDataChanged } from '@/lib/daveEvents';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { ACCOUNT_FIELDS } from '../toolTypes';
+import type { TablesUpdate } from '@/integrations/supabase/types';
 import type { ToolContext, ToolMap } from '../toolTypes';
+
+type AccountUpdate = TablesUpdate<'accounts'>;
 
 export function createAccountTools(ctx: ToolContext): ToolMap {
   return {
@@ -52,9 +55,13 @@ export function createAccountTools(ctx: ToolContext): ToolMap {
 
       if (!accts?.length) return `Account "${params.accountName}" not found`;
 
+      const accountUpdate: AccountUpdate = {
+        [dbField]: params.value,
+        updated_at: new Date().toISOString(),
+      };
       const { error } = await supabase
         .from('accounts')
-        .update({ [dbField]: params.value, updated_at: new Date().toISOString() })
+        .update(accountUpdate)
         .eq('id', accts[0].id);
 
       if (error) return `Failed to update: ${error.message}`;

@@ -7,6 +7,7 @@
  * Designed to run on-demand now and on a schedule later.
  */
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesUpdate } from '@/integrations/supabase/types';
 import { validateResourceQuality, CURRENT_ENRICHMENT_VERSION, CURRENT_VALIDATION_VERSION, QUALITY_THRESHOLDS } from './resourceQuality';
 import { createLogger } from './logger';
 
@@ -222,7 +223,7 @@ export async function runFullReconciliation(userId: string, opts?: {
   if (!dryRun) {
     const toRepair = report.details.filter(d => d.bucket === 'needs_status_repair');
     for (const item of toRepair) {
-      const update: Record<string, any> = {
+      const update: TablesUpdate<'resources'> = {
         last_reconciled_at: new Date().toISOString(),
       };
 

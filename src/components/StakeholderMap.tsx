@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import { Label } from '@/components/ui/label';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -103,6 +104,10 @@ interface DiscoveryMeta {
   website_research_used?: boolean;
 }
 
+type ContactInsert = TablesInsert<'contacts'>;
+type ContactUpdate = TablesUpdate<'contacts'>;
+type ContactCreateInput = Omit<ContactInsert, 'account_id' | 'user_id' | 'status'>;
+
 export function StakeholderMap({ accountId, accountName, website, industry, opportunityContext }: StakeholderMapProps) {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -153,7 +158,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
   });
 
   const updateContact = useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: Record<string, any> }) => {
+    mutationFn: async ({ id, updates }: { id: string; updates: ContactUpdate }) => {
       const { error } = await supabase.from('contacts').update(updates).eq('id', id);
       if (error) throw error;
     },
@@ -173,13 +178,14 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
   });
 
   const addContact = useMutation({
-    mutationFn: async (contact: any) => {
-      const { error } = await supabase.from('contacts').insert({
+    mutationFn: async (contact: ContactCreateInput) => {
+      const payload: ContactInsert = {
         ...contact,
         account_id: accountId,
         user_id: user!.id,
         status: 'target',
-      });
+      };
+      const { error } = await supabase.from('contacts').insert(payload);
       if (error) throw error;
     },
     onSuccess: async () => {
@@ -299,7 +305,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
         const match = selected.find(s => s.name.toLowerCase() === enriched.name?.toLowerCase());
         if (!match) continue;
 
-        const updates: Record<string, any> = {};
+        const updates: ContactUpdate = {};
         if (enriched.title && enriched.title !== match.title) updates.title = enriched.title;
         if (enriched.department) updates.department = enriched.department;
         if (enriched.seniority) updates.seniority = enriched.seniority;
@@ -336,8 +342,9 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
       // First clear all reporting_to so inference runs fresh
       if (contacts) {
         for (const c of contacts) {
-          if ((c as any).reporting_to) {
-            await supabase.from('contacts').update({ reporting_to: null }).eq('id', c.id);
+          if (c.reporting_to) {
+            const updates: ContactUpdate = { reporting_to: null };
+            await supabase.from('contacts').update(updates).eq('id', c.id);
           }
         }
       }
@@ -420,7 +427,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
           .maybeSingle();
 
         if (!existing) {
-          await supabase.from('contacts').insert({
+          const payload: ContactInsert = {
             user_id: user.id,
             account_id: accountId,
             name: contact.name,
@@ -431,7 +438,8 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
             buyer_role: 'unknown',
             influence_level: 'medium',
             discovery_source: 'screenshot-drop',
-          });
+          };
+          await supabase.from('contacts').insert(payload);
           added++;
         }
       }

@@ -5,6 +5,7 @@
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesUpdate } from '@/integrations/supabase/types';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -153,7 +154,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
   const saveFields = useCallback(async () => {
     setSaving(true);
     try {
-      const updates: Record<string, any> = { last_status_change_at: new Date().toISOString() };
+      const updates: TablesUpdate<'resources'> = { last_status_change_at: new Date().toISOString() };
       if (title !== r.title) updates.title = title;
       if (url !== (r.url ?? '')) updates.file_url = url || null;
       if (description) updates.description = description;

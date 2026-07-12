@@ -7,6 +7,7 @@
  */
 import { create } from 'zustand';
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesUpdate } from '@/integrations/supabase/types';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { QueryClient } from '@tanstack/react-query';
@@ -821,7 +822,7 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
     let savedResourceId: string;
 
     if (existingId && reprocessMode !== 'skip_processed') {
-      const updatePayload: Record<string, any> = {};
+      const updatePayload: TablesUpdate<'resources'> = {};
       if (reprocessMode === 'full_reprocess' || reprocessMode === 'metadata_only') {
         updatePayload.title = classification.title;
         updatePayload.description = classification.description;

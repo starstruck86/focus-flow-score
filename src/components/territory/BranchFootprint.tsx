@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,51 @@ const PRODUCTS = [
   { key: 'aio', label: 'AIO', short: 'AIO' },
   { key: 'advanced_privacy', label: 'Advanced Privacy', short: 'AP' },
 ] as const;
+
+type ProductKey = typeof PRODUCTS[number]['key'];
+type ProductStatusField = `${ProductKey}_status`;
+type ProductUseCaseField = `${ProductKey}_use_case`;
+type BranchFootprintEditableField =
+  | ProductStatusField
+  | ProductUseCaseField
+  | 'estimated_arr'
+  | 'contract_renewal_date'
+  | 'relationship_owner'
+  | 'notes';
+type BranchFootprintEditableValue = Exclude<
+  TablesUpdate<'branch_footprint'>[BranchFootprintEditableField],
+  undefined
+>;
+
+function buildFieldUpdate(
+  field: BranchFootprintEditableField,
+  value: BranchFootprintEditableValue,
+): TablesUpdate<'branch_footprint'> {
+  const textValue = typeof value === 'string' ? value || null : null;
+
+  switch (field) {
+    case 'deep_linking_status': return { deep_linking_status: textValue };
+    case 'deep_linking_use_case': return { deep_linking_use_case: textValue };
+    case 'universal_ads_status': return { universal_ads_status: textValue };
+    case 'universal_ads_use_case': return { universal_ads_use_case: textValue };
+    case 'email_to_app_status': return { email_to_app_status: textValue };
+    case 'email_to_app_use_case': return { email_to_app_use_case: textValue };
+    case 'sms_to_app_status': return { sms_to_app_status: textValue };
+    case 'sms_to_app_use_case': return { sms_to_app_use_case: textValue };
+    case 'web_to_app_status': return { web_to_app_status: textValue };
+    case 'web_to_app_use_case': return { web_to_app_use_case: textValue };
+    case 'qr_status': return { qr_status: textValue };
+    case 'qr_use_case': return { qr_use_case: textValue };
+    case 'aio_status': return { aio_status: textValue };
+    case 'aio_use_case': return { aio_use_case: textValue };
+    case 'advanced_privacy_status': return { advanced_privacy_status: textValue };
+    case 'advanced_privacy_use_case': return { advanced_privacy_use_case: textValue };
+    case 'estimated_arr': return { estimated_arr: typeof value === 'number' ? value : null };
+    case 'contract_renewal_date': return { contract_renewal_date: textValue };
+    case 'relationship_owner': return { relationship_owner: textValue };
+    case 'notes': return { notes: textValue };
+  }
+}
 
 const STATUS_STYLES: Record<Status, { pill: string; dot: string; label: string }> = {
   confirmed:  { pill: 'bg-green-500/15 text-green-600',                dot: 'bg-green-500', label: 'Confirmed' },
@@ -76,15 +122,18 @@ export function BranchFootprint({ accountId }: BranchFootprintProps) {
 
   const fp = useMemo(() => footprint ?? {}, [footprint]);
 
-  async function persistField(field: string, value: any) {
+  async function persistField(
+    field: BranchFootprintEditableField,
+    value: BranchFootprintEditableValue,
+  ) {
     if (!user) return;
     const current = (footprint as any)?.[field];
     if (current === value || (current == null && (value === '' || value == null))) return;
 
-    const payload = {
+    const payload: TablesInsert<'branch_footprint'> = {
+      ...buildFieldUpdate(field, value),
       user_id: user.id,
       account_id: accountId,
-      [field]: value === '' ? null : value,
       updated_at: new Date().toISOString(),
     };
 
@@ -163,8 +212,8 @@ export function BranchFootprint({ accountId }: BranchFootprintProps) {
       ) : (
         <div className="space-y-2">
           {PRODUCTS.map(p => {
-            const statusKey = `${p.key}_status`;
-            const useCaseKey = `${p.key}_use_case`;
+            const statusKey = `${p.key}_status` as const;
+            const useCaseKey = `${p.key}_use_case` as const;
             const status = (draft[statusKey] as Status) || 'unknown';
             return (
               <div key={p.key} className="flex flex-col sm:flex-row gap-2 items-start">

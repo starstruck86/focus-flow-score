@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesUpdate } from '@/integrations/supabase/types';
 
 interface ContactForInference {
   id: string;
@@ -110,7 +111,7 @@ export async function autoInferHierarchy(accountId: string): Promise<number> {
         p.inferredDept.toLowerCase() === child.inferredDept.toLowerCase()
       ) || parentTier[0];
 
-      const updateFields: Record<string, any> = {
+      const updateFields: TablesUpdate<'contacts'> = {
         reporting_to: bestParent.contact.name,
       };
 
@@ -135,7 +136,7 @@ export async function autoInferHierarchy(accountId: string): Promise<number> {
   // Update root-level contacts with inferred fields
   const rootTier = tierGroups.get(tierLevels[0])!;
   for (const root of rootTier) {
-    const updateFields: Record<string, any> = {};
+    const updateFields: TablesUpdate<'contacts'> = {};
     if (!root.contact.department && root.inferredDept) updateFields.department = root.inferredDept;
     if (!root.contact.seniority) updateFields.seniority = TIER_TO_SENIORITY[root.tier] || 'individual';
     if (root.contact.buyer_role === 'unknown' || !root.contact.buyer_role) {

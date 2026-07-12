@@ -8,6 +8,7 @@
  */
 import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesUpdate } from '@/integrations/supabase/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { trackedInvoke } from '@/lib/trackedInvoke';
@@ -361,7 +362,7 @@ export function useBulkIngestion() {
     let savedResourceId: string;
 
     if (existingId && reprocessMode !== 'skip_processed') {
-      const updatePayload: Record<string, any> = {};
+      const updatePayload: TablesUpdate<'resources'> = {};
       if (reprocessMode === 'full_reprocess' || reprocessMode === 'metadata_only') {
         updatePayload.title = classification.title;
         updatePayload.description = classification.description;

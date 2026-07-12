@@ -1,10 +1,13 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesUpdate } from '@/integrations/supabase/types';
 import { toast } from 'sonner';
 import { emitDataChanged } from '@/lib/daveEvents';
 import { OPP_FIELDS, MEDDICC_FIELDS } from '../toolTypes';
 import type { ToolContext, ToolMap } from '../toolTypes';
 import type { MeddiccFieldKey, TaskInsert } from '@/types/supabase-helpers';
 import { isMeddiccConfirmed } from '@/types/supabase-helpers';
+
+type OpportunityUpdate = TablesUpdate<'opportunities'>;
 
 export function createOpportunityTools(ctx: ToolContext): ToolMap {
   return {
@@ -56,9 +59,13 @@ export function createOpportunityTools(ctx: ToolContext): ToolMap {
 
       if (!opps?.length) return `Opportunity "${params.opportunityName}" not found`;
 
+      const updates: OpportunityUpdate = {
+        [dbField]: updateValue,
+        updated_at: new Date().toISOString(),
+      };
       const { error } = await supabase
         .from('opportunities')
-        .update({ [dbField]: updateValue, updated_at: new Date().toISOString() })
+        .update(updates)
         .eq('id', opps[0].id);
 
       if (error) return `Failed to update: ${error.message}`;

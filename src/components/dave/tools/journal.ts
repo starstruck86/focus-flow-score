@@ -2,8 +2,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { emitMetricsUpdated } from '@/lib/daveEvents';
 import { METRIC_MAP } from '../toolTypes';
+import type { TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 import type { ToolContext, ToolMap } from '../toolTypes';
 import type { DailyJournalRow } from '@/types/supabase-helpers';
+
+type DailyJournalInsert = TablesInsert<'daily_journal_entries'>;
+type DailyJournalUpdate = TablesUpdate<'daily_journal_entries'>;
 
 export function createJournalTools(ctx: ToolContext): ToolMap {
   return {
@@ -31,15 +35,24 @@ export function createJournalTools(ctx: ToolContext): ToolMap {
         const row = existing[0];
         oldValue = (row[dbField as keyof DailyJournalRow] as number) || 0;
         newValue = mode === 'add' ? oldValue + params.value : params.value;
+        const updatePayload: DailyJournalUpdate = {
+          [dbField]: newValue,
+          updated_at: new Date().toISOString(),
+        };
         const { error } = await supabase
           .from('daily_journal_entries')
-          .update({ [dbField]: newValue, updated_at: new Date().toISOString() })
+          .update(updatePayload)
           .eq('id', existing[0].id);
         if (error) return `Failed to update: ${error.message}`;
       } else {
+        const insertPayload: DailyJournalInsert = {
+          user_id: userId,
+          date: today,
+          [dbField]: newValue,
+        };
         const { error } = await supabase
           .from('daily_journal_entries')
-          .insert({ user_id: userId, date: today, [dbField]: newValue });
+          .insert(insertPayload);
         if (error) return `Failed to create entry: ${error.message}`;
       }
 
@@ -71,7 +84,7 @@ export function createJournalTools(ctx: ToolContext): ToolMap {
       if (!userId) return 'Not authenticated';
 
       const today = new Date().toISOString().split('T')[0];
-      const updates: Record<string, string> = { updated_at: new Date().toISOString() };
+      const updates: DailyJournalUpdate = { updated_at: new Date().toISOString() };
       if (params.whatWorked) updates.what_worked_today = params.whatWorked;
       if (params.blocker) updates.biggest_blocker = params.blocker;
       if (params.tomorrowPriority) updates.tomorrow_priority = params.tomorrowPriority;
@@ -87,7 +100,8 @@ export function createJournalTools(ctx: ToolContext): ToolMap {
       if (existing?.length) {
         await supabase.from('daily_journal_entries').update(updates).eq('id', existing[0].id);
       } else {
-        await supabase.from('daily_journal_entries').insert({ user_id: userId, date: today, ...updates });
+        const insertPayload: DailyJournalInsert = { user_id: userId, date: today, ...updates };
+        await supabase.from('daily_journal_entries').insert(insertPayload);
       }
 
       toast.success('Reflection logged');
@@ -236,15 +250,24 @@ export function createJournalTools(ctx: ToolContext): ToolMap {
         .limit(1);
 
       if (existing?.length) {
+        const updatePayload: DailyJournalUpdate = {
+          [fieldDef.column]: dbValue,
+          updated_at: new Date().toISOString(),
+        };
         const { error } = await supabase
           .from('daily_journal_entries')
-          .update({ [fieldDef.column]: dbValue, updated_at: new Date().toISOString() })
+          .update(updatePayload)
           .eq('id', existing[0].id);
         if (error) return `Failed to update: ${error.message}`;
       } else {
+        const insertPayload: DailyJournalInsert = {
+          user_id: userId,
+          date: today,
+          [fieldDef.column]: dbValue,
+        };
         const { error } = await supabase
           .from('daily_journal_entries')
-          .insert({ user_id: userId, date: today, [fieldDef.column]: dbValue });
+          .insert(insertPayload);
         if (error) return `Failed to create entry: ${error.message}`;
       }
 

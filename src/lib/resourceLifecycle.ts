@@ -5,6 +5,7 @@
  * All enrichment status mutations MUST flow through this module.
  */
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesUpdate } from '@/integrations/supabase/types';
 import { validateResourceQuality, assertEnrichmentInvariants, CURRENT_ENRICHMENT_VERSION, CURRENT_VALIDATION_VERSION, QUALITY_THRESHOLDS, type QualityResult, type ResourceForValidation } from './resourceQuality';
 import { createLogger } from './logger';
 
@@ -90,7 +91,7 @@ export async function transitionToEnriched(
     qr,
   );
 
-  const update: Record<string, any> = {
+  const update: TablesUpdate<'resources'> = {
     enrichment_status: newStatus,
     last_status_change_at: now,
     last_enrichment_attempt_at: now,
