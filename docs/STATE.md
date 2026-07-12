@@ -74,6 +74,10 @@ The single source of truth for the entire app.
 
 ### §D. OPEN / NEXT
 
+#### New (Jul 12)
+
+- **PRODUCTION RUNTIME VERSION ATTESTATION — IN REVIEW, NOT DEPLOYED.** Draft PR #11 adds a side-effect-free public `version` Edge Function, bundle-bound release metadata, focused security coverage, CI checks, and a dispatch-only workflow that compares production against `release.json` on `main`. Release `edge-20260712-5e071bee2975` is bound to hardened substantive head `5e071bee29751f549dc3ae3f5308e0d81005be72`. No merge or deployment has occurred; production verification remains pending a separately authorized deploy.
+
 #### New (Jul 11 night)
 
 - **S-R1 — RETRIEVAL RELEVANCE/RANKING.** The Sources panel exposed low-relevance items entering evidence (generic sales KIs on a competitive turn), creating budget pressure and mis-citation risk. Investigate `situationIntelligenceRetrieval` scoring. P1, post-Monday.
@@ -101,6 +105,12 @@ Trust-but-verify held throughout the session: it caught an unmerged PR before a 
 # SESSION LOG
 
 > Append-only, newest first. Add each new immutable entry directly below this note; never rewrite prior entries.
+
+## 2026-07-12 — Codex — Production runtime version attestation prepared for review
+
+- **Who:** Codex, at Corey Hartin's direction.
+- **What:** Opened draft PR #11 with a side-effect-free public `version` Edge Function, shared bundle-bound release metadata, fail-closed runtime identity response, focused Deno/security tests, CI coverage, and a dispatch-only production verifier. Independent-review hardening added strict release/commit format and binding validation plus main-ancestry and project-scoped deployment-ID verification. Release `edge-20260712-5e071bee2975` is bound to substantive hardening commit `5e071bee29751f549dc3ae3f5308e0d81005be72`. No merge or deployment was performed.
+- **SHAs:** PR #11 hardened substantive head `5e071bee29751f549dc3ae3f5308e0d81005be72`.
 
 ## 2026-07-12 — Codex — State logging mechanics refined
 

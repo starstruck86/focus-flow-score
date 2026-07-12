@@ -22,8 +22,10 @@ jobs:
           deno check --no-lock
           supabase/functions/strategy-chat/index.ts
           supabase/functions/analyze-call/index.ts
+          supabase/functions/version/index.ts
       - run: >-
           deno test --no-lock
           supabase/functions/_shared/strategy-router/situationClassifier_test.ts
           supabase/functions/_shared/strategy-core/situationIntelligenceRetrieval_test.ts
+          supabase/functions/version/index_test.ts
       - run: npm audit --omit=dev --audit-level=high
