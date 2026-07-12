@@ -181,7 +181,7 @@ var mcp_default = defineMcp({
   name: "dynamic-mcp",
   title: "Dynamic (Branch AE)",
   version: "0.1.0",
-  instructions: "Tools for Corey Hartin's Branch expansion territory in the Dynamic app. Use list_accounts / get_account / list_opportunities to inspect the 13 enterprise accounts and their strategic POVs. Use list_strategy_threads to find recent strategy conversations, and search_knowledge_items to look up captured Knowledge Items. All tools act as the signed-in user; RLS applies.",
+  instructions: "Tools for Corey Hartin's Branch expansion territory in the Dynamic app. Use list_accounts / get_account / list_opportunities to inspect the 14 enterprise accounts and their strategic POVs. Use list_strategy_threads to find recent strategy conversations, and search_knowledge_items to look up captured Knowledge Items. All tools act as the signed-in user; RLS applies.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
