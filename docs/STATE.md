@@ -12,7 +12,17 @@
 
 ## HOW THIS FILE WORKS
 
-Any agent changing system state must update **CURRENT STATE** and add a dated **SESSION LOG** entry in the same commit. Add the newest log entry first and never edit, delete, or reorder prior log entries. Todoist holds actionable tasks; this file holds durable state. Drive may mirror this file for people, but the repository remains authoritative.
+### SESSION START — ALL AGENTS, EVERY SESSION
+
+Claude, Codex, and Cowork must read **CURRENT STATE** and scan the most recent **SESSION LOG** entries before acting. This file is authoritative; Todoist is the task layer; Drive is a read-only human mirror.
+
+### SESSION END — ONLY AFTER A SYSTEM-STATE CHANGE
+
+If a session shipped code, deployed, changed production data or configuration, or altered architecture, refresh **CURRENT STATE** and append a dated **SESSION LOG** entry in the same commit. Use the heading `## YYYY-MM-DD — Author — Title` with **Who**, **What**, and **SHAs**; place the newest entry first and never edit, delete, or reorder prior entries. Read-only or advisory sessions that changed nothing do not add a log entry.
+
+### WRITE CAPABILITY
+
+Codex and Claude write this file through the repository. When Claude cannot push, Claude drafts the update and hands the commit to Codex. Cowork mirrors the state to Drive, but the repository remains the source of truth. Log state changes, not attendance.
 
 ## DYNAMIC — MASTER STATE & ROADMAP
 
@@ -84,6 +94,16 @@ Trust-but-verify held throughout the session: it caught an unmerged PR before a 
 # SESSION LOG
 
 > Append-only, newest first. Add each new immutable entry directly below this note; never rewrite prior entries.
+
+## 2026-07-11 — Claude + Codex + Lovable — Strategy trust layer shipped to prod (night)
+
+- **Who:** Claude (coordinator/verification), Codex (build), and Lovable (production database/deploy).
+- **What:** Shipped and verified live PR #4 (`040751b`), the semantic-reduction and competitive-industry stack with five precedence conflicts resolved, CARD restored, a single citation authority, and explicit count detection; PR #5, which cleared frontend type debt and removed the postinstall type-safety bypass; and PR #6 (`7ee1ebe6` / `41b539ed`), which added competitive-citation integrity, the fabrication guard (⚠ UNVERIFIED verified in production), the classifier explicit-intent override, and source-claim integrity. Corrected `territory_profile` in production to Strategic AE / 13 accounts / $1.4M.
+- **SHAs:** `040751b`, `7ee1ebe6`, `41b539ed`.
+- **Deploy:** Deployed edge functions with `supabase functions deploy`; `strategy-chat` is live from `41b539ed`; the frontend was published. Production remains on Lovable-managed Supabase and has not been migrated.
+- **System of record:** Established `docs/STATE.md` in this session through merged PR #7 as repository-authoritative. Todoist is the action layer; Drive is the read-only human mirror.
+- **Open:** S-R1 retrieval relevance, S-R2 Sources panel, S-R3 prompt budget (17,491/17,500), Supabase migration, product-layer wiring, and Web Research reconciliation. See §D and Todoist.
+- **Provenance:** Code verified by direct repository read; CI green on `41b539ed`; the fabrication guard and competitive retrieval verified live in production. The 17,491 prompt-budget figure is Codex's Deno-matrix result and was not rerun in the coordinating session.
 
 ## 2026-07-11 — Codex — Unified system of record initialized
 
