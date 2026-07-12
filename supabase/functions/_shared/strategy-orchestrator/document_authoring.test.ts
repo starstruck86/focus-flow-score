@@ -19,6 +19,53 @@ Deno.env.set("LOVABLE_API_KEY", "test");
 Deno.env.set("OPENAI_API_KEY", "test");
 Deno.env.set("PERPLEXITY_API_KEY", "test");
 
+const VALID_NINETY_DAY_PLAN = {
+  sections: [
+    {
+      id: "account_context",
+      name: "Account Context",
+      content:
+        "Stakeholder strategy maps the champion, executive buyer, technical evaluator, and finance approver. Executive alignment begins with a sponsor briefing, a shared decision memo, and a monthly leadership checkpoint tied to the agreed business outcome.",
+    },
+    {
+      id: "days_1_30",
+      name: "Days 1–30 — Learn",
+      content:
+        "Milestones include validated discovery, an agreed problem statement, and a documented decision path with owners and dates. Metrics track stakeholder coverage, discovery completion, baseline adoption, executive attendance, and the number of confirmed next-step commitments each week.",
+    },
+    {
+      id: "days_31_60",
+      name: "Days 31–60 — Engage",
+      content:
+        "Run a weekly working session, validate the solution narrative with the buying group, and deliver a measurable value hypothesis. Record each owner, due date, decision dependency, and evidence gap before the next checkpoint.",
+    },
+    {
+      id: "days_61_90",
+      name: "Days 61–90 — Advance",
+      content:
+        "Expansion triggers include verified adoption, a new executive mandate, adjacent team demand, and measurable workflow improvement. Advance only after the champion confirms success criteria, ownership, timing, and the next cross-functional use case.",
+    },
+    {
+      id: "operator_read",
+      name: "Operator Read",
+      content:
+        "The primary risk is weak multi-threading across the buying group. The lever is a champion-led executive alignment session backed by quantified metrics. Mitigate delivery risk with explicit owners, decision dates, and a weekly evidence review.",
+    },
+  ],
+  markdown: [
+    "## Account Context",
+    "Stakeholder strategy and executive alignment are documented with named owners and checkpoints.",
+    "## Days 1–30 — Learn",
+    "Milestones and metrics establish the baseline, targets, owners, and weekly validation cadence.",
+    "## Days 31–60 — Engage",
+    "Engage the full buying group around a measurable value hypothesis and decision path.",
+    "## Days 61–90 — Advance",
+    "Expansion triggers are verified through adoption, executive demand, and adjacent use cases.",
+    "## Operator Read",
+    "Risks are explicit, with mitigations, owners, dates, and an executive lever.",
+  ].join("\n\n"),
+};
+
 // ── In-memory supabase mock (only the chains the orchestrator uses) ──
 function makeFakeSupabase() {
   const rows: Record<string, any> = {};
@@ -148,12 +195,10 @@ async function runWith(opts: {
     await runStrategyTask({
       supabase: supabase as any,
       userId: "user_1",
-      // NOTE: account_brief — not discovery_prep — exercises the monolithic
-      // Stage 3 Claude authoring path that this file is designed to prove.
-      // discovery_prep now hands off to a separate progressive driver in a
-      // fresh isolate (see runTask.ts line ~328) and would never reach the
-      // assertions below from within this test process.
-      taskType: "account_brief",
+      // account_brief and discovery_prep now use bounded/progressive authoring.
+      // ninety_day_plan still exercises the monolithic Stage 3 Claude path
+      // that this file is designed to prove.
+      taskType: "ninety_day_plan",
       inputs: { company_name: "Acme" } as any,
     });
   } catch (e) {
@@ -173,12 +218,12 @@ async function runWith(opts: {
 Deno.test("document_authoring: success → status=completed", async () => {
   const { finalRow, threw } = await runWith({
     synthesisJson: JSON.stringify({ ok: true }),
-    claude: { kind: "ok", text: JSON.stringify({ sections: [{ id: "s1", heading: "H", content: "body" }] }) },
+    claude: { kind: "ok", text: JSON.stringify(VALID_NINETY_DAY_PLAN) },
   });
   assertEquals(threw, null);
   assertEquals(finalRow.status, "completed");
   assertEquals(finalRow.progress_step, "completed");
-  assertEquals(finalRow.draft_output.sections.length, 1);
+  assertEquals(finalRow.draft_output.sections.length, 5);
 });
 
 // ──────────────────────────────────────────────────────────────────

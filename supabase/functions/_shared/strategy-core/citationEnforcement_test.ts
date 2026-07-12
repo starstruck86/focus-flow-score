@@ -9,6 +9,7 @@ import {
   assert,
   assertEquals,
   assertExists,
+  assertStringIncludes,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   buildCitationCheckLog,
@@ -229,6 +230,112 @@ Deno.test("light mode: presence-level check, shadow rewrite", () => {
   assertEquals(
     result.issues.some((i) => i.code === "unverified_citation"),
     true,
+  );
+});
+
+Deno.test("enforceCitationAuthenticity publishes invalid CARD rewrites in every citation mode", () => {
+  const assistantText = `Use CARD["Adjust Comes Up"] for the expansion angle.`;
+  const auditOptions: CitationAuditOptions = {
+    cardHits: [{
+      id: "aaaaaaaa-1111-2222-3333-444444444444",
+      title: "Adjust",
+    }],
+    playbookHits: [{
+      id: "bbbbbbbb-1111-2222-3333-444444444444",
+      title: "Adjust Comes Up",
+    }],
+  };
+
+  for (
+    const citationMode of [
+      "none",
+      "none_unless_library_used",
+      "light",
+      "strict",
+    ] as const
+  ) {
+    const result = runCitationCheck(
+      baseInputs({
+        workspace: "work",
+        citationMode,
+        libraryHits: [],
+        libraryUsed: true,
+        assistantText,
+        auditOptions,
+        enforceCitationAuthenticity: true,
+      }),
+    );
+
+    assertEquals(result.audited, true, citationMode);
+    assertExists(result.audit);
+    assertEquals(result.audit.modified, true, citationMode);
+    assertEquals(
+      result.issues.some((issue) => issue.code === "unverified_citation"),
+      true,
+      citationMode,
+    );
+    assertStringIncludes(
+      result.auditedText,
+      `⚠ UNVERIFIED-CARD["Adjust Comes Up"]`,
+    );
+    assertEquals(result.citationsFound, 0, citationMode);
+  }
+});
+
+Deno.test("competitor capability claims require an authentic CARD citation", () => {
+  const auditOptions: CitationAuditOptions = {
+    cardHits: [{
+      id: "aaaaaaaa-1111-2222-3333-444444444444",
+      title: "Adjust",
+    }],
+    playbookHits: [{
+      id: "bbbbbbbb-1111-2222-3333-444444444444",
+      title: "Adjust Comes Up",
+    }],
+  };
+  const check = (assistantText: string) =>
+    runCitationCheck(
+      baseInputs({
+        workspace: "work",
+        citationMode: "light",
+        libraryHits: [],
+        libraryUsed: true,
+        assistantText,
+        auditOptions,
+        enforceCitationAuthenticity: true,
+      }),
+    );
+
+  const untagged = check("Adjust supports attribution measurement.");
+  assertEquals(untagged.citationsFound, 0);
+  assertEquals(
+    untagged.issues.some((issue) => issue.code === "missing_citations"),
+    true,
+  );
+  assertEquals(untagged.auditedText, "Adjust supports attribution measurement.");
+
+  const valid = check(
+    `Adjust supports attribution measurement CARD["Adjust"].`,
+  );
+  assertEquals(valid.citationsFound, 1);
+  assertEquals(valid.issues.length, 0);
+  assertEquals(valid.auditedText.includes("UNVERIFIED"), false);
+
+  const fabricated = check(
+    `Adjust supports attribution measurement CARD["Adjust Comes Up"].`,
+  );
+  assertEquals(fabricated.citationsFound, 0);
+  assertEquals(
+    fabricated.issues.some((issue) => issue.code === "missing_citations"),
+    true,
+  );
+  assertEquals(
+    fabricated.issues.some((issue) => issue.code === "unverified_citation"),
+    true,
+  );
+  assertStringIncludes(
+    fabricated.auditedText,
+    `⚠ UNVERIFIED-CARD["Adjust Comes Up"]`,
   );
 });
 

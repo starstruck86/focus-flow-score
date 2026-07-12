@@ -237,6 +237,31 @@ Deno.test("CARD fabricated title: flagged with UNVERIFIED-CARD", () => {
   assertStringIncludes(out.text, "⚠ UNVERIFIED-CARD");
 });
 
+Deno.test("CARD namespace cannot borrow a PLAYBOOK title or partially match a card title", () => {
+  const out = auditResourceCitations(
+    `Use CARD["Adjust Comes Up"] for the expansion angle.`,
+    [],
+    {
+      cardHits: [{
+        id: "aaaaaaaa-1111-2222-3333-444444444444",
+        title: "Adjust",
+      }],
+      playbookHits: [{
+        id: "bbbbbbbb-1111-2222-3333-444444444444",
+        title: "Adjust Comes Up",
+      }],
+    },
+  );
+
+  assertEquals(out.modified, true);
+  assertStringIncludes(
+    out.text,
+    `⚠ UNVERIFIED-CARD["Adjust Comes Up"]`,
+  );
+  assertEquals(out.verifiedTitles.includes("CARD:Adjust Comes Up"), false);
+  assertEquals(out.unverifiedCitations.includes("CARD:Adjust Comes Up"), true);
+});
+
 Deno.test("KI/CARD scanning is OFF by default (backward compat)", () => {
   // Prior callers pass no kiHits/cardHits — KI[…] must pass through untouched
   // even when it doesn't match anything (we have no hit set to compare against).

@@ -33,6 +33,7 @@ type RetrievalPlanLike = {
     include?: unknown;
     competitorNames?: unknown;
     categoryHints?: unknown;
+    explicitIntent?: unknown;
   };
   vertical?: { include?: unknown };
 };
@@ -150,6 +151,10 @@ function sanitizeMetadata(value: unknown): string {
 
 function normalizeSignal(value: unknown): string {
   return sanitizeInline(value).toLocaleLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeCompetitorMatchKey(value: unknown): string {
+  return normalizeSignal(value).replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function truncateBounded(
@@ -324,11 +329,16 @@ function rankCompetitiveRows(args: {
   riskNames: string[];
   categoryHints: string[];
   scopes: string[];
+  requiredNames?: string[];
+  allowUnscored?: boolean;
 }): RankedCompetitiveRow[] {
   const candidateKeys = args.candidateNames.map(normalizeSignal).filter(
     Boolean,
   );
   const riskKeys = new Set(args.riskNames.map(normalizeSignal).filter(Boolean));
+  const requiredNameKeys = new Set(
+    (args.requiredNames ?? []).map(normalizeCompetitorMatchKey).filter(Boolean),
+  );
   const categorySignals = dedupeStrings(
     [...args.categoryHints, ...args.scopes],
     8,
@@ -350,6 +360,13 @@ function rankCompetitiveRows(args: {
       if (!id || !name || !sourceUrl || !createdAt) return null;
 
       const nameKey = normalizeSignal(row.competitor_name);
+      const requiredNameMatched = requiredNameKeys.has(
+        normalizeCompetitorMatchKey(row.competitor_name),
+      );
+      if (
+        requiredNameKeys.size > 0 &&
+        !requiredNameMatched
+      ) return null;
       const categoryKey = normalizeSignal(row.category);
       const searchable = [
         nameKey,
@@ -357,7 +374,7 @@ function rankCompetitiveRows(args: {
         normalizeSignal(row.positioning),
       ].filter(Boolean).join(" ");
 
-      let score = 0;
+      let score = requiredNameMatched ? 100 : 0;
       for (const candidate of candidateKeys) {
         if (candidate === nameKey) score += 100;
         else if (candidate.includes(nameKey) || nameKey.includes(candidate)) {
@@ -373,7 +390,7 @@ function rankCompetitiveRows(args: {
       }
       score += Math.min(termHits, MAX_TERM_HIT_SCORE);
 
-      return score > 0
+      return score > 0 || args.allowUnscored === true
         ? { row, id, name, category, sourceUrl, createdAt, score }
         : null;
     })
@@ -416,7 +433,12 @@ async function readCompetitive(args: {
 }): Promise<CompetitiveReadResult> {
   const requested = competitiveRequested(args.situation);
   if (!requested) return emptyCompetitive(false, "classifier_not_requested");
-  if (args.situation.confidence === "low") {
+  const plan = retrievalPlan(args.situation).competitive;
+  const explicitIntent = plan?.explicitIntent === "competitive_intel" ||
+      plan?.explicitIntent === "named_competitor"
+    ? plan.explicitIntent
+    : null;
+  if (args.situation.confidence === "low" && explicitIntent === null) {
     return emptyCompetitive(true, "low_confidence");
   }
 
@@ -449,7 +471,6 @@ async function readCompetitive(args: {
     }
   }
 
-  const plan = retrievalPlan(args.situation).competitive;
   const classifierNames = boundedStrings(plan?.competitorNames, 3);
   const categoryHints = boundedStrings(plan?.categoryHints, 2);
   const candidateNames = dedupeStrings([...classifierNames, ...riskNames], 5);
@@ -458,7 +479,19 @@ async function readCompetitive(args: {
     6,
   );
 
-  if (!candidateNames.length && !categoryHints.length) {
+  const namedExplicitRequest = explicitIntent === "named_competitor" ||
+    (explicitIntent === "competitive_intel" && classifierNames.length > 0);
+  const allowBroadCatalog = explicitIntent === "competitive_intel" &&
+    classifierNames.length === 0;
+  if (namedExplicitRequest && classifierNames.length === 0) {
+    return emptyCompetitive(true, "named_competitor_missing", {
+      queried,
+      error: auxiliaryError,
+    });
+  }
+  if (
+    !candidateNames.length && !categoryHints.length && !allowBroadCatalog
+  ) {
     return emptyCompetitive(true, "no_named_or_category_signal", {
       queried,
       error: auxiliaryError,
@@ -476,13 +509,27 @@ async function readCompetitive(args: {
       .limit(MAX_CATALOG_ROWS);
     if (error) throw new StableQueryError("catalog_query_failed");
 
-    const ranked = rankCompetitiveRows({
+    let ranked = rankCompetitiveRows({
       rows: Array.isArray(data) ? data : [],
       candidateNames,
       riskNames,
       categoryHints,
       scopes,
+      requiredNames: namedExplicitRequest ? classifierNames : [],
     });
+    let usedBroadFallback = false;
+    if (ranked.length === 0 && allowBroadCatalog) {
+      ranked = rankCompetitiveRows({
+        rows: Array.isArray(data) ? data : [],
+        candidateNames,
+        riskNames,
+        categoryHints,
+        scopes,
+        requiredNames: [],
+        allowUnscored: true,
+      });
+      usedBroadFallback = ranked.length > 0;
+    }
     const rendered: Array<{ entry: RankedCompetitiveRow; text: string }> = [];
     let truncated = ranked.length > MAX_COMPETITIVE_ROWS;
 
@@ -513,7 +560,11 @@ async function readCompetitive(args: {
         requested: true,
         queried,
         matched: rendered.length,
-        reason: rendered.length ? "matched" : "no_positive_match",
+        reason: rendered.length
+          ? usedBroadFallback
+            ? "matched_explicit_broad"
+            : "matched"
+          : "no_positive_match",
         truncated,
         ...(auxiliaryError ? { error: auxiliaryError } : {}),
       },

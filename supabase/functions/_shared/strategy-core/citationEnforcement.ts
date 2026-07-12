@@ -9,22 +9,19 @@
 // Modes (from W1):
 //
 //   • none
-//       Workspace does not require citations. We still RUN the audit
-//       so we can record the citation count, but we do not modify
-//       the assistant text and we do not raise issues.
+//       Workspace does not require citations. By default we report a
+//       token count without auditing or modifying the assistant text.
 //
 //   • none_unless_library_used
 //       Citations are not required when no library hits were used.
 //       When library hits ARE present, we run the audit in shadow
-//       (presence-level) and emit telemetry but do not modify text.
+//       (presence-level) and emit telemetry without modifying text by default.
 //
 //   • light
 //       Presence-level check. Run the audit; if library hits exist
 //       and the model produced no citations, record an issue
-//       (`missing_citations`). Audit text rewrites are SHADOW-only —
-//       we keep `audit.text` available to the caller via
-//       `auditedText`, but the caller decides whether to use it.
-//       (W5 keeps this shadow; W6 owns enforcement.)
+//       (`missing_citations`). Audit text rewrites are SHADOW-only by
+//       default; an explicit caller authenticity opt-in may publish them.
 //
 //   • strict
 //       Run the existing strict audit (which detects UNVERIFIED
@@ -34,14 +31,15 @@
 //       `audit.text` and `audit.modified` remain available for
 //       telemetry and future enforcement.
 //
-//       Callers that explicitly need the legacy chat rewrite can
-//       opt in via `enableLegacyCitationRewrite: true` on the
-//       inputs. This is OUTSIDE the W5 shadow-only contract and
-//       must be set deliberately by the caller.
+//       Callers can opt into authenticity rewrites in every mode via
+//       `enforceCitationAuthenticity`, while the legacy strict-only
+//       rewrite remains available through `enableLegacyCitationRewrite`.
 //
-// W5 is intentionally SHADOW + REPORTING. We do not block. We do
-// not retry. We do not mutate canonical assistant text. Quality-
-// gate-style enforcement is W6's job.
+// W5 defaults to SHADOW + REPORTING. We do not block or retry.
+// Callers may explicitly publish authenticity-only audit rewrites so
+// emitted tags that do not resolve are visibly marked UNVERIFIED;
+// missing-citation checks remain telemetry. Quality-gate-style
+// enforcement is W6's job.
 // ════════════════════════════════════════════════════════════════
 
 import {
@@ -82,6 +80,15 @@ export interface CitationCheckInputs {
   /** Optional pass-through to the deterministic auditor. */
   auditOptions?: CitationAuditOptions;
   /**
+   * Caller-level authenticity enforcement. When true, audit supplied
+   * citations in every citation posture and publish deterministic
+   * UNVERIFIED rewrites. This does not require citations where the
+   * workspace posture does not require them; it only prevents a citation
+   * the model chose to emit from claiming an unavailable source.
+   * Defaults to false, preserving W5 shadow behavior.
+   */
+  enforceCitationAuthenticity?: boolean;
+  /**
    * OUTSIDE W5 scope. When true, `strict` mode publishes the
    * deterministic auditor's rewritten text as `auditedText`,
    * preserving the legacy strategy-chat citation rewrite.
@@ -108,11 +115,10 @@ export interface CitationCheckResult {
   audit: CitationAuditResult | null;
   /**
    * Text the caller should treat as the canonical assistant output.
-   * In W5 this is ALWAYS the original input text, regardless of mode.
-   * The single exception is when the caller passes
-   * `enableLegacyCitationRewrite: true` AND the mode is `strict` —
-   * that opt-in path is outside W5 shadow-only behavior and
-   * preserves the legacy strategy-chat rewrite.
+   * By default this is the original input text, preserving W5 shadow
+   * behavior. `enforceCitationAuthenticity: true` publishes deterministic
+   * audit rewrites in every citation posture. The legacy strict-only
+   * `enableLegacyCitationRewrite` opt-in remains supported.
    */
   auditedText: string;
 }
@@ -151,6 +157,7 @@ export function runCitationCheck(
     libraryUsed,
     citationMode,
     auditOptions,
+    enforceCitationAuthenticity = false,
     enableLegacyCitationRewrite = false,
   } = inputs;
 
@@ -159,8 +166,27 @@ export function runCitationCheck(
   const citableHits = citableLibraryHitCount(inputs);
 
   // ── Mode: none ─────────────────────────────────────────────────
-  // Don't audit. Don't modify. Just report citation count.
+  // Default remains no-audit. Authenticity enforcement is independent
+  // of whether this posture requires citations: citations the model
+  // voluntarily emits still must name a supplied source.
   if (citationMode === "none") {
+    if (enforceCitationAuthenticity) {
+      const audit = auditResourceCitations(text, libraryHits, auditOptions);
+      if (audit.unverifiedCitations.length > 0) {
+        issues.push({
+          code: "unverified_citation",
+          detail: `${audit.unverifiedCitations.length} unverified citation(s).`,
+        });
+      }
+      return {
+        citationMode,
+        citationsFound: audit.verifiedTitles.length,
+        issues,
+        audited: true,
+        audit,
+        auditedText: audit.text,
+      };
+    }
     return {
       citationMode,
       citationsFound: countCitationLikeTokens(text),
@@ -175,7 +201,10 @@ export function runCitationCheck(
   // Skip audit entirely when no library hits were used. Otherwise
   // run audit in shadow and record presence/absence as an issue.
   if (citationMode === "none_unless_library_used") {
-    if (!libraryUsed || citableHits === 0) {
+    if (
+      !enforceCitationAuthenticity &&
+      (!libraryUsed || citableHits === 0)
+    ) {
       return {
         citationMode,
         citationsFound: countCitationLikeTokens(text),
@@ -187,7 +216,7 @@ export function runCitationCheck(
     }
     const audit = auditResourceCitations(text, libraryHits, auditOptions);
     const citationsFound = audit.verifiedTitles.length;
-    if (citationsFound === 0) {
+    if (libraryUsed && citableHits > 0 && citationsFound === 0) {
       issues.push({
         code: "library_used_without_attribution",
         detail: `Library returned ${citableHits} citeable hit(s) but assistant produced no citations.`,
@@ -199,14 +228,13 @@ export function runCitationCheck(
         detail: `${audit.unverifiedCitations.length} unverified citation(s).`,
       });
     }
-    // SHADOW: do not return audit.text as the canonical text.
     return {
       citationMode,
       citationsFound,
       issues,
       audited: true,
       audit,
-      auditedText: text,
+      auditedText: enforceCitationAuthenticity ? audit.text : text,
     };
   }
 
@@ -233,7 +261,7 @@ export function runCitationCheck(
       issues,
       audited: true,
       audit,
-      auditedText: text, // shadow — caller does not rewrite in W5
+      auditedText: enforceCitationAuthenticity ? audit.text : text,
     };
   }
 
@@ -267,7 +295,9 @@ export function runCitationCheck(
     issues,
     audited: true,
     audit,
-    auditedText: enableLegacyCitationRewrite ? audit.text : text,
+    auditedText: enforceCitationAuthenticity || enableLegacyCitationRewrite
+      ? audit.text
+      : text,
   };
 }
 
