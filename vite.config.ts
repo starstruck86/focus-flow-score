@@ -21,7 +21,7 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    mcpPlugin(),
+    mode !== "test" && mcpPlugin(),
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
@@ -124,4 +124,3 @@ export default defineConfig(({ mode }) => ({
     },
   },
 }));
-

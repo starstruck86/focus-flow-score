@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { withEdgeBuildAttestation } from "../_shared/edgeBuildAttestation.ts";
 import {
   assembleStrategyContext,
   buildCitationCheckLog,
@@ -2631,7 +2632,10 @@ function workflowTypeToOutputType(wt: string): string {
 // ═══════════════════════════════════════════════════════════
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return withEdgeBuildAttestation(
+      new Response(null, { headers: corsHeaders }),
+      "strategy-chat",
+    );
   }
 
   try {

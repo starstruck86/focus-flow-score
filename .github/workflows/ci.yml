@@ -16,8 +16,64 @@ jobs:
         with:
           deno-version: v2.9.2
       - run: npm ci
+      - name: Generate CI-bound edge manifest
+        run: |
+          set -euo pipefail
+          if git ls-files --error-unmatch \
+            supabase/functions/_shared/edgeBuildManifest.generated.ts \
+            >/dev/null 2>&1; then
+            echo "Generated edge manifest must never be tracked." >&2
+            exit 1
+          fi
+          git check-ignore -q \
+            supabase/functions/_shared/edgeBuildManifest.generated.ts
+          npm run edge:manifest
+          npm run edge:manifest -- --check
       - run: npm run typecheck
       - run: npm test
+      - run: npm run edge:mcp-attestation:test
+      - name: Verify MCP attestation codegen is reproducible
+        env:
+          VITE_SUPABASE_PROJECT_ID: odbjjklumdsuqdvkgwyv
+        run: |
+          set -euo pipefail
+          npm run build
+          npm run edge:mcp-attestation:check
+          grep -q 'var projectRef = "odbjjklumdsuqdvkgwyv"' \
+            supabase/functions/mcp/index.ts
+          git diff --exit-code
+          git diff --cached --exit-code
+      - name: Reseal generated edge manifest after repository build steps
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run edge:manifest -- --check
+          node <<'NODE'
+          const { readFileSync } = require("node:fs");
+          const path = "supabase/functions/_shared/edgeBuildManifest.generated.ts";
+          const source = readFileSync(path, "utf8");
+          const match = source.match(
+            /export const EDGE_BUILD_MANIFEST = (\{[\s\S]*\}) as const;\n$/,
+          );
+          if (!match) throw new Error("Generated manifest has an unexpected shape");
+          const manifest = JSON.parse(match[1]);
+          const sha = process.env.GITHUB_SHA;
+          const names = ["strategy-chat", "analyze-call", "mcp", "version"];
+          if (manifest.source_commit !== sha) throw new Error("Manifest SHA mismatch");
+          if (!/^edge-[0-9]{8}-[0-9a-f]{12}$/.test(manifest.release_id)) {
+            throw new Error("Manifest release ID is malformed");
+          }
+          if (manifest.release_id.slice(-12) !== sha.slice(0, 12)) {
+            throw new Error("Manifest release ID is not bound to GITHUB_SHA");
+          }
+          const actualNames = Object.keys(manifest.functions ?? {}).sort();
+          if (JSON.stringify(actualNames) !== JSON.stringify([...names].sort())) {
+            throw new Error("Manifest does not contain the exact function set");
+          }
+          if (names.some((name) => manifest.functions[name] !== sha)) {
+            throw new Error("Not every manifest function maps to GITHUB_SHA");
+          }
+          NODE
       - run: >-
           deno check --no-lock
           supabase/functions/strategy-chat/index.ts
@@ -25,6 +81,7 @@ jobs:
           supabase/functions/version/index.ts
       - run: >-
           deno test --no-lock
+          supabase/functions/_shared/edgeBuildAttestation_test.ts
           supabase/functions/_shared/strategy-router/situationClassifier_test.ts
           supabase/functions/_shared/strategy-core/situationIntelligenceRetrieval_test.ts
           supabase/functions/version/index_test.ts

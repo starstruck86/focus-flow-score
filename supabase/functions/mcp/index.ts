@@ -191,4 +191,19 @@ var mcp_default = defineMcp({
 
 // lovable-mcp-supabase-entry.ts
 import { createSupabaseHandler } from "npm:@lovable.dev/mcp-js@0.20.1/stacks/supabase";
-Deno.serve(createSupabaseHandler(mcp_default, { functionName: "mcp" }));
+// DYNAMIC_RUNTIME_ATTESTATION_BEGIN
+import {
+  withEdgeBuildAttestation as __dynamicWithEdgeBuildAttestation,
+} from "../_shared/edgeBuildAttestation.ts";
+
+const __dynamicMcpBusinessHandler = createSupabaseHandler(mcp_default, {
+  functionName: "mcp",
+});
+
+Deno.serve(async (request) => {
+  const response = await __dynamicMcpBusinessHandler(request);
+  return request.method === "OPTIONS"
+    ? __dynamicWithEdgeBuildAttestation(response, "mcp")
+    : response;
+});
+// DYNAMIC_RUNTIME_ATTESTATION_END

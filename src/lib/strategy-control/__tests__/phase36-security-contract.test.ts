@@ -107,6 +107,63 @@ describe("Phase 3.6 — Security Contract", () => {
         /\[functions\.version\]\s+verify_jwt\s*=\s*false/,
       );
     });
+
+    it("all four production functions carry generated bundle attestation", () => {
+      const integrationSources = {
+        "strategy-chat": fs.readFileSync(
+          path.resolve("supabase/functions/strategy-chat/index.ts"),
+          "utf-8",
+        ),
+        "analyze-call": fs.readFileSync(
+          path.resolve("supabase/functions/analyze-call/index.ts"),
+          "utf-8",
+        ),
+        mcp: fs.readFileSync(
+          path.resolve("supabase/functions/mcp/index.ts"),
+          "utf-8",
+        ),
+        version: fs.readFileSync(
+          path.resolve("supabase/functions/_shared/versionResponse.ts"),
+          "utf-8",
+        ),
+      };
+
+      expect(integrationSources["strategy-chat"]).toContain(
+        'withEdgeBuildAttestation(\n      new Response(null, { headers: corsHeaders }),\n      "strategy-chat"',
+      );
+      expect(integrationSources["analyze-call"]).toContain(
+        'withEdgeBuildAttestation(\n      new Response(null, { headers: corsHeaders }),\n      "analyze-call"',
+      );
+      expect(integrationSources.mcp).toContain(
+        "DYNAMIC_RUNTIME_ATTESTATION_BEGIN",
+      );
+      expect(integrationSources.mcp).toContain(
+        '__dynamicWithEdgeBuildAttestation(response, "mcp")',
+      );
+      expect(integrationSources.version).toContain(
+        'withEdgeBuildAttestation(\n        new Response(null, {',
+      );
+      expect(integrationSources.version).toContain('        "version",');
+
+      for (const source of Object.values(integrationSources)) {
+        expect(source).not.toMatch(/\b[0-9a-f]{40}\b/);
+      }
+
+      const helper = fs.readFileSync(
+        path.resolve("supabase/functions/_shared/edgeBuildAttestation.ts"),
+        "utf-8",
+      );
+      expect(helper).toContain(
+        'from "./edgeBuildManifest.generated.ts"',
+      );
+      expect(helper).toContain('Deno.env.get("DENO_DEPLOYMENT_ID")');
+      expect(helper).not.toMatch(
+        /createClient|\.from\(|fetch\(|SB_EXECUTION_ID|SUPABASE_SERVICE_ROLE_KEY/,
+      );
+      expect(fs.existsSync(
+        path.resolve("supabase/functions/_shared/release.json"),
+      )).toBe(false);
+    });
   });
 
   describe("No Bypass Patterns in Production", () => {

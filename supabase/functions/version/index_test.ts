@@ -13,6 +13,12 @@ import {
 const VALID_RELEASE = {
   release_id: "edge-20260712-0123456789ab",
   source_commit: "0123456789abcdef0123456789abcdef01234567",
+  functions: {
+    "strategy-chat": "0123456789abcdef0123456789abcdef01234567",
+    "analyze-call": "0123456789abcdef0123456789abcdef01234567",
+    mcp: "0123456789abcdef0123456789abcdef01234567",
+    version: "0123456789abcdef0123456789abcdef01234567",
+  },
 };
 
 const VALID_ENVIRONMENT: Partial<Record<VersionEnvironmentName, string>> = {
@@ -160,6 +166,43 @@ Deno.test("valid matching release metadata succeeds", async () => {
   assertEquals(body.source_commit, VALID_RELEASE.source_commit);
 });
 
+Deno.test("version GET requires the exact four-function manifest", async () => {
+  const invalidManifests = [
+    {
+      ...VALID_RELEASE,
+      functions: { ...VALID_RELEASE.functions, mcp: "f".repeat(40) },
+    },
+    {
+      ...VALID_RELEASE,
+      functions: {
+        ...VALID_RELEASE.functions,
+        unexpected: VALID_RELEASE.source_commit,
+      },
+    },
+  ];
+
+  for (const releaseMetadata of invalidManifests) {
+    const response = createVersionHandler(runtime(releaseMetadata))(request());
+    const body = await response.json();
+
+    assertEquals(response.status, 503);
+    assertEquals(body.verified, false);
+    assertEquals(body.release_id, null);
+    assertEquals(body.source_commit, null);
+  }
+});
+
+Deno.test("version GET rejects deployment IDs from another project", async () => {
+  const response = createVersionHandler(runtime(VALID_RELEASE, {
+    DENO_DEPLOYMENT_ID: "otherproject_version_42",
+    SB_REGION: "us-east-1",
+  }))(request());
+  const body = await response.json();
+
+  assertEquals(response.status, 503);
+  assertEquals(body.verified, false);
+});
+
 Deno.test("unsupported methods return 405 before reading environment", async () => {
   const accessedEnvironmentNames: VersionEnvironmentName[] = [];
   const handler = createVersionHandler({
@@ -192,6 +235,20 @@ Deno.test("OPTIONS returns a side-effect-free preflight response", async () => {
     "GET, OPTIONS",
   );
   assertEquals(response.headers.get("Cache-Control"), "no-store");
+  assertEquals(response.headers.get("X-Edge-Attestation-Verified"), "true");
+  assertEquals(response.headers.get("X-Edge-Function"), "version");
+  assertEquals(
+    response.headers.get("X-Edge-Source-Commit"),
+    VALID_RELEASE.source_commit,
+  );
+  assertEquals(
+    response.headers.get("X-Edge-Deployment-Id"),
+    VALID_ENVIRONMENT.DENO_DEPLOYMENT_ID,
+  );
+  assertEquals(
+    response.headers.get("X-Edge-Proof-Scope"),
+    "edge-function-bundle",
+  );
   assertEquals(await response.text(), "");
 });
 
