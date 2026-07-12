@@ -16,6 +16,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: refs/heads/main
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Verify deployed version
@@ -41,6 +42,25 @@ jobs:
 
           expected_release_id="$(jq -er '.release_id' "$RELEASE_FILE")"
           expected_source_commit="$(jq -er '.source_commit' "$RELEASE_FILE")"
+
+          release_suffix="${expected_release_id##*-}"
+          source_prefix="${expected_source_commit:0:12}"
+          if [[ "$release_suffix" != "$source_prefix" ]]; then
+            printf 'Release ID suffix does not match source commit prefix.\n' >&2
+            exit 1
+          fi
+
+          if ! git cat-file -e "${expected_source_commit}^{commit}" 2>/dev/null; then
+            printf 'Source commit does not resolve to a Git commit: %s\n' \
+              "$expected_source_commit" >&2
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor "$expected_source_commit" HEAD; then
+            printf 'Source commit is not an ancestor of checked-out main: %s\n' \
+              "$expected_source_commit" >&2
+            exit 1
+          fi
 
           response_file="$(mktemp)"
           trap 'rm -f "$response_file"' EXIT
@@ -76,7 +96,9 @@ jobs:
               and .verified == true
               and .release_id == $release_id
               and .source_commit == $source_commit
-              and (.deployment_id | type == "string" and length > 0)
+              and (.deployment_id
+                | type == "string"
+                and startswith("odbjjklumdsuqdvkgwyv_"))
               and has("region")
               and .proof_scope == "version-function-bundle"
             ' "$response_file" >/dev/null; then

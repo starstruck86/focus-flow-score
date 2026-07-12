@@ -2,6 +2,9 @@ import releaseMetadata from "./release.json" with { type: "json" };
 
 export const VERSION_PROOF_SCOPE = "version-function-bundle" as const;
 
+const RELEASE_ID_PATTERN = /^edge-[0-9]{8}-[0-9a-f]{12}$/;
+const SOURCE_COMMIT_PATTERN = /^[0-9a-f]{40}$/;
+
 export type VersionEnvironmentName = "DENO_DEPLOYMENT_ID" | "SB_REGION";
 
 export interface VersionRuntime {
@@ -58,6 +61,12 @@ function normalizePublicValue(value: unknown): string | null {
   return normalized;
 }
 
+function readReleaseValue(value: unknown): string | null {
+  if (typeof value !== "string" || value !== value.trim()) return null;
+  if (!value || value.toUpperCase() === "PENDING") return null;
+  return value;
+}
+
 function readReleaseMetadata(metadata: unknown): {
   releaseId: string | null;
   sourceCommit: string | null;
@@ -69,8 +78,8 @@ function readReleaseMetadata(metadata: unknown): {
   try {
     const record = metadata as Record<string, unknown>;
     return {
-      releaseId: normalizePublicValue(record.release_id),
-      sourceCommit: normalizePublicValue(record.source_commit),
+      releaseId: readReleaseValue(record.release_id),
+      sourceCommit: readReleaseValue(record.source_commit),
     };
   } catch {
     return { releaseId: null, sourceCommit: null };
@@ -86,6 +95,19 @@ function readEnvironment(
   } catch {
     return null;
   }
+}
+
+function hasValidReleaseBinding(
+  releaseId: string | null,
+  sourceCommit: string | null,
+): boolean {
+  return Boolean(
+    releaseId &&
+      sourceCommit &&
+      RELEASE_ID_PATTERN.test(releaseId) &&
+      SOURCE_COMMIT_PATTERN.test(sourceCommit) &&
+      releaseId.slice(-12) === sourceCommit.slice(0, 12),
+  );
 }
 
 export function createVersionHandler(
@@ -122,7 +144,8 @@ export function createVersionHandler(
     );
     const deploymentId = readEnvironment(runtime, "DENO_DEPLOYMENT_ID");
     const region = readEnvironment(runtime, "SB_REGION");
-    const verified = Boolean(releaseId && sourceCommit && deploymentId);
+    const verified = hasValidReleaseBinding(releaseId, sourceCommit) &&
+      Boolean(deploymentId);
 
     const attestation: VersionAttestation = {
       status: verified ? "ok" : "unavailable",

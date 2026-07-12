@@ -93,6 +93,73 @@ Deno.test("missing or pending release metadata fails closed", async () => {
   }
 });
 
+Deno.test("malformed release ID fails closed", async () => {
+  for (
+    const releaseId of [
+      "release-20260712-0123456789ab",
+      "edge-2026071-0123456789ab",
+      "edge-20260712-0123456789AB",
+      "edge-20260712-0123456789abc",
+      ` ${VALID_RELEASE.release_id}`,
+    ]
+  ) {
+    const response = createVersionHandler(
+      runtime({ ...VALID_RELEASE, release_id: releaseId }),
+    )(request());
+    const body = await response.json();
+
+    assertEquals(response.status, 503);
+    assertEquals(body.verified, false);
+    assertEquals(body.status, "unavailable");
+  }
+});
+
+Deno.test("malformed or short source commit fails closed", async () => {
+  for (
+    const sourceCommit of [
+      "0123456789ab",
+      "0123456789abcdef0123456789abcdef0123456",
+      "0123456789abcdef0123456789abcdef012345678",
+      "0123456789ABCDEF0123456789ABCDEF01234567",
+      "g123456789abcdef0123456789abcdef01234567",
+      `${VALID_RELEASE.source_commit} `,
+    ]
+  ) {
+    const response = createVersionHandler(
+      runtime({ ...VALID_RELEASE, source_commit: sourceCommit }),
+    )(request());
+    const body = await response.json();
+
+    assertEquals(response.status, 503);
+    assertEquals(body.verified, false);
+    assertEquals(body.status, "unavailable");
+  }
+});
+
+Deno.test("release ID suffix must match source commit prefix", async () => {
+  const response = createVersionHandler(
+    runtime({
+      release_id: "edge-20260712-abcdef012345",
+      source_commit: VALID_RELEASE.source_commit,
+    }),
+  )(request());
+  const body = await response.json();
+
+  assertEquals(response.status, 503);
+  assertEquals(body.verified, false);
+  assertEquals(body.status, "unavailable");
+});
+
+Deno.test("valid matching release metadata succeeds", async () => {
+  const response = createVersionHandler(runtime(VALID_RELEASE))(request());
+  const body = await response.json();
+
+  assertEquals(response.status, 200);
+  assertEquals(body.verified, true);
+  assertEquals(body.release_id, VALID_RELEASE.release_id);
+  assertEquals(body.source_commit, VALID_RELEASE.source_commit);
+});
+
 Deno.test("unsupported methods return 405 before reading environment", async () => {
   const accessedEnvironmentNames: VersionEnvironmentName[] = [];
   const handler = createVersionHandler({
