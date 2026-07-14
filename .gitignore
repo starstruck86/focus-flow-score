@@ -25,3 +25,6 @@ dist-ssr
 *.sw?
 .env
 .env.local
+
+# Local database migration rehearsal inputs and generated metadata reports
+/local-migration-artifacts/

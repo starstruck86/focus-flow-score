@@ -1,0 +1,2 @@
+; Synthetic unknown TOC class: the inspector must fail closed.
+1; 9999 9999 MYSTERY OBJECT public synthetic_object app_owner

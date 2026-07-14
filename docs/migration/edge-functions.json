@@ -1,0 +1,1086 @@
+{
+  "components": [
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:c81f2a20c393a22f6449352f348f63c4d21644b3f60e96137f10516024f65f59",
+      "independently_verifiable": true,
+      "key": "analyze-call",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:d8fcd2c00f23e0a37d571214aed7747e6f8f8e18b7a7eb2cc9c4e85266a50dac",
+      "independently_verifiable": true,
+      "key": "analyze-deal-outcome",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:5f107384e50a95bbfd028e2eaab62642892bcc312a6932f257d0e7bb22fdbad7",
+      "independently_verifiable": true,
+      "key": "analyze-sentiment",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=true"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:c80d9b6e5d6f90938ab2179d7df6dd1aff0bc4481cc29d708367d4fa3da9137a",
+      "independently_verifiable": true,
+      "key": "batch-actionize",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:494a72b557ad3d4d6360e9fff75cc6ba786ad8f117f2540d6ada4de05a18d334",
+      "independently_verifiable": true,
+      "key": "batch-extract-kis",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:26dd5895da84acde15a2e7424cbc360ad4f2af693491a29db1cb541cd5a5ef2e",
+      "independently_verifiable": true,
+      "key": "batch-recovery-rerun",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:66c8e213a1378be16ba476a6c277d566b513a115d5631bdc375183c6e7359bd2",
+      "independently_verifiable": true,
+      "key": "batch-regrade-now",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:e065468482a2c72fe8b688b36991e08c13124a36b262715c024a5624459af6df",
+      "independently_verifiable": true,
+      "key": "branch-intelligence",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:57bf83e272d301d550f194d119906eb223176889b623ecb1b80fe6143d6f052d",
+      "independently_verifiable": true,
+      "key": "build-resource",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:4e8f857ddb650cf2ea586bac6f1c39102005321a5d8398b90f705b5fcee195a1",
+      "independently_verifiable": true,
+      "key": "car-mode-audio-score",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:1a19415eb2ff97708c538b05b86b19117a8763221ec4c8dae616b6589231b36d",
+      "independently_verifiable": true,
+      "key": "car-mode-score",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=true"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:06bd131b89013b633abced29b23fe88139cfd381e7c74c8c42ee480519154259",
+      "independently_verifiable": true,
+      "key": "classify-resource",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:40c66f4b7a28d2ca199cdfa39c3c209f6ff003e2db8c5bd42244f915fb51b3fe",
+      "independently_verifiable": true,
+      "key": "classify-signal",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:48460c7cc9975f61b859acae562432304e9436061da75d4df1d4c8fb49741d8c",
+      "independently_verifiable": true,
+      "key": "clean-baseline",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:d4dce27c08c9032a848730a5d530658115084740dd4d43f75d1b474a3c469748",
+      "independently_verifiable": true,
+      "key": "conversion-math",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:92d1740c6fad2cf8d761f3b54d91455855f9a78e017f26d4fc899f2bd35b9fb2",
+      "independently_verifiable": true,
+      "key": "daily-digest",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:d80425a7d6c0739ce997f9a9697589663e1faafda5534fc6579fe43f45cf67a8",
+      "independently_verifiable": true,
+      "key": "dave-conversation-token",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:7b2142f4ee2abf9dc5373c93c23f081f6da3fe161cdf9d8cb36096a783c2cc20",
+      "independently_verifiable": true,
+      "key": "dave-health-check",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=true"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:35229d36d65f0d0e7bc386ff63633d8db7e9bc1913bbecf1f56eaeee4a2a4361",
+      "independently_verifiable": true,
+      "key": "deal-intelligence",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:d8fb1ac71a9f5055b0b9cbc4a4838781cd789797dd0c1c0f9799322578d0be75",
+      "independently_verifiable": true,
+      "key": "derive-library-cards",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:e3a6281e41f71482c29c2e93d8a6560b92be929a59ded2508adfbc8483a57b6f",
+      "independently_verifiable": true,
+      "key": "detect-knowledge-gaps",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:93d4b4d2940b7137b07678e10b29e6c7c54de4bb3132aed80fcdeb8f5fc7a770",
+      "independently_verifiable": true,
+      "key": "discover-contacts",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:80ee9033228d6779c643c8d0c9b92781d661c2eac0275d3a7118728e6d1a8562",
+      "independently_verifiable": true,
+      "key": "discover-resources",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:70ab4136ff6d65138a9fab296aa0677046cbb140fa155a41005f5e9158608cdc",
+      "independently_verifiable": true,
+      "key": "dojo-review-score",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:f80ad386e7583b70a54e89f2a29efe91cb80228cfbaa6898fd58e1b303bad9a6",
+      "independently_verifiable": true,
+      "key": "dojo-roleplay-score",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:decd433a6ec53d21e12ae169bc8ecc78373ad0bbd9d840820bb43c5689f36258",
+      "independently_verifiable": true,
+      "key": "dojo-score",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=true"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:d6a69df195a386daaebf6c005648ae15551a585ac8dcd7b66f81abc8530b1803",
+      "independently_verifiable": true,
+      "key": "drill-review",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=true"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:5c603e471adcd5c85279b7be1317ff29ce6d80d72e729ef41f4b7f6056260c67",
+      "independently_verifiable": true,
+      "key": "elevenlabs-stt",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:44eb8ea9c40bb43aef03334c037e6e1420359ffb312c4356a94a68e42aee3567",
+      "independently_verifiable": true,
+      "key": "elevenlabs-transcribe",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:3458c602315de0e225eff4f0f424e878c3471acf0f4141fa05eaef085a4b06bb",
+      "independently_verifiable": true,
+      "key": "elevenlabs-tts-stream",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:865f2c855a8db5bed1cdf1f3b75a2febb3d333c464cf2797c5022a54623161d7",
+      "independently_verifiable": true,
+      "key": "enrich-account",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:695eeb6a2798e5eb1300f8358d7c33db7b4413897c3021934671d03addaeb6ec",
+      "independently_verifiable": true,
+      "key": "enrich-resource-content",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:e33cd39b9ed230445d44d90f030d998d78faa83b855e609e8fe7f8c6d930c7db",
+      "independently_verifiable": true,
+      "key": "expand-prompt",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:c9397aa1a6c521d7c20716f2d293b52ddb0da5a01821b15bf27aafcaa114eb59",
+      "independently_verifiable": true,
+      "key": "explain-score",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:58834075aa94d2a820839161854243d208f98bdbd2413c36827545494a2eecab",
+      "independently_verifiable": true,
+      "key": "extract-scenarios",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:968232052b0fb85aa58ab884663152e7465eba6ffeecc144bce707448ba4d38e",
+      "independently_verifiable": true,
+      "key": "extract-strategy-memory",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:d9f3b06a822bdcdc8cd0b842fc2182b392acf47bc92d57ebc0b741d0156810f7",
+      "independently_verifiable": true,
+      "key": "extract-tactics",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:c241b305fd1508388270d9dba6a02c3e68f114f6e9bd4a659fcf5740faf8fb81",
+      "independently_verifiable": true,
+      "key": "extract-tasks",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:16a031f0733cc753c416339ed8ecabcd89d4d9b31b29f2286ae0aff978d6d449",
+      "independently_verifiable": true,
+      "key": "generate-call-goals",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:87c1c0bda4ee94caf9666b314aeff53c4bdb9e7335a588b57bd06a92a1477d65",
+      "independently_verifiable": true,
+      "key": "generate-execution-draft",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:925f32cba963b8bb2e8e77bfe2e0c96c4179a1f06793687cad6f3be10822b15c",
+      "independently_verifiable": true,
+      "key": "generate-flashcards",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:531b188e6b3b99c7e2e8d5ea6c9463c151cd5693d1e0fe91618de456a3fb6017",
+      "independently_verifiable": true,
+      "key": "generate-lesson-content",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:2409d275887acc59ec32a005da0b5de177e80fac997ca120d09c33721c47c035",
+      "independently_verifiable": true,
+      "key": "generate-playbooks",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:07ee4d28623598cd0157ae0f94b4d1001763442e1eafdb73473598b4b84c9be9",
+      "independently_verifiable": true,
+      "key": "generate-stage-playbook",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:cf9cc3655a23d6046f9be44d49944a2f0881ad002023a9c9e86bc0b564625e74",
+      "independently_verifiable": true,
+      "key": "generate-time-blocks",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:98f7ad16726de2006312413a1f52f2ffe21b6b176d034e2c1c9566592cad8003",
+      "independently_verifiable": true,
+      "key": "get-benchmark-kis",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:7d203cdccb54bee22190a3477563726f8d2a95c1128f273ba99c8e17175999a8",
+      "independently_verifiable": true,
+      "key": "grade-lesson-response",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:8e367cfa8c16bce2384b10522c6d5a7cf68154bef4cf883938131f5b7849e3cd",
+      "independently_verifiable": true,
+      "key": "grade-mock-call",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:bd2def3468ab4c9f2d16d05ce8f3d5c4c81ee0b9476826f8aca7465a686303ed",
+      "independently_verifiable": true,
+      "key": "grade-objection-drill",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:f3e9837bd1600e2bf6399528b236fb6fd2de8c8bea8282ed7a1ef1162ed042ff",
+      "independently_verifiable": true,
+      "key": "grade-transcript",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:4fa5950f5112ecd920c2c5ac59a47c424b9a41249639f379b0fe5a170db93f1d",
+      "independently_verifiable": true,
+      "key": "import-circle-browserless",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:a49430ca116e55ee411ddea979b61dba45cc9f86efa00c56157af76a6e3cba1c",
+      "independently_verifiable": true,
+      "key": "import-course",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:e83860fce2ff1d59f132745f08b01ec34b6b2976de0099b7360067e5253f2ebf",
+      "independently_verifiable": true,
+      "key": "import-course-capture",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:336d7a6f5524242876de67ac06acf3d84c19e2dc007750425d3197e817a98f49",
+      "independently_verifiable": true,
+      "key": "import-podcast",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:b221e24bf7580f8749b465f1f1dc34d7ac38ac0fbef7bff5d3f5855c57454d0b",
+      "independently_verifiable": true,
+      "key": "import-webpage-links",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:cd411d7df8dc6e3c080f47a342f76b0f51d2d95071f9d1dab9a7e30bbfdf5dc1",
+      "independently_verifiable": true,
+      "key": "import-youtube-playlist",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:9a0cf4e68392e02b4478ef04deed8b0fe40f0456548ceae6001bd1333628f206",
+      "independently_verifiable": true,
+      "key": "journal-nudge",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:0524bd21d9ee7f5177aa5a82d0fb772f6420436859e2dd825b51560351cb8fa1",
+      "independently_verifiable": true,
+      "key": "log-workday-focus",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:1937dfe1099f6bd81ef06714f26f2377a8e357c3eab16c2f5f3ebd60d5a30a61",
+      "independently_verifiable": true,
+      "key": "mcp",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:753e511ed078fdf8cb54e9f15bc31242b0365bbc00d833c8814596336b5c355c",
+      "independently_verifiable": true,
+      "key": "mock-call",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:833f22eecd984ca8da294ad865c001d977c1c875c3b74b880914260ccad00811",
+      "independently_verifiable": true,
+      "key": "operationalize-resource",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:d287e05bf7fb2f423c3a3513071757edd36b105e6c76b59ec322152b4938fd08",
+      "independently_verifiable": true,
+      "key": "parse-account-screenshot",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:478ce795809d89c891c88826cd102b97448cc9c937945d9c68d749291bfd395a",
+      "independently_verifiable": true,
+      "key": "parse-account-synopsis",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:dfa9d4fbfbdac402b87fa577204615a2eae8e13278ee5729510b7a73363645f1",
+      "independently_verifiable": true,
+      "key": "parse-calendar-screenshot",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:c9a87f38b781460ad5567b41b55509dadf582f700f1b10863a935e0cc025d7dd",
+      "independently_verifiable": true,
+      "key": "parse-claude-import",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:f51ff153d9ac1edf184f89a0c6a48588467f183811de7562d0d01b0a6c5d119c",
+      "independently_verifiable": true,
+      "key": "parse-opp-synopsis",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:81c43f916ddb2c5b93232b82bb4285f07befe3d98cd7829a9ecaedab3fa1582b",
+      "independently_verifiable": true,
+      "key": "parse-screenshot",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:ea59dd52d5a3dc94ebc33768259d66372293c35df3ff3808c45598b810338adb",
+      "independently_verifiable": true,
+      "key": "parse-uploaded-file",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:79ff0a99f82e5b2e3bbc10eac6819ab9209c0c4ebd9525d8730eca0988a7e646",
+      "independently_verifiable": true,
+      "key": "pdf-ocr",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:f8df9806c59b83b9b75194a55c5d007d53be608e90d262136bec4c24187602d4",
+      "independently_verifiable": true,
+      "key": "pipeline-hygiene",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:bed9066adddc06f4419a7130a3c5e856692bd04ad9647ef08ad7d562cc0f03e8",
+      "independently_verifiable": true,
+      "key": "playbook-roleplay",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:e2a0c5b9ce55eb7fa576e58913f192b5131de10d9716c9caaba4f0696da74f95",
+      "independently_verifiable": true,
+      "key": "preprocess-transcript",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:9cf176970d2140548b4effa9c61dc18d015828a09ca841faa6a02c67c970ee94",
+      "independently_verifiable": true,
+      "key": "prioritize-accounts",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:37e727d3c965a252057ff3a463e2fc959eb3b542ef3a1bd17b97088c2a436049",
+      "independently_verifiable": true,
+      "key": "process-podcast-queue",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:27161553df3cd1d859826c48e044ba5fe0cd4eda7d821ab639e593a4738d7098",
+      "independently_verifiable": true,
+      "key": "reconcile-library",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:d874c62e7f24193d5a32f8e014910be9f01f9cd92e856e0397dcab8e3b8f2d58",
+      "independently_verifiable": true,
+      "key": "register-dave-tools",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:c19e8a4e06577095a86bd4fff88352df985a2bad6aee5821545fc91687204791",
+      "independently_verifiable": true,
+      "key": "resolve-podcast-episode",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:f5330beabea60e12a2a8a052d4069493aa080d4fa051e07bdfb787f65833237f",
+      "independently_verifiable": true,
+      "key": "run-catchup",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:4e3c54c1cdff7ae5a963a1fd04307f3a24e842b8c4c7a72c79a6281913ce11f7",
+      "independently_verifiable": true,
+      "key": "run-discovery-prep",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:64a896d39eb78bebbb696d5ec392eb6be1bed5efe0666ba927404b38c8644926",
+      "independently_verifiable": true,
+      "key": "run-discovery-prep-step",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:77886db96cd94d099340dde5fb6e2bc9387a67f339e8c809df5a40efa2464af6",
+      "independently_verifiable": true,
+      "key": "run-enrichment-job",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:49626cbd7a364683c0810f8837b9c5b332e80077674575c85e627f40b98e6f11",
+      "independently_verifiable": true,
+      "key": "run-phase35b-validation",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:647f78db9930f0754c7882cf47c535fa60d31cee7f977d81473dd027016caf1e",
+      "independently_verifiable": true,
+      "key": "run-strategy-eval-synthesis",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:f029c47d2e2bb721736d84ed2ebe10ba378c7fe682e51654ed15ddd6310d8255",
+      "independently_verifiable": true,
+      "key": "run-strategy-job",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:f878b64ecb8bd58f1646e2db0168812b719f48c3a1e43a17ccf61b17d8f565e7",
+      "independently_verifiable": true,
+      "key": "run-strategy-task",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:8612246bb5ccd499e483af44952e327c07d9a688d2f44e966b39af8558a156b2",
+      "independently_verifiable": true,
+      "key": "run-strategy-task-reaper",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:073307e013cafaa573a67a71485af70aed652d0ccd2a390889c677d24396aa16",
+      "independently_verifiable": true,
+      "key": "run-validation-canary",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:f480bca30106141b834e3950ec40270e4c2a772d06a24e4a4e877d99b3007700",
+      "independently_verifiable": true,
+      "key": "schedule-daily-plan",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:1b150c9ddc8930ccb23bc8286f541b1088c7ef83a14b811c5361f756602a81da",
+      "independently_verifiable": true,
+      "key": "score-micro-drill",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:ee570c5a923dd8f6ab284b016f385bffcb417dee2f19a2d2537fff763761546a",
+      "independently_verifiable": true,
+      "key": "score-original-response",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:e8571e2e0053a22de57a783d185929c68be60034ae08d20fc2f2f64847602a84",
+      "independently_verifiable": true,
+      "key": "search-context",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:624ef37c52f2dad6712a9f00e9245862fea7ea29aa2e70af154b2286caafa594",
+      "independently_verifiable": true,
+      "key": "simulate-chat",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:cdbc1d11de459a85f9e10f2de4752aa85bbf0684d444b65219d65c0b47d3bab0",
+      "independently_verifiable": true,
+      "key": "source-icp-accounts",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:2fdcec81f2703ed3cff6686ed6e77fadfd1e4ebb4ae3ab0097f42a9f5a0321d4",
+      "independently_verifiable": true,
+      "key": "strategy-benchmark-runner",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:9d0d5b9a8f8df71f434543d61c6a5ca39502d5b05509e439d6130b5909376b1f",
+      "independently_verifiable": true,
+      "key": "strategy-chat",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:4c5b58aa1c02630cc0677e7f8bc92e4fdc21d9e43c9b8a0e930dea358142a20b",
+      "independently_verifiable": true,
+      "key": "strategy-clone-thread",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:29ed5c2c0ff9ef227d5ae72496de9a1e1b55d4d0bdf99b94d6cbb9c970424527",
+      "independently_verifiable": true,
+      "key": "strategy-detect-conflicts",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:d978e65511a5991bad0560048c217eae82a796fa8bb86d634de06d3595228cc5",
+      "independently_verifiable": true,
+      "key": "strategy-detect-proposals",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:81e91c80a07a9edc2222f06b7319c2dace7ea71c9e6cbde4afc49bf258f5e2fe",
+      "independently_verifiable": true,
+      "key": "strategy-evidence-render",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:e5f01a3f47a7cda29f75e1a6ee732d6ffe2fd3b113a4183ed6301d82f3d8d752",
+      "independently_verifiable": true,
+      "key": "strategy-promote-proposal",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:0f144647f1ddabdffa93f62d687c51b3bb0edd043adf78ebcea6b6c16495b036",
+      "independently_verifiable": true,
+      "key": "strategy-retrieval-probe",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:9f214786ce3f713da327d2242ed4fd82680da199c84c4cee056e6720dc69a8aa",
+      "independently_verifiable": true,
+      "key": "strategy-smoke-test",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:79b77a4c4c27fa8e112ce923d927e21b636d4476f7e8d800fde276fc6bd2ced5",
+      "independently_verifiable": true,
+      "key": "strategy-stage-proposal",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:59024e90cf68eb2da70478c0b6923a0b6b8be42a055be156beead0c8370574cc",
+      "independently_verifiable": true,
+      "key": "strategy-stress-runner",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:ccdff9134e16bbac08336d7da2702b9617c8512f6cfcc00359a809751a1e799a",
+      "independently_verifiable": true,
+      "key": "strategy-stress-test",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:876c8b626cd75fc4c9716f7582045e7afc437e3db10f705d36728438fe4358c1",
+      "independently_verifiable": true,
+      "key": "strategy-summarize-upload",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:a6099aa1efae57816ab956957bf3bbbd6c4adeedc9e3c8beb8ec0f40ba43bd0d",
+      "independently_verifiable": true,
+      "key": "strategy-transform-output",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:1d5857f3df1462fde623d107426abe5b7d5f229a38553b4d5ac672df7f91745a",
+      "independently_verifiable": true,
+      "key": "suggest-resource-uses",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:7df8481aa5ecabdfa06c88c6c3c40d5ca61cbfb7ca1ed2ffab6a7e5b9e0de801",
+      "independently_verifiable": true,
+      "key": "suggest-templates",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:b767a22f40eab37c8a54e1b70c5a1d70f21dbb6b8b3658702aa442703451e4f3",
+      "independently_verifiable": true,
+      "key": "sync-calendar",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:988969bbc2e0d07a7f55160dfb61e2091ed15c0da53216c072df3625cfa9a9b4",
+      "independently_verifiable": true,
+      "key": "territory-copilot",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:718424c5d2aef555166f855baaa17efa66b9be64941b3e4ff1ec294e4fe22111",
+      "independently_verifiable": true,
+      "key": "training-digest",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:5d5a250fe4839cca8981f0551b7332a45a372d1a5f14d1f29a803b1b91466158",
+      "independently_verifiable": true,
+      "key": "transcribe-audio",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:d383784ce9acd3fa7b5793046151a11d6b6fe1e91a9657c1cd5e57d4b980ca14",
+      "independently_verifiable": true,
+      "key": "validate-enrichment",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:55c623984aead121d498d7c57c0f647eff2da2fd8681137d0325196eec372fc0",
+      "independently_verifiable": true,
+      "key": "version",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:dc8e393e0c6a44fefb8db871539ed65f59714bb18a41dd3a49971874a3ef999f",
+      "independently_verifiable": true,
+      "key": "voice-command",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:55e31f6114a8c440c4f6ab51327f4a34bcddde28e6040b6edbe7f586696ea15f",
+      "independently_verifiable": true,
+      "key": "weekly-battle-plan",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:209b6e862850e83f2f1e945f688c5fb802390230535a0f8411e6745c8d96b08c",
+      "independently_verifiable": true,
+      "key": "weekly-digest",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": true,
+      "count": null,
+      "fingerprint": "sha256:cf652be65ce6ba69fe55fe2303e826f7e1ef260e53e9ffcdcc157b370541cf94",
+      "independently_verifiable": true,
+      "key": "weekly-patterns",
+      "kind": "edge_function",
+      "note": "repository verify_jwt=false"
+    },
+    {
+      "configuration_known": false,
+      "count": null,
+      "fingerprint": "sha256:089402a05b2901c4252d2db49e14e93ebca92d0051932a7298cb89cddca85bab",
+      "independently_verifiable": true,
+      "key": "youtube-captions",
+      "kind": "edge_function",
+      "note": "verify_jwt is not explicit in supabase/config.toml; confirm effective deployment setting"
+    }
+  ],
+  "format_version": 1,
+  "label": "repository-edge-functions"
+}
