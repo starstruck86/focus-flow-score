@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -22,7 +23,14 @@ SQL_INVENTORY = ROOT / "docs" / "migration" / "sql-inventory.md"
 RUNTIME_INVENTORY = ROOT / "docs" / "migration" / "runtime-inventory.md"
 MIGRATION_TOOL_README = ROOT / "scripts" / "migration" / "README.md"
 LEDGER_LINE = re.compile(r"^([0-9a-f]{64})  (supabase/migrations/[^\n]+\.sql)$")
-REVIEWED_INSPECTION_SHA = "c87a124602eb669b3ec5a3829610c6cb465d3e26"
+EVIDENCE_PROCEDURE_SHA = "e4eed4a21049d274738110710a468e265c2893d2"
+INSPECTION_TOOL_SHA = "c87a124602eb669b3ec5a3829610c6cb465d3e26"
+WORKFLOW_PATTERN = re.compile(
+    r"<!-- BEGIN LOVABLE EXPORT EVIDENCE WORKFLOW -->\n"
+    r"```bash\n(.*?)\n```\n"
+    r"<!-- END LOVABLE EXPORT EVIDENCE WORKFLOW -->",
+    re.DOTALL,
+)
 
 SPEC = importlib.util.spec_from_file_location("strict_manifest", COMPARE_TOOL)
 assert SPEC and SPEC.loader
@@ -31,157 +39,329 @@ sys.modules[SPEC.name] = MANIFEST_MODULE
 SPEC.loader.exec_module(MANIFEST_MODULE)
 
 
-class RepositoryArtifactTest(unittest.TestCase):
-    def test_documented_export_evidence_template_is_executable_and_fail_closed(self):
+class DocumentedEvidenceWorkflowTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
         readme = MIGRATION_TOOL_README.read_text(encoding="utf-8")
-        bash_block = re.search(r"```bash\n(.*?)\n```", readme, re.DOTALL)
-        self.assertIsNotNone(bash_block)
-        assert bash_block is not None
+        bash_block = WORKFLOW_PATTERN.search(readme)
+        if bash_block is None:
+            raise AssertionError("documented evidence workflow block is missing")
+        cls.workflow = bash_block.group(1)
         syntax = subprocess.run(
             ["bash", "-n"],
-            input=bash_block.group(1),
+            input=cls.workflow,
             check=False,
             capture_output=True,
             text=True,
         )
-        self.assertEqual(syntax.returncode, 0, syntax.stderr)
-        snippets = re.findall(r"<<'PY'\n(.*?)\nPY", bash_block.group(1), re.DOTALL)
-        self.assertEqual(len(snippets), 2)
+        if syntax.returncode != 0:
+            raise AssertionError(syntax.stderr)
 
-        environment = os.environ | {
+        cls.class_directory = tempfile.TemporaryDirectory(
+            prefix="documented-evidence-workflow."
+        )
+        cls.class_root = Path(cls.class_directory.name)
+        cls.base_checkout = cls.class_root / "reviewed base checkout"
+        clone = subprocess.run(
+            ["git", "clone", "--quiet", "--shared", str(ROOT), str(cls.base_checkout)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if clone.returncode != 0:
+            raise AssertionError(clone.stderr)
+        shutil.copy2(
+            MIGRATION_TOOL_README,
+            cls.base_checkout / "scripts" / "migration" / "README.md",
+        )
+        for key, value in (
+            ("user.name", "Synthetic Migration Test"),
+            ("user.email", "migration-test@example.invalid"),
+        ):
+            subprocess.run(
+                ["git", "config", key, value],
+                cwd=cls.base_checkout,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        subprocess.run(
+            ["git", "add", "scripts/migration/README.md"],
+            cwd=cls.base_checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            ["git", "commit", "--quiet", "--allow-empty", "-m", "synthetic execution checkout"],
+            cwd=cls.base_checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        cls.execution_checkout_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=cls.base_checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.class_directory.cleanup()
+
+    def setUp(self):
+        self.case_root = Path(
+            tempfile.mkdtemp(prefix=f"{self._testMethodName}.", dir=self.class_root)
+        )
+        self.checkout = self.case_root / "checkout with spaces"
+        subprocess.run(
+            [
+                "git",
+                "clone",
+                "--quiet",
+                "--shared",
+                str(self.base_checkout),
+                str(self.checkout),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.canonical = (
+            self.case_root / "encrypted evidence store" / "Lovable export.backup"
+        )
+        self.canonical.parent.mkdir()
+        self.row_sentinel = "SYNTHETIC_ROW_PAYLOAD_MUST_NOT_APPEAR"
+        self.canonical.write_bytes(
+            b"PGDMP\x01\x0e\x00\x04\x08\x01" + self.row_sentinel.encode("ascii")
+        )
+        self.fake_log = self.case_root / "fake pg_restore calls.log"
+        self.fake_log.write_text("", encoding="utf-8")
+        self.fake_pg_restore = self.case_root / "fake pg_restore"
+        self.fake_pg_restore.write_text(
+            """#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  --version)
+    [[ $# -eq 1 ]]
+    printf '%s\\n' '--version' >>"$FAKE_LOG"
+    printf 'pg_restore (PostgreSQL) 17.5 (synthetic)\\n'
+    ;;
+  --list)
+    [[ $# -eq 2 ]]
+    printf '%s|%s\\n' '--list' "$2" >>"$FAKE_LOG"
+    cat -- "$FAKE_TOC"
+    ;;
+  *)
+    printf 'unexpected pg_restore invocation: %s\\n' "$*" >&2
+    exit 7
+    ;;
+esac
+""",
+            encoding="utf-8",
+        )
+        self.fake_pg_restore.chmod(0o700)
+        self.environment = os.environ | {
             "SOURCE_PROJECT_NAME": "Synthetic Lovable rehearsal",
             "SOURCE_PROJECT_REF": "abcdefghijklmnopqrst",
             "EXPORT_INITIATED_AT_UTC": "2026-07-14T12:00:00Z",
             "EXPORT_COMPLETED_AT_UTC": "2026-07-14T12:05:00Z",
             "DOWNLOAD_COMPLETED_AT_UTC": "2026-07-14T12:06:00Z",
             "OPERATOR_IDENTITY": "synthetic-test-operator",
-            "REVIEWED_GIT_SHA": REVIEWED_INSPECTION_SHA,
-            "RUN_ID": "rehearsal-synthetic",
+            "CANONICAL_EXPORT": str(self.canonical),
+            "PG_RESTORE_BIN": str(self.fake_pg_restore),
+            "PYTHON_BIN": sys.executable,
+            "FAKE_LOG": str(self.fake_log),
+            "FAKE_TOC": str(
+                self.checkout
+                / "scripts"
+                / "migration"
+                / "tests"
+                / "fixtures"
+                / "representative.toc"
+            ),
         }
 
-        with tempfile.TemporaryDirectory() as directory:
-            temporary = Path(directory)
-            run_root = temporary / "local-migration-artifacts" / "rehearsal-synthetic"
-            archive_dir = run_root / "archive"
-            inspection_dir = run_root / "inspection"
-            archive_dir.mkdir(parents=True)
-            inspection_dir.mkdir()
-            canonical = temporary / "encrypted-evidence-store" / "Lovable export.backup"
-            canonical.parent.mkdir()
-            canonical.write_bytes(b"PGDMP synthetic metadata-only fixture")
-            working = archive_dir / canonical.name
-            working.write_bytes(canonical.read_bytes())
-            before = archive_dir / "archive.sha256.before"
+    @property
+    def run_root(self) -> Path:
+        return (
+            self.checkout
+            / "local-migration-artifacts"
+            / "rehearsal-20260714T120000Z"
+        )
 
-            initial = subprocess.run(
-                [sys.executable, "-", str(canonical), str(working), str(before)],
-                input=snippets[0],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(initial.returncode, 0, initial.stderr)
-            archive_sha = hashlib.sha256(working.read_bytes()).hexdigest()
-            report = inspection_dir / "rehearsal-metadata.txt"
-            report.write_text(
-                "inspection_status: REVIEW_REQUIRED\n"
-                "restore_attempted: no\n"
-                "database_connection_attempted: no\n"
-                "row_payload_inspected: no\n"
-                f"input_file: {working.name}\n"
-                f"size_bytes: {working.stat().st_size}\n"
-                f"sha256: {archive_sha}\n"
-                "archive_snapshot_binding: PASS (synthetic bound snapshot)\n",
+    def run_workflow(
+        self,
+        *,
+        environment: dict[str, str] | None = None,
+        git_rev_parse_mode: str | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        execution_environment = self.environment | (environment or {})
+        if git_rev_parse_mode is not None:
+            fake_bin = self.case_root / "fake git bin"
+            fake_bin.mkdir()
+            fake_git = fake_bin / "git"
+            real_git = shutil.which("git")
+            self.assertIsNotNone(real_git)
+            fake_git.write_text(
+                """#!/usr/bin/env bash
+set -euo pipefail
+if [[ $# -eq 2 && "$1" == 'rev-parse' && "$2" == 'HEAD' ]]; then
+  case "$FAKE_GIT_REV_PARSE_MODE" in
+    missing) exit 0 ;;
+    malformed) printf 'not-a-commit-sha\\n'; exit 0 ;;
+  esac
+fi
+exec "$REAL_GIT" "$@"
+""",
                 encoding="utf-8",
             )
-            after = archive_dir / "archive.sha256.after"
-            report_sha = inspection_dir / "report.sha256"
-            provenance = run_root / "provenance.json"
-            arguments = [
-                canonical,
-                working,
-                before,
-                after,
-                report,
-                report_sha,
-                provenance,
-                run_root,
-            ]
-            packaged = subprocess.run(
-                [sys.executable, "-", *map(str, arguments)],
-                input=snippets[1],
-                check=False,
-                capture_output=True,
-                text=True,
-                env=environment,
-            )
-            self.assertEqual(packaged.returncode, 0, packaged.stderr)
-            manifest = json.loads(provenance.read_text(encoding="utf-8"))
-            self.assertEqual(manifest["lovable_source_project"]["ref"], "abcdefghijklmnopqrst")
-            self.assertEqual(manifest["export"]["sha256"], archive_sha)
-            self.assertEqual(
-                manifest["export"]["sha256_evidence"],
+            fake_git.chmod(0o700)
+            execution_environment.update(
                 {
-                    "external_after": archive_sha,
-                    "external_before": archive_sha,
-                    "inspector_report": archive_sha,
-                },
+                    "PATH": str(fake_bin) + os.pathsep + execution_environment["PATH"],
+                    "REAL_GIT": str(real_git),
+                    "FAKE_GIT_REV_PARSE_MODE": git_rev_parse_mode,
+                }
             )
-            self.assertEqual(
-                manifest["export"]["initiated_at_utc"]["basis"],
-                "operator_observed",
-            )
-            self.assertEqual(manifest["reviewed_git_sha"], REVIEWED_INSPECTION_SHA)
-            self.assertEqual(
-                manifest["inspection_tool"]["git_sha"], REVIEWED_INSPECTION_SHA
-            )
-            self.assertEqual(
-                manifest["report"]["sha256"], hashlib.sha256(report.read_bytes()).hexdigest()
-            )
-            self.assertEqual(before.read_text().strip(), archive_sha)
-            self.assertEqual(after.read_text().strip(), archive_sha)
+        return subprocess.run(
+            ["bash"],
+            cwd=self.checkout,
+            env=execution_environment,
+            input=self.workflow,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
 
-        with tempfile.TemporaryDirectory() as directory:
-            temporary = Path(directory)
-            canonical = temporary / "Lovable export.backup"
-            working = temporary / canonical.name
-            canonical.write_bytes(b"PGDMP synthetic planted mismatch")
-            working.write_bytes(canonical.read_bytes())
-            before = temporary / "before.sha256"
-            before.write_text("0" * 64 + "\n", encoding="ascii")
-            report = temporary / "report.txt"
-            archive_sha = hashlib.sha256(working.read_bytes()).hexdigest()
-            report.write_text(
-                "inspection_status: REVIEW_REQUIRED\n"
-                "restore_attempted: no\n"
-                "database_connection_attempted: no\n"
-                "row_payload_inspected: no\n"
-                f"input_file: {working.name}\n"
-                f"size_bytes: {working.stat().st_size}\n"
-                f"sha256: {archive_sha}\n"
-                "archive_snapshot_binding: PASS (synthetic bound snapshot)\n",
-                encoding="utf-8",
-            )
-            arguments = [
-                canonical,
-                working,
-                before,
-                temporary / "after.sha256",
-                report,
-                temporary / "report.sha256",
-                temporary / "provenance.json",
-                temporary,
-            ]
-            mismatch = subprocess.run(
-                [sys.executable, "-", *map(str, arguments)],
-                input=snippets[1],
-                check=False,
-                capture_output=True,
-                text=True,
-                env=environment,
-            )
-            self.assertNotEqual(mismatch.returncode, 0)
-            self.assertIn("SHA-256 differ", mismatch.stderr)
+    def assert_guard_failure(
+        self,
+        expected: str,
+        *,
+        environment: dict[str, str] | None = None,
+        git_rev_parse_mode: str | None = None,
+    ) -> None:
+        result = self.run_workflow(
+            environment=environment,
+            git_rev_parse_mode=git_rev_parse_mode,
+        )
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn(expected, result.stderr)
+        self.assertEqual(self.fake_log.read_text(encoding="utf-8"), "")
+        self.assertFalse(self.run_root.exists())
+
+    def test_complete_documented_workflow_runs_end_to_end(self):
+        result = self.run_workflow()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        report = self.run_root / "inspection" / "rehearsal-metadata.txt"
+        provenance_path = self.run_root / "provenance.json"
+        before = self.run_root / "archive" / "archive.sha256.before"
+        after = self.run_root / "archive" / "archive.sha256.after"
+        report_sha_path = self.run_root / "inspection" / "report.sha256"
+        for path in (report, provenance_path, before, after, report_sha_path):
+            self.assertTrue(path.is_file(), path)
+
+        archive_sha = hashlib.sha256(self.canonical.read_bytes()).hexdigest()
+        report_sha = hashlib.sha256(report.read_bytes()).hexdigest()
+        provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+        self.assertEqual(provenance["evidence_procedure_git_sha"], EVIDENCE_PROCEDURE_SHA)
+        self.assertEqual(provenance["inspection_tool_git_sha"], INSPECTION_TOOL_SHA)
+        self.assertEqual(
+            provenance["execution_checkout_sha"], self.execution_checkout_sha
+        )
+        self.assertNotIn("reviewed_git_sha", provenance)
+        self.assertEqual(provenance["inspection_tool"]["git_sha"], INSPECTION_TOOL_SHA)
+        self.assertEqual(
+            provenance["export"]["sha256_evidence"],
+            {
+                "external_after": archive_sha,
+                "external_before": archive_sha,
+                "inspector_report": archive_sha,
+            },
+        )
+        self.assertEqual(before.read_text().strip(), archive_sha)
+        self.assertEqual(after.read_text().strip(), archive_sha)
+        self.assertEqual(report_sha_path.read_text().strip(), report_sha)
+        self.assertEqual(provenance["report"]["sha256"], report_sha)
+        self.assertNotIn(self.row_sentinel, report.read_text(encoding="utf-8"))
+
+        calls = self.fake_log.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0], "--version")
+        self.assertRegex(
+            calls[1],
+            r"^--list\|.*/lovable-dump-inspection\.[^/]+/archive\.snapshot$",
+        )
+        self.assertNotIn(str(self.canonical), calls[1])
+        self.assertNotIn(str(self.run_root / "archive" / self.canonical.name), calls[1])
+
+    def test_rejects_untracked_migration_before_inspection(self):
+        untracked = self.checkout / "supabase" / "migrations" / "999999_untracked.sql"
+        untracked.write_text("select 1;\n", encoding="utf-8")
+        self.assert_guard_failure("untracked files under supabase/migrations")
+
+    def test_rejects_ignored_untracked_migration_before_inspection(self):
+        relative = "supabase/migrations/999998_ignored.sql"
+        exclude = self.checkout / ".git" / "info" / "exclude"
+        with exclude.open("a", encoding="utf-8") as destination:
+            destination.write(relative + "\n")
+        ignored = self.checkout / relative
+        ignored.write_text("select 1;\n", encoding="utf-8")
+        self.assert_guard_failure("ignored files under supabase/migrations")
+
+    def test_rejects_modified_inspector_before_inspection(self):
+        inspector = self.checkout / "scripts" / "migration" / "inspect-lovable-dump.sh"
+        inspector.write_text(inspector.read_text() + "\n# planted modification\n")
+        self.assert_guard_failure("inspection tool/input tree differs")
+
+    def test_rejects_modified_helper_before_inspection(self):
+        helper = (
+            self.checkout / "scripts" / "migration" / "lib" / "lovable_dump_report.py"
+        )
+        helper.write_text(helper.read_text() + "\n# planted modification\n")
+        self.assert_guard_failure("inspection tool/input tree differs")
+
+    def test_rejects_modified_tracked_migration_before_inspection(self):
+        migration = next((self.checkout / "supabase" / "migrations").glob("*.sql"))
+        migration.write_text(migration.read_text() + "\n-- planted modification\n")
+        self.assert_guard_failure("inspection tool/input tree differs")
+
+    def test_rejects_modified_evidence_procedure_before_inspection(self):
+        readme = self.checkout / "scripts" / "migration" / "README.md"
+        readme.write_text(readme.read_text() + "\nplanted modification\n")
+        self.assert_guard_failure("evidence procedure differs from the execution checkout")
+
+    def test_rejects_wrong_procedure_sha_before_inspection(self):
+        self.assert_guard_failure(
+            "unexpected evidence procedure Git SHA",
+            environment={"EVIDENCE_PROCEDURE_GIT_SHA": INSPECTION_TOOL_SHA},
+        )
+
+    def test_rejects_wrong_tool_sha_before_inspection(self):
+        self.assert_guard_failure(
+            "unexpected inspection tool Git SHA",
+            environment={"INSPECTION_TOOL_GIT_SHA": EVIDENCE_PROCEDURE_SHA},
+        )
+
+    def test_rejects_missing_execution_checkout_sha_before_inspection(self):
+        self.assert_guard_failure(
+            "EXECUTION_CHECKOUT_SHA must be a full lowercase commit SHA",
+            git_rev_parse_mode="missing",
+        )
+
+    def test_rejects_malformed_execution_checkout_sha_before_inspection(self):
+        self.assert_guard_failure(
+            "EXECUTION_CHECKOUT_SHA must be a full lowercase commit SHA",
+            git_rev_parse_mode="malformed",
+        )
+
+
+class RepositoryArtifactTest(unittest.TestCase):
 
     def test_manifest_schema_example_is_strictly_valid(self):
         parsed = MANIFEST_MODULE.load_manifest(MANIFEST_EXAMPLE)

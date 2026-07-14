@@ -20,19 +20,30 @@ archive hash are identical. It then writes the report checksum and provenance
 manifest with exclusive-create semantics. Replace every angle-bracketed value;
 the validation rejects placeholders.
 
+Git provenance has three separate meanings. `EVIDENCE_PROCEDURE_GIT_SHA` is the
+substantive commit that introduced this evidence-package procedure;
+`INSPECTION_TOOL_GIT_SHA` is the unchanged inspector/helper/migration baseline;
+and `EXECUTION_CHECKOUT_SHA` is the exact checkout executing the procedure. The
+first two are fixed review anchors. The third proves execution identity—not
+review approval—and is always resolved from `git rev-parse HEAD` at execution.
+
+<!-- BEGIN LOVABLE EXPORT EVIDENCE WORKFLOW -->
 ```bash
 set -euo pipefail
 umask 077
 
-export SOURCE_PROJECT_NAME='<exact Lovable source project name>'
-export SOURCE_PROJECT_REF='<exact 20-character Lovable source project ref>'
-export EXPORT_INITIATED_AT_UTC='<operator-observed YYYY-MM-DDTHH:MM:SSZ>'
-export EXPORT_COMPLETED_AT_UTC='<operator-observed YYYY-MM-DDTHH:MM:SSZ>'
-export DOWNLOAD_COMPLETED_AT_UTC='<operator-observed YYYY-MM-DDTHH:MM:SSZ>'
-export OPERATOR_IDENTITY='<named operator identity>'
-export REVIEWED_GIT_SHA='c87a124602eb669b3ec5a3829610c6cb465d3e26'
+export SOURCE_PROJECT_NAME="${SOURCE_PROJECT_NAME:-<exact Lovable source project name>}"
+export SOURCE_PROJECT_REF="${SOURCE_PROJECT_REF:-<exact 20-character Lovable source project ref>}"
+export EXPORT_INITIATED_AT_UTC="${EXPORT_INITIATED_AT_UTC:-<operator-observed YYYY-MM-DDTHH:MM:SSZ>}"
+export EXPORT_COMPLETED_AT_UTC="${EXPORT_COMPLETED_AT_UTC:-<operator-observed YYYY-MM-DDTHH:MM:SSZ>}"
+export DOWNLOAD_COMPLETED_AT_UTC="${DOWNLOAD_COMPLETED_AT_UTC:-<operator-observed YYYY-MM-DDTHH:MM:SSZ>}"
+export OPERATOR_IDENTITY="${OPERATOR_IDENTITY:-<named operator identity>}"
+export EVIDENCE_PROCEDURE_GIT_SHA="${EVIDENCE_PROCEDURE_GIT_SHA:-e4eed4a21049d274738110710a468e265c2893d2}"
+export INSPECTION_TOOL_GIT_SHA="${INSPECTION_TOOL_GIT_SHA:-c87a124602eb669b3ec5a3829610c6cb465d3e26}"
+EXECUTION_CHECKOUT_SHA="$(git rev-parse HEAD)"
+export EXECUTION_CHECKOUT_SHA
 
-CANONICAL_EXPORT='/approved/encrypted/evidence-store/Lovable export.backup'
+CANONICAL_EXPORT="${CANONICAL_EXPORT:-/approved/encrypted/evidence-store/Lovable export.backup}"
 for required_name in \
   SOURCE_PROJECT_NAME SOURCE_PROJECT_REF EXPORT_INITIATED_AT_UTC \
   EXPORT_COMPLETED_AT_UTC DOWNLOAD_COMPLETED_AT_UTC OPERATOR_IDENTITY; do
@@ -55,6 +66,80 @@ for timestamp in \
   fi
 done
 
+if [[ "$EVIDENCE_PROCEDURE_GIT_SHA" != 'e4eed4a21049d274738110710a468e265c2893d2' ]]; then
+  printf '%s\n' 'ERROR: unexpected evidence procedure Git SHA' >&2
+  exit 1
+fi
+if [[ "$INSPECTION_TOOL_GIT_SHA" != 'c87a124602eb669b3ec5a3829610c6cb465d3e26' ]]; then
+  printf '%s\n' 'ERROR: unexpected inspection tool Git SHA' >&2
+  exit 1
+fi
+for sha_name in \
+  EVIDENCE_PROCEDURE_GIT_SHA INSPECTION_TOOL_GIT_SHA \
+  EXECUTION_CHECKOUT_SHA; do
+  sha_value="${!sha_name}"
+  if [[ ! "$sha_value" =~ ^[0-9a-f]{40}$ ]]; then
+    printf 'ERROR: %s must be a full lowercase commit SHA\n' "$sha_name" >&2
+    exit 1
+  fi
+  if ! git cat-file -e "${sha_value}^{commit}"; then
+    printf 'ERROR: %s does not identify an available commit\n' "$sha_name" >&2
+    exit 1
+  fi
+done
+if [[ "$(git rev-parse HEAD)" != "$EXECUTION_CHECKOUT_SHA" ]]; then
+  printf '%s\n' 'ERROR: execution checkout SHA does not match HEAD' >&2
+  exit 1
+fi
+if ! git merge-base --is-ancestor \
+  "$EVIDENCE_PROCEDURE_GIT_SHA" "$EXECUTION_CHECKOUT_SHA"; then
+  printf '%s\n' 'ERROR: evidence procedure commit is not an execution ancestor' >&2
+  exit 1
+fi
+if ! git merge-base --is-ancestor \
+  "$INSPECTION_TOOL_GIT_SHA" "$EXECUTION_CHECKOUT_SHA"; then
+  printf '%s\n' 'ERROR: inspection tool commit is not an execution ancestor' >&2
+  exit 1
+fi
+procedure_origin="$(git show "${EVIDENCE_PROCEDURE_GIT_SHA}:scripts/migration/README.md")"
+if [[ "$procedure_origin" != *'lovable_cloud_export_inspection_provenance'* ]]; then
+  printf '%s\n' 'ERROR: evidence procedure is absent from its provenance commit' >&2
+  exit 1
+fi
+if ! git diff --quiet "$EXECUTION_CHECKOUT_SHA" -- scripts/migration/README.md; then
+  printf '%s\n' 'ERROR: evidence procedure differs from the execution checkout' >&2
+  exit 1
+fi
+if ! git diff --quiet "$INSPECTION_TOOL_GIT_SHA" -- \
+  scripts/migration/inspect-lovable-dump.sh \
+  scripts/migration/lib/lovable_dump_report.py \
+  supabase/migrations; then
+  printf '%s\n' 'ERROR: inspection tool/input tree differs from its reviewed Git SHA' >&2
+  exit 1
+fi
+if ! untracked_migrations="$(
+  git ls-files --others --exclude-standard -- supabase/migrations
+)"; then
+  printf '%s\n' 'ERROR: could not inventory untracked migration inputs' >&2
+  exit 1
+fi
+if [[ -n "$untracked_migrations" ]]; then
+  printf '%s\n' 'ERROR: untracked files under supabase/migrations can alter inspection' >&2
+  printf '%s\n' "$untracked_migrations" >&2
+  exit 1
+fi
+if ! ignored_untracked_migrations="$(
+  git ls-files --others --ignored --exclude-standard -- supabase/migrations
+)"; then
+  printf '%s\n' 'ERROR: could not inventory ignored migration inputs' >&2
+  exit 1
+fi
+if [[ -n "$ignored_untracked_migrations" ]]; then
+  printf '%s\n' 'ERROR: ignored files under supabase/migrations can alter inspection' >&2
+  printf '%s\n' "$ignored_untracked_migrations" >&2
+  exit 1
+fi
+
 RUN_ID="rehearsal-${EXPORT_INITIATED_AT_UTC//[-:]/}"
 export RUN_ID
 RUN_ROOT="local-migration-artifacts/${RUN_ID}"
@@ -70,15 +155,6 @@ test ! -e "$RUN_ROOT"
 mkdir -p "${RUN_ROOT}/archive" "${RUN_ROOT}/inspection"
 cp -p "$CANONICAL_EXPORT" "$WORKING_EXPORT"
 chmod 0400 "$WORKING_EXPORT"
-
-git cat-file -e "${REVIEWED_GIT_SHA}^{commit}"
-if ! git diff --quiet "$REVIEWED_GIT_SHA" -- \
-  scripts/migration/inspect-lovable-dump.sh \
-  scripts/migration/lib/lovable_dump_report.py \
-  supabase/migrations; then
-  printf '%s\n' 'ERROR: inspection tool differs from the reviewed Git SHA' >&2
-  exit 1
-fi
 
 python3 - "$CANONICAL_EXPORT" "$WORKING_EXPORT" "$BEFORE_SHA" <<'PY'
 import hashlib
@@ -192,9 +268,15 @@ if not initiated <= completed <= downloaded:
 project_ref = required("SOURCE_PROJECT_REF")
 if not re.fullmatch(r"[a-z0-9]{20}", project_ref):
     raise SystemExit("SOURCE_PROJECT_REF must be exactly 20 lowercase letters/digits")
-reviewed_sha = required("REVIEWED_GIT_SHA")
-if reviewed_sha != "c87a124602eb669b3ec5a3829610c6cb465d3e26":
-    raise SystemExit("unexpected reviewed Git SHA")
+procedure_sha = required("EVIDENCE_PROCEDURE_GIT_SHA")
+tool_sha = required("INSPECTION_TOOL_GIT_SHA")
+execution_sha = required("EXECUTION_CHECKOUT_SHA")
+if procedure_sha != "e4eed4a21049d274738110710a468e265c2893d2":
+    raise SystemExit("unexpected evidence procedure Git SHA")
+if tool_sha != "c87a124602eb669b3ec5a3829610c6cb465d3e26":
+    raise SystemExit("unexpected inspection tool Git SHA")
+if not re.fullmatch(r"[0-9a-f]{40}", execution_sha):
+    raise SystemExit("invalid execution checkout SHA")
 
 relative = lambda path: str(path.relative_to(run_root))
 manifest = {
@@ -202,6 +284,9 @@ manifest = {
     "artifact_kind": "lovable_cloud_export_inspection_provenance",
     "run_id": required("RUN_ID"),
     "run_kind": "rehearsal",
+    "evidence_procedure_git_sha": procedure_sha,
+    "inspection_tool_git_sha": tool_sha,
+    "execution_checkout_sha": execution_sha,
     "lovable_source_project": {
         "name": required("SOURCE_PROJECT_NAME"),
         "ref": project_ref,
@@ -230,10 +315,9 @@ manifest = {
         ],
     },
     "operator_identity": required("OPERATOR_IDENTITY"),
-    "reviewed_git_sha": reviewed_sha,
     "inspection_tool": {
         "path": "scripts/migration/inspect-lovable-dump.sh",
-        "git_sha": reviewed_sha,
+        "git_sha": tool_sha,
     },
     "report": {
         "filename": report.name,
@@ -247,6 +331,7 @@ with provenance.open("x", encoding="utf-8") as destination:
     destination.write("\n")
 PY
 ```
+<!-- END LOVABLE EXPORT EVIDENCE WORKFLOW -->
 
 After inspection, transfer the manifest-indexed report and checksum sidecars to
 the same approved encrypted evidence store as the canonical archive and verify
@@ -260,6 +345,16 @@ unknown TOC classes. It invokes `pg_restore` only with `--version` and `--list`.
 It computes the archive SHA-256 and reports metadata/risk flags without
 decoding or printing row payloads. A successful report still says
 `REVIEW_REQUIRED`; it is not a restore plan.
+
+CI extracts and executes the complete fenced Bash workflow in a temporary Git
+checkout, using a synthetic `PGDMP` archive and a controlled fake `pg_restore`.
+It exercises the real inspector/helper, report and provenance publication, and
+the Git provenance and migration-input guards without a database or network.
+Planted failures cover ordinary and ignored untracked migrations, modified
+inspector/helper/tracked migration/procedure, wrong procedure/tool pins, and
+missing or malformed execution checkout output. This proves the local procedure
+mechanics only; it does not validate a real Lovable archive, source completeness,
+or any remote system.
 
 Do not construct a final `pg_restore` command until the actual TOC has been
 classified and the supported Lovable/Supabase restore procedure is confirmed.

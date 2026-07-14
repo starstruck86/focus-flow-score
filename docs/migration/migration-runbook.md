@@ -77,8 +77,9 @@ testable server-side source fence and drain signal, cutover is blocked.
 
 Use named operators for each checklist item: migration lead, Lovable operator,
 Supabase operator, application verifier, and rollback decision owner. Record
-timestamps in UTC, reviewed Git commit SHAs, archive checksum, TOC/report
-checksum, target project identity, function artifact SHAs, and pass/fail notes.
+timestamps in UTC, the evidence-procedure origin SHA, inspection-tool/baseline
+SHA, exact execution-checkout SHA, archive checksum, TOC/report checksum, target
+project identity, function artifact SHAs, and pass/fail notes.
 The canonical archive and completed export-inspection evidence package,
 including its provenance manifest, must live in an approved encrypted evidence
 store. The ignored
@@ -167,8 +168,9 @@ class; report contains no row data; exactly one report `sha256:` value equals
 both external before/after archive checksums; and the provenance manifest records
 the exact source project name/ref, observed UTC export/download times separately
 from Support-reported claims, original filename/size/archive SHA-256, operator,
-reviewed/tool Git SHA, and report filename/SHA-256. Copy the completed package to
-the approved encrypted evidence store and verify it there before continuing.
+procedure-origin Git SHA, inspection-tool/baseline Git SHA, execution-checkout
+SHA, and report filename/SHA-256. Copy the completed package to the approved
+encrypted evidence store and verify it there before continuing.
 
 ### 7. Decide selective restore plan
 
