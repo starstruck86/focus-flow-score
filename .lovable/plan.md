@@ -1,50 +1,90 @@
-## Read-only production control-plane audit — feasibility plan
+## Migration Bridge — Server-to-Server (Cloud → Personal Supabase)
 
-Before executing, I need to flag hard tool-surface limits so the deliverable isn't misrepresented. This is a **feasibility assessment**, not the audit itself.
+Temporary, one-directional data bridge. Lovable Cloud stays authoritative. No browser client, no DB connection string, no service-role key crossing boundaries. Not deployed until you approve a dry-run.
 
-### What the available tool surface CAN retrieve (read-only)
+---
 
-1. **`version` function runtime attestation** — via `supabase--curl_edge_functions GET /version`. Returns: `release_id`, `source_commit`, `deployment_id`, `region`, `proof_scope`, `verified`. This is the only production-surface evidence of a deployed bundle available to me.
-2. **Edge function logs** — via `supabase--edge_function_logs` (per function slug). Confirms the function is live and serving; does not expose bundle contents or version numbers.
-3. **Repository (GitHub main) source** — I can read the working tree at the current synced HEAD (`447c00f6…`) and compute SHA-256 per file + a deterministic tree digest.
-4. **Supabase project metadata** — `supabase--project_info` (project-level only, not function-version metadata).
+### Architecture
 
-### What the tool surface CANNOT retrieve
+```text
+┌────────────────────────┐        HTTPS POST (JWT-less, HMAC-signed)
+│  Lovable Cloud         │        Header: x-bridge-key + x-bridge-sig
+│  edge fn:              │  ───▶  ┌──────────────────────────────┐
+│  bridge-export         │        │ Personal Supabase            │
+│  (paged, checkpointed) │        │ edge fn: bridge-ingest       │
+└────────────────────────┘        │ (validates, upserts, ACKs)   │
+        ▲                         └──────────────────────────────┘
+        │ reads
+   ┌────┴─────┐
+   │ Cloud DB │      bridge_checkpoints (cursor per table)
+   │          │      bridge_run_log (batch id, counts, hash)
+   └──────────┘
+```
 
-The audit asks for items only the Supabase Management API exposes, and I do not have a tool that calls it:
+Nothing on the personal side calls back into Cloud. One-way push.
 
-- **Function version number, deployment ID (for `strategy-chat` / `analyze-call` / `mcp`), created/updated timestamps, region, `verify_jwt` setting** — no tool exposes `GET /v1/projects/{ref}/functions/{slug}`. Only the `version` function self-reports its own `deployment_id` via its response body (by design — that's the whole point of that function).
-- **Deployed file-path list per function** — the Management API's function-body endpoint returns the bundled entrypoint, not a multi-file listing with per-file digests. There is no tool wired to that endpoint in this environment.
-- **Per-file SHA-256 of deployed sources** — same reason; not retrievable.
-- **Deterministic tree digest of the deployed bundle** — cannot be computed without (b) and (c).
-- **Unified diff deployed-vs-repo** — cannot be produced without the deployed source tree.
+---
 
-Consequence: item 6 (drift detection) cannot be answered from the deployed side except for `version`, where the `release_id`/`source_commit` in its runtime response can be compared to `supabase/functions/_shared/release.json` at commit `447c00f6…`. For `strategy-chat`, `analyze-call`, and `mcp` there is **no bundle-level ground truth accessible to me** — only "the function responds" and "logs show recent invocations."
+### Components
 
-### Control questions A/B/C — answerable now from platform knowledge
+**1. Cloud edge function `bridge-export`** (source)
+- Trigger: manual invoke with `{ table, batch_size, dry_run }`.
+- Reads from an **allowlist** of tables + columns (hard-coded in the function; not client-controlled).
+- Pages by `(updated_at, id)` cursor persisted in `bridge_checkpoints`.
+- For each batch: build payload, compute SHA-256 of canonical JSON, HMAC-sign with `BRIDGE_SIGNING_KEY`, POST to target.
+- On 2xx ACK matching the sent hash + row count → advance checkpoint; else stop and log.
+- Writes `bridge_run_log` row per batch: `{ table, batch_id, rows_sent, rows_acked, hash, target_hash, status, error }`.
 
-- **A. External `SUPABASE_ACCESS_TOKEN` deploying to a Lovable-managed project:** A user-scoped PAT minted from the Supabase dashboard (Account → Access Tokens) plus `supabase functions deploy --project-ref <ref>` will technically deploy if the token belongs to a member of the org owning the project. For Lovable-managed projects the org is owned by Lovable; the end user does not have a Supabase dashboard login on that org, so they cannot mint such a token themselves. It is possible only if Lovable adds the user (or a service account) to the underlying org as a member — which is not a self-serve setting.
-- **B. Disabling Lovable's own deploy path:** There is no user-exposed toggle to revoke Lovable's ability to deploy edge functions to a Lovable-managed project. The Lovable agent uses privileged internal credentials against the same Supabase project; those credentials are not gated by any tenant-visible setting.
-- **C. Exact control / current setting:** None exists. A true CI deployment monopoly is **not achievable** while the project remains Lovable-managed. It becomes achievable only by migrating to a user-owned Supabase project (the migration path previously assessed), at which point the user controls org membership and can restrict deploy tokens.
+**2. Personal Supabase edge function `bridge-ingest`** (target, you deploy manually)
+- Verifies `x-bridge-key` equals `BRIDGE_INGEST_KEY` (rejects otherwise, no other auth).
+- Verifies HMAC signature over raw body with same `BRIDGE_SIGNING_KEY`.
+- Validates payload against per-table schema (Zod).
+- Idempotent `upsert` on `(id)` using the personal project's service role (stays inside that function — never leaves the personal project).
+- Returns `{ received, upserted, hash }` for reconciliation.
 
-### Proposed deliverable (given the above)
+**3. Secrets (scoped, new)**
+- Cloud side: `BRIDGE_TARGET_URL`, `BRIDGE_INGEST_KEY`, `BRIDGE_SIGNING_KEY` (generated).
+- Personal side: `BRIDGE_INGEST_KEY`, `BRIDGE_SIGNING_KEY` (same values). You paste them into your project.
+- No Cloud service-role key or DB URL ever leaves Cloud.
 
-I will produce a report with three clearly-labeled sections:
+**4. Cloud tables (new, tiny)**
+- `bridge_checkpoints(table_name pk, last_updated_at, last_id, updated_at)`
+- `bridge_run_log(id, table_name, batch_id, rows_sent, rows_acked, source_hash, target_hash, status, error, started_at, finished_at)`
+- Both RLS-locked to service_role only (no user access).
 
-1. **Deployed-side evidence (Management plane / runtime):**
-   - `version`: full runtime attestation JSON + comparison to `release.json` at `447c00f6…`.
-   - `strategy-chat`, `analyze-call`, `mcp`: liveness + recent-log evidence only. Explicitly state "function-version number, deployment ID, verify_jwt, region, file-path list, per-file digests, tree digest: **not retrievable via available tool surface**."
-2. **Repository-side evidence (GitHub main `447c00f6…`):**
-   - Per-function file-path list, per-file SHA-256, deterministic tree digest (sorted path + digest pairs, SHA-256 of the concatenation).
-3. **Drift assessment:**
-   - `version`: computable (release_id/source_commit match check).
-   - Other three: **not computable** with current tools; explicitly stated, not guessed.
-4. **Control questions A/B/C:** answered as above.
+**5. Table allowlist (initial proposal — confirm before build)**
+Start with low-risk, user-scoped reference data:
+- `accounts`, `contacts`, `opportunities`, `knowledge_items`, `resources`
+Excluded until explicitly added: `auth.*`, `circle_credentials`, `approved_users`, anything with tokens or secrets.
 
-### Question for you before I proceed
+---
 
-This is a research/audit task, not an implementation task, so plan mode is technically the wrong lane — but I also want to confirm the scope before switching to build mode and burning tool calls:
+### Safety properties
 
-**Do you accept the deliverable as scoped above** (i.e., `version` gets a real deployed-vs-repo drift check; the other three get liveness + repo-side digests only, with an explicit "management-plane bundle retrieval not available" statement), **or do you want me to stop and escalate that the audit as literally specified is unsatisfiable with the current tool surface?**
+- **Idempotent**: upsert on primary key; replays are no-ops.
+- **Checkpointed**: crash/resume safe; never re-sends acked rows, never skips.
+- **Reconciled**: source hash + count must equal target hash + count before checkpoint advances.
+- **Bounded blast radius**: allowlist is code-level; no wildcard export.
+- **Revocable**: rotate `BRIDGE_INGEST_KEY` on personal side → bridge dies instantly.
+- **Observable**: `bridge_run_log` is the audit trail; a `reconcile` invocation compares `count(*)` per table across both sides.
+- **Non-destructive**: no deletes propagated in v1 (add soft-delete propagation later if needed).
 
-If you accept the scoped deliverable, approve this plan and I'll execute the read-only calls in build mode and return the report.
+---
+
+### Rollout (no prod deploy in this plan)
+
+1. You approve the plan + allowlist.
+2. I create the migration for `bridge_checkpoints` / `bridge_run_log` (awaits your approval).
+3. I write `bridge-export` + the `bridge-ingest` source you'll paste into your personal project.
+4. You generate + set the three secrets on both sides.
+5. Dry-run: invoke `bridge-export` with `dry_run:true` → payload built + signed but POST skipped; log inspected.
+6. Live run against **one table, batch_size=10**; reconcile counts + hashes.
+7. Only after clean reconciliation do we scale batch size and add tables.
+
+---
+
+### Open questions before I build
+
+1. Confirm the allowlist above (or amend).
+2. Personal project region/URL — you'll provide when we get to secret setup.
+3. Cutover intent: is this bridge a **staging mirror** (Cloud remains prod indefinitely) or a **pre-transfer sync** (eventually you switch the app over)? Affects whether we later add deletion propagation and a freeze/cutover step.
