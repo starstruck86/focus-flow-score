@@ -78,10 +78,14 @@ testable server-side source fence and drain signal, cutover is blocked.
 Use named operators for each checklist item: migration lead, Lovable operator,
 Supabase operator, application verifier, and rollback decision owner. Record
 timestamps in UTC, reviewed Git commit SHAs, archive checksum, TOC/report
-checksum, target project identity, function artifact SHAs, and pass/fail notes
-under the ignored `local-migration-artifacts/` directory or another approved
-sensitive evidence store. Never commit exports, metadata reports, credentials,
-user lists, or object names learned only from production.
+checksum, target project identity, function artifact SHAs, and pass/fail notes.
+The canonical archive and completed export-inspection evidence package,
+including its provenance manifest, must live in an approved encrypted evidence
+store. The ignored
+`local-migration-artifacts/` directory is only a private working area and must
+never be the sole retained copy because git-clean operations can delete ignored
+files. Never commit exports, metadata reports, credentials, user lists, or
+object names learned only from production.
 
 ## Phases
 
@@ -134,21 +138,23 @@ window depends on another export within 24 hours.
 
 ### 5. Download and checksum export
 
-Download into `local-migration-artifacts/` on an encrypted workstation with
-restricted permissions. Do not rename away the original extension until format
-inspection. Immediately record file size and SHA-256; checksum again after any
-copy. Never upload the archive to GitHub, chat, CI, or an unapproved file store.
+Preserve the untouched download in the approved encrypted evidence store, then
+make a restricted working copy under `local-migration-artifacts/`. Do not rename
+away the original extension until format inspection. Immediately record file
+size and SHA-256; checksum again after any copy and verify the working copy
+against the canonical archive. Never upload the archive to GitHub, chat, CI, or
+an unapproved file store.
 
-Exit gate: two checksum calculations agree and the file is non-empty and within
-the support-reported limit.
+Exit gate: the canonical and working-copy checksums agree, the external
+pre-inspection digest-only checksum file is retained, and the file is non-empty
+and within the support-reported limit.
 
 ### 6. Inspect dump table of contents
 
-Run:
-
-```text
-scripts/migration/inspect-lovable-dump.sh local-migration-artifacts/<export-file>
-```
+Execute the complete, checked-in evidence-package template under **Inspect a
+future Lovable export** in `scripts/migration/README.md`. Do not substitute the
+inspector's stdout-only form: the template retains the report, external
+before/after checksums, report checksum, and provenance manifest.
 
 The inspector is read-only: it validates local paths and custom format, checks
 tool compatibility, invokes `pg_restore --list`, emits metadata only, and fails
@@ -157,7 +163,12 @@ extensions, subscriptions, event triggers, publications, managed schemas,
 `auth`, `storage`, `supabase_*`, and duplicates with checked-in migrations.
 
 Exit gate: archive format/version is supported; TOC parsing has no unknown
-class; report contains no row data; report and archive checksums are recorded.
+class; report contains no row data; exactly one report `sha256:` value equals
+both external before/after archive checksums; and the provenance manifest records
+the exact source project name/ref, observed UTC export/download times separately
+from Support-reported claims, original filename/size/archive SHA-256, operator,
+reviewed/tool Git SHA, and report filename/SHA-256. Copy the completed package to
+the approved encrypted evidence store and verify it there before continuing.
 
 ### 7. Decide selective restore plan
 

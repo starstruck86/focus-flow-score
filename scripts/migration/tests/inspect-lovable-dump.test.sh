@@ -71,6 +71,33 @@ assert_failure() {
   fi
 }
 
+verify_external_report_sha_match() {
+  "$PYTHON" - "$1" "$2" "$3" <<'PY'
+import pathlib
+import re
+import sys
+
+digest_pattern = re.compile(r"[0-9a-f]{64}")
+before_path, after_path, report_path = map(pathlib.Path, sys.argv[1:])
+
+def read_external(path: pathlib.Path) -> str:
+    value = path.read_text(encoding="ascii").strip()
+    if not digest_pattern.fullmatch(value):
+        raise SystemExit(f"invalid digest-only checksum file: {path}")
+    return value
+
+reported = re.findall(
+    r"^sha256: ([0-9a-f]{64})$",
+    report_path.read_text(encoding="utf-8"),
+    re.MULTILINE,
+)
+if len(reported) != 1:
+    raise SystemExit("inspector report must contain exactly one archive sha256 field")
+if len({read_external(before_path), read_external(after_path), reported[0]}) != 1:
+    raise SystemExit("external and reported archive SHA-256 evidence mismatch")
+PY
+}
+
 readonly FAKE_PG_RESTORE="${TMP_ROOT}/fake pg_restore"
 cat >"$FAKE_PG_RESTORE" <<'FAKE'
 #!/usr/bin/env bash
@@ -142,6 +169,48 @@ import sys
 print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
 PY
 )"
+
+readonly BEFORE_SHA_FILE="${OUTPUT_DIR}/archive.sha256.before"
+readonly AFTER_SHA_FILE="${OUTPUT_DIR}/archive.sha256.after"
+printf '%s\n' "$expected_sha" >"$BEFORE_SHA_FILE"
+printf '%s\n' "$expected_sha" >"$AFTER_SHA_FILE"
+
+if verify_external_report_sha_match "$BEFORE_SHA_FILE" "$AFTER_SHA_FILE" "$REPORT_FILE"; then
+  pass "external before/after SHA-256 exactly matches the report archive SHA-256"
+else
+  fail "external before/after SHA-256 exactly matches the report archive SHA-256"
+fi
+
+readonly MISMATCH_SHA_FILE="${OUTPUT_DIR}/archive.sha256.mismatch"
+printf '%064d\n' 0 >"$MISMATCH_SHA_FILE"
+assert_failure \
+  "rejects external-to-report SHA mismatch" \
+  "external and reported archive SHA-256 evidence mismatch" \
+  verify_external_report_sha_match \
+    "$MISMATCH_SHA_FILE" "$AFTER_SHA_FILE" "$REPORT_FILE"
+
+readonly DUPLICATE_SHA_REPORT="${OUTPUT_DIR}/duplicate archive sha report.txt"
+cp "$REPORT_FILE" "$DUPLICATE_SHA_REPORT"
+printf 'sha256: %s\n' "$expected_sha" >>"$DUPLICATE_SHA_REPORT"
+assert_failure \
+  "rejects multiple report archive SHA fields" \
+  "inspector report must contain exactly one archive sha256 field" \
+  verify_external_report_sha_match \
+    "$BEFORE_SHA_FILE" "$AFTER_SHA_FILE" "$DUPLICATE_SHA_REPORT"
+
+report_file_sha="$($PYTHON - "$REPORT_FILE" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)"
+if [[ "$report_file_sha" =~ ^[0-9a-f]{64}$ ]]; then
+  pass "records a separate valid SHA-256 for the metadata report file"
+else
+  fail "records a separate valid SHA-256 for the metadata report file"
+fi
 
 assert_contains "$REPORT_FILE" "sha256: ${expected_sha}" "computes the exact archive SHA-256"
 assert_contains "$REPORT_FILE" "archive_format: PostgreSQL custom archive (PGDMP)" "identifies custom archive format"
