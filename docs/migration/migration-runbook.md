@@ -9,6 +9,15 @@ an isolated user-owned Supabase project, and recreate configuration on the
 remix. Every dashboard, export, project, restore, deployment, secret, domain,
 and production action below requires separate authorization.
 
+The verification boundary is asymmetric. Local tooling can bind an export's
+bytes to its TOC, detect restore-plan hazards, and later verify exactly what is
+persisted/configured in the owned target. It cannot independently prove that a
+Lovable-generated export contains every production row or runtime setting,
+because Lovable controls the source database, export implementation, and Cloud
+configuration. The owned target can later be inspected directly under separate
+authorization; Lovable production remains independently uninspectable. A green
+synthetic rehearsal does not remove that blocker.
+
 The following are **support-reported and not yet empirically proven**:
 
 - Export is a point-in-time `pg_dump` custom-format archive, with a 5 GB maximum
@@ -44,6 +53,25 @@ The reported one-export-per-24-hours limit means the rehearsal and final
 cutover exports must occur in separate 24-hour windows. Schedule the rehearsal
 early enough to absorb tool/version, restore-filter, Auth, Storage, and
 application defects before the final quiet window.
+
+## Target lifecycle and enforced write gates
+
+Treat the owned target as an explicit state machine: **new/empty → isolated
+rehearsal → discarded or proven-clean → final restore → enforced read-only →
+writes enabled**. A rehearsal-restored target is not a clean final target merely
+because tests passed. Before final restore, either recreate it from an approved
+empty baseline or use a separately reviewed reset/restoration procedure that
+proves no rehearsal object or row survives. Never substitute populated
+`dynamic-staging`.
+
+Read-only must be enforced at the data plane, not represented by a banner or
+operator promise. Until phase 20, application, browser, Auth side-effect,
+function, job, webhook, and integration credentials must be unable to mutate
+the target; only the narrowly authorized restore/verification operator may make
+the planned rehearsal/final changes. The source quiet-window fence must likewise
+stop every human and background writer and prevent already-started work from
+committing behind the final snapshot. If Lovable cannot provide a supported,
+testable server-side source fence and drain signal, cutover is blocked.
 
 ## Roles and evidence
 
@@ -84,10 +112,15 @@ identified; its baseline catalog manifest has been captured read-only.
 Under separate authorization, use Lovable's supported Remix flow while keeping
 the original project intact. Determine empirically whether Remix copied only
 code or also configuration/data. Pin the remix to the reviewed Git repository
-and commit without creating an unmanaged permanent fork.
+and commit without creating an unmanaged permanent fork. Then use Lovable's
+confirmed connection flow to connect **the remix, never the original**, to the
+isolated owned Supabase target. Record the remix identity, repository/branch,
+target project ref, and every configuration item that did or did not carry over.
+Do not disconnect the original from Lovable Cloud.
 
 Exit gate: original remains operational and unchanged; remix provenance and
-configuration gaps are documented.
+owned-target connection are positively identified; configuration gaps are
+documented; no production domain or traffic points at the remix.
 
 ### 4. Generate rehearsal export
 
@@ -150,7 +183,8 @@ credentials. A non-zero status, ignored error, unsupported extension, ownership
 failure, or duplicate object is a failed rehearsal—not a warning to waive.
 
 Exit gate: restore completed without unreviewed errors and target remains
-network/application isolated and read-only to users.
+network/application isolated. Automated negative writes through every available
+application credential prove the target's data-plane read-only gate is active.
 
 ### 9. Auth verification/reset rehearsal
 
@@ -220,11 +254,17 @@ team can stop every human/background writer.
 Place the original application in an explicit maintenance/read-only mode. Stop
 human writes, scheduled jobs, queue/retry workers, webhooks, Edge Functions,
 OAuth callbacks, integrations, and any external client with write credentials.
-Drain in-flight work using observed job/connection state; do not rely on a sleep.
-How Lovable jobs are paused remains a support blocker until confirmed.
+Activate a Lovable-supported server-side write fence shared by all of those
+paths; a maintenance page alone is insufficient. Attempt a harmless synthetic
+write through each enumerated writer and require a rejected result. Drain
+in-flight transactions/work using observed job/connection state, and prove no
+transaction that began before the fence can commit afterward; do not rely on a
+sleep. How Lovable jobs are paused and how this database-level fence/drain is
+enforced remain support blockers until confirmed.
 
-Exit gate: two-person evidence shows no active/in-flight writer; freeze start
-timestamp is recorded. Abort if a writer cannot be positively stopped.
+Exit gate: two-person evidence shows the server-side fence active, every writer
+denied, and no active/in-flight transaction able to commit; freeze start
+timestamp is recorded. Abort if any property cannot be positively demonstrated.
 
 ### 16. Final export and restore
 
@@ -232,21 +272,27 @@ Keep the source frozen. Generate/download/checksum a new final export; never
 reuse the rehearsal archive. Repeat TOC inspection and diff it against the
 rehearsed TOC. Any new/unknown class or schema change returns to selective-plan
 review. Restore into a clean or proven-restorable owned target using the exact
-rehearsed plan.
+rehearsed plan. While the source fence remains active, perform a final Storage
+sync from a newly captured source object inventory: copy new/changed objects,
+apply reviewed deletion semantics for objects absent from the final inventory,
+and compare exact per-bucket counts plus stable byte checksums where available.
+The rehearsal Storage copy is not the final copy.
 
 Exit gate: final checksum and TOC are approved; restore is error-free; source
-remains frozen; target stays read-only.
+remains frozen; final Storage inventory/checksum gates pass; target stays under
+the enforced data-plane read-only gate.
 
 ### 17. Count/digest and behavior verification
 
 Generate source and target manifests with the read-only templates. Compare
-schema/object inventory, exact row counts, primary-key ranges, sequences, RLS,
+schema/object inventory, exact row counts, sequences, RLS,
 policies, functions, triggers, extension versions, Auth/Storage counts, Edge
 Function settings, and jobs. Any data digest must be a reviewed,
 table-specific, deterministic query with explicit projection and primary-key
-ordering. `Match` is required for rollback-critical components; unknowns remain
-failures unless an accountable owner explicitly removes them from the cutover
-scope.
+ordering under separate authorization; the default collector emits no key
+values or min/max ranges. `Match` is required for rollback-critical components;
+unknowns remain failures unless an accountable owner explicitly removes them
+from the cutover scope.
 
 Exit gate: exact comparison report is accepted and archive/target evidence is
 retained; no generic hash or estimated row count is treated as proof.
@@ -263,7 +309,8 @@ crosses the lossless-rollback boundary. Keep the public domain on the original
 project.
 
 Exit gate: rollback-critical behavior passes from the user-facing path with no
-target mutation.
+target mutation, including rejected negative writes from each application
+credential. The target write gate remains enforced.
 
 ### 19. Domain/frontend rebinding
 
@@ -279,8 +326,9 @@ the original remains intact and reachable for rollback.
 
 This is the irreversible rollback boundary absent reverse transfer. Obtain an
 explicit go decision only after phases 17–19 pass. Enable application writes
-first for a controlled cohort; enable jobs/webhooks/integrations one class at a
-time. Record the first target write timestamp.
+first for a controlled cohort by deliberately releasing the target data-plane
+write gate; enable jobs/webhooks/integrations one class at a time. Record the
+first target write timestamp. Keep the source fenced to prevent split brain.
 
 Exit gate: controlled writes persist correctly and no split-brain writer exists.
 

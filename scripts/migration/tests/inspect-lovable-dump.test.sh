@@ -91,6 +91,11 @@ case "${1:-}" in
       exit 1
     fi
     [[ $# -eq 2 ]] || exit 8
+    if [[ "${FAKE_MODE:-ok}" == 'mutate-snapshot' ]]; then
+      chmod u+w "$2"
+      printf 'mutated-during-list\n' >>"$2"
+      chmod 0400 "$2"
+    fi
     cat -- "$FAKE_TOC"
     ;;
   *)
@@ -140,7 +145,11 @@ PY
 
 assert_contains "$REPORT_FILE" "sha256: ${expected_sha}" "computes the exact archive SHA-256"
 assert_contains "$REPORT_FILE" "archive_format: PostgreSQL custom archive (PGDMP)" "identifies custom archive format"
+assert_contains "$REPORT_FILE" "archive_format_version: 1.14.0" "reports the archive format version"
+assert_contains "$REPORT_FILE" "source_postgresql_version: 15.8" "reports source PostgreSQL separately"
+assert_contains "$REPORT_FILE" "source_pg_dump_version: 17.5" "reports pg_dump separately"
 assert_contains "$REPORT_FILE" "pg_restore_list_compatibility: PASS" "records pg_restore list compatibility"
+assert_contains "$REPORT_FILE" "archive_snapshot_binding: PASS" "binds TOC and SHA to one captured snapshot"
 assert_contains "$REPORT_FILE" "owner_metadata: PRESENT" "flags owner metadata"
 assert_contains "$REPORT_FILE" "acl_metadata: PRESENT" "flags ACL metadata"
 assert_contains "$REPORT_FILE" "role_references: PRESENT" "flags role references"
@@ -159,10 +168,11 @@ assert_not_contains "$REPORT_FILE" 'TOP_SECRET_TOC_COMMENT_MUST_NOT_APPEAR' "doe
 
 if [[ "$(wc -l <"$CALL_LOG" | tr -d ' ')" == '2' ]] &&
   grep -Fxq -- '--version' "$CALL_LOG" &&
-  grep -Fxq -- "--list|${CANONICAL_DUMP_FILE}" "$CALL_LOG"; then
-  pass "invokes pg_restore only for version and metadata listing"
+  grep -Eq -- '^--list\|.*/lovable-dump-inspection\.[^/]+/archive\.snapshot$' "$CALL_LOG" &&
+  ! grep -Fq -- "--list|${CANONICAL_DUMP_FILE}" "$CALL_LOG"; then
+  pass "invokes pg_restore only on the private captured snapshot"
 else
-  fail "invokes pg_restore only for version and metadata listing"
+  fail "invokes pg_restore only on the private captured snapshot"
 fi
 
 assert_failure \
@@ -223,6 +233,21 @@ assert_failure \
   "archive metadata inspection failed closed" \
   env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
     FAKE_LOG="$CALL_LOG" FAKE_TOC="${FIXTURES}/unknown-class.toc" \
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
+
+assert_failure \
+  "fails closed on unresolved known TOC entry" \
+  "unresolved known TOC entry at line 2 (TABLE)" \
+  env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
+    FAKE_LOG="$CALL_LOG" FAKE_TOC="${FIXTURES}/unresolved-known.toc" \
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
+
+assert_failure \
+  "rejects archive mutation during TOC capture" \
+  "archive snapshot changed during pg_restore --list" \
+  env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
+    FAKE_MODE=mutate-snapshot FAKE_LOG="$CALL_LOG" \
+    FAKE_TOC="${FIXTURES}/representative.toc" \
     bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
 
 assert_failure \

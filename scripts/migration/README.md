@@ -28,11 +28,44 @@ classified and the supported Lovable/Supabase restore procedure is confirmed.
 ## Inventory reviewed Edge Function source
 
 ```text
-scripts/migration/inventory-edge-functions.py > /tmp/edge-functions.json
+scripts/migration/inventory-edge-functions.py \
+  --role source \
+  --collected-at '2026-07-14T13:29:59Z' \
+  > /tmp/edge-functions.json
 ```
 
-The output is repository-only. It marks a missing `verify_jwt` value as unknown
-instead of assuming a platform default.
+Supply the actual repository role and UTC collection time. A target collection
+also requires its explicit `--project-ref`, preventing source evidence from
+being relabeled accidentally. Because this tool reads only a local checkout,
+target-role output is marked not independently verifiable and cannot produce a
+green deployment comparison; deployed-target evidence requires a distinct,
+independent collector. The repository-only output fingerprints
+each function's resolved local deployment dependency closure (including
+reachable `_shared` files) together with its effective entrypoint, import map,
+and `verify_jwt`. An omitted `verify_jwt` is recorded structurally as the
+documented default `true`, distinct from an explicit setting. Unresolved local
+imports or unsupported function settings fail collection.
+
+## Convert captured PostgreSQL verification output
+
+Both read-only SQL collectors under `verification/` emit one strict JSON object
+per line. Convert a captured byte snapshot deterministically:
+
+```text
+scripts/migration/catalog-jsonl-to-manifest.py \
+  'local-migration-artifacts/source catalog.jsonl' \
+  --output 'local-migration-artifacts/source manifest.json' \
+  --label rehearsal-source --role source --project-ref '<source-ref>' \
+  --artifact-source '<capture-provenance>' \
+  --evidence-kind database_catalog
+```
+
+The converter reads and hashes the input once, fingerprints typed metadata with
+domain-separated length framing, refuses incomplete table counts and unknown
+record classes, derives its snapshot boundary/time and verification scope from
+the captured SQL envelope, and will not overwrite an existing output. Use
+`--evidence-kind service_inventory` only with the separately captured managed
+service inventory.
 
 ## Compare verification manifests
 
@@ -44,4 +77,8 @@ scripts/migration/compare-manifests.py \
 
 Exit `0` means every component is exactly `Match`; exit `2` means at least one
 discrepancy or unknown; exit `1` means input validation failed. The strict
-schema and SQL collection templates are under `verification/`.
+schema and SQL collection templates are under `verification/`. Format v2
+requires non-empty source and target manifests, distinct project refs and
+collection provenance, real SHA-256 evidence, explicit source/target roles,
+collector version/time, and kind-sufficient evidence. Reusing one input or
+comparing source against source is an invalid comparison, not a match.

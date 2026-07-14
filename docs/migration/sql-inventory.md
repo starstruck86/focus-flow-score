@@ -1984,5 +1984,5 @@ Every explicit PK/FK/reference/unique/check clause found inside a CREATE TABLE d
 - `cron.job` rows beyond `ops_sentinel_v1`, whether background writers can be paused, and every job's current active state/body.
 - Auth users, identities, sessions, MFA, provider/OAuth settings, redirect allowlist, SMTP/templates, password-hash portability, and reset requirements.
 - Storage bucket settings, object inventory/bytes/checksums, and runtime-only bucket/policy drift beyond the three repository buckets.
-- Table contents/counts/deterministic per-table digests, primary-key ranges, sequence values (if runtime objects introduce sequences), and data whose tables are absent from migration creation history.
+- Table contents/counts/deterministic per-table digests, sequence values (if runtime objects introduce sequences), and data whose tables are absent from migration creation history. Primary-key values and min/max ranges are deliberately excluded from the default collector as sensitive row-derived evidence; any table-specific use requires separate authorization and review.
 - Managed Supabase schemas/roles/extensions/ACLs present in a future export and conflicts with a fresh owned project. No full restore command should be authored until the actual TOC is inspected.

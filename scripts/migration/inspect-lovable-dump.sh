@@ -4,8 +4,8 @@
 #
 # This script deliberately has no restore or database connection mode. It only:
 #   1. validates a local archive path and PGDMP header,
-#   2. fingerprints the archive with SHA-256,
-#   3. asks pg_restore for its version and metadata-only TOC list, and
+#   2. captures the bytes into a private read-only local snapshot,
+#   3. binds that snapshot's SHA-256 to pg_restore's metadata-only TOC, and
 #   4. renders a sanitized metadata report.
 
 set -euo pipefail
@@ -35,6 +35,7 @@ Safety boundary:
   * LOCAL_DUMP_FILE must be a readable, non-empty local regular file.
   * URLs and connection strings are rejected.
   * Only PostgreSQL custom-format archives (PGDMP) are accepted.
+  * A private read-only byte snapshot binds pg_restore --list to the SHA-256.
   * pg_restore is invoked only with --version and --list.
   * No restore, SQL execution, database connection, or row-data extraction occurs.
   * Put local archives/reports under local-migration-artifacts/ (gitignored).
@@ -131,6 +132,7 @@ reject_unsafe_path_text "migrations directory" "$migrations_input"
 
 readonly DUMP_DIR="$(cd -P -- "$(dirname -- "$dump_input")" && pwd)"
 readonly DUMP_PATH="${DUMP_DIR}/$(basename -- "$dump_input")"
+readonly INPUT_NAME="$(basename -- "$DUMP_PATH")"
 
 archive_magic=''
 IFS= read -r -n 5 archive_magic < "$DUMP_PATH" || true
@@ -161,19 +163,51 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+readonly SNAPSHOT_PATH="${WORK_DIR}/archive.snapshot"
 readonly TOC_FILE="${WORK_DIR}/archive.toc"
 readonly PG_RESTORE_ERROR="${WORK_DIR}/pg_restore.stderr"
 readonly REPORT_FILE="${WORK_DIR}/report.txt"
 
-if ! "$PG_RESTORE" --list "$DUMP_PATH" >"$TOC_FILE" 2>"$PG_RESTORE_ERROR"; then
+if ! cp -- "$DUMP_PATH" "$SNAPSHOT_PATH"; then
+  die "could not capture a private archive snapshot" 4
+fi
+chmod 0400 "$SNAPSHOT_PATH" || die "could not make archive snapshot read-only" 4
+
+sha256_file() {
+  "$PYTHON" - "$1" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+digest = hashlib.sha256()
+with pathlib.Path(sys.argv[1]).open("rb") as source:
+    while chunk := source.read(1024 * 1024):
+        digest.update(chunk)
+print(digest.hexdigest())
+PY
+}
+
+snapshot_sha_before="$(sha256_file "$SNAPSHOT_PATH")" ||
+  die "could not fingerprint captured archive snapshot" 4
+readonly snapshot_sha_before
+
+if ! "$PG_RESTORE" --list "$SNAPSHOT_PATH" >"$TOC_FILE" 2>"$PG_RESTORE_ERROR"; then
   die "pg_restore --list rejected the archive; it is corrupt or incompatible with pg_restore ${PG_RESTORE_VERSION}" 4
 fi
 [[ -s "$TOC_FILE" ]] || die "pg_restore --list returned an empty archive TOC" 4
 
+snapshot_sha_after="$(sha256_file "$SNAPSHOT_PATH")" ||
+  die "could not re-fingerprint captured archive snapshot" 4
+readonly snapshot_sha_after
+[[ "$snapshot_sha_before" == "$snapshot_sha_after" ]] ||
+  die "archive snapshot changed during pg_restore --list; refusing unbound report" 4
+
 if ! "$PYTHON" "$REPORT_HELPER" \
-  --dump "$DUMP_PATH" \
+  --dump "$SNAPSHOT_PATH" \
   --toc "$TOC_FILE" \
   --pg-restore-version "$PG_RESTORE_VERSION" \
+  --expected-sha256 "$snapshot_sha_after" \
+  --input-name "$INPUT_NAME" \
   --migrations-dir "$MIGRATIONS_DIR" >"$REPORT_FILE"; then
   die "archive metadata inspection failed closed" 4
 fi
@@ -189,7 +223,38 @@ readonly OUTPUT_NAME="$(basename -- "$output_input")"
 readonly OUTPUT_DIR="$(cd -P -- "$OUTPUT_DIR_INPUT" && pwd)"
 readonly OUTPUT_PATH="${OUTPUT_DIR}/${OUTPUT_NAME}"
 [[ "$OUTPUT_PATH" != "$DUMP_PATH" ]] || die "output path must not replace the dump file" 2
-[[ ! -e "$OUTPUT_PATH" ]] || die "output file already exists; refusing to overwrite it" 2
 
-mv -- "$REPORT_FILE" "$OUTPUT_PATH"
+# Publish with exclusive-create semantics. A preliminary existence check plus
+# mv can clobber a file created by another process between those operations.
+if "$PYTHON" - "$REPORT_FILE" "$OUTPUT_PATH" <<'PY'
+import os
+import pathlib
+import shutil
+import sys
+
+source = pathlib.Path(sys.argv[1])
+destination = pathlib.Path(sys.argv[2])
+created = False
+try:
+    with source.open("rb") as input_handle, destination.open("xb") as output_handle:
+        created = True
+        shutil.copyfileobj(input_handle, output_handle, length=1024 * 1024)
+        output_handle.flush()
+        os.fsync(output_handle.fileno())
+except FileExistsError:
+    raise SystemExit(17)
+except Exception:
+    if created:
+        destination.unlink(missing_ok=True)
+    raise SystemExit(18)
+PY
+then
+  :
+else
+  publish_status=$?
+  if [[ "$publish_status" -eq 17 ]]; then
+    die "output file already exists; refusing to overwrite it" 2
+  fi
+  die "could not publish metadata report" 4
+fi
 printf 'Metadata-only report written to %s\n' "$OUTPUT_PATH"

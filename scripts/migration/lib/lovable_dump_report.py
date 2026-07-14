@@ -2,7 +2,10 @@
 """Render a sanitized, metadata-only report from a pg_restore TOC list.
 
 The archive itself is opened only to compute its byte length, SHA-256 digest,
-and PGDMP header version. Row payload bytes are never decoded or emitted.
+and PGDMP archive-format version. Row payload bytes are never decoded or
+emitted. The caller supplies the SHA-256 captured around ``pg_restore --list``;
+this helper recomputes it so the TOC and report cannot refer to different
+archive byte snapshots.
 """
 
 from __future__ import annotations
@@ -155,6 +158,15 @@ MANAGED_SCHEMAS = frozenset(
 )
 IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 TOC_LINE_RE = re.compile(r"^\s*(\d+);\s+(\d+)\s+(\d+)\s+(.+?)\s*$")
+SOURCE_POSTGRES_VERSION_RE = re.compile(
+    r"^;\s*Dumped from database version:\s*"
+    r"([0-9]+(?:\.[0-9]+)*(?:[A-Za-z0-9_.+~-]*)?)"
+)
+PG_DUMP_VERSION_RE = re.compile(
+    r"^;\s*Dumped by pg_dump version:\s*"
+    r"([0-9]+(?:\.[0-9]+)*(?:[A-Za-z0-9_.+~-]*)?)"
+)
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class InspectionError(RuntimeError):
@@ -176,11 +188,19 @@ class ObjectRef:
     name: str
 
 
+@dataclass(frozen=True)
+class TocProvenance:
+    source_postgresql_version: Optional[str]
+    pg_dump_version: Optional[str]
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--dump", required=True, type=Path)
     parser.add_argument("--toc", required=True, type=Path)
     parser.add_argument("--pg-restore-version", required=True)
+    parser.add_argument("--expected-sha256", required=True)
+    parser.add_argument("--input-name", required=True)
     parser.add_argument("--migrations-dir", required=True, type=Path)
     return parser.parse_args()
 
@@ -222,13 +242,23 @@ def identify_toc_class(payload: str, line_number: int) -> tuple[str, str]:
     raise InspectionError(f"unknown TOC class at line {line_number}")
 
 
-def parse_toc(path: Path) -> list[TocEntry]:
+def parse_toc(path: Path) -> tuple[list[TocEntry], TocProvenance]:
     entries: list[TocEntry] = []
     text = path.read_text(encoding="utf-8", errors="strict")
+    source_postgresql_versions: set[str] = set()
+    pg_dump_versions: set[str] = set()
 
     for line_number, line in enumerate(text.splitlines(), start=1):
         stripped = line.strip()
-        if not stripped or stripped.startswith(";"):
+        if not stripped:
+            continue
+        if stripped.startswith(";"):
+            source_match = SOURCE_POSTGRES_VERSION_RE.match(line)
+            if source_match:
+                source_postgresql_versions.add(source_match.group(1))
+            dump_match = PG_DUMP_VERSION_RE.match(line)
+            if dump_match:
+                pg_dump_versions.add(dump_match.group(1))
             continue
         match = TOC_LINE_RE.match(line)
         if not match:
@@ -247,7 +277,15 @@ def parse_toc(path: Path) -> list[TocEntry]:
         raise InspectionError("archive TOC contains no object entries")
     if len({entry.toc_id for entry in entries}) != len(entries):
         raise InspectionError("archive TOC contains duplicate entry identifiers")
-    return entries
+    if len(source_postgresql_versions) > 1:
+        raise InspectionError("TOC reports conflicting source PostgreSQL versions")
+    if len(pg_dump_versions) > 1:
+        raise InspectionError("TOC reports conflicting pg_dump versions")
+
+    return entries, TocProvenance(
+        source_postgresql_version=next(iter(source_postgresql_versions), None),
+        pg_dump_version=next(iter(pg_dump_versions), None),
+    )
 
 
 def clean_identifier(value: str) -> Optional[str]:
@@ -323,6 +361,25 @@ MIGRATION_CLASS_PREFIXES = {
     "VIEW": r"(?:create|alter)(?:\s+or\s+replace)?\s+view",
 }
 
+# These classes describe repository-comparable or migration-critical objects.
+# If their schema/name reference cannot be normalized, silently omitting the
+# entry could create a false "no duplicate" or "no managed object" result.
+OBJECT_REFERENCE_REQUIRED_CLASSES = frozenset(MIGRATION_CLASS_PREFIXES) | {
+    "SUBSCRIPTION"
+}
+
+
+def validate_required_object_references(entries: Iterable[TocEntry]) -> None:
+    for entry in entries:
+        if (
+            entry.object_class in OBJECT_REFERENCE_REQUIRED_CLASSES
+            and object_ref(entry) is None
+        ):
+            raise InspectionError(
+                "unresolved known TOC entry at line "
+                f"{entry.line_number} ({entry.object_class})"
+            )
+
 
 def quoted_identifier_pattern(identifier: str) -> str:
     escaped = re.escape(identifier)
@@ -397,7 +454,19 @@ def flag_line(label: str, count: int) -> str:
 
 def build_report(args: argparse.Namespace) -> str:
     size, sha256, archive_version = archive_fingerprint(args.dump)
-    entries = parse_toc(args.toc)
+    if not SHA256_RE.fullmatch(args.expected_sha256):
+        raise InspectionError("invalid expected archive SHA-256")
+    if sha256 != args.expected_sha256:
+        raise InspectionError(
+            "archive snapshot changed after TOC capture; refusing unbound report"
+        )
+    if Path(args.input_name).name != args.input_name or any(
+        character in args.input_name for character in ("\n", "\r")
+    ):
+        raise InspectionError("unsafe input display name")
+
+    entries, toc_provenance = parse_toc(args.toc)
+    validate_required_object_references(entries)
     class_counts = Counter(entry.object_class for entry in entries)
     owners = owner_reference_count(entries)
     acl = sum(
@@ -428,6 +497,14 @@ def build_report(args: argparse.Namespace) -> str:
 
     duplicates = find_migration_duplicates(entries, args.migrations_dir)
     role_references = owners + acl
+    not_object_normalized = Counter(
+        entry.object_class for entry in entries if object_ref(entry) is None
+    )
+
+    source_postgresql_version = (
+        toc_provenance.source_postgresql_version or "UNKNOWN_NOT_REPORTED"
+    )
+    pg_dump_version = toc_provenance.pg_dump_version or "UNKNOWN_NOT_REPORTED"
 
     lines = [
         "LOVABLE CLOUD DUMP — METADATA-ONLY INSPECTION",
@@ -436,22 +513,41 @@ def build_report(args: argparse.Namespace) -> str:
         "restore_attempted: no",
         "database_connection_attempted: no",
         "row_payload_inspected: no",
-        f"input_file: {args.dump.name}",
+        f"input_file: {args.input_name}",
         f"size_bytes: {size}",
         f"sha256: {sha256}",
         "archive_format: PostgreSQL custom archive (PGDMP)",
-        f"archive_header_version: {archive_version}",
+        f"archive_format_version: {archive_version}",
+        f"source_postgresql_version: {source_postgresql_version}",
+        f"source_pg_dump_version: {pg_dump_version}",
         f"pg_restore_version: {args.pg_restore_version}",
         "pg_restore_list_compatibility: PASS",
+        "archive_snapshot_binding: PASS "
+        "(TOC and SHA-256 use one private read-only capture)",
         f"toc_entries: {len(entries)}",
         f"toc_metadata_entries: {len(entries) - data_entries}",
         f"toc_data_references_not_extracted: {data_entries}",
         "unknown_toc_classes: none (inspection fails closed if encountered)",
+        "unresolved_known_toc_entries: none (required object references fail closed)",
         "",
         "TOC CLASS COUNTS",
     ]
     for object_class in sorted(class_counts):
         lines.append(f"{object_class}: {class_counts[object_class]}")
+
+    lines.extend(
+        [
+            "",
+            "KNOWN TOC ENTRIES WITHOUT NORMALIZED OBJECT REFERENCES",
+            "These entries remain counted and flagged; required object-bearing "
+            "classes fail inspection instead.",
+        ]
+    )
+    if not not_object_normalized:
+        lines.append("none")
+    else:
+        for object_class in sorted(not_object_normalized):
+            lines.append(f"{object_class}: {not_object_normalized[object_class]}")
 
     lines.extend(
         [

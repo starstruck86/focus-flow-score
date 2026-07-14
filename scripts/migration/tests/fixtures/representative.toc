@@ -1,5 +1,7 @@
 ; Synthetic pg_restore --list output. It contains metadata only.
 ; TOP_SECRET_TOC_COMMENT_MUST_NOT_APPEAR
+;     Dumped from database version: 15.8 (synthetic source build)
+;     Dumped by pg_dump version: 17.5 (synthetic client build)
 1; 2615 2200 SCHEMA - public app_owner
 2; 1259 100 TABLE public daily_digest_items app_owner
 3; 0 100 TABLE DATA public daily_digest_items app_owner

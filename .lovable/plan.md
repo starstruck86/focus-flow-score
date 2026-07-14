@@ -1,5 +1,15 @@
 
-# Cloud → Personal Supabase Staging Mirror — v2.2.1
+# REJECTED HISTORICAL DESIGN — DO NOT IMPLEMENT
+
+This custom bridge/CDC plan was superseded on July 14, 2026 by Lovable
+Support's reported Cloud export + Remix migration path. It is retained only as
+historical design context. It is **not** an implementation contract, migration
+runbook, deployment instruction, or approved fallback. Do not build, deploy,
+repair, or revive any mechanism below without a new explicit architecture
+decision and authorization. The authoritative rehearsal plan is
+`docs/migration/migration-runbook.md`.
+
+# Cloud → Personal Supabase Staging Mirror — v2.2.1 (rejected)
 
 Plan-only correction to v2.2. No build, no DB/secret/deploy changes, no branches, no data movement. Await explicit approval before v2.3 or any implementation.
 

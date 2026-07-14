@@ -198,7 +198,10 @@ Hardcoded refs/URLs:
 
 ## Code/migration gaps and runtime-only unknowns
 
-1. 78 Edge Functions lack an explicit verify_jwt boolean in config.toml.
+1. 78 Edge Functions lack an explicit `verify_jwt` boolean in `config.toml`.
+   The local deployment-closure inventory treats the documented omitted default
+   as `true` and records that provenance structurally; this is not evidence of
+   each function's currently deployed Lovable Cloud setting.
 2. docs/phase2-function-inventory.json is incomplete (75 vs 120 functions).
 3. Most cron definitions are absent from chronological migrations; the derived snapshot is not a safe substitute.
 4. agent_cron_map references public.agent_configs, but that table is not created in chronological migrations.
@@ -216,7 +219,7 @@ Hardcoded refs/URLs:
 
 ## Verification requirements for rehearsal
 
-- Generate an owned-project function manifest from the reviewed Git commit: slug, source digest, explicit verify_jwt, shared import closure, and env-name set.
+- Generate the repository source function manifest from the reviewed Git commit: slug, resolved deployment-closure fingerprint (including reachable `_shared` files), and structured effective `verify_jwt`/entrypoint/import-map settings. A locally generated target-role manifest remains non-independent until deployed source/config is collected from the owned target.
 - Compare actual deployed slugs/settings only under separately authorized read access; this PR must remain repository-local.
 - Inventory actual cron.job rows, active/timezone/schedule/command hashes, and reconcile to the repository without printing header values.
 - Inventory Auth counts/identity-provider counts, preserve/map UUIDs, rehearse password reset, and validate Google/OAuth/MCP redirects plus SMTP.
