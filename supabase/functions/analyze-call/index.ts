@@ -10,6 +10,7 @@
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { withEdgeBuildAttestation } from "../_shared/edgeBuildAttestation.ts";
 import { classifySituation } from "../_shared/strategy-router/situationClassifier.ts";
 import { retrieveLibraryContext } from "../_shared/strategy-core/index.ts";
 import { getModelConfig } from '../_shared/getModelConfig.ts';
@@ -55,7 +56,10 @@ async function callClaude(messages: Array<{ role: string; content: string }>, sy
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return withEdgeBuildAttestation(
+      new Response(null, { headers: corsHeaders }),
+      "analyze-call",
+    );
   }
 
   try {

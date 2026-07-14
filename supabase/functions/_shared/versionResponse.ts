@@ -1,9 +1,10 @@
-import releaseMetadata from "./release.json" with { type: "json" };
+import { EDGE_BUILD_MANIFEST } from "./edgeBuildManifest.generated.ts";
+import {
+  readEdgeBuildAttestation,
+  withEdgeBuildAttestation,
+} from "./edgeBuildAttestation.ts";
 
 export const VERSION_PROOF_SCOPE = "version-function-bundle" as const;
-
-const RELEASE_ID_PATTERN = /^edge-[0-9]{8}-[0-9a-f]{12}$/;
-const SOURCE_COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 
 export type VersionEnvironmentName = "DENO_DEPLOYMENT_ID" | "SB_REGION";
 
@@ -33,7 +34,7 @@ const COMMON_HEADERS: Record<string, string> = {
 };
 
 const productionRuntime: VersionRuntime = {
-  releaseMetadata,
+  releaseMetadata: EDGE_BUILD_MANIFEST,
   getEnv: (name) => Deno.env.get(name),
 };
 
@@ -61,31 +62,6 @@ function normalizePublicValue(value: unknown): string | null {
   return normalized;
 }
 
-function readReleaseValue(value: unknown): string | null {
-  if (typeof value !== "string" || value !== value.trim()) return null;
-  if (!value || value.toUpperCase() === "PENDING") return null;
-  return value;
-}
-
-function readReleaseMetadata(metadata: unknown): {
-  releaseId: string | null;
-  sourceCommit: string | null;
-} {
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
-    return { releaseId: null, sourceCommit: null };
-  }
-
-  try {
-    const record = metadata as Record<string, unknown>;
-    return {
-      releaseId: readReleaseValue(record.release_id),
-      sourceCommit: readReleaseValue(record.source_commit),
-    };
-  } catch {
-    return { releaseId: null, sourceCommit: null };
-  }
-}
-
 function readEnvironment(
   runtime: VersionRuntime,
   name: VersionEnvironmentName,
@@ -97,28 +73,22 @@ function readEnvironment(
   }
 }
 
-function hasValidReleaseBinding(
-  releaseId: string | null,
-  sourceCommit: string | null,
-): boolean {
-  return Boolean(
-    releaseId &&
-      sourceCommit &&
-      RELEASE_ID_PATTERN.test(releaseId) &&
-      SOURCE_COMMIT_PATTERN.test(sourceCommit) &&
-      releaseId.slice(-12) === sourceCommit.slice(0, 12),
-  );
-}
-
 export function createVersionHandler(
   runtime: VersionRuntime = productionRuntime,
 ): (request: Request) => Response {
   return (request: Request): Response => {
     if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: responseHeaders({ Allow: "GET, OPTIONS" }),
-      });
+      return withEdgeBuildAttestation(
+        new Response(null, {
+          status: 204,
+          headers: responseHeaders({ Allow: "GET, OPTIONS" }),
+        }),
+        "version",
+        {
+          manifest: runtime.releaseMetadata,
+          getDeploymentId: () => runtime.getEnv("DENO_DEPLOYMENT_ID"),
+        },
+      );
     }
 
     if (request.method !== "GET") {
@@ -139,25 +109,23 @@ export function createVersionHandler(
       );
     }
 
-    const { releaseId, sourceCommit } = readReleaseMetadata(
-      runtime.releaseMetadata,
-    );
-    const deploymentId = readEnvironment(runtime, "DENO_DEPLOYMENT_ID");
+    const edgeAttestation = readEdgeBuildAttestation({
+      manifest: runtime.releaseMetadata,
+      getDeploymentId: () => runtime.getEnv("DENO_DEPLOYMENT_ID"),
+    });
     const region = readEnvironment(runtime, "SB_REGION");
-    const verified = hasValidReleaseBinding(releaseId, sourceCommit) &&
-      Boolean(deploymentId);
 
     const attestation: VersionAttestation = {
-      status: verified ? "ok" : "unavailable",
+      status: edgeAttestation.verified ? "ok" : "unavailable",
       service: "version",
-      verified,
-      release_id: releaseId,
-      source_commit: sourceCommit,
-      deployment_id: deploymentId,
+      verified: edgeAttestation.verified,
+      release_id: edgeAttestation.releaseId,
+      source_commit: edgeAttestation.sourceCommit,
+      deployment_id: edgeAttestation.deploymentId,
       region,
       proof_scope: VERSION_PROOF_SCOPE,
     };
 
-    return jsonResponse(attestation, verified ? 200 : 503);
+    return jsonResponse(attestation, edgeAttestation.verified ? 200 : 503);
   };
 }

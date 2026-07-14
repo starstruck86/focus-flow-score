@@ -25,3 +25,6 @@ dist-ssr
 *.sw?
 .env
 .env.local
+
+# Generated from GITHUB_SHA by CI/deploy workflows; never commit this artifact.
+supabase/functions/_shared/edgeBuildManifest.generated.ts

@@ -2,7 +2,7 @@
 
 > **Supersedes all prior state documents and mirrors.**
 >
-> **Version:** v21 — July 11, 2026 night shipping cut
+> **Version:** v21 — July 12, 2026 runtime provenance review
 >
 > **Owner:** Corey Hartin (Branch.io Strategic Account Executive; Day 1 = July 13, 2026)
 >
@@ -37,7 +37,7 @@ Codex and Claude write this file through the repository. Claude drafts entries a
 
 The single source of truth for the entire app.
 
-**Updated:** July 11, 2026 (v21 — Jul-11-night Strategy shipping cut)
+**Updated:** July 12, 2026 (runtime provenance review on top of the v21 Jul-11-night Strategy shipping cut)
 
 **Supersedes:** v20 (`1PeTg6kZ71G1ZgqrCp9X5W-GSVD1bz8BZCfH0Fppv9E0`). v20 recorded the corpus/fluency scale-up and listed the STRATEGY six-layer rollout as PENDING. v21 records that several of those layers shipped to prod the night of Jul 11 and are verified live.
 
@@ -51,7 +51,7 @@ The single source of truth for the entire app.
 6. **IDENTITY → TERRITORY (#12) — SHIPPED + DATA CONFIRMED.** Identity comes from `territory_profile`, not hardcoded values. Prod confirmed: Strategic Account Executive / 13 accounts / $1.4M USD Expansion / verticals media-ent, travel, retail, finserv. Stale “Senior AE / 14 accounts” text was removed.
 7. **FRONTEND TYPE DEBT — SHIPPED.** PR #5 fixed 28 `RejectExcessProperties` errors; the postinstall type-safety bypass was removed; typecheck now compiles project references.
 
-**DEPLOY STATE:** Edge functions (`strategy-chat`, `analyze-call`, `mcp`) were deployed via `supabase functions deploy` from merged `main`; `strategy-chat` is live from `41b539ed`. The frontend was published. Production Supabase remains `odbjjklumdsuqdvkgwyv` (Lovable-managed)—not migrated (§D).
+**DEPLOY STATE:** Exact bundle provenance is not yet independently established for any production Edge Function. `version` self-reports substantive commit `5e071bee29751f549dc3ae3f5308e0d81005be72`; `strategy-chat` has live-behavior evidence for the `41b539ed` citation/classifier changes; `analyze-call` and `mcp` were manually deployed from merged `main`. Those three statements are operational records, not bundle-bound proof. Draft PR #12 (`agent/all-functions-runtime-attestation`, original substantive head `dd649ec63017058c77b896aa766897b5aa41a8f4`; verifier-test hardening `acbef013bf094b283eddd9be23566731e374f548`) adds one CI-generated commit manifest, independent runtime proof for `strategy-chat`, `analyze-call`, `mcp`, and `version`, and a clean-checkout deploy-and-verify workflow whose exact verifier now has a nonzero mismatch regression in normal PR CI. It is not merged or deployed. The only `supabase/functions/**` change from `5e071bee` through current `main` `447c00f6` is `_shared/release.json`; no scoped handler or business-logic file changed. A coordinated four-function redeploy is required after PR #12 merges and the protected deployment credentials are configured. The frontend was published. Production Supabase remains `odbjjklumdsuqdvkgwyv` (Lovable-managed)—not migrated (§D).
 
 ### §B. STRATEGY SIX-LAYER STATUS
 
@@ -76,7 +76,8 @@ The single source of truth for the entire app.
 
 #### New (Jul 12)
 
-- **PRODUCTION RUNTIME VERSION ATTESTATION — IN REVIEW, NOT DEPLOYED.** Draft PR #11 adds a side-effect-free public `version` Edge Function, bundle-bound release metadata, focused security coverage, CI checks, and a dispatch-only workflow that compares production against `release.json` on `main`. Release `edge-20260712-5e071bee2975` is bound to hardened substantive head `5e071bee29751f549dc3ae3f5308e0d81005be72`. No merge or deployment has occurred; production verification remains pending a separately authorized deploy.
+- **ALL-FUNCTION RUNTIME ATTESTATION — IN REVIEW, NOT DEPLOYED.** Draft PR #12 (`agent/all-functions-runtime-attestation`, original substantive head `dd649ec63017058c77b896aa766897b5aa41a8f4`; verifier-test hardening `acbef013bf094b283eddd9be23566731e374f548`) replaces the hand-editable version-only SHA authority with an ignored manifest generated from GitHub Actions `GITHUB_SHA`. Each of `strategy-chat`, `analyze-call`, `mcp`, and `version` reports its bundle SHA and deployment ID. A dispatch-only workflow validates one clean detached `main` checkout, stages all four functions in one CLI invocation, and fails unless every runtime reports the expected SHA. Normal PR CI now executes the exact post-deploy verifier against synthetic responses and proves that a per-function SHA mismatch exits `1`; it also covers the all-valid, missing-header, and duplicate-deployment-ID paths. Before use, GitHub needs a protected `production` environment with `SUPABASE_ACCESS_TOKEN`; main and out-of-band Supabase deploy authority also need protection for CI to be the provenance boundary.
+- **VERSION-ONLY ATTESTATION — MERGED, DEPLOYED, AND SUPERSEDED BY PR #12'S DESIGN.** PR #11 merged as `447c00f6`. The public `version` endpoint returns release `edge-20260712-5e071bee2975`, source `5e071bee29751f549dc3ae3f5308e0d81005be72`, and a project-scoped deployment ID. It does not attest the other functions, and its tracked `release.json` can name a commit other than the bundle-producing commit; PR #12 removes that second authority.
 
 #### New (Jul 11 night)
 
@@ -105,6 +106,18 @@ Trust-but-verify held throughout the session: it caught an unmerged PR before a 
 # SESSION LOG
 
 > Append-only, newest first. Add each new immutable entry directly below this note; never rewrite prior entries.
+
+## 2026-07-12 — Codex — Post-deploy mismatch proof added to PR #12
+
+- **Who:** Codex, responding to Corey's independent review of PR #12.
+- **What:** Confirmed that the four-function post-deploy `verify` job was present but that its nonzero mismatch behavior had no executable regression. Extracted the exact runtime verifier into a tracked script used directly by the workflow, made the verification job check out and prove the exact deployed source SHA, and added normal-PR-CI tests. The tests prove all-valid attestations exit `0`, one otherwise-valid function reporting the wrong SHA exits `1`, a missing required header exits `1`, and reused deployment IDs exit `1`. No merge or deployment was performed.
+- **SHAs:** PR #12 verifier-test hardening `acbef013bf094b283eddd9be23566731e374f548`.
+
+## 2026-07-12 — Codex — All-function runtime attestation prepared for review
+
+- **Who:** Codex, at Corey Hartin's direction.
+- **What:** Opened draft PR #12 on `agent/all-functions-runtime-attestation`. It replaces tracked, hand-editable version-only SHA metadata with one ignored manifest generated from GitHub Actions `GITHUB_SHA`; exposes fail-closed bundle proof for `strategy-chat`, `analyze-call`, `mcp`, and `version`; and adds a clean detached-main, four-function deploy plus independent runtime verification workflow. The production audit found that `_shared/release.json` is the only `supabase/functions/**` change between `5e071bee` and current `main` `447c00f6`; no scoped handler or business logic changed. Production exact-SHA status remains unproven for all four until a coordinated verified redeploy. No merge or deployment was performed.
+- **SHAs:** PR #12 substantive head `dd649ec63017058c77b896aa766897b5aa41a8f4`.
 
 ## 2026-07-12 — Codex — Production runtime version attestation prepared for review
 

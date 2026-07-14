@@ -5,14 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "build:dev": "vite build --mode development",
+    "build": "vite build && node scripts/postprocess-mcp-attestation.mjs",
+    "build:dev": "vite build --mode development && node scripts/postprocess-mcp-attestation.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc -b --force --pretty false",
     "test": "vitest run",
+    "posttest": "node scripts/postprocess-mcp-attestation.mjs",
     "test:watch": "vitest",
-    "analyze": "ANALYZE=true vite build"
+    "analyze": "ANALYZE=true vite build && node scripts/postprocess-mcp-attestation.mjs",
+    "edge:manifest": "node scripts/generate-edge-build-manifest.mjs",
+    "edge:mcp-attestation:check": "node scripts/postprocess-mcp-attestation.mjs --check",
+    "edge:mcp-attestation:test": "node --test scripts/postprocess-mcp-attestation_test.mjs",
+    "edge:runtime-attestation:test": "node --test scripts/verify-edge-attestations_test.mjs"
   },
   "dependencies": {
     "@elevenlabs/react": "^0.14.3",
