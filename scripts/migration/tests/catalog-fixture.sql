@@ -1,5 +1,13 @@
 \set ON_ERROR_STOP on
 
+DO $$
+BEGIN
+  IF pg_catalog.current_database() !~ '^migration_verify_' THEN
+    RAISE EXCEPTION 'catalog fixture requires a disposable migration_verify_* database';
+  END IF;
+END
+$$;
+
 DROP PUBLICATION IF EXISTS verify_fixture_publication;
 DROP SCHEMA IF EXISTS verify_fixture CASCADE;
 

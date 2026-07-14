@@ -258,7 +258,8 @@ def _parse_collection(value: Any, context: str) -> dict[str, Any]:
         boundary_value = _fingerprint(
             boundary_value, f"{context}.boundary.value", nullable=False
         )
-        assert boundary_value is not None
+        if boundary_value is None:
+            raise ManifestError(f"{context}.boundary.value: missing fingerprint")
 
     collector = value["collector"]
     if not isinstance(collector, dict):
@@ -581,7 +582,10 @@ def compare(source: dict[str, Component], target: dict[str, Component]) -> list[
             if not outcomes:
                 outcomes = ["Match"]
 
-        assert item is not None
+        if item is None:
+            raise ManifestError(
+                f"comparison internal error: no component for identity {identity!r}"
+            )
         results.append(
             {
                 "kind": item.kind,

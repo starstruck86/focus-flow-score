@@ -67,6 +67,16 @@ the captured SQL envelope, and will not overwrite an existing output. Use
 `--evidence-kind service_inventory` only with the separately captured managed
 service inventory.
 
+The destructive synthetic PostgreSQL integration fixtures are test-only. They
+require `MIGRATION_VERIFY_ALLOW_FIXTURE=1`, PostgreSQL 17, a database named
+`migration_verify_*`, and either the canonical local PostgreSQL Unix socket or
+an explicitly prefixed `focus-flow-migration-verify-*` container on a local
+Docker socket carrying the test-only label
+`com.focus-flow.migration-verify=true`. Both scripts verify the connected
+database identity before fixture SQL. TCP hosts, non-test database names,
+remote Docker endpoints, missing dependencies, and ambiguous assertion results
+fail before fixture setup.
+
 ## Compare verification manifests
 
 ```text
