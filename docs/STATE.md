@@ -76,11 +76,12 @@ The single source of truth for the entire app.
 
 #### New (Jul 14)
 
-- **SUPABASE MIGRATION REHEARSAL — DRAFT, NOT EXECUTED.** Draft PR #13 pivots the migration architecture from the rejected custom bridge design to Lovable Support's reported Cloud export/remix path. It adds the repository-derived inventory, a 22-phase rehearsal/cutover runbook, a local read-only dump inspector, fail-closed manifest comparison, and read-only verification templates. The latest substantive branch head is `5b56593a491227bc690751fffee43d4c3658317d`. Support's export-format, restore, Auth, Storage, Remix, and rate-limit statements remain unproven until an authorized empirical rehearsal or written confirmation. No project was created or queried; no export, restore, remix, deployment, secret access, production invocation, or data movement occurred. The prior bridge specifications in `.lovable/plan.md` are rejected historical input, and the preserved local bridge spike is not part of PR #13.
+- **SUPABASE MIGRATION REHEARSAL — DRAFT, NOT EXECUTED.** Draft PR #13 pivots the migration architecture from the rejected custom bridge design to Lovable Support's reported Cloud export/remix path. Its hardening adds provenance-bound/fail-closed manifests, resolved Edge Function deployment-closure fingerprints and structured effective `verify_jwt`, a deterministic PostgreSQL catalog-output converter without PK values/ranges, immutable dump/TOC binding, real PostgreSQL 17 CI integration, and enforced source/target write-gate and lifecycle gates in the runbook. The latest substantive branch head is `5bbc85e47c3f4833529c9e3b83a776ca9049022c`. Support's export-format, restore, Auth, Storage, Remix, write-fence, and rate-limit statements remain unproven until an authorized empirical rehearsal or written confirmation. No project was created or queried; no export, restore, remix, deployment, secret access, production invocation, or data movement occurred. `.lovable/plan.md` is explicitly rejected historical input, and the preserved local bridge spike is not part of PR #13.
 
 #### New (Jul 12)
 
-- **PRODUCTION RUNTIME VERSION ATTESTATION — MERGED, NOT DEPLOYED OR PRODUCTION-VERIFIED.** PR #11 merged as `447c00f6bdfe988053e8e9ee650a834679a1a7fc`. Release `edge-20260712-5e071bee2975` remains bound to hardened substantive head `5e071bee29751f549dc3ae3f5308e0d81005be72`. Repository merge does not establish deployment; production verification remains pending a separately authorized deploy and attestation.
+- **PRODUCTION `version` RESPONSE — JULY 12 OBSERVED, LIMITED PROOF.** PR #11 merged as `447c00f6bdfe988053e8e9ee650a834679a1a7fc`. A July 12 observation of the public production `version` function returned release `edge-20260712-5e071bee2975`, source `5e071bee29751f549dc3ae3f5308e0d81005be72`, and a project-scoped deployment ID. This proves only what that deployed `version` bundle returned at that observation time. It does not independently attest `strategy-chat`, `analyze-call`, or `mcp`, prove that the named source commit produced every deployed bundle, or establish current production state; tracked release metadata can name a commit other than the bundle-producing commit.
+- **ALL-FUNCTION RUNTIME ATTESTATION — OPEN DRAFT, NOT DEPLOYED.** PR #12 is open and draft at `a70ea4e1e3cdaa588546cbd3730481ae85b664cd`. It proposes coordinated build/deploy/verification for `strategy-chat`, `analyze-call`, `mcp`, and `version`, but remains blocked on a protected `production` environment with `SUPABASE_ACCESS_TOKEN`, protected `main`, and removal/restriction of out-of-band Supabase deploy authority. Merge and the coordinated four-function redeploy both require separate authorization; neither occurred here.
 
 #### New (Jul 11 night)
 
@@ -109,6 +110,12 @@ Trust-but-verify held throughout the session: it caught an unmerged PR before a 
 # SESSION LOG
 
 > Append-only, newest first. Add each new immutable entry directly below this note; never rewrite prior entries.
+
+## 2026-07-14 — Codex — Migration rehearsal hardened and runtime state caught up
+
+- **Who:** Codex, at Corey Hartin's direction.
+- **What:** Hardened draft PR #13 without changing its migration architecture: eliminated local manifest false greens, fingerprinted resolved Edge Function deployment closures/effective JWT configuration, replaced ambiguous catalog evidence with strict typed fingerprints and a deterministic converter, bound dump TOCs to immutable archive snapshots, added PostgreSQL 17 integration coverage, and strengthened Remix connection, Storage final-sync, target-lifecycle, and enforced maintenance/write-fence gates. `.lovable/plan.md` is now visibly rejected. This entry also records the limited July 12 production `version` response observation for merged PR #11 and open draft PR #12's unresolved deployment prerequisites. No Supabase or Lovable project was accessed or changed; no export, restore, remix, secret, deployment, production invocation, or production data was accessed or moved.
+- **SHAs:** PR #13 starting hardening head `e9ddd60e695b0d8bca405e514030d13b14f6daed`; hardening substantive head `5bbc85e47c3f4833529c9e3b83a776ca9049022c`. PR #12 open draft head `a70ea4e1e3cdaa588546cbd3730481ae85b664cd`; PR #11 merge `447c00f6bdfe988053e8e9ee650a834679a1a7fc` and observed version source `5e071bee29751f549dc3ae3f5308e0d81005be72`.
 
 ## 2026-07-14 — Codex — Supabase migration rehearsal prepared for review
 
