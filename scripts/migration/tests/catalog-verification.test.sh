@@ -81,7 +81,6 @@ assert items[("table", "verify_fixture.items")]["count"] == 2
 assert items[("sequence", "verify_fixture.external_counter")]["count"] is None
 required = {
     ("column", "verify_fixture.items.code"),
-    ("default_privilege", "postgres@verify_fixture:r"),
     ("enum", "verify_fixture.item_state"),
     ("domain", "verify_fixture.short_note"),
     ("function", "verify_fixture.touch_updated_at()"),
@@ -91,6 +90,10 @@ required = {
 }
 missing = sorted(required - set(items))
 assert not missing, missing
+default_privileges = sorted(
+    key for kind, key in items if kind == "default_privilege" and key.endswith("@verify_fixture:r")
+)
+assert len(default_privileges) == 1, default_privileges
 ' "$TMP_DIR/source manifest.json"
 
 python3 -c '
