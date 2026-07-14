@@ -286,3 +286,98 @@ CREATE TABLE _bridge_demo.canary (
 5. Confirm acceptance fixture UUIDs/values will be provided at v2.3 (deterministic, checked-in as a test vector).
 
 Stop. Awaiting explicit approval before v2.3 or any implementation.
+
+---
+
+# v2.2.1 — Binding Implementation Addendum (frozen)
+
+Status: architectural basis conditionally approved. This addendum FREEZES the contract items below. No build, no DB/secret/deploy/branch/commit/tag/invoke/data movement. v2.3 draft PR must satisfy every item verbatim.
+
+## A. Expired-batch recovery (single in-flight rule)
+- `public.bridge_v1_claim_batch(p_stream_epoch)`:
+  - Locks stream-control row.
+  - If ANY non-ACKed batch exists (lease valid OR expired): RECOVER and renew lease. Return the SAME `batch_id`, `batch_ordinal`, ordered `event_ids`, `batch_seq` assignment, and `batch_content_hash`. Zero mutation of these five fields.
+  - Only when no unresolved batch exists may a new batch be created.
+  - Never permits >1 in-flight batch per stream during canary.
+
+## B. Persisted-state canonicalization (SQL-side)
+- JCS (RFC 8785) is WIRE/EVENT-only. Postgres MUST NOT use `jsonb::text` as a JCS substitute.
+- Define `_bridge.row_encode_canary_v1(row)` — fixed, versioned, length-delimited SQL encoding:
+  - Tag: ASCII `"BRIDGE-ROW-CANARY-v1"` || LF
+  - Per field, in fixed order: `id uuid`, `n int4`, `note text (≤N bytes)`, `updated_at timestamptz`, `pk_version int8`, `tombstone bool`
+  - Each field: 1-byte type tag || 4-byte big-endian length || raw bytes (UUID=16B, int4=4B BE, int8=8B BE, text=UTF-8 bytes with declared byte cap enforced, timestamptz=int8 microseconds since epoch UTC BE, bool=1B).
+- `row_hash = sha256("BRIDGE-ROW-CANARY-v1" || row_encode_canary_v1(row))`.
+- `table_state_hash = sha256("BRIDGE-STATE-CANARY-v1" || concat(row_hash ORDER BY pk_uuid ASC))`.
+- Cross-runtime test vectors REQUIRED (checked-in): source SQL, target SQL, TypeScript produce identical hex for a fixed fixture of ≥8 rows including edge cases (min/max int, unicode note at byte cap, tombstoned row, epoch-boundary timestamp).
+- Delta apply MUST, inside the same target transaction, read back affected rows/tombstones, recompute the affected-state hash, and reject (rollback, no ACK) if it disagrees with the source-signed expectation.
+
+## C. Deterministic baseline extraction
+- `public.bridge_v1_baseline_read_chunk(p_epoch, p_chunk_no)`:
+  - Hardcoded projection list for `_bridge_demo.canary` (`id, n, note, updated_at, pk_version, tombstone`). No `information_schema`, no dynamic SQL for columns.
+  - `ORDER BY id ASC` (pk_uuid); deterministic chunk boundaries by `(chunk_no-1)*CHUNK_ROW_LIMIT` OFFSET / LIMIT computed over the sealed immutable baseline table.
+  - Rejects if `stream_epoch <> p_epoch` OR baseline seal state ≠ `sealed`.
+- Covered-event exclusion uses explicit `covered_by_epoch IS NULL` semantics on the outbox. NEVER "eligible because marker == current_epoch".
+
+## D. Stream-state transitions (frozen state machine)
+- `baseline_seal()` REFUSES to start while any non-ACKed batch exists (any epoch).
+- New epoch txn: `next_batch_ordinal := 1`; increments `stream_epoch`.
+- Post-source-seal: source state = `baseline_encoded_pending`; delta `claim_batch` DISABLED.
+- Target baseline finalization → computes `baseline_receipt_hash` = initial chain tip for epoch.
+- Source verifies target receipt, persists it, transitions to `streaming`.
+- Target accepts a delta batch iff: exact expected `epoch`, `batch_ordinal == last_applied_ordinal+1`, and `previous_receipt_hash == target_chain_tip`.
+- Target advances chain tip ONLY inside the successful apply transaction.
+- Source advances chain tip ONLY after verifying and persisting the returned receipt.
+- Any chain mismatch → stream PAUSED, no ACK, operator intervention required.
+
+## E. ACK contract
+- `ack` REMOVED from source-signed message kinds. No target signing key introduced for canary.
+- Target returns receipt over HTTPS response body.
+- Source verifies receipt contains EXACT expected: `epoch`, `batch_id`, `batch_ordinal`, `batch_content_hash`, `previous_receipt_hash`, `receipt_chain_hash`, `event_id_set` (exact set equality), `affected_state_hash`.
+- Any missing/added/altered `event_id` → fail-closed rejection, no ACK, stream paused.
+
+## F. Signing-key placement
+- Public `kid → Ed25519 public key` map lives in the reviewed TARGET ARTIFACT/CONFIGURATION (function bundle + env), not a mutable DB row.
+- Source Ed25519 private key: source Edge Function secret store ONLY.
+
+## G. Function security (frozen)
+- Source emitter (`bridge-export`): `verify_jwt=true` + explicit operator UUID allowlist check post-JWT.
+- Target ingest (`bridge-ingest`): `verify_jwt=false` (custom Ed25519 over exact raw bytes is mandatory pre-parse).
+- Public wrapper names: hardcoded `public.bridge_v1_*` only.
+- Data tables: `_bridge.*` (source), `_bridge_tgt.*` (target).
+- Every SECURITY DEFINER wrapper: `SET search_path = ''` (or `pg_catalog` only; NO `pg_temp`); all objects fully qualified; no client-controlled schema/table identifiers.
+- `REVOKE EXECUTE ... FROM PUBLIC, anon, authenticated`; `GRANT EXECUTE ... TO service_role` only.
+
+## H. Locked planning decisions
+- Wire: `bridge/1.0`.
+- Canary table + 20-baseline/30-delta fixture: approved.
+- Operator UUIDs, signing keys, PATs: deployment-time only; never requested in chat, never committed.
+- Target: prefer isolated Supabase branch or separate project. `dynamic-staging` (`uujkmcbqavsmzhnbqvmm`) is populated and NOT AUTHORIZED for modification.
+- Excluded from canary: cron, pruning, cleanup, retention automation, load testing, real tables.
+
+---
+
+## Artifact Map (condition → planned artifact)
+
+| Item | Artifact |
+|---|---|
+| A. Expired-batch recovery | migration `bridge/0003_claim_batch.sql` → `public.bridge_v1_claim_batch`; test `bridge/tests/claim_recovery.sql` (expired-lease preserves 5 fields; forbids parallel batch) |
+| B. Row/state encoding | migration `bridge/0004_canonical_encoding.sql` → `_bridge.row_encode_canary_v1`, `_bridge.row_hash_canary_v1`, `_bridge.table_state_hash_canary_v1`; TS `supabase/functions/_shared/bridge/encodeCanaryRow.ts`; test vectors `bridge/tests/vectors/canary_rows.json` + parity runners `bridge/tests/parity_{sql,ts}.test.*` |
+| B. Affected-state readback | migration `bridge/0007_apply_batch.sql` → `public.bridge_v1_apply_batch` (single-txn readback+compare+rollback); test `bridge/tests/apply_state_mismatch.sql` |
+| C. Deterministic baseline read | migration `bridge/0005_baseline.sql` → `public.bridge_v1_baseline_read_chunk` (hardcoded projection, ORDER BY id, epoch/seal guard); test `bridge/tests/baseline_determinism.sql` |
+| C. Covered-event semantics | migration `bridge/0002_outbox.sql` (adds `covered_by_epoch`); test `bridge/tests/covered_exclusion.sql` |
+| D. State machine | migration `bridge/0006_stream_state.sql` (control row + transitions + guards); test `bridge/tests/state_transitions.sql` |
+| E. ACK contract | edge function `supabase/functions/bridge-export/receiptVerify.ts`; test `bridge/tests/receipt_contract.test.ts` (missing/added/altered event_id → reject) |
+| F. Key placement | env in target bundle (`BRIDGE_KID_MAP_JSON`); source secret `BRIDGE_SRC_ED25519_SK`; test `bridge/tests/key_placement.test.ts` (no DB read for pubkeys) |
+| G. verify_jwt + operator allowlist | `supabase/config.toml` entries for `bridge-export` (true) and `bridge-ingest` (false); source `operatorAuthz.ts`; test `bridge/tests/authz.test.ts` |
+| G. Wrapper hygiene | linter script `bridge/tests/wrapper_hygiene.sql` (asserts search_path, ownership, grants for every `bridge_v1_*`) |
+| H. Fixture + decisions | `bridge/fixtures/canary_20_30.json`; `bridge/README.md` records wire=`bridge/1.0`, target=isolated branch TBD (NOT `dynamic-staging`) |
+| Provenance | pinned SHA-256 in `bridge/RELEASE.md`; verified via Management connector pre-invocation |
+
+Nothing above is created in this turn. This is the frozen contract for the v2.3 draft PR.
+
+## Technical Blockers (true, must be resolved before v2.3 begins)
+1. **Isolated target project ref unresolved.** `dynamic-staging` is explicitly out-of-bounds. v2.3 cannot deploy target artifacts until Corey names an isolated Supabase branch or separate project ref (and a service_role key issued only to that project).
+2. **Cross-runtime hash parity requires a real Postgres runtime for test-vector generation.** Deno test env alone cannot prove SQL parity; v2.3 must include a Postgres-container step (or equivalent) in CI to run `bridge/tests/parity_sql.test.sql` and diff against the checked-in vectors.
+3. **`verify_jwt=true` on `bridge-export` requires an authenticated operator session.** No blocker for design, but v2.3 must ship an invocation harness (script or checked-in curl recipe) that uses an operator-owned JWT; no shared/service token substitute.
+
+No other blockers identified. Awaiting explicit authorization to draft v2.3 PR.
