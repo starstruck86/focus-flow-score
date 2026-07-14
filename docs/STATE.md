@@ -74,9 +74,13 @@ The single source of truth for the entire app.
 
 ### §D. OPEN / NEXT
 
+#### New (Jul 14)
+
+- **SUPABASE MIGRATION REHEARSAL — DRAFT, NOT EXECUTED.** Draft PR #13 pivots the migration architecture from the rejected custom bridge design to Lovable Support's reported Cloud export/remix path. It adds the repository-derived inventory, a 22-phase rehearsal/cutover runbook, a local read-only dump inspector, fail-closed manifest comparison, and read-only verification templates. The latest substantive branch head is `5b56593a491227bc690751fffee43d4c3658317d`. Support's export-format, restore, Auth, Storage, Remix, and rate-limit statements remain unproven until an authorized empirical rehearsal or written confirmation. No project was created or queried; no export, restore, remix, deployment, secret access, production invocation, or data movement occurred. The prior bridge specifications in `.lovable/plan.md` are rejected historical input, and the preserved local bridge spike is not part of PR #13.
+
 #### New (Jul 12)
 
-- **PRODUCTION RUNTIME VERSION ATTESTATION — IN REVIEW, NOT DEPLOYED.** Draft PR #11 adds a side-effect-free public `version` Edge Function, bundle-bound release metadata, focused security coverage, CI checks, and a dispatch-only workflow that compares production against `release.json` on `main`. Release `edge-20260712-5e071bee2975` is bound to hardened substantive head `5e071bee29751f549dc3ae3f5308e0d81005be72`. No merge or deployment has occurred; production verification remains pending a separately authorized deploy.
+- **PRODUCTION RUNTIME VERSION ATTESTATION — MERGED, NOT DEPLOYED OR PRODUCTION-VERIFIED.** PR #11 merged as `447c00f6bdfe988053e8e9ee650a834679a1a7fc`. Release `edge-20260712-5e071bee2975` remains bound to hardened substantive head `5e071bee29751f549dc3ae3f5308e0d81005be72`. Repository merge does not establish deployment; production verification remains pending a separately authorized deploy and attestation.
 
 #### New (Jul 11 night)
 
@@ -87,7 +91,7 @@ The single source of truth for the entire app.
 #### Carried from v20
 
 - **L3 PRODUCT wiring:** Unscoped. Day 1: upload Branch onboarding docs → Library → Product Intelligence head.
-- **SUPABASE MIGRATION to own account:** STILL OPEN (Todoist due Jul 12). Production remains on Lovable-managed `odbjjklumdsuqdvkgwyv`. Do not cut over before Monday; do it with rollback time.
+- **SUPABASE MIGRATION to own account:** REHEARSAL PLANNING IN DRAFT PR #13; no export, restore, project creation, remix, or cutover has occurred. Production remains on Lovable-managed `odbjjklumdsuqdvkgwyv`. Keep the original project intact and the new backend read-only until rollback-critical verification passes.
 - **`account_risks` population gap:** Only 2/9 fluency accounts yield a competitive signal; the debrief-capture pipeline is the real fix.
 - **`competitive_intel` freshness:** Spot-verify AppsFlyer (Jun 2026 raise) and Kochava (2026 FTC settlement) card text against live rows.
 - **Web Research widening:** Reconcile onto new `main`, then rerun CI and the prompt budget before merge.
@@ -105,6 +109,12 @@ Trust-but-verify held throughout the session: it caught an unmerged PR before a 
 # SESSION LOG
 
 > Append-only, newest first. Add each new immutable entry directly below this note; never rewrite prior entries.
+
+## 2026-07-14 — Codex — Supabase migration rehearsal prepared for review
+
+- **Who:** Codex, at Corey Hartin's direction.
+- **What:** Opened draft PR #13 to replace the rejected custom bridge architecture with a repository-derived migration inventory, 22-phase export/remix rehearsal and cutover runbook, local read-only dump inspection, fail-closed manifest comparison, verification templates, and a precise empirical/Lovable-confirmation backlog. The implementation treats Lovable Support's path and constraints as reported but not yet proven, commits synthetic fixtures only, and deliberately omits a final restore command until a real export TOC is inspected under separate authorization. No Supabase or Lovable project was created, queried, remixed, changed, or deployed; no export, secret, production system, or production data was accessed or moved.
+- **SHAs:** PR #13 substantive head `5b56593a491227bc690751fffee43d4c3658317d`.
 
 ## 2026-07-12 — Codex — Production runtime version attestation prepared for review
 
