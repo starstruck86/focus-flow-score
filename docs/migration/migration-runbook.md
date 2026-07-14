@@ -2,6 +2,9 @@
 
 ## Status and evidence boundary
 
+**Migration readiness is RED.** No restore, target creation, or cutover is
+authorized by this runbook or by a successful local inspection.
+
 This is a future-execution runbook, not evidence that a migration occurred. It
 uses the supported path reported by Lovable Support: retain the original
 project, remix the project, export Cloud database data, restore selectively into
@@ -18,10 +21,21 @@ configuration. The owned target can later be inspected directly under separate
 authorization; Lovable production remains independently uninspectable. A green
 synthetic rehearsal does not remove that blocker.
 
+One authorized rehearsal export is retained offline in the approved evidence
+store. Its inspection is blocked by a procedure mismatch: the retained download
+has a ZIP wrapper, while the previously reviewed inspector accepts only a raw
+`PGDMP` archive. No identifying artifact metadata belongs in this repository.
+Adding and reviewing a strict local ZIP normalizer resolves the procedural
+mismatch without generating a replacement export, but it does not make the
+migration ready. The normalizer and all repository tests use synthetic fixtures
+only; repository work must not inspect or otherwise access the retained export.
+
 The following are **support-reported and not yet empirically proven**:
 
-- Export is a point-in-time `pg_dump` custom-format archive, with a 5 GB maximum
-  and one generated export per 24 hours.
+- The database payload is a point-in-time `pg_dump` custom-format archive, with
+  a 5 GB maximum export and one generated export per 24 hours. The exact outer
+  download packaging remains a separate property from the inner database
+  archive.
 - Auth data is partial/best-effort and password resets may be required.
 - Storage objects require separate manual download/upload.
 - No supported CDC/delta feed exists.
@@ -31,13 +45,14 @@ The following are **support-reported and not yet empirically proven**:
 - The supported topology uses a remixed Lovable project while the original is
   retained.
 
-Do not infer a restore command from those claims. A `PGDMP` magic header alone
-does not establish which schemas, owners, privileges, roles, extensions, or
-managed objects are present. The actual archive table of contents (TOC), source
-PostgreSQL major version, local `pg_restore` version, and target constraints must
-be inspected first. Supabase's current generic Postgres migration guidance also
-recommends stripping owners/privileges and separately handling roles and RLS,
-which is why a wholesale restore is not presumed safe:
+Do not infer a restore command from those claims. A valid ZIP envelope and a
+`PGDMP` magic header still do not establish which schemas, owners, privileges,
+roles, extensions, or managed objects are present. The verified inner archive's
+table of contents (TOC), source PostgreSQL major version, local `pg_restore`
+version, and target constraints must be inspected first. Supabase's current
+generic Postgres migration guidance also recommends stripping owners/privileges
+and separately handling roles and RLS, which is why a wholesale restore is not
+presumed safe:
 <https://supabase.com/docs/guides/platform/migrating-to-supabase/postgres>.
 
 ## Non-negotiable rollback rule
@@ -80,17 +95,59 @@ Supabase operator, application verifier, execution-checkout approval owner, and
 rollback decision owner. Record timestamps in UTC, the informational historical
 procedure-origin SHA, externally approved execution-checkout SHA, independently
 observed execution-checkout SHA, procedure README blob SHA, fenced-workflow
-SHA-256, inspection-tool/baseline SHA, archive checksum, TOC/report checksum,
+SHA-256, inspection-tool/baseline SHA, artifact checksums, TOC/report checksum,
 target project identity, function artifact SHAs, and pass/fail notes. The
 historical origin does not approve later procedure content, and the observed
 execution SHA alone does not prove external approval.
-The canonical archive and completed export-inspection evidence package,
+
+Treat artifact identities as separate, immutable evidence. For a ZIP download,
+record the canonical outer artifact's UI-observed object name, original
+filename, size, before/after SHA-256, and validated ZIP structural metadata.
+Separately record the sole member's actual name, compression method, CRC, and
+declared compressed/uncompressed sizes; the verified inner `PGDMP` size and
+SHA-256; the SHA-256 reported by the existing inspector for that inner archive;
+and the report and provenance-manifest hashes. The inspector-reported hash must
+equal the verified inner hash, never the outer ZIP hash. A direct raw-`PGDMP`
+input remains supported and has no fabricated ZIP/member metadata; in direct
+mode, provenance explicitly records the verified inner as a byte copy of the
+canonical input, so their equal hash is expected rather than misrepresented as
+a ZIP-derived relationship. Record a manifest file hash in a
+separate checksum sidecar rather than attempting to put a file's ordinary
+SHA-256 inside the bytes being hashed.
+
+The canonical outer artifact and completed export-inspection evidence package,
 including its provenance manifest, must live in an approved encrypted evidence
 store. The ignored
 `local-migration-artifacts/` directory is only a private working area and must
 never be the sole retained copy because git-clean operations can delete ignored
 files. Never commit exports, metadata reports, credentials, user lists, or
 object names learned only from production.
+
+Timeline events are independent evidence, not aliases. Represent initiation and
+completion as structured observations: either an operator-observed UTC value or
+`{"value": null, "basis": "not_observed", "reason": "..."}` with a required,
+non-placeholder reason. Export availability and download completion must each
+have an operator-observed, second-precision RFC3339 UTC value. Validate every
+available observed relationship: observed initiation must not follow observed
+completion or availability; observed completion must not follow availability;
+and availability must not follow download completion. Never infer an event from
+a filename, ZIP timestamp, filesystem metadata, or another event.
+
+The retained rehearsal's initiation was not observed and that historical gap is
+irreparable. Completion may likewise be explicitly unobserved; availability is
+not completion. Its provenance must therefore record
+`export_timeline_status: INCOMPLETE`, while metadata inspection remains
+`inspection_status: REVIEW_REQUIRED`. The missing initiation does not require a
+new rehearsal export and does not prevent safe offline metadata inspection after
+the ZIP procedure is reviewed. Every future rehearsal and final export must
+record initiation correctly before the export action is taken.
+
+Bind the run to an explicit evidence profile. The retained-rehearsal profile
+requires unobserved initiation and an `INCOMPLETE` timeline; future-rehearsal
+and final-cutover profiles require operator-observed initiation. This prevents a
+basis change from relabeling the retained gap as complete. The event values are
+still human observations: local validation proves their syntax, ordering, and
+package binding, not that the operator actually observed the claimed UI event.
 
 ## Phases
 
@@ -133,26 +190,42 @@ documented; no production domain or traffic points at the remix.
 
 ### 4. Generate rehearsal export
 
-Use Cloud → Overview → Advanced settings → Export data only after recording the
-start time and the exact source project. Do not assume export completion means a
-usable dump. The rehearsal export consumes the reported 24-hour generation
-slot.
+For every future rehearsal, use Cloud → Overview → Advanced settings → Export
+data only after recording the initiation time and exact source project. Record
+the time at which the export object becomes available as a distinct event. Do
+not label availability as completion and do not assume either event means the
+download contains a usable dump. If completion itself was not observed, record
+it with `value: null`, `basis: not_observed`, and a required reason. The export
+consumes the reported 24-hour generation slot.
 
-Exit gate: UI reports success, download is available, and no final-cutover
-window depends on another export within 24 hours.
+For the retained rehearsal only, preserve the explicit missing-initiation record
+and keep `export_timeline_status: INCOMPLETE`; do not backfill it from any other
+timestamp. This prevents the run from becoming complete rehearsal evidence, but
+does not block the separately reviewed offline metadata-only inspection.
+
+Exit gate: future initiation is operator-observed; availability is separately
+operator-observed; completion is either independently observed or explicitly
+not observed with a reason; and no final-cutover window depends on another
+export within the reported 24-hour limit.
 
 ### 5. Download and checksum export
 
-Preserve the untouched download in the approved encrypted evidence store, then
-make a restricted working copy under `local-migration-artifacts/`. Do not rename
-away the original extension until format inspection. Immediately record file
-size and SHA-256; checksum again after any copy and verify the working copy
-against the canonical archive. Never upload the archive to GitHub, chat, CI, or
-an unapproved file store.
+Treat the untouched download as the canonical outer artifact, regardless of
+whether it is ZIP-wrapped or direct `PGDMP`. Preserve it in the approved
+encrypted evidence store, then make a restricted working copy under
+`local-migration-artifacts/`. Do not rename away the original extension.
+Immediately record its UI-observed export object name, original filename, size,
+download-completion time, and SHA-256; checksum again after any copy and verify
+the working copy against the canonical outer artifact. Never upload any outer
+or derived artifact to GitHub, chat, CI, or an unapproved file store.
 
-Exit gate: the canonical and working-copy checksums agree, the external
-pre-inspection digest-only checksum file is retained, and the file is non-empty
-and within the support-reported limit.
+An inner `PGDMP` produced by normalization is a distinct derived artifact. Its
+filename, size, and hash cannot replace or relabel the outer evidence.
+
+Exit gate: availability and download-completion timestamps are independently
+observed and ordered; canonical-outer and working-copy checksums agree; the
+external pre-inspection digest-only checksum is retained; and the outer file is
+non-empty and within the reviewed limit.
 
 ### 6. Inspect dump table of contents
 
@@ -165,28 +238,72 @@ supplied approval pin equals the executing checkout; it cannot prove who
 authorized or supplied it.
 
 Execute the complete, checked-in evidence-package template under **Inspect a
-future Lovable export** in `scripts/migration/README.md`. Do not substitute the
+Lovable export envelope** in `scripts/migration/README.md`. Do not substitute the
 inspector's stdout-only form: the template retains the report, external
-before/after checksums, report checksum, and provenance manifest. Do not edit a
-copied command block: the content identities attest the approved checkout's
-README and marked fence, not an independently captured shell-input stream.
+outer before/after checksums, derived-artifact metadata, report and provenance
+checksums, and provenance manifest. Do not edit a copied command block: the
+content identities attest the approved checkout's README and marked fence, not
+an independently captured shell-input stream.
 
-The inspector is read-only: it validates local paths and custom format, checks
-tool compatibility, invokes `pg_restore --list`, emits metadata only, and fails
-closed on unknown TOC classes. Review every warning for owners, ACLs, roles,
-extensions, subscriptions, event triggers, publications, managed schemas,
-`auth`, `storage`, `supabase_*`, and duplicates with checked-in migrations.
+The normalizer accepts either direct raw `PGDMP` input or a strictly validated
+ZIP envelope. A ZIP must contain exactly one non-empty regular member. Reject
+multiple or duplicate entries; directories, symlinks, devices, and other special
+files; absolute, traversal, separator-containing, drive-prefixed,
+control-character, or ambiguous names; encryption; unsupported compression;
+nested archives; empty or non-`PGDMP` content; malformed headers/directories,
+bad CRC, truncation, prefix/polyglot bytes, and trailing junk; and any declared
+size, actual streamed size, compression ratio, or disk-headroom condition beyond
+the reviewed limits. Working storage must accommodate the outer working copy,
+derived inner, inspector snapshot, and temporary/report overhead—approximately
+three archive copies for direct PGDMP input. The outer before/after SHA-256 must
+remain identical, and a
+supplied expected outer SHA-256 must match. Symlink inputs and canonical mutation
+fail closed.
 
-Exit gate: archive format/version is supported; TOC parsing has no unknown
-class; report contains no row data; exactly one report `sha256:` value equals
-both external before/after archive checksums; and the provenance manifest records
-the exact source project name/ref, observed UTC export/download times separately
-from Support-reported claims, original filename/size/archive SHA-256, operator,
-informational procedure-origin SHA, externally approved checkout SHA, actual
-execution-checkout SHA, exact committed README blob SHA, exact fenced-workflow
-SHA-256, unchanged inspection-tool/baseline SHA, and report filename/SHA-256.
-The approved and execution SHAs must be identical. Copy the completed package
-to the approved encrypted evidence store and verify it there before continuing.
+For ZIP input, prefix/polyglot and trailing-junk rejection is enforced by exact
+byte-zero local-header and EOF end-of-central-directory framing. For direct raw
+`PGDMP`, the normalizer enforces a stable bounded copy and conservative header
+validation, while the unchanged inspector's real `pg_restore --list` invocation
+remains the full-format and trailing-content compatibility boundary. Failure at
+either layer publishes no evidence package.
+
+Do not use `unzip`, `extractall`, or a member-controlled output path. Stream the
+sole member to one fixed, exclusively created file in a private temporary
+directory. Enforce the actual-byte cap while streaming, hash the stream, verify
+CRC and actual length against the validated metadata, require `PGDMP` magic,
+flush and `fsync`, atomically publish the derived file, and set mode `0400`.
+Remove every partial output after any failure. Stage the derived archive,
+report, manifest, and checksum sidecars away from the final run path; publish a
+run only after all checks pass, never overwrite an existing run or output, and
+treat the exclusively written `EVIDENCE_COMPLETE` marker as the publication
+boundary. Fsync the complete pending tree and publish it with an operating-system
+atomic no-replace rename; an unsupported platform, destination collision,
+missing marker, or cleanup failure is a hard stop.
+Derive the run ID from the observed availability time plus a prefix of the outer
+SHA-256, never from initiation or artifact metadata.
+
+Only the verified inner `PGDMP` is passed to the existing inspector. The
+inspector's boundary remains unchanged: it validates a local raw custom-format
+archive, checks tool compatibility, invokes `pg_restore` only with `--version`
+and `--list`, emits metadata only, and fails closed on unknown TOC classes.
+Review every warning for owners, ACLs, roles, extensions, subscriptions, event
+triggers, publications, managed schemas, `auth`, `storage`, `supabase_*`, and
+duplicates with checked-in migrations.
+
+Exit gate: normalization and archive format/version checks pass; TOC parsing has
+no unknown class; the report contains no row data; exactly one report `sha256:`
+equals the verified inspected `PGDMP` SHA-256; outer before/after/expected hashes
+agree; ZIP mode never compares or records the outer hash as the inner hash;
+direct mode explicitly records the canonical-to-verified-copy relationship; and
+provenance separately records the source identity, structured timeline and statuses, outer
+identity/ZIP metadata and actual member metadata when applicable, inner identity
+and inspector-reported hash, operator, informational procedure-origin SHA,
+externally approved checkout SHA, actual execution-checkout SHA, committed
+README blob SHA, fenced-workflow SHA-256, inspection-tool/baseline SHA, and
+report/provenance hashes. The approved and execution SHAs must be identical.
+Copy the completed package to the approved encrypted evidence store and verify
+it there before continuing. Migration readiness remains RED and inspection
+remains `REVIEW_REQUIRED`.
 
 ### 7. Decide selective restore plan
 
@@ -274,9 +391,16 @@ Schedule a final export at least 24 hours after the rehearsal export. Freeze
 schema/code/config changes. Pre-stage reviewed tools and checklists; record the
 last known-good original state and target rollback snapshot. Name go/no-go and
 rollback decision owners. Confirm support availability and export link expiry.
+The retained rehearsal's missing initiation timestamp cannot be used as proof of
+the reported 24-hour spacing, so establish the final window independently and
+conservatively. Assign an operator to record final-export initiation before the
+export action, plus availability and download completion as separate observed
+events. A final export with unobserved initiation is not acceptable cutover
+evidence.
 
 Exit gate: change freeze active, backups/restoration evidence current, and the
-team can stop every human/background writer.
+team can stop every human/background writer; the final-export evidence owner and
+timestamp capture procedure are confirmed.
 
 ### 15. Stop human and background writes
 
@@ -297,19 +421,25 @@ timestamp is recorded. Abort if any property cannot be positively demonstrated.
 
 ### 16. Final export and restore
 
-Keep the source frozen. Generate/download/checksum a new final export; never
-reuse the rehearsal archive. Repeat TOC inspection and diff it against the
-rehearsed TOC. Any new/unknown class or schema change returns to selective-plan
-review. Restore into a clean or proven-restorable owned target using the exact
-rehearsed plan. While the source fence remains active, perform a final Storage
-sync from a newly captured source object inventory: copy new/changed objects,
-apply reviewed deletion semantics for objects absent from the final inventory,
-and compare exact per-bucket counts plus stable byte checksums where available.
-The rehearsal Storage copy is not the final copy.
+Keep the source frozen. Record initiation, then generate, download, and checksum
+a new final canonical outer artifact; never reuse the rehearsal artifact. Record
+availability separately from completion and record download completion. Apply
+the same strict ZIP-or-direct normalization, outer/inner hash separation,
+atomic-publication rules, and existing-inspector boundary used in the rehearsal.
+Repeat TOC inspection and diff it against the rehearsed TOC. Any new/unknown
+class or schema change returns to selective-plan review. Restore into a clean or
+proven-restorable owned target using the exact rehearsed plan. While the source
+fence remains active, perform a final Storage sync from a newly captured source
+object inventory: copy new/changed objects, apply reviewed deletion semantics
+for objects absent from the final inventory, and compare exact per-bucket counts
+plus stable byte checksums where available. The rehearsal Storage copy is not
+the final copy.
 
-Exit gate: final checksum and TOC are approved; restore is error-free; source
-remains frozen; final Storage inventory/checksum gates pass; target stays under
-the enforced data-plane read-only gate.
+Exit gate: final initiation, availability, and download completion are observed
+and correctly ordered; outer, inner, report, and provenance identities are
+separately approved; TOC inspection is approved; restore is error-free; source
+remains frozen; final Storage inventory/checksum gates pass; and the target stays
+under the enforced data-plane read-only gate.
 
 ### 17. Count/digest and behavior verification
 

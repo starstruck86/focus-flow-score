@@ -5,28 +5,32 @@ restore plan is approved:
 
 1. What exact `pg_dump` command, flags, and PostgreSQL major version produce the
    Cloud export?
-2. Are owner, ACL, and role statements stripped? If so, at dump time or restore
+2. Is the downloaded database export always ZIP-wrapped? If so, what member
+   count, naming, compression, encryption, size, and integrity guarantees does
+   Lovable support for the outer envelope and inner database archive?
+3. Are owner, ACL, and role statements stripped? If so, at dump time or restore
    time?
-3. Which schemas are included and excluded, exactly?
-4. Should repository migrations run before restore, or must schema entries be
+4. Which schemas are included and excluded, exactly?
+5. Should repository migrations run before restore, or must schema entries be
    filtered from the dump to avoid duplicates?
-5. What exact `pg_restore` command does Lovable support for managed Supabase?
-6. Which `auth.*` tables are included, and are password hashes and identity rows
+6. What exact `pg_restore` command does Lovable support for managed Supabase?
+7. Which `auth.*` tables are included, and are password hashes and identity rows
    usable in an owned Supabase project?
-7. How long does an export download link remain valid?
-8. Does Remix copy code only, or any Cloud configuration/data as well?
-9. Can the remixed project ultimately use this same GitHub repository without a
+8. How long does an export download link remain valid?
+9. Does Remix copy code only, or any Cloud configuration/data as well?
+10. Can the remixed project ultimately use this same GitHub repository without a
    permanent code fork?
-10. What is the custom-domain transfer and rollback procedure?
-11. How can all scheduled/background jobs be enumerated and paused during the
+11. What is the custom-domain transfer and rollback procedure?
+12. How can all scheduled/background jobs be enumerated and paused during the
     final export?
-12. Does Storage support folder or bucket download/upload despite lacking an
+13. Does Storage support folder or bucket download/upload despite lacking an
     automated export?
 
 ## Facts only an empirical rehearsal can establish
 
-- Actual archive magic, format version, source database version, TOC syntax,
-  archive size, download behavior, and local `pg_restore` compatibility.
+- Actual outer-envelope structure and integrity, inner archive magic and format
+  version, source database version, TOC syntax, artifact sizes, download
+  behavior, and local `pg_restore` compatibility.
 - Actual included schemas/object classes and whether owner/ACL/role, extension,
   publication, subscription, event-trigger, `auth`, `storage`, `vault`,
   `realtime`, or `supabase_*` entries appear.

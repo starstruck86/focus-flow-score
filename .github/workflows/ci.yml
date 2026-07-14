@@ -41,6 +41,8 @@ jobs:
               Path("scripts/migration/compare-manifests.py"),
               Path("scripts/migration/catalog-jsonl-to-manifest.py"),
               Path("scripts/migration/inventory-edge-functions.py"),
+              Path("scripts/migration/inspect-lovable-export.py"),
+              Path("scripts/migration/normalize-lovable-export.py"),
               Path("scripts/migration/lib/lovable_dump_report.py"),
           ):
               compile(path.read_text(encoding="utf-8"), str(path), "exec")

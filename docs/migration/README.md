@@ -5,7 +5,8 @@ supersedes the custom snapshot/CDC bridge described in `.lovable/plan.md`.
 Bridge specifications remain historical design input only; this branch does not
 implement or deploy a bridge.
 
-This directory contains repository-derived planning evidence only:
+This directory contains repository-derived planning and synthetic validation
+evidence only:
 
 - `repository-inventory.md` — what the repository can and cannot establish.
 - `sql-migrations.sha256` — chronological checksum ledger for every checked-in
@@ -14,9 +15,30 @@ This directory contains repository-derived planning evidence only:
   rollback gates.
 - `support-follow-up.md` — facts that still require Lovable confirmation or an
   empirical rehearsal.
-- `../../scripts/migration/` — local-only dump inspection, inventory,
-  verification templates, and strict manifest comparison.
+- `../../scripts/migration/` — strict local ZIP-envelope normalization ahead of
+  the unchanged raw-`PGDMP` inspector, inventory, verification templates, and
+  strict manifest comparison.
 
-No Lovable export was generated or downloaded, no Supabase project was created
-or queried, no restore was attempted, and no secret or production data was read
-while producing these files.
+**Migration readiness remains RED.** An authorized rehearsal export is retained
+offline in an approved evidence store, but inspection is blocked by the mismatch
+between its ZIP wrapper and the previously reviewed direct-`PGDMP` procedure.
+No identifying artifact metadata is committed here. The ZIP-support work and
+tests use synthetic fixtures only and do not access, inspect, list, copy, hash,
+rename, or extract the retained export. They also do not access Lovable,
+Supabase, secrets, production, or any remote or pre-existing database. CI keeps
+the already required PostgreSQL checks confined to isolated synthetic PG17
+fixture databases.
+
+The retained rehearsal's initiation time was not observed. Provenance must keep
+that event explicitly null with `basis: not_observed` and a required reason,
+record availability separately from completion, and remain
+`export_timeline_status: INCOMPLETE` with
+`inspection_status: REVIEW_REQUIRED`. That missing evidence is irreparable for
+this rehearsal, but it does not require another export or prevent safe offline
+metadata inspection after the ZIP procedure is reviewed. Every future rehearsal
+and final export must record initiation before the export action.
+
+No restore, deployment, migration, export, or data movement is performed by the
+repository workflow. The canonical outer artifact and any verified inner
+`PGDMP` are distinct evidence with distinct hashes; neither may be committed to
+the repository.
