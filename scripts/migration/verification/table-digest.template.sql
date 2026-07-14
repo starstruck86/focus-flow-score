@@ -1,0 +1,14 @@
+-- TEMPLATE ONLY. Copy this file per table and replace every placeholder after
+-- reviewing its schema. Never run a generic row_to_json/jsonb::text digest.
+--
+-- Required review decisions for each table:
+--   1. hardcode the schema, table, and complete projected column list;
+--   2. define unambiguous text/byte encodings for every type;
+--   3. order by a stable, unique primary key (all PK columns if composite);
+--   4. state timestamp precision, NULL framing, bytea encoding, and collation;
+--   5. bind a protocol/version domain separator to the digest;
+--   6. test deterministic vectors locally before source/target comparison.
+--
+-- This intentionally does not contain an executable digest query. A generic
+-- digest would create false confidence for timestamps, NULLs, JSON, arrays,
+-- floats, collations, or unordered rows.

@@ -1,0 +1,2 @@
+; Synthetic recognized class whose object reference is incomplete.
+1; 1259 100 TABLE public

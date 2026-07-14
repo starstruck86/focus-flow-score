@@ -1,0 +1,3915 @@
+{
+  "collection": {
+    "artifact": {
+      "kind": "repository_deployment_inventory",
+      "sha256": "sha256:11fc8a87e2c69bcc51dd7c3807b81d21593dbcb41c55d42d7e5170fdcdf5fada",
+      "source": "local source project odbjjklumdsuqdvkgwyv supabase/config.toml and resolved supabase/functions dependency closures"
+    },
+    "boundary": {
+      "kind": "repository_content_sha256",
+      "value": "sha256:11fc8a87e2c69bcc51dd7c3807b81d21593dbcb41c55d42d7e5170fdcdf5fada"
+    },
+    "collected_at": "2026-07-14T13:29:59Z",
+    "collector": {
+      "name": "inventory-edge-functions",
+      "version": "2.0.0"
+    }
+  },
+  "components": [
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/analyze-call/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/_shared/strategy-core/chatPrompt.ts",
+          "supabase/functions/_shared/strategy-core/citationAudit.ts",
+          "supabase/functions/_shared/strategy-core/citationEnforcement.ts",
+          "supabase/functions/_shared/strategy-core/citationSyntax.ts",
+          "supabase/functions/_shared/strategy-core/contextAssembly.ts",
+          "supabase/functions/_shared/strategy-core/critique.ts",
+          "supabase/functions/_shared/strategy-core/enforcementPolicy.ts",
+          "supabase/functions/_shared/strategy-core/explicitOutputRequest.ts",
+          "supabase/functions/_shared/strategy-core/index.ts",
+          "supabase/functions/_shared/strategy-core/library.ts",
+          "supabase/functions/_shared/strategy-core/libraryCalibration.ts",
+          "supabase/functions/_shared/strategy-core/libraryLookup.ts",
+          "supabase/functions/_shared/strategy-core/libraryStandard.ts",
+          "supabase/functions/_shared/strategy-core/libraryTotals.ts",
+          "supabase/functions/_shared/strategy-core/reasoningCore.ts",
+          "supabase/functions/_shared/strategy-core/resourceRetrieval.ts",
+          "supabase/functions/_shared/strategy-core/retrievalEnforcement.ts",
+          "supabase/functions/_shared/strategy-core/schemaHealth.ts",
+          "supabase/functions/_shared/strategy-core/situationIntelligenceRetrieval.ts",
+          "supabase/functions/_shared/strategy-core/thesisMemory.ts",
+          "supabase/functions/_shared/strategy-core/workspaceContractTypes.ts",
+          "supabase/functions/_shared/strategy-core/workspaceContracts.ts",
+          "supabase/functions/_shared/strategy-core/workspaceEscalation.ts",
+          "supabase/functions/_shared/strategy-core/workspaceGateRunner.ts",
+          "supabase/functions/_shared/strategy-core/workspacePrompt.ts",
+          "supabase/functions/_shared/strategy-orchestrator/libraryRetrieval.ts",
+          "supabase/functions/_shared/strategy-orchestrator/types.ts",
+          "supabase/functions/_shared/strategy-router/situationClassifier.ts",
+          "supabase/functions/analyze-call/index.ts"
+        ],
+        "fingerprint": "sha256:e6813071fd22331ce274538a55de341b2d05e4595d07f69071d2446fffcfe365",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "analyze-call",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/analyze-deal-outcome/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/analyze-deal-outcome/index.ts"
+        ],
+        "fingerprint": "sha256:f016f06e08207a8fe5a9518d0b3579108e3b4a970b5329b6575098ba46337592",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "analyze-deal-outcome",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/analyze-sentiment/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/analyze-sentiment/index.ts"
+        ],
+        "fingerprint": "sha256:cd6257462969e9b429ebf1b607eddb1082f4fa2f3532caca1d05247999a94b59",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "analyze-sentiment",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/batch-actionize/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/enforcementLog.ts",
+          "supabase/functions/_shared/securityLog.ts",
+          "supabase/functions/batch-actionize/index.ts"
+        ],
+        "fingerprint": "sha256:fc13826293e83e19d893e3544843d6143ca53837b7baaeb38a1fc06702bf236c",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "batch-actionize",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/batch-extract-kis/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/batch-extract-kis/index.ts"
+        ],
+        "fingerprint": "sha256:a787ffbe216940ca489ee3eee874994b4410c2b11ce1373f0e0dfa14d4839a40",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "batch-extract-kis",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/batch-recovery-rerun/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/securityLog.ts",
+          "supabase/functions/batch-recovery-rerun/index.ts"
+        ],
+        "fingerprint": "sha256:2521c90feed3b33976f90897c83d681c1f1a2ce68facbe8016959f56e13d231e",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "batch-recovery-rerun",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/batch-regrade-now/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/batch-regrade-now/index.ts"
+        ],
+        "fingerprint": "sha256:e1a9890d53b630472c09a8bfb1f9cce60fd5ababe08dfcc326e7a1cb36fd11fe",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "batch-regrade-now",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/branch-intelligence/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/branch-intelligence/index.ts"
+        ],
+        "fingerprint": "sha256:3b67122c0fe9757fc2dc6560597401db8e37c7e124d8e1c9630b239ab0a79a75",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "branch-intelligence",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/build-resource/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/build-resource/index.ts"
+        ],
+        "fingerprint": "sha256:23a001c3e5c06a625024978152a4993009b6cca041e008a960242fd19ce91ffe",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "build-resource",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/car-mode-audio-score/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/car-mode-audio-score/index.ts"
+        ],
+        "fingerprint": "sha256:3cc119e831db59c0d699c544fb8d4ebfc6ce5cc906a7d50b532c6dffcac7a3a0",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "car-mode-audio-score",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/car-mode-score/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/car-mode-score/index.ts"
+        ],
+        "fingerprint": "sha256:367aafb9e0e723cb37026e084ccc68d8beaf62b719c94be4940379787dae976d",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "car-mode-score",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/classify-resource/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/classify-resource/index.ts"
+        ],
+        "fingerprint": "sha256:357685c36a97e88ab1c54670828416aa837d1d871a132e62e015ae94ea1d6a30",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "classify-resource",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/classify-signal/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/classify-signal/index.ts"
+        ],
+        "fingerprint": "sha256:187bcbb108966ac0d5a27cdaa8ca19540520116ae74dede09a481709cde8f9cf",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "classify-signal",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/clean-baseline/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/clean-baseline/index.ts"
+        ],
+        "fingerprint": "sha256:1172eef0842f822356a7ba228fbbe2863874ccb321960409d3efcd993dac0efd",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "clean-baseline",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/conversion-math/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/conversion-math/index.ts"
+        ],
+        "fingerprint": "sha256:59f10c22e961fa63fa9585910aa759a427adfb9b79604f82675df3ac861d25f6",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "conversion-math",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/daily-digest/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/daily-digest/index.ts"
+        ],
+        "fingerprint": "sha256:1cf09db97f85b46ca8a390dd03ac1f0b7e349aab13dcb52ea5935de2a2935c91",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "daily-digest",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/dave-conversation-token/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/dave-conversation-token/index.ts"
+        ],
+        "fingerprint": "sha256:54e7f21de79910f825fdaf123b02b1bcb047c7bdecfe112eee04fd314dbe30cb",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "dave-conversation-token",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/dave-health-check/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/dave-health-check/index.ts"
+        ],
+        "fingerprint": "sha256:aa6b6ba880431a1a2e19c931c467bfad34569c686d850c692aa21bf218f25586",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "dave-health-check",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/deal-intelligence/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/deal-intelligence/index.ts"
+        ],
+        "fingerprint": "sha256:89e07a62499b0ad8d8ca173ee5cf654ec23c63a5d4d01377f2308a6dc5a5e2bd",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "deal-intelligence",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/derive-library-cards/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/_shared/strategy-orchestrator/providerFailureClassifier.ts",
+          "supabase/functions/_shared/strategy-orchestrator/providers.ts",
+          "supabase/functions/_shared/strategy-orchestrator/telemetryWriter.ts",
+          "supabase/functions/derive-library-cards/index.ts"
+        ],
+        "fingerprint": "sha256:78e5d33ddba93e86a9f94aab32a1827fe9deedc9da94bcf48763f1cc3f910828",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "derive-library-cards",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/detect-knowledge-gaps/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/detect-knowledge-gaps/index.ts"
+        ],
+        "fingerprint": "sha256:c8b556e0b18892bba60b012fa2135b92c84f8793bf4b57cb5d71373b04df4289",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "detect-knowledge-gaps",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/discover-contacts/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/discover-contacts/index.ts"
+        ],
+        "fingerprint": "sha256:36323205c4a76ee58932e918c11ea705ecb024c25da2c75f135e056ce09c3305",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "discover-contacts",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/discover-resources/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/discover-resources/index.ts"
+        ],
+        "fingerprint": "sha256:b98e12ad9035e27ce76396b0cab4975b78969af86bbabfe56a92efdc16607d41",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "discover-resources",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/dojo-review-score/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/dojo-review-score/index.ts"
+        ],
+        "fingerprint": "sha256:aa5d84b9c06d26069215d64258cd8374cda6675dcb6fbaec17d0ab8f289504a0",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "dojo-review-score",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/dojo-roleplay-score/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/dojo-roleplay-score/index.ts"
+        ],
+        "fingerprint": "sha256:99e9dd6c74daa890ae6b8e00a561e3d077f9730352ad5c78ceb351cbbf752b7b",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "dojo-roleplay-score",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/dojo-score/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/dojo-score/index.ts"
+        ],
+        "fingerprint": "sha256:10592d928436f8b9d4effa2e68b6381095d130148c2d2e5b4eb10951cebbb941",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "dojo-score",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/drill-review/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/drill-review/index.ts"
+        ],
+        "fingerprint": "sha256:39a4a7abb90ac9610906ed7e94a9fb0c1468f21d95f8d6b8eda970fb8f798220",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "drill-review",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/elevenlabs-stt/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/_shared/requireUser.ts",
+          "supabase/functions/elevenlabs-stt/index.ts"
+        ],
+        "fingerprint": "sha256:666081e278180fdeb0e19881f8d80614b135922176ddb06a8b6a58d5e86909c3",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "elevenlabs-stt",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/elevenlabs-transcribe/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/elevenlabs-transcribe/index.ts"
+        ],
+        "fingerprint": "sha256:ffc615cb32db7f53b1e7bf3def8d8b05f420419aade4a9202f86b18ad4077d8a",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "elevenlabs-transcribe",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/elevenlabs-tts-stream/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/_shared/requireUser.ts",
+          "supabase/functions/elevenlabs-tts-stream/index.ts"
+        ],
+        "fingerprint": "sha256:f06b212727c068666ab564e2cca47821c9fc87d3e752b1acc09b5bc411be3991",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "elevenlabs-tts-stream",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/enrich-account/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/_shared/requireUser.ts",
+          "supabase/functions/enrich-account/index.ts"
+        ],
+        "fingerprint": "sha256:ab094973188987d19bc0d36399be889049f7960ecfdbf0bba41a91006d37b475",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "enrich-account",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/enrich-resource-content/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/enrich-resource-content/index.ts"
+        ],
+        "fingerprint": "sha256:2d01ccbbe908fc9a97970184fad4f96ee220e0a5f7ba9942abd5f52cc4eed26c",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "enrich-resource-content",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/expand-prompt/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/expand-prompt/index.ts"
+        ],
+        "fingerprint": "sha256:307ebf7eec34299f664403b213e82b8a525e4ec1e2dcc6bc5734fee04d8e0f7f",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "expand-prompt",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/explain-score/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/explain-score/index.ts"
+        ],
+        "fingerprint": "sha256:0cc167185fd9fd076924ed5e8f0d99a4ed9a132a8f5b16b801ed24bf3358e998",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "explain-score",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/extract-scenarios/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/extract-scenarios/index.ts"
+        ],
+        "fingerprint": "sha256:a5ad17d0ab2ecb8318a03cdc23903d5879fbc4bd9a5447b5289f7ed425cb22ff",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "extract-scenarios",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/extract-strategy-memory/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/extract-strategy-memory/index.ts"
+        ],
+        "fingerprint": "sha256:0d7245d908e6ffe5da71fbf303b571ec3e832f720a0a25194e4adc7f1aadee64",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "extract-strategy-memory",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/extract-tactics/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/enforcementLog.ts",
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/_shared/securityLog.ts",
+          "supabase/functions/extract-tactics/index.ts"
+        ],
+        "fingerprint": "sha256:4ee7c0dff97840c19057f918da6525ecd985ad685043b6d2d19f03c884e8aef6",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "extract-tactics",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/extract-tasks/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/extract-tasks/index.ts"
+        ],
+        "fingerprint": "sha256:9e2ebc37d3e953492b7e032d213d6af242786bfc9f11d7c503a4deffdb58832d",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "extract-tasks",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/generate-call-goals/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/generate-call-goals/index.ts"
+        ],
+        "fingerprint": "sha256:d2058456b9f15652f610f46c1f1da7399ca99b27082b9563dd118a0d08659ba0",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "generate-call-goals",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/generate-execution-draft/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/generate-execution-draft/index.ts"
+        ],
+        "fingerprint": "sha256:b400f51915c6e93c2996e3f25aeae4ceca881912181cc067f6abda0e2a3cc44b",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "generate-execution-draft",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/generate-flashcards/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/generate-flashcards/index.ts"
+        ],
+        "fingerprint": "sha256:9305145c3807c52a59914760115418515b8066988fc018da270f453171f3fe63",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "generate-flashcards",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/generate-lesson-content/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/generate-lesson-content/index.ts"
+        ],
+        "fingerprint": "sha256:0e4bce1665afc17a7f537abf73b1f3513e6947aec2b9299480b365c6c8055dad",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "generate-lesson-content",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/generate-playbooks/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/generate-playbooks/index.ts"
+        ],
+        "fingerprint": "sha256:91ba96777c23ae8f59d807d075a7dd045d4d5647bf7189ec73c5680ad0e94eff",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "generate-playbooks",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/generate-stage-playbook/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/generate-stage-playbook/index.ts"
+        ],
+        "fingerprint": "sha256:5e661f8fee7a8c352002344f279c4c05370bc9e6d08e946eb8e936a2101dddbc",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "generate-stage-playbook",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/generate-time-blocks/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/generate-time-blocks/index.ts"
+        ],
+        "fingerprint": "sha256:84856247b5e03563ba8ad7b02fe020dd322c9fdc280f35d4c5b109ae6fd71577",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "generate-time-blocks",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/get-benchmark-kis/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/get-benchmark-kis/index.ts"
+        ],
+        "fingerprint": "sha256:74e11881cc00b1a5ccb47f40740e133e23492a1358a8794a4af16359e677c90e",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "get-benchmark-kis",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/grade-lesson-response/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/grade-lesson-response/index.ts"
+        ],
+        "fingerprint": "sha256:aefafd265c9a0125bc916903ec33db3ff2b1f0afce5f27c5b992db41a7adffe4",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "grade-lesson-response",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/grade-mock-call/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/grade-mock-call/index.ts"
+        ],
+        "fingerprint": "sha256:fefb1fb93ab7d4e82c367d71ad6ed7f3d3bd5e52623162835799f8d23e683d95",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "grade-mock-call",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/grade-objection-drill/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/grade-objection-drill/index.ts"
+        ],
+        "fingerprint": "sha256:d0f053d743e6c6fb3f667db05f9b7f5a2ae3fadc5720489cde6142853b962011",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "grade-objection-drill",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/grade-transcript/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/grade-transcript/index.ts"
+        ],
+        "fingerprint": "sha256:bb09ee264bfc7aa8eba3bb7cd5029991b96f09bbfabb7edbec09867ce85c7a24",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "grade-transcript",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/import-circle-browserless/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/import-circle-browserless/index.ts"
+        ],
+        "fingerprint": "sha256:b83eb500313b7158eeac4acef006c0128da5a8d131cd921a9e3da90e68695b67",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "import-circle-browserless",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/import-course/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/import-course/circle.ts",
+          "supabase/functions/import-course/index.ts"
+        ],
+        "fingerprint": "sha256:9ef93955e55bdd4540bfd854f218a7ab32a926e9795c6d3208a4b7111609af03",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "import-course",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/import-course-capture/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/import-course-capture/index.ts"
+        ],
+        "fingerprint": "sha256:4996193911a56ba6b5eec6564697bd7b5381069ff254545ef9c538ac85e093bb",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "import-course-capture",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/import-podcast/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/requireUser.ts",
+          "supabase/functions/import-podcast/index.ts"
+        ],
+        "fingerprint": "sha256:65de8c6b6ba7e16159ee60ae33b07aff5375420cd93a445e066a2a82058d7947",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "import-podcast",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/import-webpage-links/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/import-webpage-links/index.ts"
+        ],
+        "fingerprint": "sha256:90f281eaae9241e48f42a4e3d1000718e1955a51c8f54f6413725cca6708fa02",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "import-webpage-links",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/import-youtube-playlist/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/requireUser.ts",
+          "supabase/functions/import-youtube-playlist/index.ts"
+        ],
+        "fingerprint": "sha256:7a5e5ce32be1bca87c79633c508a051dec9bbc0f80908c5a29425597c7aef9d7",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "import-youtube-playlist",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/journal-nudge/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/journal-nudge/index.ts"
+        ],
+        "fingerprint": "sha256:93e78c452e163d1a7db05916040f9453b6c4e99c769b5498e60634dddab27de3",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "journal-nudge",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/log-workday-focus/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/securityLog.ts",
+          "supabase/functions/log-workday-focus/index.ts"
+        ],
+        "fingerprint": "sha256:356b9b571b14374074787492947232e2162557c82ef6f2a41c089dc35dfc948c",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "log-workday-focus",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/mcp/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/mcp/index.ts"
+        ],
+        "fingerprint": "sha256:96d55df72842c9f340fb24745fa7278202137772e16f616a91be8b47b331b8a9",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "mcp",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/mock-call/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/mock-call/index.ts"
+        ],
+        "fingerprint": "sha256:384e2c223622ec3bb1486d5928fc0352ae04ec93ffae5b42e09eca32216556ae",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "mock-call",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/operationalize-resource/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/operationalize-resource/index.ts"
+        ],
+        "fingerprint": "sha256:34540a5067241bf2f3db59b45c368dfb6dd8a37849465ed68b0878bdf518db1f",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "operationalize-resource",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/parse-account-screenshot/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/_shared/requireUser.ts",
+          "supabase/functions/parse-account-screenshot/index.ts"
+        ],
+        "fingerprint": "sha256:8f3a0edf1f3107e049c664083de341e419e64c766bf3b36cd8b7b2917e10f108",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "parse-account-screenshot",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/parse-account-synopsis/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/parse-account-synopsis/index.ts"
+        ],
+        "fingerprint": "sha256:4487005ee1593c5e5fb92a5aac894c63fcb040cf0e37595264dc3690a7d6f73a",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "parse-account-synopsis",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/parse-calendar-screenshot/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/parse-calendar-screenshot/index.ts"
+        ],
+        "fingerprint": "sha256:ad75b7c9517de13cb759955cdc301f73322f7e9f55be74f5c32920230a3b692b",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "parse-calendar-screenshot",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/parse-claude-import/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/_shared/requireUser.ts",
+          "supabase/functions/parse-claude-import/index.ts"
+        ],
+        "fingerprint": "sha256:8b33f3688aeb5bdbff5d847a47ba7827a766a90454127a40495a1a09a38dac3e",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "parse-claude-import",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/parse-opp-synopsis/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/parse-opp-synopsis/index.ts"
+        ],
+        "fingerprint": "sha256:30dce5129218cd1aa60e9c8b63584b74dcddbf333c5c90ca48ad2532ebf8c1be",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "parse-opp-synopsis",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/parse-screenshot/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/_shared/requireUser.ts",
+          "supabase/functions/parse-screenshot/index.ts"
+        ],
+        "fingerprint": "sha256:cbb207832a36406247914fc59abafff9d33ccd41adb2c1c058e171e9afe42da1",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "parse-screenshot",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/parse-uploaded-file/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/parse-uploaded-file/index.ts"
+        ],
+        "fingerprint": "sha256:14c5f0d98ce5d76664f7bb2b502ac9d2e4632c3b5a89cbab6932f42a15eee016",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "parse-uploaded-file",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/pdf-ocr/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/pdf-ocr/index.ts"
+        ],
+        "fingerprint": "sha256:f1e584c4e9c9ca8b7c74c15d1f010cf7d3c8b510cab0cebcf56c76881f27d0a9",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "pdf-ocr",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/pipeline-hygiene/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/pipeline-hygiene/index.ts"
+        ],
+        "fingerprint": "sha256:351abcd764fe1a371cf582f8a4d63f57d9ecda7bbcf67e15d2eca7a5534d9bbd",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "pipeline-hygiene",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/playbook-roleplay/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/playbook-roleplay/index.ts"
+        ],
+        "fingerprint": "sha256:014f6c022058f46a69bad6d3530b0cbce50f2dbc36fa29c93462af4693fd13e0",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "playbook-roleplay",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/preprocess-transcript/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/preprocess-transcript/index.ts"
+        ],
+        "fingerprint": "sha256:b9814e0204d433782f89cc5a5466838fc7b1ffe48f4835e1d1ef1fb15cd62b4c",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "preprocess-transcript",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/prioritize-accounts/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/prioritize-accounts/index.ts"
+        ],
+        "fingerprint": "sha256:b3968b5bbfc5db6280a375b984e74f2a2f53a4aa488886543e763f755f847f74",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "prioritize-accounts",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/process-podcast-queue/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/securityLog.ts",
+          "supabase/functions/process-podcast-queue/index.ts"
+        ],
+        "fingerprint": "sha256:b8f654863a434318730d2c4e5c6aa396e034087522e43736ebc1ef513b35505d",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "process-podcast-queue",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/reconcile-library/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/reconcile-library/index.ts"
+        ],
+        "fingerprint": "sha256:ae83e4a0648b310654a7c9f6389bac0daaccbfd9387d5fabe3f5bf0e145fd7dd",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "reconcile-library",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/register-dave-tools/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/register-dave-tools/index.ts"
+        ],
+        "fingerprint": "sha256:ab83c02b2c3198e77d44ed83b5a9453733cd1a4b6e0014235a81dd1d5e7d5058",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "register-dave-tools",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/resolve-podcast-episode/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/resolve-podcast-episode/index.ts"
+        ],
+        "fingerprint": "sha256:a265900d4462e9f377f0b189728e7ae6f759ea7e9d7a2ab86cb486b5221b9f31",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "resolve-podcast-episode",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/run-catchup/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/run-catchup/index.ts"
+        ],
+        "fingerprint": "sha256:2ed376a08587e5c7b6d7121cd8d3a4e5646ac907a3b381cc0a6d48e092af0346",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "run-catchup",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/run-discovery-prep/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/strategy-core/chatPrompt.ts",
+          "supabase/functions/_shared/strategy-core/citationAudit.ts",
+          "supabase/functions/_shared/strategy-core/citationEnforcement.ts",
+          "supabase/functions/_shared/strategy-core/citationSyntax.ts",
+          "supabase/functions/_shared/strategy-core/contextAssembly.ts",
+          "supabase/functions/_shared/strategy-core/critique.ts",
+          "supabase/functions/_shared/strategy-core/enforcementPolicy.ts",
+          "supabase/functions/_shared/strategy-core/explicitOutputRequest.ts",
+          "supabase/functions/_shared/strategy-core/index.ts",
+          "supabase/functions/_shared/strategy-core/library.ts",
+          "supabase/functions/_shared/strategy-core/libraryCalibration.ts",
+          "supabase/functions/_shared/strategy-core/libraryLookup.ts",
+          "supabase/functions/_shared/strategy-core/libraryStandard.ts",
+          "supabase/functions/_shared/strategy-core/libraryTotals.ts",
+          "supabase/functions/_shared/strategy-core/reasoningCore.ts",
+          "supabase/functions/_shared/strategy-core/resourceRetrieval.ts",
+          "supabase/functions/_shared/strategy-core/retrievalEnforcement.ts",
+          "supabase/functions/_shared/strategy-core/schemaHealth.ts",
+          "supabase/functions/_shared/strategy-core/situationIntelligenceRetrieval.ts",
+          "supabase/functions/_shared/strategy-core/thesisMemory.ts",
+          "supabase/functions/_shared/strategy-core/workspaceContractTypes.ts",
+          "supabase/functions/_shared/strategy-core/workspaceContracts.ts",
+          "supabase/functions/_shared/strategy-core/workspaceEscalation.ts",
+          "supabase/functions/_shared/strategy-core/workspaceGateRunner.ts",
+          "supabase/functions/_shared/strategy-core/workspacePrompt.ts",
+          "supabase/functions/_shared/strategy-orchestrator/artifactGateEnforcement.ts",
+          "supabase/functions/_shared/strategy-orchestrator/batchOutputValidator.ts",
+          "supabase/functions/_shared/strategy-orchestrator/enforceTaskSopOnce.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/accountBrief.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/discoveryPrep.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/discoveryPrepTemplate.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/ninetyDayPlan.ts",
+          "supabase/functions/_shared/strategy-orchestrator/hybridGuard.ts",
+          "supabase/functions/_shared/strategy-orchestrator/idempotency.ts",
+          "supabase/functions/_shared/strategy-orchestrator/libraryCards.ts",
+          "supabase/functions/_shared/strategy-orchestrator/libraryRetrieval.ts",
+          "supabase/functions/_shared/strategy-orchestrator/normalizeParagraphs.ts",
+          "supabase/functions/_shared/strategy-orchestrator/progressiveDriver.ts",
+          "supabase/functions/_shared/strategy-orchestrator/providerFailureClassifier.ts",
+          "supabase/functions/_shared/strategy-orchestrator/providers.ts",
+          "supabase/functions/_shared/strategy-orchestrator/registry.ts",
+          "supabase/functions/_shared/strategy-orchestrator/remediationExecutor.ts",
+          "supabase/functions/_shared/strategy-orchestrator/runTask.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sectionAuthor.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sectionCanonicalizer.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sectionIntegrityAnalyzer.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sopValidator.ts",
+          "supabase/functions/_shared/strategy-orchestrator/staleRunWatchdog.ts",
+          "supabase/functions/_shared/strategy-orchestrator/taskManifestMap.ts",
+          "supabase/functions/_shared/strategy-orchestrator/taskWorkspace.ts",
+          "supabase/functions/_shared/strategy-orchestrator/telemetryWriter.ts",
+          "supabase/functions/_shared/strategy-orchestrator/types.ts",
+          "supabase/functions/_shared/strategy-router/situationClassifier.ts",
+          "supabase/functions/_shared/strategy-skills/adapter.ts",
+          "supabase/functions/_shared/strategy-skills/expansion.ts",
+          "supabase/functions/_shared/strategy-skills/manifests.ts",
+          "supabase/functions/_shared/strategy-skills/planner.ts",
+          "supabase/functions/_shared/strategy-skills/salesLexicon.ts",
+          "supabase/functions/_shared/strategy-skills/types.ts",
+          "supabase/functions/run-discovery-prep/index.ts"
+        ],
+        "fingerprint": "sha256:0d6cf6a561bef885efc4e6f3d791eb262e37026f7a37f0ee7b4821ded5450d23",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "run-discovery-prep",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/run-discovery-prep-step/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/strategy-core/chatPrompt.ts",
+          "supabase/functions/_shared/strategy-core/citationAudit.ts",
+          "supabase/functions/_shared/strategy-core/citationEnforcement.ts",
+          "supabase/functions/_shared/strategy-core/citationSyntax.ts",
+          "supabase/functions/_shared/strategy-core/contextAssembly.ts",
+          "supabase/functions/_shared/strategy-core/critique.ts",
+          "supabase/functions/_shared/strategy-core/enforcementPolicy.ts",
+          "supabase/functions/_shared/strategy-core/explicitOutputRequest.ts",
+          "supabase/functions/_shared/strategy-core/index.ts",
+          "supabase/functions/_shared/strategy-core/library.ts",
+          "supabase/functions/_shared/strategy-core/libraryCalibration.ts",
+          "supabase/functions/_shared/strategy-core/libraryLookup.ts",
+          "supabase/functions/_shared/strategy-core/libraryStandard.ts",
+          "supabase/functions/_shared/strategy-core/libraryTotals.ts",
+          "supabase/functions/_shared/strategy-core/reasoningCore.ts",
+          "supabase/functions/_shared/strategy-core/resourceRetrieval.ts",
+          "supabase/functions/_shared/strategy-core/retrievalEnforcement.ts",
+          "supabase/functions/_shared/strategy-core/schemaHealth.ts",
+          "supabase/functions/_shared/strategy-core/situationIntelligenceRetrieval.ts",
+          "supabase/functions/_shared/strategy-core/thesisMemory.ts",
+          "supabase/functions/_shared/strategy-core/workspaceContractTypes.ts",
+          "supabase/functions/_shared/strategy-core/workspaceContracts.ts",
+          "supabase/functions/_shared/strategy-core/workspaceEscalation.ts",
+          "supabase/functions/_shared/strategy-core/workspaceGateRunner.ts",
+          "supabase/functions/_shared/strategy-core/workspacePrompt.ts",
+          "supabase/functions/_shared/strategy-orchestrator/artifactGateEnforcement.ts",
+          "supabase/functions/_shared/strategy-orchestrator/batchOutputValidator.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/accountBrief.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/discoveryPrep.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/discoveryPrepTemplate.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/ninetyDayPlan.ts",
+          "supabase/functions/_shared/strategy-orchestrator/hybridGuard.ts",
+          "supabase/functions/_shared/strategy-orchestrator/libraryCards.ts",
+          "supabase/functions/_shared/strategy-orchestrator/libraryRetrieval.ts",
+          "supabase/functions/_shared/strategy-orchestrator/normalizeParagraphs.ts",
+          "supabase/functions/_shared/strategy-orchestrator/progressiveDriver.ts",
+          "supabase/functions/_shared/strategy-orchestrator/providerFailureClassifier.ts",
+          "supabase/functions/_shared/strategy-orchestrator/providers.ts",
+          "supabase/functions/_shared/strategy-orchestrator/registry.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sectionAuthor.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sectionCanonicalizer.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sectionIntegrityAnalyzer.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sopValidator.ts",
+          "supabase/functions/_shared/strategy-orchestrator/taskManifestMap.ts",
+          "supabase/functions/_shared/strategy-orchestrator/telemetryWriter.ts",
+          "supabase/functions/_shared/strategy-orchestrator/types.ts",
+          "supabase/functions/_shared/strategy-router/situationClassifier.ts",
+          "supabase/functions/_shared/strategy-skills/manifests.ts",
+          "supabase/functions/_shared/strategy-skills/types.ts",
+          "supabase/functions/run-discovery-prep-step/index.ts"
+        ],
+        "fingerprint": "sha256:3a2dde8834575ca4bc23c16d53ed44e666b921eb63e90871d003cca4a33d52a7",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "run-discovery-prep-step",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/run-enrichment-job/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/enforcementLog.ts",
+          "supabase/functions/_shared/securityLog.ts",
+          "supabase/functions/run-enrichment-job/index.ts"
+        ],
+        "fingerprint": "sha256:e4cb607662f870540c1a23e49d593df69a7e628f0cc65dba8240904c34f0c7d5",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "run-enrichment-job",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/run-phase35b-validation/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/run-phase35b-validation/index.ts"
+        ],
+        "fingerprint": "sha256:ba7c85c20b4de4a4ed385c5ce7b2606fb20a4f5fa224db16c2cf82d44735e89b",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "run-phase35b-validation",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/run-strategy-eval-synthesis/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/strategy-orchestrator/libraryRetrieval.ts",
+          "supabase/functions/_shared/strategy-orchestrator/types.ts",
+          "supabase/functions/_shared/strategy-skills/adapter.ts",
+          "supabase/functions/_shared/strategy-skills/authority.ts",
+          "supabase/functions/_shared/strategy-skills/expansion.ts",
+          "supabase/functions/_shared/strategy-skills/hardening.ts",
+          "supabase/functions/_shared/strategy-skills/index.ts",
+          "supabase/functions/_shared/strategy-skills/manifests.ts",
+          "supabase/functions/_shared/strategy-skills/planner.ts",
+          "supabase/functions/_shared/strategy-skills/runtime.ts",
+          "supabase/functions/_shared/strategy-skills/salesLexicon.ts",
+          "supabase/functions/_shared/strategy-skills/sourceModeGate.ts",
+          "supabase/functions/_shared/strategy-skills/synthesisAddendum.ts",
+          "supabase/functions/_shared/strategy-skills/trace.ts",
+          "supabase/functions/_shared/strategy-skills/types.ts",
+          "supabase/functions/run-strategy-eval-synthesis/index.ts"
+        ],
+        "fingerprint": "sha256:4be745293ea4ae7579736b67a36baa68dec920378f9dd49ffde48bd6b28360c4",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "run-strategy-eval-synthesis",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/run-strategy-job/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/strategy-core/chatPrompt.ts",
+          "supabase/functions/_shared/strategy-core/citationAudit.ts",
+          "supabase/functions/_shared/strategy-core/citationEnforcement.ts",
+          "supabase/functions/_shared/strategy-core/citationSyntax.ts",
+          "supabase/functions/_shared/strategy-core/contextAssembly.ts",
+          "supabase/functions/_shared/strategy-core/critique.ts",
+          "supabase/functions/_shared/strategy-core/enforcementPolicy.ts",
+          "supabase/functions/_shared/strategy-core/explicitOutputRequest.ts",
+          "supabase/functions/_shared/strategy-core/index.ts",
+          "supabase/functions/_shared/strategy-core/library.ts",
+          "supabase/functions/_shared/strategy-core/libraryCalibration.ts",
+          "supabase/functions/_shared/strategy-core/libraryLookup.ts",
+          "supabase/functions/_shared/strategy-core/libraryStandard.ts",
+          "supabase/functions/_shared/strategy-core/libraryTotals.ts",
+          "supabase/functions/_shared/strategy-core/reasoningCore.ts",
+          "supabase/functions/_shared/strategy-core/resourceRetrieval.ts",
+          "supabase/functions/_shared/strategy-core/retrievalEnforcement.ts",
+          "supabase/functions/_shared/strategy-core/schemaHealth.ts",
+          "supabase/functions/_shared/strategy-core/situationIntelligenceRetrieval.ts",
+          "supabase/functions/_shared/strategy-core/thesisMemory.ts",
+          "supabase/functions/_shared/strategy-core/workspaceContractTypes.ts",
+          "supabase/functions/_shared/strategy-core/workspaceContracts.ts",
+          "supabase/functions/_shared/strategy-core/workspaceEscalation.ts",
+          "supabase/functions/_shared/strategy-core/workspaceGateRunner.ts",
+          "supabase/functions/_shared/strategy-core/workspacePrompt.ts",
+          "supabase/functions/_shared/strategy-orchestrator/artifactGateEnforcement.ts",
+          "supabase/functions/_shared/strategy-orchestrator/batchOutputValidator.ts",
+          "supabase/functions/_shared/strategy-orchestrator/enforceTaskSopOnce.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/accountBrief.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/discoveryPrep.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/discoveryPrepTemplate.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/ninetyDayPlan.ts",
+          "supabase/functions/_shared/strategy-orchestrator/hybridGuard.ts",
+          "supabase/functions/_shared/strategy-orchestrator/libraryCards.ts",
+          "supabase/functions/_shared/strategy-orchestrator/libraryRetrieval.ts",
+          "supabase/functions/_shared/strategy-orchestrator/normalizeParagraphs.ts",
+          "supabase/functions/_shared/strategy-orchestrator/progressiveDriver.ts",
+          "supabase/functions/_shared/strategy-orchestrator/providerFailureClassifier.ts",
+          "supabase/functions/_shared/strategy-orchestrator/providers.ts",
+          "supabase/functions/_shared/strategy-orchestrator/registry.ts",
+          "supabase/functions/_shared/strategy-orchestrator/remediationExecutor.ts",
+          "supabase/functions/_shared/strategy-orchestrator/runTask.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sectionAuthor.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sectionCanonicalizer.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sectionIntegrityAnalyzer.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sopValidator.ts",
+          "supabase/functions/_shared/strategy-orchestrator/staleRunWatchdog.ts",
+          "supabase/functions/_shared/strategy-orchestrator/taskManifestMap.ts",
+          "supabase/functions/_shared/strategy-orchestrator/taskWorkspace.ts",
+          "supabase/functions/_shared/strategy-orchestrator/telemetryWriter.ts",
+          "supabase/functions/_shared/strategy-orchestrator/types.ts",
+          "supabase/functions/_shared/strategy-router/situationClassifier.ts",
+          "supabase/functions/_shared/strategy-skills/adapter.ts",
+          "supabase/functions/_shared/strategy-skills/expansion.ts",
+          "supabase/functions/_shared/strategy-skills/manifests.ts",
+          "supabase/functions/_shared/strategy-skills/planner.ts",
+          "supabase/functions/_shared/strategy-skills/salesLexicon.ts",
+          "supabase/functions/_shared/strategy-skills/types.ts",
+          "supabase/functions/run-strategy-job/index.ts"
+        ],
+        "fingerprint": "sha256:3736a360e287b559ab3a2e0325c5e9d721a78df1b862eaf0a27042d6072a19a6",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "run-strategy-job",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/run-strategy-task/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/strategy-core/chatPrompt.ts",
+          "supabase/functions/_shared/strategy-core/citationAudit.ts",
+          "supabase/functions/_shared/strategy-core/citationEnforcement.ts",
+          "supabase/functions/_shared/strategy-core/citationSyntax.ts",
+          "supabase/functions/_shared/strategy-core/contextAssembly.ts",
+          "supabase/functions/_shared/strategy-core/critique.ts",
+          "supabase/functions/_shared/strategy-core/enforcementPolicy.ts",
+          "supabase/functions/_shared/strategy-core/explicitOutputRequest.ts",
+          "supabase/functions/_shared/strategy-core/index.ts",
+          "supabase/functions/_shared/strategy-core/library.ts",
+          "supabase/functions/_shared/strategy-core/libraryCalibration.ts",
+          "supabase/functions/_shared/strategy-core/libraryLookup.ts",
+          "supabase/functions/_shared/strategy-core/libraryStandard.ts",
+          "supabase/functions/_shared/strategy-core/libraryTotals.ts",
+          "supabase/functions/_shared/strategy-core/reasoningCore.ts",
+          "supabase/functions/_shared/strategy-core/resourceRetrieval.ts",
+          "supabase/functions/_shared/strategy-core/retrievalEnforcement.ts",
+          "supabase/functions/_shared/strategy-core/schemaHealth.ts",
+          "supabase/functions/_shared/strategy-core/situationIntelligenceRetrieval.ts",
+          "supabase/functions/_shared/strategy-core/thesisMemory.ts",
+          "supabase/functions/_shared/strategy-core/workspaceContractTypes.ts",
+          "supabase/functions/_shared/strategy-core/workspaceContracts.ts",
+          "supabase/functions/_shared/strategy-core/workspaceEscalation.ts",
+          "supabase/functions/_shared/strategy-core/workspaceGateRunner.ts",
+          "supabase/functions/_shared/strategy-core/workspacePrompt.ts",
+          "supabase/functions/_shared/strategy-orchestrator/artifactGateEnforcement.ts",
+          "supabase/functions/_shared/strategy-orchestrator/batchOutputValidator.ts",
+          "supabase/functions/_shared/strategy-orchestrator/enforceTaskSopOnce.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/accountBrief.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/discoveryPrep.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/discoveryPrepTemplate.ts",
+          "supabase/functions/_shared/strategy-orchestrator/handlers/ninetyDayPlan.ts",
+          "supabase/functions/_shared/strategy-orchestrator/hybridGuard.ts",
+          "supabase/functions/_shared/strategy-orchestrator/idempotency.ts",
+          "supabase/functions/_shared/strategy-orchestrator/libraryCards.ts",
+          "supabase/functions/_shared/strategy-orchestrator/libraryRetrieval.ts",
+          "supabase/functions/_shared/strategy-orchestrator/normalizeParagraphs.ts",
+          "supabase/functions/_shared/strategy-orchestrator/progressiveDriver.ts",
+          "supabase/functions/_shared/strategy-orchestrator/providerFailureClassifier.ts",
+          "supabase/functions/_shared/strategy-orchestrator/providers.ts",
+          "supabase/functions/_shared/strategy-orchestrator/registry.ts",
+          "supabase/functions/_shared/strategy-orchestrator/remediationExecutor.ts",
+          "supabase/functions/_shared/strategy-orchestrator/runTask.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sectionAuthor.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sectionCanonicalizer.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sectionIntegrityAnalyzer.ts",
+          "supabase/functions/_shared/strategy-orchestrator/sopValidator.ts",
+          "supabase/functions/_shared/strategy-orchestrator/staleRunWatchdog.ts",
+          "supabase/functions/_shared/strategy-orchestrator/taskManifestMap.ts",
+          "supabase/functions/_shared/strategy-orchestrator/taskWorkspace.ts",
+          "supabase/functions/_shared/strategy-orchestrator/telemetryWriter.ts",
+          "supabase/functions/_shared/strategy-orchestrator/types.ts",
+          "supabase/functions/_shared/strategy-router/situationClassifier.ts",
+          "supabase/functions/_shared/strategy-skills/adapter.ts",
+          "supabase/functions/_shared/strategy-skills/expansion.ts",
+          "supabase/functions/_shared/strategy-skills/manifests.ts",
+          "supabase/functions/_shared/strategy-skills/planner.ts",
+          "supabase/functions/_shared/strategy-skills/salesLexicon.ts",
+          "supabase/functions/_shared/strategy-skills/types.ts",
+          "supabase/functions/run-strategy-task/index.ts"
+        ],
+        "fingerprint": "sha256:6e7a0b92cced1211e48363d475d5af4bd926f3d6245669c1220a5f8569bc5c8f",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "run-strategy-task",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/run-strategy-task-reaper/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/strategy-orchestrator/staleRunWatchdog.ts",
+          "supabase/functions/run-strategy-task-reaper/index.ts"
+        ],
+        "fingerprint": "sha256:e20b22813f663b8608bbfcc4154803977a2dda3fbb646a3be4faf04c551f1165",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "run-strategy-task-reaper",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/run-validation-canary/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/run-validation-canary/index.ts"
+        ],
+        "fingerprint": "sha256:89986d7b21f25af39bf6c71c7bb78abf7278cd76913e134ee2dabf53c5c11399",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "run-validation-canary",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/schedule-daily-plan/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/schedule-daily-plan/index.ts"
+        ],
+        "fingerprint": "sha256:4563efd81a68cd9ea64b5c0c7f7ed18e1e91c69f8df51e311197e405859889f8",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "schedule-daily-plan",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/score-micro-drill/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/score-micro-drill/index.ts"
+        ],
+        "fingerprint": "sha256:1c76c2f6055f621d3d3875096d1738297935a0d5432be58768fef83b7cb76df4",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "score-micro-drill",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/score-original-response/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/score-original-response/index.ts"
+        ],
+        "fingerprint": "sha256:b3cc49d202821854d9e84ce9fe8eb19f57aeb826b1bb051eba54b104a9d800cb",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "score-original-response",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/search-context/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/search-context/index.ts"
+        ],
+        "fingerprint": "sha256:598cdbc4c56d470c49cbe5975ce463e7f92d2c92ef47fb267ae319f926d13aa8",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "search-context",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/simulate-chat/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/_shared/requireUser.ts",
+          "supabase/functions/simulate-chat/index.ts"
+        ],
+        "fingerprint": "sha256:13866b1cd669d76f758410eec420250991aa940084c8cb1535c4bf9a34305b7d",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "simulate-chat",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/source-icp-accounts/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/source-icp-accounts/index.ts"
+        ],
+        "fingerprint": "sha256:687c3b7a2d9effef3ef3f56423ae3f50c77595e6de648905380e6dbedf0b16e6",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "source-icp-accounts",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/strategy-benchmark-runner/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/strategy-benchmark-runner/index.ts"
+        ],
+        "fingerprint": "sha256:660fe46a73b8770891222a9153fb0357b1a34c36e25462a837adaceea545cb1b",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "strategy-benchmark-runner",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/strategy-chat/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/strategy-core/behaviorIntent.ts",
+          "supabase/functions/_shared/strategy-core/chatPrompt.ts",
+          "supabase/functions/_shared/strategy-core/citationAudit.ts",
+          "supabase/functions/_shared/strategy-core/citationEnforcement.ts",
+          "supabase/functions/_shared/strategy-core/citationSyntax.ts",
+          "supabase/functions/_shared/strategy-core/contextAssembly.ts",
+          "supabase/functions/_shared/strategy-core/critique.ts",
+          "supabase/functions/_shared/strategy-core/currentStateIntelligence.ts",
+          "supabase/functions/_shared/strategy-core/enforcementPolicy.ts",
+          "supabase/functions/_shared/strategy-core/explicitOutputRequest.ts",
+          "supabase/functions/_shared/strategy-core/index.ts",
+          "supabase/functions/_shared/strategy-core/library.ts",
+          "supabase/functions/_shared/strategy-core/libraryCalibration.ts",
+          "supabase/functions/_shared/strategy-core/libraryLookup.ts",
+          "supabase/functions/_shared/strategy-core/libraryStandard.ts",
+          "supabase/functions/_shared/strategy-core/libraryTotals.ts",
+          "supabase/functions/_shared/strategy-core/outputMode.ts",
+          "supabase/functions/_shared/strategy-core/promptComposition.ts",
+          "supabase/functions/_shared/strategy-core/reasoningCore.ts",
+          "supabase/functions/_shared/strategy-core/resourceRetrieval.ts",
+          "supabase/functions/_shared/strategy-core/retrievalEnforcement.ts",
+          "supabase/functions/_shared/strategy-core/schemaHealth.ts",
+          "supabase/functions/_shared/strategy-core/semanticPrompt.ts",
+          "supabase/functions/_shared/strategy-core/situationIntelligenceRetrieval.ts",
+          "supabase/functions/_shared/strategy-core/thesisMemory.ts",
+          "supabase/functions/_shared/strategy-core/v2/index.ts",
+          "supabase/functions/_shared/strategy-core/v2/operatorDispatcher.ts",
+          "supabase/functions/_shared/strategy-core/v2/orchestrator.ts",
+          "supabase/functions/_shared/strategy-core/v2/qualityAudit.ts",
+          "supabase/functions/_shared/strategy-core/v2/reasoningRubric.ts",
+          "supabase/functions/_shared/strategy-core/v2/synthesisContractSentinel.ts",
+          "supabase/functions/_shared/strategy-core/v2/wrongQuestionGuard.ts",
+          "supabase/functions/_shared/strategy-core/workspaceContractTypes.ts",
+          "supabase/functions/_shared/strategy-core/workspaceContracts.ts",
+          "supabase/functions/_shared/strategy-core/workspaceEscalation.ts",
+          "supabase/functions/_shared/strategy-core/workspaceGateRunner.ts",
+          "supabase/functions/_shared/strategy-core/workspacePrompt.ts",
+          "supabase/functions/_shared/strategy-orchestrator/libraryRetrieval.ts",
+          "supabase/functions/_shared/strategy-orchestrator/types.ts",
+          "supabase/functions/_shared/strategy-router/index.ts",
+          "supabase/functions/_shared/strategy-router/log.ts",
+          "supabase/functions/_shared/strategy-router/signals.ts",
+          "supabase/functions/_shared/strategy-router/situationClassifier.ts",
+          "supabase/functions/_shared/strategy-skills/adapter.ts",
+          "supabase/functions/_shared/strategy-skills/authority.ts",
+          "supabase/functions/_shared/strategy-skills/expansion.ts",
+          "supabase/functions/_shared/strategy-skills/hardening.ts",
+          "supabase/functions/_shared/strategy-skills/index.ts",
+          "supabase/functions/_shared/strategy-skills/manifests.ts",
+          "supabase/functions/_shared/strategy-skills/planner.ts",
+          "supabase/functions/_shared/strategy-skills/runtime.ts",
+          "supabase/functions/_shared/strategy-skills/salesLexicon.ts",
+          "supabase/functions/_shared/strategy-skills/sourceModeGate.ts",
+          "supabase/functions/_shared/strategy-skills/synthesisAddendum.ts",
+          "supabase/functions/_shared/strategy-skills/trace.ts",
+          "supabase/functions/_shared/strategy-skills/types.ts",
+          "supabase/functions/strategy-chat/index.ts"
+        ],
+        "fingerprint": "sha256:45b731df61a9226929799d1a15ab0078a7f0516b2cc503b656ee93c3911562d0",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "strategy-chat",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/strategy-clone-thread/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/strategy-clone-thread/index.ts"
+        ],
+        "fingerprint": "sha256:c78c89bafdd914672e4075419070ca8732c44cfe16f29dcf906c2599a02633d9",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "strategy-clone-thread",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/strategy-detect-conflicts/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/strategy-detect-conflicts/index.ts"
+        ],
+        "fingerprint": "sha256:bf72fe689179bd60ece350e1b92f5d8b3b6ea6795f342798ab3d2adad4b331f7",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "strategy-detect-conflicts",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/strategy-detect-proposals/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/strategy-detect-proposals/index.ts"
+        ],
+        "fingerprint": "sha256:e39fbf3c669b42557cf5db4af7709ef707939ca18f2c51bf4f30269c83b46cf3",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "strategy-detect-proposals",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/strategy-evidence-render/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/strategy-evidence-render/index.ts"
+        ],
+        "fingerprint": "sha256:67b3e4838df3bd2fe4d4a1fc8332af8580a23586558323879dc234f023630691",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "strategy-evidence-render",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/strategy-promote-proposal/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/strategy-promote-proposal/index.ts"
+        ],
+        "fingerprint": "sha256:31d55de86c796dd65cc47ccd9b7942f785950d9ad360bfd8319ee770ab2ec5af",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "strategy-promote-proposal",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/strategy-retrieval-probe/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/strategy-core/resourceRetrieval.ts",
+          "supabase/functions/strategy-retrieval-probe/index.ts"
+        ],
+        "fingerprint": "sha256:061b5d5e9991ab52e318adda0b009db7a929e5cb8492d18611f69954f92613fb",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "strategy-retrieval-probe",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/strategy-smoke-test/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/strategy-smoke-test/index.ts"
+        ],
+        "fingerprint": "sha256:6346fc700d4e23b45feefdafc0242eecb753290c7c08e1097e51c17451675d1c",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "strategy-smoke-test",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/strategy-stage-proposal/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/strategy-stage-proposal/index.ts"
+        ],
+        "fingerprint": "sha256:b57400dfd5308ca6d3468589e631fb84738e76efb2637078ca74f10ba5135252",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "strategy-stage-proposal",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/strategy-stress-runner/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/strategy-stress-runner/index.ts"
+        ],
+        "fingerprint": "sha256:65a539eaecca7bc8de85ebc2820f00c4fd7de72b1f7db03116889e833cf9854b",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "strategy-stress-runner",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/strategy-stress-test/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/strategy-stress-test/index.ts"
+        ],
+        "fingerprint": "sha256:8639b9c2588f185571fa583b5b035140a09bd7b34868f3a7079f43cb6d367b4a",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "strategy-stress-test",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/strategy-summarize-upload/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/strategy-summarize-upload/index.ts"
+        ],
+        "fingerprint": "sha256:e549393d8d5ea07f7e5b42f34ebeb7b5a0acfb2898c5c9e93c834b95e7de2e54",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "strategy-summarize-upload",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/strategy-transform-output/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/strategy-transform-output/index.ts"
+        ],
+        "fingerprint": "sha256:ff61b0136c145ae3b8a8cba039c9d5851f5b62f3bc72596e0122346d4fe8bc99",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "strategy-transform-output",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/suggest-resource-uses/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/suggest-resource-uses/index.ts"
+        ],
+        "fingerprint": "sha256:3406af325a33d1d1387349bbd5745d609d0fe68d3dcf37db75e58ac1ca4b1790",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "suggest-resource-uses",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/suggest-templates/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/suggest-templates/index.ts"
+        ],
+        "fingerprint": "sha256:bfca8d9ff7e0e9ef37cc2d50511f117b9d14b657188356f97c4a1d0fb1e489a4",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "suggest-templates",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/sync-calendar/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/sync-calendar/index.ts"
+        ],
+        "fingerprint": "sha256:7fb0c505693ae386cb56e65c916df1c24bc7493104aa5f2807059bbdab5fd93f",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "sync-calendar",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/territory-copilot/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/territory-copilot/index.ts"
+        ],
+        "fingerprint": "sha256:2ae950720e6948e90cecba62460e419340013e4f318a72b6d28fca59cc819789",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "territory-copilot",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/training-digest/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/training-digest/index.ts"
+        ],
+        "fingerprint": "sha256:c01b7662828d4dd0e87e9ebc68a575c68d6e6b58c85eb3445066cc0a9431dab4",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "training-digest",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/transcribe-audio/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/transcribe-audio/index.ts"
+        ],
+        "fingerprint": "sha256:0185a5db825199031cd26ac65feac211905f7e2839b2aaf546ce65645bff2c75",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "transcribe-audio",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/validate-enrichment/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/validate-enrichment/index.ts"
+        ],
+        "fingerprint": "sha256:937856c5940528a701953f971b01bced50cf6b59841a0254888304c077d24ab9",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "validate-enrichment",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/version/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/release.json",
+          "supabase/functions/_shared/versionResponse.ts",
+          "supabase/functions/version/index.ts"
+        ],
+        "fingerprint": "sha256:415e78cef3f69664deffe4267f893f053aa594cd790f90a19e651e3180ecaf07",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "version",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/voice-command/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/voice-command/index.ts"
+        ],
+        "fingerprint": "sha256:b3d085aa1ef72a67cdfe10b803948195103e0b4f58208d612ccfac1526508f1a",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "voice-command",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/weekly-battle-plan/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/weekly-battle-plan/index.ts"
+        ],
+        "fingerprint": "sha256:c728bd4081cc4263ac0d9e779acc58dfa43256f5041cbd772ed812b3f93bdde7",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "weekly-battle-plan",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/weekly-digest/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/weekly-digest/index.ts"
+        ],
+        "fingerprint": "sha256:d8ba1ec23c40ed74e2ba7e8cc9fc0a1f421636bcebfde7d5035217b3beca8d48",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "weekly-digest",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/weekly-patterns/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": false
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/weekly-patterns/index.ts"
+        ],
+        "fingerprint": "sha256:c10d991d479e64d70a62dc43bbb957226ba2553f727cefe2c5b64ca95d921121",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "weekly-patterns",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/youtube-captions/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "documented_default",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/youtube-captions/index.ts"
+        ],
+        "fingerprint": "sha256:a18cee8ca9f3cfbf997b0ec5add66cab880c0394bfb6c35f5fc530586ff76214",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "youtube-captions",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    }
+  ],
+  "format_version": 2,
+  "label": "source-repository-edge-functions",
+  "project_ref": "odbjjklumdsuqdvkgwyv",
+  "role": "source"
+}

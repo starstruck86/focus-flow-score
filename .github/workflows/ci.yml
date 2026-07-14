@@ -8,6 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
@@ -15,9 +17,48 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.9.2
+      - uses: ankane/setup-postgres@v1
+        with:
+          postgres-version: 17
+          database: migration_verify_ci
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: Verify migration rehearsal tooling
+        run: |
+          bash -n \
+            scripts/migration/inspect-lovable-dump.sh \
+            scripts/migration/tests/catalog-verification.test.sh \
+            scripts/migration/tests/inspect-lovable-dump.integration.sh \
+            scripts/migration/tests/inspect-lovable-dump.test.sh \
+            scripts/migration/tests/lib/postgres-test-safety.sh \
+            scripts/migration/tests/postgres-target-safety.test.sh \
+            scripts/migration/tests/service-verification.test.sh
+          python3 - <<'PY'
+          from pathlib import Path
+
+          for path in (
+              Path("scripts/migration/compare-manifests.py"),
+              Path("scripts/migration/catalog-jsonl-to-manifest.py"),
+              Path("scripts/migration/inventory-edge-functions.py"),
+              Path("scripts/migration/lib/lovable_dump_report.py"),
+          ):
+              compile(path.read_text(encoding="utf-8"), str(path), "exec")
+          PY
+          python3 -m unittest discover -s tests/migration -p 'test_*.py' -v
+          bash scripts/migration/tests/inspect-lovable-dump.test.sh
+          bash scripts/migration/tests/postgres-target-safety.test.sh
+          bash scripts/migration/tests/catalog-verification.test.sh
+          bash scripts/migration/tests/service-verification.test.sh
+          bash scripts/migration/tests/inspect-lovable-dump.integration.sh
+          git diff --check "$PR_BASE_SHA...$PR_HEAD_SHA"
+        env:
+          PGDATABASE: migration_verify_ci
+          PGHOST: /var/run/postgresql
+          PGUSER: runner
+          MIGRATION_VERIFY_ALLOW_FIXTURE: "1"
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       - run: >-
           deno check --no-lock
           supabase/functions/strategy-chat/index.ts

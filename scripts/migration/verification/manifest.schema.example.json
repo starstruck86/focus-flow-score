@@ -1,0 +1,52 @@
+{
+  "format_version": 2,
+  "label": "synthetic-source-fixture",
+  "role": "source",
+  "project_ref": "synthetic-source",
+  "collection": {
+    "boundary": {
+      "kind": "synthetic_fixture",
+      "value": "source-fixture-boundary-20260714"
+    },
+    "collected_at": "2026-07-14T12:00:00Z",
+    "collector": {
+      "name": "reviewed-synthetic-collector",
+      "version": "2.0.0"
+    },
+    "artifact": {
+      "kind": "synthetic_fixture",
+      "source": "local synthetic source fixture",
+      "sha256": "sha256:289c58f19e2b126468dae353a63ea5b6d41161e8ba7ae3eada37643fb0e2b66f"
+    }
+  },
+  "components": [
+    {
+      "key": "public.synthetic_table",
+      "kind": "table",
+      "count": 20,
+      "evidence": {
+        "kind": "synthetic_fixture",
+        "fingerprint": "sha256:c956dedcc2f1dfa6462c9ceebfafb852130b0b86b38aa78a8e3292140a955421",
+        "closure": null
+      },
+      "configuration": {},
+      "configuration_known": true,
+      "independently_verifiable": true,
+      "note": "Synthetic structure only; not production evidence."
+    },
+    {
+      "key": "dashboard.oauth",
+      "kind": "auth",
+      "count": null,
+      "evidence": {
+        "kind": "unavailable",
+        "fingerprint": null,
+        "closure": null
+      },
+      "configuration": {},
+      "configuration_known": false,
+      "independently_verifiable": false,
+      "note": "Dashboard-only configuration requires a separate inventory."
+    }
+  ]
+}
