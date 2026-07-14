@@ -20,12 +20,23 @@ archive hash are identical. It then writes the report checksum and provenance
 manifest with exclusive-create semantics. Replace every angle-bracketed value;
 the validation rejects placeholders.
 
-Git provenance has three separate meanings. `EVIDENCE_PROCEDURE_GIT_SHA` is the
-substantive commit that introduced this evidence-package procedure;
-`INSPECTION_TOOL_GIT_SHA` is the unchanged inspector/helper/migration baseline;
-and `EXECUTION_CHECKOUT_SHA` is the exact checkout executing the procedure. The
-first two are fixed review anchors. The third proves execution identity—not
-review approval—and is always resolved from `git rev-parse HEAD` at execution.
+Git provenance has distinct meanings. `PROCEDURE_ORIGIN_SHA` records the
+historical commit that first introduced this evidence-package procedure; it is
+informational only and is not a review or approval claim.
+`APPROVED_EXECUTION_CHECKOUT_SHA` has no default and must be supplied through the
+external approval process for the exact commit to execute. `EXECUTION_CHECKOUT_SHA`
+is independently resolved from `git rev-parse HEAD`; it records execution
+identity but is not itself proof of approval. Exact equality between those two
+values is the pre-execution approval gate. `PROCEDURE_README_BLOB_SHA` identifies
+the committed README, while `PROCEDURE_WORKFLOW_SHA256` identifies the exact
+Markdown fenced block: the UTF-8 bytes from the three-backtick `bash` opening
+fence through the three-backtick closing fence, inclusive, inside the unique
+workflow markers.
+`INSPECTION_TOOL_GIT_SHA` remains the unchanged inspector/helper/migration
+baseline. The workflow proves that the supplied approval pin matched the
+checkout; it does not prove who authorized or supplied that pin. The content
+digests identify the checked-out README and its marked Markdown fence, not a
+separately edited copy of commands pasted into a shell.
 
 <!-- BEGIN LOVABLE EXPORT EVIDENCE WORKFLOW -->
 ```bash
@@ -38,9 +49,13 @@ export EXPORT_INITIATED_AT_UTC="${EXPORT_INITIATED_AT_UTC:-<operator-observed YY
 export EXPORT_COMPLETED_AT_UTC="${EXPORT_COMPLETED_AT_UTC:-<operator-observed YYYY-MM-DDTHH:MM:SSZ>}"
 export DOWNLOAD_COMPLETED_AT_UTC="${DOWNLOAD_COMPLETED_AT_UTC:-<operator-observed YYYY-MM-DDTHH:MM:SSZ>}"
 export OPERATOR_IDENTITY="${OPERATOR_IDENTITY:-<named operator identity>}"
-export EVIDENCE_PROCEDURE_GIT_SHA="${EVIDENCE_PROCEDURE_GIT_SHA:-e4eed4a21049d274738110710a468e265c2893d2}"
 export INSPECTION_TOOL_GIT_SHA="${INSPECTION_TOOL_GIT_SHA:-c87a124602eb669b3ec5a3829610c6cb465d3e26}"
-EXECUTION_CHECKOUT_SHA="$(git rev-parse HEAD)"
+PROCEDURE_ORIGIN_SHA='e4eed4a21049d274738110710a468e265c2893d2'
+export PROCEDURE_ORIGIN_SHA
+if ! EXECUTION_CHECKOUT_SHA="$(git rev-parse HEAD)"; then
+  printf '%s\n' 'ERROR: could not resolve execution checkout SHA' >&2
+  exit 1
+fi
 export EXECUTION_CHECKOUT_SHA
 
 CANONICAL_EXPORT="${CANONICAL_EXPORT:-/approved/encrypted/evidence-store/Lovable export.backup}"
@@ -66,16 +81,21 @@ for timestamp in \
   fi
 done
 
-if [[ "$EVIDENCE_PROCEDURE_GIT_SHA" != 'e4eed4a21049d274738110710a468e265c2893d2' ]]; then
-  printf '%s\n' 'ERROR: unexpected evidence procedure Git SHA' >&2
+if [[ -z "${APPROVED_EXECUTION_CHECKOUT_SHA:-}" ]]; then
+  printf '%s\n' 'ERROR: APPROVED_EXECUTION_CHECKOUT_SHA is required from external approval' >&2
   exit 1
 fi
+if [[ ! "$APPROVED_EXECUTION_CHECKOUT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+  printf '%s\n' 'ERROR: APPROVED_EXECUTION_CHECKOUT_SHA must be a full lowercase commit SHA' >&2
+  exit 1
+fi
+export APPROVED_EXECUTION_CHECKOUT_SHA
 if [[ "$INSPECTION_TOOL_GIT_SHA" != 'c87a124602eb669b3ec5a3829610c6cb465d3e26' ]]; then
   printf '%s\n' 'ERROR: unexpected inspection tool Git SHA' >&2
   exit 1
 fi
 for sha_name in \
-  EVIDENCE_PROCEDURE_GIT_SHA INSPECTION_TOOL_GIT_SHA \
+  APPROVED_EXECUTION_CHECKOUT_SHA INSPECTION_TOOL_GIT_SHA \
   EXECUTION_CHECKOUT_SHA; do
   sha_value="${!sha_name}"
   if [[ ! "$sha_value" =~ ^[0-9a-f]{40}$ ]]; then
@@ -87,23 +107,17 @@ for sha_name in \
     exit 1
   fi
 done
-if [[ "$(git rev-parse HEAD)" != "$EXECUTION_CHECKOUT_SHA" ]]; then
-  printf '%s\n' 'ERROR: execution checkout SHA does not match HEAD' >&2
+if [[ "$APPROVED_EXECUTION_CHECKOUT_SHA" != "$EXECUTION_CHECKOUT_SHA" ]]; then
+  printf '%s\n' 'ERROR: approved execution checkout SHA does not match HEAD' >&2
   exit 1
 fi
-if ! git merge-base --is-ancestor \
-  "$EVIDENCE_PROCEDURE_GIT_SHA" "$EXECUTION_CHECKOUT_SHA"; then
-  printf '%s\n' 'ERROR: evidence procedure commit is not an execution ancestor' >&2
+if [[ "$(git rev-parse HEAD)" != "$EXECUTION_CHECKOUT_SHA" ]]; then
+  printf '%s\n' 'ERROR: execution checkout SHA changed during preflight' >&2
   exit 1
 fi
 if ! git merge-base --is-ancestor \
   "$INSPECTION_TOOL_GIT_SHA" "$EXECUTION_CHECKOUT_SHA"; then
   printf '%s\n' 'ERROR: inspection tool commit is not an execution ancestor' >&2
-  exit 1
-fi
-procedure_origin="$(git show "${EVIDENCE_PROCEDURE_GIT_SHA}:scripts/migration/README.md")"
-if [[ "$procedure_origin" != *'lovable_cloud_export_inspection_provenance'* ]]; then
-  printf '%s\n' 'ERROR: evidence procedure is absent from its provenance commit' >&2
   exit 1
 fi
 if ! git diff --quiet "$EXECUTION_CHECKOUT_SHA" -- scripts/migration/README.md; then
@@ -137,6 +151,42 @@ fi
 if [[ -n "$ignored_untracked_migrations" ]]; then
   printf '%s\n' 'ERROR: ignored files under supabase/migrations can alter inspection' >&2
   printf '%s\n' "$ignored_untracked_migrations" >&2
+  exit 1
+fi
+
+PROCEDURE_README_BLOB_SHA="$(
+  git rev-parse 'HEAD:scripts/migration/README.md'
+)"
+export PROCEDURE_README_BLOB_SHA
+if [[ ! "$PROCEDURE_README_BLOB_SHA" =~ ^[0-9a-f]{40,64}$ ]]; then
+  printf '%s\n' 'ERROR: procedure README blob SHA is malformed' >&2
+  exit 1
+fi
+if ! PROCEDURE_WORKFLOW_SHA256="$(python3 - 'scripts/migration/README.md' <<'PY'
+import hashlib
+import pathlib
+import sys
+
+data = pathlib.Path(sys.argv[1]).read_bytes()
+label = b"LOVABLE EXPORT EVIDENCE WORKFLOW"
+begin_marker = b"<!-- BEGIN " + label + b" -->\n"
+end_marker = b"\n<!-- END " + label + b" -->"
+if data.count(begin_marker) != 1 or data.count(end_marker) != 1:
+    raise SystemExit("workflow markers must each occur exactly once")
+start = data.index(begin_marker) + len(begin_marker)
+end = data.index(end_marker, start)
+fenced = data[start:end]
+if not fenced.startswith(b"```bash\n") or not fenced.endswith(b"\n```"):
+    raise SystemExit("workflow markers must contain exactly one Bash fence")
+print(hashlib.sha256(fenced).hexdigest())
+PY
+)"; then
+  printf '%s\n' 'ERROR: could not fingerprint the checked-out workflow block' >&2
+  exit 1
+fi
+export PROCEDURE_WORKFLOW_SHA256
+if [[ ! "$PROCEDURE_WORKFLOW_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+  printf '%s\n' 'ERROR: procedure workflow SHA-256 is malformed' >&2
   exit 1
 fi
 
@@ -268,15 +318,28 @@ if not initiated <= completed <= downloaded:
 project_ref = required("SOURCE_PROJECT_REF")
 if not re.fullmatch(r"[a-z0-9]{20}", project_ref):
     raise SystemExit("SOURCE_PROJECT_REF must be exactly 20 lowercase letters/digits")
-procedure_sha = required("EVIDENCE_PROCEDURE_GIT_SHA")
+approved_sha = required("APPROVED_EXECUTION_CHECKOUT_SHA")
+origin_sha = required("PROCEDURE_ORIGIN_SHA")
 tool_sha = required("INSPECTION_TOOL_GIT_SHA")
 execution_sha = required("EXECUTION_CHECKOUT_SHA")
-if procedure_sha != "e4eed4a21049d274738110710a468e265c2893d2":
-    raise SystemExit("unexpected evidence procedure Git SHA")
+readme_blob_sha = required("PROCEDURE_README_BLOB_SHA")
+workflow_sha256 = required("PROCEDURE_WORKFLOW_SHA256")
+if approved_sha != execution_sha:
+    raise SystemExit("approved and execution checkout SHAs differ")
+if origin_sha != "e4eed4a21049d274738110710a468e265c2893d2":
+    raise SystemExit("unexpected historical procedure origin SHA")
 if tool_sha != "c87a124602eb669b3ec5a3829610c6cb465d3e26":
     raise SystemExit("unexpected inspection tool Git SHA")
-if not re.fullmatch(r"[0-9a-f]{40}", execution_sha):
-    raise SystemExit("invalid execution checkout SHA")
+for name, value in {
+    "approved execution checkout SHA": approved_sha,
+    "execution checkout SHA": execution_sha,
+}.items():
+    if not re.fullmatch(r"[0-9a-f]{40}", value):
+        raise SystemExit(f"invalid {name}")
+if not re.fullmatch(r"[0-9a-f]{40,64}", readme_blob_sha):
+    raise SystemExit("invalid procedure README blob SHA")
+if not HEX64.fullmatch(workflow_sha256):
+    raise SystemExit("invalid procedure workflow SHA-256")
 
 relative = lambda path: str(path.relative_to(run_root))
 manifest = {
@@ -284,9 +347,12 @@ manifest = {
     "artifact_kind": "lovable_cloud_export_inspection_provenance",
     "run_id": required("RUN_ID"),
     "run_kind": "rehearsal",
-    "evidence_procedure_git_sha": procedure_sha,
-    "inspection_tool_git_sha": tool_sha,
+    "approved_execution_checkout_sha": approved_sha,
     "execution_checkout_sha": execution_sha,
+    "procedure_origin_sha": origin_sha,
+    "procedure_readme_blob_sha": readme_blob_sha,
+    "procedure_workflow_sha256": workflow_sha256,
+    "inspection_tool_git_sha": tool_sha,
     "lovable_source_project": {
         "name": required("SOURCE_PROJECT_NAME"),
         "ref": project_ref,
@@ -351,10 +417,14 @@ checkout, using a synthetic `PGDMP` archive and a controlled fake `pg_restore`.
 It exercises the real inspector/helper, report and provenance publication, and
 the Git provenance and migration-input guards without a database or network.
 Planted failures cover ordinary and ignored untracked migrations, modified
-inspector/helper/tracked migration/procedure, wrong procedure/tool pins, and
-missing or malformed execution checkout output. This proves the local procedure
-mechanics only; it does not validate a real Lovable archive, source completeness,
-or any remote system.
+inspector/helper/tracked migration/procedure, a missing/malformed/unavailable or
+stale external approval pin, a wrong tool pin, and missing or malformed execution
+checkout output. A committed-descendant regression executes the newly committed
+workflow and proves it cannot proceed with the previously approved checkout, but
+can proceed when its exact new HEAD is explicitly supplied. This proves the local
+procedure mechanics and pin equality only; it does not prove who approved the pin,
+validate a real Lovable archive, establish source completeness, or inspect any
+remote system.
 
 Do not construct a final `pg_restore` command until the actual TOC has been
 classified and the supported Lovable/Supabase restore procedure is confirmed.

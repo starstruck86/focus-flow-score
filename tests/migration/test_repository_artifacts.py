@@ -23,14 +23,27 @@ SQL_INVENTORY = ROOT / "docs" / "migration" / "sql-inventory.md"
 RUNTIME_INVENTORY = ROOT / "docs" / "migration" / "runtime-inventory.md"
 MIGRATION_TOOL_README = ROOT / "scripts" / "migration" / "README.md"
 LEDGER_LINE = re.compile(r"^([0-9a-f]{64})  (supabase/migrations/[^\n]+\.sql)$")
-EVIDENCE_PROCEDURE_SHA = "e4eed4a21049d274738110710a468e265c2893d2"
+PROCEDURE_ORIGIN_SHA = "e4eed4a21049d274738110710a468e265c2893d2"
 INSPECTION_TOOL_SHA = "c87a124602eb669b3ec5a3829610c6cb465d3e26"
-WORKFLOW_PATTERN = re.compile(
-    r"<!-- BEGIN LOVABLE EXPORT EVIDENCE WORKFLOW -->\n"
-    r"```bash\n(.*?)\n```\n"
-    r"<!-- END LOVABLE EXPORT EVIDENCE WORKFLOW -->",
-    re.DOTALL,
-)
+WORKFLOW_LABEL = b"LOVABLE EXPORT EVIDENCE WORKFLOW"
+WORKFLOW_BEGIN = b"<!-- BEGIN " + WORKFLOW_LABEL + b" -->\n"
+WORKFLOW_END = b"\n<!-- END " + WORKFLOW_LABEL + b" -->"
+
+
+def extract_fenced_workflow(readme: bytes) -> bytes:
+    if readme.count(WORKFLOW_BEGIN) != 1 or readme.count(WORKFLOW_END) != 1:
+        raise AssertionError("workflow markers must each occur exactly once")
+    start = readme.index(WORKFLOW_BEGIN) + len(WORKFLOW_BEGIN)
+    end = readme.index(WORKFLOW_END, start)
+    fenced = readme[start:end]
+    if not fenced.startswith(b"```bash\n") or not fenced.endswith(b"\n```"):
+        raise AssertionError("workflow markers must contain exactly one Bash fence")
+    return fenced
+
+
+def extract_workflow_body(readme: bytes) -> str:
+    fenced = extract_fenced_workflow(readme)
+    return fenced[len(b"```bash\n") : -len(b"\n```")].decode("utf-8")
 
 SPEC = importlib.util.spec_from_file_location("strict_manifest", COMPARE_TOOL)
 assert SPEC and SPEC.loader
@@ -42,11 +55,7 @@ SPEC.loader.exec_module(MANIFEST_MODULE)
 class DocumentedEvidenceWorkflowTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        readme = MIGRATION_TOOL_README.read_text(encoding="utf-8")
-        bash_block = WORKFLOW_PATTERN.search(readme)
-        if bash_block is None:
-            raise AssertionError("documented evidence workflow block is missing")
-        cls.workflow = bash_block.group(1)
+        cls.workflow = extract_workflow_body(MIGRATION_TOOL_README.read_bytes())
         syntax = subprocess.run(
             ["bash", "-n"],
             input=cls.workflow,
@@ -171,6 +180,7 @@ esac
             "EXPORT_COMPLETED_AT_UTC": "2026-07-14T12:05:00Z",
             "DOWNLOAD_COMPLETED_AT_UTC": "2026-07-14T12:06:00Z",
             "OPERATOR_IDENTITY": "synthetic-test-operator",
+            "APPROVED_EXECUTION_CHECKOUT_SHA": self.execution_checkout_sha,
             "CANONICAL_EXPORT": str(self.canonical),
             "PG_RESTORE_BIN": str(self.fake_pg_restore),
             "PYTHON_BIN": sys.executable,
@@ -198,8 +208,11 @@ esac
         *,
         environment: dict[str, str] | None = None,
         git_rev_parse_mode: str | None = None,
+        unset_environment: set[str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         execution_environment = self.environment | (environment or {})
+        for name in unset_environment or set():
+            execution_environment.pop(name, None)
         if git_rev_parse_mode is not None:
             fake_bin = self.case_root / "fake git bin"
             fake_bin.mkdir()
@@ -227,11 +240,14 @@ exec "$REAL_GIT" "$@"
                     "FAKE_GIT_REV_PARSE_MODE": git_rev_parse_mode,
                 }
             )
+        workflow = extract_workflow_body(
+            (self.checkout / "scripts" / "migration" / "README.md").read_bytes()
+        )
         return subprocess.run(
             ["bash"],
             cwd=self.checkout,
             env=execution_environment,
-            input=self.workflow,
+            input=workflow,
             check=False,
             capture_output=True,
             text=True,
@@ -244,18 +260,30 @@ exec "$REAL_GIT" "$@"
         *,
         environment: dict[str, str] | None = None,
         git_rev_parse_mode: str | None = None,
+        unset_environment: set[str] | None = None,
     ) -> None:
+        canonical_sha = hashlib.sha256(self.canonical.read_bytes()).hexdigest()
         result = self.run_workflow(
             environment=environment,
             git_rev_parse_mode=git_rev_parse_mode,
+            unset_environment=unset_environment,
         )
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn(expected, result.stderr)
         self.assertEqual(self.fake_log.read_text(encoding="utf-8"), "")
         self.assertFalse(self.run_root.exists())
+        self.assertFalse((self.run_root / "provenance.json").exists())
+        self.assertFalse(
+            (self.run_root / "inspection" / "rehearsal-metadata.txt").exists()
+        )
+        self.assertEqual(
+            hashlib.sha256(self.canonical.read_bytes()).hexdigest(), canonical_sha
+        )
 
-    def test_complete_documented_workflow_runs_end_to_end(self):
-        result = self.run_workflow()
+    def assert_workflow_success(
+        self, *, environment: dict[str, str] | None = None
+    ) -> dict[str, object]:
+        result = self.run_workflow(environment=environment)
         self.assertEqual(result.returncode, 0, result.stderr)
 
         report = self.run_root / "inspection" / "rehearsal-metadata.txt"
@@ -269,11 +297,54 @@ exec "$REAL_GIT" "$@"
         archive_sha = hashlib.sha256(self.canonical.read_bytes()).hexdigest()
         report_sha = hashlib.sha256(report.read_bytes()).hexdigest()
         provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
-        self.assertEqual(provenance["evidence_procedure_git_sha"], EVIDENCE_PROCEDURE_SHA)
-        self.assertEqual(provenance["inspection_tool_git_sha"], INSPECTION_TOOL_SHA)
+        execution_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=self.checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        approved_sha = (self.environment | (environment or {}))[
+            "APPROVED_EXECUTION_CHECKOUT_SHA"
+        ]
+        readme_blob_sha = subprocess.run(
+            ["git", "rev-parse", f"{approved_sha}:scripts/migration/README.md"],
+            cwd=self.checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        approved_readme = subprocess.run(
+            ["git", "show", f"{approved_sha}:scripts/migration/README.md"],
+            cwd=self.checkout,
+            check=True,
+            capture_output=True,
+        ).stdout
+        workflow_sha256 = hashlib.sha256(
+            extract_fenced_workflow(approved_readme)
+        ).hexdigest()
+
+        self.assertEqual(approved_sha, execution_sha)
+        self.assertEqual(provenance["approved_execution_checkout_sha"], approved_sha)
+        self.assertEqual(provenance["execution_checkout_sha"], execution_sha)
+        self.assertEqual(provenance["procedure_origin_sha"], PROCEDURE_ORIGIN_SHA)
+        self.assertEqual(provenance["procedure_readme_blob_sha"], readme_blob_sha)
+        self.assertEqual(provenance["procedure_workflow_sha256"], workflow_sha256)
         self.assertEqual(
-            provenance["execution_checkout_sha"], self.execution_checkout_sha
+            hashlib.sha256(
+                extract_fenced_workflow(
+                    (
+                        self.checkout
+                        / "scripts"
+                        / "migration"
+                        / "README.md"
+                    ).read_bytes()
+                )
+            ).hexdigest(),
+            workflow_sha256,
         )
+        self.assertEqual(provenance["inspection_tool_git_sha"], INSPECTION_TOOL_SHA)
+        self.assertNotIn("evidence_procedure_git_sha", provenance)
         self.assertNotIn("reviewed_git_sha", provenance)
         self.assertEqual(provenance["inspection_tool"]["git_sha"], INSPECTION_TOOL_SHA)
         self.assertEqual(
@@ -299,6 +370,10 @@ exec "$REAL_GIT" "$@"
         )
         self.assertNotIn(str(self.canonical), calls[1])
         self.assertNotIn(str(self.run_root / "archive" / self.canonical.name), calls[1])
+        return provenance
+
+    def test_complete_documented_workflow_runs_end_to_end(self):
+        self.assert_workflow_success()
 
     def test_rejects_untracked_migration_before_inspection(self):
         untracked = self.checkout / "supabase" / "migrations" / "999999_untracked.sql"
@@ -336,17 +411,113 @@ exec "$REAL_GIT" "$@"
         readme.write_text(readme.read_text() + "\nplanted modification\n")
         self.assert_guard_failure("evidence procedure differs from the execution checkout")
 
-    def test_rejects_wrong_procedure_sha_before_inspection(self):
+    def test_requires_external_approved_checkout_before_inspection(self):
         self.assert_guard_failure(
-            "unexpected evidence procedure Git SHA",
-            environment={"EVIDENCE_PROCEDURE_GIT_SHA": INSPECTION_TOOL_SHA},
+            "APPROVED_EXECUTION_CHECKOUT_SHA is required from external approval",
+            unset_environment={"APPROVED_EXECUTION_CHECKOUT_SHA"},
+        )
+
+    def test_rejects_empty_approved_checkout_before_inspection(self):
+        self.assert_guard_failure(
+            "APPROVED_EXECUTION_CHECKOUT_SHA is required from external approval",
+            environment={"APPROVED_EXECUTION_CHECKOUT_SHA": ""},
+        )
+
+    def test_rejects_malformed_approved_checkout_before_inspection(self):
+        self.assert_guard_failure(
+            "APPROVED_EXECUTION_CHECKOUT_SHA must be a full lowercase commit SHA",
+            environment={"APPROVED_EXECUTION_CHECKOUT_SHA": "not-a-commit"},
+        )
+
+    def test_rejects_unavailable_approved_checkout_before_inspection(self):
+        self.assert_guard_failure(
+            "APPROVED_EXECUTION_CHECKOUT_SHA does not identify an available commit",
+            environment={"APPROVED_EXECUTION_CHECKOUT_SHA": "0" * 40},
         )
 
     def test_rejects_wrong_tool_sha_before_inspection(self):
         self.assert_guard_failure(
             "unexpected inspection tool Git SHA",
-            environment={"INSPECTION_TOOL_GIT_SHA": EVIDENCE_PROCEDURE_SHA},
+            environment={"INSPECTION_TOOL_GIT_SHA": PROCEDURE_ORIGIN_SHA},
         )
+
+    def test_committed_descendant_requires_its_exact_external_approval(self):
+        prior_checkout_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=self.checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        self.assertEqual(prior_checkout_sha, self.execution_checkout_sha)
+
+        readme = self.checkout / "scripts" / "migration" / "README.md"
+        original = readme.read_bytes()
+        needle = b"```bash\nset -euo pipefail\numask 077\n"
+        replacement = needle + b"# synthetic committed descendant\n"
+        self.assertEqual(original.count(needle), 1)
+        readme.write_bytes(original.replace(needle, replacement, 1))
+        subprocess.run(
+            ["git", "add", "scripts/migration/README.md"],
+            cwd=self.checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=Synthetic Migration Test",
+                "-c",
+                "user.email=migration-test@example.invalid",
+                "commit",
+                "--quiet",
+                "-m",
+                "synthetic committed descendant",
+            ],
+            cwd=self.checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        descendant_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=self.checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        self.assertNotEqual(descendant_sha, prior_checkout_sha)
+        subprocess.run(
+            ["git", "merge-base", "--is-ancestor", prior_checkout_sha, descendant_sha],
+            cwd=self.checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=self.checkout,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout,
+            "",
+        )
+
+        self.assert_guard_failure(
+            "approved execution checkout SHA does not match HEAD",
+            environment={"APPROVED_EXECUTION_CHECKOUT_SHA": prior_checkout_sha},
+        )
+        provenance = self.assert_workflow_success(
+            environment={"APPROVED_EXECUTION_CHECKOUT_SHA": descendant_sha}
+        )
+        self.assertEqual(
+            provenance["approved_execution_checkout_sha"], descendant_sha
+        )
+        self.assertEqual(provenance["execution_checkout_sha"], descendant_sha)
 
     def test_rejects_missing_execution_checkout_sha_before_inspection(self):
         self.assert_guard_failure(

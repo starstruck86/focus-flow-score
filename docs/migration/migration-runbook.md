@@ -76,10 +76,14 @@ testable server-side source fence and drain signal, cutover is blocked.
 ## Roles and evidence
 
 Use named operators for each checklist item: migration lead, Lovable operator,
-Supabase operator, application verifier, and rollback decision owner. Record
-timestamps in UTC, the evidence-procedure origin SHA, inspection-tool/baseline
-SHA, exact execution-checkout SHA, archive checksum, TOC/report checksum, target
-project identity, function artifact SHAs, and pass/fail notes.
+Supabase operator, application verifier, execution-checkout approval owner, and
+rollback decision owner. Record timestamps in UTC, the informational historical
+procedure-origin SHA, externally approved execution-checkout SHA, independently
+observed execution-checkout SHA, procedure README blob SHA, fenced-workflow
+SHA-256, inspection-tool/baseline SHA, archive checksum, TOC/report checksum,
+target project identity, function artifact SHAs, and pass/fail notes. The
+historical origin does not approve later procedure content, and the observed
+execution SHA alone does not prove external approval.
 The canonical archive and completed export-inspection evidence package,
 including its provenance manifest, must live in an approved encrypted evidence
 store. The ignored
@@ -152,10 +156,20 @@ and within the support-reported limit.
 
 ### 6. Inspect dump table of contents
 
+Before running the template, the named execution-checkout approval owner must
+review an exact commit and supply that full SHA out of band as
+`APPROVED_EXECUTION_CHECKOUT_SHA`. The template has no default for this value. A
+missing, malformed, unavailable, or non-HEAD approval pin stops before creating
+the run directory or invoking `pg_restore`. The workflow can prove only that the
+supplied approval pin equals the executing checkout; it cannot prove who
+authorized or supplied it.
+
 Execute the complete, checked-in evidence-package template under **Inspect a
 future Lovable export** in `scripts/migration/README.md`. Do not substitute the
 inspector's stdout-only form: the template retains the report, external
-before/after checksums, report checksum, and provenance manifest.
+before/after checksums, report checksum, and provenance manifest. Do not edit a
+copied command block: the content identities attest the approved checkout's
+README and marked fence, not an independently captured shell-input stream.
 
 The inspector is read-only: it validates local paths and custom format, checks
 tool compatibility, invokes `pg_restore --list`, emits metadata only, and fails
@@ -168,9 +182,11 @@ class; report contains no row data; exactly one report `sha256:` value equals
 both external before/after archive checksums; and the provenance manifest records
 the exact source project name/ref, observed UTC export/download times separately
 from Support-reported claims, original filename/size/archive SHA-256, operator,
-procedure-origin Git SHA, inspection-tool/baseline Git SHA, execution-checkout
-SHA, and report filename/SHA-256. Copy the completed package to the approved
-encrypted evidence store and verify it there before continuing.
+informational procedure-origin SHA, externally approved checkout SHA, actual
+execution-checkout SHA, exact committed README blob SHA, exact fenced-workflow
+SHA-256, unchanged inspection-tool/baseline SHA, and report filename/SHA-256.
+The approved and execution SHAs must be identical. Copy the completed package
+to the approved encrypted evidence store and verify it there before continuing.
 
 ### 7. Decide selective restore plan
 
