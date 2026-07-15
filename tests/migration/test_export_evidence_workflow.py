@@ -81,6 +81,9 @@ def synthetic_object_analysis_report(
     lines = [
         "LOVABLE CLOUD DUMP — METADATA-ONLY INSPECTION",
         "inspection_status: REVIEW_REQUIRED",
+        f"object_reference_analysis: {object_status or expected_status}",
+        f"migration_duplicate_analysis: {duplicate_status or expected_status}",
+        f"restore_planning_gate: {restore_gate}",
         (
             "scope: archive header, SHA-256, pg_restore TOC metadata, "
             "aggregate unresolved-object counts"
@@ -101,18 +104,15 @@ def synthetic_object_analysis_report(
             "(TOC and SHA-256 use one private read-only capture)"
         ),
         f"toc_entries: {max(1, unresolved_total)}",
-        "toc_metadata_entries: 1",
+        f"toc_metadata_entries: {max(1, unresolved_total)}",
         "toc_data_references_not_extracted: 0",
         "unknown_toc_classes: none (inspection fails closed if encountered)",
         f"unresolved_known_toc_entries: {unresolved_total}",
-        f"object_reference_analysis: {object_status or expected_status}",
-        f"migration_duplicate_analysis: {duplicate_status or expected_status}",
-        f"restore_planning_gate: {restore_gate}",
         "",
         DRIVER.UNRESOLVED_CLASS_COUNT_HEADER,
     ]
     if unresolved_total == 0:
-        lines.insert(6, "input_file: verified-inner.pgdmp")
+        lines.insert(9, "input_file: verified-inner.pgdmp")
     lines.extend(f"{object_class}: {counts[object_class]}" for object_class in counts)
     lines.extend(
         [
@@ -138,8 +138,14 @@ def synthetic_object_analysis_report(
     return "\n".join(lines)
 
 
-def synthetic_package_report_and_provenance(run_id: str) -> tuple[bytes, bytes]:
-    report_text = synthetic_object_analysis_report(unresolved_total=0)
+def synthetic_package_report_and_provenance(
+    run_id: str,
+    *,
+    unresolved_total: int = 0,
+) -> tuple[bytes, bytes]:
+    report_text = synthetic_object_analysis_report(
+        unresolved_total=unresolved_total
+    )
     analysis = DRIVER.parse_report_object_analysis(report_text)
     provenance = {
         "format_version": DRIVER.PROVENANCE_FORMAT_VERSION,
@@ -2068,6 +2074,45 @@ esac
                 with self.assertRaises(DRIVER.WorkflowError):
                     DRIVER.parse_report_object_analysis(valid + sentinel + "\n")
 
+    def test_incomplete_report_grammar_rejects_duplicate_safe_fields_and_bad_arithmetic(self):
+        valid = synthetic_object_analysis_report(unresolved_total=1)
+        poisoned_reports = {
+            "duplicate source version carrying secret": valid.replace(
+                "source_postgresql_version: 17.5\n",
+                "source_postgresql_version: 17.5\n"
+                "source_postgresql_version: "
+                "17.5SYNTHETIC_SECRET_MUST_NOT_APPEAR\n",
+            ),
+            "duplicate size": valid.replace(
+                "size_bytes: 23\n",
+                "size_bytes: 23\nsize_bytes: 999999\n",
+            ),
+            "duplicate pg_restore version": valid.replace(
+                "pg_restore_version: 17.5\n",
+                "pg_restore_version: 17.5\npg_restore_version: 17.999\n",
+            ),
+            "duplicate TOC metadata count": valid.replace(
+                "toc_metadata_entries: 1\n",
+                "toc_metadata_entries: 1\ntoc_metadata_entries: 999\n",
+            ),
+            "TOC aggregate arithmetic mismatch": valid.replace(
+                "toc_metadata_entries: 1\n",
+                "toc_metadata_entries: 0\n",
+            ),
+            "reviewed fields out of order": valid.replace(
+                "source_postgresql_version: 17.5\n"
+                "source_pg_dump_version: 17.5\n",
+                "source_pg_dump_version: 17.5\n"
+                "source_postgresql_version: 17.5\n",
+            ),
+            "missing canonical final LF": valid[:-1],
+            "noncanonical CRLF framing": valid.replace("\n", "\r\n"),
+        }
+        for label, report in poisoned_reports.items():
+            with self.subTest(label=label):
+                with self.assertRaises(DRIVER.WorkflowError):
+                    DRIVER.parse_report_object_analysis(report)
+
     def test_provenance_and_completion_marker_never_encode_restore_ready(self):
         analysis = DRIVER.parse_report_object_analysis(
             synthetic_object_analysis_report(unresolved_total=1)
@@ -2175,6 +2220,106 @@ esac
         self.assertFalse((durable_parent / run_id).exists())
         self.assertFalse((durable_parent / f".{run_id}.pending").exists())
         DRIVER.remove_incomplete_run(run_root)
+
+    def test_fully_rehashed_incomplete_report_poison_fails_both_tree_validators(self):
+        poisoners = {
+            "duplicate-source-secret": lambda report: report.replace(
+                b"source_postgresql_version: 17.5\n",
+                b"source_postgresql_version: 17.5\n"
+                b"source_postgresql_version: "
+                b"17.5SYNTHETIC_SECRET_MUST_NOT_APPEAR\n",
+            ),
+            "duplicate-size": lambda report: report.replace(
+                b"size_bytes: 23\n",
+                b"size_bytes: 23\nsize_bytes: 999999\n",
+            ),
+            "duplicate-pg-version": lambda report: report.replace(
+                b"pg_restore_version: 17.5\n",
+                b"pg_restore_version: 17.5\npg_restore_version: 17.999\n",
+            ),
+            "duplicate-toc-metadata": lambda report: report.replace(
+                b"toc_metadata_entries: 1\n",
+                b"toc_metadata_entries: 1\ntoc_metadata_entries: 999\n",
+            ),
+            "bad-toc-arithmetic": lambda report: report.replace(
+                b"toc_metadata_entries: 1\n",
+                b"toc_metadata_entries: 0\n",
+            ),
+            "reordered-source-fields": lambda report: report.replace(
+                b"source_postgresql_version: 17.5\n"
+                b"source_pg_dump_version: 17.5\n",
+                b"source_pg_dump_version: 17.5\n"
+                b"source_postgresql_version: 17.5\n",
+            ),
+        }
+        workspace = self.checkout / "local-migration-artifacts"
+        workspace.mkdir(mode=0o700, exist_ok=True)
+
+        for index, (label, poison) in enumerate(poisoners.items(), start=1):
+            with self.subTest(label=label):
+                run_id = f"rehearsal-20300102T030405Z-reportpoison{index}"
+                run_root = workspace / run_id
+                pending = run_root / ".pending"
+                run_root.mkdir(mode=0o700)
+                pending.mkdir(mode=0o700)
+                (pending / "archive").mkdir(mode=0o700)
+                (pending / "inspection").mkdir(mode=0o700)
+                report, provenance = synthetic_package_report_and_provenance(
+                    run_id,
+                    unresolved_total=1,
+                )
+                poisoned_report = poison(report)
+                self.assertNotEqual(poisoned_report, report)
+                payloads = {
+                    "archive/outer.expected.sha256": ("a" * 64 + "\n").encode(),
+                    "archive/outer.workflow-observed.before.sha256": (
+                        "a" * 64 + "\n"
+                    ).encode(),
+                    "archive/outer.workflow-observed.after.sha256": (
+                        "a" * 64 + "\n"
+                    ).encode(),
+                    "inspection/rehearsal-metadata.txt": report,
+                    "inspection/report.sha256": (
+                        hashlib.sha256(report).hexdigest() + "\n"
+                    ).encode(),
+                    "provenance.json": provenance,
+                    "provenance.sha256": (
+                        hashlib.sha256(provenance).hexdigest() + "\n"
+                    ).encode(),
+                }
+                for relative, data in payloads.items():
+                    DRIVER.write_exclusive(pending / relative, data)
+                DRIVER.build_evidence_file_manifest(pending, run_id)
+                DRIVER.validate_evidence_tree(pending, run_id)
+                descriptor = os.open(pending, os.O_RDONLY)
+                try:
+                    DRIVER.validate_evidence_tree_at(descriptor, run_id)
+                finally:
+                    os.close(descriptor)
+
+                report_path = pending / "inspection/rehearsal-metadata.txt"
+                report_sha_path = pending / "inspection/report.sha256"
+                report_path.chmod(0o600)
+                report_path.write_bytes(poisoned_report)
+                report_path.chmod(0o400)
+                report_sha_path.chmod(0o600)
+                report_sha_path.write_bytes(
+                    (hashlib.sha256(poisoned_report).hexdigest() + "\n").encode()
+                )
+                report_sha_path.chmod(0o400)
+                (pending / "evidence-files.json").unlink()
+                (pending / "evidence-files.sha256").unlink()
+                DRIVER.build_evidence_file_manifest(pending, run_id)
+
+                with self.assertRaises(DRIVER.WorkflowError):
+                    DRIVER.validate_evidence_tree(pending, run_id)
+                descriptor = os.open(pending, os.O_RDONLY)
+                try:
+                    with self.assertRaises(DRIVER.WorkflowError):
+                        DRIVER.validate_evidence_tree_at(descriptor, run_id)
+                finally:
+                    os.close(descriptor)
+                DRIVER.remove_incomplete_run(run_root)
 
     def test_partial_normalization_failure_publishes_no_evidence(self):
         corrupted = bytearray(self.canonical.read_bytes())

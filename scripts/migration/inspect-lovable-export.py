@@ -1822,14 +1822,32 @@ def _single_report_value(
 
 
 def _validate_incomplete_report_lines(
-    report_lines: list[str], reviewed_count_line_indexes: frozenset[int]
+    report_text: str,
+    report_lines: list[str],
+    class_counts: dict[str, int],
 ) -> None:
-    """Reject every non-reviewed line from an aggregate-only report."""
+    """Require the exact aggregate-only report grammar and arithmetic."""
 
-    fixed_lines = {
-        "",
+    # The helper and raw inspector each contribute one fixed, reviewed section.
+    # Validating only that every line resembles an allowlisted field is not
+    # enough: a second safe-looking field could contradict the canonical value
+    # or carry attacker-controlled text.  Bind the complete LF-terminated line
+    # sequence, including the ordered class-count ledger, instead.
+    if report_text != "\n".join(report_lines) + "\n":
+        raise WorkflowError(
+            "incomplete object-reference report is not canonical LF-terminated text"
+        )
+
+    version_value = (
+        r"(?:UNKNOWN_NOT_REPORTED|"
+        r"[0-9]+(?:\.[0-9]+)*(?:[A-Za-z0-9_.+~-]*)?)"
+    )
+    canonical_lines: list[str | re.Pattern[str]] = [
         "LOVABLE CLOUD DUMP — METADATA-ONLY INSPECTION",
         "inspection_status: REVIEW_REQUIRED",
+        "object_reference_analysis: INCOMPLETE",
+        "migration_duplicate_analysis: INCOMPLETE",
+        "restore_planning_gate: BLOCKED",
         (
             "scope: archive header, SHA-256, pg_restore TOC metadata, "
             "aggregate unresolved-object counts"
@@ -1837,59 +1855,76 @@ def _validate_incomplete_report_lines(
         "restore_attempted: no",
         "database_connection_attempted: no",
         "row_payload_inspected: no",
+        re.compile(r"size_bytes: (?:0|[1-9][0-9]*)"),
+        re.compile(r"sha256: [0-9a-f]{64}"),
         "archive_format: PostgreSQL custom archive (PGDMP)",
+        re.compile(r"archive_format_version: [0-9]+\.[0-9]+\.[0-9]+"),
+        re.compile(rf"source_postgresql_version: {version_value}"),
+        re.compile(rf"source_pg_dump_version: {version_value}"),
+        re.compile(r"pg_restore_version: 17(?:\.[0-9]+)?"),
         "pg_restore_list_compatibility: PASS",
         (
             "archive_snapshot_binding: PASS "
             "(TOC and SHA-256 use one private read-only capture)"
         ),
+        re.compile(r"toc_entries: (?:0|[1-9][0-9]*)"),
+        re.compile(r"toc_metadata_entries: (?:0|[1-9][0-9]*)"),
+        re.compile(r"toc_data_references_not_extracted: (?:0|[1-9][0-9]*)"),
         "unknown_toc_classes: none (inspection fails closed if encountered)",
-        "object_reference_analysis: INCOMPLETE",
-        "migration_duplicate_analysis: INCOMPLETE",
-        "restore_planning_gate: BLOCKED",
+        re.compile(r"unresolved_known_toc_entries: (?:0|[1-9][0-9]*)"),
+        "",
         UNRESOLVED_CLASS_COUNT_HEADER,
-        "BOUNDARY",
-        "This report is an inventory aid, not a restore plan or completeness proof.",
-        "Object-reference analysis is incomplete; restore planning remains blocked.",
-        "PGDMP HEADER CAPTURE",
-        "expected_sha256_binding: PASS",
-    }
-    reviewed_patterns = (
-        re.compile(r"^size_bytes: (?:0|[1-9][0-9]*)$"),
-        re.compile(r"^sha256: [0-9a-f]{64}$"),
-        re.compile(r"^archive_format_version: [0-9]+\.[0-9]+\.[0-9]+$"),
-        re.compile(
-            r"^source_postgresql_version: "
-            r"(?:UNKNOWN_NOT_REPORTED|[0-9]+(?:\.[0-9]+)*(?:[A-Za-z0-9_.+~-]*)?)$"
-        ),
-        re.compile(
-            r"^source_pg_dump_version: "
-            r"(?:UNKNOWN_NOT_REPORTED|[0-9]+(?:\.[0-9]+)*(?:[A-Za-z0-9_.+~-]*)?)$"
-        ),
-        re.compile(r"^pg_restore_version: 17(?:\.[0-9]+)?$"),
-        re.compile(r"^toc_entries: (?:0|[1-9][0-9]*)$"),
-        re.compile(r"^toc_metadata_entries: (?:0|[1-9][0-9]*)$"),
-        re.compile(r"^toc_data_references_not_extracted: (?:0|[1-9][0-9]*)$"),
-        re.compile(r"^unresolved_known_toc_entries: (?:0|[1-9][0-9]*)$"),
-        re.compile(r"^archive_format_version_bytes: [0-9]+,[0-9]+,[0-9]+$"),
-        re.compile(r"^archive_integer_width_bytes: (?:4|8)$"),
-        re.compile(r"^archive_offset_width_bytes: (?:4|8)$"),
-        re.compile(r"^archive_format_code: 1$"),
-        re.compile(r"^archive_header_bound_sha256: [0-9a-f]{64}$"),
+    ]
+    canonical_lines.extend(
+        f"{object_class}: {class_counts[object_class]}"
+        for object_class in UNRESOLVED_OBJECT_CLASS_ALLOWLIST
     )
-    for index, line in enumerate(report_lines):
-        if index in reviewed_count_line_indexes:
-            continue
-        if line in fixed_lines or any(pattern.fullmatch(line) for pattern in reviewed_patterns):
-            continue
+    canonical_lines.extend(
+        [
+            "",
+            "BOUNDARY",
+            "This report is an inventory aid, not a restore plan or completeness proof.",
+            "Object-reference analysis is incomplete; restore planning remains blocked.",
+            "",
+            "PGDMP HEADER CAPTURE",
+            re.compile(
+                r"archive_format_version_bytes: "
+                r"(?:0|[1-9][0-9]*),(?:0|[1-9][0-9]*),(?:0|[1-9][0-9]*)"
+            ),
+            re.compile(r"archive_integer_width_bytes: (?:4|8)"),
+            re.compile(r"archive_offset_width_bytes: (?:4|8)"),
+            "archive_format_code: 1",
+            re.compile(r"archive_header_bound_sha256: [0-9a-f]{64}"),
+            "expected_sha256_binding: PASS",
+        ]
+    )
+
+    if len(report_lines) != len(canonical_lines):
         raise WorkflowError(
-            "incomplete object-reference report contains an unreviewed line"
+            "incomplete object-reference report differs from the canonical line count"
+        )
+    for line, expected in zip(report_lines, canonical_lines):
+        if isinstance(expected, str):
+            valid = line == expected
+        else:
+            valid = expected.fullmatch(line) is not None
+        if not valid:
+            raise WorkflowError(
+                "incomplete object-reference report differs from the canonical grammar"
+            )
+
+    toc_entries = int(report_lines[18].split(": ", 1)[1])
+    metadata_entries = int(report_lines[19].split(": ", 1)[1])
+    data_references = int(report_lines[20].split(": ", 1)[1])
+    if metadata_entries + data_references != toc_entries:
+        raise WorkflowError(
+            "incomplete object-reference report TOC aggregate counts disagree"
         )
 
 
 def _parse_unresolved_class_count_block(
     lines: list[str],
-) -> tuple[dict[str, int], frozenset[int]]:
+) -> dict[str, int]:
     header_indexes = [
         index
         for index, line in enumerate(lines)
@@ -1923,10 +1958,7 @@ def _parse_unresolved_class_count_block(
         raise WorkflowError(
             "inspector report object-class-count block order or coverage is invalid"
         )
-    return (
-        parsed,
-        frozenset(range(block_start, block_stop)),
-    )
+    return parsed
 
 
 def parse_report_object_analysis(report_text: str) -> dict[str, Any]:
@@ -1974,7 +2006,7 @@ def parse_report_object_analysis(report_text: str) -> dict[str, Any]:
         "restore-planning-gate",
     )
 
-    class_counts, unresolved_count_indexes = _parse_unresolved_class_count_block(lines)
+    class_counts = _parse_unresolved_class_count_block(lines)
 
     if (
         unresolved_total > toc_entries
@@ -1990,8 +2022,9 @@ def parse_report_object_analysis(report_text: str) -> dict[str, Any]:
         raise WorkflowError("inspector report object-analysis gate matrix is invalid")
     if object_status == "INCOMPLETE":
         _validate_incomplete_report_lines(
+            report_text,
             lines,
-            unresolved_count_indexes,
+            class_counts,
         )
 
     return {
