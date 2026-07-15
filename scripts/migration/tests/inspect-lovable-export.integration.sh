@@ -12,8 +12,7 @@ export LC_ALL
 umask 077
 
 readonly TEST_DIR="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly REPO_ROOT="$(cd -P -- "${TEST_DIR}/../../.." && pwd)"
-readonly DRIVER="${REPO_ROOT}/scripts/migration/inspect-lovable-export.py"
+readonly SOURCE_REPO_ROOT="$(cd -P -- "${TEST_DIR}/../../.." && pwd)"
 readonly SAFETY="${TEST_DIR}/lib/postgres-test-safety.sh"
 readonly FIXTURE_SCHEMA="migration_export_fixture"
 readonly ROW_SENTINEL="SYNTHETIC_HIGH_LEVEL_ROW_PAYLOAD_MUST_NOT_APPEAR"
@@ -32,20 +31,20 @@ for command_name in git grep pg_dump pg_restore psql python3; do
   migration_verify_require_command "$command_name"
 done
 for required_path in \
-  "$DRIVER" \
-  "$REPO_ROOT/scripts/migration/bounded-pg-restore.py" \
-  "$REPO_ROOT/scripts/migration/normalize-lovable-export.py" \
-  "$REPO_ROOT/scripts/migration/inspect-lovable-dump.sh" \
-  "$REPO_ROOT/supabase/config.toml"; do
+  "$SOURCE_REPO_ROOT/scripts/migration/inspect-lovable-export.py" \
+  "$SOURCE_REPO_ROOT/scripts/migration/bounded-pg-restore.py" \
+  "$SOURCE_REPO_ROOT/scripts/migration/normalize-lovable-export.py" \
+  "$SOURCE_REPO_ROOT/scripts/migration/inspect-lovable-dump.sh" \
+  "$SOURCE_REPO_ROOT/supabase/config.toml"; do
   migration_verify_require_file "$required_path"
 done
 
 readonly PYTHON="$(command -v python3)"
 readonly PG_DUMP="$(command -v pg_dump)"
-readonly REAL_PG_RESTORE="$(command -v pg_restore)"
+readonly REAL_PG_RESTORE_BIN="$(command -v pg_restore)"
 readonly PSQL="$(command -v psql)"
 
-for tool in "$PG_DUMP" "$REAL_PG_RESTORE" "$PSQL"; do
+for tool in "$PG_DUMP" "$REAL_PG_RESTORE_BIN" "$PSQL"; do
   "$tool" --version | grep -Eq '\(PostgreSQL\) 17([. ]|$)' || {
     printf 'ERROR: high-level integration requires PostgreSQL 17 client tools\n' >&2
     exit 2
@@ -62,16 +61,45 @@ fi
 migration_verify_validate_identity "$database_identity" direct
 
 readonly TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/lovable-export-high-level.XXXXXX")"
+fixture_started=0
+workspace_created_by_test=0
+
+cleanup() {
+  local status=$?
+  trap - EXIT HUP INT TERM
+  if [[ ${fixture_started:-0} -eq 1 ]]; then
+    "$PSQL" -X -q -v ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1 || true
+DROP SCHEMA IF EXISTS ${FIXTURE_SCHEMA} CASCADE;
+SQL
+  fi
+  if [[ ${workspace_created_by_test:-0} -eq 1 && -n ${LOCAL_WORKSPACE:-} ]]; then
+    rmdir -- "$LOCAL_WORKSPACE" >/dev/null 2>&1 || true
+  fi
+  rm -rf -- "$TMP_ROOT"
+  exit "$status"
+}
+trap cleanup EXIT HUP INT TERM
+
+readonly EXECUTION_REPO="${TMP_ROOT}/approved-execution-checkout"
+git clone --quiet --shared "$SOURCE_REPO_ROOT" "$EXECUTION_REPO"
+readonly APPROVED_CHECKOUT="$(git -C "$SOURCE_REPO_ROOT" rev-parse HEAD)"
+[[ $(git -C "$EXECUTION_REPO" rev-parse HEAD) == "$APPROVED_CHECKOUT" ]] || {
+  printf 'ERROR: isolated execution checkout does not match the source HEAD\n' >&2
+  exit 2
+}
+[[ -z $(git -C "$EXECUTION_REPO" status --porcelain) ]] || {
+  printf 'ERROR: isolated execution checkout is not clean\n' >&2
+  exit 2
+}
+readonly DRIVER="${EXECUTION_REPO}/scripts/migration/inspect-lovable-export.py"
 readonly ZIP_STORE="${TMP_ROOT}/zip evidence store"
 readonly DIRECT_STORE="${TMP_ROOT}/direct evidence store"
 readonly ZIP_CANONICAL="${ZIP_STORE}/synthetic-lovable-export.zip"
 readonly DIRECT_CANONICAL="${DIRECT_STORE}/synthetic-direct-export.backup"
 readonly ZIP_MEMBER="synthetic-lovable-export.backup"
-readonly PG_RESTORE_LEDGER="${TMP_ROOT}/pg_restore.calls"
+readonly PG_RESTORE_LEDGER_PATH="${TMP_ROOT}/pg_restore.calls"
 readonly PG_RESTORE_WRAPPER="${TMP_ROOT}/audited-pg_restore"
-readonly APPROVED_CHECKOUT="$(git -C "$REPO_ROOT" rev-parse HEAD)"
-readonly LOCAL_WORKSPACE="${REPO_ROOT}/local-migration-artifacts"
-workspace_created_by_test=0
+readonly LOCAL_WORKSPACE="${EXECUTION_REPO}/local-migration-artifacts"
 
 if [[ -e "$LOCAL_WORKSPACE" ]]; then
   [[ -d "$LOCAL_WORKSPACE" && ! -L "$LOCAL_WORKSPACE" ]] || {
@@ -86,23 +114,9 @@ else
   workspace_created_by_test=1
 fi
 
-cleanup() {
-  local status=$?
-  trap - EXIT HUP INT TERM
-  "$PSQL" -X -q -v ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1 || true
-DROP SCHEMA IF EXISTS ${FIXTURE_SCHEMA} CASCADE;
-SQL
-  if [[ $workspace_created_by_test -eq 1 ]]; then
-    rmdir -- "$LOCAL_WORKSPACE" >/dev/null 2>&1 || true
-  fi
-  rm -rf -- "$TMP_ROOT"
-  exit "$status"
-}
-trap cleanup EXIT HUP INT TERM
-
 mkdir -m 0700 -- "$ZIP_STORE" "$DIRECT_STORE"
-: >"$PG_RESTORE_LEDGER"
-chmod 0600 "$PG_RESTORE_LEDGER"
+: >"$PG_RESTORE_LEDGER_PATH"
+chmod 0600 "$PG_RESTORE_LEDGER_PATH"
 
 cat >"$PG_RESTORE_WRAPPER" <<'WRAPPER'
 #!/usr/bin/env bash
@@ -124,6 +138,7 @@ exec "$REAL_PG_RESTORE" "$@"
 WRAPPER
 chmod 0700 "$PG_RESTORE_WRAPPER"
 
+fixture_started=1
 "$PSQL" -X -q -v ON_ERROR_STOP=1 <<SQL
 DROP SCHEMA IF EXISTS ${FIXTURE_SCHEMA} CASCADE;
 CREATE SCHEMA ${FIXTURE_SCHEMA};
@@ -171,7 +186,7 @@ with zipfile.ZipFile(
 PY
 chmod 0400 "$ZIP_CANONICAL"
 
-project_ref="$($PYTHON - "$REPO_ROOT/supabase/config.toml" <<'PY'
+project_ref="$($PYTHON - "$EXECUTION_REPO/supabase/config.toml" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -230,8 +245,8 @@ run_driver() {
   APPROVED_EVIDENCE_STORE_ROOT="$store" \
   APPROVED_EXECUTION_CHECKOUT_SHA="$APPROVED_CHECKOUT" \
   PG_RESTORE_BIN="$PG_RESTORE_WRAPPER" \
-  PG_RESTORE_LEDGER="$PG_RESTORE_LEDGER" \
-  REAL_PG_RESTORE="$REAL_PG_RESTORE" \
+  PG_RESTORE_LEDGER="$PG_RESTORE_LEDGER_PATH" \
+  REAL_PG_RESTORE="$REAL_PG_RESTORE_BIN" \
   "$PYTHON" "$DRIVER"
 }
 
@@ -239,11 +254,11 @@ zip_stdout="$(run_driver "$ZIP_CANONICAL" "$ZIP_STORE" "$ZIP_MEMBER")"
 direct_stdout="$(run_driver "$DIRECT_CANONICAL" "$DIRECT_STORE" "synthetic-direct-export.backup")"
 
 "$PYTHON" - \
-  "$REPO_ROOT" \
+  "$EXECUTION_REPO" \
   "$project_ref" \
   "$ZIP_STORE" "$ZIP_CANONICAL" "$ZIP_MEMBER" "$zip_stdout" \
   "$DIRECT_STORE" "$DIRECT_CANONICAL" "$direct_stdout" \
-  "$ROW_SENTINEL" "$PG_RESTORE_LEDGER" <<'PY'
+  "$ROW_SENTINEL" "$PG_RESTORE_LEDGER_PATH" <<'PY'
 import hashlib
 import json
 import stat
@@ -498,10 +513,10 @@ appended_archive="${TMP_ROOT}/real-pgdmp-with-appended-junk.backup"
 cp -- "$DIRECT_CANONICAL" "$appended_archive"
 chmod 0600 "$appended_archive"
 printf 'SYNTHETIC_APPENDED_JUNK' >>"$appended_archive"
-if "$REAL_PG_RESTORE" --list "$appended_archive" >/dev/null 2>&1; then
+if "$REAL_PG_RESTORE_BIN" --list "$appended_archive" >/dev/null 2>&1; then
   grep -Eiq \
     'pg_restore --list.*does not prove.*every.*inner.*byte.*consum' \
-    "$REPO_ROOT/scripts/migration/README.md" || {
+    "$EXECUTION_REPO/scripts/migration/README.md" || {
       printf 'ERROR: accepted appended bytes require the explicit documented ceiling\n' >&2
       exit 1
     }
