@@ -10,6 +10,16 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+      - name: Verify tracked schema credential containment
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/security/scan-tracked-schema-secrets.py")
+          compile(path.read_text(encoding="utf-8"), str(path), "exec")
+          PY
+          python3 -m unittest discover -s tests/security -p 'test_*.py' -v
+          python3 scripts/security/scan-tracked-schema-secrets.py
       - uses: actions/setup-node@v5
         with:
           node-version: "22"

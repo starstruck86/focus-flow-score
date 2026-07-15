@@ -7,7 +7,7 @@ Scope: static repository inspection only on 2026-07-14. No remote Supabase/Lovab
 - There are 120 deployable Edge Function directories plus supabase/functions/_shared. Every deployable directory has index.ts.
 - supabase/config.toml records verify_jwt=true for 5 functions and false for 37. Three named sections omit verify_jwt, and 75 directories have no function section. Thus 78 functions have no explicit repository JWT boolean; the effective deployed setting is not repository-provable and must be captured/recreated explicitly.
 - The existing docs/phase2-function-inventory.json is stale: it says generated 2026-04-11 and contains 75 functions (lines 3, 12, 636), versus 120 current directories.
-- The tracked supabase/dynamic_staging_schema.sql is a generated/derived schema snapshot, not a chronological migration. It contains nine pg_cron schedules plus hardcoded project URLs and credential-like literals. Values are not reproduced here. It must never be treated as an executable restore plan or secret source.
+- The tracked supabase/dynamic_staging_schema.sql is a generated/derived schema snapshot, not a chronological migration. Earlier revisions contained nine executable pg_cron schedules, hardcoded project URLs, and credential-shaped literals. The current tree removes that entire executable block and retains the inventory below only as historical repository evidence. It must never be treated as an executable restore plan or secret source.
 - SQL migrations enable pg_cron/pg_net repeatedly, but only one current cron.schedule call (ops_sentinel_v1) is present in chronological migrations. Most scheduled jobs exist only in the derived schema snapshot, docs, or runtime expectations.
 - Auth, OAuth client/provider configuration, SMTP, actual cron state/timezone/headers, n8n, deployed Edge Function versions/settings, secret values, and actual Storage contents cannot be derived from this repository.
 - Git tracks .env. It contains Supabase binding names. Values were not recorded in this report; migration work should avoid copying the file blindly and should review whether tracking it is intentional.
@@ -62,7 +62,7 @@ Chronological migrations:
 - That same migration seeds agent_cron_map with 13 expected mappings at lines 20-35. Several mapped job names do not match the derived snapshot names, and cadence_sentinel_v1, backlog_burner_v1, gap_ranker_v1, and governor_v1 have no schedule definition found.
 - The migration queries public.agent_configs at lines 54-65 and 86-93, but no CREATE TABLE public.agent_configs exists in chronological migrations; it appears only in supabase/dynamic_staging_schema.sql:202-203. This is a fresh-restore blocker unless the actual dump/selective restore plan supplies it.
 
-Derived snapshot only (supabase/dynamic_staging_schema.sql:6800-6868; credential values deliberately omitted):
+Historical derived-snapshot evidence from before repository containment (credential values deliberately omitted; the current snapshot contains no executable schedule block):
 
 - sync-calendar-hourly — 0 * * * * — HTTP invokes sync-calendar.
 - process-podcast-queue-every-minute — * * * * * — HTTP invokes process-podcast-queue.
@@ -89,7 +89,7 @@ Function-side guards/dependencies:
 
 ## Webhooks and outbound integrations
 
-No standalone webhook registry/configuration was found. pg_net cron HTTP calls are the only SQL-defined outbound hooks, and most live only in the derived snapshot.
+No standalone webhook registry/configuration was found. Before containment, pg_net cron HTTP calls were the only SQL-defined outbound hooks outside chronological migrations; the current derived snapshot deliberately contains no executable schedule block.
 
 External service dependencies found in Edge code:
 
@@ -187,10 +187,10 @@ Primary bindings:
 Hardcoded refs/URLs:
 
 - Current Lovable-managed project ref odbjjklumdsuqdvkgwyv: supabase/config.toml:1; .github/workflows/verify-production-version.yml:22-26,99-103; scripts/phase3a-debug-validation.sh:48-50; supabase/functions/mcp/index.ts:178-187; .lovable/mcp/manifest.json:4-10; docs/STATE.md.
-- Populated dynamic-staging ref uujkmcbqavsmzhnbqvmm: supabase/dynamic_staging_schema.sql cron URLs and .lovable/plan.md. It is explicitly out of scope and must not be used.
+- The populated dynamic-staging ref remains in rejected historical planning input. It is explicitly out of scope and must not be used; the current derived snapshot no longer carries cron endpoint literals.
 - The dispatch-only production version workflow is tied to the current project ref and deployment-id prefix; it must not be invoked in this PR and must be rebound only after authorized cutover.
 - scripts/phase3a-debug-validation.sh contains a hardcoded current endpoint and a credential-like public token literal. The value is intentionally omitted. Do not run it during this migration PR.
-- supabase/dynamic_staging_schema.sql contains credential-like literals in cron headers at lines 6805,6814,6823,6832,6864. Values are intentionally omitted. Never copy them into a report, restore command, or new project.
+- Earlier revisions of supabase/dynamic_staging_schema.sql contained credential-shaped cron-header material. The current tree removes the executable cron block and suppresses textual diffs for that file so review does not reproduce removed values. Rotation and historical exposure response remain external requirements.
 - src/lib/rustBusterLinks.ts:4-14 hardcodes an organization-specific Salesforce host and report/list IDs.
 - Browserless uses a production-sfo endpoint (import-circle-browserless/index.ts:527).
 - MCP titles/instructions are personalized to one owner, Branch territory, and a stated account count (supabase/functions/mcp/index.ts:181-189; src/lib/mcp/index.ts:10-18). Verify these assumptions rather than carrying them as infrastructure truth.
@@ -213,7 +213,7 @@ Hardcoded refs/URLs:
 10. Storage objects and complete bucket settings are absent; only three bucket/policy definitions are in migrations.
 11. Deployed Edge Function set, versions, runtime imports, effective JWT settings, env values, and remote agent configuration (ElevenLabs/Lovable) are absent.
 12. The repository uses Lovable AI endpoints and Lovable Cloud auth; availability/configuration after remix and owned-Supabase rebinding is not proven.
-13. Tracked .env, dynamic_staging_schema.sql, and phase3a script contain sensitive or credential-like material. Migration tooling must not echo or package their values.
+13. Tracked .env and the phase3a script contain sensitive or credential-like material. Earlier dynamic_staging_schema.sql revisions also contain credential-shaped material in Git history; migration tooling and review must not echo or package any values.
 14. Production webhooks beyond pg_net jobs, n8n workflows, job pause controls, cron timezone, Realtime runtime settings, OAuth providers, and SMTP require empirical/operator inventory.
 15. A full restore cannot be selected based on repository state alone: schema drift represented in dynamic_staging_schema.sql shows objects/runtime jobs not reproducible from chronological migrations.
 

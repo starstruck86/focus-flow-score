@@ -1,5 +1,7 @@
 -- dynamic-staging schema export generated from Lovable project 2750cde7-6277-4433-9311-204bcc16e1d1 on 2026-07-09.
 -- Schema only. The only copied table data is public.function_configs.
+-- Derived drift evidence only; never execute this file as a deployment source.
+-- Executable schedules and embedded authorization material are intentionally omitted.
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -6797,76 +6799,11 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT, INSERT
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;
 
--- pg_cron jobs
-SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'sync-calendar-hourly';
-SELECT cron.schedule('sync-calendar-hourly', '0 * * * *', '
-  SELECT net.http_post(
-    url := ''https://uujkmcbqavsmzhnbqvmm.supabase.co/functions/v1/sync-calendar'',
-    headers := ''{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1amttY2JxYXZzbXpobmJxdm1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTQ3NzcsImV4cCI6MjA5OTE5MDc3N30.19WUtFlglG7_Slm4PIs7Eb3MMbvbwQd15oR6hc3yyGo"}''::jsonb,
-    body := ''{}''::jsonb
-  ) AS request_id;
-  ');
-
-SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'process-podcast-queue-every-minute';
-SELECT cron.schedule('process-podcast-queue-every-minute', '* * * * *', '
-  SELECT net.http_post(
-    url := ''https://uujkmcbqavsmzhnbqvmm.supabase.co/functions/v1/process-podcast-queue'',
-    headers := ''{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1amttY2JxYXZzbXpobmJxdm1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTQ3NzcsImV4cCI6MjA5OTE5MDc3N30.19WUtFlglG7_Slm4PIs7Eb3MMbvbwQd15oR6hc3yyGo"}''::jsonb,
-    body := ''{}''::jsonb
-  ) AS request_id;
-  ');
-
-SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'daily-digest-6am';
-SELECT cron.schedule('daily-digest-6am', '0 6 * * *', '
-  SELECT net.http_post(
-    url:=''https://uujkmcbqavsmzhnbqvmm.supabase.co/functions/v1/daily-digest'',
-    headers:=''{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1amttY2JxYXZzbXpobmJxdm1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTQ3NzcsImV4cCI6MjA5OTE5MDc3N30.19WUtFlglG7_Slm4PIs7Eb3MMbvbwQd15oR6hc3yyGo", "x-cron-secret": "86Ge1BivMfeBKy6i22x1SBNC2TXSHTAjCOcjnPFPqT5mq5xz2LNmGzpsKKye06Xo"}''::jsonb,
-    body:=''{}''::jsonb
-  ) AS request_id;
-  ');
-
-SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'run-strategy-task-reaper-every-minute';
-SELECT cron.schedule('run-strategy-task-reaper-every-minute', '* * * * *', '
-  SELECT net.http_post(
-    url := ''https://uujkmcbqavsmzhnbqvmm.supabase.co/functions/v1/run-strategy-task-reaper'',
-    headers := ''{"Content-Type":"application/json","Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1amttY2JxYXZzbXpobmJxdm1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTQ3NzcsImV4cCI6MjA5OTE5MDc3N30.19WUtFlglG7_Slm4PIs7Eb3MMbvbwQd15oR6hc3yyGo","x-cron-secret":"86Ge1BivMfeBKy6i22x1SBNC2TXSHTAjCOcjnPFPqT5mq5xz2LNmGzpsKKye06Xo"}''::jsonb,
-    body := ''{}''::jsonb
-  ) as request_id;
-  ');
-
-SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'ops_sentinel_v1';
-SELECT cron.schedule('ops_sentinel_v1', '0 3 * * *', '
-INSERT INTO agent_events (user_id, agent, event_type, so_what, signal_class, confidence, status, provenance, payload)
-SELECT (SELECT user_id FROM accounts LIMIT 1), ''ops_sentinel'', ''nightly_invariants'',
- CASE WHEN violations = 0 THEN ''All invariants passed — the app told the truth today'' ELSE violations || '' invariant(s) FAILED — see payload; the app may be contradicting itself'' END,
- ''evergreen'', 1.0, CASE WHEN violations = 0 THEN ''consumed'' ELSE ''proposed'' END,
- ''{"source_label":"agent:ops_sentinel"}''::jsonb,
- jsonb_build_object(''orphan_pov'', (SELECT count(*) FROM branch_pov p WHERE NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id=p.account_id)),
-                    ''unclassified_signals'', (SELECT count(*) FROM account_signals WHERE signal_class IS NULL),
-                    ''expired_unreaped'', (SELECT count(*) FROM agent_events WHERE expires_at < now() AND status=''proposed''))
-FROM (SELECT (SELECT count(*) FROM branch_pov p WHERE NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id=p.account_id))
-           + (SELECT count(*) FROM account_signals WHERE signal_class IS NULL) AS violations) v;
-');
-
-SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'lease_reaper_v1';
-SELECT cron.schedule('lease_reaper_v1', '*/15 * * * *', 'UPDATE agent_events SET status=''proposed'', lease_until=NULL WHERE status=''processing'' AND lease_until < now();');
-
-SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'decay_evaporator_v1';
-SELECT cron.schedule('decay_evaporator_v1', '0 2 * * *', 'UPDATE agent_events SET status=''expired'' WHERE status=''proposed'' AND expires_at IS NOT NULL AND expires_at < now();');
-
-SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'freshness_warden_v1';
-SELECT cron.schedule('freshness_warden_v1', '0 4 * * *', 'INSERT INTO agent_events (user_id, agent, event_type, account_id, so_what, signal_class, confidence, status, provenance, expires_at) SELECT s.user_id, ''freshness_warden'', ''signal_aging'', s.linked_account_id, ''Window signal for '' || s.linked_account_name || '' is '' || (now()::date - s.observed_at) || '' days old - verify still true or archive'', ''evergreen'', 0.7, ''proposed'', ''{"source_label":"agent:freshness_warden"}''::jsonb, now() + interval ''14 days'' FROM account_signals s WHERE s.signal_class = ''window'' AND s.observed_at < now() - interval ''60 days'' AND NOT EXISTS (SELECT 1 FROM agent_events e WHERE e.agent = ''freshness_warden'' AND e.account_id = s.linked_account_id AND e.created_at > now() - interval ''30 days'');');
-
-SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'generate-daily-plan-5am-et';
-SELECT cron.schedule('generate-daily-plan-5am-et', '0 10 * * 1-5', '
-  SELECT net.http_post(
-    url:=''https://uujkmcbqavsmzhnbqvmm.supabase.co/functions/v1/schedule-daily-plan'',
-    headers:=''{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1amttY2JxYXZzbXpobmJxdm1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTQ3NzcsImV4cCI6MjA5OTE5MDc3N30.19WUtFlglG7_Slm4PIs7Eb3MMbvbwQd15oR6hc3yyGo", "x-cron-secret": "86Ge1BivMfeBKy6i22x1SBNC2TXSHTAjCOcjnPFPqT5mq5xz2LNmGzpsKKye06Xo"}''::jsonb,
-    body:=concat(''{"time": "'', now(), ''"}'')::jsonb,
-    timeout_milliseconds:=25000
-  ) AS request_id;
-');
-
+-- pg_cron jobs are intentionally disabled in this derived drift snapshot.
+-- This tracked file is drift evidence only and is not an executable deployment source.
+-- Recreate reviewed schedules separately during an authorized deployment, initially
+-- disabled, with endpoints and configuration supplied at deployment time and credentials
+-- read from an approved runtime secret source. No schedule or credential default exists here.
 
 INSERT INTO public.function_configs (function_name, primary_model, fallback_model, notes, updated_at) VALUES
   ('analyze-call', 'claude-haiku-4-5-20251001', NULL, NULL, '2026-07-09 18:41:16.610079+00'::timestamp with time zone),

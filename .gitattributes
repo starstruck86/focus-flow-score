@@ -1,0 +1,3 @@
+# Pre-containment revisions of this derived snapshot include credential-shaped
+# material. Suppress textual diffs so reviews do not reproduce removed values.
+supabase/dynamic_staging_schema.sql -diff
