@@ -382,22 +382,24 @@ The fixed count block covers every recognized TOC class. Classes representing
 data/payload position or annotations rather than a standalone schema-object
 reference are explicitly exempt and must retain a zero unresolved count; every
 other recognized class participates in this conservative gate.
-Migration-duplicate analysis is a separate completeness claim. It is
-`COMPLETE` only if every normalized class has reviewed repository-migration
-matching or is explicitly non-applicable. Reviewed matching includes
-`LANGUAGE` definitions and `CREATE [UNIQUE] INDEX [CONCURRENTLY]`; an otherwise
-normalized unsupported class or form keeps duplicate analysis `INCOMPLETE`,
-retains only the aggregate report, and leaves restore planning `BLOCKED`.
-The conservative form gate discovers a broader set of PostgreSQL CREATE/ALTER
-candidates than the exact name-bearing matcher accepts. Implicit unnamed
-objects, comment-obscured grammar, unreviewed leading modifiers, and lexically
-unprovable migration text therefore cannot produce a false `COMPLETE` result.
-No TOC line, object name, schema, owner, OID, SQL, path, or payload from that
-analysis may enter the report or durable package. Unknown classes, malformed
+Migration-duplicate analysis is a separate, non-complete heuristic. When every
+TOC object reference needed by the report is resolved and migration metadata is
+readable, it is `CONSERVATIVE`: reviewed name matches may identify possible
+duplicates, but absence of a match is not proof across PostgreSQL aliases,
+pre-name modifiers, object-kind ambiguity, or dynamic SQL. When object
+references are unresolved, it is `INCOMPLETE` and only aggregate evidence is
+retained. This workflow never emits `COMPLETE`; reserve that status for a
+catalog-backed or genuinely executed/parsed schema comparison. Restore
+planning remains `BLOCKED` in either case.
+The `INCOMPLETE` aggregate path emits no TOC line, object name, schema, owner,
+OID, SQL, path, payload, or migration-match detail. A `CONSERVATIVE` detailed
+report may retain the normalized metadata references and possible checked-in
+migration matches already defined by the report contract, but never raw TOC
+lines, SQL text, or row payload; it remains blocked. Unknown classes, malformed
 TOCs, duplicate TOC IDs, conflicting version headers, archive/hash failures,
-unsafe diagnostics, and migration-metadata read failures on the complete
+unsafe diagnostics, and migration-metadata read failures on the resolved-object
 analysis path remain fatal and publish no normal package.
-These analysis fields are mandatory in provenance format version 5; the
+These analysis fields are mandatory in provenance format version 6; the
 pending and descriptor-bound durable validators reject an older or missing
 provenance format rather than inferring the gate.
 Those validators also use a recursive duplicate-key- and nonfinite-number-
@@ -406,10 +408,16 @@ and evidence-manifest level. Rehashed last-key-wins documents, nested duplicate
 members, unknown readiness claims, and contradictory fixed safety values are
 publication failures.
 Expected scalar values are type/format checked and cross-bound across tool,
-source/config, outer, inner/header, report, checksum, and durable-path claims;
-the pending package is then rebound to the descriptor-held canonical artifact
-before any durable directory is created. Synthetic poison cases exercise both
-validators and the actual no-replace publication entry point.
+source/config, outer, inner/header, report, checksum, and durable-path claims.
+Before evidence-package construction, the workflow freezes an immutable
+publication expectation from the live descriptor-bound canonical artifact and
+the runtime-approved checkout, tools, configuration, Python, source, timeline,
+inner archive, report, and analysis identities. The pending package,
+descriptor-bound staging package, immediate pre-rename package, and renamed
+package before `EVIDENCE_COMPLETE` must each equal that expectation and recheck
+the live canonical descriptor. Synthetic poison cases include fully coherent,
+fully rehashed outer and checkout/tool/config/project substitutions that remain
+structurally valid but cannot pass the runtime publication gate.
 The approved workflow records its resolved execution-Python identity, runs
 child Python tools in isolated mode, pins the raw inspector to that interpreter
 and `/bin/bash`, and excludes inherited shell/Python startup hooks from the
@@ -478,12 +486,13 @@ the fixed `REDACTED_UNSAFE_OR_UNRECOGNIZED` token; candidate count and byte
 length are bounded, and candidate values are never included in diagnostics.
 An EXTENSION owner token contributes to the owner/role warning count; ownerless
 and explicit `-` owner forms do not.
-When both object-reference and migration-duplicate analysis are complete,
-review every warning for owners,
+When object-reference analysis is complete and migration-duplicate analysis is
+conservative, review every heuristic warning for owners,
 ACLs, roles, extensions, subscriptions, event triggers, publications, managed
-schemas, `auth`, `storage`, `supabase_*`, and duplicates with checked-in
-migrations. When either analysis is incomplete, the only safe result is the
-aggregate blocked package; resolve the parser/evidence gap under review before
+schemas, `auth`, `storage`, `supabase_*`, and possible duplicates with
+checked-in migrations. A conservative result is not proof that no other
+duplicate exists. When object-reference analysis is incomplete, the only safe
+result is the aggregate blocked package; resolve the parser/evidence gap before
 any restore planning.
 
 Exit gate: normalization and archive format/version checks pass; TOC parsing has
@@ -505,9 +514,10 @@ The per-file manifest and detached hash must verify in the durable package, the
 disposable local run must be absent, and the externally approved expected outer
 identity must remain distinct from workflow-observed measurements. Migration
 readiness remains **RED**, inspection remains `REVIEW_REQUIRED`, and
-`restore_planning_gate` must be `BLOCKED` whether object-reference analysis or
-migration-duplicate analysis is complete or incomplete. No downstream validation may treat
-`EVIDENCE_COMPLETE`, a complete object analysis, or a matching manifest as
+`restore_planning_gate` must be `BLOCKED` whether migration-duplicate analysis
+is conservative or incomplete. No downstream validation may treat
+`EVIDENCE_COMPLETE`, complete object-reference analysis, conservative duplicate
+analysis, or a matching manifest as
 restore authorization.
 
 ### 7. Decide selective restore plan

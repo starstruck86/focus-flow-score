@@ -140,7 +140,7 @@ class LovableDumpReportDiagnosticTest(unittest.TestCase):
         report = result.stdout.decode("utf-8")
         self.assertIn("inspection_status: REVIEW_REQUIRED\n", report)
         self.assertIn("object_reference_analysis: COMPLETE\n", report)
-        self.assertIn("migration_duplicate_analysis: COMPLETE\n", report)
+        self.assertIn("migration_duplicate_analysis: CONSERVATIVE\n", report)
         self.assertIn("restore_planning_gate: BLOCKED\n", report)
         self.assertIn(f"sha256: {self.dump_sha}\n", report)
         self.assertIn("TABLE: 1\n", report)
@@ -390,7 +390,7 @@ class LovableDumpReportDiagnosticTest(unittest.TestCase):
         self.assertEqual(sum(int(value) for value in counts.values()), 3)
         self.assertEqual(counts["ACL"], "0")
 
-    def test_supported_language_and_concurrent_index_duplicates_are_complete(self):
+    def test_supported_language_and_concurrent_index_duplicates_are_conservative(self):
         migration = self.migrations / "20260715000000_supported_forms.sql"
         migration.write_text(
             "CREATE LANGUAGE synthetic_language;\n"
@@ -411,7 +411,8 @@ class LovableDumpReportDiagnosticTest(unittest.TestCase):
         self.assertEqual(result.stderr, b"")
         report = result.stdout.decode("utf-8")
         self.assertIn("object_reference_analysis: COMPLETE\n", report)
-        self.assertIn("migration_duplicate_analysis: COMPLETE\n", report)
+        self.assertIn("migration_duplicate_analysis: CONSERVATIVE\n", report)
+        self.assertNotIn("migration_duplicate_analysis: COMPLETE\n", report)
         self.assertIn("restore_planning_gate: BLOCKED\n", report)
         self.assertIn("possible_repo_migration_duplicates: PRESENT (2)\n", report)
         self.assertIn(
@@ -423,7 +424,7 @@ class LovableDumpReportDiagnosticTest(unittest.TestCase):
             report,
         )
 
-    def test_unnamed_create_index_forces_incomplete_duplicate_analysis(self):
+    def test_unnamed_create_index_remains_conservative_duplicate_analysis(self):
         private_name = "PRIVATE_UNNAMED_INDEX_TABLE"
         migration = self.migrations / "20260715000000_unnamed_index.sql"
         migration.write_text(
@@ -442,13 +443,14 @@ class LovableDumpReportDiagnosticTest(unittest.TestCase):
         self.assertEqual(result.stderr, b"")
         report = result.stdout.decode("utf-8")
         self.assertIn("object_reference_analysis: COMPLETE\n", report)
-        self.assertIn("migration_duplicate_analysis: INCOMPLETE\n", report)
+        self.assertIn("migration_duplicate_analysis: CONSERVATIVE\n", report)
+        self.assertNotIn("migration_duplicate_analysis: COMPLETE\n", report)
         self.assertIn("restore_planning_gate: BLOCKED\n", report)
         self.assertNotIn(private_name, report)
         self.assertNotIn("synthetic_index", report)
-        self.assertNotIn("POSSIBLE REPO MIGRATION DUPLICATES", report)
+        self.assertIn("possible_repo_migration_duplicates: none (0)\n", report)
 
-    def test_comment_obscured_language_forces_incomplete_without_leaking(self):
+    def test_comment_obscured_language_remains_conservative_without_leaking(self):
         private_comment = "PRIVATE_COMMENT_AND_ROW_SENTINEL"
         private_name = "private_language_name"
         migration = self.migrations / "20260715000000_obscured_language.sql"
@@ -468,52 +470,82 @@ class LovableDumpReportDiagnosticTest(unittest.TestCase):
         self.assertEqual(result.stderr, b"")
         report = result.stdout.decode("utf-8")
         self.assertIn("object_reference_analysis: COMPLETE\n", report)
-        self.assertIn("migration_duplicate_analysis: INCOMPLETE\n", report)
+        self.assertIn("migration_duplicate_analysis: CONSERVATIVE\n", report)
+        self.assertNotIn("migration_duplicate_analysis: COMPLETE\n", report)
         self.assertIn("restore_planning_gate: BLOCKED\n", report)
         self.assertNotIn(private_comment, report)
         self.assertNotIn(private_name, report)
-        self.assertNotIn("POSSIBLE REPO MIGRATION DUPLICATES", report)
+        self.assertIn("possible_repo_migration_duplicates: none (0)\n", report)
 
-    def test_broad_candidate_rejects_valid_unreviewed_create_form(self):
-        private_name = "PRIVATE_UNLOGGED_TABLE_SENTINEL"
-        migration = self.migrations / "20260715000000_unlogged_table.sql"
-        migration.write_text(
-            f"CREATE UNLOGGED TABLE public.{private_name} (id integer);\n",
-            encoding="utf-8",
+    def test_sql_alias_modifier_and_dynamic_forms_never_claim_complete(self):
+        cases = (
+            (
+                "alter_table_only",
+                "TABLE",
+                "synthetic_table",
+                "ALTER TABLE ONLY public.synthetic_table ADD COLUMN n integer;\n",
+            ),
+            (
+                "alter_table_all_in_tablespace",
+                "TABLE",
+                "synthetic_table",
+                "ALTER TABLE ALL IN TABLESPACE synthetic_space SET TABLESPACE other_space;\n",
+            ),
+            (
+                "alter_foreign_table_only",
+                "FOREIGN TABLE",
+                "synthetic_foreign_table",
+                "ALTER FOREIGN TABLE ONLY public.synthetic_foreign_table ADD COLUMN n integer;\n",
+            ),
+            (
+                "alter_materialized_view_all_in_tablespace",
+                "MATERIALIZED VIEW",
+                "synthetic_materialized_view",
+                "ALTER MATERIALIZED VIEW ALL IN TABLESPACE synthetic_space SET TABLESPACE other_space;\n",
+            ),
+            (
+                "alter_table_applied_to_view",
+                "VIEW",
+                "synthetic_view",
+                "ALTER TABLE public.synthetic_view SET (security_barrier = true);\n",
+            ),
+            (
+                "dynamically_concatenated_ddl",
+                "TABLE",
+                "synthetic_dynamic_table",
+                "DO $$ BEGIN EXECUTE 'ALTER TABLE public.' || "
+                "'synthetic_dynamic_table' || ' ADD COLUMN n integer'; END $$;\n",
+            ),
         )
-        self.write_toc(
-            "; Dumped from database version: 17.5\n"
-            "; Dumped by pg_dump version: 17.5\n"
-            "1; 0 0 TABLE public synthetic_table synthetic_owner\n"
-        )
+        migration = self.migrations / "20260715000000_variant.sql"
 
-        result = self.run_helper()
+        for label, object_class, object_name, sql in cases:
+            with self.subTest(label=label):
+                migration.write_text(sql, encoding="utf-8")
+                self.write_toc(
+                    "; Dumped from database version: 17.5\n"
+                    "; Dumped by pg_dump version: 17.5\n"
+                    f"1; 0 0 {object_class} public {object_name} synthetic_owner\n"
+                )
 
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stderr, b"")
-        report = result.stdout.decode("utf-8")
-        self.assertIn("object_reference_analysis: COMPLETE\n", report)
-        self.assertIn("migration_duplicate_analysis: INCOMPLETE\n", report)
-        self.assertIn("restore_planning_gate: BLOCKED\n", report)
-        self.assertNotIn(private_name, report)
-        self.assertNotIn("synthetic_table", report)
-        self.assertNotIn("POSSIBLE REPO MIGRATION DUPLICATES", report)
+                result = self.run_helper()
 
-        # CREATE OR REPLACE TRIGGER is another valid PostgreSQL form outside
-        # the exact reviewed trigger matcher. The broad detector sees it even
-        # though object-reference handling remains independently conservative.
-        trigger_candidate = REPORT.migration_definition_candidate_pattern(
-            "TRIGGER"
-        )
-        trigger_sql = "CREATE OR REPLACE TRIGGER synthetic_trigger "
-        self.assertIsNotNone(trigger_candidate.match(trigger_sql))
-        self.assertIsNone(
-            REPORT.migration_definition_shape_pattern("TRIGGER").match(
-                trigger_sql
-            )
-        )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stderr, b"")
+                report = result.stdout.decode("utf-8")
+                self.assertIn("object_reference_analysis: COMPLETE\n", report)
+                self.assertIn(
+                    "migration_duplicate_analysis: CONSERVATIVE\n", report
+                )
+                self.assertNotIn(
+                    "migration_duplicate_analysis: COMPLETE\n", report
+                )
+                self.assertIn("restore_planning_gate: BLOCKED\n", report)
+                self.assertIn(
+                    "possible_repo_migration_duplicates: none (0)\n", report
+                )
 
-    def test_normalized_unclassified_duplicate_class_is_incomplete(self):
+    def test_normalized_unclassified_duplicate_class_is_conservative(self):
         entry = REPORT.TocEntry(
             1,
             "ACCESS METHOD",
@@ -521,10 +553,6 @@ class LovableDumpReportDiagnosticTest(unittest.TestCase):
             1,
         )
         self.assertIsNotNone(REPORT.object_ref(entry))
-        self.assertEqual(
-            REPORT.unsupported_migration_duplicate_classes([entry]),
-            {"ACCESS METHOD": 1},
-        )
         self.write_toc(
             "; Dumped from database version: 17.5\n"
             "; Dumped by pg_dump version: 17.5\n"
@@ -537,30 +565,12 @@ class LovableDumpReportDiagnosticTest(unittest.TestCase):
         self.assertEqual(result.stderr, b"")
         report = result.stdout.decode("utf-8")
         self.assertIn("object_reference_analysis: COMPLETE\n", report)
-        self.assertIn("migration_duplicate_analysis: INCOMPLETE\n", report)
+        self.assertIn("migration_duplicate_analysis: CONSERVATIVE\n", report)
+        self.assertNotIn("migration_duplicate_analysis: COMPLETE\n", report)
         self.assertIn("restore_planning_gate: BLOCKED\n", report)
         self.assertIn("unresolved_known_toc_entries: 0\n", report)
         self.assertNotIn("synthetic_access_method", report)
-        self.assertNotIn("POSSIBLE REPO MIGRATION DUPLICATES", report)
-
-    def test_duplicate_analysis_non_applicability_is_explicit(self):
-        self.assertEqual(
-            REPORT.MIGRATION_DUPLICATE_ANALYZED_CLASSES,
-            frozenset(REPORT.MIGRATION_CLASS_PREFIXES),
-        )
-        self.assertIn("ACL", REPORT.MIGRATION_DUPLICATE_NON_APPLICABLE_CLASSES)
-        self.assertIn(
-            "TABLE DATA", REPORT.MIGRATION_DUPLICATE_NON_APPLICABLE_CLASSES
-        )
-        self.assertNotIn(
-            "ACCESS METHOD", REPORT.MIGRATION_DUPLICATE_NON_APPLICABLE_CLASSES
-        )
-        self.assertEqual(
-            REPORT.unsupported_migration_duplicate_classes(
-                [REPORT.TocEntry(1, "ACL", "public synthetic", 1)]
-            ),
-            {},
-        )
+        self.assertIn("possible_repo_migration_duplicates: none (0)\n", report)
 
     def test_unsafe_version_headers_are_bounded_redacted_and_nonleaking(self):
         # These short all-ASCII suffixes fit the former permissive alpha/vendor

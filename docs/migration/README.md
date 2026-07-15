@@ -40,14 +40,19 @@ structurally malformed or conflicting TOCs remain fatal. Evidence-package
 completion never means restore planning or migration readiness is complete.
 
 Object-reference and repository-migration duplicate analysis have independent
-completeness gates. Duplicate analysis is complete only when every normalized
-class has reviewed matching support or is explicitly non-applicable; otherwise
-the aggregate-only evidence remains `REVIEW_REQUIRED` and restore planning
-remains `BLOCKED`. A broader CREATE/ALTER candidate scan ensures unreviewed,
-implicit-name, comment-obscured, or lexically unprovable repository SQL cannot
-be mislabeled complete. Pending and durable evidence JSON is validated with
-recursive duplicate-key rejection, exact fixed-object schemas, typed scalar
-leaves, identity cross-bindings, and an actual publication-path rejection test.
+gates. The repository scan is only `CONSERVATIVE` when object references are
+resolved: it may identify reviewed possible duplicates, but cannot prove their
+absence across PostgreSQL aliases, pre-name modifiers, object-kind ambiguity,
+or dynamic SQL. It is `INCOMPLETE` when object references are unresolved, and
+it never emits `COMPLETE`; that status is reserved for catalog-backed or
+genuinely executed/parsed schema comparison. Restore planning remains blocked.
+Pending and durable evidence JSON is validated with recursive duplicate-key
+rejection, exact fixed-object schemas, typed scalar leaves, and identity
+cross-bindings. A frozen runtime binding created before evidence construction
+carries the live canonical descriptor and checkout/tool/config/Python/source/
+timeline/inner/report/analysis identities through pending, staged, pre-rename,
+and post-rename validation, so a coherent fully rehashed substitution cannot
+publish merely by agreeing with itself.
 Source and
 `pg_dump` version headers use a bounded allowlist and fixed redaction for every
 unrecognized value, and EXTENSION owner tokens participate in owner/role

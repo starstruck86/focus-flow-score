@@ -158,28 +158,33 @@ gates:
 Data/payload-position and annotation classes that do not represent a standalone
 schema-object reference are explicitly exempt and retain zero unresolved
 counts; every other recognized class participates in the conservative gate.
-Migration-duplicate analysis is independent: `COMPLETE` is emitted only when
-every normalized class has reviewed repository-migration matching or is
-explicitly classified non-applicable. Reviewed matching includes `LANGUAGE`
-definitions and `CREATE [UNIQUE] INDEX [CONCURRENTLY]`; any unsupported class
-or form yields `migration_duplicate_analysis: INCOMPLETE`, retains only the
-aggregate report, and keeps restore planning blocked even when
-`object_reference_analysis` is `COMPLETE`.
-Candidate discovery is intentionally broader than the exact reviewed matcher:
-valid leading modifiers, implicit unnamed objects, comment-obscured grammar,
-and lexically unprovable repository SQL cannot disappear as an apparent
-no-duplicate result. They fail the duplicate-analysis completeness claim
-closed without entering retained output.
-Provenance format version 5 makes these analysis fields and the blocked gate
-mandatory; a version-4 package cannot satisfy the current publication
+Migration-duplicate analysis is independent but never claims completeness.
+When object references are resolved and migration metadata is readable, the
+name scan is labeled `CONSERVATIVE`: it can flag reviewed possible duplicates,
+but it cannot prove their absence across PostgreSQL aliases, modifiers before
+an object name, object-kind ambiguity, or dynamically constructed SQL. When an
+object reference is unresolved, duplicate analysis is `INCOMPLETE` and the
+report retains only aggregate counts. `COMPLETE` is reserved for a future
+catalog-backed or genuinely executed/parsed schema comparison and is not
+emitted by this workflow. Both statuses keep
+`restore_planning_gate: BLOCKED`.
+Provenance format version 6 makes these analysis fields and the blocked gate
+mandatory; an older package cannot satisfy the current publication
 validator. Durable and pending `provenance.json` and `evidence-files.json` are
 loaded with recursive duplicate-key and nonfinite-number rejection and exact
 allowed-key schemas at every fixed object level; unknown readiness fields,
 contradictory safety values, and last-key-wins JSON cannot satisfy publication.
-Every expected scalar is type/format checked, identity fields are cross-bound
-to their parent claims and retained checksum/report bytes, and publication
-rebinds the package to the descriptor-held canonical artifact. Fully rehashed
-poison documents are exercised through the actual no-replace publication path.
+Every expected scalar is type/format checked and identity fields are
+cross-bound to their parent claims and retained checksum/report bytes. Before
+evidence-package construction, the workflow freezes a runtime publication
+contract containing the live descriptor-bound canonical identity and the
+approved checkout, tool, configuration, Python, source, timeline, inner,
+report, and analysis identities. Pending validation, descriptor-bound staging
+validation, the immediate pre-rename gate, and the post-rename gate before
+`EVIDENCE_COMPLETE` each compare provenance to that same runtime contract and
+reverify the live canonical descriptor. Internal agreement among substituted
+provenance fields, sidecars, and a fully rehashed manifest is therefore not
+sufficient for publication.
 That aggregate-only path does not perform or emit name-, schema-, owner-, OID-,
 SQL-, path-, payload-, or migration-duplicate detail analysis. Unknown object
 classes, malformed TOC records, duplicate TOC IDs, conflicting source or

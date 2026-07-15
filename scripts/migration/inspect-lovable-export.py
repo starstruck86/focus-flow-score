@@ -68,7 +68,7 @@ REPORT_OBJECT_REFERENCE_ANALYSIS = re.compile(
     r"^object_reference_analysis: (COMPLETE|INCOMPLETE)$", re.MULTILINE
 )
 REPORT_MIGRATION_DUPLICATE_ANALYSIS = re.compile(
-    r"^migration_duplicate_analysis: (COMPLETE|INCOMPLETE)$", re.MULTILINE
+    r"^migration_duplicate_analysis: (CONSERVATIVE|INCOMPLETE)$", re.MULTILINE
 )
 REPORT_RESTORE_PLANNING_GATE = re.compile(
     r"^restore_planning_gate: (BLOCKED)$", re.MULTILINE
@@ -233,7 +233,7 @@ MAX_INSPECTOR_DIAGNOSTIC_BYTES = 4096
 MAX_OUTER_BYTES = 5_000_000_000
 MIN_WORKSPACE_OVERHEAD_BYTES = 256 * 1024 * 1024
 MAX_REPORT_BYTES = 128 * 1024 * 1024
-PROVENANCE_FORMAT_VERSION = 5
+PROVENANCE_FORMAT_VERSION = 6
 DURABLE_EVIDENCE_DIRECTORY = "migration-inspection-evidence"
 
 
@@ -298,6 +298,42 @@ class BoundCanonical:
         if self.root_fd >= 0:
             os.close(self.root_fd)
             self.root_fd = -1
+
+
+@dataclass(frozen=True)
+class PublicationExpectations:
+    """Immutable live-runtime truth that durable evidence must reproduce."""
+
+    run_id: str
+    run_kind: str
+    evidence_profile: str
+    timeline_status: str
+    timeline_sha256: str
+    source_name: str
+    source_ref: str
+    configured_project_ref: str
+    ui_export_object_name: str
+    operator_identity: str
+    preflight_identities: tuple[tuple[str, str], ...]
+    approved_root: str
+    owner_uid: int
+    canonical_mode: str
+    canonical_filename: str
+    canonical_size_bytes: int
+    canonical_sha256: str
+    root_device: int
+    root_inode: int
+    canonical_device: int
+    canonical_inode: int
+    admitted_bound: BoundCanonical
+    outer_format: str
+    normalized_member_name: str | None
+    envelope_metadata_sha256: str
+    inner_size_bytes: int
+    inner_sha256: str
+    pgdmp_header_sha256: str
+    report_sha256: str
+    analysis_sha256: str
 
 
 def required_environment(name: str) -> str:
@@ -1859,6 +1895,245 @@ def validate_provenance_payload_bindings(
         raise WorkflowError("inspection report PGDMP header binding disagrees")
 
 
+def build_publication_expectations(
+    *,
+    run_id: str,
+    run_kind: str,
+    evidence_profile: str,
+    timeline_status: str,
+    timeline: dict[str, Any],
+    source_name: str,
+    source_ref: str,
+    configured_project_ref: str,
+    ui_export_object_name: str,
+    operator_identity: str,
+    identities: dict[str, str],
+    bound: BoundCanonical,
+    normalization: dict[str, Any],
+    inner_size_bytes: int,
+    inner_sha256: str,
+    pgdmp_header: dict[str, Any],
+    report_sha256: str,
+    object_analysis: dict[str, Any],
+) -> PublicationExpectations:
+    """Freeze runtime truth before retained sidecars/provenance are constructed."""
+
+    if set(identities) != PREFLIGHT_IDENTITY_KEYS:
+        raise WorkflowError("publication runtime identities differ from the reviewed set")
+    if source_ref != configured_project_ref:
+        raise WorkflowError("publication runtime project binding disagrees")
+    root_metadata = os.fstat(bound.root_fd)
+    file_metadata = os.fstat(bound.file_fd)
+    normalization = validate_normalization(
+        normalization,
+        bound.observed_sha256,
+        bound.size,
+    )
+    outer_format = normalization["outer"]["format"]
+    normalized_member_name = (
+        normalization["member"]["name"]
+        if normalization["envelope_kind"] == "zip"
+        else None
+    )
+    envelope_projection = {
+        "outer_format": outer_format,
+        "zip_envelope": normalization["outer"].get("zip"),
+        "archive_member": normalization.get("member"),
+        "normalized_member_name": normalized_member_name,
+    }
+    envelope_bytes = json.dumps(
+        envelope_projection,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    if (
+        root_metadata.st_uid != bound.owner_uid
+        or file_metadata.st_uid != bound.owner_uid
+    ):
+        raise WorkflowError("publication runtime ownership binding disagrees")
+    timeline_bytes = json.dumps(
+        timeline,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    header_bytes = json.dumps(
+        pgdmp_header,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    analysis_bytes = json.dumps(
+        object_analysis,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    if (
+        outer_format not in {"zip", "postgresql_custom_archive"}
+        or not isinstance(inner_size_bytes, int)
+        or isinstance(inner_size_bytes, bool)
+        or inner_size_bytes <= 0
+        or HEX64.fullmatch(inner_sha256) is None
+        or HEX64.fullmatch(report_sha256) is None
+        or validate_provenance_object_analysis(object_analysis) != object_analysis
+    ):
+        raise WorkflowError("publication runtime inspection identity is invalid")
+    return PublicationExpectations(
+        run_id=run_id,
+        run_kind=run_kind,
+        evidence_profile=evidence_profile,
+        timeline_status=timeline_status,
+        timeline_sha256=sha256_bytes(timeline_bytes),
+        source_name=source_name,
+        source_ref=source_ref,
+        configured_project_ref=configured_project_ref,
+        ui_export_object_name=ui_export_object_name,
+        operator_identity=operator_identity,
+        preflight_identities=tuple(sorted(identities.items())),
+        approved_root=str(bound.root),
+        owner_uid=bound.owner_uid,
+        canonical_mode=f"{bound.mode:04o}",
+        canonical_filename=bound.path.name,
+        canonical_size_bytes=bound.size,
+        canonical_sha256=bound.observed_sha256,
+        root_device=bound.root_device,
+        root_inode=bound.root_inode,
+        canonical_device=bound.device,
+        canonical_inode=bound.inode,
+        admitted_bound=bound,
+        outer_format=outer_format,
+        normalized_member_name=normalized_member_name,
+        envelope_metadata_sha256=sha256_bytes(envelope_bytes),
+        inner_size_bytes=inner_size_bytes,
+        inner_sha256=inner_sha256,
+        pgdmp_header_sha256=sha256_bytes(header_bytes),
+        report_sha256=report_sha256,
+        analysis_sha256=sha256_bytes(analysis_bytes),
+    )
+
+
+def validate_publication_runtime_bound(
+    expectations: PublicationExpectations,
+    bound: BoundCanonical,
+) -> None:
+    """Prove the immutable expectation still describes the admitted descriptor."""
+
+    verify_bound_canonical(bound)
+    if (
+        expectations.approved_root != str(bound.root)
+        or expectations.owner_uid != bound.owner_uid
+        or expectations.canonical_mode != f"{bound.mode:04o}"
+        or expectations.canonical_filename != bound.path.name
+        or expectations.canonical_size_bytes != bound.size
+        or expectations.canonical_sha256 != bound.observed_sha256
+        or expectations.root_device != bound.root_device
+        or expectations.root_inode != bound.root_inode
+        or expectations.canonical_device != bound.device
+        or expectations.canonical_inode != bound.inode
+        or expectations.admitted_bound is not bound
+    ):
+        raise WorkflowError("publication expectation does not match canonical runtime truth")
+
+
+def validate_provenance_against_publication_expectations(
+    provenance: dict[str, Any],
+    expectations: PublicationExpectations,
+) -> None:
+    """Reject coherent evidence substitution using independent runtime truth."""
+
+    identities = dict(expectations.preflight_identities)
+    if (
+        set(identities) != PREFLIGHT_IDENTITY_KEYS
+        or any(provenance[key] != value for key, value in identities.items())
+    ):
+        raise WorkflowError("provenance execution identity differs from runtime truth")
+    timeline_bytes = json.dumps(
+        provenance["export_timeline"],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    source = provenance["lovable_source_project"]
+    repository_binding = source["repository_binding"]
+    evidence_store = provenance["evidence_store"]
+    outer = provenance["outer_artifact"]
+    expected = outer["expected_identity"]
+    observed = outer["workflow_observed_identity"]
+    normalizer = outer["normalizer_sha256"]
+    member_binding = provenance["ui_member_binding"]
+    inner = provenance["inner_pgdmp"]
+    header_bytes = json.dumps(
+        inner["pgdmp_header"],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    analysis = {
+        key: provenance[key] for key in PROVENANCE_ANALYSIS_KEYS
+    }
+    analysis_bytes = json.dumps(
+        analysis,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    envelope_projection = {
+        "outer_format": outer["format"],
+        "zip_envelope": provenance["zip_envelope"],
+        "archive_member": provenance["archive_member"],
+        "normalized_member_name": member_binding["normalized_member_name"],
+    }
+    envelope_bytes = json.dumps(
+        envelope_projection,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    if (
+        provenance["run_id"] != expectations.run_id
+        or provenance["run_kind"] != expectations.run_kind
+        or provenance["export_evidence_profile"] != expectations.evidence_profile
+        or provenance["export_timeline_status"] != expectations.timeline_status
+        or sha256_bytes(timeline_bytes) != expectations.timeline_sha256
+        or source["name"] != expectations.source_name
+        or source["ref"] != expectations.source_ref
+        or repository_binding["declared_project_id"]
+        != expectations.configured_project_ref
+        or outer["ui_observed_export_object_name"]
+        != expectations.ui_export_object_name
+        or member_binding["ui_observed_name"]
+        != expectations.ui_export_object_name
+        or provenance["operator_identity"] != expectations.operator_identity
+        or evidence_store["approved_root"] != expectations.approved_root
+        or evidence_store["root_owner_uid"] != expectations.owner_uid
+        or evidence_store["canonical_owner_uid"] != expectations.owner_uid
+        or evidence_store["canonical_mode"] != expectations.canonical_mode
+        or expected["original_filename"] != expectations.canonical_filename
+        or observed["original_filename"] != expectations.canonical_filename
+        or expected["size_bytes"] != expectations.canonical_size_bytes
+        or observed["size_bytes_before"] != expectations.canonical_size_bytes
+        or observed["size_bytes_after"] != expectations.canonical_size_bytes
+        or expected["sha256"] != expectations.canonical_sha256
+        or observed["sha256_before"] != expectations.canonical_sha256
+        or observed["sha256_after"] != expectations.canonical_sha256
+        or normalizer["before"] != expectations.canonical_sha256
+        or normalizer["after"] != expectations.canonical_sha256
+        or outer["format"] != expectations.outer_format
+        or member_binding["normalized_member_name"]
+        != expectations.normalized_member_name
+        or sha256_bytes(envelope_bytes) != expectations.envelope_metadata_sha256
+        or inner["size_bytes"] != expectations.inner_size_bytes
+        or inner["sha256"] != expectations.inner_sha256
+        or inner["inspector_reported_sha256"] != expectations.inner_sha256
+        or sha256_bytes(header_bytes) != expectations.pgdmp_header_sha256
+        or provenance["report"]["sha256"] != expectations.report_sha256
+        or sha256_bytes(analysis_bytes) != expectations.analysis_sha256
+    ):
+        raise WorkflowError("provenance publication binding differs from runtime truth")
+
+
 def evidence_file_identity(path: Path) -> dict[str, int | str]:
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
     flags |= getattr(os, "O_NOFOLLOW", 0)
@@ -2026,6 +2301,7 @@ def validate_evidence_tree_at(
     expected_run_id: str,
     *,
     require_completion_marker: bool = False,
+    publication_expectations: PublicationExpectations | None = None,
 ) -> dict[str, dict[str, int | str]]:
     """Validate the fixed durable payload without resolving its parent path."""
 
@@ -2105,6 +2381,11 @@ def validate_evidence_tree_at(
             or provenance.get("inspection_status") != "REVIEW_REQUIRED"
         ):
             raise WorkflowError("durable provenance run_id does not match its package")
+        if publication_expectations is not None:
+            validate_provenance_against_publication_expectations(
+                provenance,
+                publication_expectations,
+            )
 
         def read_durable_relative(relative: str) -> bytes:
             if "/" in relative:
@@ -2178,6 +2459,8 @@ def build_evidence_file_manifest(pending: Path, run_id: str) -> None:
 def validate_evidence_tree(
     pending: Path,
     expected_run_id: str,
+    *,
+    publication_expectations: PublicationExpectations | None = None,
 ) -> dict[str, dict[str, int | str]]:
     root_metadata = pending.lstat()
     if (
@@ -2245,6 +2528,11 @@ def validate_evidence_tree(
         or provenance.get("inspection_status") != "REVIEW_REQUIRED"
     ):
         raise WorkflowError("provenance run_id does not match its package")
+    if publication_expectations is not None:
+        validate_provenance_against_publication_expectations(
+            provenance,
+            publication_expectations,
+        )
     validate_provenance_payload_bindings(
         provenance,
         identities,
@@ -2523,10 +2811,16 @@ def publish_durable_evidence(
     run_root: Path,
     bound: BoundCanonical,
     run_id: str,
+    publication_expectations: PublicationExpectations,
 ) -> Path:
     """Copy, verify, fsync, and no-replace publish outside disposable Git space."""
 
-    source_identities = validate_evidence_tree(pending, run_id)
+    validate_publication_runtime_bound(publication_expectations, bound)
+    source_identities = validate_evidence_tree(
+        pending,
+        run_id,
+        publication_expectations=publication_expectations,
+    )
     parent, parent_fd = prepare_durable_parent(bound)
     staging_name = f".{run_id}.pending"
     final_name = run_id
@@ -2577,10 +2871,20 @@ def publish_durable_evidence(
         finally:
             for descriptor in child_fds.values():
                 os.close(descriptor)
-        source_identities_after_copy = validate_evidence_tree(pending, run_id)
+        validate_publication_runtime_bound(publication_expectations, bound)
+        source_identities_after_copy = validate_evidence_tree(
+            pending,
+            run_id,
+            publication_expectations=publication_expectations,
+        )
         if source_identities_after_copy != source_identities:
             raise WorkflowError("publication source changed while evidence was copied")
-        destination_identities = validate_evidence_tree_at(staging_fd, run_id)
+        validate_publication_runtime_bound(publication_expectations, bound)
+        destination_identities = validate_evidence_tree_at(
+            staging_fd,
+            run_id,
+            publication_expectations=publication_expectations,
+        )
         if destination_identities != source_identities:
             raise WorkflowError("durable evidence copy identity mismatch")
         os.fsync(staging_fd)
@@ -2590,6 +2894,7 @@ def publish_durable_evidence(
         # Disposable archive bytes are removed before the durable commit gate.
         remove_incomplete_run(run_root)
         verify_bound_canonical(bound)
+        validate_publication_runtime_bound(publication_expectations, bound)
         parent_metadata = validate_owned_private_directory_descriptor(
             parent_fd,
             label="durable evidence parent",
@@ -2605,7 +2910,14 @@ def publish_durable_evidence(
             root_relative_parent.st_ino,
         ):
             raise WorkflowError("durable evidence parent binding changed before publication")
-        if validate_evidence_tree_at(staging_fd, run_id) != source_identities:
+        if (
+            validate_evidence_tree_at(
+                staging_fd,
+                run_id,
+                publication_expectations=publication_expectations,
+            )
+            != source_identities
+        ):
             raise WorkflowError("durable evidence staging identity changed before publication")
 
         manifest_sha = source_identities["evidence-files.json"]["sha256"]
@@ -2629,11 +2941,16 @@ def publish_durable_evidence(
             )
         try:
             if (
-                validate_evidence_tree_at(staging_fd, run_id)
+                validate_evidence_tree_at(
+                    staging_fd,
+                    run_id,
+                    publication_expectations=publication_expectations,
+                )
                 != source_identities
             ):
                 raise WorkflowError("published durable evidence identity mismatch")
             verify_bound_canonical(bound)
+            validate_publication_runtime_bound(publication_expectations, bound)
             final_parent_metadata = validate_owned_private_directory_descriptor(
                 parent_fd,
                 label="durable evidence parent",
@@ -2661,6 +2978,7 @@ def publish_durable_evidence(
                     staging_fd,
                     run_id,
                     require_completion_marker=True,
+                    publication_expectations=publication_expectations,
                 )
                 != source_identities
             ):
@@ -2981,14 +3299,16 @@ def parse_report_object_analysis(report_text: str) -> dict[str, Any]:
     ):
         raise WorkflowError("inspector report unresolved-object counts disagree")
     expected_object_status = "COMPLETE" if unresolved_total == 0 else "INCOMPLETE"
+    expected_duplicate_status = (
+        "CONSERVATIVE" if expected_object_status == "COMPLETE" else "INCOMPLETE"
+    )
     if (
         object_status != expected_object_status
-        or duplicate_status not in {"COMPLETE", "INCOMPLETE"}
-        or (object_status == "INCOMPLETE" and duplicate_status != "INCOMPLETE")
+        or duplicate_status != expected_duplicate_status
         or restore_gate != "BLOCKED"
     ):
         raise WorkflowError("inspector report object-analysis gate matrix is invalid")
-    if object_status == "INCOMPLETE" or duplicate_status == "INCOMPLETE":
+    if object_status == "INCOMPLETE":
         _validate_incomplete_report_lines(
             report_text,
             lines,
@@ -3038,15 +3358,14 @@ def validate_provenance_object_analysis(provenance: Any) -> dict[str, Any]:
     ):
         raise WorkflowError("evidence provenance has an invalid unresolved total")
     expected_object_status = "COMPLETE" if total == 0 else "INCOMPLETE"
+    expected_duplicate_status = (
+        "CONSERVATIVE" if expected_object_status == "COMPLETE" else "INCOMPLETE"
+    )
     if (
         sum(counts.values()) != total
         or analysis["object_reference_analysis"] != expected_object_status
         or not isinstance(analysis["migration_duplicate_analysis"], str)
-        or analysis["migration_duplicate_analysis"] not in {"COMPLETE", "INCOMPLETE"}
-        or (
-            analysis["object_reference_analysis"] == "INCOMPLETE"
-            and analysis["migration_duplicate_analysis"] != "INCOMPLETE"
-        )
+        or analysis["migration_duplicate_analysis"] != expected_duplicate_status
         or analysis["restore_planning_gate"] != "BLOCKED"
     ):
         raise WorkflowError("evidence provenance object-analysis gate matrix is invalid")
@@ -3512,11 +3831,6 @@ def inspect() -> Path:
             checksum_dir / "outer.workflow-observed.before.sha256"
         )
         observed_after_file = checksum_dir / "outer.workflow-observed.after.sha256"
-        write_exclusive(expected_sha_file, (expected_sha256 + "\n").encode("ascii"))
-        write_exclusive(
-            observed_before_file,
-            (bound.observed_sha256 + "\n").encode("ascii"),
-        )
 
         derived_dir = pending / ".derived"
         derived_dir.mkdir(mode=0o700)
@@ -3630,7 +3944,7 @@ def inspect() -> Path:
         report_lines = set(report_text.splitlines())
         if (
             object_analysis["object_reference_analysis"] == "COMPLETE"
-            and object_analysis["migration_duplicate_analysis"] == "COMPLETE"
+            and object_analysis["migration_duplicate_analysis"] == "CONSERVATIVE"
         ):
             required_report_lines.add("input_file: verified-inner.pgdmp")
         elif any(line.startswith("input_file:") for line in report_lines):
@@ -3664,20 +3978,45 @@ def inspect() -> Path:
         }
         if len(outer_hashes) != 1:
             raise WorkflowError("canonical or working outer artifact changed during inspection")
-        write_exclusive(
-            observed_after_file,
-            (canonical_sha_after + "\n").encode("ascii"),
-        )
-
         report_sha = file_sha256(report)
         report_sha_file = inspection_dir / "report.sha256"
-        write_exclusive(report_sha_file, (report_sha + "\n").encode("ascii"))
 
         identities_after_execution = preflight(repo)
         if identities_after_execution != identities:
             raise WorkflowError("execution provenance changed during inspection")
         if repository_project_id(repo) != configured_project_ref:
             raise WorkflowError("repository project binding changed during inspection")
+
+        publication_expectations = build_publication_expectations(
+            run_id=run_id,
+            run_kind=run_kind,
+            evidence_profile=evidence_profile,
+            timeline_status=timeline_status,
+            timeline=timeline,
+            source_name=source_name,
+            source_ref=source_ref,
+            configured_project_ref=configured_project_ref,
+            ui_export_object_name=ui_object_name,
+            operator_identity=operator,
+            identities=identities,
+            bound=bound,
+            normalization=normalization,
+            inner_size_bytes=inner_size,
+            inner_sha256=inner_sha,
+            pgdmp_header=header_metadata,
+            report_sha256=report_sha,
+            object_analysis=object_analysis,
+        )
+        write_exclusive(expected_sha_file, (expected_sha256 + "\n").encode("ascii"))
+        write_exclusive(
+            observed_before_file,
+            (bound.observed_sha256 + "\n").encode("ascii"),
+        )
+        write_exclusive(
+            observed_after_file,
+            (canonical_sha_after + "\n").encode("ascii"),
+        )
+        write_exclusive(report_sha_file, (report_sha + "\n").encode("ascii"))
 
         root_metadata = os.fstat(bound.root_fd)
         file_metadata = os.fstat(bound.file_fd)
@@ -3873,6 +4212,7 @@ def inspect() -> Path:
             run_root,
             bound,
             run_id,
+            publication_expectations,
         )
         completed = True
         print("inspection_status=REVIEW_REQUIRED")
