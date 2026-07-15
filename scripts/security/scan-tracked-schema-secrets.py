@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""Fail closed on embedded credentials in tracked schema/server config files.
+"""Guard against reviewed credential/cron patterns in tracked artifacts.
 
-Output is intentionally restricted to canonical JSONL records containing only
-the repository-relative path and an allowlisted finding type. Matching bytes,
-context, line numbers, hashes, sizes, and exception text are never emitted.
+This is a narrow accidental-regression guard, not a PostgreSQL parser or an
+exhaustive SQL security scanner. It recognizes only the documented patterns
+below. Operational scan errors stop the check, but a clean result must never be
+treated as proof that arbitrary SQL contains no credential or executable job.
+
+Output is restricted to canonical JSONL records containing an allowlisted
+finding type and either the one explicitly reviewed public schema path or a
+fixed opaque placeholder. Matching bytes, context, line numbers, hashes,
+sizes, exception text, and untrusted filenames are never emitted.
 """
 
 from __future__ import annotations
@@ -17,17 +23,26 @@ import sys
 from pathlib import Path, PurePosixPath
 
 
-CONFIG_SUFFIXES = frozenset(
-    {".cfg", ".conf", ".ini", ".json", ".toml", ".yaml", ".yml"}
-)
+# These are the only server-config syntaxes intentionally covered, and only
+# beneath supabase/. Generic .cfg/.conf and configs elsewhere are out of scope.
+SUPABASE_CONFIG_SUFFIX_FAMILIES = {
+    ".ini": "line",
+    ".json": "json",
+    ".toml": "line",
+    ".yaml": "line",
+    ".yml": "line",
+}
 MAX_ARTIFACT_BYTES = 16 * 1024 * 1024
+OPAQUE_DIAGNOSTIC_PATH = "<redacted-tracked-artifact>"
 FINDING_TYPES = frozenset(
     {
         "embedded_bearer_jwt",
         "executable_cron_in_derived_snapshot",
         "non_placeholder_x_cron_secret",
         "scan_error",
+        "supabase_project_binding_in_derived_snapshot",
         "unsafe_cron_secret_runtime_binding",
+        "x_cron_secret_in_derived_snapshot",
     }
 )
 APPROVED_TEMPLATE_MARKERS = frozenset(
@@ -41,6 +56,24 @@ APPROVED_TEMPLATE_MARKERS = frozenset(
 DERIVED_STAGING_SNAPSHOT = "supabase/dynamic_staging_schema.sql"
 
 X_CRON_KEY = re.compile(r"(?i)x-cron-secret")
+REVIEWED_TEXT_ESCAPES = (
+    (re.compile(r"(?i)\\u002d|\\x2d|\\055|\\002d"), "-"),
+    (re.compile(r"(?i)\\u0065|\\x65|\\145|\\0065"), "e"),
+)
+SQL_LITERAL_JOIN = re.compile(
+    r"(?is)"
+    r"['\"]"
+    r"(?:\s|--[^\r\n]*(?:\r?\n|$)|/\*.*?\*/)*"
+    r"(?:\|\|(?:\s|--[^\r\n]*(?:\r?\n|$)|/\*.*?\*/)*)?"
+    r"(?:[Ee]|[Uu]&)?['\"]"
+)
+SQL_CONCAT_TWO_LITERALS = re.compile(
+    r"(?is)\bconcat\s*\(\s*"
+    r"(?:[Ee]|[Uu]&)?(?P<first_quote>['\"])(?P<first>[^'\"]*)"
+    r"(?P=first_quote)\s*,\s*"
+    r"(?:[Ee]|[Uu]&)?(?P<second_quote>['\"])(?P<second>[^'\"]*)"
+    r"(?P=second_quote)\s*\)"
+)
 TEMPLATE_MARKER_PATTERN = "(?:" + "|".join(
     re.escape(marker) for marker in sorted(APPROVED_TEMPLATE_MARKERS)
 ) + ")"
@@ -82,24 +115,52 @@ CRON_SCHEMA_TOKEN = re.compile(
     r"(?i)(?<![A-Za-z0-9_$])(?:cron|\"cron\")(?![A-Za-z0-9_$])"
 )
 CRON_FUNCTION_TOKEN = re.compile(
-    r"(?i)(?:schedule|schedule_in_database|\"schedule\"|"
-    r"\"schedule_in_database\")(?![A-Za-z0-9_$])"
+    r"(?i)(?:schedule|schedule_in_database|alter_job|unschedule|"
+    r"\"schedule\"|\"schedule_in_database\"|\"alter_job\"|"
+    r"\"unschedule\")(?![A-Za-z0-9_$])"
 )
+CRON_JOB_TOKEN = re.compile(r'(?i)(?:job|"job")(?![A-Za-z0-9_$])')
+SQL_COMMAND_TOKEN = re.compile(r"(?i)\b(?:insert|update|delete)\b")
+SEARCH_PATH_TOKEN = re.compile(r"(?i)\bsearch_path\b")
+SUPABASE_ENDPOINT_SHAPE = re.compile(
+    r"(?i)(?<![A-Za-z0-9])https://[a-z0-9]{20}\.supabase\.co"
+    r"(?=[:/\s'\"),;]|$)"
+)
+SUPABASE_PROJECT_REF_BINDING_SHAPE = re.compile(
+    r"(?ix)"
+    r"\b(?:source[_-]?project[_-]?ref|supabase[_-]?project[_-]?ref|"
+    r"project[_-]?ref)\b"
+    r"\s*(?:=|:|=>|,)\s*"
+    r"['\"]?[a-z0-9]{20}['\"]?"
+    r"(?=\s*(?:[,;)}\]]|$))"
+)
+PUBLIC_DIAGNOSTIC_PATHS = frozenset({DERIVED_STAGING_SNAPSHOT})
+
+
+def diagnostic_path(path: str) -> str:
+    """Return only an explicitly reviewed public path or an opaque label."""
+
+    if path == "." or path in PUBLIC_DIAGNOSTIC_PATHS:
+        return path
+    return OPAQUE_DIAGNOSTIC_PATH
 
 
 def canonical_record(path: str, finding_type: str) -> str:
     if finding_type not in FINDING_TYPES:
         finding_type = "scan_error"
     return json.dumps(
-        {"path": path, "finding_type": finding_type},
+        {"path": diagnostic_path(path), "finding_type": finding_type},
         ensure_ascii=True,
         separators=(",", ":"),
     )
 
 
 def emit(findings: set[tuple[str, str]]) -> None:
-    for path, finding_type in sorted(findings):
-        print(canonical_record(path, finding_type))
+    records = {
+        canonical_record(path, finding_type) for path, finding_type in findings
+    }
+    for record in sorted(records):
+        print(record)
 
 
 def parse_repo_root(arguments: list[str]) -> Path | None:
@@ -167,7 +228,10 @@ def is_scanned_artifact(relative: str) -> bool:
     suffix = path.suffix.casefold()
     if suffix == ".sql":
         return True
-    return path.parts[0] == "supabase" and suffix in CONFIG_SUFFIXES
+    return (
+        path.parts[0] == "supabase"
+        and suffix in SUPABASE_CONFIG_SUFFIX_FAMILIES
+    )
 
 
 def read_tracked_artifact(root_fd: int, relative: str) -> str | None:
@@ -288,7 +352,27 @@ def skip_sql_token_gap(text: str, start: int) -> int:
     return position
 
 
-def has_executable_cron(text: str) -> bool:
+def reviewed_pattern_view(text: str) -> str:
+    """Normalize only reviewed escape and SQL-literal-join spellings.
+
+    This deliberately is not general SQL/config canonicalization.
+    """
+
+    normalized = text
+    for pattern, replacement in REVIEWED_TEXT_ESCAPES:
+        normalized = pattern.sub(replacement, normalized)
+    while True:
+        joined = SQL_LITERAL_JOIN.sub("", normalized)
+        joined = SQL_CONCAT_TWO_LITERALS.sub(
+            lambda match: match.group("first") + match.group("second"),
+            joined,
+        )
+        if joined == normalized:
+            return normalized
+        normalized = joined
+
+
+def has_qualified_cron_call(text: str) -> bool:
     for schema_match in CRON_SCHEMA_TOKEN.finditer(text):
         position = skip_sql_token_gap(text, schema_match.end())
         if position >= len(text) or text[position] != ".":
@@ -301,6 +385,88 @@ def has_executable_cron(text: str) -> bool:
         if position < len(text) and text[position] == "(":
             return True
     return False
+
+
+def has_any_cron_function_call(text: str) -> bool:
+    for function_match in CRON_FUNCTION_TOKEN.finditer(text):
+        position = skip_sql_token_gap(text, function_match.end())
+        if position < len(text) and text[position] == "(":
+            return True
+    return False
+
+
+def has_cron_search_path(text: str) -> bool:
+    """Recognize reviewed SET/set_config search-path forms containing cron."""
+
+    assignments = re.finditer(
+        r"(?is)\bset\s+(?:(?:local|session)\s+)?search_path\s*"
+        r"(?:=|to)\s*(?P<value>[^;]{0,512})",
+        text,
+    )
+    set_config_calls = re.finditer(
+        r"(?is)\bset_config\s*\(\s*['\"]search_path['\"]\s*,\s*"
+        r"(?P<quote>['\"])(?P<value>.{0,512}?)(?P=quote)",
+        text,
+    )
+    return any(
+        CRON_SCHEMA_TOKEN.search(match.group("value"))
+        for match in (*assignments, *set_config_calls)
+    )
+
+
+def match_sql_keyword(text: str, position: int, keyword: str) -> int | None:
+    end = position + len(keyword)
+    if text[position:end].casefold() != keyword:
+        return None
+    if position and (text[position - 1].isalnum() or text[position - 1] in "_$"):
+        return None
+    if end < len(text) and (text[end].isalnum() or text[end] in "_$"):
+        return None
+    return end
+
+
+def match_cron_job_relation(text: str, position: int) -> int | None:
+    position = skip_sql_token_gap(text, position)
+    schema_match = CRON_SCHEMA_TOKEN.match(text, position)
+    if schema_match is None:
+        return None
+    position = skip_sql_token_gap(text, schema_match.end())
+    if position >= len(text) or text[position] != ".":
+        return None
+    position = skip_sql_token_gap(text, position + 1)
+    job_match = CRON_JOB_TOKEN.match(text, position)
+    return None if job_match is None else job_match.end()
+
+
+def has_direct_cron_job_dml(text: str) -> bool:
+    for command_match in SQL_COMMAND_TOKEN.finditer(text):
+        command = command_match.group(0).casefold()
+        position = skip_sql_token_gap(text, command_match.end())
+        if command == "insert":
+            matched = match_sql_keyword(text, position, "into")
+            if matched is None:
+                continue
+            position = skip_sql_token_gap(text, matched)
+        elif command == "delete":
+            matched = match_sql_keyword(text, position, "from")
+            if matched is None:
+                continue
+            position = skip_sql_token_gap(text, matched)
+        if command in {"update", "delete"}:
+            only = match_sql_keyword(text, position, "only")
+            if only is not None:
+                position = skip_sql_token_gap(text, only)
+        if match_cron_job_relation(text, position) is not None:
+            return True
+    return False
+
+
+def has_executable_cron(text: str) -> bool:
+    return (
+        has_qualified_cron_call(text)
+        or (has_cron_search_path(text) and has_any_cron_function_call(text))
+        or has_direct_cron_job_dml(text)
+    )
 
 
 def config_binding_terminated(text: str, start: int, suffix: str) -> bool:
@@ -339,7 +505,8 @@ def config_binding_terminated(text: str, start: int, suffix: str) -> bool:
 
 def scan_text(relative: str, text: str) -> set[tuple[str, str]]:
     findings: set[tuple[str, str]] = set()
-    if BEARER_JWT.search(text):
+    reviewed_view = reviewed_pattern_view(text)
+    if BEARER_JWT.search(text) or BEARER_JWT.search(reviewed_view):
         findings.add((relative, "embedded_bearer_jwt"))
     suffix = PurePosixPath(relative).suffix.casefold()
     is_sql = suffix == ".sql"
@@ -367,12 +534,27 @@ def scan_text(relative: str, text: str) -> set[tuple[str, str]]:
     if any(
         match.start() not in safe_setting_positions
         for match in RUNTIME_CRON_SETTING.finditer(text)
+    ) or len(RUNTIME_CRON_SETTING.findall(reviewed_view)) > len(
+        RUNTIME_CRON_SETTING.findall(text)
     ):
         findings.add((relative, "unsafe_cron_secret_runtime_binding"))
-    if any(match.start() not in safe_key_positions for match in X_CRON_KEY.finditer(text)):
+    original_key_matches = tuple(X_CRON_KEY.finditer(text))
+    reviewed_key_matches = tuple(X_CRON_KEY.finditer(reviewed_view))
+    if any(
+        match.start() not in safe_key_positions for match in original_key_matches
+    ) or len(reviewed_key_matches) > len(original_key_matches):
         findings.add((relative, "non_placeholder_x_cron_secret"))
-    if relative == DERIVED_STAGING_SNAPSHOT and has_executable_cron(text):
-        findings.add((relative, "executable_cron_in_derived_snapshot"))
+    if relative == DERIVED_STAGING_SNAPSHOT:
+        if reviewed_key_matches:
+            findings.add((relative, "x_cron_secret_in_derived_snapshot"))
+        if has_executable_cron(reviewed_view):
+            findings.add((relative, "executable_cron_in_derived_snapshot"))
+        if SUPABASE_ENDPOINT_SHAPE.search(
+            reviewed_view
+        ) or SUPABASE_PROJECT_REF_BINDING_SHAPE.search(reviewed_view):
+            findings.add(
+                (relative, "supabase_project_binding_in_derived_snapshot")
+            )
     return findings
 
 

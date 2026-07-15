@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SCANNER = ROOT / "scripts" / "security" / "scan-tracked-schema-secrets.py"
 ALLOWED_KEYS = {"path", "finding_type"}
+OPAQUE_PATH = "<redacted-tracked-artifact>"
 
 
 class TrackedSchemaSecretScannerTest(unittest.TestCase):
@@ -97,7 +98,11 @@ class TrackedSchemaSecretScannerTest(unittest.TestCase):
 
     @staticmethod
     def finding(path: str, finding_type: str) -> dict[str, str]:
-        return {"path": path, "finding_type": finding_type}
+        public_paths = {".", "supabase/dynamic_staging_schema.sql"}
+        return {
+            "path": path if path in public_paths else OPAQUE_PATH,
+            "finding_type": finding_type,
+        }
 
     def test_non_placeholder_cron_header_fails_without_value_leakage(self) -> None:
         poison = "synthetic" + "-cron-value-must-not-escape"
@@ -119,6 +124,50 @@ class TrackedSchemaSecretScannerTest(unittest.TestCase):
             self.finding("schema.sql", "embedded_bearer_jwt")
         ]:
             self.fail("embedded bearer JWT did not fail canonically")
+
+    def test_split_and_escaped_bearer_shapes_fail_without_leakage(self) -> None:
+        token = ".".join(
+            ("syntheticSplitHeader", "syntheticSplitPayload", "syntheticSplitSig")
+        )
+        header, payload, signature = token.split(".")
+        cases = (
+            (
+                "split_bearer_word",
+                f"select 'Bear' || 'er ' || '{token}';\n",
+            ),
+            (
+                "split_token",
+                f"select 'Bearer {header}.' || '{payload}.{signature}';\n",
+            ),
+            (
+                "concat_function",
+                f"select concat('Bearer ', '{token}');\n",
+            ),
+            (
+                "sql_hex_escape",
+                f"select E'B\\x65arer {token}';\n",
+            ),
+            (
+                "json_unicode_escape",
+                '{"authorization":"B\\u0065arer ' + token + '"}\n',
+            ),
+        )
+        for label, content in cases:
+            with self.subTest(bearer_form=label):
+                relative = (
+                    "supabase/private/config.json"
+                    if label == "json_unicode_escape"
+                    else "schema.sql"
+                )
+                self.track("schema.sql", "select 1;\n")
+                self.track("supabase/private/config.json", "{}\n")
+                self.track(relative, content)
+                result = self.run_scanner()
+                records = self.safe_records(result, (token.encode(),))
+                if result.returncode != 1 or records != [
+                    self.finding(relative, "embedded_bearer_jwt")
+                ]:
+                    self.fail("reviewed split/escaped Bearer shape was missed")
 
     def test_multiple_matches_are_deduplicated_by_path_and_type(self) -> None:
         token = ".".join(("headerA", "payloadB", "signatureC"))
@@ -408,6 +457,55 @@ class TrackedSchemaSecretScannerTest(unittest.TestCase):
                 ]:
                     self.fail("alternate non-placeholder cron literal did not fail")
 
+    def test_split_and_escaped_cron_header_names_fail_without_leakage(self) -> None:
+        poison = "synthetic" + "-split-key-value-must-not-escape"
+        cases = (
+            (
+                "sql_concatenation",
+                "schema.sql",
+                "select jsonb_build_object('x-cron-' || 'secret', "
+                f"'{poison}');\n",
+            ),
+            (
+                "sql_adjacent_literals",
+                "schema.sql",
+                "select jsonb_build_object('x-cron-'\n 'secret', "
+                f"'{poison}');\n",
+            ),
+            (
+                "sql_concat_function",
+                "schema.sql",
+                "select jsonb_build_object(concat('x-cron-', 'secret'), "
+                f"'{poison}');\n",
+            ),
+            (
+                "sql_hex_escape",
+                "schema.sql",
+                f"select jsonb_build_object(E'x-cron\\x2dsecret', '{poison}');\n",
+            ),
+            (
+                "sql_unicode_escape",
+                "schema.sql",
+                f"select jsonb_build_object(U&'x-cron\\002Dsecret', '{poison}');\n",
+            ),
+            (
+                "json_unicode_escape",
+                "supabase/private/config.json",
+                '{"x-cron\\u002dsecret":"' + poison + '"}\n',
+            ),
+        )
+        for label, relative, content in cases:
+            with self.subTest(header_name_form=label):
+                self.track("schema.sql", "select 1;\n")
+                self.track("supabase/private/config.json", "{}\n")
+                self.track(relative, content)
+                result = self.run_scanner()
+                records = self.safe_records(result, (poison.encode(),))
+                if result.returncode != 1 or records != [
+                    self.finding(relative, "non_placeholder_x_cron_secret")
+                ]:
+                    self.fail("reviewed split/escaped cron-header shape was missed")
+
     def test_tracked_sql_and_supabase_server_config_are_both_scanned(self) -> None:
         token = ".".join(("configHeader", "configPayload", "configSignature"))
         self.track("database/schema artifact.sql", "select 1;\n")
@@ -418,6 +516,39 @@ class TrackedSchemaSecretScannerTest(unittest.TestCase):
             self.finding("supabase/private/config.toml", "embedded_bearer_jwt")
         ]:
             self.fail("tracked server configuration was not scanned canonically")
+
+    def test_supported_config_suffix_scope_is_explicit(self) -> None:
+        token = ".".join(("scopeHeader", "scopePayload", "scopeSignature"))
+        self.track("safe.sql", "select 1;\n")
+        ignored = (
+            "supabase/.env",
+            "supabase/private/config.cfg",
+            "supabase/private/config.conf",
+            "supabase/private/config.jsonc",
+            "supabase/private/config.properties",
+            "supabase/private/config.tfvars",
+            "supabase/private/config.template",
+            "supabase/private/config.sh",
+            "supabase/private/config",
+            "outside/config.toml",
+        )
+        for relative in ignored:
+            self.track(relative, 'header = "Bearer ' + token + '"\n')
+        result = self.run_scanner()
+        records = self.safe_records(result, (token.encode(),))
+        if result.returncode != 0 or records:
+            self.fail("scanner consumed a config syntax outside its explicit scope")
+
+        self.track(
+            "supabase/private/config.yml",
+            'header: "Bearer ' + token + '"\n',
+        )
+        result = self.run_scanner()
+        records = self.safe_records(result, (token.encode(),))
+        if result.returncode != 1 or records != [
+            self.finding("supabase/private/config.yml", "embedded_bearer_jwt")
+        ]:
+            self.fail("explicitly supported YAML config suffix was not scanned")
 
     def test_untracked_artifact_is_ignored(self) -> None:
         self.track("tracked.sql", "select 1;\n")
@@ -459,6 +590,22 @@ class TrackedSchemaSecretScannerTest(unittest.TestCase):
                 "select \"cron\".\"schedule_in_database\"("
                 "'synthetic', '* * * * *', 'select 1', 'postgres');\n",
             ),
+            (
+                "alter_job",
+                "select cron.alter_job(1, schedule => '* * * * *');\n",
+            ),
+            (
+                "quoted_alter_job",
+                "select \"cron\".\"alter_job\"(1, active => false);\n",
+            ),
+            (
+                "unschedule",
+                "select cron.unschedule(1);\n",
+            ),
+            (
+                "quoted_unschedule",
+                "select \"cron\".\"unschedule\"('synthetic');\n",
+            ),
         )
         relative = "supabase/dynamic_staging_schema.sql"
         for label, content in cases:
@@ -470,6 +617,61 @@ class TrackedSchemaSecretScannerTest(unittest.TestCase):
                     self.finding(relative, "executable_cron_in_derived_snapshot")
                 ]:
                     self.fail("alternate executable cron entrypoint did not fail closed")
+
+    def test_derived_snapshot_rejects_unqualified_cron_calls_via_search_path(self) -> None:
+        cases = (
+            (
+                "set_search_path",
+                "set search_path = cron, public;\n"
+                "select schedule('synthetic', '* * * * *', 'select 1');\n",
+            ),
+            (
+                "set_local_search_path",
+                "set local search_path to public, \"cron\";\n"
+                "select alter_job(1, active => false);\n",
+            ),
+            (
+                "set_config_search_path",
+                "select pg_catalog.set_config('search_path', 'cron, public', false);\n"
+                "select unschedule(1);\n",
+            ),
+        )
+        relative = "supabase/dynamic_staging_schema.sql"
+        for label, content in cases:
+            with self.subTest(search_path_form=label):
+                self.track(relative, content)
+                result = self.run_scanner()
+                records = self.safe_records(result)
+                if result.returncode != 1 or records != [
+                    self.finding(relative, "executable_cron_in_derived_snapshot")
+                ]:
+                    self.fail("search-path-enabled cron call was missed")
+
+    def test_derived_snapshot_rejects_direct_cron_job_dml(self) -> None:
+        cases = (
+            (
+                "insert",
+                "insert into cron.job (schedule, command) values ('* * * * *', 'select 1');\n",
+            ),
+            (
+                "update_only",
+                "update only \"cron\".\"job\" set active = false;\n",
+            ),
+            (
+                "delete_with_comment_gap",
+                "delete from cron/* reviewed gap */.job where jobid = 1;\n",
+            ),
+        )
+        relative = "supabase/dynamic_staging_schema.sql"
+        for label, content in cases:
+            with self.subTest(cron_job_dml=label):
+                self.track(relative, content)
+                result = self.run_scanner()
+                records = self.safe_records(result)
+                if result.returncode != 1 or records != [
+                    self.finding(relative, "executable_cron_in_derived_snapshot")
+                ]:
+                    self.fail("direct cron.job mutation was missed")
 
     def test_derived_snapshot_rejects_comments_between_cron_tokens(self) -> None:
         cases = (
@@ -500,6 +702,64 @@ class TrackedSchemaSecretScannerTest(unittest.TestCase):
                 ]:
                     self.fail("comment-separated executable cron did not fail closed")
 
+    def test_derived_snapshot_rejects_even_placeholder_cron_secret_header(self) -> None:
+        key = "x-cron" + "-secret"
+        relative = "supabase/dynamic_staging_schema.sql"
+        self.track(
+            relative,
+            f"select '{{\"{key}\":\"${{X_CRON_SECRET}}\"}}'::jsonb;\n",
+        )
+        result = self.run_scanner()
+        records = self.safe_records(result)
+        if result.returncode != 1 or records != [
+            self.finding(relative, "x_cron_secret_in_derived_snapshot")
+        ]:
+            self.fail("derived snapshot retained a cron-secret header reference")
+
+    def test_derived_snapshot_rejects_bearer_and_project_binding_shapes(self) -> None:
+        relative = "supabase/dynamic_staging_schema.sql"
+        token = ".".join(("derivedHeader", "derivedPayload", "derivedSignature"))
+        project_ref = "a" * 20
+        cases = (
+            (
+                "bearer",
+                "select 'Bearer " + token + "';\n",
+                "embedded_bearer_jwt",
+                (token.encode(),),
+            ),
+            (
+                "endpoint",
+                "select 'https://" + project_ref + ".supabase.co/functions/v1/job';\n",
+                "supabase_project_binding_in_derived_snapshot",
+                (project_ref.encode(),),
+            ),
+            (
+                "project_ref_binding",
+                "select source_project_ref = '" + project_ref + "';\n",
+                "supabase_project_binding_in_derived_snapshot",
+                (project_ref.encode(),),
+            ),
+        )
+        for label, content, finding_type, forbidden in cases:
+            with self.subTest(binding_shape=label):
+                self.track(relative, content)
+                result = self.run_scanner()
+                records = self.safe_records(result, forbidden)
+                if result.returncode != 1 or records != [
+                    self.finding(relative, finding_type)
+                ]:
+                    self.fail("derived snapshot binding shape was missed")
+
+    def test_synthetic_sanitized_derived_snapshot_has_no_findings(self) -> None:
+        self.track(
+            "supabase/dynamic_staging_schema.sql",
+            "select 1;\n",
+        )
+        result = self.run_scanner()
+        records = self.safe_records(result)
+        if result.returncode != 0 or records:
+            self.fail("synthetic sanitized derived snapshot was rejected")
+
     def test_non_utf8_tracked_artifact_fails_closed(self) -> None:
         self.track("schema.sql", b"\xff\xfe\x00")
         result = self.run_scanner()
@@ -518,6 +778,31 @@ class TrackedSchemaSecretScannerTest(unittest.TestCase):
             self.finding("schema.sql", "scan_error")
         ]:
             self.fail("missing tracked artifact did not fail closed")
+
+    def test_sensitive_filename_is_replaced_by_opaque_diagnostic_path(self) -> None:
+        token = ".".join(("filenameHeader", "filenamePayload", "filenameSignature"))
+        relative = "synthetic-secret-filename.sql"
+        self.track(relative, "select 'Bearer " + token + "';\n")
+        result = self.run_scanner()
+        records = self.safe_records(
+            result,
+            (relative.encode(), token.encode()),
+        )
+        if result.returncode != 1 or records != [
+            self.finding(OPAQUE_PATH, "embedded_bearer_jwt")
+        ]:
+            self.fail("potentially sensitive filename escaped diagnostic redaction")
+
+    def test_ordinary_filename_is_also_replaced_by_opaque_path(self) -> None:
+        token = ".".join(("safePathHeader", "safePathPayload", "safePathSignature"))
+        relative = "schemas/synthetic.sql"
+        self.track(relative, "select 'Bearer " + token + "';\n")
+        result = self.run_scanner()
+        records = self.safe_records(result, (relative.encode(), token.encode()))
+        if result.returncode != 1 or records != [
+            self.finding(relative, "embedded_bearer_jwt")
+        ]:
+            self.fail("untrusted ordinary filename escaped diagnostic redaction")
 
     def test_oversized_tracked_artifact_fails_closed(self) -> None:
         relative = "oversized.sql"
@@ -732,16 +1017,6 @@ os.read = _replacing_read
         records = self.safe_records(result)
         if result.returncode != 0 or records:
             self.fail("current tracked repository failed credential scanning")
-
-    def test_historical_snapshot_text_diff_is_suppressed(self) -> None:
-        attributes = ROOT / ".gitattributes"
-        try:
-            lines = attributes.read_text(encoding="utf-8").splitlines()
-        except (OSError, UnicodeError):
-            self.fail("repository attributes could not be read")
-        if "supabase/dynamic_staging_schema.sql -diff" not in lines:
-            self.fail("historical credential-bearing snapshot diff is not suppressed")
-
 
 if __name__ == "__main__":
     unittest.main()

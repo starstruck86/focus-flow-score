@@ -1,14 +1,18 @@
 # Repository-local runtime migration inventory
 
-Scope: static repository inspection only on 2026-07-14. No remote Supabase/Lovable system, database, secret store, production endpoint, or data was queried or changed. Secret values are intentionally omitted. Repository paths and line numbers are the evidence boundary.
+Original inventory scope: static repository inspection on 2026-07-14 at
+`a21cd2dd90286633c08b99d83eb8a15cdf68c869`. No remote Supabase/Lovable
+system, database, secret store, production endpoint, or data was queried or
+changed during that inventory. Secret values are intentionally omitted.
+Repository paths and line numbers are its evidence boundary.
 
 ## Executive findings
 
 - There are 120 deployable Edge Function directories plus supabase/functions/_shared. Every deployable directory has index.ts.
 - supabase/config.toml records verify_jwt=true for 5 functions and false for 37. Three named sections omit verify_jwt, and 75 directories have no function section. Thus 78 functions have no explicit repository JWT boolean; the effective deployed setting is not repository-provable and must be captured/recreated explicitly.
 - The existing docs/phase2-function-inventory.json is stale: it says generated 2026-04-11 and contains 75 functions (lines 3, 12, 636), versus 120 current directories.
-- The tracked supabase/dynamic_staging_schema.sql is a generated/derived schema snapshot, not a chronological migration. Earlier revisions contained nine executable pg_cron schedules, hardcoded project URLs, and credential-shaped literals. The current tree removes that entire executable block and retains the inventory below only as historical repository evidence. It must never be treated as an executable restore plan or secret source.
-- SQL migrations enable pg_cron/pg_net repeatedly, but only one current cron.schedule call (ops_sentinel_v1) is present in chronological migrations. Most scheduled jobs exist only in the derived schema snapshot, docs, or runtime expectations.
+- The tracked supabase/dynamic_staging_schema.sql is a generated/derived schema snapshot, not a chronological migration. A historical pre-containment revision contained nine executable pg_cron schedules, hardcoded project URLs, and credential-shaped literals. The sanitized current snapshot omits that executable block and must never be treated as an executable restore plan or secret source. This is a repository statement only; no runtime schedule was inspected, disabled, removed, or changed.
+- SQL migrations enable pg_cron/pg_net repeatedly, but only one current cron.schedule call (`ops_sentinel_v1`) is present in chronological migrations. The historical snapshot revision recorded nine schedules total, including that same `ops_sentinel_v1`; eight were beyond the migration-defined schedule. Other expected jobs appear only in historical repository evidence, docs, or runtime expectations.
 - Auth, OAuth client/provider configuration, SMTP, actual cron state/timezone/headers, n8n, deployed Edge Function versions/settings, secret values, and actual Storage contents cannot be derived from this repository.
 - Git tracks .env. It contains Supabase binding names. Values were not recorded in this report; migration work should avoid copying the file blindly and should review whether tracking it is intentional.
 
@@ -59,10 +63,14 @@ Chronological migrations:
 
 - pg_cron and pg_net are enabled in 20260205170426..., 20260311053345..., 20260317225106..., and 20260323110853....
 - Only supabase/migrations/20260711134232_...sql:37-42 schedules a job: ops_sentinel_v1 at 0 3 * * *.
-- That same migration seeds agent_cron_map with 13 expected mappings at lines 20-35. Several mapped job names do not match the derived snapshot names, and cadence_sentinel_v1, backlog_burner_v1, gap_ranker_v1, and governor_v1 have no schedule definition found.
+- That same migration seeds agent_cron_map with 13 expected mappings at lines 20-35. Several mapped job names do not match names recorded by the historical pre-containment snapshot revision, and cadence_sentinel_v1, backlog_burner_v1, gap_ranker_v1, and governor_v1 have no schedule definition found.
 - The migration queries public.agent_configs at lines 54-65 and 86-93, but no CREATE TABLE public.agent_configs exists in chronological migrations; it appears only in supabase/dynamic_staging_schema.sql:202-203. This is a fresh-restore blocker unless the actual dump/selective restore plan supplies it.
 
-Historical derived-snapshot evidence from before repository containment (credential values deliberately omitted; the current snapshot contains no executable schedule block):
+Historical derived-snapshot evidence from a pre-containment revision
+(credential values deliberately omitted): nine schedules total, including the
+migration-represented `ops_sentinel_v1`, and eight beyond it. The sanitized
+current repository snapshot contains no executable schedule block. This does
+not establish that any runtime job is disabled or changed.
 
 - sync-calendar-hourly — 0 * * * * — HTTP invokes sync-calendar.
 - process-podcast-queue-every-minute — * * * * * — HTTP invokes process-podcast-queue.
@@ -82,14 +90,18 @@ Function-side guards/dependencies:
 - run-strategy-task-reaper and schedule-daily-plan require CRON_SECRET (respective index.ts:22-25 and 12-15).
 - training-digest requires TRAINING_DIGEST_SECRET (index.ts:15-20), but no repository cron schedule was found.
 - process-podcast-queue declares itself unauthenticated system cron and uses service role (index.ts:587-596); it has no explicit config.toml entry. Its actual edge-boundary JWT behavior must be rehearsed, not inferred.
-- sync-calendar requires a real bearer user (index.ts:573-595), while the derived cron snapshot shows an HTTP schedule. The exact supported cron authentication model therefore needs reconciliation.
+- sync-calendar requires a real bearer user (index.ts:573-595), while the historical pre-containment snapshot revision recorded an HTTP schedule. The exact supported cron authentication model therefore needs reconciliation.
 - Self/background continuations exist in run-enrichment-job (lines 339,397), batch-extract-kis (lines 222-289), extract-tactics (line 2484), process-podcast-queue (multiple downstream function calls), and strategy orchestration. These must be drained/paused in the final quiet window.
 - Settings claims an n8n weekly backup against the primary database (src/pages/Settings.tsx:253-259; docs/GUIDE.md:179-180). No n8n workflow/configuration is in Git. Treat it as runtime-only and require Lovable/operator inventory.
 - Client-side browser notification scheduling also exists, but it is not a server cron and does not replace a background-job inventory.
 
 ## Webhooks and outbound integrations
 
-No standalone webhook registry/configuration was found. Before containment, pg_net cron HTTP calls were the only SQL-defined outbound hooks outside chronological migrations; the current derived snapshot deliberately contains no executable schedule block.
+No standalone webhook registry/configuration was found. In the historical
+pre-containment revision, pg_net cron HTTP calls were the only SQL-defined
+outbound hooks outside chronological migrations. The sanitized current
+repository snapshot contains no executable schedule block; this does not prove
+that a runtime hook or schedule was disabled or changed.
 
 External service dependencies found in Edge code:
 
@@ -187,10 +199,10 @@ Primary bindings:
 Hardcoded refs/URLs:
 
 - Current Lovable-managed project ref odbjjklumdsuqdvkgwyv: supabase/config.toml:1; .github/workflows/verify-production-version.yml:22-26,99-103; scripts/phase3a-debug-validation.sh:48-50; supabase/functions/mcp/index.ts:178-187; .lovable/mcp/manifest.json:4-10; docs/STATE.md.
-- The populated dynamic-staging ref remains in rejected historical planning input. It is explicitly out of scope and must not be used; the current derived snapshot no longer carries cron endpoint literals.
+- The sanitized current snapshot contains zero dynamic-staging or production project-reference/endpoint literals. Remaining repository references to the staging identity are historical inventory statements or rejected planning input. The identity is explicitly out of scope and must not be used.
 - The dispatch-only production version workflow is tied to the current project ref and deployment-id prefix; it must not be invoked in this PR and must be rebound only after authorized cutover.
 - scripts/phase3a-debug-validation.sh contains a hardcoded current endpoint and a credential-like public token literal. The value is intentionally omitted. Do not run it during this migration PR.
-- Earlier revisions of supabase/dynamic_staging_schema.sql contained credential-shaped cron-header material. The current tree removes the executable cron block and suppresses textual diffs for that file so review does not reproduce removed values. Rotation and historical exposure response remain external requirements.
+- A historical pre-containment revision of supabase/dynamic_staging_schema.sql contained credential-shaped cron-header material. The sanitized current snapshot omits that material and its executable cron block. The public PR patch itself disclosed predecessor bytes; PR patches, history, forks, caches, archived patches, and prior clones may retain them. No repository display control is a confidentiality boundary. Rotation and historical-exposure response remain external requirements.
 - src/lib/rustBusterLinks.ts:4-14 hardcodes an organization-specific Salesforce host and report/list IDs.
 - Browserless uses a production-sfo endpoint (import-circle-browserless/index.ts:527).
 - MCP titles/instructions are personalized to one owner, Branch territory, and a stated account count (supabase/functions/mcp/index.ts:181-189; src/lib/mcp/index.ts:10-18). Verify these assumptions rather than carrying them as infrastructure truth.
@@ -203,9 +215,9 @@ Hardcoded refs/URLs:
    as `true` and records that provenance structurally; this is not evidence of
    each function's currently deployed Lovable Cloud setting.
 2. docs/phase2-function-inventory.json is incomplete (75 vs 120 functions).
-3. Most cron definitions are absent from chronological migrations; the derived snapshot is not a safe substitute.
+3. Most cron definitions are absent from chronological migrations; the historical pre-containment snapshot revision is not a safe substitute.
 4. agent_cron_map references public.agent_configs, but that table is not created in chronological migrations.
-5. Cron naming differs between agent_cron_map and the derived snapshot for calendar and digest jobs; active runtime names are unknown.
+5. Cron naming differs between agent_cron_map and the historical pre-containment snapshot revision for calendar and digest jobs; active runtime names are unknown.
 6. batch_runs has a frontend Realtime subscription but no repository publication addition.
 7. n8n weekly backup is claimed in UI/docs but has no repository configuration.
 8. Auth provider/OAuth client/SMTP/site URL/redirect/template settings are absent.
@@ -213,7 +225,7 @@ Hardcoded refs/URLs:
 10. Storage objects and complete bucket settings are absent; only three bucket/policy definitions are in migrations.
 11. Deployed Edge Function set, versions, runtime imports, effective JWT settings, env values, and remote agent configuration (ElevenLabs/Lovable) are absent.
 12. The repository uses Lovable AI endpoints and Lovable Cloud auth; availability/configuration after remix and owned-Supabase rebinding is not proven.
-13. Tracked .env and the phase3a script contain sensitive or credential-like material. Earlier dynamic_staging_schema.sql revisions also contain credential-shaped material in Git history; migration tooling and review must not echo or package any values.
+13. Tracked .env and the phase3a script contain sensitive or credential-like material. A historical pre-containment dynamic_staging_schema.sql revision also contains credential-shaped material; PR patches, Git history, forks, caches, archived patches, and prior clones may retain predecessor bytes. Migration tooling and review must not echo or package any values, and staging-secret rotation remains the mitigation.
 14. Production webhooks beyond pg_net jobs, n8n workflows, job pause controls, cron timezone, Realtime runtime settings, OAuth providers, and SMTP require empirical/operator inventory.
 15. A full restore cannot be selected based on repository state alone: schema drift represented in dynamic_staging_schema.sql shows objects/runtime jobs not reproducible from chronological migrations.
 
