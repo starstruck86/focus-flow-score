@@ -207,6 +207,58 @@ class LovableZipNormalizerTest(unittest.TestCase):
             self.metadata_output.read_text(encoding="utf-8"),
         )
 
+    def test_requires_exact_method_specific_version_needed(self):
+        valid_cases = (
+            (8, 20, "deflate"),
+            (0, 10, "stored"),
+        )
+        for method, version_needed, compression in valid_cases:
+            with self.subTest(valid=f"{compression}-{version_needed}"):
+                source_bytes = zip_bytes(
+                    [
+                        Entry(
+                            f"{compression}.backup".encode("ascii"),
+                            self.pgdmp,
+                            method=method,
+                            version_needed=version_needed,
+                        )
+                    ]
+                )
+                source = self.write_input(
+                    source_bytes,
+                    f"valid-{compression}-version.zip",
+                )
+                metadata = self.normalize(source)
+                self.assertEqual(metadata["member"]["compression"], compression)
+                self.assertEqual(
+                    metadata["member"]["version_needed"],
+                    version_needed,
+                )
+                self.output.unlink()
+                self.metadata_output.unlink()
+
+        invalid_cases = (
+            (8, 10, "DEFLATE", "1.0"),
+            (8, 19, "DEFLATE", "1.9"),
+            (0, 20, "stored", "2.0"),
+            (0, 11, "stored", "1.1"),
+        )
+        for method, version_needed, method_label, version_label in invalid_cases:
+            with self.subTest(invalid=f"{method_label}-{version_label}"):
+                self.assert_rejected(
+                    zip_bytes(
+                        [
+                            Entry(
+                                b"wrong-version.backup",
+                                self.pgdmp,
+                                method=method,
+                                version_needed=version_needed,
+                            )
+                        ]
+                    ),
+                    rf"{method_label} ZIP members must require ZIP version",
+                )
+
     def test_direct_pgdmp_behavior_is_preserved(self):
         source = self.write_input(self.pgdmp, "synthetic direct.backup")
         metadata = self.normalize(source)
@@ -306,7 +358,16 @@ class LovableZipNormalizerTest(unittest.TestCase):
             "unsupported ZIP compression",
         )
         self.assert_rejected(
-            zip_bytes([Entry(b"nested.backup", zip_bytes([Entry(b"inner.backup", self.pgdmp)]), method=0)]),
+            zip_bytes(
+                [
+                    Entry(
+                        b"nested.backup",
+                        zip_bytes([Entry(b"inner.backup", self.pgdmp)]),
+                        method=0,
+                        version_needed=10,
+                    )
+                ]
+            ),
             "nested archive",
         )
         self.assert_rejected(
@@ -536,6 +597,21 @@ class LovableZipNormalizerTest(unittest.TestCase):
             zip_bytes([Entry(b"partial.backup", self.pgdmp, crc32_override=1)]),
             "CRC32",
         )
+
+    def test_fifo_input_is_rejected_without_blocking_or_outputs(self):
+        fifo = self.root / "synthetic fifo"
+        os.mkfifo(fifo, 0o400)
+        with self.assertRaisesRegex(
+            NORMALIZER.NormalizationError,
+            "not a regular file",
+        ):
+            NORMALIZER.normalize(
+                fifo,
+                expected_outer_sha256="0" * 64,
+                output=self.output,
+                metadata_output=self.metadata_output,
+            )
+        self.assertEqual(list(self.output_directory.iterdir()), [])
 
 
 if __name__ == "__main__":

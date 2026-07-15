@@ -21,6 +21,15 @@ configuration. The owned target can later be inspected directly under separate
 authorization; Lovable production remains independently uninspectable. A green
 synthetic rehearsal does not remove that blocker.
 
+The hardened workflow also cannot prove that externally supplied expected
+filename/size/SHA values or operator-observed event values are truthful, that
+the approved evidence-store volume is actually encrypted, or that Lovable's UI
+export control maps to the repository-bound backend. It can only validate their
+form, bind them to the inspected bytes and approved checkout, and report the
+remaining claims explicitly.
+
+pg_restore --list does not prove that every byte of the inner input was consumed.
+
 One authorized rehearsal export is retained offline in the approved evidence
 store. Its inspection is blocked by a procedure mismatch: the retained download
 has a ZIP wrapper, while the previously reviewed inspector accepts only a raw
@@ -101,8 +110,11 @@ historical origin does not approve later procedure content, and the observed
 execution SHA alone does not prove external approval.
 
 Treat artifact identities as separate, immutable evidence. For a ZIP download,
-record the canonical outer artifact's UI-observed object name, original
-filename, size, before/after SHA-256, and validated ZIP structural metadata.
+record the canonical outer artifact's UI-observed object name and externally
+approved expected original filename, size, and SHA-256 separately from the
+workflow-observed filename, before/after size, before/after SHA-256, and
+validated ZIP structural metadata. Never call the workflow's own measurement
+an external checksum or promote it into the expected value.
 Separately record the sole member's actual name, compression method, CRC, and
 declared compressed/uncompressed sizes; the verified inner `PGDMP` size and
 SHA-256; the SHA-256 reported by the existing inspector for that inner archive;
@@ -115,13 +127,25 @@ a ZIP-derived relationship. Record a manifest file hash in a
 separate checksum sidecar rather than attempting to put a file's ordinary
 SHA-256 inside the bytes being hashed.
 
+Bind source identity before artifact access. `SOURCE_PROJECT_REF` must exactly
+equal the single strict top-level `project_id` in the approved checkout's
+`supabase/config.toml`. Record that config file's Git blob SHA and file SHA-256.
+This proves repository configuration equality only; it does not independently
+prove which Lovable backend produced the export. For ZIP input, the normalized
+member name must exactly equal the independently recorded
+`UI_EXPORT_OBJECT_NAME` before `pg_restore` is invoked.
+
 The canonical outer artifact and completed export-inspection evidence package,
 including its provenance manifest, must live in an approved encrypted evidence
-store. The ignored
-`local-migration-artifacts/` directory is only a private working area and must
-never be the sole retained copy because git-clean operations can delete ignored
-files. Never commit exports, metadata reports, credentials, user lists, or
-object names learned only from production.
+store. `APPROVED_EVIDENCE_STORE_ROOT` has no default and must be absolute,
+outside the Git worktree, a real non-symlink directory, owned by the executing
+user, and mode `0700`. `CANONICAL_EXPORT` must be a direct child of that root, a
+non-symlink regular file owned by the executing user, and inaccessible to group
+and world. The local workflow verifies those filesystem properties, not volume
+encryption. The ignored `local-migration-artifacts/` directory is disposable
+private working space; it is removed after durable publication and can be
+deleted by git-clean operations. Never commit exports, metadata reports,
+credentials, user lists, or object names learned only from production.
 
 Timeline events are independent evidence, not aliases. Represent initiation and
 completion as structured observations: either an operator-observed UTC value or
@@ -132,6 +156,12 @@ available observed relationship: observed initiation must not follow observed
 completion or availability; observed completion must not follow availability;
 and availability must not follow download completion. Never infer an event from
 a filename, ZIP timestamp, filesystem metadata, or another event.
+
+Reject any unknown basis, missing or placeholder `not_observed` reason,
+`not_observed` event carrying a value, or `operator_observed` event carrying a
+reason. A fully observed and ordered initiation → completion → availability →
+download timeline records `COMPLETE`. Any accepted missing initiation or
+completion records `INCOMPLETE`; availability is never relabeled as completion.
 
 The retained rehearsal's initiation was not observed and that historical gap is
 irreparable. Completion may likewise be explicitly unobserved; availability is
@@ -212,20 +242,32 @@ export within the reported 24-hour limit.
 
 Treat the untouched download as the canonical outer artifact, regardless of
 whether it is ZIP-wrapped or direct `PGDMP`. Preserve it in the approved
-encrypted evidence store, then make a restricted working copy under
-`local-migration-artifacts/`. Do not rename away the original extension.
-Immediately record its UI-observed export object name, original filename, size,
-download-completion time, and SHA-256; checksum again after any copy and verify
-the working copy against the canonical outer artifact. Never upload any outer
-or derived artifact to GitHub, chat, CI, or an unapproved file store.
+encrypted evidence-store root as a direct child under its original filename. Do
+not rename away the original extension. Before invoking the checked-in workflow,
+obtain and externally approve its exact basename, byte size, and SHA-256, then
+supply those values with no defaults as `EXPECTED_ORIGINAL_FILENAME`,
+`EXPECTED_OUTER_SIZE_BYTES`, and `EXPECTED_OUTER_SHA256`. Separately record the
+UI-observed export object name and observed download-completion time. Never
+upload an outer or derived artifact to GitHub, chat, CI, or an unapproved file
+store.
+
+Supply the store itself as `APPROVED_EVIDENCE_STORE_ROOT`, also with no default.
+It must be absolute and outside the Git worktree, a real non-symlink directory
+owned by the operator with mode `0700`. The canonical direct child must be a
+non-symlink regular file owned by that operator with no group/world access. The
+workflow checks the basename, size, and SHA against the externally supplied
+values before it creates a run directory, copies bytes, normalizes, or invokes
+`pg_restore`. Its own descriptor-bound measurements are recorded only as
+workflow-observed before/after identity; they are not external evidence.
 
 An inner `PGDMP` produced by normalization is a distinct derived artifact. Its
 filename, size, and hash cannot replace or relabel the outer evidence.
 
 Exit gate: availability and download-completion timestamps are independently
-observed and ordered; canonical-outer and working-copy checksums agree; the
-external pre-inspection digest-only checksum is retained; and the outer file is
-non-empty and within the reviewed limit.
+observed and ordered; the expected canonical identity is approved independently
+of the workflow; root/file ownership, modes, non-symlink and direct-child
+requirements pass; expected and workflow-observed outer identities agree; and
+the outer file is non-empty and within the reviewed limit.
 
 ### 6. Inspect dump table of contents
 
@@ -239,18 +281,30 @@ authorized or supplied it.
 
 Execute the complete, checked-in evidence-package template under **Inspect a
 Lovable export envelope** in `scripts/migration/README.md`. Do not substitute the
-inspector's stdout-only form: the template retains the report, external
-outer before/after checksums, derived-artifact metadata, report and provenance
-checksums, and provenance manifest. Do not edit a copied command block: the
-content identities attest the approved checkout's README and marked fence, not
-an independently captured shell-input stream.
+inspector's stdout-only form: the template retains the report, externally
+approved expected identity separately from workflow-observed outer before/after
+checksums, derived-artifact metadata, report and provenance checksums, per-file
+evidence manifest and detached manifest hash, and provenance manifest. Do not
+edit a copied command block: the content identities attest the approved
+checkout's README and marked fence, not an independently captured shell-input
+stream.
+
+Before any artifact access, require `SOURCE_PROJECT_REF` to equal the approved
+checkout's one strict top-level `project_id` in `supabase/config.toml`; record
+the config Git blob SHA and file SHA-256 in provenance. That check binds the
+repository configuration, not Lovable's internal project/export mapping.
+Likewise, all four artifact-approval inputs—`EXPECTED_OUTER_SHA256`,
+`EXPECTED_OUTER_SIZE_BYTES`, `EXPECTED_ORIGINAL_FILENAME`, and
+`APPROVED_EVIDENCE_STORE_ROOT`—are mandatory and have no defaults. A mismatch
+stops before run creation or `pg_restore`.
 
 The normalizer accepts either direct raw `PGDMP` input or a strictly validated
 ZIP envelope. A ZIP must contain exactly one non-empty regular member. Reject
 multiple or duplicate entries; directories, symlinks, devices, and other special
 files; absolute, traversal, separator-containing, drive-prefixed,
 control-character, or ambiguous names; encryption; unsupported compression;
-nested archives; empty or non-`PGDMP` content; malformed headers/directories,
+nested archives; a STORE member not declaring ZIP version 1.0 or DEFLATE member
+not declaring ZIP version 2.0; empty or non-`PGDMP` content; malformed headers/directories,
 bad CRC, truncation, prefix/polyglot bytes, and trailing junk; and any declared
 size, actual streamed size, compression ratio, or disk-headroom condition beyond
 the reviewed limits. Working storage must accommodate the outer working copy,
@@ -260,12 +314,30 @@ remain identical, and a
 supplied expected outer SHA-256 must match. Symlink inputs and canonical mutation
 fail closed.
 
+In ZIP mode, require the sole normalized member's exact name to equal the
+operator-recorded `UI_EXPORT_OBJECT_NAME`; a mismatch stops before `pg_restore`
+and publishes nothing. Do not conflate that UI object/member binding with the
+downloaded outer filename.
+
 For ZIP input, prefix/polyglot and trailing-junk rejection is enforced by exact
 byte-zero local-header and EOF end-of-central-directory framing. For direct raw
 `PGDMP`, the normalizer enforces a stable bounded copy and conservative header
 validation, while the unchanged inspector's real `pg_restore --list` invocation
-remains the full-format and trailing-content compatibility boundary. Failure at
-either layer publishes no evidence package.
+supplies a bounded TOC/compatibility signal only and may accept appended inner
+bytes. Whole-file hashes bind the exact inner input, but do not prove that
+`pg_restore` consumed it all. Failure at either layer publishes no evidence
+package.
+
+Route every inspector invocation through the reviewed bounded guard. Its
+underlying PostgreSQL 17 executable is mandatory, absolute, executable, and not
+a symlink; the guard accepts only `--version` or `--list <absolute-local-path>`.
+Fixed limits permit 15 seconds and 1 MiB stdout for `--version`, 300 seconds and
+128 MiB stdout for `--list`, and 1 MiB stderr for either. It streams both
+channels into private exclusive captures, kills the process group and
+waits for/reaps its direct child leader on timeout or overflow, passes output
+only after exit zero, and removes every capture.
+
+pg_restore --list does not prove that every byte of the inner input was consumed.
 
 Do not use `unzip`, `extractall`, or a member-controlled output path. Stream the
 sole member to one fixed, exclusively created file in a private temporary
@@ -274,11 +346,30 @@ CRC and actual length against the validated metadata, require `PGDMP` magic,
 flush and `fsync`, atomically publish the derived file, and set mode `0400`.
 Remove every partial output after any failure. Stage the derived archive,
 report, manifest, and checksum sidecars away from the final run path; publish a
-run only after all checks pass, never overwrite an existing run or output, and
-treat the exclusively written `EVIDENCE_COMPLETE` marker as the publication
-boundary. Fsync the complete pending tree and publish it with an operating-system
-atomic no-replace rename; an unsupported platform, destination collision,
-missing marker, or cleanup failure is a hard stop.
+run only after all checks pass and never overwrite an existing run or output.
+The durable destination is exactly
+`<APPROVED_EVIDENCE_STORE_ROOT>/migration-inspection-evidence/<run-id>`. Before
+publication, build `evidence-files.json` with each core evidence payload file's
+SHA-256, size, and mode plus detached `evidence-files.sha256`; retain detached
+`provenance.sha256`; require every file mode `0400` and evidence directory mode
+`0700`. The payload manifest intentionally excludes the non-self-referential
+completion marker. Copy through held directory descriptors to a private pending
+durable tree, verify every copied identity, fsync final file modes plus its
+directories and parents, remove disposable working evidence, and atomically
+reserve the final run path with a descriptor-relative operating-system
+no-replace rename. Reverify the committed payload, canonical artifact, store
+root, and parent binding before exclusively writing and fsyncing
+`EVIDENCE_COMPLETE`; its exact content binds the run ID and detached payload
+manifest hash. A postcommit validation failure must have no completion marker
+and must instead carry `EVIDENCE_INDETERMINATE`. Consumers reject a missing or
+malformed completion marker, any indeterminate marker, a manifest/hash/mode
+mismatch, or a residual local run. Existing pending/final runs are never
+overwritten or deleted.
+
+An I/O failure while persisting the final completion/indeterminate state is an
+explicit manual-quarantine stop: user-space cannot eliminate the crash or
+filesystem ambiguity at the atomic-rename/`fsync` boundary. This ceiling does
+not make an indeterminate package valid and does not authorize continuation.
 Derive the run ID from the observed availability time plus a prefix of the outer
 SHA-256, never from initiation or artifact metadata.
 
@@ -294,16 +385,18 @@ Exit gate: normalization and archive format/version checks pass; TOC parsing has
 no unknown class; the report contains no row data; exactly one report `sha256:`
 equals the verified inspected `PGDMP` SHA-256; outer before/after/expected hashes
 agree; ZIP mode never compares or records the outer hash as the inner hash;
-direct mode explicitly records the canonical-to-verified-copy relationship; and
-provenance separately records the source identity, structured timeline and statuses, outer
+direct mode explicitly records the canonical-to-verified-copy relationship;
+ZIP mode records exact UI/member-name equality; and provenance separately
+records the repository-config source binding, structured timeline and statuses, outer
 identity/ZIP metadata and actual member metadata when applicable, inner identity
 and inspector-reported hash, operator, informational procedure-origin SHA,
 externally approved checkout SHA, actual execution-checkout SHA, committed
 README blob SHA, fenced-workflow SHA-256, inspection-tool/baseline SHA, and
 report/provenance hashes. The approved and execution SHAs must be identical.
-Copy the completed package to the approved encrypted evidence store and verify
-it there before continuing. Migration readiness remains RED and inspection
-remains `REVIEW_REQUIRED`.
+The per-file manifest and detached hash must verify in the durable package, the
+disposable local run must be absent, and the externally approved expected outer
+identity must remain distinct from workflow-observed measurements. Migration
+readiness remains **RED** and inspection remains `REVIEW_REQUIRED`.
 
 ### 7. Decide selective restore plan
 

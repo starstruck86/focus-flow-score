@@ -53,6 +53,8 @@ MIN_DISK_RESERVE_BYTES = 256 * 1024 * 1024
 
 ZIP_STORED = 0
 ZIP_DEFLATED = 8
+ZIP_STORED_VERSION_NEEDED = 10
+ZIP_DEFLATED_VERSION_NEEDED = 20
 ZIP_UTF8_FLAG = 0x0800
 ZIP_DEFLATE_OPTION_FLAGS = 0x0006
 ZIP_ENCRYPTED_FLAG = 0x0001
@@ -326,10 +328,21 @@ def _parse_strict_zip(file_fd: int, outer_size: int, limits: Limits) -> ZipMembe
         or version_needed >= 45
     ):
         raise NormalizationError("ZIP64 envelopes are not accepted")
-    if version_needed < 10 or version_needed > 20:
-        raise NormalizationError("unsupported ZIP version requirement")
     if method not in {ZIP_STORED, ZIP_DEFLATED}:
         raise NormalizationError("unsupported ZIP compression method")
+    expected_version_needed = {
+        ZIP_STORED: ZIP_STORED_VERSION_NEEDED,
+        ZIP_DEFLATED: ZIP_DEFLATED_VERSION_NEEDED,
+    }[method]
+    if version_needed != expected_version_needed:
+        method_label = "stored" if method == ZIP_STORED else "DEFLATE"
+        expected_version_label = (
+            f"{expected_version_needed // 10}.{expected_version_needed % 10}"
+        )
+        raise NormalizationError(
+            f"{method_label} ZIP members must require ZIP version "
+            f"{expected_version_label}"
+        )
 
     forbidden_flags = (
         ZIP_ENCRYPTED_FLAG
@@ -686,7 +699,10 @@ def _open_local_regular_input(input_path: Path) -> tuple[int, os.stat_result]:
     if nofollow is None:
         raise NormalizationError("platform does not provide O_NOFOLLOW")
     try:
-        file_fd = os.open(input_text, os.O_RDONLY | os.O_CLOEXEC | nofollow)
+        file_fd = os.open(
+            input_text,
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NONBLOCK | nofollow,
+        )
     except OSError as exc:
         if exc.errno == errno.ELOOP:
             raise NormalizationError("symlink input is not accepted") from exc

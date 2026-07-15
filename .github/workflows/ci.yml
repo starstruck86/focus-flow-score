@@ -30,6 +30,7 @@ jobs:
             scripts/migration/inspect-lovable-dump.sh \
             scripts/migration/tests/catalog-verification.test.sh \
             scripts/migration/tests/inspect-lovable-dump.integration.sh \
+            scripts/migration/tests/inspect-lovable-export.integration.sh \
             scripts/migration/tests/inspect-lovable-dump.test.sh \
             scripts/migration/tests/lib/postgres-test-safety.sh \
             scripts/migration/tests/postgres-target-safety.test.sh \
@@ -41,6 +42,7 @@ jobs:
               Path("scripts/migration/compare-manifests.py"),
               Path("scripts/migration/catalog-jsonl-to-manifest.py"),
               Path("scripts/migration/inventory-edge-functions.py"),
+              Path("scripts/migration/bounded-pg-restore.py"),
               Path("scripts/migration/inspect-lovable-export.py"),
               Path("scripts/migration/normalize-lovable-export.py"),
               Path("scripts/migration/lib/lovable_dump_report.py"),
@@ -53,6 +55,7 @@ jobs:
           bash scripts/migration/tests/catalog-verification.test.sh
           bash scripts/migration/tests/service-verification.test.sh
           bash scripts/migration/tests/inspect-lovable-dump.integration.sh
+          bash scripts/migration/tests/inspect-lovable-export.integration.sh
           git diff --check "$PR_BASE_SHA...$PR_HEAD_SHA"
         env:
           PGDATABASE: migration_verify_ci
@@ -72,3 +75,33 @@ jobs:
           supabase/functions/_shared/strategy-core/situationIntelligenceRetrieval_test.ts
           supabase/functions/version/index_test.ts
       - run: npm audit --omit=dev --audit-level=high
+
+  migration-envelope-macos:
+    name: macOS ZIP-envelope workflow
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Exercise macOS normalization and durable publication
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          for path in (
+              Path("scripts/migration/bounded-pg-restore.py"),
+              Path("scripts/migration/inspect-lovable-export.py"),
+              Path("scripts/migration/normalize-lovable-export.py"),
+          ):
+              compile(path.read_text(encoding="utf-8"), str(path), "exec")
+          PY
+          python3 -m unittest discover \
+            -s tests/migration -p 'test_lovable_zip_normalizer.py' -v
+          python3 -m unittest discover \
+            -s tests/migration -p 'test_bounded_pg_restore.py' -v
+          python3 -m unittest discover \
+            -s tests/migration -p 'test_export_evidence_workflow.py' -v
