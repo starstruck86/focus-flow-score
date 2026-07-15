@@ -29,7 +29,8 @@ an external assertion.
 The high-level driver `inspect-lovable-export.py` performs these steps:
 
 1. Requires an externally supplied approval pin that exactly equals `HEAD`, a
-   clean checkout, the unchanged direct inspector baseline, and reviewed
+   clean checkout, an execution-checkout-bound raw inspector, the unchanged
+   report-helper/migration baseline, and reviewed
    normalizer/driver/bounded-guard/README/config bytes from that checkout.
 2. Requires `SOURCE_PROJECT_REF` to exactly equal the single strict top-level
    `project_id` in the approved checkout's `supabase/config.toml`, whose Git blob
@@ -46,8 +47,11 @@ The high-level driver `inspect-lovable-export.py` performs these steps:
    `UI_EXPORT_OBJECT_NAME`, and streams it to the fixed
    exclusive file `verified-inner.pgdmp`; for raw PGDMP input, makes the same
    bounded verified copy without inventing member metadata.
-6. Runs the unchanged `inspect-lovable-dump.sh` only against that verified inner
-   file, routing `pg_restore` through the reviewed bounded guard. The guard may
+6. Runs the execution-bound `inspect-lovable-dump.sh` only against that verified
+   inner file. Before any `pg_restore` call, the inspector records only the
+   first 11 safe PGDMP header bytes as numeric archive-version bytes, integer
+   width, offset width, and custom-format code, bound to the verified inner
+   SHA-256. It routes `pg_restore` through the reviewed bounded guard, which may
    invoke the absolute, non-symlink underlying executable only as `--version`
    or `--list <absolute-local-path>`.
 7. Rechecks the canonical outer, working outer, derived inner, inspector report,
@@ -89,7 +93,7 @@ no-overwrite hard link inside an owner-only temporary directory.
 Prefix, polyglot, and trailing-junk rejection is structural in ZIP mode: the
 local header must begin at byte zero and the end-of-central-directory record
 must end at EOF. In direct-PGDMP mode the normalizer performs the bounded,
-stable byte copy and a conservative custom-archive header check; the unchanged
+stable byte copy and a conservative custom-archive header check; the execution-bound
 inspector's real `pg_restore --list` call supplies a bounded TOC/compatibility
 signal only and may accept appended inner bytes. Whole-file hashes bind the
 exact inner input, but do not prove that `pg_restore` consumed it all. A
@@ -101,7 +105,10 @@ has 15 seconds and 1 MiB stdout; `--list` has 300 seconds and 128 MiB stdout;
 both have a 1 MiB stderr cap. It drains output through private exclusive capture
 files, kills the child process group and waits for/reaps its direct child leader
 on timeout or output overflow, and passes captured output only after exit status
-zero. These bounds
+zero. On failure it classifies only `unsupported_archive_version`,
+`invalid_archive`, `truncated_archive`, `timeout`, `output_cap`, or
+`other_nonzero` and emits one fixed JSON record; it never relays child output.
+These bounds
 prevent an unbounded inspection process; they do not strengthen what
 `pg_restore` semantically validates.
 
@@ -177,9 +184,16 @@ Git provenance has distinct meanings:
 - The committed README blob and exact fenced block SHA-256 identify procedure
   content. The driver and normalizer have separate Git-blob and file SHA-256
   identities.
-- `inspection_tool_git_sha` remains
-  `c87a124602eb669b3ec5a3829610c6cb465d3e26`, the unchanged direct inspector,
-  report helper, and migration-input baseline.
+- `inspection_tool_git_sha` is the approved execution checkout containing the
+  current raw inspector; its exact Git blob and file SHA-256 are also recorded.
+- `inspection_baseline_git_sha` remains
+  `c87a124602eb669b3ec5a3829610c6cb465d3e26` and explicitly covers only the
+  unchanged report helper and migration-input tree.
+- The execution Python is resolved before the driver starts, used in isolated
+  mode, and recorded by resolved path, implementation/version, and executable
+  SHA-256. The driver pins `/bin/bash` and that same interpreter for the raw
+  inspector, using a minimal child environment without inherited shell or
+  Python startup controls.
 
 The workflow proves pin equality and byte identity only; it does not prove who
 approved the pin.
@@ -188,6 +202,7 @@ approved the pin.
 ```bash
 set -euo pipefail
 umask 077
+unset BASH_ENV ENV PYTHON_BIN PYTHONHOME PYTHONPATH PYTHONSTARTUP
 
 : "${SOURCE_PROJECT_NAME:?required}"
 : "${SOURCE_PROJECT_REF:?required}"
@@ -206,7 +221,16 @@ umask 077
 : "${EXPORT_AVAILABLE_AT_UTC:?required observed UTC time}"
 : "${DOWNLOAD_COMPLETED_AT_UTC:?required observed UTC time}"
 
-scripts/migration/inspect-lovable-export.py
+execution_python="$(command -v python3)"
+case "$execution_python" in
+  /*) ;;
+  *) printf '%s\n' 'ERROR: python3 must resolve to an absolute executable' >&2; exit 4 ;;
+esac
+[[ -x "$execution_python" && ! -d "$execution_python" ]] || {
+  printf '%s\n' 'ERROR: python3 must resolve to an executable file' >&2
+  exit 4
+}
+"$execution_python" -I scripts/migration/inspect-lovable-export.py
 ```
 <!-- END LOVABLE EXPORT EVIDENCE WORKFLOW -->
 
@@ -231,7 +255,8 @@ filename, size, and SHA-256—separate from `workflow_observed_identity`, which 
 the workflow's descriptor-bound measurement before and after inspection. It
 also records ZIP structure, UI object name, exact member
 name/compression/CRC/sizes, inner PGDMP size/hash, inspector-reported inner hash,
-report hash, timeline, operator, source/config binding, and procedure/tool
+safe numeric PGDMP header metadata bound to that inner hash, report hash,
+timeline, operator, source/config binding, and procedure/tool
 identities. `provenance.sha256` is detached because a file cannot contain its
 own ordinary SHA-256. `evidence-files.json` binds the size, mode, and SHA-256 of
 every core evidence payload file except the deliberately non-self-referential
@@ -267,13 +292,41 @@ formats, incompatible tools, existing reports, unknown TOC classes, and
 unresolved known object entries. It captures a private byte snapshot and never
 connects to or restores a database.
 
+Every low-level failure emits exactly one versioned JSON diagnostic containing
+only an allowlisted `stage` and `reason`; raw child stdout/stderr, TOC text,
+paths, object names, and archive bytes are never forwarded. The stage allowlist
+is `input_validation_failed`, `dependency_validation_failed`,
+`workspace_setup_failed`, `pg_restore_version_failed`, `snapshot_copy_failed`,
+`snapshot_permissions_failed`, `snapshot_hash_before_failed`,
+`pgdmp_header_failed`, `pg_restore_list_rejected`, `pg_restore_list_empty`,
+`snapshot_hash_after_failed`, `snapshot_identity_changed`,
+`report_helper_failed`, `report_publish_failed`, `cleanup_failed`, and
+`internal_failure`. The high-level driver accepts only the exact JSON grammar
+and this allowlist; malformed, missing, duplicated, oversized, non-ASCII, or
+mixed diagnostics collapse to `inspector_diagnostic_invalid`. No ordinary
+durable evidence package is published after any such failure.
+The raw inspector stages a report away from its private snapshot workspace,
+removes that workspace before publication, and atomically creates the final
+report name without replacement. A cleanup failure therefore publishes no
+final or staged report.
+
+On success the additive safe-header fields are
+`archive_format_version_bytes`, `archive_integer_width_bytes`,
+`archive_offset_width_bytes`, `archive_format_code`, and
+`archive_header_bound_sha256`. They are captured from bytes 5–10 after the
+`PGDMP` magic while hashing the full private snapshot and before invoking
+`pg_restore`; the high-level workflow requires their bound hash to equal the
+normalizer, derived-file, and inspector-report inner SHA-256.
+
 CI executes the complete fenced workflow in isolated synthetic Git checkouts,
 including adversarial normalizer and bounded-guard tests, a real PostgreSQL 17
 `pg_dump -Fc` high-level ZIP/direct integration on Linux, and targeted durable
 publication tests on macOS. It plants checkout, repository-binding,
 privacy/timeline/hash/member/publication failures, proves only
 `pg_restore --version` and `--list` are called, and scans output/evidence for a
-synthetic row-payload sentinel. This validates local mechanics only. It cannot
+synthetic row-payload and secret sentinel. Planted failures exercise every raw
+inspector stage and prove child output is absent from visible diagnostics,
+logs, reports, and durable files. This validates local mechanics only. It cannot
 prove the truth or provenance of externally supplied assertions, encryption of
 the approved evidence-store volume, Lovable's UI-control-to-backend mapping, or
 source completeness. Migration readiness remains **RED**.

@@ -10,6 +10,7 @@ readonly SCRIPT="$(cd -P -- "${TEST_DIR}/.." && pwd)/inspect-lovable-dump.sh"
 readonly FIXTURES="${TEST_DIR}/fixtures"
 readonly PYTHON="$(command -v python3)"
 readonly TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/inspect-lovable-dump-test.XXXXXX")"
+export TMPDIR="$TMP_ROOT"
 cleanup() {
   local status=$?
   trap - EXIT HUP INT TERM
@@ -53,7 +54,7 @@ assert_not_contains() {
   fi
 }
 
-assert_failure() {
+assert_helper_failure() {
   local label="$1"
   local expected="$2"
   shift 2
@@ -69,6 +70,48 @@ assert_failure() {
   else
     fail "$label (missing error: $expected)"
   fi
+}
+
+diagnostic_json() {
+  printf '{"diagnostic_version":1,"stage":"%s","reason":"%s"}' "$1" "$2"
+}
+
+assert_stage_failure() {
+  local label="$1"
+  local expected_stage="$2"
+  local expected_reason="$3"
+  shift 3
+  local stdout_file="${TMP_ROOT}/${label// /_}.stdout"
+  local stderr_file="${TMP_ROOT}/${label// /_}.stderr"
+  local expected
+  expected="$(diagnostic_json "$expected_stage" "$expected_reason")"
+
+  if "$@" >"$stdout_file" 2>"$stderr_file"; then
+    fail "$label (unexpected success)"
+    return
+  fi
+  if [[ -s "$stdout_file" ]]; then
+    fail "$label (failure wrote stdout)"
+    return
+  fi
+  if [[ "$(<"$stderr_file")" != "$expected" ]] ||
+    [[ "$(wc -l <"$stderr_file" | tr -d ' ')" != '1' ]]; then
+    fail "$label (unexpected diagnostic: $(<"$stderr_file"))"
+    return
+  fi
+  if grep -Fq -- "$SECRET_SENTINEL" "$stderr_file" ||
+    grep -Fq -- 'TOP_SECRET_TOC_COMMENT_MUST_NOT_APPEAR' "$stderr_file" ||
+    grep -Fq -- "$DUMP_FILE" "$stderr_file"; then
+    fail "$label (unsafe content leaked into diagnostic)"
+    return
+  fi
+  if [[ "$expected_stage" != 'cleanup_failed' ]] &&
+    find "$TMP_ROOT" -maxdepth 1 -type d -name 'lovable-dump-inspection.*' \
+      -print -quit | grep -q .; then
+    fail "$label (private inspection workspace was retained)"
+    return
+  fi
+  pass "$label"
 }
 
 verify_external_report_sha_match() {
@@ -102,27 +145,83 @@ readonly FAKE_PG_RESTORE="${TMP_ROOT}/fake pg_restore"
 cat >"$FAKE_PG_RESTORE" <<'FAKE'
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s nullglob
+
+if [[ "${FAKE_REQUIRE_HEADER:-0}" == '1' ]]; then
+  header_files=("${FAKE_TMP_PARENT}"/lovable-dump-inspection.*/header.metadata)
+  [[ "${#header_files[@]}" -eq 1 && -s "${header_files[0]}" ]] || {
+    printf '%s\n' 'PG_RESTORE_CALLED_BEFORE_SAFE_HEADER_CAPTURE' >&2
+    exit 97
+  }
+fi
+
 case "${1:-}" in
   --version)
     printf '%s\n' '--version' >>"$FAKE_LOG"
     case "${FAKE_MODE:-ok}" in
-      version-fail) exit 9 ;;
-      version-malformed) printf 'unexpected client build\n'; exit 0 ;;
+      version-fail)
+        printf '%s\n' 'TOP_SECRET_VERSION_FAILURE_MUST_NOT_APPEAR' >&2
+        exit 9
+        ;;
+      version-malformed)
+        printf 'TOP_SECRET_MALFORMED_VERSION_MUST_NOT_APPEAR\n'
+        exit 0
+        ;;
+      version-bounded-timeout)
+        printf '%s\n' '{"diagnostic_version":1,"reason":"timeout"}' >&2
+        exit 1
+        ;;
       *) printf 'pg_restore (PostgreSQL) 17.5 (synthetic)\n'; exit 0 ;;
     esac
     ;;
   --list)
     printf '%s|%s\n' '--list' "${2:-}" >>"$FAKE_LOG"
-    if [[ "${FAKE_MODE:-ok}" == 'incompatible' ]]; then
-      printf 'pg_restore: error: unsupported version in file header\n' >&2
-      exit 1
-    fi
     [[ $# -eq 2 ]] || exit 8
-    if [[ "${FAKE_MODE:-ok}" == 'mutate-snapshot' ]]; then
-      chmod u+w "$2"
-      printf 'mutated-during-list\n' >>"$2"
-      chmod 0400 "$2"
-    fi
+    case "${FAKE_MODE:-ok}" in
+      unsupported-version)
+        printf 'pg_restore: error: unsupported version (1.99) in file header\n' >&2
+        exit 1
+        ;;
+      invalid-archive)
+        printf 'pg_restore: error: input file does not appear to be a valid archive\n' >&2
+        exit 1
+        ;;
+      invalid-archive-too-short)
+        printf 'pg_restore: error: input file does not appear to be a valid archive (too short?)\n' >&2
+        exit 1
+        ;;
+      truncated-archive)
+        printf 'pg_restore: error: input file is too short (read 5, expected 11)\n' >&2
+        exit 1
+        ;;
+      bounded-timeout)
+        printf '%s\n' '{"diagnostic_version":1,"reason":"timeout"}' >&2
+        exit 1
+        ;;
+      bounded-output-cap)
+        printf '%s\n' '{"diagnostic_version":1,"reason":"output_cap"}' >&2
+        exit 1
+        ;;
+      bounded-invalid-json)
+        printf '%s\n' '{"diagnostic_version":1,"reason":"not_applicable"}' >&2
+        exit 1
+        ;;
+      other-nonzero)
+        printf '%s\n' 'TOP_SECRET_PG_RESTORE_FAILURE_MUST_NOT_APPEAR' >&2
+        exit 1
+        ;;
+      mixed-nonzero)
+        printf 'pg_restore: error: unsupported version (1.99) in file header\n%s\n' \
+          'TOP_SECRET_PG_RESTORE_FAILURE_MUST_NOT_APPEAR' >&2
+        exit 1
+        ;;
+      empty-toc) exit 0 ;;
+      mutate-snapshot)
+        chmod u+w "$2"
+        printf 'mutated-during-list\n' >>"$2"
+        chmod 0400 "$2"
+        ;;
+    esac
     cat -- "$FAKE_TOC"
     ;;
   *)
@@ -152,6 +251,8 @@ if ! env \
   PYTHON_BIN="$PYTHON" \
   FAKE_TOC="${FIXTURES}/representative.toc" \
   FAKE_LOG="$CALL_LOG" \
+  FAKE_REQUIRE_HEADER=1 \
+  FAKE_TMP_PARENT="$TMP_ROOT" \
   bash "$SCRIPT" \
     --migrations-dir "$MIGRATIONS_DIR" \
     --output "$REPORT_FILE" \
@@ -183,7 +284,7 @@ fi
 
 readonly MISMATCH_SHA_FILE="${OUTPUT_DIR}/archive.sha256.mismatch"
 printf '%064d\n' 0 >"$MISMATCH_SHA_FILE"
-assert_failure \
+assert_helper_failure \
   "rejects external-to-report SHA mismatch" \
   "external and reported archive SHA-256 evidence mismatch" \
   verify_external_report_sha_match \
@@ -192,7 +293,7 @@ assert_failure \
 readonly DUPLICATE_SHA_REPORT="${OUTPUT_DIR}/duplicate archive sha report.txt"
 cp "$REPORT_FILE" "$DUPLICATE_SHA_REPORT"
 printf 'sha256: %s\n' "$expected_sha" >>"$DUPLICATE_SHA_REPORT"
-assert_failure \
+assert_helper_failure \
   "rejects multiple report archive SHA fields" \
   "inspector report must contain exactly one archive sha256 field" \
   verify_external_report_sha_match \
@@ -219,6 +320,12 @@ assert_contains "$REPORT_FILE" "source_postgresql_version: 15.8" "reports source
 assert_contains "$REPORT_FILE" "source_pg_dump_version: 17.5" "reports pg_dump separately"
 assert_contains "$REPORT_FILE" "pg_restore_list_compatibility: PASS" "records pg_restore list compatibility"
 assert_contains "$REPORT_FILE" "archive_snapshot_binding: PASS" "binds TOC and SHA to one captured snapshot"
+assert_contains "$REPORT_FILE" "archive_format_version_bytes: 1,14,0" "captures the safe PGDMP version bytes before pg_restore"
+assert_contains "$REPORT_FILE" "archive_integer_width_bytes: 4" "records the safe header integer width"
+assert_contains "$REPORT_FILE" "archive_offset_width_bytes: 8" "records the safe header offset width"
+assert_contains "$REPORT_FILE" "archive_format_code: 1" "records the safe header format code"
+assert_contains "$REPORT_FILE" "archive_header_bound_sha256: ${expected_sha}" "binds safe header metadata to the snapshot SHA-256"
+assert_contains "$REPORT_FILE" "expected_sha256_binding: not_supplied" "preserves direct inspector behavior without an expected SHA"
 assert_contains "$REPORT_FILE" "owner_metadata: PRESENT" "flags owner metadata"
 assert_contains "$REPORT_FILE" "acl_metadata: PRESENT" "flags ACL metadata"
 assert_contains "$REPORT_FILE" "role_references: PRESENT" "flags role references"
@@ -244,87 +351,308 @@ else
   fail "invokes pg_restore only on the private captured snapshot"
 fi
 
-assert_failure \
-  "rejects URL input" \
-  "must be a local filesystem path" \
+readonly EXPECTED_REPORT_FILE="${OUTPUT_DIR}/expected SHA inspection report.txt"
+if env \
+  PG_RESTORE_BIN="$FAKE_PG_RESTORE" \
+  PYTHON_BIN="$PYTHON" \
+  FAKE_TOC="${FIXTURES}/representative.toc" \
+  FAKE_LOG="$CALL_LOG" \
+  FAKE_REQUIRE_HEADER=1 \
+  FAKE_TMP_PARENT="$TMP_ROOT" \
+  bash "$SCRIPT" \
+    --migrations-dir "$MIGRATIONS_DIR" \
+    --expected-sha256 "$expected_sha" \
+    --output "$EXPECTED_REPORT_FILE" \
+    "$DUMP_FILE" >/dev/null 2>"${TMP_ROOT}/expected-success.stderr"; then
+  if [[ ! -s "${TMP_ROOT}/expected-success.stderr" ]] &&
+    grep -Fq 'expected_sha256_binding: PASS' "$EXPECTED_REPORT_FILE" &&
+    grep -Fq "archive_header_bound_sha256: ${expected_sha}" "$EXPECTED_REPORT_FILE"; then
+    pass "optional expected SHA binds the derived inner snapshot before pg_restore"
+  else
+    fail "optional expected SHA binds the derived inner snapshot before pg_restore"
+  fi
+else
+  fail "optional expected SHA binds the derived inner snapshot before pg_restore"
+fi
+
+: >"$CALL_LOG"
+assert_stage_failure \
+  "rejects a wrong expected SHA before pg_restore" \
+  "snapshot_identity_changed" \
+  "not_applicable" \
+  env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
+    FAKE_TOC="${FIXTURES}/representative.toc" FAKE_LOG="$CALL_LOG" \
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" \
+      --expected-sha256 "$(printf '%064d' 0)" "$DUMP_FILE"
+if [[ ! -s "$CALL_LOG" ]]; then
+  pass "wrong expected SHA prevents every pg_restore invocation"
+else
+  fail "wrong expected SHA prevents every pg_restore invocation"
+fi
+
+assert_stage_failure \
+  "rejects URL input with an input-validation stage" \
+  "input_validation_failed" "not_applicable" \
   env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
     bash "$SCRIPT" 'postgresql://example.invalid/database'
 
-assert_failure \
-  "rejects absent file" \
-  "dump file does not exist" \
-  env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
-    bash "$SCRIPT" "${TMP_ROOT}/does not exist.backup"
-
 readonly PLAIN_FILE="${TMP_ROOT}/plain.sql"
 printf 'select 1;\n' >"$PLAIN_FILE"
-assert_failure \
-  "rejects non-custom dump" \
-  "expected a PostgreSQL custom-format archive" \
+assert_stage_failure \
+  "rejects non-custom input without echoing its path" \
+  "input_validation_failed" "not_applicable" \
   env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
     bash "$SCRIPT" "$PLAIN_FILE"
 
-assert_failure \
-  "reports missing pg_restore" \
-  "pg_restore executable is missing or not executable" \
+assert_stage_failure \
+  "reports dependency validation failure" \
+  "dependency_validation_failed" "not_applicable" \
   env PG_RESTORE_BIN="${TMP_ROOT}/missing-pg_restore" PYTHON_BIN="$PYTHON" \
     bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
 
-assert_failure \
-  "reports missing python" \
-  "python3 executable is missing or not executable" \
-  env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="${TMP_ROOT}/missing-python" \
+readonly MISSING_TMP_PARENT="${TMP_ROOT}/missing tmp parent"
+assert_stage_failure \
+  "reports private workspace setup failure" \
+  "workspace_setup_failed" "not_applicable" \
+  env TMPDIR="$MISSING_TMP_PARENT" PG_RESTORE_BIN="$FAKE_PG_RESTORE" \
+    PYTHON_BIN="$PYTHON" \
     bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
 
-assert_failure \
-  "reports pg_restore version failure" \
-  "pg_restore --version failed" \
+readonly TRUNCATED_HEADER_FILE="${TMP_ROOT}/truncated-header.backup"
+printf 'PGDMP' >"$TRUNCATED_HEADER_FILE"
+assert_stage_failure \
+  "rejects a truncated eleven-byte PGDMP header before pg_restore" \
+  "pgdmp_header_failed" "not_applicable" \
+  env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$TRUNCATED_HEADER_FILE"
+
+: >"$CALL_LOG"
+readonly INVALID_INTEGER_WIDTH_FILE="${TMP_ROOT}/invalid-integer-width.backup"
+readonly INVALID_OFFSET_WIDTH_FILE="${TMP_ROOT}/invalid-offset-width.backup"
+readonly INVALID_FORMAT_CODE_FILE="${TMP_ROOT}/invalid-format-code.backup"
+printf 'PGDMP\001\016\000\003\010\001payload\n' >"$INVALID_INTEGER_WIDTH_FILE"
+printf 'PGDMP\001\016\000\004\007\001payload\n' >"$INVALID_OFFSET_WIDTH_FILE"
+printf 'PGDMP\001\016\000\004\010\002payload\n' >"$INVALID_FORMAT_CODE_FILE"
+
+assert_stage_failure \
+  "rejects an unsupported PGDMP integer width before pg_restore" \
+  "pgdmp_header_failed" "not_applicable" \
+  env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$INVALID_INTEGER_WIDTH_FILE"
+assert_stage_failure \
+  "rejects an unsupported PGDMP offset width before pg_restore" \
+  "pgdmp_header_failed" "not_applicable" \
+  env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$INVALID_OFFSET_WIDTH_FILE"
+assert_stage_failure \
+  "rejects an unsupported PGDMP format code before pg_restore" \
+  "pgdmp_header_failed" "not_applicable" \
+  env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$INVALID_FORMAT_CODE_FILE"
+if [[ ! -s "$CALL_LOG" ]]; then
+  pass "unsupported PGDMP header fields are rejected before pg_restore"
+else
+  fail "unsupported PGDMP header fields are rejected before pg_restore"
+fi
+
+readonly REAL_CP_BIN="$(command -v cp)"
+readonly REAL_CHMOD_BIN="$(command -v chmod)"
+readonly REAL_RM_BIN="$(command -v rm)"
+readonly REAL_DIRNAME_BIN="$(command -v dirname)"
+readonly SHIM_ROOT="${TMP_ROOT}/failure shims"
+mkdir -p "$SHIM_ROOT/copy" "$SHIM_ROOT/permissions" "$SHIM_ROOT/cleanup" \
+  "$SHIM_ROOT/internal"
+
+cat >"$SHIM_ROOT/copy/cp" <<'SHIM'
+#!/usr/bin/env bash
+exit 70
+SHIM
+cat >"$SHIM_ROOT/permissions/chmod" <<'SHIM'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${*: -1}" == */archive.snapshot ]]; then
+  exit 70
+fi
+exec "$REAL_CHMOD_BIN" "$@"
+SHIM
+cat >"$SHIM_ROOT/cleanup/rm" <<'SHIM'
+#!/usr/bin/env bash
+exit 70
+SHIM
+cat >"$SHIM_ROOT/internal/dirname" <<'SHIM'
+#!/usr/bin/env bash
+exit 70
+SHIM
+chmod 0700 "$SHIM_ROOT/copy/cp" "$SHIM_ROOT/permissions/chmod" \
+  "$SHIM_ROOT/cleanup/rm" "$SHIM_ROOT/internal/dirname"
+
+assert_stage_failure \
+  "reports snapshot copy failure" \
+  "snapshot_copy_failed" "not_applicable" \
+  env PATH="$SHIM_ROOT/copy:$PATH" PG_RESTORE_BIN="$FAKE_PG_RESTORE" \
+    PYTHON_BIN="$PYTHON" \
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
+
+assert_stage_failure \
+  "reports snapshot permission failure" \
+  "snapshot_permissions_failed" "not_applicable" \
+  env PATH="$SHIM_ROOT/permissions:$PATH" REAL_CHMOD_BIN="$REAL_CHMOD_BIN" \
+    PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
+
+readonly FAILING_PYTHON="${TMP_ROOT}/operation-selective-python"
+cat >"$FAILING_PYTHON" <<'PYTHON_WRAPPER'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${*: -1}" == "${FAIL_PYTHON_OPERATION:-never}" ]]; then
+  exit 71
+fi
+exec "$REAL_PYTHON_BIN" "$@"
+PYTHON_WRAPPER
+chmod 0700 "$FAILING_PYTHON"
+
+assert_stage_failure \
+  "reports snapshot hash-before failure" \
+  "snapshot_hash_before_failed" "not_applicable" \
+  env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$FAILING_PYTHON" \
+    REAL_PYTHON_BIN="$PYTHON" FAIL_PYTHON_OPERATION=before \
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
+
+assert_stage_failure \
+  "classifies pg_restore version nonzero without relaying stderr" \
+  "pg_restore_version_failed" "other_nonzero" \
   env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
     FAKE_MODE=version-fail FAKE_LOG="$CALL_LOG" \
     bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
 
-assert_failure \
-  "rejects malformed pg_restore version" \
-  "unrecognized version string" \
+assert_stage_failure \
+  "classifies malformed pg_restore version output" \
+  "pg_restore_version_failed" "invalid_output" \
   env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
     FAKE_MODE=version-malformed FAKE_LOG="$CALL_LOG" \
     bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
 
-assert_failure \
-  "reports incompatible archive version" \
-  "corrupt or incompatible with pg_restore 17.5" \
+assert_stage_failure \
+  "classifies bounded pg_restore version timeout privately" \
+  "pg_restore_version_failed" "timeout" \
   env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
-    FAKE_MODE=incompatible FAKE_LOG="$CALL_LOG" FAKE_TOC="${FIXTURES}/representative.toc" \
+    FAKE_MODE=version-bounded-timeout FAKE_LOG="$CALL_LOG" \
     bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
 
-assert_failure \
-  "fails closed on unknown TOC class" \
-  "archive metadata inspection failed closed" \
+for reason_case in \
+  'unsupported-version|unsupported_archive_version' \
+  'invalid-archive|invalid_archive' \
+  'invalid-archive-too-short|invalid_archive' \
+  'truncated-archive|truncated_archive' \
+  'bounded-timeout|timeout' \
+  'bounded-output-cap|output_cap' \
+  'bounded-invalid-json|other_nonzero' \
+  'other-nonzero|other_nonzero' \
+  'mixed-nonzero|other_nonzero'; do
+  IFS='|' read -r fake_mode expected_reason <<<"$reason_case"
+  assert_stage_failure \
+    "classifies private pg_restore failure ${fake_mode}" \
+    "pg_restore_list_rejected" "$expected_reason" \
+    env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
+      FAKE_MODE="$fake_mode" FAKE_LOG="$CALL_LOG" \
+      FAKE_TOC="${FIXTURES}/representative.toc" \
+      bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
+done
+
+assert_stage_failure \
+  "reports an empty pg_restore TOC" \
+  "pg_restore_list_empty" "not_applicable" \
   env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
-    FAKE_LOG="$CALL_LOG" FAKE_TOC="${FIXTURES}/unknown-class.toc" \
+    FAKE_MODE=empty-toc FAKE_LOG="$CALL_LOG" \
+    FAKE_TOC="${FIXTURES}/representative.toc" \
     bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
 
-assert_failure \
-  "fails closed on unresolved known TOC entry" \
-  "unresolved known TOC entry at line 2 (TABLE)" \
-  env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
-    FAKE_LOG="$CALL_LOG" FAKE_TOC="${FIXTURES}/unresolved-known.toc" \
+assert_stage_failure \
+  "reports snapshot hash-after failure" \
+  "snapshot_hash_after_failed" "not_applicable" \
+  env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$FAILING_PYTHON" \
+    REAL_PYTHON_BIN="$PYTHON" FAIL_PYTHON_OPERATION=after \
+    FAKE_LOG="$CALL_LOG" FAKE_TOC="${FIXTURES}/representative.toc" \
     bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
 
-assert_failure \
-  "rejects archive mutation during TOC capture" \
-  "archive snapshot changed during pg_restore --list" \
+assert_stage_failure \
+  "rejects snapshot identity mutation during pg_restore list" \
+  "snapshot_identity_changed" "not_applicable" \
   env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
     FAKE_MODE=mutate-snapshot FAKE_LOG="$CALL_LOG" \
     FAKE_TOC="${FIXTURES}/representative.toc" \
     bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
 
-assert_failure \
-  "refuses report overwrite" \
-  "output file already exists" \
+assert_stage_failure \
+  "fails closed on report-helper rejection without relaying TOC content" \
+  "report_helper_failed" "not_applicable" \
+  env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
+    FAKE_LOG="$CALL_LOG" FAKE_TOC="${FIXTURES}/unknown-class.toc" \
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
+
+assert_stage_failure \
+  "refuses report overwrite with a report-publish stage" \
+  "report_publish_failed" "not_applicable" \
   env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
     FAKE_LOG="$CALL_LOG" FAKE_TOC="${FIXTURES}/representative.toc" \
-    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" --output "$REPORT_FILE" "$DUMP_FILE"
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" \
+      --output "$REPORT_FILE" "$DUMP_FILE"
+
+readonly PARTIAL_PUBLISH_REPORT="${OUTPUT_DIR}/partial publish report.txt"
+assert_stage_failure \
+  "removes a staged report when report publication setup fails" \
+  "report_publish_failed" "not_applicable" \
+  env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$FAILING_PYTHON" \
+    REAL_PYTHON_BIN="$PYTHON" FAIL_PYTHON_OPERATION=stage \
+    FAKE_LOG="$CALL_LOG" FAKE_TOC="${FIXTURES}/representative.toc" \
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" \
+      --output "$PARTIAL_PUBLISH_REPORT" "$DUMP_FILE"
+if [[ ! -e "$PARTIAL_PUBLISH_REPORT" ]] &&
+  ! find "$OUTPUT_DIR" -maxdepth 1 -name '.lovable-metadata-report.*.pending' \
+    -print -quit | grep -q .; then
+  pass "report publication setup failure leaves no final or staged report"
+else
+  fail "report publication setup failure leaves no final or staged report"
+fi
+
+readonly CLEANUP_REPORT="${OUTPUT_DIR}/cleanup failure report.txt"
+assert_stage_failure \
+  "reports cleanup failure as the final authoritative stage" \
+  "cleanup_failed" "not_applicable" \
+  env PATH="$SHIM_ROOT/cleanup:$PATH" PG_RESTORE_BIN="$FAKE_PG_RESTORE" \
+    PYTHON_BIN="$PYTHON" FAKE_LOG="$CALL_LOG" \
+    FAKE_TOC="${FIXTURES}/representative.toc" \
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" \
+      --output "$CLEANUP_REPORT" "$DUMP_FILE"
+if [[ ! -e "$CLEANUP_REPORT" ]] &&
+  ! find "$OUTPUT_DIR" -maxdepth 1 -name '.lovable-metadata-report.*.pending' \
+    -print -quit | grep -q .; then
+  pass "cleanup failure occurs before report publication and removes its stage"
+else
+  fail "cleanup failure occurs before report publication and removes its stage"
+fi
+cleanup_leftover="$(find "$TMP_ROOT" -maxdepth 1 -type d \
+  -name 'lovable-dump-inspection.*' -print -quit)"
+if [[ -n "$cleanup_leftover" ]]; then
+  "$REAL_RM_BIN" -rf -- "$cleanup_leftover"
+  pass "cleanup failure leaves only the private workspace for explicit quarantine"
+else
+  fail "cleanup failure leaves only the private workspace for explicit quarantine"
+fi
+
+assert_stage_failure \
+  "unexpected bootstrap command failure maps to internal failure" \
+  "internal_failure" "not_applicable" \
+  env PATH="$SHIM_ROOT/internal:$PATH" PG_RESTORE_BIN="$FAKE_PG_RESTORE" \
+    PYTHON_BIN="$PYTHON" REAL_DIRNAME_BIN="$REAL_DIRNAME_BIN" \
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
+
+assert_not_contains "$CALL_LOG" "$SECRET_SENTINEL" \
+  "pg_restore invocation ledger contains no row-payload sentinel"
+assert_not_contains "$CALL_LOG" 'TOP_SECRET_VERSION_FAILURE_MUST_NOT_APPEAR' \
+  "pg_restore invocation ledger contains no version-failure secret"
+assert_not_contains "$CALL_LOG" 'TOP_SECRET_PG_RESTORE_FAILURE_MUST_NOT_APPEAR' \
+  "pg_restore invocation ledger contains no list-failure secret"
 
 printf '\n%s passed; %s failed\n' "$passes" "$failures"
 [[ "$failures" -eq 0 ]]

@@ -31,13 +31,12 @@ remaining claims explicitly.
 pg_restore --list does not prove that every byte of the inner input was consumed.
 
 One authorized rehearsal export is retained offline in the approved evidence
-store. Its inspection is blocked by a procedure mismatch: the retained download
-has a ZIP wrapper, while the previously reviewed inspector accepts only a raw
-`PGDMP` archive. No identifying artifact metadata belongs in this repository.
-Adding and reviewing a strict local ZIP normalizer resolves the procedural
-mismatch without generating a replacement export, but it does not make the
-migration ready. The normalizer and all repository tests use synthetic fixtures
-only; repository work must not inspect or otherwise access the retained export.
+store. Merged ZIP-envelope support resolved the earlier wrapper mismatch, but a
+separately authorized metadata-only attempt subsequently failed closed inside
+the raw inspector without a stable stage attribution. No identifying artifact
+metadata belongs in this repository. The diagnostic hardening procedure uses
+synthetic fixtures only and does not access or retry the retained export. It
+does not make the migration ready.
 
 The following are **support-reported and not yet empirically proven**:
 
@@ -169,8 +168,9 @@ not completion. Its provenance must therefore record
 `export_timeline_status: INCOMPLETE`, while metadata inspection remains
 `inspection_status: REVIEW_REQUIRED`. The missing initiation does not require a
 new rehearsal export and does not prevent safe offline metadata inspection after
-the ZIP procedure is reviewed. Every future rehearsal and final export must
-record initiation correctly before the export action is taken.
+an exact execution checkout is separately reviewed and approved. Every future
+rehearsal and final export must record initiation correctly before the export
+action is taken.
 
 Bind the run to an explicit evidence profile. The retained-rehearsal profile
 requires unobserved initiation and an `INCOMPLETE` timeline; future-rehearsal
@@ -322,7 +322,7 @@ downloaded outer filename.
 For ZIP input, prefix/polyglot and trailing-junk rejection is enforced by exact
 byte-zero local-header and EOF end-of-central-directory framing. For direct raw
 `PGDMP`, the normalizer enforces a stable bounded copy and conservative header
-validation, while the unchanged inspector's real `pg_restore --list` invocation
+validation, while the execution-bound inspector's real `pg_restore --list` invocation
 supplies a bounded TOC/compatibility signal only and may accept appended inner
 bytes. Whole-file hashes bind the exact inner input, but do not prove that
 `pg_restore` consumed it all. Failure at either layer publishes no evidence
@@ -336,6 +336,22 @@ Fixed limits permit 15 seconds and 1 MiB stdout for `--version`, 300 seconds and
 channels into private exclusive captures, kills the process group and
 waits for/reaps its direct child leader on timeout or overflow, passes output
 only after exit zero, and removes every capture.
+
+Every raw-inspector failure must emit one exact versioned JSON record containing
+only an allowlisted stage and safe reason. The high-level driver must reject a
+missing, malformed, duplicate, oversized, non-ASCII, unknown, or mixed
+diagnostic and must never relay raw child stdout/stderr, TOC text, paths, object
+names, or payload bytes. A failed run publishes no normal durable evidence
+package and removes its disposable snapshot, TOC, derived archive, partial
+report, and provenance. Reviewed `pg_restore` failure reasons are limited to
+unsupported archive version, invalid archive, truncated archive, timeout,
+output cap, or other nonzero; all unfamiliar text is `other_nonzero`.
+The approved workflow records its resolved execution-Python identity, runs
+child Python tools in isolated mode, pins the raw inspector to that interpreter
+and `/bin/bash`, and excludes inherited shell/Python startup hooks from the
+child environment. The raw inspector must finish private-workspace cleanup
+before atomically publishing a no-replace report; cleanup failure publishes
+nothing.
 
 pg_restore --list does not prove that every byte of the inner input was consumed.
 
@@ -373,8 +389,11 @@ not make an indeterminate package valid and does not authorize continuation.
 Derive the run ID from the observed availability time plus a prefix of the outer
 SHA-256, never from initiation or artifact metadata.
 
-Only the verified inner `PGDMP` is passed to the existing inspector. The
-inspector's boundary remains unchanged: it validates a local raw custom-format
+Only the verified inner `PGDMP` is passed to the execution-bound inspector.
+Before invoking `pg_restore`, it records the numeric three-byte archive-format
+version, integer width, offset width, and custom-format code from the first 11
+PGDMP header bytes and binds them to the already verified inner SHA-256. The
+inspector otherwise retains its boundary: it validates a local raw custom-format
 archive, checks tool compatibility, invokes `pg_restore` only with `--version`
 and `--list`, emits metadata only, and fails closed on unknown TOC classes.
 Review every warning for owners, ACLs, roles, extensions, subscriptions, event
@@ -389,9 +408,11 @@ direct mode explicitly records the canonical-to-verified-copy relationship;
 ZIP mode records exact UI/member-name equality; and provenance separately
 records the repository-config source binding, structured timeline and statuses, outer
 identity/ZIP metadata and actual member metadata when applicable, inner identity
-and inspector-reported hash, operator, informational procedure-origin SHA,
+and inspector-reported hash, the pre-`pg_restore` safe header fields bound to
+that same inner hash, operator, informational procedure-origin SHA,
 externally approved checkout SHA, actual execution-checkout SHA, committed
-README blob SHA, fenced-workflow SHA-256, inspection-tool/baseline SHA, and
+README blob SHA, fenced-workflow SHA-256, execution-bound inspector Git
+blob/file SHA, historical helper/migration baseline SHA, and
 report/provenance hashes. The approved and execution SHAs must be identical.
 The per-file manifest and detached hash must verify in the durable package, the
 disposable local run must be absent, and the externally approved expected outer

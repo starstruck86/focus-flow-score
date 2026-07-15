@@ -87,8 +87,11 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Exercise macOS normalization and durable publication
+      - name: Exercise macOS inspection diagnostics and durable publication
         run: |
+          bash -n \
+            scripts/migration/inspect-lovable-dump.sh \
+            scripts/migration/tests/inspect-lovable-dump.test.sh
           python3 - <<'PY'
           from pathlib import Path
 
@@ -99,6 +102,7 @@ jobs:
           ):
               compile(path.read_text(encoding="utf-8"), str(path), "exec")
           PY
+          bash scripts/migration/tests/inspect-lovable-dump.test.sh
           python3 -m unittest discover \
             -s tests/migration -p 'test_lovable_zip_normalizer.py' -v
           python3 -m unittest discover \

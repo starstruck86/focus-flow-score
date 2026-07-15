@@ -35,9 +35,61 @@ READ_CHUNK_BYTES = 64 * 1024
 
 REMOTE_PATH_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://")
 
+REASON_TIMEOUT = "timeout"
+REASON_OUTPUT_CAP = "output_cap"
+REASON_UNSUPPORTED_ARCHIVE_VERSION = "unsupported_archive_version"
+REASON_INVALID_ARCHIVE = "invalid_archive"
+REASON_TRUNCATED_ARCHIVE = "truncated_archive"
+REASON_OTHER_NONZERO = "other_nonzero"
+ALLOWED_REASON_CODES = frozenset(
+    {
+        REASON_TIMEOUT,
+        REASON_OUTPUT_CAP,
+        REASON_UNSUPPORTED_ARCHIVE_VERSION,
+        REASON_INVALID_ARCHIVE,
+        REASON_TRUNCATED_ARCHIVE,
+        REASON_OTHER_NONZERO,
+    }
+)
+
+# These expressions intentionally recognize only complete, C-locale messages
+# emitted by PostgreSQL.  Any extra line, path, byte, or unrecognized wording
+# falls back to other_nonzero and is never relayed to the caller.
+UNSUPPORTED_ARCHIVE_VERSION_RE = re.compile(
+    rb"\Apg_restore: error: unsupported version \([0-9]{1,3}\.[0-9]{1,3}\) "
+    rb"in file header\n?\Z"
+)
+INVALID_ARCHIVE_MESSAGES = frozenset(
+    {
+        b"pg_restore: error: input file does not appear to be a valid archive",
+        b"pg_restore: error: input file does not appear to be a valid archive "
+        b"(too short?)",
+        b"pg_restore: error: input file appears to be a text format dump. "
+        b"Please use psql.",
+    }
+)
+TRUNCATED_ARCHIVE_MESSAGES = frozenset(
+    {
+        b"pg_restore: error: unexpected end of file",
+        b"pg_restore: error: could not read from input file: end of file",
+        b"pg_restore: error: [custom archiver] could not read from input file: "
+        b"end of file",
+    }
+)
+TRUNCATED_ARCHIVE_RE = re.compile(
+    rb"\Apg_restore: error: input file is too short "
+    rb"\(read [0-9]+, expected [0-9]+\)\Z"
+)
+
 
 class BoundedPgRestoreError(RuntimeError):
-    """A command, executable, timeout, output, or child-process failure."""
+    """A private failure represented publicly by one approved reason code."""
+
+    def __init__(self, reason_code: str):
+        if reason_code not in ALLOWED_REASON_CODES:
+            raise ValueError("unapproved bounded pg_restore reason code")
+        self.reason_code = reason_code
+        super().__init__(reason_code)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -48,29 +100,28 @@ class Request:
     stderr_cap_bytes: int = STDERR_CAP_BYTES
 
     def validate_limits(self) -> None:
-        for label, value in (
-            ("timeout", self.timeout_seconds),
-            ("stdout cap", self.stdout_cap_bytes),
-            ("stderr cap", self.stderr_cap_bytes),
+        for value in (
+            self.timeout_seconds,
+            self.stdout_cap_bytes,
+            self.stderr_cap_bytes,
         ):
             if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
-                raise BoundedPgRestoreError(f"{label} must be positive")
-
+                raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
 
 def _validate_list_input(raw_path: str) -> str:
     if not raw_path or REMOTE_PATH_RE.search(raw_path):
-        raise BoundedPgRestoreError("--list requires a local archive path")
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
     if not os.path.isabs(raw_path) or raw_path.startswith("//"):
-        raise BoundedPgRestoreError("--list archive path must be absolute")
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
 
     try:
         archive_stat = os.lstat(raw_path)
     except OSError as exc:
-        raise BoundedPgRestoreError("--list archive path is unavailable") from exc
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO) from exc
     if stat.S_ISLNK(archive_stat.st_mode):
-        raise BoundedPgRestoreError("--list archive path must not be a symlink")
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
     if not stat.S_ISREG(archive_stat.st_mode):
-        raise BoundedPgRestoreError("--list archive path must be a regular file")
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
     return raw_path
 
 
@@ -88,40 +139,36 @@ def parse_request(arguments: Sequence[str]) -> Request:
             timeout_seconds=LIST_TIMEOUT_SECONDS,
             stdout_cap_bytes=LIST_STDOUT_CAP_BYTES,
         )
-    raise BoundedPgRestoreError(
-        "accepted arguments are exactly --version or --list <absolute-local-path>"
-    )
+    raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
 
 
 def validate_underlying_executable(environment: Mapping[str, str]) -> str:
     raw_path = environment.get(UNDERLYING_ENVIRONMENT_VARIABLE)
     if raw_path is None or raw_path == "":
-        raise BoundedPgRestoreError(
-            f"{UNDERLYING_ENVIRONMENT_VARIABLE} is required and has no default"
-        )
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
     if not os.path.isabs(raw_path):
-        raise BoundedPgRestoreError("underlying pg_restore path must be absolute")
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
 
     try:
         executable_stat = os.lstat(raw_path)
     except OSError as exc:
-        raise BoundedPgRestoreError("underlying pg_restore is unavailable") from exc
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO) from exc
     if stat.S_ISLNK(executable_stat.st_mode):
-        raise BoundedPgRestoreError("underlying pg_restore must not be a symlink")
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
     if not stat.S_ISREG(executable_stat.st_mode):
-        raise BoundedPgRestoreError("underlying pg_restore must be a regular file")
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
     if not os.access(raw_path, os.X_OK):
-        raise BoundedPgRestoreError("underlying pg_restore is not executable")
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
 
     try:
         wrapper_stat = os.stat(__file__)
     except OSError as exc:
-        raise BoundedPgRestoreError("wrapper executable identity is unavailable") from exc
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO) from exc
     if (executable_stat.st_dev, executable_stat.st_ino) == (
         wrapper_stat.st_dev,
         wrapper_stat.st_ino,
     ):
-        raise BoundedPgRestoreError("underlying pg_restore must not be this wrapper")
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
     return raw_path
 
 
@@ -130,8 +177,40 @@ def _write_all(file_descriptor: int, data: bytes) -> None:
     while offset < len(data):
         written = os.write(file_descriptor, data[offset:])
         if written <= 0:
-            raise BoundedPgRestoreError("private capture write failed")
+            raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
         offset += written
+
+
+def _read_private_capture(file_descriptor: int, cap_bytes: int) -> bytes:
+    if os.fstat(file_descriptor).st_size > cap_bytes:
+        raise BoundedPgRestoreError(REASON_OUTPUT_CAP)
+    os.lseek(file_descriptor, 0, os.SEEK_SET)
+    captured = bytearray()
+    while True:
+        chunk = os.read(file_descriptor, min(READ_CHUNK_BYTES, cap_bytes + 1))
+        if not chunk:
+            break
+        captured.extend(chunk)
+        if len(captured) > cap_bytes:
+            raise BoundedPgRestoreError(REASON_OUTPUT_CAP)
+    return bytes(captured)
+
+
+def classify_child_stderr(raw_stderr: bytes) -> str:
+    """Reduce private C-locale stderr to a fixed, non-sensitive reason code."""
+
+    if UNSUPPORTED_ARCHIVE_VERSION_RE.fullmatch(raw_stderr) is not None:
+        return REASON_UNSUPPORTED_ARCHIVE_VERSION
+
+    message = raw_stderr[:-1] if raw_stderr.endswith(b"\n") else raw_stderr
+    if message in INVALID_ARCHIVE_MESSAGES:
+        return REASON_INVALID_ARCHIVE
+    if (
+        message in TRUNCATED_ARCHIVE_MESSAGES
+        or TRUNCATED_ARCHIVE_RE.fullmatch(message) is not None
+    ):
+        return REASON_TRUNCATED_ARCHIVE
+    return REASON_OTHER_NONZERO
 
 
 def _kill_process_group_and_reap_leader(process: subprocess.Popen[bytes]) -> None:
@@ -156,12 +235,12 @@ def _capture_child(
     stderr_cap_bytes: int,
 ) -> None:
     if process.stdout is None or process.stderr is None:
-        raise BoundedPgRestoreError("child output pipes were not created")
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
 
     selector = selectors.DefaultSelector()
     streams = {
-        process.stdout: (stdout_fd, stdout_cap_bytes, "stdout", 0),
-        process.stderr: (stderr_fd, stderr_cap_bytes, "stderr", 0),
+        process.stdout: (stdout_fd, stdout_cap_bytes, 0),
+        process.stderr: (stderr_fd, stderr_cap_bytes, 0),
     }
     for stream in streams:
         os.set_blocking(stream.fileno(), False)
@@ -172,7 +251,7 @@ def _capture_child(
         while selector.get_map() or process.poll() is None:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise BoundedPgRestoreError("pg_restore exceeded its reviewed timeout")
+                raise BoundedPgRestoreError(REASON_TIMEOUT)
             if not selector.get_map():
                 # A child can close both output streams and remain alive.  Keep
                 # the process-lifetime timeout authoritative in that case.
@@ -181,7 +260,7 @@ def _capture_child(
             events = selector.select(timeout=min(remaining, 0.1))
             for key, _mask in events:
                 stream = key.fileobj
-                capture_fd, cap_bytes, label, captured_bytes = streams[stream]
+                capture_fd, cap_bytes, captured_bytes = streams[stream]
                 try:
                     chunk = os.read(stream.fileno(), READ_CHUNK_BYTES)
                 except BlockingIOError:
@@ -191,14 +270,11 @@ def _capture_child(
                     stream.close()
                     continue
                 if captured_bytes + len(chunk) > cap_bytes:
-                    raise BoundedPgRestoreError(
-                        f"pg_restore {label} exceeded its reviewed byte cap"
-                    )
+                    raise BoundedPgRestoreError(REASON_OUTPUT_CAP)
                 _write_all(capture_fd, chunk)
                 streams[stream] = (
                     capture_fd,
                     cap_bytes,
-                    label,
                     captured_bytes + len(chunk),
                 )
     finally:
@@ -263,6 +339,9 @@ def run_request(
 
         child_environment = dict(environment)
         child_environment.pop(UNDERLYING_ENVIRONMENT_VARIABLE, None)
+        child_environment["LC_ALL"] = "C"
+        child_environment["LANG"] = "C"
+        child_environment.pop("LANGUAGE", None)
         try:
             process = subprocess.Popen(
                 [executable, *request.child_arguments],
@@ -273,7 +352,7 @@ def run_request(
                 start_new_session=True,
             )
         except OSError as exc:
-            raise BoundedPgRestoreError("could not start underlying pg_restore") from exc
+            raise BoundedPgRestoreError(REASON_OTHER_NONZERO) from exc
 
         _capture_child(
             process,
@@ -286,12 +365,15 @@ def run_request(
 
         return_code = process.wait()
         if return_code != 0:
-            raise BoundedPgRestoreError("underlying pg_restore exited unsuccessfully")
+            reason_code = classify_child_stderr(
+                _read_private_capture(stderr_fd, request.stderr_cap_bytes)
+            )
+            raise BoundedPgRestoreError(reason_code)
 
         if os.fstat(stdout_fd).st_size > request.stdout_cap_bytes:
-            raise BoundedPgRestoreError("pg_restore stdout exceeded its reviewed byte cap")
+            raise BoundedPgRestoreError(REASON_OUTPUT_CAP)
         if os.fstat(stderr_fd).st_size > request.stderr_cap_bytes:
-            raise BoundedPgRestoreError("pg_restore stderr exceeded its reviewed byte cap")
+            raise BoundedPgRestoreError(REASON_OUTPUT_CAP)
 
         _emit_capture(stdout_fd, stdout)
         _emit_capture(stderr_fd, stderr)
@@ -309,6 +391,24 @@ def run_request(
         shutil.rmtree(temporary_directory)
 
 
+def _failure_diagnostic(reason_code: str) -> bytes:
+    if reason_code not in ALLOWED_REASON_CODES:
+        reason_code = REASON_OTHER_NONZERO
+    return (
+        f'{{"diagnostic_version":1,"reason":"{reason_code}"}}\n'.encode("ascii")
+    )
+
+
+def _emit_failure_diagnostic(reason_code: str) -> None:
+    try:
+        sys.stderr.buffer.write(_failure_diagnostic(reason_code))
+        sys.stderr.buffer.flush()
+    except Exception:
+        # The diagnostic destination itself may be unavailable.  Never replace
+        # the fixed diagnostic with a traceback or other free-form text.
+        pass
+
+
 def main(arguments: Sequence[str] | None = None) -> int:
     if arguments is None:
         arguments = sys.argv[1:]
@@ -323,12 +423,10 @@ def main(arguments: Sequence[str] | None = None) -> int:
             stderr=sys.stderr.buffer,
         )
     except BoundedPgRestoreError as exc:
-        print(f"bounded-pg-restore: error: {exc}", file=sys.stderr)
+        _emit_failure_diagnostic(exc.reason_code)
         return 1
-    except OSError:
-        print("bounded-pg-restore: error: local bounded execution failed", file=sys.stderr)
-        return 1
-    except BrokenPipeError:
+    except Exception:
+        _emit_failure_diagnostic(REASON_OTHER_NONZERO)
         return 1
     return 0
 

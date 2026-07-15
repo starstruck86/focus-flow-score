@@ -2,11 +2,9 @@
 
 # Read-only inspection for a local PostgreSQL custom-format archive.
 #
-# This script deliberately has no restore or database connection mode. It only:
-#   1. validates a local archive path and PGDMP header,
-#   2. captures the bytes into a private read-only local snapshot,
-#   3. binds that snapshot's SHA-256 to pg_restore's metadata-only TOC, and
-#   4. renders a sanitized metadata report.
+# The script has no restore or database connection mode. Failure stderr is one
+# fixed JSON diagnostic containing only reviewed, allowlisted values. Child,
+# tool, path, archive, and TOC text is never relayed on failure.
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -14,8 +12,140 @@ LC_ALL=C
 export LC_ALL
 umask 077
 
-readonly SCRIPT_DIR="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly REPO_ROOT="$(cd -P -- "${SCRIPT_DIR}/../.." && pwd)"
+failure_stage=''
+failure_reason='not_applicable'
+current_stage='internal_failure'
+work_dir=''
+staged_report=''
+
+stage_is_allowed() {
+  case "$1" in
+    pg_restore_version_failed | \
+      snapshot_copy_failed | \
+      snapshot_permissions_failed | \
+      snapshot_hash_before_failed | \
+      pg_restore_list_rejected | \
+      pg_restore_list_empty | \
+      snapshot_hash_after_failed | \
+      snapshot_identity_changed | \
+      report_helper_failed | \
+      report_publish_failed | \
+      input_validation_failed | \
+      dependency_validation_failed | \
+      workspace_setup_failed | \
+      pgdmp_header_failed | \
+      cleanup_failed | \
+      internal_failure)
+      return 0
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+reason_is_allowed() {
+  case "$1" in
+    not_applicable | \
+      unsupported_archive_version | \
+      invalid_archive | \
+      truncated_archive | \
+      timeout | \
+      output_cap | \
+      invalid_output | \
+      other_nonzero)
+      return 0
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+fail() {
+  local stage="$1"
+  local reason="${2:-not_applicable}"
+  local code="${3:-4}"
+  if ! stage_is_allowed "$stage" || ! reason_is_allowed "$reason"; then
+    failure_stage='internal_failure'
+    failure_reason='invalid_output'
+    exit 4
+  fi
+  failure_stage="$stage"
+  failure_reason="$reason"
+  exit "$code"
+}
+
+remove_work_dir() {
+  [[ -n "$work_dir" ]] || return 0
+  if ! rm -rf -- "$work_dir" >/dev/null 2>&1; then
+    return 1
+  fi
+  work_dir=''
+}
+
+remove_staged_report() {
+  [[ -n "$staged_report" ]] || return 0
+  [[ -n "${PYTHON:-}" ]] || return 1
+  if ! "$PYTHON" -I - "$staged_report" cleanup >/dev/null 2>&1 <<'PY'
+import pathlib
+import sys
+
+try:
+    pathlib.Path(sys.argv[1]).unlink(missing_ok=True)
+except OSError:
+    raise SystemExit(1)
+PY
+  then
+    return 1
+  fi
+  staged_report=''
+}
+
+on_exit() {
+  local status=$?
+  local cleanup_status=0
+  local stage reason
+  trap - EXIT HUP INT TERM
+
+  remove_staged_report || cleanup_status=1
+  remove_work_dir || cleanup_status=1
+  if [[ "$cleanup_status" -ne 0 ]]; then
+    failure_stage='cleanup_failed'
+    failure_reason='not_applicable'
+    status=4
+  fi
+
+  if [[ "$status" -ne 0 ]]; then
+    stage="${failure_stage:-$current_stage}"
+    reason="${failure_reason:-not_applicable}"
+    if ! stage_is_allowed "$stage" || ! reason_is_allowed "$reason"; then
+      stage='internal_failure'
+      reason='invalid_output'
+      status=4
+    fi
+    printf '{"diagnostic_version":1,"stage":"%s","reason":"%s"}\n' \
+      "$stage" "$reason" >&2 || true
+  fi
+  exit "$status"
+}
+
+on_signal() {
+  failure_stage="${current_stage:-internal_failure}"
+  failure_reason='not_applicable'
+  exit "$1"
+}
+
+trap on_exit EXIT
+trap 'on_signal 129' HUP
+trap 'on_signal 130' INT
+trap 'on_signal 143' TERM
+
+current_stage='internal_failure'
+if ! script_dir="$({ cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd; } 2>/dev/null)"; then
+  fail 'internal_failure'
+fi
+if ! repo_root="$({ cd -P -- "${script_dir}/../.." && pwd; } 2>/dev/null)"; then
+  fail 'internal_failure'
+fi
+readonly SCRIPT_DIR="$script_dir"
+readonly REPO_ROOT="$repo_root"
 readonly REPORT_HELPER="${SCRIPT_DIR}/lib/lovable_dump_report.py"
 
 usage() {
@@ -29,6 +159,8 @@ Options:
   --output FILE         Write the metadata-only report to a new local file.
                         The parent directory must already exist. Existing files
                         are never overwritten. Without this option, print to stdout.
+  --expected-sha256 HEX Require the private snapshot to equal this lowercase
+                        SHA-256 before any pg_restore invocation.
   -h, --help            Show this help.
 
 Safety boundary:
@@ -42,13 +174,6 @@ Safety boundary:
 USAGE
 }
 
-die() {
-  local message="$1"
-  local code="${2:-1}"
-  printf 'ERROR: %s\n' "$message" >&2
-  exit "$code"
-}
-
 is_url_like() {
   local value="$1"
   [[ "$value" =~ ^[[:alpha:]][[:alnum:]+.-]*:// ]] ||
@@ -56,205 +181,529 @@ is_url_like() {
 }
 
 reject_unsafe_path_text() {
-  local label="$1"
-  local value="$2"
-  is_url_like "$value" && die "${label} must be a local filesystem path, not a URL or connection string"
-  [[ "$value" == *$'\n'* || "$value" == *$'\r'* ]] &&
-    die "${label} must not contain newline characters"
-  return 0
+  local value="$1"
+  if is_url_like "$value" || [[ "$value" == *$'\n'* || "$value" == *$'\r'* ]]; then
+    fail 'input_validation_failed' 'not_applicable' 2
+  fi
 }
 
 resolve_executable() {
-  local override="$1"
-  local default_name="$2"
-  local label="$3"
-  local resolved
+  local output_name="$1"
+  local override="$2"
+  local default_name="$3"
+  local resolved=''
 
   if [[ -n "$override" ]]; then
     [[ -x "$override" && ! -d "$override" ]] ||
-      die "${label} executable is missing or not executable: ${override}" 3
-    printf '%s\n' "$override"
-    return
+      fail 'dependency_validation_failed' 'not_applicable' 3
+    printf -v "$output_name" '%s' "$override"
+    return 0
   fi
 
-  resolved="$(command -v "$default_name" 2>/dev/null || true)"
-  [[ -n "$resolved" && -x "$resolved" ]] ||
-    die "required tool not found: ${default_name}" 3
-  printf '%s\n' "$resolved"
+  if ! resolved="$(command -v "$default_name" 2>/dev/null)" ||
+    [[ -z "$resolved" || ! -x "$resolved" || -d "$resolved" ]]; then
+    fail 'dependency_validation_failed' 'not_applicable' 3
+  fi
+  printf -v "$output_name" '%s' "$resolved"
 }
 
+current_stage='input_validation_failed'
 dump_input=''
 output_input=''
+expected_sha256=''
 migrations_input="${REPO_ROOT}/supabase/migrations"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --migrations-dir)
-      [[ $# -ge 2 ]] || die "--migrations-dir requires a directory path" 2
+      [[ $# -ge 2 ]] || fail 'input_validation_failed' 'not_applicable' 2
       migrations_input="$2"
       shift 2
       ;;
     --output)
-      [[ $# -ge 2 ]] || die "--output requires a file path" 2
+      [[ $# -ge 2 ]] || fail 'input_validation_failed' 'not_applicable' 2
       output_input="$2"
       shift 2
       ;;
-    -h|--help)
+    --expected-sha256)
+      [[ $# -ge 2 ]] || fail 'input_validation_failed' 'not_applicable' 2
+      expected_sha256="$2"
+      shift 2
+      ;;
+    -h | --help)
       usage
       exit 0
       ;;
     --)
       shift
-      [[ $# -eq 1 ]] || die "expected exactly one local dump file after --" 2
+      [[ $# -eq 1 ]] || fail 'input_validation_failed' 'not_applicable' 2
       dump_input="$1"
       shift
       ;;
-    -*)
-      die "unknown option: $1" 2
-      ;;
+    -*) fail 'input_validation_failed' 'not_applicable' 2 ;;
     *)
-      [[ -z "$dump_input" ]] || die "expected exactly one local dump file" 2
+      [[ -z "$dump_input" ]] || fail 'input_validation_failed' 'not_applicable' 2
       dump_input="$1"
       shift
       ;;
   esac
 done
 
-[[ -n "$dump_input" ]] || die "a local dump file is required" 2
-reject_unsafe_path_text "dump path" "$dump_input"
-reject_unsafe_path_text "migrations directory" "$migrations_input"
-[[ -z "$output_input" ]] || reject_unsafe_path_text "output path" "$output_input"
+[[ -n "$dump_input" ]] || fail 'input_validation_failed' 'not_applicable' 2
+reject_unsafe_path_text "$dump_input"
+reject_unsafe_path_text "$migrations_input"
+[[ -z "$output_input" ]] || reject_unsafe_path_text "$output_input"
+if [[ -n "$expected_sha256" && ! "$expected_sha256" =~ ^[0-9a-f]{64}$ ]]; then
+  fail 'input_validation_failed' 'not_applicable' 2
+fi
 
-[[ -e "$dump_input" ]] || die "dump file does not exist" 2
-[[ -f "$dump_input" ]] || die "dump path is not a regular file" 2
-[[ -r "$dump_input" ]] || die "dump file is not readable" 2
-[[ -s "$dump_input" ]] || die "dump file is empty" 2
+[[ -e "$dump_input" ]] || fail 'input_validation_failed' 'not_applicable' 2
+[[ -f "$dump_input" ]] || fail 'input_validation_failed' 'not_applicable' 2
+[[ -r "$dump_input" ]] || fail 'input_validation_failed' 'not_applicable' 2
+[[ -s "$dump_input" ]] || fail 'input_validation_failed' 'not_applicable' 2
 
-readonly DUMP_DIR="$(cd -P -- "$(dirname -- "$dump_input")" && pwd)"
-readonly DUMP_PATH="${DUMP_DIR}/$(basename -- "$dump_input")"
-readonly INPUT_NAME="$(basename -- "$DUMP_PATH")"
+if ! dump_dir="$({ cd -P -- "$(dirname -- "$dump_input")" && pwd; } 2>/dev/null)"; then
+  fail 'input_validation_failed' 'not_applicable' 2
+fi
+if ! input_name="$(basename -- "$dump_input" 2>/dev/null)" || [[ -z "$input_name" ]]; then
+  fail 'input_validation_failed' 'not_applicable' 2
+fi
+readonly DUMP_DIR="$dump_dir"
+readonly DUMP_PATH="${DUMP_DIR}/${input_name}"
+readonly INPUT_NAME="$input_name"
 
 archive_magic=''
-IFS= read -r -n 5 archive_magic < "$DUMP_PATH" || true
-[[ "$archive_magic" == 'PGDMP' ]] ||
-  die "unsupported dump format: expected a PostgreSQL custom-format archive (PGDMP)" 4
+{ IFS= read -r -n 5 archive_magic < "$DUMP_PATH" || true; } 2>/dev/null
+[[ "$archive_magic" == 'PGDMP' ]] || fail 'input_validation_failed' 'not_applicable' 4
 
-[[ -d "$migrations_input" ]] || die "migrations directory does not exist" 2
-readonly MIGRATIONS_DIR="$(cd -P -- "$migrations_input" && pwd)"
+[[ -d "$migrations_input" ]] || fail 'input_validation_failed' 'not_applicable' 2
+if ! migrations_dir="$({ cd -P -- "$migrations_input" && pwd; } 2>/dev/null)"; then
+  fail 'input_validation_failed' 'not_applicable' 2
+fi
+readonly MIGRATIONS_DIR="$migrations_dir"
 
-PG_RESTORE="$(resolve_executable "${PG_RESTORE_BIN:-}" pg_restore pg_restore)" || exit $?
-PYTHON="$(resolve_executable "${PYTHON_BIN:-}" python3 python3)" || exit $?
+current_stage='dependency_validation_failed'
+PG_RESTORE=''
+PYTHON=''
+resolve_executable PG_RESTORE "${PG_RESTORE_BIN:-}" pg_restore
+resolve_executable PYTHON "${PYTHON_BIN:-}" python3
 readonly PG_RESTORE PYTHON
-[[ -r "$REPORT_HELPER" ]] || die "report helper is missing: ${REPORT_HELPER}" 3
+case "${LOVABLE_PG_RESTORE_GUARD_IS_PYTHON:-0}" in
+  0 | 1) ;;
+  *) fail 'dependency_validation_failed' 'not_applicable' 3 ;;
+esac
+[[ -r "$REPORT_HELPER" ]] || fail 'dependency_validation_failed' 'not_applicable' 3
 
-pg_restore_output=''
-if ! pg_restore_output="$("$PG_RESTORE" --version 2>/dev/null)"; then
-  die "pg_restore --version failed; install a working PostgreSQL client" 3
-fi
-
-if [[ ! "$pg_restore_output" =~ ^pg_restore[[:space:]]+\(PostgreSQL\)[[:space:]]+([0-9]+)(\.([0-9]+))? ]]; then
-  die "pg_restore returned an unrecognized version string" 3
-fi
-readonly PG_RESTORE_VERSION="${BASH_REMATCH[1]}${BASH_REMATCH[2]:-}"
-
-readonly WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/lovable-dump-inspection.XXXXXX")"
-cleanup() {
-  rm -rf -- "$WORK_DIR"
+run_pg_restore() {
+  if [[ "${LOVABLE_PG_RESTORE_GUARD_IS_PYTHON:-0}" == '1' ]]; then
+    "$PYTHON" -I "$PG_RESTORE" "$@"
+  else
+    "$PG_RESTORE" "$@"
+  fi
 }
-trap cleanup EXIT HUP INT TERM
 
-readonly SNAPSHOT_PATH="${WORK_DIR}/archive.snapshot"
-readonly TOC_FILE="${WORK_DIR}/archive.toc"
-readonly PG_RESTORE_ERROR="${WORK_DIR}/pg_restore.stderr"
-readonly REPORT_FILE="${WORK_DIR}/report.txt"
-
-if ! cp -- "$DUMP_PATH" "$SNAPSHOT_PATH"; then
-  die "could not capture a private archive snapshot" 4
+current_stage='workspace_setup_failed'
+if ! work_dir="$(mktemp -d "${TMPDIR:-/tmp}/lovable-dump-inspection.XXXXXX" 2>/dev/null)" ||
+  [[ -z "$work_dir" || ! -d "$work_dir" ]]; then
+  work_dir=''
+  fail 'workspace_setup_failed'
 fi
-chmod 0400 "$SNAPSHOT_PATH" || die "could not make archive snapshot read-only" 4
+readonly SNAPSHOT_PATH="${work_dir}/archive.snapshot"
+readonly HEADER_METADATA_FILE="${work_dir}/header.metadata"
+readonly TOC_FILE="${work_dir}/archive.toc"
+readonly PG_RESTORE_ERROR="${work_dir}/pg_restore.stderr"
+readonly PG_RESTORE_VERSION_OUTPUT="${work_dir}/pg_restore-version.stdout"
+readonly PG_RESTORE_VERSION_ERROR="${work_dir}/pg_restore-version.stderr"
+readonly REPORT_HELPER_ERROR="${work_dir}/report-helper.stderr"
+readonly REPORT_FILE="${work_dir}/report.txt"
 
-sha256_file() {
-  "$PYTHON" - "$1" <<'PY'
+current_stage='snapshot_copy_failed'
+if ! cp -- "$DUMP_PATH" "$SNAPSHOT_PATH" >/dev/null 2>&1; then
+  fail 'snapshot_copy_failed'
+fi
+
+current_stage='snapshot_permissions_failed'
+if ! chmod 0400 "$SNAPSHOT_PATH" >/dev/null 2>&1; then
+  fail 'snapshot_permissions_failed'
+fi
+if ! { "$PYTHON" -I - "$SNAPSHOT_PATH" permissions <<'PY'
+import os
+import pathlib
+import stat
+import sys
+
+path = pathlib.Path(sys.argv[1])
+try:
+    metadata = os.stat(path, follow_symlinks=False)
+except OSError:
+    raise SystemExit(1)
+if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o400:
+    raise SystemExit(1)
+PY
+} >/dev/null 2>/dev/null; then
+  fail 'snapshot_permissions_failed'
+fi
+
+current_stage='snapshot_hash_before_failed'
+header_status=0
+if { "$PYTHON" -I - "$SNAPSHOT_PATH" before > "$HEADER_METADATA_FILE" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+digest = hashlib.sha256()
+header = b""
+try:
+    with path.open("rb") as source:
+        while True:
+            chunk = source.read(1024 * 1024)
+            if not chunk:
+                break
+            if len(header) < 11:
+                header += chunk[: 11 - len(header)]
+            digest.update(chunk)
+except OSError:
+    raise SystemExit(40)
+if len(header) < 11 or not header.startswith(b"PGDMP"):
+    raise SystemExit(41)
+print(
+    "|".join(
+        (
+            digest.hexdigest(),
+            str(header[5]),
+            str(header[6]),
+            str(header[7]),
+            str(header[8]),
+            str(header[9]),
+            str(header[10]),
+        )
+    )
+)
+PY
+} 2>/dev/null; then
+  header_status=0
+else
+  header_status=$?
+fi
+if [[ "$header_status" -eq 41 ]]; then
+  fail 'pgdmp_header_failed'
+elif [[ "$header_status" -ne 0 ]]; then
+  fail 'snapshot_hash_before_failed'
+fi
+
+header_record=''
+if ! { IFS= read -r header_record < "$HEADER_METADATA_FILE"; } 2>/dev/null; then
+  fail 'pgdmp_header_failed' 'invalid_output'
+fi
+header_record_without_separators="${header_record//|/}"
+if [[ $((${#header_record} - ${#header_record_without_separators})) -ne 6 ]]; then
+  fail 'pgdmp_header_failed' 'invalid_output'
+fi
+IFS='|' read -r snapshot_sha_before header_major header_minor header_revision \
+  header_integer_size header_offset_size header_format extra_header_field <<< "$header_record"
+if [[ -n "${extra_header_field:-}" ]] ||
+  [[ ! "$snapshot_sha_before" =~ ^[0-9a-f]{64}$ ]] ||
+  [[ ! "$header_major" =~ ^[0-9]{1,3}$ ]] ||
+  [[ ! "$header_minor" =~ ^[0-9]{1,3}$ ]] ||
+  [[ ! "$header_revision" =~ ^[0-9]{1,3}$ ]] ||
+  [[ ! "$header_integer_size" =~ ^[0-9]{1,3}$ ]] ||
+  [[ ! "$header_offset_size" =~ ^[0-9]{1,3}$ ]] ||
+  [[ ! "$header_format" =~ ^[0-9]{1,3}$ ]]; then
+  fail 'pgdmp_header_failed' 'invalid_output'
+fi
+if [[ "$header_integer_size" != '4' && "$header_integer_size" != '8' ]] ||
+  [[ "$header_offset_size" != '4' && "$header_offset_size" != '8' ]] ||
+  [[ "$header_format" != '1' ]]; then
+  fail 'pgdmp_header_failed'
+fi
+readonly snapshot_sha_before header_major header_minor header_revision
+readonly header_integer_size header_offset_size header_format
+
+if [[ -n "$expected_sha256" && "$snapshot_sha_before" != "$expected_sha256" ]]; then
+  fail 'snapshot_identity_changed'
+fi
+
+classify_pg_restore_failure() {
+  local error_file="$1"
+  local classified=''
+  if ! classified="$({ "$PYTHON" -I - "$error_file" classify <<'PY'
+import json
+import pathlib
+import re
+import sys
+
+try:
+    data = pathlib.Path(sys.argv[1]).read_bytes()
+except OSError:
+    print("other_nonzero")
+    raise SystemExit(0)
+if len(data) > 65536:
+    print("other_nonzero")
+    raise SystemExit(0)
+try:
+    text = data.decode("ascii")
+except UnicodeError:
+    print("other_nonzero")
+    raise SystemExit(0)
+text = text.removesuffix("\n")
+bounded_reasons = {
+    "unsupported_archive_version",
+    "invalid_archive",
+    "truncated_archive",
+    "timeout",
+    "output_cap",
+    "other_nonzero",
+}
+if re.fullmatch(
+    r'\{"diagnostic_version":1,"reason":"[a-z_]+"\}',
+    text,
+):
+    parsed = json.loads(text)
+    reason = parsed.get("reason")
+    print(reason if reason in bounded_reasons else "other_nonzero")
+elif "\n" in text or "\r" in text:
+    print("other_nonzero")
+elif re.fullmatch(
+    r"pg_restore(?:: error:|: \[archiver\]) unsupported version "
+    r"\([0-9]+\.[0-9]+\) in file header",
+    text,
+):
+    print("unsupported_archive_version")
+elif text in {
+    "pg_restore: error: input file does not appear to be a valid archive",
+    "pg_restore: error: input file does not appear to be a valid archive (too short?)",
+    "pg_restore: error: input file appears to be a text format dump. Please use psql.",
+}:
+    print("invalid_archive")
+elif re.fullmatch(
+    r"pg_restore: error: input file is too short \(read [0-9]+, expected [0-9]+\)",
+    text,
+) or text in {
+    "pg_restore: error: could not read from input file: end of file",
+    "pg_restore: error: unexpected end of file",
+}:
+    print("truncated_archive")
+else:
+    print("other_nonzero")
+PY
+} 2>/dev/null)" || ! reason_is_allowed "$classified"; then
+    classified='other_nonzero'
+  fi
+  printf '%s' "$classified"
+}
+
+current_stage='pg_restore_version_failed'
+if ! { run_pg_restore --version > "$PG_RESTORE_VERSION_OUTPUT" 2> "$PG_RESTORE_VERSION_ERROR"; } 2>/dev/null; then
+  pg_restore_reason="$(classify_pg_restore_failure "$PG_RESTORE_VERSION_ERROR")"
+  fail 'pg_restore_version_failed' "$pg_restore_reason" 3
+fi
+pg_restore_version=''
+if ! pg_restore_version="$({ "$PYTHON" -I - "$PG_RESTORE_VERSION_OUTPUT" version <<'PY'
+import pathlib
+import re
+import sys
+
+try:
+    data = pathlib.Path(sys.argv[1]).read_bytes()
+except OSError:
+    raise SystemExit(1)
+if len(data) > 4096:
+    raise SystemExit(1)
+try:
+    text = data.decode("ascii")
+except UnicodeError:
+    raise SystemExit(1)
+match = re.fullmatch(
+    r"pg_restore[ \t]+\(PostgreSQL\)[ \t]+([0-9]+(?:\.[0-9]+)?)[^\r\n]*\n?",
+    text,
+)
+if match is None:
+    raise SystemExit(1)
+print(match.group(1))
+PY
+} 2>/dev/null)" || [[ ! "$pg_restore_version" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  fail 'pg_restore_version_failed' 'invalid_output' 3
+fi
+readonly PG_RESTORE_VERSION="$pg_restore_version"
+
+current_stage='pg_restore_list_rejected'
+if ! { run_pg_restore --list "$SNAPSHOT_PATH" > "$TOC_FILE" 2> "$PG_RESTORE_ERROR"; } 2>/dev/null; then
+  pg_restore_reason="$(classify_pg_restore_failure "$PG_RESTORE_ERROR")"
+  fail 'pg_restore_list_rejected' "$pg_restore_reason" 4
+fi
+
+current_stage='pg_restore_list_empty'
+[[ -s "$TOC_FILE" ]] || fail 'pg_restore_list_empty'
+
+current_stage='snapshot_hash_after_failed'
+snapshot_sha_after=''
+if ! snapshot_sha_after="$({ "$PYTHON" -I - "$SNAPSHOT_PATH" after <<'PY'
 import hashlib
 import pathlib
 import sys
 
 digest = hashlib.sha256()
-with pathlib.Path(sys.argv[1]).open("rb") as source:
-    while chunk := source.read(1024 * 1024):
-        digest.update(chunk)
+try:
+    with pathlib.Path(sys.argv[1]).open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+except OSError:
+    raise SystemExit(1)
 print(digest.hexdigest())
 PY
-}
-
-snapshot_sha_before="$(sha256_file "$SNAPSHOT_PATH")" ||
-  die "could not fingerprint captured archive snapshot" 4
-readonly snapshot_sha_before
-
-if ! "$PG_RESTORE" --list "$SNAPSHOT_PATH" >"$TOC_FILE" 2>"$PG_RESTORE_ERROR"; then
-  die "pg_restore --list rejected the archive; it is corrupt or incompatible with pg_restore ${PG_RESTORE_VERSION}" 4
+} 2>/dev/null)" || [[ ! "$snapshot_sha_after" =~ ^[0-9a-f]{64}$ ]]; then
+  fail 'snapshot_hash_after_failed'
 fi
-[[ -s "$TOC_FILE" ]] || die "pg_restore --list returned an empty archive TOC" 4
-
-snapshot_sha_after="$(sha256_file "$SNAPSHOT_PATH")" ||
-  die "could not re-fingerprint captured archive snapshot" 4
 readonly snapshot_sha_after
-[[ "$snapshot_sha_before" == "$snapshot_sha_after" ]] ||
-  die "archive snapshot changed during pg_restore --list; refusing unbound report" 4
 
-if ! "$PYTHON" "$REPORT_HELPER" \
+current_stage='snapshot_identity_changed'
+[[ "$snapshot_sha_before" == "$snapshot_sha_after" ]] ||
+  fail 'snapshot_identity_changed'
+if [[ -n "$expected_sha256" && "$snapshot_sha_after" != "$expected_sha256" ]]; then
+  fail 'snapshot_identity_changed'
+fi
+
+current_stage='report_helper_failed'
+if ! { "$PYTHON" -I "$REPORT_HELPER" \
   --dump "$SNAPSHOT_PATH" \
   --toc "$TOC_FILE" \
   --pg-restore-version "$PG_RESTORE_VERSION" \
   --expected-sha256 "$snapshot_sha_after" \
   --input-name "$INPUT_NAME" \
-  --migrations-dir "$MIGRATIONS_DIR" >"$REPORT_FILE"; then
-  die "archive metadata inspection failed closed" 4
+  --migrations-dir "$MIGRATIONS_DIR" > "$REPORT_FILE" 2> "$REPORT_HELPER_ERROR"; } 2>/dev/null; then
+  fail 'report_helper_failed'
 fi
 
+expected_binding='not_supplied'
+[[ -z "$expected_sha256" ]] || expected_binding='PASS'
+if ! { printf '%s\n' \
+  '' \
+  'PGDMP HEADER CAPTURE' \
+  "archive_format_version_bytes: ${header_major},${header_minor},${header_revision}" \
+  "archive_integer_width_bytes: ${header_integer_size}" \
+  "archive_offset_width_bytes: ${header_offset_size}" \
+  "archive_format_code: ${header_format}" \
+  "archive_header_bound_sha256: ${snapshot_sha_after}" \
+  "expected_sha256_binding: ${expected_binding}" >> "$REPORT_FILE"; } 2>/dev/null; then
+  fail 'report_helper_failed'
+fi
+
+current_stage='report_publish_failed'
 if [[ -z "$output_input" ]]; then
-  cat -- "$REPORT_FILE"
+  if ! exec 3< "$REPORT_FILE"; then
+    fail 'report_publish_failed'
+  fi
+  if ! remove_work_dir; then
+    exec 3<&- || true
+    fail 'cleanup_failed'
+  fi
+  if ! cat <&3 2>/dev/null; then
+    exec 3<&- || true
+    fail 'report_publish_failed'
+  fi
+  exec 3<&- || true
   exit 0
 fi
 
-readonly OUTPUT_DIR_INPUT="$(dirname -- "$output_input")"
-readonly OUTPUT_NAME="$(basename -- "$output_input")"
-[[ -d "$OUTPUT_DIR_INPUT" ]] || die "output parent directory does not exist" 2
-readonly OUTPUT_DIR="$(cd -P -- "$OUTPUT_DIR_INPUT" && pwd)"
-readonly OUTPUT_PATH="${OUTPUT_DIR}/${OUTPUT_NAME}"
-[[ "$OUTPUT_PATH" != "$DUMP_PATH" ]] || die "output path must not replace the dump file" 2
+if ! output_dir_input="$(dirname -- "$output_input" 2>/dev/null)" ||
+  ! output_name="$(basename -- "$output_input" 2>/dev/null)" ||
+  [[ -z "$output_name" || ! -d "$output_dir_input" ]]; then
+  fail 'report_publish_failed' 'not_applicable' 2
+fi
+if ! output_dir="$({ cd -P -- "$output_dir_input" && pwd; } 2>/dev/null)"; then
+  fail 'report_publish_failed' 'not_applicable' 2
+fi
+readonly OUTPUT_PATH="${output_dir}/${output_name}"
+[[ "$OUTPUT_PATH" != "$DUMP_PATH" ]] || fail 'report_publish_failed' 'not_applicable' 2
 
-# Publish with exclusive-create semantics. A preliminary existence check plus
-# mv can clobber a file created by another process between those operations.
-if "$PYTHON" - "$REPORT_FILE" "$OUTPUT_PATH" <<'PY'
+if ! staged_report="$({ "$PYTHON" -I - "$REPORT_FILE" "$output_dir" stage <<'PY'
 import os
 import pathlib
 import shutil
 import sys
+import tempfile
 
 source = pathlib.Path(sys.argv[1])
-destination = pathlib.Path(sys.argv[2])
-created = False
+directory = pathlib.Path(sys.argv[2])
+file_descriptor = -1
+staged = None
 try:
-    with source.open("rb") as input_handle, destination.open("xb") as output_handle:
-        created = True
+    file_descriptor, raw_path = tempfile.mkstemp(
+        prefix=".lovable-metadata-report.",
+        suffix=".pending",
+        dir=directory,
+    )
+    staged = pathlib.Path(raw_path)
+    os.fchmod(file_descriptor, 0o600)
+    with source.open("rb") as input_handle, os.fdopen(
+        file_descriptor, "wb", closefd=True
+    ) as output_handle:
+        file_descriptor = -1
         shutil.copyfileobj(input_handle, output_handle, length=1024 * 1024)
         output_handle.flush()
         os.fsync(output_handle.fileno())
+    print(staged)
+except Exception:
+    if file_descriptor >= 0:
+        os.close(file_descriptor)
+    if staged is not None:
+        staged.unlink(missing_ok=True)
+    raise SystemExit(18)
+PY
+} 2>/dev/null)" || [[ -z "$staged_report" || ! -f "$staged_report" ]]; then
+  staged_report=''
+  fail 'report_publish_failed' 'not_applicable' 4
+fi
+
+if ! remove_work_dir; then
+  fail 'cleanup_failed'
+fi
+
+publish_status=0
+if { "$PYTHON" -I - "$staged_report" "$OUTPUT_PATH" publish <<'PY'
+import os
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1])
+destination = pathlib.Path(sys.argv[2])
+published = False
+directory_fd = -1
+try:
+    os.link(source, destination, follow_symlinks=False)
+    published = True
+    directory_fd = os.open(
+        destination.parent,
+        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+    )
+    os.fsync(directory_fd)
+    source.unlink()
+    os.fsync(directory_fd)
 except FileExistsError:
     raise SystemExit(17)
 except Exception:
-    if created:
-        destination.unlink(missing_ok=True)
+    if published:
+        try:
+            destination.unlink(missing_ok=True)
+        except OSError:
+            pass
     raise SystemExit(18)
+finally:
+    if directory_fd >= 0:
+        os.close(directory_fd)
 PY
-then
-  :
+} >/dev/null 2>/dev/null; then
+  publish_status=0
 else
   publish_status=$?
-  if [[ "$publish_status" -eq 17 ]]; then
-    die "output file already exists; refusing to overwrite it" 2
-  fi
-  die "could not publish metadata report" 4
 fi
+if [[ "$publish_status" -ne 0 ]]; then
+  if [[ "$publish_status" -eq 17 ]]; then
+    fail 'report_publish_failed' 'not_applicable' 2
+  fi
+  fail 'report_publish_failed' 'not_applicable' 4
+fi
+
+staged_report=''
 printf 'Metadata-only report written to %s\n' "$OUTPUT_PATH"

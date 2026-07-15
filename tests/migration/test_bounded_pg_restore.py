@@ -60,6 +60,31 @@ elif mode == "flood":
     os.write(1, b"X" * 8192)
 elif mode == "stderr-flood":
     os.write(2, b"X" * 8192)
+elif mode == "success-output":
+    os.write(1, b"SUCCESS_STDOUT\n")
+    os.write(2, b"SUCCESS_STDERR\n")
+elif mode == "unsupported-version":
+    os.write(2, b"pg_restore: error: unsupported version (1.99) in file header\n")
+    raise SystemExit(1)
+elif mode == "invalid-archive":
+    os.write(2, b"pg_restore: error: input file does not appear to be a valid archive\n")
+    raise SystemExit(1)
+elif mode == "invalid-archive-too-short":
+    os.write(2, b"pg_restore: error: input file does not appear to be a valid archive (too short?)\n")
+    raise SystemExit(1)
+elif mode == "truncated-archive":
+    os.write(2, b"pg_restore: error: unexpected end of file\n")
+    raise SystemExit(1)
+elif mode == "truncated-short-read":
+    os.write(2, b"pg_restore: error: input file is too short (read 5, expected 11)\n")
+    raise SystemExit(1)
+elif mode == "unsupported-with-extra-line":
+    os.write(2, b"pg_restore: error: unsupported version (1.99) in file header\n")
+    os.write(2, b"CHILD_PRIVATE_PATH_SENTINEL=/private/export.backup\n")
+    raise SystemExit(1)
+elif mode == "invalid-utf8":
+    os.write(2, b"pg_restore: error: \xffCHILD_BINARY_SENTINEL\n")
+    raise SystemExit(1)
 elif mode == "failure":
     os.write(1, b"CHILD_STDOUT_SENTINEL")
     os.write(2, b"CHILD_STDERR_SENTINEL")
@@ -127,6 +152,48 @@ class BoundedPgRestoreTest(unittest.TestCase):
             for line in self.ledger.read_text(encoding="utf-8").splitlines()
         ]
 
+    def assert_failure_diagnostic(self, result, *, reason_code):
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, b"")
+        expected = (
+            f'{{"diagnostic_version":1,"reason":"{reason_code}"}}\n'.encode(
+                "ascii"
+            )
+        )
+        self.assertEqual(result.stderr, expected)
+        self.assertEqual(result.stderr.count(b"\n"), 1)
+        diagnostic = json.loads(result.stderr)
+        self.assertEqual(
+            set(diagnostic),
+            {"diagnostic_version", "reason"},
+        )
+        self.assertIn(diagnostic["reason"], WRAPPER.ALLOWED_REASON_CODES)
+
+    def test_reason_code_allowlist_and_diagnostic_schema_are_fixed(self):
+        expected_reason_codes = frozenset(
+            {
+                "timeout",
+                "output_cap",
+                "unsupported_archive_version",
+                "invalid_archive",
+                "truncated_archive",
+                "other_nonzero",
+            }
+        )
+        self.assertEqual(WRAPPER.ALLOWED_REASON_CODES, expected_reason_codes)
+        for reason_code in expected_reason_codes:
+            with self.subTest(reason_code=reason_code):
+                diagnostic = json.loads(
+                    WRAPPER._failure_diagnostic(reason_code)
+                )
+                self.assertEqual(
+                    diagnostic,
+                    {
+                        "diagnostic_version": 1,
+                        "reason": reason_code,
+                    },
+                )
+
     def test_cli_ledger_contains_only_version_and_list(self):
         version = self.run_cli("--version")
         self.assertEqual(version.returncode, 0, version.stderr)
@@ -142,6 +209,15 @@ class BoundedPgRestoreTest(unittest.TestCase):
             [["--version"], ["--list", str(self.archive)]],
         )
 
+    def test_success_preserves_child_stdout_and_stderr_bytes(self):
+        environment = dict(self.environment)
+        environment["FAKE_MODE"] = "success-output"
+        result = self.run_cli("--version", environment=environment)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, b"SUCCESS_STDOUT\n")
+        self.assertEqual(result.stderr, b"SUCCESS_STDERR\n")
+        self.assertEqual(self.ledger_entries(), [["--version"]])
+
     def test_rejects_every_other_argument_shape_before_child(self):
         cases = (
             (),
@@ -155,24 +231,35 @@ class BoundedPgRestoreTest(unittest.TestCase):
         for arguments in cases:
             with self.subTest(arguments=arguments):
                 result = self.run_cli(*arguments)
-                self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(result.stdout, b"")
+                self.assert_failure_diagnostic(
+                    result,
+                    reason_code=WRAPPER.REASON_OTHER_NONZERO,
+                )
         self.assertEqual(self.ledger_entries(), [])
 
     def test_requires_absolute_nonsymlink_executable(self):
         missing = dict(self.environment)
         missing.pop(WRAPPER.UNDERLYING_ENVIRONMENT_VARIABLE)
-        self.assertNotEqual(self.run_cli("--version", environment=missing).returncode, 0)
+        self.assert_failure_diagnostic(
+            self.run_cli("--version", environment=missing),
+            reason_code=WRAPPER.REASON_OTHER_NONZERO,
+        )
 
         relative = dict(self.environment)
         relative[WRAPPER.UNDERLYING_ENVIRONMENT_VARIABLE] = "fake-pg-restore"
-        self.assertNotEqual(self.run_cli("--version", environment=relative).returncode, 0)
+        self.assert_failure_diagnostic(
+            self.run_cli("--version", environment=relative),
+            reason_code=WRAPPER.REASON_OTHER_NONZERO,
+        )
 
         linked_binary = self.root / "linked-pg-restore"
         linked_binary.symlink_to(self.fake)
         symlinked = dict(self.environment)
         symlinked[WRAPPER.UNDERLYING_ENVIRONMENT_VARIABLE] = str(linked_binary)
-        self.assertNotEqual(self.run_cli("--version", environment=symlinked).returncode, 0)
+        self.assert_failure_diagnostic(
+            self.run_cli("--version", environment=symlinked),
+            reason_code=WRAPPER.REASON_OTHER_NONZERO,
+        )
         self.assertEqual(self.ledger_entries(), [])
 
     def test_timeout_kills_process_group_and_reaps_leader(self):
@@ -188,8 +275,9 @@ class BoundedPgRestoreTest(unittest.TestCase):
         )
 
         started = time.monotonic()
-        with self.assertRaisesRegex(WRAPPER.BoundedPgRestoreError, "timeout"):
+        with self.assertRaises(WRAPPER.BoundedPgRestoreError) as caught:
             self.direct_request(request, environment=environment)
+        self.assertEqual(caught.exception.reason_code, WRAPPER.REASON_TIMEOUT)
         self.assertLess(time.monotonic() - started, 2)
         time.sleep(0.8)
         self.assertFalse(marker.exists())
@@ -212,7 +300,7 @@ class BoundedPgRestoreTest(unittest.TestCase):
         stdout = io.BytesIO()
         stderr = io.BytesIO()
 
-        with self.assertRaisesRegex(WRAPPER.BoundedPgRestoreError, "timeout"):
+        with self.assertRaises(WRAPPER.BoundedPgRestoreError) as caught:
             WRAPPER.run_request(
                 str(self.fake),
                 request,
@@ -221,6 +309,7 @@ class BoundedPgRestoreTest(unittest.TestCase):
                 stderr=stderr,
                 temporary_parent=str(self.capture_parent),
             )
+        self.assertEqual(caught.exception.reason_code, WRAPPER.REASON_TIMEOUT)
         self.assertTrue(leader_marker.exists())
         self.assertEqual(stdout.getvalue(), b"")
         self.assertEqual(stderr.getvalue(), b"")
@@ -240,22 +329,49 @@ class BoundedPgRestoreTest(unittest.TestCase):
                     stdout_cap_bytes=1024,
                     stderr_cap_bytes=1024,
                 )
-                with self.assertRaisesRegex(
-                    WRAPPER.BoundedPgRestoreError,
-                    rf"{stream_name}.*byte cap",
-                ):
+                with self.assertRaises(WRAPPER.BoundedPgRestoreError) as caught:
                     self.direct_request(request, environment=environment)
+                self.assertEqual(caught.exception.reason_code, WRAPPER.REASON_OUTPUT_CAP)
                 self.assertEqual(list(self.capture_parent.iterdir()), [])
         self.assertEqual(self.ledger_entries(), [["--version"], ["--version"]])
 
-    def test_unsuccessful_child_output_is_never_passed_through(self):
-        environment = dict(self.environment)
-        environment["FAKE_MODE"] = "failure"
-        result = self.run_cli("--version", environment=environment)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(result.stdout, b"")
-        self.assertNotIn(b"CHILD_STDOUT_SENTINEL", result.stderr)
-        self.assertNotIn(b"CHILD_STDERR_SENTINEL", result.stderr)
+    def test_child_failure_reason_codes_are_classified_without_raw_stderr(self):
+        cases = (
+            ("unsupported-version", WRAPPER.REASON_UNSUPPORTED_ARCHIVE_VERSION),
+            ("invalid-archive", WRAPPER.REASON_INVALID_ARCHIVE),
+            ("invalid-archive-too-short", WRAPPER.REASON_INVALID_ARCHIVE),
+            ("truncated-archive", WRAPPER.REASON_TRUNCATED_ARCHIVE),
+            ("truncated-short-read", WRAPPER.REASON_TRUNCATED_ARCHIVE),
+            ("failure", WRAPPER.REASON_OTHER_NONZERO),
+        )
+        for mode, reason_code in cases:
+            with self.subTest(mode=mode):
+                environment = dict(self.environment)
+                environment["FAKE_MODE"] = mode
+                result = self.run_cli("--list", str(self.archive), environment=environment)
+                self.assert_failure_diagnostic(
+                    result,
+                    reason_code=reason_code,
+                )
+                self.assertNotIn(b"pg_restore: error:", result.stderr)
+                self.assertNotIn(b"CHILD_STDOUT_SENTINEL", result.stderr)
+                self.assertNotIn(b"CHILD_STDERR_SENTINEL", result.stderr)
+
+    def test_known_prefix_with_extra_or_binary_private_stderr_is_other_nonzero(self):
+        for mode, forbidden in (
+            ("unsupported-with-extra-line", b"CHILD_PRIVATE_PATH_SENTINEL"),
+            ("invalid-utf8", b"CHILD_BINARY_SENTINEL"),
+        ):
+            with self.subTest(mode=mode):
+                environment = dict(self.environment)
+                environment["FAKE_MODE"] = mode
+                result = self.run_cli("--list", str(self.archive), environment=environment)
+                self.assert_failure_diagnostic(
+                    result,
+                    reason_code=WRAPPER.REASON_OTHER_NONZERO,
+                )
+                self.assertNotIn(forbidden, result.stderr)
+                self.assertNotIn(b"/private/export.backup", result.stderr)
 
     def test_list_input_must_be_a_regular_nonsymlink_local_file(self):
         linked = self.root / "linked.backup"
@@ -265,8 +381,10 @@ class BoundedPgRestoreTest(unittest.TestCase):
         for candidate in (str(linked), str(directory), str(self.root / "absent.backup")):
             with self.subTest(candidate=candidate):
                 result = self.run_cli("--list", candidate)
-                self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(result.stdout, b"")
+                self.assert_failure_diagnostic(
+                    result,
+                    reason_code=WRAPPER.REASON_OTHER_NONZERO,
+                )
         self.assertEqual(self.ledger_entries(), [])
 
     def test_capture_limits_have_no_environment_override(self):
