@@ -387,6 +387,55 @@ else
   fail "optional expected SHA binds the derived inner snapshot before pg_restore"
 fi
 
+readonly UNRESOLVED_TOC="${TMP_ROOT}/recognized unresolved aggregate.toc"
+readonly UNRESOLVED_REPORT="${OUTPUT_DIR}/recognized unresolved aggregate.txt"
+readonly UNRESOLVED_NAME_SENTINEL='PRIVATE_OBJECT_NAME_WITH.PUNCTUATION_MUST_NOT_APPEAR'
+readonly UNRESOLVED_SCHEMA_SENTINEL='private_schema_must_not_appear'
+readonly UNRESOLVED_OWNER_SENTINEL='private_owner_must_not_appear'
+readonly UNRESOLVED_SQL_SENTINEL='SELECT_PRIVATE_SQL_MUST_NOT_APPEAR'
+printf '%s\n' \
+  '; Dumped from database version: 17.5' \
+  '; Dumped by pg_dump version: 17.5' \
+  "; ${UNRESOLVED_SQL_SENTINEL}" \
+  "1; 123456 789012 TABLE ${UNRESOLVED_SCHEMA_SENTINEL} ${UNRESOLVED_NAME_SENTINEL} ${UNRESOLVED_OWNER_SENTINEL}" \
+  >"$UNRESOLVED_TOC"
+: >"$CALL_LOG"
+if env \
+  PG_RESTORE_BIN="$FAKE_PG_RESTORE" \
+  PYTHON_BIN="$PYTHON" \
+  FAKE_TOC="$UNRESOLVED_TOC" \
+  FAKE_LOG="$CALL_LOG" \
+  bash "$SCRIPT" \
+    --migrations-dir "$MIGRATIONS_DIR" \
+    --expected-sha256 "$expected_sha" \
+    --output "$UNRESOLVED_REPORT" \
+    "$DUMP_FILE" >"${TMP_ROOT}/unresolved.stdout" 2>"${TMP_ROOT}/unresolved.stderr"; then
+  if [[ ! -s "${TMP_ROOT}/unresolved.stderr" ]] &&
+    grep -Fxq 'object_reference_analysis: INCOMPLETE' "$UNRESOLVED_REPORT" &&
+    grep -Fxq 'migration_duplicate_analysis: INCOMPLETE' "$UNRESOLVED_REPORT" &&
+    grep -Fxq 'restore_planning_gate: BLOCKED' "$UNRESOLVED_REPORT" &&
+    grep -Fxq 'unresolved_known_toc_entries: 1' "$UNRESOLVED_REPORT" &&
+    ! grep -Fq "$UNRESOLVED_NAME_SENTINEL" "$UNRESOLVED_REPORT" &&
+    ! grep -Fq "$UNRESOLVED_SCHEMA_SENTINEL" "$UNRESOLVED_REPORT" &&
+    ! grep -Fq "$UNRESOLVED_OWNER_SENTINEL" "$UNRESOLVED_REPORT" &&
+    ! grep -Fq "$UNRESOLVED_SQL_SENTINEL" "$UNRESOLVED_REPORT" &&
+    ! grep -Fq 'REVIEW FLAGS' "$UNRESOLVED_REPORT" &&
+    ! grep -Fq 'POSSIBLE REPO MIGRATION DUPLICATES' "$UNRESOLVED_REPORT"; then
+    pass "recognized unresolved TOC entry publishes aggregate-only blocked metadata"
+  else
+    fail "recognized unresolved TOC entry publishes aggregate-only blocked metadata"
+  fi
+  if [[ "$(wc -l <"$CALL_LOG" | tr -d ' ')" == '2' ]] &&
+    grep -Fxq -- '--version' "$CALL_LOG" &&
+    grep -Eq -- '^--list\|.*/lovable-dump-inspection\.[^/]+/archive\.snapshot$' "$CALL_LOG"; then
+    pass "aggregate-only incomplete report preserves the exact pg_restore ledger"
+  else
+    fail "aggregate-only incomplete report preserves the exact pg_restore ledger"
+  fi
+else
+  fail "recognized unresolved TOC entry publishes aggregate-only blocked metadata"
+fi
+
 : >"$CALL_LOG"
 assert_stage_failure \
   "rejects a wrong expected SHA before pg_restore" \

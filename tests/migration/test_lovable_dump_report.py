@@ -20,6 +20,7 @@ sys.modules[SPEC.name] = REPORT
 SPEC.loader.exec_module(REPORT)
 
 SENTINEL = "SYNTHETIC_PRIVATE_TOC_SQL_PATH_PAYLOAD_MUST_NOT_APPEAR"
+REGRESSION_BASE_SHA = "8b872882787859b87549e7f884832c624e29ead9"
 
 
 class LovableDumpReportDiagnosticTest(unittest.TestCase):
@@ -54,12 +55,17 @@ class LovableDumpReportDiagnosticTest(unittest.TestCase):
             str(self.migrations),
         ]
 
-    def run_helper(self, arguments: list[str] | None = None):
+    def run_helper(
+        self,
+        arguments: list[str] | None = None,
+        *,
+        helper: Path = HELPER,
+    ):
         return subprocess.run(
             [
                 sys.executable,
                 "-I",
-                str(HELPER),
+                str(helper),
                 *(self.helper_arguments() if arguments is None else arguments),
             ],
             cwd=ROOT,
@@ -133,16 +139,263 @@ class LovableDumpReportDiagnosticTest(unittest.TestCase):
         self.assertEqual(result.stderr, b"")
         report = result.stdout.decode("utf-8")
         self.assertIn("inspection_status: REVIEW_REQUIRED\n", report)
+        self.assertIn("object_reference_analysis: COMPLETE\n", report)
+        self.assertIn("migration_duplicate_analysis: COMPLETE\n", report)
+        self.assertIn("restore_planning_gate: BLOCKED\n", report)
         self.assertIn(f"sha256: {self.dump_sha}\n", report)
         self.assertIn("TABLE: 1\n", report)
+
+    def test_starting_main_reproduces_hyphenated_extension_false_fatal(self):
+        baseline_helper = self.root / "starting-main-lovable-dump-report.py"
+        baseline = subprocess.run(
+            [
+                "git",
+                "show",
+                f"{REGRESSION_BASE_SHA}:scripts/migration/lib/lovable_dump_report.py",
+            ],
+            cwd=ROOT,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            timeout=5,
+        )
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        baseline_helper.write_bytes(baseline.stdout)
+        self.write_toc(
+            "; Dumped from database version: 17.5\n"
+            "; Dumped by pg_dump version: 17.5\n"
+            "1; 0 0 EXTENSION - uuid-ossp synthetic_owner\n"
+            "2; 0 0 EXTENSION - uuid-ossp\n"
+        )
+
+        result = self.run_helper(helper=baseline_helper)
+
+        self.assert_failure(result, "unresolved_known_toc_entry")
+
+    def test_hyphenated_extension_name_uses_only_class_specific_parser(self):
+        entry = REPORT.TocEntry(
+            toc_id=1,
+            object_class="EXTENSION",
+            remainder="- uuid-ossp synthetic_owner",
+            line_number=1,
+        )
+
+        # The general identifier path deliberately rejects this name.  Before
+        # the class-specific branch, that made the known TOC entry unresolved.
+        self.assertIsNone(REPORT.clean_identifier("uuid-ossp"))
+        self.assertEqual(
+            REPORT.object_ref(entry),
+            REPORT.ObjectRef("EXTENSION", "-", "uuid-ossp"),
+        )
+        self.assertEqual(REPORT.unresolved_required_object_references([entry]), {})
+
+        self.write_toc(
+            "; Dumped from database version: 17.5\n"
+            "; Dumped by pg_dump version: 17.5\n"
+            "1; 0 0 EXTENSION - uuid-ossp synthetic_owner\n"
+            "2; 0 0 EXTENSION - pgcrypto\n"
+            "3; 0 0 EXTENSION - uuid-ossp\n"
+        )
+        result = self.run_helper()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, b"")
+        self.assertIn("EXTENSION: 3\n", result.stdout.decode("utf-8"))
+
+    def test_extension_name_exception_remains_conservative(self):
+        accepted = {
+            "uuid-ossp": "uuid-ossp",
+            "postgis-3": "postgis-3",
+        }
+        rejected = (
+            "-uuid-ossp",
+            "uuid-ossp-",
+            "uuid--ossp",
+            "uuid.ossp",
+            "uuid/ossp",
+            "uuid:ossp",
+            "uuid@ossp",
+            "uuid–ossp",
+            "uüid-ossp",
+            '"uuid-ossp',
+            'uuid-ossp"',
+            '"uuid-ossp"',
+            '"uuid"-ossp',
+            "",
+        )
+
+        for value, normalized in accepted.items():
+            with self.subTest(value=value):
+                self.assertEqual(REPORT.clean_extension_name(value), normalized)
+        for value in rejected:
+            with self.subTest(value=value):
+                self.assertIsNone(REPORT.clean_extension_name(value))
+
+        malformed_remainders = (
+            "- uuid ossp synthetic_owner",
+            "- uuid.ossp synthetic_owner",
+            "- uuid/ossp synthetic_owner",
+            "- uuid–ossp synthetic_owner",
+            "- uüid-ossp synthetic_owner",
+            "public uuid-ossp synthetic_owner",
+            "-",
+            "- uuid-ossp synthetic_owner unexpected",
+        )
+        for remainder in malformed_remainders:
+            with self.subTest(remainder=remainder):
+                entry = REPORT.TocEntry(1, "EXTENSION", remainder, 1)
+                self.assertIsNone(REPORT.object_ref(entry))
+                self.assertEqual(
+                    REPORT.unresolved_required_object_references([entry]),
+                    {"EXTENSION": 1},
+                )
+
+        # The same spelling is not accepted for unrelated object classes.
+        table = REPORT.TocEntry(
+            1,
+            "TABLE",
+            "public uuid-ossp synthetic_owner",
+            1,
+        )
+        self.assertIsNone(REPORT.object_ref(table))
+
+    def test_generic_and_routine_identifier_grammars_fail_closed(self):
+        for value in (
+            '"unmatched',
+            'unmatched"',
+            '"balanced_but_not_documented_as_quoting"',
+            '""double""',
+            "name.with.punctuation",
+            "name/with/slash",
+            "name:with:colon",
+            "name@owner",
+            "name(signature",
+            "naïve",
+        ):
+            with self.subTest(value=value):
+                self.assertIsNone(REPORT.clean_identifier(value))
+
+        self.assertEqual(
+            REPORT.object_ref(
+                REPORT.TocEntry(
+                    1,
+                    "FUNCTION",
+                    "public handle_fixture() synthetic_owner",
+                    1,
+                )
+            ),
+            REPORT.ObjectRef("FUNCTION", "public", "handle_fixture"),
+        )
+        for remainder in (
+            '"my schema" "my function"() synthetic_owner',
+            "public bad.function() synthetic_owner",
+            "public bad/function() synthetic_owner",
+            "public naïve() synthetic_owner",
+            "public handle_fixture() synthetic-owner",
+            "public handle_fixture((integer)) synthetic_owner",
+            "public handle_fixture() synthetic_owner extra",
+        ):
+            with self.subTest(remainder=remainder):
+                entry = REPORT.TocEntry(1, "FUNCTION", remainder, 1)
+                self.assertIsNone(REPORT.object_ref(entry))
+                self.assertEqual(
+                    REPORT.unresolved_required_object_references([entry]),
+                    {"FUNCTION": 1},
+                )
+
+        for remainder in (
+            "public safe_name synthetic-owner",
+            'public safe_name "synthetic owner"',
+            "public safe_name synthetic_owner extra",
+            "public safe_name",
+            '"my schema" safe_name synthetic_owner',
+            'public "my table" synthetic_owner',
+        ):
+            with self.subTest(remainder=remainder):
+                entry = REPORT.TocEntry(1, "TABLE", remainder, 1)
+                self.assertIsNone(REPORT.object_ref(entry))
+                self.assertEqual(
+                    REPORT.unresolved_required_object_references([entry]),
+                    {"TABLE": 1},
+                )
+
+        for object_class, remainder in (
+            ("CONSTRAINT", "public items items_pkey synthetic_owner"),
+            ("CONSTRAINT", "public items items_pkey"),
+            ("POLICY", "public items private_policy synthetic_owner"),
+            ("TRIGGER", "public items update_timestamp synthetic_owner"),
+        ):
+            with self.subTest(object_class=object_class, remainder=remainder):
+                entry = REPORT.TocEntry(1, object_class, remainder, 1)
+                self.assertIsNone(REPORT.object_ref(entry))
+                self.assertEqual(
+                    REPORT.unresolved_required_object_references([entry]),
+                    {object_class: 1},
+                )
+
+    def test_unresolved_known_entries_publish_only_aggregate_blocked_analysis(self):
+        self.write_toc(
+            "; Dumped from database version: 17.5\n"
+            "; Dumped by pg_dump version: 17.5\n"
+            f"1; 123 456 TABLE {SENTINEL}\n"
+            f"2; 789 101 FUNCTION public name.with.punctuation {SENTINEL}\n"
+            f"3; 102 103 AGGREGATE public malformed.aggregate {SENTINEL}\n"
+            f"4; 104 105 ACL public {SENTINEL}\n"
+        )
+
+        result = self.run_helper()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, b"")
+        report = result.stdout.decode("utf-8")
+        self.assertIn("inspection_status: REVIEW_REQUIRED\n", report)
+        self.assertIn("object_reference_analysis: INCOMPLETE\n", report)
+        self.assertIn("migration_duplicate_analysis: INCOMPLETE\n", report)
+        self.assertIn("restore_planning_gate: BLOCKED\n", report)
+        self.assertIn("unresolved_known_toc_entries: 3\n", report)
+        self.assertIn("AGGREGATE: 1\n", report)
+        self.assertIn("FUNCTION: 1\n", report)
+        self.assertIn("TABLE: 1\n", report)
+        self.assertNotIn(SENTINEL, report)
+        self.assertNotIn("123", report)
+        self.assertNotIn("456", report)
+        self.assertNotIn("789", report)
+        self.assertNotIn("101", report)
+        self.assertNotIn("KNOWN TOC ENTRIES WITHOUT", report)
+        self.assertNotIn("REVIEW FLAGS", report)
+        self.assertNotIn("POSSIBLE REPO MIGRATION DUPLICATES", report)
+        self.assertNotIn("input_file:", report)
+
+        section = report.split("UNRESOLVED KNOWN TOC CLASS COUNTS\n", 1)[1]
+        section = section.split("\n\nBOUNDARY", 1)[0]
+        counts = dict(line.rsplit(": ", 1) for line in section.splitlines())
+        self.assertEqual(tuple(sorted(counts)), REPORT.UNRESOLVED_CLASS_COUNT_KEYS)
+        self.assertEqual(sum(int(value) for value in counts.values()), 3)
+        self.assertEqual(counts["ACL"], "0")
+
+    def test_spaces_punctuation_and_unicode_are_incomplete_without_leaking(self):
+        remainders = (
+            "- uuid ossp synthetic_owner",
+            "- uuid.ossp synthetic_owner",
+            "- uuid/ossp synthetic_owner",
+            "- uuid–ossp synthetic_owner",
+            "- uüid-ossp synthetic_owner",
+            "- uuid-ossp synthetic-owner",
+        )
+        for index, remainder in enumerate(remainders, start=1):
+            with self.subTest(remainder=remainder):
+                self.write_toc(f"{index}; 0 0 EXTENSION {remainder}\n")
+                result = self.run_helper()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                report = result.stdout.decode("utf-8")
+                self.assertIn("object_reference_analysis: INCOMPLETE\n", report)
+                self.assertIn("restore_planning_gate: BLOCKED\n", report)
+                self.assertNotIn(remainder, report)
 
     def test_toc_failure_reasons_are_specific_and_never_relay_metadata(self):
         cases = {
             "unknown_toc_class": (
                 "1; 0 0 FUTURE OBJECT " + SENTINEL + "\n"
-            ),
-            "unresolved_known_toc_entry": (
-                "1; 0 0 TABLE " + SENTINEL + "\n"
             ),
             "malformed_toc": "not-a-toc-line " + SENTINEL + "\n",
             "duplicate_toc_id": (

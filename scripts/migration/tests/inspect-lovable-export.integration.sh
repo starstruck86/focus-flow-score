@@ -342,6 +342,29 @@ def verify_mode(
 
     if provenance["inspection_status"] != "REVIEW_REQUIRED":
         raise SystemExit("high-level inspection status was not REVIEW_REQUIRED")
+    if provenance.get("format_version") != 5:
+        raise SystemExit("high-level provenance format version was not 5")
+    if provenance.get("object_reference_analysis") != "INCOMPLETE":
+        raise SystemExit("real PGDMP object-reference analysis was not INCOMPLETE")
+    if provenance.get("migration_duplicate_analysis") != "INCOMPLETE":
+        raise SystemExit("real PGDMP migration-duplicate analysis was not INCOMPLETE")
+    if provenance.get("restore_planning_gate") != "BLOCKED":
+        raise SystemExit("real PGDMP restore-planning gate was not BLOCKED")
+    if not isinstance(provenance.get("unresolved_known_toc_entries"), int) or (
+        provenance["unresolved_known_toc_entries"] < 1
+    ):
+        raise SystemExit("real PGDMP did not retain unresolved TOC aggregate evidence")
+    unresolved_counts = provenance.get("unresolved_known_toc_class_counts")
+    if (
+        not isinstance(unresolved_counts, dict)
+        or not unresolved_counts
+        or unresolved_counts.get("CONSTRAINT", 0) < 1
+        or sum(unresolved_counts.values())
+        != provenance["unresolved_known_toc_entries"]
+    ):
+        raise SystemExit("real PGDMP unresolved class counts are invalid")
+    if "restore_planning_gate=BLOCKED\n" not in stdout:
+        raise SystemExit("workflow stdout omitted the blocked restore-planning gate")
     if provenance["export_timeline_status"] != "COMPLETE":
         raise SystemExit("complete synthetic timeline was not recorded as COMPLETE")
     if expected_identity != {
@@ -505,6 +528,16 @@ def verify_mode(
     }
     if not required_header_lines <= set(report.splitlines()):
         raise SystemExit("metadata report omits the bound safe PGDMP header fields")
+    required_analysis_lines = {
+        "inspection_status: REVIEW_REQUIRED",
+        "object_reference_analysis: INCOMPLETE",
+        "migration_duplicate_analysis: INCOMPLETE",
+        "restore_planning_gate: BLOCKED",
+    }
+    if not required_analysis_lines <= set(report.splitlines()):
+        raise SystemExit("metadata report omits the blocked object-analysis contract")
+    if "POSSIBLE REPO MIGRATION DUPLICATES" in report:
+        raise SystemExit("incomplete report emitted duplicate-name details")
     if expected_kind == "zip":
         if inner_sha == outer_sha:
             raise SystemExit("ZIP outer and derived inner hashes were conflated")
@@ -533,9 +566,14 @@ def verify_mode(
     if completion != {
         "evidence_files_sha256": sha256(evidence_manifest_path),
         "inspection_status": "REVIEW_REQUIRED",
+        "restore_planning_gate": "BLOCKED",
         "run_id": provenance.get("run_id"),
     }:
         raise SystemExit("durable completion marker binding mismatch")
+    if provenance["durable_publication"].get("completion_marker_meaning") != (
+        "evidence package bytes are complete; restore planning remains blocked"
+    ):
+        raise SystemExit("completion-marker meaning could imply restore readiness")
     manifest_entries = evidence_manifest.get("files")
     if not isinstance(manifest_entries, dict) or not manifest_entries:
         raise SystemExit("durable evidence manifest has no bound files")

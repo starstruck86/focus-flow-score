@@ -61,6 +61,90 @@ REPORT_FORMAT_CODE = re.compile(r"^archive_format_code: ([0-9]+)$", re.MULTILINE
 REPORT_HEADER_SHA = re.compile(
     r"^archive_header_bound_sha256: ([0-9a-f]{64})$", re.MULTILINE
 )
+REPORT_UNRESOLVED_KNOWN_TOC_ENTRIES = re.compile(
+    r"^unresolved_known_toc_entries: (0|[1-9][0-9]*)$", re.MULTILINE
+)
+REPORT_OBJECT_REFERENCE_ANALYSIS = re.compile(
+    r"^object_reference_analysis: (COMPLETE|INCOMPLETE)$", re.MULTILINE
+)
+REPORT_MIGRATION_DUPLICATE_ANALYSIS = re.compile(
+    r"^migration_duplicate_analysis: (COMPLETE|INCOMPLETE)$", re.MULTILINE
+)
+REPORT_RESTORE_PLANNING_GATE = re.compile(
+    r"^restore_planning_gate: (BLOCKED)$", re.MULTILINE
+)
+REPORT_INSPECTION_STATUS = re.compile(
+    r"^inspection_status: (REVIEW_REQUIRED)$", re.MULTILINE
+)
+REPORT_TOC_ENTRIES = re.compile(r"^toc_entries: (0|[1-9][0-9]*)$", re.MULTILINE)
+UNRESOLVED_CLASS_COUNT_HEADER = "UNRESOLVED KNOWN TOC CLASS COUNTS"
+UNRESOLVED_OBJECT_CLASS_ALLOWLIST = (
+    "ACCESS METHOD",
+    "ACL",
+    "AGGREGATE",
+    "BLOB",
+    "BLOB DATA",
+    "BLOB METADATA",
+    "CAST",
+    "CHECK CONSTRAINT",
+    "COLLATION",
+    "COMMENT",
+    "CONSTRAINT",
+    "CONVERSION",
+    "DATABASE",
+    "DATABASE PROPERTIES",
+    "DEFAULT",
+    "DEFAULT ACL",
+    "DOMAIN",
+    "DOMAIN CONSTRAINT",
+    "EVENT TRIGGER",
+    "EXTENSION",
+    "FK CONSTRAINT",
+    "FOREIGN DATA WRAPPER",
+    "FOREIGN SERVER",
+    "FOREIGN TABLE",
+    "FUNCTION",
+    "INDEX",
+    "INDEX ATTACH",
+    "LANGUAGE",
+    "LARGE OBJECT",
+    "LARGE OBJECT DATA",
+    "MATERIALIZED VIEW",
+    "MATERIALIZED VIEW DATA",
+    "OPERATOR",
+    "OPERATOR CLASS",
+    "OPERATOR FAMILY",
+    "POLICY",
+    "PROCEDURE",
+    "PROTOCOL",
+    "PUBLICATION",
+    "PUBLICATION TABLE",
+    "PUBLICATION TABLES IN SCHEMA",
+    "ROW SECURITY",
+    "RULE",
+    "SCHEMA",
+    "SECURITY LABEL",
+    "SEQUENCE",
+    "SEQUENCE OWNED BY",
+    "SEQUENCE SET",
+    "SHELL TYPE",
+    "STATISTICS",
+    "STATISTICS DATA",
+    "SUBSCRIPTION",
+    "TABLE",
+    "TABLE ATTACH",
+    "TABLE DATA",
+    "TABLESPACE",
+    "TEXT SEARCH CONFIGURATION",
+    "TEXT SEARCH DICTIONARY",
+    "TEXT SEARCH PARSER",
+    "TEXT SEARCH TEMPLATE",
+    "TRANSFORM",
+    "TRIGGER",
+    "TYPE",
+    "USER MAPPING",
+    "VIEW",
+)
 INSPECTOR_STAGE_CODES = frozenset(
     {
         "input_validation_failed",
@@ -136,6 +220,7 @@ MAX_INSPECTOR_DIAGNOSTIC_BYTES = 4096
 MAX_OUTER_BYTES = 5_000_000_000
 MIN_WORKSPACE_OVERHEAD_BYTES = 256 * 1024 * 1024
 MAX_REPORT_BYTES = 128 * 1024 * 1024
+PROVENANCE_FORMAT_VERSION = 5
 DURABLE_EVIDENCE_DIRECTORY = "migration-inspection-evidence"
 
 
@@ -1064,8 +1149,28 @@ def validate_evidence_tree_at(
             )
         except (UnicodeError, json.JSONDecodeError) as exc:
             raise WorkflowError("durable provenance is invalid") from exc
-        if not isinstance(provenance, dict) or provenance.get("run_id") != expected_run_id:
+        if (
+            not isinstance(provenance, dict)
+            or provenance.get("format_version") != PROVENANCE_FORMAT_VERSION
+            or provenance.get("run_id") != expected_run_id
+            or provenance.get("inspection_status") != "REVIEW_REQUIRED"
+        ):
             raise WorkflowError("durable provenance run_id does not match its package")
+        provenance_analysis = validate_provenance_object_analysis(provenance)
+        try:
+            report_analysis = parse_report_object_analysis(
+                read_private_file_at(
+                    directory_fds["inspection"],
+                    "rehearsal-metadata.txt",
+                    maximum_bytes=MAX_REPORT_BYTES,
+                ).decode("utf-8")
+            )
+        except UnicodeError as exc:
+            raise WorkflowError("durable inspection report is not valid UTF-8") from exc
+        if report_analysis != provenance_analysis:
+            raise WorkflowError(
+                "durable inspection report and provenance analysis gates differ"
+            )
         if require_completion_marker:
             validate_completion_marker_at(
                 root_fd,
@@ -1175,8 +1280,24 @@ def validate_evidence_tree(
         provenance = json.loads((pending / "provenance.json").read_text(encoding="utf-8"))
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise WorkflowError("provenance is invalid") from exc
-    if not isinstance(provenance, dict) or provenance.get("run_id") != expected_run_id:
+    if (
+        not isinstance(provenance, dict)
+        or provenance.get("format_version") != PROVENANCE_FORMAT_VERSION
+        or provenance.get("run_id") != expected_run_id
+        or provenance.get("inspection_status") != "REVIEW_REQUIRED"
+    ):
         raise WorkflowError("provenance run_id does not match its package")
+    provenance_analysis = validate_provenance_object_analysis(provenance)
+    try:
+        report_analysis = parse_report_object_analysis(
+            (pending / "inspection/rehearsal-metadata.txt").read_text(
+                encoding="utf-8"
+            )
+        )
+    except UnicodeError as exc:
+        raise WorkflowError("inspection report is not valid UTF-8") from exc
+    if report_analysis != provenance_analysis:
+        raise WorkflowError("inspection report and provenance analysis gates differ")
     return identities
 
 
@@ -1358,6 +1479,7 @@ def completion_marker_bytes(run_id: str, manifest_sha256: str) -> bytes:
             {
                 "evidence_files_sha256": manifest_sha256,
                 "inspection_status": "REVIEW_REQUIRED",
+                "restore_planning_gate": "BLOCKED",
                 "run_id": run_id,
             },
             sort_keys=True,
@@ -1686,6 +1808,242 @@ def parse_inspector_failure(stdout: bytes, stderr: bytes) -> tuple[str, str]:
     if diagnostic_text != canonical:
         return "inspector_diagnostic_invalid", "other_nonzero"
     return stage, reason
+
+
+def _single_report_value(
+    pattern: re.Pattern[str], report_text: str, label: str
+) -> str:
+    matches = pattern.findall(report_text)
+    if len(matches) != 1 or not isinstance(matches[0], str):
+        raise WorkflowError(
+            f"inspector report must contain exactly one {label} field"
+        )
+    return matches[0]
+
+
+def _validate_incomplete_report_lines(
+    report_lines: list[str], reviewed_count_line_indexes: frozenset[int]
+) -> None:
+    """Reject every non-reviewed line from an aggregate-only report."""
+
+    fixed_lines = {
+        "",
+        "LOVABLE CLOUD DUMP — METADATA-ONLY INSPECTION",
+        "inspection_status: REVIEW_REQUIRED",
+        (
+            "scope: archive header, SHA-256, pg_restore TOC metadata, "
+            "aggregate unresolved-object counts"
+        ),
+        "restore_attempted: no",
+        "database_connection_attempted: no",
+        "row_payload_inspected: no",
+        "archive_format: PostgreSQL custom archive (PGDMP)",
+        "pg_restore_list_compatibility: PASS",
+        (
+            "archive_snapshot_binding: PASS "
+            "(TOC and SHA-256 use one private read-only capture)"
+        ),
+        "unknown_toc_classes: none (inspection fails closed if encountered)",
+        "object_reference_analysis: INCOMPLETE",
+        "migration_duplicate_analysis: INCOMPLETE",
+        "restore_planning_gate: BLOCKED",
+        UNRESOLVED_CLASS_COUNT_HEADER,
+        "BOUNDARY",
+        "This report is an inventory aid, not a restore plan or completeness proof.",
+        "Object-reference analysis is incomplete; restore planning remains blocked.",
+        "PGDMP HEADER CAPTURE",
+        "expected_sha256_binding: PASS",
+    }
+    reviewed_patterns = (
+        re.compile(r"^size_bytes: (?:0|[1-9][0-9]*)$"),
+        re.compile(r"^sha256: [0-9a-f]{64}$"),
+        re.compile(r"^archive_format_version: [0-9]+\.[0-9]+\.[0-9]+$"),
+        re.compile(
+            r"^source_postgresql_version: "
+            r"(?:UNKNOWN_NOT_REPORTED|[0-9]+(?:\.[0-9]+)*(?:[A-Za-z0-9_.+~-]*)?)$"
+        ),
+        re.compile(
+            r"^source_pg_dump_version: "
+            r"(?:UNKNOWN_NOT_REPORTED|[0-9]+(?:\.[0-9]+)*(?:[A-Za-z0-9_.+~-]*)?)$"
+        ),
+        re.compile(r"^pg_restore_version: 17(?:\.[0-9]+)?$"),
+        re.compile(r"^toc_entries: (?:0|[1-9][0-9]*)$"),
+        re.compile(r"^toc_metadata_entries: (?:0|[1-9][0-9]*)$"),
+        re.compile(r"^toc_data_references_not_extracted: (?:0|[1-9][0-9]*)$"),
+        re.compile(r"^unresolved_known_toc_entries: (?:0|[1-9][0-9]*)$"),
+        re.compile(r"^archive_format_version_bytes: [0-9]+,[0-9]+,[0-9]+$"),
+        re.compile(r"^archive_integer_width_bytes: (?:4|8)$"),
+        re.compile(r"^archive_offset_width_bytes: (?:4|8)$"),
+        re.compile(r"^archive_format_code: 1$"),
+        re.compile(r"^archive_header_bound_sha256: [0-9a-f]{64}$"),
+    )
+    for index, line in enumerate(report_lines):
+        if index in reviewed_count_line_indexes:
+            continue
+        if line in fixed_lines or any(pattern.fullmatch(line) for pattern in reviewed_patterns):
+            continue
+        raise WorkflowError(
+            "incomplete object-reference report contains an unreviewed line"
+        )
+
+
+def _parse_unresolved_class_count_block(
+    lines: list[str],
+) -> tuple[dict[str, int], frozenset[int]]:
+    header_indexes = [
+        index
+        for index, line in enumerate(lines)
+        if line == UNRESOLVED_CLASS_COUNT_HEADER
+    ]
+    if len(header_indexes) != 1:
+        raise WorkflowError(
+            "inspector report must contain exactly one unresolved-class-count block"
+        )
+    block_start = header_indexes[0] + 1
+    block_stop = block_start
+    while block_stop < len(lines) and lines[block_stop] != "":
+        block_stop += 1
+    block_lines = lines[block_start:block_stop]
+    if not block_lines:
+        raise WorkflowError("inspector report object-class-count block is empty")
+
+    allowlisted = set(UNRESOLVED_OBJECT_CLASS_ALLOWLIST)
+    parsed: dict[str, int] = {}
+    for line in block_lines:
+        match = re.fullmatch(r"([A-Z][A-Z ]*): (0|[1-9][0-9]*)", line)
+        if match is None or match.group(1) not in allowlisted:
+            raise WorkflowError(
+                "inspector report object-class-count block differs from the allowlist"
+            )
+        object_class = match.group(1)
+        if object_class in parsed:
+            raise WorkflowError("inspector report contains a duplicate object-class count")
+        parsed[object_class] = int(match.group(2))
+    if tuple(parsed) != UNRESOLVED_OBJECT_CLASS_ALLOWLIST:
+        raise WorkflowError(
+            "inspector report object-class-count block order or coverage is invalid"
+        )
+    return (
+        parsed,
+        frozenset(range(block_start, block_stop)),
+    )
+
+
+def parse_report_object_analysis(report_text: str) -> dict[str, Any]:
+    """Parse and bind the exact fail-closed TOC object-analysis summary."""
+
+    lines = report_text.splitlines()
+    exact_field_prefixes = {
+        "unresolved_known_toc_entries:": REPORT_UNRESOLVED_KNOWN_TOC_ENTRIES,
+        "object_reference_analysis:": REPORT_OBJECT_REFERENCE_ANALYSIS,
+        "migration_duplicate_analysis:": REPORT_MIGRATION_DUPLICATE_ANALYSIS,
+        "restore_planning_gate:": REPORT_RESTORE_PLANNING_GATE,
+        "inspection_status:": REPORT_INSPECTION_STATUS,
+        "toc_entries:": REPORT_TOC_ENTRIES,
+    }
+    for prefix, pattern in exact_field_prefixes.items():
+        candidates = [line for line in lines if line.startswith(prefix)]
+        if len(candidates) != 1 or pattern.fullmatch(candidates[0]) is None:
+            raise WorkflowError(
+                "inspector report contains a missing, duplicate, or unreviewed analysis field"
+            )
+
+    unresolved_total = int(
+        _single_report_value(
+            REPORT_UNRESOLVED_KNOWN_TOC_ENTRIES,
+            report_text,
+            "unresolved-known-TOC count",
+        )
+    )
+    toc_entries = int(
+        _single_report_value(REPORT_TOC_ENTRIES, report_text, "TOC-entry count")
+    )
+    object_status = _single_report_value(
+        REPORT_OBJECT_REFERENCE_ANALYSIS,
+        report_text,
+        "object-reference-analysis",
+    )
+    duplicate_status = _single_report_value(
+        REPORT_MIGRATION_DUPLICATE_ANALYSIS,
+        report_text,
+        "migration-duplicate-analysis",
+    )
+    restore_gate = _single_report_value(
+        REPORT_RESTORE_PLANNING_GATE,
+        report_text,
+        "restore-planning-gate",
+    )
+
+    class_counts, unresolved_count_indexes = _parse_unresolved_class_count_block(lines)
+
+    if (
+        unresolved_total > toc_entries
+        or sum(class_counts.values()) != unresolved_total
+    ):
+        raise WorkflowError("inspector report unresolved-object counts disagree")
+    expected_status = "COMPLETE" if unresolved_total == 0 else "INCOMPLETE"
+    if (
+        object_status != expected_status
+        or duplicate_status != expected_status
+        or restore_gate != "BLOCKED"
+    ):
+        raise WorkflowError("inspector report object-analysis gate matrix is invalid")
+    if object_status == "INCOMPLETE":
+        _validate_incomplete_report_lines(
+            lines,
+            unresolved_count_indexes,
+        )
+
+    return {
+        "object_reference_analysis": object_status,
+        "migration_duplicate_analysis": duplicate_status,
+        "restore_planning_gate": restore_gate,
+        "unresolved_known_toc_entries": unresolved_total,
+        "unresolved_known_toc_class_counts": class_counts,
+    }
+
+
+def validate_provenance_object_analysis(provenance: Any) -> dict[str, Any]:
+    """Require the exact blocked analysis contract in every evidence package."""
+
+    if not isinstance(provenance, dict):
+        raise WorkflowError("evidence provenance must be an object")
+    expected_keys = {
+        "object_reference_analysis",
+        "migration_duplicate_analysis",
+        "restore_planning_gate",
+        "unresolved_known_toc_entries",
+        "unresolved_known_toc_class_counts",
+    }
+    analysis = {key: provenance.get(key) for key in expected_keys}
+    if any(key not in provenance for key in expected_keys):
+        raise WorkflowError("evidence provenance lacks the object-analysis gate")
+    counts = analysis["unresolved_known_toc_class_counts"]
+    if (
+        not isinstance(counts, dict)
+        or list(counts) != list(UNRESOLVED_OBJECT_CLASS_ALLOWLIST)
+        or any(
+            not isinstance(value, int) or isinstance(value, bool) or value < 0
+            for value in counts.values()
+        )
+    ):
+        raise WorkflowError("evidence provenance has invalid unresolved-class counts")
+    total = analysis["unresolved_known_toc_entries"]
+    if (
+        not isinstance(total, int)
+        or isinstance(total, bool)
+        or total < 0
+    ):
+        raise WorkflowError("evidence provenance has an invalid unresolved total")
+    expected_status = "COMPLETE" if total == 0 else "INCOMPLETE"
+    if (
+        sum(counts.values()) != total
+        or analysis["object_reference_analysis"] != expected_status
+        or analysis["migration_duplicate_analysis"] != expected_status
+        or analysis["restore_planning_gate"] != "BLOCKED"
+    ):
+        raise WorkflowError("evidence provenance object-analysis gate matrix is invalid")
+    return analysis
 
 
 def parse_report_header_metadata(report_text: str, inner_sha: str) -> dict[str, Any]:
@@ -2254,15 +2612,21 @@ def inspect() -> Path:
         reported_hashes = REPORT_SHA.findall(report_text)
         if len(reported_hashes) != 1:
             raise WorkflowError("inspector report must contain exactly one inner sha256 field")
+        object_analysis = parse_report_object_analysis(report_text)
         required_report_lines = {
             "inspection_status: REVIEW_REQUIRED",
             "restore_attempted: no",
             "database_connection_attempted: no",
             "row_payload_inspected: no",
-            "input_file: verified-inner.pgdmp",
             f"size_bytes: {inner_size}",
         }
         report_lines = set(report_text.splitlines())
+        if object_analysis["object_reference_analysis"] == "COMPLETE":
+            required_report_lines.add("input_file: verified-inner.pgdmp")
+        elif any(line.startswith("input_file:") for line in report_lines):
+            raise WorkflowError(
+                "incomplete object-reference report must not retain an input filename"
+            )
         if not required_report_lines <= report_lines or not any(
             line.startswith("archive_snapshot_binding: PASS ") for line in report_lines
         ):
@@ -2308,10 +2672,11 @@ def inspect() -> Path:
         root_metadata = os.fstat(bound.root_fd)
         file_metadata = os.fstat(bound.file_fd)
         provenance: dict[str, Any] = {
-            "format_version": 4,
+            "format_version": PROVENANCE_FORMAT_VERSION,
             "artifact_kind": "lovable_cloud_export_inspection_provenance",
             "inspection_status": "REVIEW_REQUIRED",
             "export_timeline_status": timeline_status,
+            **object_analysis,
             "run_id": run_id,
             "run_kind": run_kind,
             "export_evidence_profile": evidence_profile,
@@ -2465,6 +2830,9 @@ def inspect() -> Path:
                 "file_manifest": "evidence-files.json",
                 "file_manifest_checksum": "evidence-files.sha256",
                 "completion_marker": COMPLETION_MARKER,
+                "completion_marker_meaning": (
+                    "evidence package bytes are complete; restore planning remains blocked"
+                ),
                 "publication_semantics": (
                     "descriptor_bound_fsynced_payload_then_atomic_no_replace_"
                     "postcommit_validation_then_completion_marker"
@@ -2503,6 +2871,7 @@ def inspect() -> Path:
         )
         completed = True
         print("inspection_status=REVIEW_REQUIRED")
+        print("restore_planning_gate=BLOCKED")
         print(f"export_timeline_status={timeline_status}")
         print(f"evidence_run_id={run_id}")
         print(

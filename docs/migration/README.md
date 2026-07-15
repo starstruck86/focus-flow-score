@@ -20,14 +20,24 @@ evidence only:
   and strict manifest comparison.
 
 **Migration readiness remains RED.** An authorized rehearsal export is retained
-offline in an approved evidence store. Merged ZIP support removed the wrapper
-mismatch, but a separately authorized metadata-only attempt failed closed
-without stable raw-inspector stage attribution. No identifying artifact
-metadata is committed here. The diagnostic hardening work and tests use
-synthetic fixtures only and do not access, inspect, list, copy, hash, rename, or
-extract the retained export. They also do not access Lovable, Supabase, secrets,
-production, or any remote or pre-existing database. CI keeps the required
-PostgreSQL checks confined to isolated synthetic PG17 fixture databases.
+offline in an approved evidence store. PR #15 is merged at main
+`8b872882787859b87549e7f884832c624e29ead9`. A separately authorized
+metadata-only attempt failed closed at
+`report_helper_failed/unresolved_known_toc_entry`; it produced no evidence
+package and performed no restore. No identifying artifact metadata is committed
+here. This correction and its tests use synthetic fixtures only and do not
+access, inspect, list, copy, hash, rename, or extract the retained export. They
+also do not access Lovable, Supabase, secrets, production, or any remote or
+pre-existing database. CI keeps the required PostgreSQL checks confined to
+isolated synthetic PG17 fixture databases.
+
+PostgreSQL's editable `pg_restore --list` output does not define lossless
+quoting for its whitespace-separated namespace, tag, and owner fields. A
+recognized entry whose object identity cannot be conservatively parsed now
+retains only aggregate metadata with object-reference and migration-duplicate
+analysis `INCOMPLETE` and `restore_planning_gate: BLOCKED`; unknown classes and
+structurally malformed or conflicting TOCs remain fatal. Evidence-package
+completion never means restore planning or migration readiness is complete.
 
 The retained rehearsal's initiation time was not observed. Provenance must keep
 that event explicitly null with `basis: not_observed` and a required reason,

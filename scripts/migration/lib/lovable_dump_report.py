@@ -157,6 +157,50 @@ MANAGED_SCHEMAS = frozenset(
     }
 )
 IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
+# PostgreSQL's text TOC output does not provide a reliably parseable quoted
+# identifier for every object class.  Extension names are also control-file
+# names in practice, and repository-known extensions such as ``uuid-ossp``
+# contain a hyphen that is intentionally rejected by ``IDENTIFIER_RE``.  Keep
+# this exception class-specific and narrow: ASCII identifier-like segments,
+# separated by single hyphens, with no leading, trailing, or repeated hyphen.
+HYPHENATED_EXTENSION_NAME_RE = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)+$"
+)
+ROUTINE_TOC_RE = re.compile(
+    r"^([A-Za-z_][A-Za-z0-9_$]*|-) "
+    r"([A-Za-z_][A-Za-z0-9_$]*)\(([^()]*)\)"
+    r"(?: ([A-Za-z_][A-Za-z0-9_$]*|-))?$"
+)
+ROUTINE_TOC_CLASSES = frozenset({"AGGREGATE", "FUNCTION", "PROCEDURE"})
+GENERIC_SINGLE_NAME_TOC_CLASSES = frozenset(
+    {
+        "ACCESS METHOD",
+        "COLLATION",
+        "CONVERSION",
+        "DATABASE",
+        "DOMAIN",
+        "EVENT TRIGGER",
+        "FOREIGN DATA WRAPPER",
+        "FOREIGN SERVER",
+        "FOREIGN TABLE",
+        "INDEX",
+        "LANGUAGE",
+        "MATERIALIZED VIEW",
+        "PUBLICATION",
+        "SEQUENCE",
+        "STATISTICS",
+        "SUBSCRIPTION",
+        "TABLE",
+        "TABLESPACE",
+        "TEXT SEARCH CONFIGURATION",
+        "TEXT SEARCH DICTIONARY",
+        "TEXT SEARCH PARSER",
+        "TEXT SEARCH TEMPLATE",
+        "TRANSFORM",
+        "TYPE",
+        "VIEW",
+    }
+)
 TOC_LINE_RE = re.compile(r"^\s*(\d+);\s+(\d+)\s+(\d+)\s+(.+?)\s*$")
 SOURCE_POSTGRES_VERSION_RE = re.compile(
     r"^;\s*Dumped from database version:\s*"
@@ -326,9 +370,19 @@ def parse_toc(path: Path) -> tuple[list[TocEntry], TocProvenance]:
 
 
 def clean_identifier(value: str) -> Optional[str]:
-    value = value.strip('"')
-    value = value.split("(", 1)[0]
+    # pg_restore --list does not promise SQL-identifier quoting here. Treat a
+    # quote as object-name data, not syntax that this parser may strip.
+    if '"' in value:
+        return None
     return value if IDENTIFIER_RE.fullmatch(value) else None
+
+
+def clean_extension_name(value: str) -> Optional[str]:
+    """Normalize only conservative ASCII extension names from a TOC entry."""
+
+    if IDENTIFIER_RE.fullmatch(value):
+        return value
+    return value if HYPHENATED_EXTENSION_NAME_RE.fullmatch(value) else None
 
 
 def object_ref(entry: TocEntry) -> Optional[ObjectRef]:
@@ -341,14 +395,53 @@ def object_ref(entry: TocEntry) -> Optional[ObjectRef]:
     }:
         return None
 
+    if entry.object_class in ROUTINE_TOC_CLASSES:
+        routine_match = ROUTINE_TOC_RE.fullmatch(entry.remainder)
+        if routine_match is None:
+            return None
+        schema = (
+            "-"
+            if routine_match.group(1) == "-"
+            else clean_identifier(routine_match.group(1))
+        )
+        name = clean_identifier(routine_match.group(2))
+        if not schema or not name:
+            return None
+        return ObjectRef(entry.object_class, schema, name)
+
     tokens = entry.remainder.split()
     if len(tokens) < 2:
         return None
 
     if entry.object_class == "SCHEMA":
+        if len(tokens) != 3 or tokens[0] != "-" or not (
+            tokens[2] == "-" or IDENTIFIER_RE.fullmatch(tokens[2])
+        ):
+            return None
         schema = clean_identifier(tokens[1])
         return ObjectRef("SCHEMA", schema, schema) if schema else None
 
+    if entry.object_class == "EXTENSION":
+        # pg_restore --list renders the repository-known shape as
+        # ``EXTENSION - uuid-ossp <owner>``; ownerless list output such as
+        # ``EXTENSION - pgcrypto`` is also emitted by PostgreSQL.  Requiring
+        # exactly those two layouts avoids accepting a whitespace-containing
+        # or otherwise ambiguous name by considering only its first token.
+        if len(tokens) not in (2, 3) or tokens[0] != "-":
+            return None
+        if len(tokens) == 3 and not (
+            tokens[2] == "-" or IDENTIFIER_RE.fullmatch(tokens[2])
+        ):
+            return None
+        name = clean_extension_name(tokens[1])
+        return ObjectRef("EXTENSION", "-", name) if name else None
+
+    if entry.object_class not in GENERIC_SINGLE_NAME_TOC_CLASSES:
+        return None
+    if len(tokens) != 3 or not (
+        tokens[2] == "-" or IDENTIFIER_RE.fullmatch(tokens[2])
+    ):
+        return None
     schema = clean_identifier(tokens[0]) if tokens[0] != "-" else "-"
     name = clean_identifier(tokens[1])
     if not schema or not name:
@@ -398,21 +491,38 @@ MIGRATION_CLASS_PREFIXES = {
     "VIEW": r"(?:create|alter)(?:\s+or\s+replace)?\s+view",
 }
 
-# These classes describe repository-comparable or migration-critical objects.
-# If their schema/name reference cannot be normalized, silently omitting the
-# entry could create a false "no duplicate" or "no managed object" result.
-OBJECT_REFERENCE_REQUIRED_CLASSES = frozenset(MIGRATION_CLASS_PREFIXES) | {
-    "SUBSCRIPTION"
+# These classes do not carry a standalone object reference for the report's
+# purpose, or refer only to data payload/position rather than a schema object.
+# Every other recognized TOC class participates in the conservative analysis:
+# failing to normalize any such entry makes object-reference and duplicate
+# analysis incomplete rather than silently omitting it.
+OBJECT_REFERENCE_EXEMPT_CLASSES = DATA_TOC_CLASSES | {
+    "ACL",
+    "BLOB",
+    "BLOB METADATA",
+    "COMMENT",
+    "DEFAULT ACL",
+    "LARGE OBJECT",
+    "SECURITY LABEL",
+    "SEQUENCE SET",
 }
+OBJECT_REFERENCE_REQUIRED_CLASSES = (
+    KNOWN_TOC_CLASSES - OBJECT_REFERENCE_EXEMPT_CLASSES
+)
+UNRESOLVED_CLASS_COUNT_KEYS = tuple(sorted(KNOWN_TOC_CLASSES))
 
 
-def validate_required_object_references(entries: Iterable[TocEntry]) -> None:
-    for entry in entries:
-        if (
-            entry.object_class in OBJECT_REFERENCE_REQUIRED_CLASSES
-            and object_ref(entry) is None
-        ):
-            raise InspectionError(REASON_UNRESOLVED_KNOWN_TOC_ENTRY)
+def unresolved_required_object_references(
+    entries: Iterable[TocEntry],
+) -> Counter[str]:
+    """Count recognized entries whose object reference is not losslessly parsed."""
+
+    return Counter(
+        entry.object_class
+        for entry in entries
+        if entry.object_class in OBJECT_REFERENCE_REQUIRED_CLASSES
+        and object_ref(entry) is None
+    )
 
 
 def quoted_identifier_pattern(identifier: str) -> str:
@@ -497,8 +607,62 @@ def build_report(args: argparse.Namespace) -> str:
         raise InspectionError(REASON_OTHER_NONZERO)
 
     entries, toc_provenance = parse_toc(args.toc)
-    validate_required_object_references(entries)
     class_counts = Counter(entry.object_class for entry in entries)
+    unresolved_counts = unresolved_required_object_references(entries)
+    unresolved_total = sum(unresolved_counts.values())
+    data_entries = sum(class_counts[name] for name in DATA_TOC_CLASSES)
+
+    source_postgresql_version = (
+        toc_provenance.source_postgresql_version or "UNKNOWN_NOT_REPORTED"
+    )
+    pg_dump_version = toc_provenance.pg_dump_version or "UNKNOWN_NOT_REPORTED"
+
+    if unresolved_total:
+        # PostgreSQL's list format is not a lossless serialization of every
+        # namespace, tag, and owner.  Once a recognized object-bearing entry
+        # cannot be normalized, do not run name-, schema-, owner-, or
+        # migration-definition analysis.  Retain only fixed-class aggregate
+        # evidence and a hard blocked restore-planning gate.
+        lines = [
+            "LOVABLE CLOUD DUMP — METADATA-ONLY INSPECTION",
+            "inspection_status: REVIEW_REQUIRED",
+            "object_reference_analysis: INCOMPLETE",
+            "migration_duplicate_analysis: INCOMPLETE",
+            "restore_planning_gate: BLOCKED",
+            "scope: archive header, SHA-256, pg_restore TOC metadata, aggregate unresolved-object counts",
+            "restore_attempted: no",
+            "database_connection_attempted: no",
+            "row_payload_inspected: no",
+            f"size_bytes: {size}",
+            f"sha256: {sha256}",
+            "archive_format: PostgreSQL custom archive (PGDMP)",
+            f"archive_format_version: {archive_version}",
+            f"source_postgresql_version: {source_postgresql_version}",
+            f"source_pg_dump_version: {pg_dump_version}",
+            f"pg_restore_version: {args.pg_restore_version}",
+            "pg_restore_list_compatibility: PASS",
+            "archive_snapshot_binding: PASS "
+            "(TOC and SHA-256 use one private read-only capture)",
+            f"toc_entries: {len(entries)}",
+            f"toc_metadata_entries: {len(entries) - data_entries}",
+            f"toc_data_references_not_extracted: {data_entries}",
+            "unknown_toc_classes: none (inspection fails closed if encountered)",
+            f"unresolved_known_toc_entries: {unresolved_total}",
+            "",
+            "UNRESOLVED KNOWN TOC CLASS COUNTS",
+        ]
+        for object_class in UNRESOLVED_CLASS_COUNT_KEYS:
+            lines.append(f"{object_class}: {unresolved_counts[object_class]}")
+        lines.extend(
+            [
+                "",
+                "BOUNDARY",
+                "This report is an inventory aid, not a restore plan or completeness proof.",
+                "Object-reference analysis is incomplete; restore planning remains blocked.",
+            ]
+        )
+        return "\n".join(lines) + "\n"
+
     owners = owner_reference_count(entries)
     acl = sum(
         class_counts[name] for name in ("ACL", "DEFAULT ACL")
@@ -511,8 +675,6 @@ def build_report(args: argparse.Namespace) -> str:
         for name, count in class_counts.items()
         if name == "PUBLICATION" or name.startswith("PUBLICATION ")
     )
-    data_entries = sum(class_counts[name] for name in DATA_TOC_CLASSES)
-
     schemas = [schema_for_flag(entry) for entry in entries]
     managed = sum(schema in MANAGED_SCHEMAS for schema in schemas if schema)
     auth = sum(schema == "auth" for schema in schemas)
@@ -532,14 +694,12 @@ def build_report(args: argparse.Namespace) -> str:
         entry.object_class for entry in entries if object_ref(entry) is None
     )
 
-    source_postgresql_version = (
-        toc_provenance.source_postgresql_version or "UNKNOWN_NOT_REPORTED"
-    )
-    pg_dump_version = toc_provenance.pg_dump_version or "UNKNOWN_NOT_REPORTED"
-
     lines = [
         "LOVABLE CLOUD DUMP — METADATA-ONLY INSPECTION",
         "inspection_status: REVIEW_REQUIRED",
+        "object_reference_analysis: COMPLETE",
+        "migration_duplicate_analysis: COMPLETE",
+        "restore_planning_gate: BLOCKED",
         "scope: archive header, SHA-256, pg_restore TOC metadata, migration-name comparison",
         "restore_attempted: no",
         "database_connection_attempted: no",
@@ -559,12 +719,16 @@ def build_report(args: argparse.Namespace) -> str:
         f"toc_metadata_entries: {len(entries) - data_entries}",
         f"toc_data_references_not_extracted: {data_entries}",
         "unknown_toc_classes: none (inspection fails closed if encountered)",
-        "unresolved_known_toc_entries: none (required object references fail closed)",
+        "unresolved_known_toc_entries: 0",
         "",
         "TOC CLASS COUNTS",
     ]
     for object_class in sorted(class_counts):
         lines.append(f"{object_class}: {class_counts[object_class]}")
+
+    lines.extend(["", "UNRESOLVED KNOWN TOC CLASS COUNTS"])
+    for object_class in UNRESOLVED_CLASS_COUNT_KEYS:
+        lines.append(f"{object_class}: 0")
 
     lines.extend(
         [

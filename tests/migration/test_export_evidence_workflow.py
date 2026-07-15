@@ -63,6 +63,96 @@ def git_output(checkout: Path, *arguments: str) -> str:
     ).stdout.strip()
 
 
+def synthetic_object_analysis_report(
+    *,
+    unresolved_total: int,
+    unresolved_class: str = "TABLE",
+    object_status: str | None = None,
+    duplicate_status: str | None = None,
+    restore_gate: str = "BLOCKED",
+) -> str:
+    expected_status = "COMPLETE" if unresolved_total == 0 else "INCOMPLETE"
+    counts = {
+        object_class: 0
+        for object_class in DRIVER.UNRESOLVED_OBJECT_CLASS_ALLOWLIST
+    }
+    if unresolved_total:
+        counts[unresolved_class] = unresolved_total
+    lines = [
+        "LOVABLE CLOUD DUMP — METADATA-ONLY INSPECTION",
+        "inspection_status: REVIEW_REQUIRED",
+        (
+            "scope: archive header, SHA-256, pg_restore TOC metadata, "
+            "aggregate unresolved-object counts"
+        ),
+        "restore_attempted: no",
+        "database_connection_attempted: no",
+        "row_payload_inspected: no",
+        "size_bytes: 23",
+        "sha256: " + ("a" * 64),
+        "archive_format: PostgreSQL custom archive (PGDMP)",
+        "archive_format_version: 1.14.0",
+        "source_postgresql_version: 17.5",
+        "source_pg_dump_version: 17.5",
+        "pg_restore_version: 17.5",
+        "pg_restore_list_compatibility: PASS",
+        (
+            "archive_snapshot_binding: PASS "
+            "(TOC and SHA-256 use one private read-only capture)"
+        ),
+        f"toc_entries: {max(1, unresolved_total)}",
+        "toc_metadata_entries: 1",
+        "toc_data_references_not_extracted: 0",
+        "unknown_toc_classes: none (inspection fails closed if encountered)",
+        f"unresolved_known_toc_entries: {unresolved_total}",
+        f"object_reference_analysis: {object_status or expected_status}",
+        f"migration_duplicate_analysis: {duplicate_status or expected_status}",
+        f"restore_planning_gate: {restore_gate}",
+        "",
+        DRIVER.UNRESOLVED_CLASS_COUNT_HEADER,
+    ]
+    if unresolved_total == 0:
+        lines.insert(6, "input_file: verified-inner.pgdmp")
+    lines.extend(f"{object_class}: {counts[object_class]}" for object_class in counts)
+    lines.extend(
+        [
+            "",
+            "BOUNDARY",
+            "This report is an inventory aid, not a restore plan or completeness proof.",
+            (
+                "Object-reference analysis is incomplete; restore planning remains blocked."
+                if unresolved_total
+                else "Object-reference analysis is complete; restore planning remains blocked."
+            ),
+            "",
+            "PGDMP HEADER CAPTURE",
+            "archive_format_version_bytes: 1,14,0",
+            "archive_integer_width_bytes: 4",
+            "archive_offset_width_bytes: 8",
+            "archive_format_code: 1",
+            "archive_header_bound_sha256: " + ("a" * 64),
+            "expected_sha256_binding: PASS",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def synthetic_package_report_and_provenance(run_id: str) -> tuple[bytes, bytes]:
+    report_text = synthetic_object_analysis_report(unresolved_total=0)
+    analysis = DRIVER.parse_report_object_analysis(report_text)
+    provenance = {
+        "format_version": DRIVER.PROVENANCE_FORMAT_VERSION,
+        "inspection_status": "REVIEW_REQUIRED",
+        "run_id": run_id,
+        **analysis,
+    }
+    return (
+        report_text.encode("utf-8"),
+        (json.dumps(provenance, sort_keys=True) + "\n").encode("utf-8"),
+    )
+
+
 class DocumentedExportEvidenceWorkflowTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -424,6 +514,49 @@ esac
             "INSPECTION_TOOL_GIT_SHA": checkout_sha,
         }
 
+    def commit_helper_source_mutation(
+        self,
+        *,
+        old: str,
+        new: str,
+        label: str,
+        count: int = 1,
+    ) -> dict[str, str]:
+        helper = self.checkout / "scripts/migration/lib/lovable_dump_report.py"
+        source = helper.read_text(encoding="utf-8")
+        if source.count(old) < count:
+            self.fail("synthetic helper mutation target is unavailable")
+        helper.write_text(source.replace(old, new, count), encoding="utf-8")
+        subprocess.run(
+            ["git", "add", "scripts/migration/lib/lovable_dump_report.py"],
+            cwd=self.checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=Synthetic Migration Test",
+                "-c",
+                "user.email=migration-test@example.invalid",
+                "commit",
+                "--quiet",
+                "-m",
+                f"synthetic report mutation: {label}",
+            ],
+            cwd=self.checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        checkout_sha = git_output(self.checkout, "rev-parse", "HEAD")
+        return {
+            "APPROVED_EXECUTION_CHECKOUT_SHA": checkout_sha,
+            "INSPECTION_TOOL_GIT_SHA": checkout_sha,
+        }
+
     def assert_synthetic_helper_failure(
         self,
         *,
@@ -493,7 +626,10 @@ esac
         self.assert_no_runs()
 
     def assert_success(
-        self, *, environment: dict[str, str] | None = None
+        self,
+        *,
+        environment: dict[str, str] | None = None,
+        unresolved_counts: dict[str, int] | None = None,
     ) -> tuple[dict[str, object], subprocess.CompletedProcess[str], Path]:
         expected_root = self.run_root(environment=environment)
         result = self.run_workflow(environment=environment)
@@ -544,6 +680,7 @@ esac
             {
                 "evidence_files_sha256": evidence_manifest_sha,
                 "inspection_status": "REVIEW_REQUIRED",
+                "restore_planning_gate": "BLOCKED",
                 "run_id": expected_root.name,
             },
         )
@@ -580,6 +717,37 @@ esac
             self.assertIsNone(provenance["zip_envelope"])
             self.assertIsNone(provenance["archive_member"])
         self.assertEqual(provenance["inspection_status"], "REVIEW_REQUIRED")
+        self.assertEqual(
+            provenance["format_version"], DRIVER.PROVENANCE_FORMAT_VERSION
+        )
+        expected_counts = {
+            object_class: 0
+            for object_class in DRIVER.UNRESOLVED_OBJECT_CLASS_ALLOWLIST
+        }
+        expected_counts.update(unresolved_counts or {})
+        expected_unresolved_total = sum(expected_counts.values())
+        expected_analysis_status = (
+            "INCOMPLETE" if expected_unresolved_total else "COMPLETE"
+        )
+        self.assertEqual(
+            provenance["object_reference_analysis"], expected_analysis_status
+        )
+        self.assertEqual(
+            provenance["migration_duplicate_analysis"], expected_analysis_status
+        )
+        self.assertEqual(provenance["restore_planning_gate"], "BLOCKED")
+        self.assertEqual(
+            provenance["unresolved_known_toc_entries"], expected_unresolved_total
+        )
+        self.assertEqual(
+            provenance["unresolved_known_toc_class_counts"],
+            expected_counts,
+        )
+        self.assertIn("restore_planning_gate=BLOCKED\n", result.stdout)
+        self.assertEqual(
+            provenance["durable_publication"]["completion_marker_meaning"],
+            "evidence package bytes are complete; restore planning remains blocked",
+        )
         self.assertEqual(
             provenance["durable_publication"]["publication_semantics"],
             "descriptor_bound_fsynced_payload_then_atomic_no_replace_"
@@ -781,6 +949,94 @@ esac
         self.assertTrue(incomplete.is_dir())
         shutil.rmtree(incomplete)
 
+    def test_unresolved_known_entry_publishes_only_blocked_aggregate_evidence(self):
+        private_sentinels = (
+            "SYNTHETIC_UNRESOLVED_OBJECT_MUST_NOT_APPEAR",
+            "/private/SYNTHETIC_UNRESOLVED_PATH_MUST_NOT_APPEAR",
+            "SELECT SYNTHETIC_UNRESOLVED_SQL_MUST_NOT_APPEAR",
+        )
+        self.fake_toc.write_text(
+            "; Dumped from database version: 17.5\n"
+            "; Dumped by pg_dump version: 17.5\n"
+            "; "
+            + private_sentinels[1]
+            + "\n"
+            "1; 1259 100 TABLE "
+            + private_sentinels[0]
+            + "\n"
+            "; "
+            + private_sentinels[2]
+            + "\n",
+            encoding="utf-8",
+        )
+        provenance, result, evidence = self.assert_success(
+            unresolved_counts={"TABLE": 1}
+        )
+        report = (evidence / "inspection/rehearsal-metadata.txt").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("object_reference_analysis: INCOMPLETE\n", report)
+        self.assertIn("migration_duplicate_analysis: INCOMPLETE\n", report)
+        self.assertIn("restore_planning_gate: BLOCKED\n", report)
+        self.assertIn("unresolved_known_toc_entries: 1\n", report)
+        self.assertNotIn("TOC CLASS COUNTS", report.splitlines())
+        self.assertNotIn("input_file:", report)
+        self.assertNotIn("POSSIBLE REPO MIGRATION DUPLICATES", report)
+        self.assertEqual(provenance["restore_planning_gate"], "BLOCKED")
+        self.assertIn("restore_planning_gate=BLOCKED\n", result.stdout)
+
+        retained = result.stdout + result.stderr
+        for path in evidence.rglob("*"):
+            if path.is_file():
+                retained += path.read_text(encoding="utf-8")
+        for sentinel in private_sentinels:
+            self.assertNotIn(sentinel, retained)
+        self.assertTrue((evidence / "EVIDENCE_COMPLETE").is_file())
+        self.assertFalse((evidence / "EVIDENCE_INDETERMINATE").exists())
+        self.assertFalse((evidence / ".working").exists())
+        self.assertFalse((evidence / ".derived").exists())
+        self.assertEqual(
+            [line.split("|", 1)[0] for line in self.fake_log.read_text().splitlines()],
+            ["--version", "--list"],
+        )
+
+    def test_invalid_incomplete_gate_cleans_every_partial_evidence_file(self):
+        self.fake_toc.write_text(
+            "; Dumped from database version: 17.5\n"
+            "; Dumped by pg_dump version: 17.5\n"
+            "1; 1259 100 TABLE SYNTHETIC_PRIVATE_OBJECT_MUST_NOT_APPEAR\n",
+            encoding="utf-8",
+        )
+        environment = self.commit_helper_source_mutation(
+            old='"restore_planning_gate: BLOCKED",',
+            new='"restore_planning_gate: READY",',
+            label="false ready gate",
+        )
+        expected_root = self.run_root(environment=environment)
+        result = self.run_workflow(environment=environment)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("SYNTHETIC_PRIVATE_OBJECT_MUST_NOT_APPEAR", result.stdout)
+        self.assertNotIn("SYNTHETIC_PRIVATE_OBJECT_MUST_NOT_APPEAR", result.stderr)
+        self.assertFalse(expected_root.exists())
+        self.assert_no_runs()
+        for forbidden_name in (
+            "rehearsal-metadata.txt",
+            "report.sha256",
+            "provenance.json",
+            "provenance.sha256",
+            "evidence-files.json",
+            "evidence-files.sha256",
+            "EVIDENCE_COMPLETE",
+            "EVIDENCE_INDETERMINATE",
+            "verified-inner.pgdmp",
+            "canonical-outer.artifact",
+        ):
+            self.assertEqual(list(self.case_root.rglob(forbidden_name)), [])
+        self.assertEqual(
+            [line.split("|", 1)[0] for line in self.fake_log.read_text().splitlines()],
+            ["--version", "--list"],
+        )
+
     def test_final_file_mode_is_applied_before_fsync(self):
         real_fchmod = DRIVER.os.fchmod
         real_fsync = DRIVER.os.fsync
@@ -832,10 +1088,7 @@ esac
             pending.mkdir(parents=True, mode=0o700)
             (pending / "archive").mkdir(mode=0o700)
             (pending / "inspection").mkdir(mode=0o700)
-            report = b"synthetic metadata-only report\n"
-            provenance = (
-                json.dumps({"run_id": run_id}, sort_keys=True) + "\n"
-            ).encode("utf-8")
+            report, provenance = synthetic_package_report_and_provenance(run_id)
             payloads = {
                 "archive/outer.expected.sha256": ("a" * 64 + "\n").encode(),
                 "archive/outer.workflow-observed.before.sha256": ("a" * 64 + "\n").encode(),
@@ -945,8 +1198,7 @@ esac
             pending.mkdir(parents=True, mode=0o700)
             (pending / "archive").mkdir(mode=0o700)
             (pending / "inspection").mkdir(mode=0o700)
-            report = b"synthetic metadata-only report\n"
-            provenance = (json.dumps({"run_id": run_id}) + "\n").encode()
+            report, provenance = synthetic_package_report_and_provenance(run_id)
             payloads = {
                 "archive/outer.expected.sha256": ("a" * 64 + "\n").encode(),
                 "archive/outer.workflow-observed.before.sha256": ("a" * 64 + "\n").encode(),
@@ -1078,8 +1330,7 @@ esac
         pending.mkdir(parents=True, mode=0o700)
         (pending / "archive").mkdir(mode=0o700)
         (pending / "inspection").mkdir(mode=0o700)
-        report = b"synthetic metadata-only report\n"
-        provenance = (json.dumps({"run_id": run_id}) + "\n").encode()
+        report, provenance = synthetic_package_report_and_provenance(run_id)
         payloads = {
             "archive/outer.expected.sha256": ("a" * 64 + "\n").encode(),
             "archive/outer.workflow-observed.before.sha256": ("a" * 64 + "\n").encode(),
@@ -1715,6 +1966,215 @@ esac
             with self.subTest(tampered=tampered[-100:]):
                 with self.assertRaises(DRIVER.WorkflowError):
                     DRIVER.parse_report_header_metadata(tampered, inner_sha)
+
+    def test_object_analysis_parser_binds_complete_and_incomplete_reports(self):
+        complete = DRIVER.parse_report_object_analysis(
+            synthetic_object_analysis_report(unresolved_total=0)
+        )
+        self.assertEqual(
+            complete,
+            {
+                "object_reference_analysis": "COMPLETE",
+                "migration_duplicate_analysis": "COMPLETE",
+                "restore_planning_gate": "BLOCKED",
+                "unresolved_known_toc_entries": 0,
+                "unresolved_known_toc_class_counts": {
+                    object_class: 0
+                    for object_class in DRIVER.UNRESOLVED_OBJECT_CLASS_ALLOWLIST
+                },
+            },
+        )
+
+        incomplete = DRIVER.parse_report_object_analysis(
+            synthetic_object_analysis_report(
+                unresolved_total=2,
+                unresolved_class="EXTENSION",
+            )
+        )
+        self.assertEqual(incomplete["object_reference_analysis"], "INCOMPLETE")
+        self.assertEqual(incomplete["migration_duplicate_analysis"], "INCOMPLETE")
+        self.assertEqual(incomplete["restore_planning_gate"], "BLOCKED")
+        self.assertEqual(incomplete["unresolved_known_toc_entries"], 2)
+        self.assertEqual(
+            incomplete["unresolved_known_toc_class_counts"]["EXTENSION"], 2
+        )
+        self.assertEqual(
+            sum(incomplete["unresolved_known_toc_class_counts"].values()), 2
+        )
+
+    def test_object_analysis_parser_rejects_invalid_matrix_counts_and_keys(self):
+        valid = synthetic_object_analysis_report(unresolved_total=1)
+        invalid_reports = {
+            "complete status with unresolved entries": valid.replace(
+                "object_reference_analysis: INCOMPLETE",
+                "object_reference_analysis: COMPLETE",
+            ),
+            "duplicate analysis falsely complete": valid.replace(
+                "migration_duplicate_analysis: INCOMPLETE",
+                "migration_duplicate_analysis: COMPLETE",
+            ),
+            "nonblocked restore gate": valid.replace(
+                "restore_planning_gate: BLOCKED",
+                "restore_planning_gate: READY",
+            ),
+            "class count differs from total": valid.replace("TABLE: 1", "TABLE: 0"),
+            "unresolved total exceeds TOC": valid.replace(
+                "unresolved_known_toc_entries: 1",
+                "unresolved_known_toc_entries: 2",
+            ),
+            "unknown class key": valid.replace("TABLE: 1", "FUTURE OBJECT: 1"),
+            "missing status": valid.replace(
+                "object_reference_analysis: INCOMPLETE\n", ""
+            ),
+            "duplicate status": valid.replace(
+                "object_reference_analysis: INCOMPLETE",
+                "object_reference_analysis: INCOMPLETE\n"
+                "object_reference_analysis: INCOMPLETE",
+            ),
+            "alternate ready status alongside blocked": valid.replace(
+                "restore_planning_gate: BLOCKED",
+                "restore_planning_gate: BLOCKED\nrestore_planning_gate: READY",
+            ),
+            "alternate inspection status alongside review required": valid.replace(
+                "inspection_status: REVIEW_REQUIRED",
+                "inspection_status: REVIEW_REQUIRED\ninspection_status: READY",
+            ),
+            "missing count block": valid.replace(
+                DRIVER.UNRESOLVED_CLASS_COUNT_HEADER,
+                "MISSING UNRESOLVED CLASS COUNTS",
+            ),
+            "duplicate count block": valid
+            + DRIVER.UNRESOLVED_CLASS_COUNT_HEADER
+            + "\n",
+        }
+        for label, report in invalid_reports.items():
+            with self.subTest(label=label):
+                with self.assertRaises(DRIVER.WorkflowError):
+                    DRIVER.parse_report_object_analysis(report)
+
+    def test_incomplete_report_rejects_every_unreviewed_or_leaking_line(self):
+        valid = synthetic_object_analysis_report(unresolved_total=1)
+        sentinels = (
+            "SYNTHETIC_SECRET_MUST_NOT_APPEAR",
+            "SYNTHETIC_ROW_PAYLOAD_MUST_NOT_APPEAR",
+            "/private/SYNTHETIC_PATH_MUST_NOT_APPEAR",
+            "SYNTHETIC_FILENAME_MUST_NOT_APPEAR.backup",
+            "SYNTHETIC_OBJECT_NAME_MUST_NOT_APPEAR",
+            "1; 1259 100 TABLE private secret owner",
+            "SELECT SYNTHETIC_SQL_MUST_NOT_APPEAR",
+        )
+        for sentinel in sentinels:
+            with self.subTest(sentinel=sentinel.split(" ", 1)[0]):
+                with self.assertRaises(DRIVER.WorkflowError):
+                    DRIVER.parse_report_object_analysis(valid + sentinel + "\n")
+
+    def test_provenance_and_completion_marker_never_encode_restore_ready(self):
+        analysis = DRIVER.parse_report_object_analysis(
+            synthetic_object_analysis_report(unresolved_total=1)
+        )
+        provenance = {
+            "inspection_status": "REVIEW_REQUIRED",
+            **analysis,
+        }
+        self.assertEqual(
+            DRIVER.validate_provenance_object_analysis(provenance), analysis
+        )
+        marker = json.loads(DRIVER.completion_marker_bytes("synthetic-run", "a" * 64))
+        self.assertEqual(marker["inspection_status"], "REVIEW_REQUIRED")
+        self.assertEqual(marker["restore_planning_gate"], "BLOCKED")
+        self.assertNotIn("READY", json.dumps(marker))
+        self.assertNotIn("GREEN", json.dumps(marker))
+
+        for mutation in (
+            {"restore_planning_gate": "READY"},
+            {"object_reference_analysis": "COMPLETE"},
+            {"migration_duplicate_analysis": "COMPLETE"},
+            {"unresolved_known_toc_entries": 0},
+            {"unresolved_known_toc_class_counts": {"TABLE": 1}},
+        ):
+            with self.subTest(mutation=next(iter(mutation))):
+                with self.assertRaises(DRIVER.WorkflowError):
+                    DRIVER.validate_provenance_object_analysis(
+                        provenance | mutation
+                    )
+
+    def test_fully_rehashed_ready_mutation_fails_both_evidence_tree_validators(self):
+        run_id = "rehearsal-20300102T030405Z-rehashedready"
+        run_root = self.checkout / "local-migration-artifacts" / run_id
+        pending = run_root / ".pending"
+        run_root.parent.mkdir(mode=0o700, exist_ok=True)
+        run_root.mkdir(mode=0o700)
+        pending.mkdir(mode=0o700)
+        (pending / "archive").mkdir(mode=0o700)
+        (pending / "inspection").mkdir(mode=0o700)
+        report, provenance = synthetic_package_report_and_provenance(run_id)
+        payloads = {
+            "archive/outer.expected.sha256": ("a" * 64 + "\n").encode(),
+            "archive/outer.workflow-observed.before.sha256": (
+                "a" * 64 + "\n"
+            ).encode(),
+            "archive/outer.workflow-observed.after.sha256": (
+                "a" * 64 + "\n"
+            ).encode(),
+            "inspection/rehearsal-metadata.txt": report,
+            "inspection/report.sha256": (
+                hashlib.sha256(report).hexdigest() + "\n"
+            ).encode(),
+            "provenance.json": provenance,
+            "provenance.sha256": (
+                hashlib.sha256(provenance).hexdigest() + "\n"
+            ).encode(),
+        }
+        for relative, data in payloads.items():
+            DRIVER.write_exclusive(pending / relative, data)
+        DRIVER.build_evidence_file_manifest(pending, run_id)
+        DRIVER.validate_evidence_tree(pending, run_id)
+        descriptor = os.open(pending, os.O_RDONLY)
+        try:
+            DRIVER.validate_evidence_tree_at(descriptor, run_id)
+        finally:
+            os.close(descriptor)
+
+        ready_report = report.replace(
+            b"restore_planning_gate: BLOCKED",
+            b"restore_planning_gate: READY",
+        )
+        ready_provenance = json.loads(provenance)
+        ready_provenance["restore_planning_gate"] = "READY"
+        ready_provenance_bytes = (
+            json.dumps(ready_provenance, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        replacements = {
+            pending / "inspection/rehearsal-metadata.txt": ready_report,
+            pending / "inspection/report.sha256": (
+                hashlib.sha256(ready_report).hexdigest() + "\n"
+            ).encode(),
+            pending / "provenance.json": ready_provenance_bytes,
+            pending / "provenance.sha256": (
+                hashlib.sha256(ready_provenance_bytes).hexdigest() + "\n"
+            ).encode(),
+        }
+        for path, data in replacements.items():
+            path.chmod(0o600)
+            path.write_bytes(data)
+            path.chmod(0o400)
+        (pending / "evidence-files.json").unlink()
+        (pending / "evidence-files.sha256").unlink()
+        DRIVER.build_evidence_file_manifest(pending, run_id)
+
+        with self.assertRaises(DRIVER.WorkflowError):
+            DRIVER.validate_evidence_tree(pending, run_id)
+        descriptor = os.open(pending, os.O_RDONLY)
+        try:
+            with self.assertRaises(DRIVER.WorkflowError):
+                DRIVER.validate_evidence_tree_at(descriptor, run_id)
+        finally:
+            os.close(descriptor)
+
+        durable_parent = self.evidence_store / DRIVER.DURABLE_EVIDENCE_DIRECTORY
+        self.assertFalse((durable_parent / run_id).exists())
+        self.assertFalse((durable_parent / f".{run_id}.pending").exists())
+        DRIVER.remove_incomplete_run(run_root)
 
     def test_partial_normalization_failure_publishes_no_evidence(self):
         corrupted = bytearray(self.canonical.read_bytes())
