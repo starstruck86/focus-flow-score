@@ -514,8 +514,8 @@ cp -- "$DIRECT_CANONICAL" "$appended_archive"
 chmod 0600 "$appended_archive"
 printf 'SYNTHETIC_APPENDED_JUNK' >>"$appended_archive"
 if "$REAL_PG_RESTORE_BIN" --list "$appended_archive" >/dev/null 2>&1; then
-  grep -Eiq \
-    'pg_restore --list.*does not prove.*every.*inner.*byte.*consum' \
+  grep -Fq -- \
+    'pg_restore --list does not prove that every byte of the inner input was consumed.' \
     "$EXECUTION_REPO/scripts/migration/README.md" || {
       printf 'ERROR: accepted appended bytes require the explicit documented ceiling\n' >&2
       exit 1
