@@ -93,8 +93,11 @@ grep -Eq '^archive_integer_width_bytes: [0-9]+$' "$REPORT"
 grep -Eq '^archive_offset_width_bytes: [0-9]+$' "$REPORT"
 grep -Fxq 'archive_format_code: 1' "$REPORT"
 grep -Eq '^archive_header_bound_sha256: [0-9a-f]{64}$' "$REPORT"
-grep -Eq '^source_postgresql_version: 17([.]|$)' "$REPORT"
-grep -Eq '^source_pg_dump_version: 17([.]|$)' "$REPORT"
+# Distribution-packaged PostgreSQL clients commonly append vendor text to
+# these headers. The report may retain a bounded numeric PostgreSQL 17 value
+# only when the whole value matches; otherwise it must use the fixed redaction.
+grep -Eq '^source_postgresql_version: (17([.][0-9]{1,3}){0,3}|REDACTED_UNSAFE_OR_UNRECOGNIZED)$' "$REPORT"
+grep -Eq '^source_pg_dump_version: (17([.][0-9]{1,3}){0,3}|REDACTED_UNSAFE_OR_UNRECOGNIZED)$' "$REPORT"
 grep -Fxq 'inspection_status: REVIEW_REQUIRED' "$REPORT"
 grep -Fxq 'object_reference_analysis: INCOMPLETE' "$REPORT"
 grep -Fxq 'migration_duplicate_analysis: INCOMPLETE' "$REPORT"
