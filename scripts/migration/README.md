@@ -1,454 +1,301 @@
 # Local migration rehearsal tools
 
 These tools operate on local files or reviewed repository source only. They do
-not contain a database restore path and were not run against a remote database,
-Lovable Cloud, or production data in this PR.
+not implement a database restore, connection, export, deployment, or migration.
+Migration readiness remains **RED** until a separately authorized empirical
+rehearsal succeeds and every runbook gate is reviewed.
 
-## Inspect a future Lovable export
+## Inspect a Lovable export envelope
 
-Preserve the untouched download first in an approved encrypted evidence store.
-The ignored `local-migration-artifacts/` directory is disposable staging, not
-the canonical or only copy: `git clean` operations can delete ignored files.
-Inspect only a working copy whose SHA-256 has been verified against the
-canonical archive.
+Lovable may deliver a PostgreSQL custom archive inside a ZIP envelope. The ZIP
+is the canonical downloaded artifact; the PGDMP member is a distinct, derived
+inspector input. Their sizes and SHA-256 values must never be conflated. A raw
+PGDMP remains a supported input and is recorded as a direct byte-copy
+relationship rather than as an invented ZIP member.
 
-The following Bash template creates a private per-run package, records
-digest-only external before/after checksum files, runs the metadata-only
-inspector, requires exactly one `sha256:` field in the report, and fails unless
-the canonical archive, working copy, both external checksums, and reported
-archive hash are identical. It then writes the report checksum and provenance
-manifest with exclusive-create semantics. Replace every angle-bracketed value;
-the validation rejects placeholders.
+Preserve the untouched download, under its original filename, in an approved
+encrypted evidence store outside this Git worktree. Supply that exact store as
+`APPROVED_EVIDENCE_STORE_ROOT`: it must be an absolute, real non-symlink
+directory owned by the executing user with mode `0700`. `CANONICAL_EXPORT` must
+be its direct child, not a symlink, owned by the executing user, and inaccessible
+to group and world. The ignored `local-migration-artifacts/` directory is
+disposable working space only: `git clean` can delete it, and the workflow
+removes its completed working run after durable publication. Never upload an
+export, metadata report, object inventory, credential, or secret to GitHub, CI,
+chat, or unapproved storage. The workflow enforces filesystem privacy but does
+not independently verify volume encryption; approval of the encrypted store is
+an external assertion.
 
-Git provenance has distinct meanings. `PROCEDURE_ORIGIN_SHA` records the
-historical commit that first introduced this evidence-package procedure; it is
-informational only and is not a review or approval claim.
-`APPROVED_EXECUTION_CHECKOUT_SHA` has no default and must be supplied through the
-external approval process for the exact commit to execute. `EXECUTION_CHECKOUT_SHA`
-is independently resolved from `git rev-parse HEAD`; it records execution
-identity but is not itself proof of approval. Exact equality between those two
-values is the pre-execution approval gate. `PROCEDURE_README_BLOB_SHA` identifies
-the committed README, while `PROCEDURE_WORKFLOW_SHA256` identifies the exact
-Markdown fenced block: the UTF-8 bytes from the three-backtick `bash` opening
-fence through the three-backtick closing fence, inclusive, inside the unique
-workflow markers.
-`INSPECTION_TOOL_GIT_SHA` remains the unchanged inspector/helper/migration
-baseline. The workflow proves that the supplied approval pin matched the
-checkout; it does not prove who authorized or supplied that pin. The content
-digests identify the checked-out README and its marked Markdown fence, not a
-separately edited copy of commands pasted into a shell.
+The high-level driver `inspect-lovable-export.py` performs these steps:
+
+1. Requires an externally supplied approval pin that exactly equals `HEAD`, a
+   clean checkout, the unchanged direct inspector baseline, and reviewed
+   normalizer/driver/bounded-guard/README/config bytes from that checkout.
+2. Requires `SOURCE_PROJECT_REF` to exactly equal the single strict top-level
+   `project_id` in the approved checkout's `supabase/config.toml`, whose Git blob
+   and file SHA-256 are recorded. This binds repository configuration, not
+   Lovable's internal export-control mapping.
+3. Validates structured event provenance without inferring any timestamp, then
+   validates the approved evidence-store root and the externally supplied
+   expected outer filename, byte size, and SHA-256 before creating a run,
+   copying bytes, normalizing, or invoking `pg_restore`.
+4. Captures the canonical outer bytes into private working space and calls
+   `normalize-lovable-export.py` with `EXPECTED_OUTER_SHA256`, never a digest
+   freshly measured and promoted by the workflow itself.
+5. For ZIP input, requires one safe regular member whose name exactly equals
+   `UI_EXPORT_OBJECT_NAME`, and streams it to the fixed
+   exclusive file `verified-inner.pgdmp`; for raw PGDMP input, makes the same
+   bounded verified copy without inventing member metadata.
+6. Runs the unchanged `inspect-lovable-dump.sh` only against that verified inner
+   file, routing `pg_restore` through the reviewed bounded guard. The guard may
+   invoke the absolute, non-symlink underlying executable only as `--version`
+   or `--list <absolute-local-path>`.
+7. Rechecks the canonical outer, working outer, derived inner, inspector report,
+   and every digest binding. Archive bytes are deleted from working evidence.
+8. Fully prepares the metadata report, expected and workflow-observed checksum
+   sidecars, provenance and detached provenance hash, and the per-file evidence
+   manifest plus detached manifest hash inside a private pending tree. It copies
+   and verifies every payload file at mode `0400` through held directory
+   descriptors and fsyncs the final modes and every mode-0700 directory. After
+   one payload-tree and canonical/root recheck it atomically reserves the final
+   run path with a descriptor-relative operating-system no-replace guarantee at
+   `<APPROVED_EVIDENCE_STORE_ROOT>/migration-inspection-evidence/<run-id>`, and
+   then revalidates the committed descriptor-bound tree, canonical artifact,
+   and store binding before adding an exact `EVIDENCE_COMPLETE` marker that
+   binds the run ID and detached-manifest identity. Disposable working evidence
+   and derived archive are removed before commit. A precommit failure publishes
+   no final-named package; cleanup failure can leave only a hidden quarantined
+   pending directory. A postcommit validation failure has no completion marker
+   and receives `EVIDENCE_INDETERMINATE`. Existing pending or final runs are
+   never overwritten or deleted.
+
+The normalizer does not use `unzip`, `extractall`, or a member-controlled output
+path. Its accepted ZIP subset is intentionally small: no prefix or trailing
+bytes, no archive comment, no ZIP64, no data descriptor, no extra fields,
+exactly one central/local entry pair, and only STORE declaring ZIP version 1.0
+or raw DEFLATE declaring ZIP version 2.0. It
+rejects duplicate/multiple entries, unsafe or ambiguous names, directories,
+symlinks and special files, encryption, nested archives, unsupported flags or
+compression, inconsistent headers, truncation, CRC/size lies, non-PGDMP bytes,
+declared or streamed size excess, excessive compression ratio, and insufficient
+disk headroom. After the outer working copy exists, normalization requires room
+for both the derived inner and the inspector's private inner snapshot plus the
+larger of 256 MiB or ten percent of the inner size; direct PGDMP mode therefore
+plans for approximately three archive copies plus overhead in working storage.
+The output is streamed through an exclusive partial file, hashed
+and CRC-checked while bounded, fsynced, set to mode `0400`, and published with a
+no-overwrite hard link inside an owner-only temporary directory.
+
+Prefix, polyglot, and trailing-junk rejection is structural in ZIP mode: the
+local header must begin at byte zero and the end-of-central-directory record
+must end at EOF. In direct-PGDMP mode the normalizer performs the bounded,
+stable byte copy and a conservative custom-archive header check; the unchanged
+inspector's real `pg_restore --list` call supplies a bounded TOC/compatibility
+signal only and may accept appended inner bytes. Whole-file hashes bind the
+exact inner input, but do not prove that `pg_restore` consumed it all. A
+rejection removes the pending derived archive and publishes no report or
+provenance.
+
+The bounded guard has fixed, non-environment-overridable limits: `--version`
+has 15 seconds and 1 MiB stdout; `--list` has 300 seconds and 128 MiB stdout;
+both have a 1 MiB stderr cap. It drains output through private exclusive capture
+files, kills the child process group and waits for/reaps its direct child leader
+on timeout or output overflow, and passes captured output only after exit status
+zero. These bounds
+prevent an unbounded inspection process; they do not strengthen what
+`pg_restore` semantically validates.
+
+pg_restore --list does not prove that every byte of the inner input was consumed.
+
+### Required operator inputs
+
+Supply these values in the environment. Values shown here are descriptions,
+not defaults:
+
+| Variable | Contract |
+|---|---|
+| `SOURCE_PROJECT_NAME` | Exact operator-observed Lovable UI project name |
+| `SOURCE_PROJECT_REF` | Exact 20-character lowercase project ref |
+| `UI_EXPORT_OBJECT_NAME` | Exact export object name observed in the Lovable UI; separate from the downloaded filename |
+| `OPERATOR_IDENTITY` | Named human operator |
+| `EXPORT_EVIDENCE_PROFILE` | `retained_rehearsal_missing_initiation`, `future_rehearsal`, or `final_cutover` |
+| `APPROVED_EVIDENCE_STORE_ROOT` | Absolute approved encrypted-store root outside the Git worktree; real non-symlink, executing-user-owned, mode `0700`; no default |
+| `CANONICAL_EXPORT` | Absolute direct-child path beneath `APPROVED_EVIDENCE_STORE_ROOT`; non-symlink regular file, executing-user-owned, no group/world access |
+| `EXPECTED_ORIGINAL_FILENAME` | Externally approved exact canonical basename; no default |
+| `EXPECTED_OUTER_SIZE_BYTES` | Externally approved positive decimal canonical byte size, at most the 5 GB inspection cap; no default |
+| `EXPECTED_OUTER_SHA256` | Externally approved 64-character lowercase SHA-256 of the canonical outer artifact; no default |
+| `APPROVED_EXECUTION_CHECKOUT_SHA` | Externally approved full lowercase 40-character commit SHA; no default |
+| `PG_RESTORE_BIN` | Reviewed absolute, executable, non-symlink PostgreSQL 17 `pg_restore` path; the workflow places the bounded guard in front of it |
+| `EXPORT_AVAILABLE_AT_UTC` | Operator-observed availability time, second-precision RFC3339 UTC |
+| `DOWNLOAD_COMPLETED_AT_UTC` | Operator-observed download-completion time, second-precision RFC3339 UTC |
+| `EXPORT_INITIATED_BASIS` | `operator_observed` or `not_observed` |
+| `EXPORT_INITIATED_AT_UTC` | Required only for `operator_observed`; otherwise empty/unset |
+| `EXPORT_INITIATED_REASON` | Required only for `not_observed`; otherwise empty/unset |
+| `EXPORT_COMPLETED_BASIS` | `operator_observed` or `not_observed` |
+| `EXPORT_COMPLETED_AT_UTC` | Required only for `operator_observed`; otherwise empty/unset |
+| `EXPORT_COMPLETED_REASON` | Required only for `not_observed`; otherwise empty/unset |
+
+Missing initiation evidence for the retained rehearsal is irreparable. Record
+it honestly as `{"value": null, "basis": "not_observed", "reason": "..."}`.
+This does not require another export and does not prevent safe offline metadata
+inspection. Export availability is a separate observed event and is never
+relabeled as completion. Completion may likewise be explicitly unobserved.
+Availability and download completion are mandatory and must be ordered. Any
+missing initiation or completion records `export_timeline_status=INCOMPLETE`;
+successful inspection still records `inspection_status=REVIEW_REQUIRED`.
+Future and final exports must record initiation at the UI action instead of
+reusing this exception.
+
+Timeline validation rejects an unknown basis, a missing or placeholder reason
+for `not_observed`, a value paired with `not_observed`, a reason paired with
+`operator_observed`, observed initiation after completion or availability,
+observed completion after availability, and availability after download
+completion. A fully observed, correctly ordered initiation → completion →
+availability → download timeline records `COMPLETE`; availability is never
+relabeled as completion.
+
+The evidence profile makes that distinction fail closed. The retained-rehearsal
+profile requires unobserved initiation and an `INCOMPLETE` timeline. Future and
+final profiles require operator-observed initiation; changing the basis alone
+cannot turn this retained rehearsal green. Event values remain operator
+attestations—the local tool can validate structure/order and bind them to the
+approved package, but cannot independently prove what the operator saw.
+
+The run ID is derived from the observed availability time and the first 12
+hexadecimal characters of the canonical outer SHA-256. No time is inferred from
+a filename, ZIP/DOS timestamp, filesystem metadata, download time, availability
+time, or any other event.
+
+### Checked-in execution workflow
+
+Git provenance has distinct meanings:
+
+- `procedure_origin_sha` is the historical commit that first introduced the
+  evidence procedure. It is informational only.
+- `approved_execution_checkout_sha` is supplied externally and must exactly
+  match `execution_checkout_sha`, independently resolved from `HEAD`.
+- The committed README blob and exact fenced block SHA-256 identify procedure
+  content. The driver and normalizer have separate Git-blob and file SHA-256
+  identities.
+- `inspection_tool_git_sha` remains
+  `c87a124602eb669b3ec5a3829610c6cb465d3e26`, the unchanged direct inspector,
+  report helper, and migration-input baseline.
+
+The workflow proves pin equality and byte identity only; it does not prove who
+approved the pin.
 
 <!-- BEGIN LOVABLE EXPORT EVIDENCE WORKFLOW -->
 ```bash
 set -euo pipefail
 umask 077
 
-export SOURCE_PROJECT_NAME="${SOURCE_PROJECT_NAME:-<exact Lovable source project name>}"
-export SOURCE_PROJECT_REF="${SOURCE_PROJECT_REF:-<exact 20-character Lovable source project ref>}"
-export EXPORT_INITIATED_AT_UTC="${EXPORT_INITIATED_AT_UTC:-<operator-observed YYYY-MM-DDTHH:MM:SSZ>}"
-export EXPORT_COMPLETED_AT_UTC="${EXPORT_COMPLETED_AT_UTC:-<operator-observed YYYY-MM-DDTHH:MM:SSZ>}"
-export DOWNLOAD_COMPLETED_AT_UTC="${DOWNLOAD_COMPLETED_AT_UTC:-<operator-observed YYYY-MM-DDTHH:MM:SSZ>}"
-export OPERATOR_IDENTITY="${OPERATOR_IDENTITY:-<named operator identity>}"
-export INSPECTION_TOOL_GIT_SHA="${INSPECTION_TOOL_GIT_SHA:-c87a124602eb669b3ec5a3829610c6cb465d3e26}"
-PROCEDURE_ORIGIN_SHA='e4eed4a21049d274738110710a468e265c2893d2'
-export PROCEDURE_ORIGIN_SHA
-if ! EXECUTION_CHECKOUT_SHA="$(git rev-parse HEAD)"; then
-  printf '%s\n' 'ERROR: could not resolve execution checkout SHA' >&2
-  exit 1
-fi
-export EXECUTION_CHECKOUT_SHA
+: "${SOURCE_PROJECT_NAME:?required}"
+: "${SOURCE_PROJECT_REF:?required}"
+: "${UI_EXPORT_OBJECT_NAME:?required}"
+: "${OPERATOR_IDENTITY:?required}"
+: "${EXPORT_EVIDENCE_PROFILE:?required}"
+: "${APPROVED_EVIDENCE_STORE_ROOT:?required from external approval; no default}"
+: "${CANONICAL_EXPORT:?required}"
+: "${EXPECTED_ORIGINAL_FILENAME:?required from external approval; no default}"
+: "${EXPECTED_OUTER_SIZE_BYTES:?required from external approval; no default}"
+: "${EXPECTED_OUTER_SHA256:?required from external approval; no default}"
+: "${APPROVED_EXECUTION_CHECKOUT_SHA:?required from external approval}"
+: "${PG_RESTORE_BIN:?required PostgreSQL 17 pg_restore path}"
+: "${EXPORT_INITIATED_BASIS:?required}"
+: "${EXPORT_COMPLETED_BASIS:?required}"
+: "${EXPORT_AVAILABLE_AT_UTC:?required observed UTC time}"
+: "${DOWNLOAD_COMPLETED_AT_UTC:?required observed UTC time}"
 
-CANONICAL_EXPORT="${CANONICAL_EXPORT:-/approved/encrypted/evidence-store/Lovable export.backup}"
-for required_name in \
-  SOURCE_PROJECT_NAME SOURCE_PROJECT_REF EXPORT_INITIATED_AT_UTC \
-  EXPORT_COMPLETED_AT_UTC DOWNLOAD_COMPLETED_AT_UTC OPERATOR_IDENTITY; do
-  required_value="${!required_name}"
-  if [[ -z "$required_value" || "$required_value" == *'<'* || "$required_value" == *'>'* ]]; then
-    printf 'ERROR: %s is missing or still a placeholder\n' "$required_name" >&2
-    exit 1
-  fi
-done
-if [[ ! "$SOURCE_PROJECT_REF" =~ ^[a-z0-9]{20}$ ]]; then
-  printf '%s\n' 'ERROR: SOURCE_PROJECT_REF must be 20 lowercase letters/digits' >&2
-  exit 1
-fi
-for timestamp in \
-  "$EXPORT_INITIATED_AT_UTC" "$EXPORT_COMPLETED_AT_UTC" \
-  "$DOWNLOAD_COMPLETED_AT_UTC"; do
-  if [[ ! "$timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
-    printf '%s\n' 'ERROR: observed times must be second-precision RFC3339 UTC' >&2
-    exit 1
-  fi
-done
-
-if [[ -z "${APPROVED_EXECUTION_CHECKOUT_SHA:-}" ]]; then
-  printf '%s\n' 'ERROR: APPROVED_EXECUTION_CHECKOUT_SHA is required from external approval' >&2
-  exit 1
-fi
-if [[ ! "$APPROVED_EXECUTION_CHECKOUT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-  printf '%s\n' 'ERROR: APPROVED_EXECUTION_CHECKOUT_SHA must be a full lowercase commit SHA' >&2
-  exit 1
-fi
-export APPROVED_EXECUTION_CHECKOUT_SHA
-if [[ "$INSPECTION_TOOL_GIT_SHA" != 'c87a124602eb669b3ec5a3829610c6cb465d3e26' ]]; then
-  printf '%s\n' 'ERROR: unexpected inspection tool Git SHA' >&2
-  exit 1
-fi
-for sha_name in \
-  APPROVED_EXECUTION_CHECKOUT_SHA INSPECTION_TOOL_GIT_SHA \
-  EXECUTION_CHECKOUT_SHA; do
-  sha_value="${!sha_name}"
-  if [[ ! "$sha_value" =~ ^[0-9a-f]{40}$ ]]; then
-    printf 'ERROR: %s must be a full lowercase commit SHA\n' "$sha_name" >&2
-    exit 1
-  fi
-  if ! git cat-file -e "${sha_value}^{commit}"; then
-    printf 'ERROR: %s does not identify an available commit\n' "$sha_name" >&2
-    exit 1
-  fi
-done
-if [[ "$APPROVED_EXECUTION_CHECKOUT_SHA" != "$EXECUTION_CHECKOUT_SHA" ]]; then
-  printf '%s\n' 'ERROR: approved execution checkout SHA does not match HEAD' >&2
-  exit 1
-fi
-if [[ "$(git rev-parse HEAD)" != "$EXECUTION_CHECKOUT_SHA" ]]; then
-  printf '%s\n' 'ERROR: execution checkout SHA changed during preflight' >&2
-  exit 1
-fi
-if ! git merge-base --is-ancestor \
-  "$INSPECTION_TOOL_GIT_SHA" "$EXECUTION_CHECKOUT_SHA"; then
-  printf '%s\n' 'ERROR: inspection tool commit is not an execution ancestor' >&2
-  exit 1
-fi
-if ! git diff --quiet "$EXECUTION_CHECKOUT_SHA" -- scripts/migration/README.md; then
-  printf '%s\n' 'ERROR: evidence procedure differs from the execution checkout' >&2
-  exit 1
-fi
-if ! git diff --quiet "$INSPECTION_TOOL_GIT_SHA" -- \
-  scripts/migration/inspect-lovable-dump.sh \
-  scripts/migration/lib/lovable_dump_report.py \
-  supabase/migrations; then
-  printf '%s\n' 'ERROR: inspection tool/input tree differs from its reviewed Git SHA' >&2
-  exit 1
-fi
-if ! untracked_migrations="$(
-  git ls-files --others --exclude-standard -- supabase/migrations
-)"; then
-  printf '%s\n' 'ERROR: could not inventory untracked migration inputs' >&2
-  exit 1
-fi
-if [[ -n "$untracked_migrations" ]]; then
-  printf '%s\n' 'ERROR: untracked files under supabase/migrations can alter inspection' >&2
-  printf '%s\n' "$untracked_migrations" >&2
-  exit 1
-fi
-if ! ignored_untracked_migrations="$(
-  git ls-files --others --ignored --exclude-standard -- supabase/migrations
-)"; then
-  printf '%s\n' 'ERROR: could not inventory ignored migration inputs' >&2
-  exit 1
-fi
-if [[ -n "$ignored_untracked_migrations" ]]; then
-  printf '%s\n' 'ERROR: ignored files under supabase/migrations can alter inspection' >&2
-  printf '%s\n' "$ignored_untracked_migrations" >&2
-  exit 1
-fi
-
-PROCEDURE_README_BLOB_SHA="$(
-  git rev-parse 'HEAD:scripts/migration/README.md'
-)"
-export PROCEDURE_README_BLOB_SHA
-if [[ ! "$PROCEDURE_README_BLOB_SHA" =~ ^[0-9a-f]{40,64}$ ]]; then
-  printf '%s\n' 'ERROR: procedure README blob SHA is malformed' >&2
-  exit 1
-fi
-if ! PROCEDURE_WORKFLOW_SHA256="$(python3 - 'scripts/migration/README.md' <<'PY'
-import hashlib
-import pathlib
-import sys
-
-data = pathlib.Path(sys.argv[1]).read_bytes()
-label = b"LOVABLE EXPORT EVIDENCE WORKFLOW"
-begin_marker = b"<!-- BEGIN " + label + b" -->\n"
-end_marker = b"\n<!-- END " + label + b" -->"
-if data.count(begin_marker) != 1 or data.count(end_marker) != 1:
-    raise SystemExit("workflow markers must each occur exactly once")
-start = data.index(begin_marker) + len(begin_marker)
-end = data.index(end_marker, start)
-fenced = data[start:end]
-if not fenced.startswith(b"```bash\n") or not fenced.endswith(b"\n```"):
-    raise SystemExit("workflow markers must contain exactly one Bash fence")
-print(hashlib.sha256(fenced).hexdigest())
-PY
-)"; then
-  printf '%s\n' 'ERROR: could not fingerprint the checked-out workflow block' >&2
-  exit 1
-fi
-export PROCEDURE_WORKFLOW_SHA256
-if [[ ! "$PROCEDURE_WORKFLOW_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
-  printf '%s\n' 'ERROR: procedure workflow SHA-256 is malformed' >&2
-  exit 1
-fi
-
-RUN_ID="rehearsal-${EXPORT_INITIATED_AT_UTC//[-:]/}"
-export RUN_ID
-RUN_ROOT="local-migration-artifacts/${RUN_ID}"
-WORKING_EXPORT="${RUN_ROOT}/archive/$(basename "$CANONICAL_EXPORT")"
-BEFORE_SHA="${RUN_ROOT}/archive/archive.sha256.before"
-AFTER_SHA="${RUN_ROOT}/archive/archive.sha256.after"
-REPORT="${RUN_ROOT}/inspection/rehearsal-metadata.txt"
-REPORT_SHA="${RUN_ROOT}/inspection/report.sha256"
-PROVENANCE="${RUN_ROOT}/provenance.json"
-
-test -s "$CANONICAL_EXPORT"
-test ! -e "$RUN_ROOT"
-mkdir -p "${RUN_ROOT}/archive" "${RUN_ROOT}/inspection"
-cp -p "$CANONICAL_EXPORT" "$WORKING_EXPORT"
-chmod 0400 "$WORKING_EXPORT"
-
-python3 - "$CANONICAL_EXPORT" "$WORKING_EXPORT" "$BEFORE_SHA" <<'PY'
-import hashlib
-import pathlib
-import sys
-
-def sha256(path: pathlib.Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        while chunk := source.read(1024 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-canonical, working, output = map(pathlib.Path, sys.argv[1:])
-canonical_sha = sha256(canonical)
-working_sha = sha256(working)
-if canonical_sha != working_sha:
-    raise SystemExit("canonical archive and working-copy SHA-256 differ")
-with output.open("x", encoding="ascii") as destination:
-    destination.write(working_sha + "\n")
-PY
-
-scripts/migration/inspect-lovable-dump.sh \
-  --output "$REPORT" \
-  "$WORKING_EXPORT"
-
-python3 - \
-  "$CANONICAL_EXPORT" "$WORKING_EXPORT" "$BEFORE_SHA" "$AFTER_SHA" \
-  "$REPORT" "$REPORT_SHA" "$PROVENANCE" "$RUN_ROOT" <<'PY'
-import datetime
-import hashlib
-import json
-import os
-import pathlib
-import re
-import sys
-
-HEX64 = re.compile(r"[0-9a-f]{64}")
-PLACEHOLDER = re.compile(r"[<>]|placeholder|replace|todo|tbd", re.IGNORECASE)
-
-def sha256(path: pathlib.Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        while chunk := source.read(1024 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-def required(name: str) -> str:
-    value = os.environ.get(name, "")
-    if not value or value.strip() != value or "\n" in value or "\r" in value:
-        raise SystemExit(f"{name} must be a non-empty single-line value")
-    if PLACEHOLDER.search(value):
-        raise SystemExit(f"{name} still contains a placeholder")
-    return value
-
-def observed_utc(name: str) -> str:
-    value = required(name)
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", value):
-        raise SystemExit(f"{name} must be second-precision RFC3339 UTC")
-    datetime.datetime.fromisoformat(value[:-1] + "+00:00")
-    return value
-
-def read_digest(path: pathlib.Path) -> str:
-    value = path.read_text(encoding="ascii").strip()
-    if not HEX64.fullmatch(value):
-        raise SystemExit(f"invalid digest-only checksum file: {path}")
-    return value
-
-canonical, working, before_file, after_file, report, report_sha_file, provenance, run_root = (
-    map(pathlib.Path, sys.argv[1:])
-)
-if canonical.name != working.name:
-    raise SystemExit("working copy does not preserve the original filename")
-
-before = read_digest(before_file)
-after = sha256(working)
-with after_file.open("x", encoding="ascii") as destination:
-    destination.write(after + "\n")
-
-report_text = report.read_text(encoding="utf-8")
-reported = re.findall(r"^sha256: ([0-9a-f]{64})$", report_text, re.MULTILINE)
-if len(reported) != 1:
-    raise SystemExit("inspector report must contain exactly one archive sha256 field")
-report_lines = set(report_text.splitlines())
-required_report_lines = {
-    "inspection_status: REVIEW_REQUIRED",
-    "restore_attempted: no",
-    "database_connection_attempted: no",
-    "row_payload_inspected: no",
-    f"input_file: {working.name}",
-    f"size_bytes: {working.stat().st_size}",
-}
-if not required_report_lines <= report_lines or not any(
-    line.startswith("archive_snapshot_binding: PASS ") for line in report_lines
-):
-    raise SystemExit("inspector report is missing a required safety-boundary field")
-actual = sha256(working)
-canonical_sha = sha256(canonical)
-if len({before, after, reported[0], actual, canonical_sha}) != 1:
-    raise SystemExit("external before/after, report, working, and canonical SHA-256 differ")
-
-report_sha = sha256(report)
-with report_sha_file.open("x", encoding="ascii") as destination:
-    destination.write(report_sha + "\n")
-
-initiated = observed_utc("EXPORT_INITIATED_AT_UTC")
-completed = observed_utc("EXPORT_COMPLETED_AT_UTC")
-downloaded = observed_utc("DOWNLOAD_COMPLETED_AT_UTC")
-if not initiated <= completed <= downloaded:
-    raise SystemExit("observed export/download times are out of order")
-project_ref = required("SOURCE_PROJECT_REF")
-if not re.fullmatch(r"[a-z0-9]{20}", project_ref):
-    raise SystemExit("SOURCE_PROJECT_REF must be exactly 20 lowercase letters/digits")
-approved_sha = required("APPROVED_EXECUTION_CHECKOUT_SHA")
-origin_sha = required("PROCEDURE_ORIGIN_SHA")
-tool_sha = required("INSPECTION_TOOL_GIT_SHA")
-execution_sha = required("EXECUTION_CHECKOUT_SHA")
-readme_blob_sha = required("PROCEDURE_README_BLOB_SHA")
-workflow_sha256 = required("PROCEDURE_WORKFLOW_SHA256")
-if approved_sha != execution_sha:
-    raise SystemExit("approved and execution checkout SHAs differ")
-if origin_sha != "e4eed4a21049d274738110710a468e265c2893d2":
-    raise SystemExit("unexpected historical procedure origin SHA")
-if tool_sha != "c87a124602eb669b3ec5a3829610c6cb465d3e26":
-    raise SystemExit("unexpected inspection tool Git SHA")
-for name, value in {
-    "approved execution checkout SHA": approved_sha,
-    "execution checkout SHA": execution_sha,
-}.items():
-    if not re.fullmatch(r"[0-9a-f]{40}", value):
-        raise SystemExit(f"invalid {name}")
-if not re.fullmatch(r"[0-9a-f]{40,64}", readme_blob_sha):
-    raise SystemExit("invalid procedure README blob SHA")
-if not HEX64.fullmatch(workflow_sha256):
-    raise SystemExit("invalid procedure workflow SHA-256")
-
-relative = lambda path: str(path.relative_to(run_root))
-manifest = {
-    "format_version": 1,
-    "artifact_kind": "lovable_cloud_export_inspection_provenance",
-    "run_id": required("RUN_ID"),
-    "run_kind": "rehearsal",
-    "approved_execution_checkout_sha": approved_sha,
-    "execution_checkout_sha": execution_sha,
-    "procedure_origin_sha": origin_sha,
-    "procedure_readme_blob_sha": readme_blob_sha,
-    "procedure_workflow_sha256": workflow_sha256,
-    "inspection_tool_git_sha": tool_sha,
-    "lovable_source_project": {
-        "name": required("SOURCE_PROJECT_NAME"),
-        "ref": project_ref,
-    },
-    "export": {
-        "initiated_at_utc": {"value": initiated, "basis": "operator_observed"},
-        "completed_at_utc": {"value": completed, "basis": "operator_observed"},
-        "downloaded_at_utc": {"value": downloaded, "basis": "operator_observed"},
-        "original_filename": working.name,
-        "working_copy_relative_path": relative(working),
-        "size_bytes": working.stat().st_size,
-        "sha256": actual,
-        "sha256_evidence": {
-            "external_before": before,
-            "external_after": after,
-            "inspector_report": reported[0],
-        },
-        "external_checksum_files": {
-            "before": relative(before_file),
-            "after": relative(after_file),
-        },
-        "support_reported_not_empirically_verified": [
-            "point-in-time pg_dump custom-format archive",
-            "maximum export size 5 GB",
-            "one export generation per 24 hours",
-        ],
-    },
-    "operator_identity": required("OPERATOR_IDENTITY"),
-    "inspection_tool": {
-        "path": "scripts/migration/inspect-lovable-dump.sh",
-        "git_sha": tool_sha,
-    },
-    "report": {
-        "filename": report.name,
-        "relative_path": relative(report),
-        "sha256": report_sha,
-        "checksum_file": relative(report_sha_file),
-    },
-}
-with provenance.open("x", encoding="utf-8") as destination:
-    json.dump(manifest, destination, indent=2, sort_keys=True)
-    destination.write("\n")
-PY
+scripts/migration/inspect-lovable-export.py
 ```
 <!-- END LOVABLE EXPORT EVIDENCE WORKFLOW -->
 
-After inspection, transfer the manifest-indexed report and checksum sidecars to
-the same approved encrypted evidence store as the canonical archive and verify
-the copied file hashes there. Retaining only `local-migration-artifacts/` is not
-acceptable. Never record an expiring download URL, connection string,
-credential, or secret in the package.
+On success the durable output is published directly outside the Git worktree:
 
-The script refuses URLs/connection strings, missing or non-regular files,
-non-`PGDMP` formats, missing/incompatible tools, existing output files, and
-unknown TOC classes. It invokes `pg_restore` only with `--version` and `--list`.
-It computes the archive SHA-256 and reports metadata/risk flags without
-decoding or printing row payloads. A successful report still says
-`REVIEW_REQUIRED`; it is not a restore plan.
+```text
+<APPROVED_EVIDENCE_STORE_ROOT>/migration-inspection-evidence/<run-id>/
+  EVIDENCE_COMPLETE
+  archive/outer.expected.sha256
+  archive/outer.workflow-observed.before.sha256
+  archive/outer.workflow-observed.after.sha256
+  inspection/rehearsal-metadata.txt
+  inspection/report.sha256
+  provenance.json
+  provenance.sha256
+  evidence-files.json
+  evidence-files.sha256
+```
 
-CI extracts and executes the complete fenced Bash workflow in a temporary Git
-checkout, using a synthetic `PGDMP` archive and a controlled fake `pg_restore`.
-It exercises the real inspector/helper, report and provenance publication, and
-the Git provenance and migration-input guards without a database or network.
-Planted failures cover ordinary and ignored untracked migrations, modified
-inspector/helper/tracked migration/procedure, a missing/malformed/unavailable or
-stale external approval pin, a wrong tool pin, and missing or malformed execution
-checkout output. A committed-descendant regression executes the newly committed
-workflow and proves it cannot proceed with the previously approved checkout, but
-can proceed when its exact new HEAD is explicitly supplied. This proves the local
-procedure mechanics and pin equality only; it does not prove who approved the pin,
-validate a real Lovable archive, establish source completeness, or inspect any
-remote system.
+`provenance.json` keeps `expected_identity`—the externally supplied original
+filename, size, and SHA-256—separate from `workflow_observed_identity`, which is
+the workflow's descriptor-bound measurement before and after inspection. It
+also records ZIP structure, UI object name, exact member
+name/compression/CRC/sizes, inner PGDMP size/hash, inspector-reported inner hash,
+report hash, timeline, operator, source/config binding, and procedure/tool
+identities. `provenance.sha256` is detached because a file cannot contain its
+own ordinary SHA-256. `evidence-files.json` binds the size, mode, and SHA-256 of
+every core evidence payload file except the deliberately non-self-referential
+completion marker; its detached `evidence-files.sha256` binds the manifest, the
+exact completion marker binds that detached-manifest identity and run ID, and
+publication rechecks every copied file including both manifest files.
+Neither outer working bytes nor derived inner bytes are retained. A directory
+without the final `EVIDENCE_COMPLETE` marker, with
+`EVIDENCE_INDETERMINATE`, or with a manifest/hash/mode mismatch is not a valid
+published package.
+
+If the atomic final rename succeeds but a subsequent descriptor revalidation or
+parent-directory `fsync` fails, the workflow removes any completion marker,
+writes and fsyncs `EVIDENCE_INDETERMINATE`, reports a manual-review stop, and
+does not destructively clean the committed payload. Consumers must reject any
+run without the exact completion marker or with the indeterminate marker.
+Filesystem crash/I/O ambiguity during these last persistence operations cannot
+be eliminated in user space; inability to persist the indeterminate marker is a
+manual-quarantine hard stop. This is an execution-platform verification
+ceiling, not authorization to continue.
+
+The existing low-level inspector remains available for a reviewed direct raw
+PGDMP path:
+
+```text
+scripts/migration/inspect-lovable-dump.sh \
+  --output 'local-migration-artifacts/metadata-report.txt' \
+  '/absolute/local/path/to/synthetic-or-authorized.dump'
+```
+
+It refuses URLs/connection strings, missing/non-regular/empty files, non-PGDMP
+formats, incompatible tools, existing reports, unknown TOC classes, and
+unresolved known object entries. It captures a private byte snapshot and never
+connects to or restores a database.
+
+CI executes the complete fenced workflow in isolated synthetic Git checkouts,
+including adversarial normalizer and bounded-guard tests, a real PostgreSQL 17
+`pg_dump -Fc` high-level ZIP/direct integration on Linux, and targeted durable
+publication tests on macOS. It plants checkout, repository-binding,
+privacy/timeline/hash/member/publication failures, proves only
+`pg_restore --version` and `--list` are called, and scans output/evidence for a
+synthetic row-payload sentinel. This validates local mechanics only. It cannot
+prove the truth or provenance of externally supplied assertions, encryption of
+the approved evidence-store volume, Lovable's UI-control-to-backend mapping, or
+source completeness. Migration readiness remains **RED**.
 
 Do not construct a final `pg_restore` command until the actual TOC has been
-classified and the supported Lovable/Supabase restore procedure is confirmed.
+classified and the supported managed-Supabase restore procedure is confirmed.
 
 ## Inventory reviewed Edge Function source
 
 ```text
 scripts/migration/inventory-edge-functions.py \
   --role source \
-  --collected-at '2026-07-14T13:29:59Z' \
+  --collected-at '<operator-observed RFC3339 UTC>' \
   > /tmp/edge-functions.json
 ```
 
 Supply the actual repository role and UTC collection time. A target collection
-also requires its explicit `--project-ref`, preventing source evidence from
-being relabeled accidentally. Because this tool reads only a local checkout,
-target-role output is marked not independently verifiable and cannot produce a
-green deployment comparison; deployed-target evidence requires a distinct,
-independent collector. The repository-only output fingerprints
-each function's resolved local deployment dependency closure (including
-reachable `_shared` files) together with its effective entrypoint, import map,
-and `verify_jwt`. An omitted `verify_jwt` is recorded structurally as the
-documented default `true`, distinct from an explicit setting. Unresolved local
-imports or unsupported function settings fail collection.
+also requires its explicit `--project-ref`. The repository-only output
+fingerprints each function's resolved local deployment dependency closure,
+including reachable `_shared` files, together with its effective entrypoint,
+import map, and structured `verify_jwt` setting. Deployed-target evidence
+requires a distinct authorized collector.
 
 ## Convert captured PostgreSQL verification output
 
@@ -464,22 +311,13 @@ scripts/migration/catalog-jsonl-to-manifest.py \
   --evidence-kind database_catalog
 ```
 
-The converter reads and hashes the input once, fingerprints typed metadata with
-domain-separated length framing, refuses incomplete table counts and unknown
-record classes, derives its snapshot boundary/time and verification scope from
-the captured SQL envelope, and will not overwrite an existing output. Use
-`--evidence-kind service_inventory` only with the separately captured managed
-service inventory.
-
-The destructive synthetic PostgreSQL integration fixtures are test-only. They
-require `MIGRATION_VERIFY_ALLOW_FIXTURE=1`, PostgreSQL 17, a database named
-`migration_verify_*`, and either the canonical local PostgreSQL Unix socket or
-an explicitly prefixed `focus-flow-migration-verify-*` container on a local
-Docker socket carrying the test-only label
-`com.focus-flow.migration-verify=true`. Both scripts verify the connected
-database identity before fixture SQL. TCP hosts, non-test database names,
-remote Docker endpoints, missing dependencies, and ambiguous assertion results
-fail before fixture setup.
+The converter hashes the input once, fingerprints typed metadata with
+domain-separated length framing, refuses incomplete counts/unknown record
+classes, derives its snapshot boundary/time from the SQL envelope, and never
+overwrites output. The destructive synthetic PostgreSQL fixtures require
+`MIGRATION_VERIFY_ALLOW_FIXTURE=1`, PostgreSQL 17, a database named
+`migration_verify_*`, and a recognized local socket or explicitly labeled local
+test container. Remote/non-test targets fail before fixture SQL.
 
 ## Compare verification manifests
 
@@ -490,9 +328,8 @@ scripts/migration/compare-manifests.py \
 ```
 
 Exit `0` means every component is exactly `Match`; exit `2` means at least one
-discrepancy or unknown; exit `1` means input validation failed. The strict
-schema and SQL collection templates are under `verification/`. Format v2
-requires non-empty source and target manifests, distinct project refs and
-collection provenance, real SHA-256 evidence, explicit source/target roles,
-collector version/time, and kind-sufficient evidence. Reusing one input or
-comparing source against source is an invalid comparison, not a match.
+discrepancy or unknown; exit `1` means validation failed. The strict v2 schema
+requires non-empty, distinct source/target manifests, project refs, collection
+provenance, real fingerprints, explicit roles, collector version/time, and
+kind-sufficient evidence. Source-vs-source or same-input comparisons are invalid,
+not a match.
