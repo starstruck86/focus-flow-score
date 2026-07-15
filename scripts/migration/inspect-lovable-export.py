@@ -38,7 +38,7 @@ INSPECTION_BASELINE_GIT_SHA = "c87a124602eb669b3ec5a3829610c6cb465d3e26"
 PROCEDURE_ORIGIN_SHA = "e4eed4a21049d274738110710a468e265c2893d2"
 WORKFLOW_LABEL = b"LOVABLE EXPORT EVIDENCE WORKFLOW"
 HEX40 = re.compile(r"[0-9a-f]{40}")
-HEX_OBJECT = re.compile(r"[0-9a-f]{40,64}")
+HEX_OBJECT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
 HEX64 = re.compile(r"[0-9a-f]{64}")
 PROJECT_REF = re.compile(r"[a-z0-9]{20}")
 RFC3339_UTC = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
@@ -60,6 +60,103 @@ REPORT_OFFSET_WIDTH = re.compile(
 REPORT_FORMAT_CODE = re.compile(r"^archive_format_code: ([0-9]+)$", re.MULTILINE)
 REPORT_HEADER_SHA = re.compile(
     r"^archive_header_bound_sha256: ([0-9a-f]{64})$", re.MULTILINE
+)
+REPORT_UNRESOLVED_KNOWN_TOC_ENTRIES = re.compile(
+    r"^unresolved_known_toc_entries: (0|[1-9][0-9]*)$", re.MULTILINE
+)
+REPORT_OBJECT_REFERENCE_ANALYSIS = re.compile(
+    r"^object_reference_analysis: (COMPLETE|INCOMPLETE)$", re.MULTILINE
+)
+REPORT_MIGRATION_DUPLICATE_ANALYSIS = re.compile(
+    r"^migration_duplicate_analysis: (CONSERVATIVE|INCOMPLETE)$", re.MULTILINE
+)
+REPORT_RESTORE_PLANNING_GATE = re.compile(
+    r"^restore_planning_gate: (BLOCKED)$", re.MULTILINE
+)
+REPORT_INSPECTION_STATUS = re.compile(
+    r"^inspection_status: (REVIEW_REQUIRED)$", re.MULTILINE
+)
+REPORT_TOC_ENTRIES = re.compile(r"^toc_entries: (0|[1-9][0-9]*)$", re.MULTILINE)
+SAFE_REPORTED_VERSION_VALUE_PATTERN = (
+    r"(?:UNKNOWN_NOT_REPORTED|REDACTED_UNSAFE_OR_UNRECOGNIZED|"
+    r"[0-9]{1,3}(?:\.[0-9]{1,3}){0,3}"
+    r"(?:(?:beta|rc)[0-9]{1,3}|devel)?)"
+)
+REPORT_SOURCE_POSTGRES_VERSION = re.compile(
+    rf"^source_postgresql_version: ({SAFE_REPORTED_VERSION_VALUE_PATTERN})$",
+    re.MULTILINE | re.ASCII,
+)
+REPORT_SOURCE_PG_DUMP_VERSION = re.compile(
+    rf"^source_pg_dump_version: ({SAFE_REPORTED_VERSION_VALUE_PATTERN})$",
+    re.MULTILINE | re.ASCII,
+)
+UNRESOLVED_CLASS_COUNT_HEADER = "UNRESOLVED KNOWN TOC CLASS COUNTS"
+UNRESOLVED_OBJECT_CLASS_ALLOWLIST = (
+    "ACCESS METHOD",
+    "ACL",
+    "AGGREGATE",
+    "BLOB",
+    "BLOB DATA",
+    "BLOB METADATA",
+    "CAST",
+    "CHECK CONSTRAINT",
+    "COLLATION",
+    "COMMENT",
+    "CONSTRAINT",
+    "CONVERSION",
+    "DATABASE",
+    "DATABASE PROPERTIES",
+    "DEFAULT",
+    "DEFAULT ACL",
+    "DOMAIN",
+    "DOMAIN CONSTRAINT",
+    "EVENT TRIGGER",
+    "EXTENSION",
+    "FK CONSTRAINT",
+    "FOREIGN DATA WRAPPER",
+    "FOREIGN SERVER",
+    "FOREIGN TABLE",
+    "FUNCTION",
+    "INDEX",
+    "INDEX ATTACH",
+    "LANGUAGE",
+    "LARGE OBJECT",
+    "LARGE OBJECT DATA",
+    "MATERIALIZED VIEW",
+    "MATERIALIZED VIEW DATA",
+    "OPERATOR",
+    "OPERATOR CLASS",
+    "OPERATOR FAMILY",
+    "POLICY",
+    "PROCEDURE",
+    "PROTOCOL",
+    "PUBLICATION",
+    "PUBLICATION TABLE",
+    "PUBLICATION TABLES IN SCHEMA",
+    "ROW SECURITY",
+    "RULE",
+    "SCHEMA",
+    "SECURITY LABEL",
+    "SEQUENCE",
+    "SEQUENCE OWNED BY",
+    "SEQUENCE SET",
+    "SHELL TYPE",
+    "STATISTICS",
+    "STATISTICS DATA",
+    "SUBSCRIPTION",
+    "TABLE",
+    "TABLE ATTACH",
+    "TABLE DATA",
+    "TABLESPACE",
+    "TEXT SEARCH CONFIGURATION",
+    "TEXT SEARCH DICTIONARY",
+    "TEXT SEARCH PARSER",
+    "TEXT SEARCH TEMPLATE",
+    "TRANSFORM",
+    "TRIGGER",
+    "TYPE",
+    "USER MAPPING",
+    "VIEW",
 )
 INSPECTOR_STAGE_CODES = frozenset(
     {
@@ -136,6 +233,7 @@ MAX_INSPECTOR_DIAGNOSTIC_BYTES = 4096
 MAX_OUTER_BYTES = 5_000_000_000
 MIN_WORKSPACE_OVERHEAD_BYTES = 256 * 1024 * 1024
 MAX_REPORT_BYTES = 128 * 1024 * 1024
+PROVENANCE_FORMAT_VERSION = 6
 DURABLE_EVIDENCE_DIRECTORY = "migration-inspection-evidence"
 
 
@@ -200,6 +298,42 @@ class BoundCanonical:
         if self.root_fd >= 0:
             os.close(self.root_fd)
             self.root_fd = -1
+
+
+@dataclass(frozen=True)
+class PublicationExpectations:
+    """Immutable live-runtime truth that durable evidence must reproduce."""
+
+    run_id: str
+    run_kind: str
+    evidence_profile: str
+    timeline_status: str
+    timeline_sha256: str
+    source_name: str
+    source_ref: str
+    configured_project_ref: str
+    ui_export_object_name: str
+    operator_identity: str
+    preflight_identities: tuple[tuple[str, str], ...]
+    approved_root: str
+    owner_uid: int
+    canonical_mode: str
+    canonical_filename: str
+    canonical_size_bytes: int
+    canonical_sha256: str
+    root_device: int
+    root_inode: int
+    canonical_device: int
+    canonical_inode: int
+    admitted_bound: BoundCanonical
+    outer_format: str
+    normalized_member_name: str | None
+    envelope_metadata_sha256: str
+    inner_size_bytes: int
+    inner_sha256: str
+    pgdmp_header_sha256: str
+    report_sha256: str
+    analysis_sha256: str
 
 
 def required_environment(name: str) -> str:
@@ -810,6 +944,1194 @@ ALL_EVIDENCE_FILES = CORE_EVIDENCE_FILES | {
 EVIDENCE_DIRECTORIES = {"archive", "inspection"}
 COMPLETION_MARKER = "EVIDENCE_COMPLETE"
 INDETERMINATE_MARKER = "EVIDENCE_INDETERMINATE"
+EVIDENCE_MANIFEST_SELF_HASH_BOUNDARY = (
+    "the detached evidence-files.sha256 binds this manifest; "
+    "runtime publication verification also compares every copied file"
+)
+SUPPORT_REPORTED_BOUNDARY = [
+    "export source completeness and point-in-time boundary",
+    "maximum export size 5 GB",
+    "one export generation per 24 hours",
+    "Lovable UI export control to backend-project mapping",
+]
+PREFLIGHT_IDENTITY_KEYS = {
+    "approved_execution_checkout_sha",
+    "execution_checkout_sha",
+    "procedure_origin_sha",
+    "inspection_tool_git_sha",
+    "inspection_baseline_git_sha",
+    "procedure_readme_blob_sha",
+    "execution_driver_blob_sha",
+    "normalizer_blob_sha",
+    "pg_restore_guard_blob_sha",
+    "pgdmp_inspector_blob_sha",
+    "report_helper_blob_sha",
+    "supabase_config_blob_sha",
+    "procedure_workflow_sha256",
+    "execution_driver_sha256",
+    "normalizer_sha256",
+    "pg_restore_guard_sha256",
+    "pgdmp_inspector_sha256",
+    "report_helper_sha256",
+    "supabase_config_sha256",
+    "execution_python_executable",
+    "execution_python_sha256",
+    "execution_python_implementation",
+    "execution_python_version",
+}
+PROVENANCE_ANALYSIS_KEYS = {
+    "object_reference_analysis",
+    "migration_duplicate_analysis",
+    "restore_planning_gate",
+    "unresolved_known_toc_entries",
+    "unresolved_known_toc_class_counts",
+}
+PROVENANCE_TOP_LEVEL_KEYS = {
+    "format_version",
+    "artifact_kind",
+    "inspection_status",
+    "export_timeline_status",
+    "run_id",
+    "run_kind",
+    "export_evidence_profile",
+    *PREFLIGHT_IDENTITY_KEYS,
+    *PROVENANCE_ANALYSIS_KEYS,
+    "procedure_identity_boundary",
+    "execution_tools",
+    "lovable_source_project",
+    "export_timeline",
+    "evidence_store",
+    "outer_artifact",
+    "zip_envelope",
+    "archive_member",
+    "ui_member_binding",
+    "inner_pgdmp",
+    "operator_identity",
+    "report",
+    "durable_publication",
+    "support_reported_not_independently_verified",
+}
+
+
+def _reject_duplicate_json_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Build one JSON object while rejecting duplicate members recursively."""
+
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON member")
+        result[key] = value
+    return result
+
+
+def load_evidence_contract_json(data: bytes, *, label: str) -> Any:
+    """Load bounded evidence JSON without last-key-wins or nonfinite numbers."""
+
+    try:
+        text = data.decode("utf-8")
+        return json.loads(
+            text,
+            object_pairs_hook=_reject_duplicate_json_members,
+            parse_constant=lambda _value: (_ for _ in ()).throw(
+                ValueError("nonfinite JSON number")
+            ),
+        )
+    except (UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        raise WorkflowError(f"{label} is invalid") from exc
+
+
+def require_exact_object_keys(value: Any, expected: set[str], *, label: str) -> dict[str, Any]:
+    """Require one fixed-schema JSON object with no optional surprise keys."""
+
+    if not isinstance(value, dict) or set(value) != expected:
+        raise WorkflowError(f"{label} differs from the reviewed schema")
+    return value
+
+
+def require_nonnegative_json_integer(value: Any, *, label: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise WorkflowError(f"{label} must be a nonnegative JSON integer")
+    return value
+
+
+def require_matching_string(
+    value: Any,
+    pattern: re.Pattern[str],
+    *,
+    label: str,
+) -> str:
+    if not isinstance(value, str) or pattern.fullmatch(value) is None:
+        raise WorkflowError(f"{label} is malformed")
+    return value
+
+
+def require_safe_nonempty_string(value: Any, *, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or not value
+        or value.strip() != value
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    ):
+        raise WorkflowError(f"{label} is malformed")
+    return value
+
+
+def validate_file_identity_object(value: Any, *, label: str) -> None:
+    identity = require_exact_object_keys(
+        value,
+        {"sha256", "size_bytes", "mode"},
+        label=label,
+    )
+    if (
+        not isinstance(identity["sha256"], str)
+        or HEX64.fullmatch(identity["sha256"]) is None
+        or identity["mode"] != "0400"
+    ):
+        raise WorkflowError(f"{label} contains an invalid file identity")
+    require_nonnegative_json_integer(
+        identity["size_bytes"],
+        label=f"{label} size_bytes",
+    )
+
+
+def validate_evidence_manifest_schema(manifest: Any) -> dict[str, Any]:
+    manifest_object = require_exact_object_keys(
+        manifest,
+        {
+            "format_version",
+            "artifact_kind",
+            "run_id",
+            "files",
+            "self_hash_boundary",
+        },
+        label="evidence file manifest",
+    )
+    files = require_exact_object_keys(
+        manifest_object["files"],
+        set(CORE_EVIDENCE_FILES),
+        label="evidence file manifest payload map",
+    )
+    for relative, identity in files.items():
+        validate_file_identity_object(
+            identity,
+            label=f"evidence file manifest identity for {relative}",
+        )
+    if (
+        not isinstance(manifest_object["format_version"], int)
+        or isinstance(manifest_object["format_version"], bool)
+        or manifest_object["format_version"] != 1
+        or manifest_object["artifact_kind"]
+        != "migration_inspection_evidence_file_manifest"
+        or not isinstance(manifest_object["run_id"], str)
+        or manifest_object["self_hash_boundary"]
+        != EVIDENCE_MANIFEST_SELF_HASH_BOUNDARY
+    ):
+        raise WorkflowError("evidence file manifest differs from the reviewed contract")
+    return manifest_object
+
+
+def _require_nested_keys(parent: dict[str, Any], key: str, expected: set[str]) -> dict[str, Any]:
+    return require_exact_object_keys(
+        parent[key],
+        expected,
+        label=f"provenance {key}",
+    )
+
+
+def validate_provenance_schema(provenance: Any) -> dict[str, Any]:
+    """Reject unknown or contradictory fields at every fixed provenance level."""
+
+    root = require_exact_object_keys(
+        provenance,
+        PROVENANCE_TOP_LEVEL_KEYS,
+        label="evidence provenance",
+    )
+    if (
+        not isinstance(root["format_version"], int)
+        or isinstance(root["format_version"], bool)
+        or root["format_version"] != PROVENANCE_FORMAT_VERSION
+        or root["artifact_kind"]
+        != "lovable_cloud_export_inspection_provenance"
+        or root["inspection_status"] != "REVIEW_REQUIRED"
+        or not isinstance(root["export_timeline_status"], str)
+        or root["export_timeline_status"] not in {"COMPLETE", "INCOMPLETE"}
+        or not isinstance(root["run_kind"], str)
+        or root["run_kind"] not in {"rehearsal", "final_cutover"}
+        or not isinstance(root["export_evidence_profile"], str)
+        or root["export_evidence_profile"]
+        not in {"retained_rehearsal_missing_initiation", "future_rehearsal", "final_cutover"}
+        or not isinstance(root["run_id"], str)
+        or not root["run_id"]
+    ):
+        raise WorkflowError("evidence provenance has invalid fixed contract values")
+    for key in (
+        "approved_execution_checkout_sha",
+        "execution_checkout_sha",
+        "procedure_origin_sha",
+        "inspection_tool_git_sha",
+        "inspection_baseline_git_sha",
+    ):
+        require_matching_string(root[key], HEX40, label=f"provenance {key}")
+    if (
+        root["approved_execution_checkout_sha"]
+        != root["execution_checkout_sha"]
+        or root["inspection_tool_git_sha"] != root["execution_checkout_sha"]
+        or root["procedure_origin_sha"] != PROCEDURE_ORIGIN_SHA
+        or root["inspection_baseline_git_sha"] != INSPECTION_BASELINE_GIT_SHA
+    ):
+        raise WorkflowError("provenance Git identity bindings disagree")
+    for key in (
+        "procedure_readme_blob_sha",
+        "execution_driver_blob_sha",
+        "normalizer_blob_sha",
+        "pg_restore_guard_blob_sha",
+        "pgdmp_inspector_blob_sha",
+        "report_helper_blob_sha",
+        "supabase_config_blob_sha",
+    ):
+        require_matching_string(root[key], HEX_OBJECT, label=f"provenance {key}")
+    for key in (
+        "procedure_workflow_sha256",
+        "execution_driver_sha256",
+        "normalizer_sha256",
+        "pg_restore_guard_sha256",
+        "pgdmp_inspector_sha256",
+        "report_helper_sha256",
+        "supabase_config_sha256",
+        "execution_python_sha256",
+    ):
+        require_matching_string(root[key], HEX64, label=f"provenance {key}")
+    execution_python = require_safe_nonempty_string(
+        root["execution_python_executable"],
+        label="provenance execution_python_executable",
+    )
+    if not Path(execution_python).is_absolute():
+        raise WorkflowError("provenance execution Python path is not absolute")
+    require_matching_string(
+        root["execution_python_implementation"],
+        re.compile(r"[a-z][a-z0-9_]{0,31}", re.ASCII),
+        label="provenance execution_python_implementation",
+    )
+    require_matching_string(
+        root["execution_python_version"],
+        re.compile(r"[0-9]{1,3}(?:\.[0-9]{1,3}){1,3}", re.ASCII),
+        label="provenance execution_python_version",
+    )
+    procedure_boundary = _require_nested_keys(
+        root,
+        "procedure_identity_boundary",
+        {
+            "procedure_origin_sha_is_informational_only",
+            "external_approval_proof",
+            "inspector_identity",
+            "historical_baseline_scope",
+        },
+    )
+    if (
+        procedure_boundary["procedure_origin_sha_is_informational_only"] is not True
+        or procedure_boundary["external_approval_proof"]
+        != "approved checkout must exactly equal execution checkout"
+        or procedure_boundary["inspector_identity"]
+        != "approved execution checkout plus exact Git blob and file SHA-256"
+        or procedure_boundary["historical_baseline_scope"]
+        != "unchanged supabase/migrations only"
+    ):
+        raise WorkflowError("provenance procedure identity boundary is contradictory")
+    tools = _require_nested_keys(
+        root,
+        "execution_tools",
+        {
+            "driver",
+            "envelope_normalizer",
+            "bounded_pg_restore_guard",
+            "pgdmp_inspector",
+            "report_helper",
+            "python_runtime",
+        },
+    )
+    simple_tool_bindings = {
+        "driver": (
+            "scripts/migration/inspect-lovable-export.py",
+            "execution_driver_blob_sha",
+            "execution_driver_sha256",
+        ),
+        "envelope_normalizer": (
+            "scripts/migration/normalize-lovable-export.py",
+            "normalizer_blob_sha",
+            "normalizer_sha256",
+        ),
+    }
+    for key, (expected_path, blob_key, sha_key) in simple_tool_bindings.items():
+        tool = require_exact_object_keys(
+            tools[key],
+            {"path", "git_blob_sha", "sha256"},
+            label=f"provenance execution_tools.{key}",
+        )
+        if tool != {
+            "path": expected_path,
+            "git_blob_sha": root[blob_key],
+            "sha256": root[sha_key],
+        }:
+            raise WorkflowError(f"provenance execution_tools.{key} binding disagrees")
+    restore_guard = require_exact_object_keys(
+        tools["bounded_pg_restore_guard"],
+        {
+            "path",
+            "git_blob_sha",
+            "sha256",
+            "invoked_with_execution_python_isolated_mode",
+        },
+        label="provenance execution_tools.bounded_pg_restore_guard",
+    )
+    if (
+        restore_guard["path"] != "scripts/migration/bounded-pg-restore.py"
+        or restore_guard["git_blob_sha"] != root["pg_restore_guard_blob_sha"]
+        or restore_guard["sha256"] != root["pg_restore_guard_sha256"]
+        or restore_guard["invoked_with_execution_python_isolated_mode"] is not True
+    ):
+        raise WorkflowError("provenance pg_restore guard isolation claim is invalid")
+    child_tool_bindings = {
+        "pgdmp_inspector": (
+            "scripts/migration/inspect-lovable-dump.sh",
+            "pgdmp_inspector_blob_sha",
+            "pgdmp_inspector_sha256",
+        ),
+        "report_helper": (
+            "scripts/migration/lib/lovable_dump_report.py",
+            "report_helper_blob_sha",
+            "report_helper_sha256",
+        ),
+    }
+    for key, (expected_path, blob_key, sha_key) in child_tool_bindings.items():
+        child_tool = require_exact_object_keys(
+            tools[key],
+            {
+                "path",
+                "git_sha",
+                "git_blob_sha",
+                "sha256",
+                "failure_diagnostic_format_version",
+                "raw_failure_output_relayed",
+            },
+            label=f"provenance execution_tools.{key}",
+        )
+        if (
+            child_tool["path"] != expected_path
+            or child_tool["git_sha"] != root["inspection_tool_git_sha"]
+            or child_tool["git_blob_sha"] != root[blob_key]
+            or child_tool["sha256"] != root[sha_key]
+            or child_tool["failure_diagnostic_format_version"] != 1
+            or isinstance(child_tool["failure_diagnostic_format_version"], bool)
+            or child_tool["raw_failure_output_relayed"] is not False
+        ):
+            raise WorkflowError(
+                f"provenance execution_tools.{key} safety claim is invalid"
+            )
+    python_runtime = require_exact_object_keys(
+        tools["python_runtime"],
+        {
+            "executable",
+            "sha256",
+            "implementation",
+            "version",
+            "isolated_mode_for_child_tools",
+            "inherited_python_or_shell_startup_environment",
+        },
+        label="provenance execution_tools.python_runtime",
+    )
+    if (
+        python_runtime["executable"] != root["execution_python_executable"]
+        or python_runtime["sha256"] != root["execution_python_sha256"]
+        or python_runtime["implementation"]
+        != root["execution_python_implementation"]
+        or python_runtime["version"] != root["execution_python_version"]
+        or python_runtime["isolated_mode_for_child_tools"] is not True
+        or python_runtime["inherited_python_or_shell_startup_environment"] is not False
+    ):
+        raise WorkflowError("provenance Python isolation claim is invalid")
+
+    source = _require_nested_keys(
+        root,
+        "lovable_source_project",
+        {"name", "ref", "repository_binding", "identity_boundary"},
+    )
+    repository_binding = require_exact_object_keys(
+        source["repository_binding"],
+        {"path", "declared_project_id", "git_blob_sha", "sha256", "exact_match"},
+        label="provenance lovable_source_project.repository_binding",
+    )
+    require_safe_nonempty_string(
+        source["name"], label="provenance lovable_source_project.name"
+    )
+    source_ref = require_matching_string(
+        source["ref"], PROJECT_REF, label="provenance lovable_source_project.ref"
+    )
+    if (
+        repository_binding["path"] != "supabase/config.toml"
+        or repository_binding["declared_project_id"] != source_ref
+        or repository_binding["git_blob_sha"] != root["supabase_config_blob_sha"]
+        or repository_binding["sha256"] != root["supabase_config_sha256"]
+        or repository_binding["exact_match"] is not True
+        or source["identity_boundary"]
+        != (
+            "operator-observed UI identity plus exact approved-checkout config "
+            "equality; Lovable's internal export mapping is not independently verifiable"
+        )
+    ):
+        raise WorkflowError("provenance repository binding is not exact")
+    timeline = _require_nested_keys(
+        root,
+        "export_timeline",
+        {
+            "initiated_at_utc",
+            "completed_at_utc",
+            "available_at_utc",
+            "download_completed_at_utc",
+            "time_inference_used",
+        },
+    )
+    parsed_timeline: dict[str, dt.datetime | None] = {}
+    for event_name in (
+        "initiated_at_utc",
+        "completed_at_utc",
+        "available_at_utc",
+        "download_completed_at_utc",
+    ):
+        event = timeline[event_name]
+        if not isinstance(event, dict):
+            raise WorkflowError(
+                f"provenance export_timeline.{event_name} differs from the reviewed schema"
+            )
+        basis = event.get("basis")
+        if basis == "operator_observed":
+            if (
+                set(event) != {"value", "basis"}
+                or not isinstance(event.get("value"), str)
+            ):
+                raise WorkflowError(
+                    f"provenance export_timeline.{event_name} differs from the reviewed schema"
+                )
+            parsed_timeline[event_name] = parse_timestamp(
+                event["value"], f"provenance export_timeline.{event_name}.value"
+            )
+        elif basis == "not_observed":
+            if (
+                set(event) != {"value", "basis", "reason"}
+                or event.get("value") is not None
+                or not isinstance(event.get("reason"), str)
+                or not event["reason"]
+            ):
+                raise WorkflowError(
+                    f"provenance export_timeline.{event_name} differs from the reviewed schema"
+                )
+            require_safe_nonempty_string(
+                event["reason"],
+                label=f"provenance export_timeline.{event_name}.reason",
+            )
+            parsed_timeline[event_name] = None
+        else:
+            raise WorkflowError(
+                f"provenance export_timeline.{event_name} differs from the reviewed schema"
+            )
+    expected_timeline_status = (
+        "COMPLETE"
+        if all(
+            timeline[event_name]["basis"] == "operator_observed"
+            for event_name in (
+                "initiated_at_utc",
+                "completed_at_utc",
+                "available_at_utc",
+                "download_completed_at_utc",
+            )
+        )
+        else "INCOMPLETE"
+    )
+    if (
+        timeline["time_inference_used"] is not False
+        or root["export_timeline_status"] != expected_timeline_status
+        or timeline["available_at_utc"]["basis"] != "operator_observed"
+        or timeline["download_completed_at_utc"]["basis"] != "operator_observed"
+    ):
+        raise WorkflowError("provenance timeline status is contradictory")
+    initiated_at = parsed_timeline["initiated_at_utc"]
+    completed_at = parsed_timeline["completed_at_utc"]
+    available_at = parsed_timeline["available_at_utc"]
+    downloaded_at = parsed_timeline["download_completed_at_utc"]
+    if (
+        available_at is None
+        or downloaded_at is None
+        or available_at > downloaded_at
+        or (initiated_at is not None and initiated_at > available_at)
+        or (completed_at is not None and completed_at > available_at)
+        or (
+            initiated_at is not None
+            and completed_at is not None
+            and initiated_at > completed_at
+        )
+        or (
+            root["export_evidence_profile"]
+            == "retained_rehearsal_missing_initiation"
+            and (
+                timeline["initiated_at_utc"]["basis"] != "not_observed"
+                or root["export_timeline_status"] != "INCOMPLETE"
+            )
+        )
+        or (
+            root["export_evidence_profile"] in {"future_rehearsal", "final_cutover"}
+            and timeline["initiated_at_utc"]["basis"] != "operator_observed"
+        )
+    ):
+        raise WorkflowError("provenance timeline ordering or profile is contradictory")
+
+    evidence_store = _require_nested_keys(
+        root,
+        "evidence_store",
+        {
+            "approved_root",
+            "root_owner_uid",
+            "root_mode",
+            "canonical_direct_child",
+            "canonical_owner_uid",
+            "canonical_mode",
+            "volume_encryption",
+            "durable_package_relative_path",
+        },
+    )
+    require_nonnegative_json_integer(
+        evidence_store["root_owner_uid"],
+        label="provenance evidence_store.root_owner_uid",
+    )
+    require_nonnegative_json_integer(
+        evidence_store["canonical_owner_uid"],
+        label="provenance evidence_store.canonical_owner_uid",
+    )
+    approved_root = require_safe_nonempty_string(
+        evidence_store["approved_root"],
+        label="provenance evidence_store.approved_root",
+    )
+    if (
+        not Path(approved_root).is_absolute()
+        or evidence_store["root_owner_uid"]
+        != evidence_store["canonical_owner_uid"]
+        or evidence_store["root_mode"] != "0700"
+        or evidence_store["canonical_direct_child"] is not True
+        or not isinstance(evidence_store["canonical_mode"], str)
+        or re.fullmatch(r"0[0-7]00", evidence_store["canonical_mode"]) is None
+        or evidence_store["volume_encryption"]
+        != "not_independently_verified_by_this_workflow"
+        or evidence_store["durable_package_relative_path"]
+        != f"{DURABLE_EVIDENCE_DIRECTORY}/{root['run_id']}"
+    ):
+        raise WorkflowError("provenance evidence-store boundary is contradictory")
+    outer = _require_nested_keys(
+        root,
+        "outer_artifact",
+        {
+            "role",
+            "ui_observed_export_object_name",
+            "expected_identity",
+            "workflow_observed_identity",
+            "format",
+            "normalizer_sha256",
+            "checksum_files",
+            "working_copy_retained_in_evidence",
+        },
+    )
+    expected_identity = require_exact_object_keys(
+        outer["expected_identity"],
+        {"original_filename", "size_bytes", "sha256", "basis"},
+        label="provenance outer_artifact.expected_identity",
+    )
+    require_nonnegative_json_integer(
+        expected_identity["size_bytes"],
+        label="provenance outer_artifact.expected_identity.size_bytes",
+    )
+    expected_filename = require_safe_nonempty_string(
+        expected_identity["original_filename"],
+        label="provenance outer_artifact.expected_identity.original_filename",
+    )
+    if Path(expected_filename).name != expected_filename:
+        raise WorkflowError("provenance outer expected filename is unsafe")
+    expected_outer_sha = require_matching_string(
+        expected_identity["sha256"],
+        HEX64,
+        label="provenance outer_artifact.expected_identity.sha256",
+    )
+    observed_identity = require_exact_object_keys(
+        outer["workflow_observed_identity"],
+        {
+            "original_filename",
+            "size_bytes_before",
+            "size_bytes_after",
+            "sha256_before",
+            "sha256_after",
+        },
+        label="provenance outer_artifact.workflow_observed_identity",
+    )
+    for key in ("size_bytes_before", "size_bytes_after"):
+        require_nonnegative_json_integer(
+            observed_identity[key],
+            label=f"provenance outer_artifact.workflow_observed_identity.{key}",
+        )
+    normalizer_hashes = require_exact_object_keys(
+        outer["normalizer_sha256"],
+        {"before", "after"},
+        label="provenance outer_artifact.normalizer_sha256",
+    )
+    checksum_files = require_exact_object_keys(
+        outer["checksum_files"],
+        {"expected", "workflow_observed_before", "workflow_observed_after"},
+        label="provenance outer_artifact.checksum_files",
+    )
+    require_safe_nonempty_string(
+        outer["ui_observed_export_object_name"],
+        label="provenance outer_artifact.ui_observed_export_object_name",
+    )
+    if (
+        outer["role"] != "canonical_download_envelope"
+        or outer["working_copy_retained_in_evidence"] is not False
+        or expected_identity["basis"]
+        != "mandatory externally supplied runtime approval inputs"
+        or observed_identity["original_filename"] != expected_filename
+        or expected_identity["size_bytes"] <= 0
+        or observed_identity["size_bytes_before"] != expected_identity["size_bytes"]
+        or observed_identity["size_bytes_after"] != expected_identity["size_bytes"]
+        or observed_identity["sha256_before"] != expected_outer_sha
+        or observed_identity["sha256_after"] != expected_outer_sha
+        or normalizer_hashes["before"] != expected_outer_sha
+        or normalizer_hashes["after"] != expected_outer_sha
+        or checksum_files
+        != {
+            "expected": "archive/outer.expected.sha256",
+            "workflow_observed_before": (
+                "archive/outer.workflow-observed.before.sha256"
+            ),
+            "workflow_observed_after": (
+                "archive/outer.workflow-observed.after.sha256"
+            ),
+        }
+    ):
+        raise WorkflowError("provenance outer-artifact boundary is contradictory")
+
+    zip_metadata = root["zip_envelope"]
+    if zip_metadata is not None:
+        zip_metadata = require_exact_object_keys(
+            zip_metadata,
+            {
+                "archive_comment_length",
+                "central_directory_offset",
+                "central_directory_size",
+                "entry_count",
+                "zip64",
+            },
+            label="provenance zip_envelope",
+        )
+        for key in (
+            "archive_comment_length",
+            "central_directory_offset",
+            "central_directory_size",
+            "entry_count",
+        ):
+            require_nonnegative_json_integer(
+                zip_metadata[key],
+                label=f"provenance zip_envelope.{key}",
+            )
+        if (
+            zip_metadata["archive_comment_length"] != 0
+            or zip_metadata["entry_count"] != 1
+            or zip_metadata["zip64"] is not False
+        ):
+            raise WorkflowError("provenance ZIP envelope contract is contradictory")
+    member = root["archive_member"]
+    if member is not None:
+        member = require_exact_object_keys(
+            member,
+            {
+                "compressed_size",
+                "compression",
+                "crc32",
+                "external_attributes",
+                "flags",
+                "method",
+                "name",
+                "streamed_size",
+                "uncompressed_size",
+                "version_made_by",
+                "version_needed",
+            },
+            label="provenance archive_member",
+        )
+        for key in (
+            "compressed_size",
+            "external_attributes",
+            "flags",
+            "method",
+            "streamed_size",
+            "uncompressed_size",
+            "version_made_by",
+            "version_needed",
+        ):
+            require_nonnegative_json_integer(
+                member[key],
+                label=f"provenance archive_member.{key}",
+            )
+        member_name = require_safe_nonempty_string(
+            member["name"], label="provenance archive_member.name"
+        )
+        if (
+            not member_name.isascii()
+            or Path(member_name).name != member_name
+            or not isinstance(member["crc32"], str)
+            or re.fullmatch(r"[0-9a-f]{8}", member["crc32"]) is None
+            or not isinstance(member["compression"], str)
+            or member["compression"] not in {"stored", "deflate"}
+            or (member["compression"], member["method"])
+            not in {("stored", 0), ("deflate", 8)}
+            or member["compressed_size"] <= 0
+            or member["uncompressed_size"] <= 0
+            or member["streamed_size"] != member["uncompressed_size"]
+        ):
+            raise WorkflowError("provenance ZIP member contract is contradictory")
+    member_binding = _require_nested_keys(
+        root,
+        "ui_member_binding",
+        {"status", "ui_observed_name", "normalized_member_name"},
+    )
+    if (
+        member_binding["ui_observed_name"]
+        != outer["ui_observed_export_object_name"]
+    ):
+        raise WorkflowError("provenance UI member binding disagrees")
+    if zip_metadata is None:
+        if (
+            member is not None
+            or outer["format"] != "postgresql_custom_archive"
+            or member_binding["status"] != "not_applicable"
+            or member_binding["normalized_member_name"] is not None
+        ):
+            raise WorkflowError("provenance direct-PGDMP envelope fields disagree")
+    elif (
+        member is None
+        or outer["format"] != "zip"
+        or member_binding["status"] != "exact_match"
+        or member_binding["normalized_member_name"] != member["name"]
+        or member_binding["ui_observed_name"] != member["name"]
+    ):
+        raise WorkflowError("provenance ZIP envelope fields disagree")
+    inner = _require_nested_keys(
+        root,
+        "inner_pgdmp",
+        {
+            "role",
+            "relationship_to_outer",
+            "size_bytes",
+            "sha256",
+            "inspector_reported_sha256",
+            "pgdmp_header",
+            "pg_restore_list",
+            "retained_in_evidence",
+            "all_bytes_consumed_by_pg_restore_list",
+        },
+    )
+    require_nonnegative_json_integer(
+        inner["size_bytes"],
+        label="provenance inner_pgdmp.size_bytes",
+    )
+    inner_sha = require_matching_string(
+        inner["sha256"], HEX64, label="provenance inner_pgdmp.sha256"
+    )
+    pgdmp_header = require_exact_object_keys(
+        inner["pgdmp_header"],
+        {
+            "archive_format_version_bytes",
+            "integer_width_bytes",
+            "offset_width_bytes",
+            "archive_format_code",
+            "bound_to_inner_sha256",
+            "captured_before_pg_restore",
+        },
+        label="provenance inner_pgdmp.pgdmp_header",
+    )
+    pg_restore_list = require_exact_object_keys(
+        inner["pg_restore_list"],
+        {"compatibility", "failure_diagnostic", "raw_child_output_retained"},
+        label="provenance inner_pgdmp.pg_restore_list",
+    )
+    version_bytes = pgdmp_header["archive_format_version_bytes"]
+    if (
+        inner["role"] != "verified_inspector_input"
+        or inner["size_bytes"] <= 0
+        or inner["inspector_reported_sha256"] != inner_sha
+        or not isinstance(version_bytes, list)
+        or len(version_bytes) != 3
+        or any(
+            not isinstance(value, int)
+            or isinstance(value, bool)
+            or not 0 <= value <= 255
+            for value in version_bytes
+        )
+        or not isinstance(pgdmp_header["integer_width_bytes"], int)
+        or isinstance(pgdmp_header["integer_width_bytes"], bool)
+        or pgdmp_header["integer_width_bytes"] not in {4, 8}
+        or not isinstance(pgdmp_header["offset_width_bytes"], int)
+        or isinstance(pgdmp_header["offset_width_bytes"], bool)
+        or pgdmp_header["offset_width_bytes"] not in {4, 8}
+        or not isinstance(pgdmp_header["archive_format_code"], int)
+        or pgdmp_header["archive_format_code"] != 1
+        or isinstance(pgdmp_header["archive_format_code"], bool)
+        or pgdmp_header["bound_to_inner_sha256"] != inner_sha
+        or inner["retained_in_evidence"] is not False
+        or inner["all_bytes_consumed_by_pg_restore_list"]
+        != "not_independently_verifiable"
+        or pgdmp_header["captured_before_pg_restore"] is not True
+        or pg_restore_list["compatibility"] != "PASS"
+        or pg_restore_list["failure_diagnostic"] is not None
+        or pg_restore_list["raw_child_output_retained"] is not False
+    ):
+        raise WorkflowError("provenance inner-PGDMP boundary is contradictory")
+    if zip_metadata is None:
+        if (
+            inner["relationship_to_outer"] != "byte_copy_of_direct_pgdmp"
+            or inner_sha != expected_outer_sha
+            or inner["size_bytes"] != expected_identity["size_bytes"]
+        ):
+            raise WorkflowError("provenance direct-PGDMP identity bindings disagree")
+    elif (
+        inner["relationship_to_outer"] != "derived_from_single_zip_member"
+        or inner["size_bytes"] != member["uncompressed_size"]
+        or inner["size_bytes"] != member["streamed_size"]
+    ):
+        raise WorkflowError("provenance ZIP inner identity bindings disagree")
+    report = _require_nested_keys(
+        root,
+        "report",
+        {"filename", "relative_path", "sha256", "checksum_file"},
+    )
+    require_matching_string(
+        report["sha256"], HEX64, label="provenance report.sha256"
+    )
+    if report != {
+        "filename": "rehearsal-metadata.txt",
+        "relative_path": "inspection/rehearsal-metadata.txt",
+        "sha256": report["sha256"],
+        "checksum_file": "inspection/report.sha256",
+    }:
+        raise WorkflowError("provenance report binding is contradictory")
+    require_safe_nonempty_string(
+        root["operator_identity"], label="provenance operator_identity"
+    )
+    durable_publication = _require_nested_keys(
+        root,
+        "durable_publication",
+        {
+            "relative_directory",
+            "file_manifest",
+            "file_manifest_checksum",
+            "completion_marker",
+            "completion_marker_meaning",
+            "publication_semantics",
+        },
+    )
+    if (
+        durable_publication["relative_directory"]
+        != f"{DURABLE_EVIDENCE_DIRECTORY}/{root['run_id']}"
+        or evidence_store["durable_package_relative_path"]
+        != durable_publication["relative_directory"]
+        or durable_publication["file_manifest"] != "evidence-files.json"
+        or durable_publication["file_manifest_checksum"] != "evidence-files.sha256"
+        or durable_publication["completion_marker"] != COMPLETION_MARKER
+        or durable_publication["completion_marker_meaning"]
+        != "evidence package bytes are complete; restore planning remains blocked"
+        or durable_publication["publication_semantics"]
+        != (
+            "descriptor_bound_fsynced_payload_then_atomic_no_replace_"
+            "postcommit_validation_then_completion_marker"
+        )
+    ):
+        raise WorkflowError("provenance durable-publication boundary is contradictory")
+    if root["support_reported_not_independently_verified"] != SUPPORT_REPORTED_BOUNDARY:
+        raise WorkflowError(
+            "provenance support boundary differs from the reviewed schema"
+        )
+    return root
+
+
+def validate_provenance_payload_bindings(
+    provenance: dict[str, Any],
+    identities: dict[str, dict[str, int | str]],
+    read_relative: Any,
+) -> None:
+    """Bind reviewed provenance claims to the retained package bytes."""
+
+    outer_sha = provenance["outer_artifact"]["expected_identity"]["sha256"]
+    for relative in (
+        "archive/outer.expected.sha256",
+        "archive/outer.workflow-observed.before.sha256",
+        "archive/outer.workflow-observed.after.sha256",
+    ):
+        if read_relative(relative) != (outer_sha + "\n").encode("ascii"):
+            raise WorkflowError("outer artifact checksum evidence disagrees")
+
+    report_relative = "inspection/rehearsal-metadata.txt"
+    report_bytes = read_relative(report_relative)
+    report_sha = provenance["report"]["sha256"]
+    if (
+        identities[report_relative]["sha256"] != report_sha
+        or read_relative("inspection/report.sha256")
+        != (report_sha + "\n").encode("ascii")
+    ):
+        raise WorkflowError("provenance report identity disagrees with package bytes")
+    try:
+        report_text = report_bytes.decode("utf-8")
+    except UnicodeError as exc:
+        raise WorkflowError("inspection report is not valid UTF-8") from exc
+    inner = provenance["inner_pgdmp"]
+    reported_hashes = REPORT_SHA.findall(report_text)
+    if len(reported_hashes) != 1 or reported_hashes[0] != inner["sha256"]:
+        raise WorkflowError("inspection report inner identity disagrees")
+    if f"size_bytes: {inner['size_bytes']}" not in report_text.splitlines():
+        raise WorkflowError("inspection report inner size disagrees")
+    if parse_report_header_metadata(report_text, inner["sha256"]) != inner["pgdmp_header"]:
+        raise WorkflowError("inspection report PGDMP header binding disagrees")
+
+
+def build_publication_expectations(
+    *,
+    run_id: str,
+    run_kind: str,
+    evidence_profile: str,
+    timeline_status: str,
+    timeline: dict[str, Any],
+    source_name: str,
+    source_ref: str,
+    configured_project_ref: str,
+    ui_export_object_name: str,
+    operator_identity: str,
+    identities: dict[str, str],
+    bound: BoundCanonical,
+    normalization: dict[str, Any],
+    inner_size_bytes: int,
+    inner_sha256: str,
+    pgdmp_header: dict[str, Any],
+    report_sha256: str,
+    object_analysis: dict[str, Any],
+) -> PublicationExpectations:
+    """Freeze runtime truth before retained sidecars/provenance are constructed."""
+
+    if set(identities) != PREFLIGHT_IDENTITY_KEYS:
+        raise WorkflowError("publication runtime identities differ from the reviewed set")
+    if source_ref != configured_project_ref:
+        raise WorkflowError("publication runtime project binding disagrees")
+    root_metadata = os.fstat(bound.root_fd)
+    file_metadata = os.fstat(bound.file_fd)
+    normalization = validate_normalization(
+        normalization,
+        bound.observed_sha256,
+        bound.size,
+    )
+    outer_format = normalization["outer"]["format"]
+    normalized_member_name = (
+        normalization["member"]["name"]
+        if normalization["envelope_kind"] == "zip"
+        else None
+    )
+    envelope_projection = {
+        "outer_format": outer_format,
+        "zip_envelope": normalization["outer"].get("zip"),
+        "archive_member": normalization.get("member"),
+        "normalized_member_name": normalized_member_name,
+    }
+    envelope_bytes = json.dumps(
+        envelope_projection,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    if (
+        root_metadata.st_uid != bound.owner_uid
+        or file_metadata.st_uid != bound.owner_uid
+    ):
+        raise WorkflowError("publication runtime ownership binding disagrees")
+    timeline_bytes = json.dumps(
+        timeline,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    header_bytes = json.dumps(
+        pgdmp_header,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    analysis_bytes = json.dumps(
+        object_analysis,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    if (
+        outer_format not in {"zip", "postgresql_custom_archive"}
+        or not isinstance(inner_size_bytes, int)
+        or isinstance(inner_size_bytes, bool)
+        or inner_size_bytes <= 0
+        or HEX64.fullmatch(inner_sha256) is None
+        or HEX64.fullmatch(report_sha256) is None
+        or validate_provenance_object_analysis(object_analysis) != object_analysis
+    ):
+        raise WorkflowError("publication runtime inspection identity is invalid")
+    return PublicationExpectations(
+        run_id=run_id,
+        run_kind=run_kind,
+        evidence_profile=evidence_profile,
+        timeline_status=timeline_status,
+        timeline_sha256=sha256_bytes(timeline_bytes),
+        source_name=source_name,
+        source_ref=source_ref,
+        configured_project_ref=configured_project_ref,
+        ui_export_object_name=ui_export_object_name,
+        operator_identity=operator_identity,
+        preflight_identities=tuple(sorted(identities.items())),
+        approved_root=str(bound.root),
+        owner_uid=bound.owner_uid,
+        canonical_mode=f"{bound.mode:04o}",
+        canonical_filename=bound.path.name,
+        canonical_size_bytes=bound.size,
+        canonical_sha256=bound.observed_sha256,
+        root_device=bound.root_device,
+        root_inode=bound.root_inode,
+        canonical_device=bound.device,
+        canonical_inode=bound.inode,
+        admitted_bound=bound,
+        outer_format=outer_format,
+        normalized_member_name=normalized_member_name,
+        envelope_metadata_sha256=sha256_bytes(envelope_bytes),
+        inner_size_bytes=inner_size_bytes,
+        inner_sha256=inner_sha256,
+        pgdmp_header_sha256=sha256_bytes(header_bytes),
+        report_sha256=report_sha256,
+        analysis_sha256=sha256_bytes(analysis_bytes),
+    )
+
+
+def validate_publication_runtime_bound(
+    expectations: PublicationExpectations,
+    bound: BoundCanonical,
+) -> None:
+    """Prove the immutable expectation still describes the admitted descriptor."""
+
+    verify_bound_canonical(bound)
+    if (
+        expectations.approved_root != str(bound.root)
+        or expectations.owner_uid != bound.owner_uid
+        or expectations.canonical_mode != f"{bound.mode:04o}"
+        or expectations.canonical_filename != bound.path.name
+        or expectations.canonical_size_bytes != bound.size
+        or expectations.canonical_sha256 != bound.observed_sha256
+        or expectations.root_device != bound.root_device
+        or expectations.root_inode != bound.root_inode
+        or expectations.canonical_device != bound.device
+        or expectations.canonical_inode != bound.inode
+        or expectations.admitted_bound is not bound
+    ):
+        raise WorkflowError("publication expectation does not match canonical runtime truth")
+
+
+def validate_provenance_against_publication_expectations(
+    provenance: dict[str, Any],
+    expectations: PublicationExpectations,
+) -> None:
+    """Reject coherent evidence substitution using independent runtime truth."""
+
+    identities = dict(expectations.preflight_identities)
+    if (
+        set(identities) != PREFLIGHT_IDENTITY_KEYS
+        or any(provenance[key] != value for key, value in identities.items())
+    ):
+        raise WorkflowError("provenance execution identity differs from runtime truth")
+    timeline_bytes = json.dumps(
+        provenance["export_timeline"],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    source = provenance["lovable_source_project"]
+    repository_binding = source["repository_binding"]
+    evidence_store = provenance["evidence_store"]
+    outer = provenance["outer_artifact"]
+    expected = outer["expected_identity"]
+    observed = outer["workflow_observed_identity"]
+    normalizer = outer["normalizer_sha256"]
+    member_binding = provenance["ui_member_binding"]
+    inner = provenance["inner_pgdmp"]
+    header_bytes = json.dumps(
+        inner["pgdmp_header"],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    analysis = {
+        key: provenance[key] for key in PROVENANCE_ANALYSIS_KEYS
+    }
+    analysis_bytes = json.dumps(
+        analysis,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    envelope_projection = {
+        "outer_format": outer["format"],
+        "zip_envelope": provenance["zip_envelope"],
+        "archive_member": provenance["archive_member"],
+        "normalized_member_name": member_binding["normalized_member_name"],
+    }
+    envelope_bytes = json.dumps(
+        envelope_projection,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    if (
+        provenance["run_id"] != expectations.run_id
+        or provenance["run_kind"] != expectations.run_kind
+        or provenance["export_evidence_profile"] != expectations.evidence_profile
+        or provenance["export_timeline_status"] != expectations.timeline_status
+        or sha256_bytes(timeline_bytes) != expectations.timeline_sha256
+        or source["name"] != expectations.source_name
+        or source["ref"] != expectations.source_ref
+        or repository_binding["declared_project_id"]
+        != expectations.configured_project_ref
+        or outer["ui_observed_export_object_name"]
+        != expectations.ui_export_object_name
+        or member_binding["ui_observed_name"]
+        != expectations.ui_export_object_name
+        or provenance["operator_identity"] != expectations.operator_identity
+        or evidence_store["approved_root"] != expectations.approved_root
+        or evidence_store["root_owner_uid"] != expectations.owner_uid
+        or evidence_store["canonical_owner_uid"] != expectations.owner_uid
+        or evidence_store["canonical_mode"] != expectations.canonical_mode
+        or expected["original_filename"] != expectations.canonical_filename
+        or observed["original_filename"] != expectations.canonical_filename
+        or expected["size_bytes"] != expectations.canonical_size_bytes
+        or observed["size_bytes_before"] != expectations.canonical_size_bytes
+        or observed["size_bytes_after"] != expectations.canonical_size_bytes
+        or expected["sha256"] != expectations.canonical_sha256
+        or observed["sha256_before"] != expectations.canonical_sha256
+        or observed["sha256_after"] != expectations.canonical_sha256
+        or normalizer["before"] != expectations.canonical_sha256
+        or normalizer["after"] != expectations.canonical_sha256
+        or outer["format"] != expectations.outer_format
+        or member_binding["normalized_member_name"]
+        != expectations.normalized_member_name
+        or sha256_bytes(envelope_bytes) != expectations.envelope_metadata_sha256
+        or inner["size_bytes"] != expectations.inner_size_bytes
+        or inner["sha256"] != expectations.inner_sha256
+        or inner["inspector_reported_sha256"] != expectations.inner_sha256
+        or sha256_bytes(header_bytes) != expectations.pgdmp_header_sha256
+        or provenance["report"]["sha256"] != expectations.report_sha256
+        or sha256_bytes(analysis_bytes) != expectations.analysis_sha256
+    ):
+        raise WorkflowError("provenance publication binding differs from runtime truth")
 
 
 def evidence_file_identity(path: Path) -> dict[str, int | str]:
@@ -979,6 +2301,7 @@ def validate_evidence_tree_at(
     expected_run_id: str,
     *,
     require_completion_marker: bool = False,
+    publication_expectations: PublicationExpectations | None = None,
 ) -> dict[str, dict[str, int | str]]:
     """Validate the fixed durable payload without resolving its parent path."""
 
@@ -1022,26 +2345,14 @@ def validate_evidence_tree_at(
             identities[relative] = evidence_file_identity_at(descriptor, name)
 
         manifest_bytes = read_private_file_at(root_fd, "evidence-files.json")
-        try:
-            manifest = json.loads(manifest_bytes.decode("utf-8"))
-        except (UnicodeError, json.JSONDecodeError) as exc:
-            raise WorkflowError("durable evidence manifest is invalid") from exc
+        manifest = validate_evidence_manifest_schema(
+            load_evidence_contract_json(
+                manifest_bytes,
+                label="durable evidence manifest",
+            )
+        )
         if (
-            not isinstance(manifest, dict)
-            or set(manifest)
-            != {
-                "format_version",
-                "artifact_kind",
-                "run_id",
-                "files",
-                "self_hash_boundary",
-            }
-            or manifest.get("format_version") != 1
-            or manifest.get("artifact_kind")
-            != "migration_inspection_evidence_file_manifest"
-            or manifest.get("run_id") != expected_run_id
-            or not isinstance(manifest.get("files"), dict)
-            or set(manifest["files"]) != CORE_EVIDENCE_FILES
+            manifest.get("run_id") != expected_run_id
             or manifest["files"]
             != {
                 relative: identities[relative]
@@ -1058,14 +2369,58 @@ def validate_evidence_tree_at(
         provenance_sha = read_private_file_at(root_fd, "provenance.sha256")
         if provenance_sha != (identities["provenance.json"]["sha256"] + "\n").encode("ascii"):
             raise WorkflowError("durable provenance detached SHA-256 does not match")
-        try:
-            provenance = json.loads(
-                read_private_file_at(root_fd, "provenance.json").decode("utf-8")
+        provenance = validate_provenance_schema(
+            load_evidence_contract_json(
+                read_private_file_at(root_fd, "provenance.json"),
+                label="durable provenance",
             )
-        except (UnicodeError, json.JSONDecodeError) as exc:
-            raise WorkflowError("durable provenance is invalid") from exc
-        if not isinstance(provenance, dict) or provenance.get("run_id") != expected_run_id:
+        )
+        if (
+            provenance.get("format_version") != PROVENANCE_FORMAT_VERSION
+            or provenance.get("run_id") != expected_run_id
+            or provenance.get("inspection_status") != "REVIEW_REQUIRED"
+        ):
             raise WorkflowError("durable provenance run_id does not match its package")
+        if publication_expectations is not None:
+            validate_provenance_against_publication_expectations(
+                provenance,
+                publication_expectations,
+            )
+
+        def read_durable_relative(relative: str) -> bytes:
+            if "/" in relative:
+                directory, name = relative.split("/", 1)
+                return read_private_file_at(
+                    directory_fds[directory],
+                    name,
+                    maximum_bytes=(
+                        MAX_REPORT_BYTES
+                        if relative == "inspection/rehearsal-metadata.txt"
+                        else 8 * 1024 * 1024
+                    ),
+                )
+            return read_private_file_at(root_fd, relative)
+
+        validate_provenance_payload_bindings(
+            provenance,
+            identities,
+            read_durable_relative,
+        )
+        provenance_analysis = validate_provenance_object_analysis(provenance)
+        try:
+            report_analysis = parse_report_object_analysis(
+                read_private_file_at(
+                    directory_fds["inspection"],
+                    "rehearsal-metadata.txt",
+                    maximum_bytes=MAX_REPORT_BYTES,
+                ).decode("utf-8")
+            )
+        except UnicodeError as exc:
+            raise WorkflowError("durable inspection report is not valid UTF-8") from exc
+        if report_analysis != provenance_analysis:
+            raise WorkflowError(
+                "durable inspection report and provenance analysis gates differ"
+            )
         if require_completion_marker:
             validate_completion_marker_at(
                 root_fd,
@@ -1088,10 +2443,7 @@ def build_evidence_file_manifest(pending: Path, run_id: str) -> None:
         "artifact_kind": "migration_inspection_evidence_file_manifest",
         "run_id": run_id,
         "files": entries,
-        "self_hash_boundary": (
-            "the detached evidence-files.sha256 binds this manifest; "
-            "runtime publication verification also compares every copied file"
-        ),
+        "self_hash_boundary": EVIDENCE_MANIFEST_SELF_HASH_BOUNDARY,
     }
     manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(
         "utf-8"
@@ -1107,6 +2459,8 @@ def build_evidence_file_manifest(pending: Path, run_id: str) -> None:
 def validate_evidence_tree(
     pending: Path,
     expected_run_id: str,
+    *,
+    publication_expectations: PublicationExpectations | None = None,
 ) -> dict[str, dict[str, int | str]]:
     root_metadata = pending.lstat()
     if (
@@ -1137,23 +2491,14 @@ def validate_evidence_tree(
         for relative in sorted(ALL_EVIDENCE_FILES)
     }
     manifest_path = pending / "evidence-files.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = validate_evidence_manifest_schema(
+        load_evidence_contract_json(
+            manifest_path.read_bytes(),
+            label="evidence file manifest",
+        )
+    )
     if (
-        not isinstance(manifest, dict)
-        or set(manifest)
-        != {
-            "format_version",
-            "artifact_kind",
-            "run_id",
-            "files",
-            "self_hash_boundary",
-        }
-        or manifest.get("format_version") != 1
-        or manifest.get("artifact_kind")
-        != "migration_inspection_evidence_file_manifest"
-        or manifest.get("run_id") != expected_run_id
-        or not isinstance(manifest.get("files"), dict)
-        or set(manifest["files"]) != CORE_EVIDENCE_FILES
+        manifest.get("run_id") != expected_run_id
     ):
         raise WorkflowError("evidence file manifest differs from the reviewed contract")
     if manifest["files"] != {
@@ -1171,12 +2516,39 @@ def validate_evidence_tree(
         identities["provenance.json"]["sha256"] + "\n"
     ):
         raise WorkflowError("provenance detached SHA-256 does not match")
-    try:
-        provenance = json.loads((pending / "provenance.json").read_text(encoding="utf-8"))
-    except (UnicodeError, json.JSONDecodeError) as exc:
-        raise WorkflowError("provenance is invalid") from exc
-    if not isinstance(provenance, dict) or provenance.get("run_id") != expected_run_id:
+    provenance = validate_provenance_schema(
+        load_evidence_contract_json(
+            (pending / "provenance.json").read_bytes(),
+            label="provenance",
+        )
+    )
+    if (
+        provenance.get("format_version") != PROVENANCE_FORMAT_VERSION
+        or provenance.get("run_id") != expected_run_id
+        or provenance.get("inspection_status") != "REVIEW_REQUIRED"
+    ):
         raise WorkflowError("provenance run_id does not match its package")
+    if publication_expectations is not None:
+        validate_provenance_against_publication_expectations(
+            provenance,
+            publication_expectations,
+        )
+    validate_provenance_payload_bindings(
+        provenance,
+        identities,
+        lambda relative: (pending / relative).read_bytes(),
+    )
+    provenance_analysis = validate_provenance_object_analysis(provenance)
+    try:
+        report_analysis = parse_report_object_analysis(
+            (pending / "inspection/rehearsal-metadata.txt").read_text(
+                encoding="utf-8"
+            )
+        )
+    except UnicodeError as exc:
+        raise WorkflowError("inspection report is not valid UTF-8") from exc
+    if report_analysis != provenance_analysis:
+        raise WorkflowError("inspection report and provenance analysis gates differ")
     return identities
 
 
@@ -1358,6 +2730,7 @@ def completion_marker_bytes(run_id: str, manifest_sha256: str) -> bytes:
             {
                 "evidence_files_sha256": manifest_sha256,
                 "inspection_status": "REVIEW_REQUIRED",
+                "restore_planning_gate": "BLOCKED",
                 "run_id": run_id,
             },
             sort_keys=True,
@@ -1438,10 +2811,16 @@ def publish_durable_evidence(
     run_root: Path,
     bound: BoundCanonical,
     run_id: str,
+    publication_expectations: PublicationExpectations,
 ) -> Path:
     """Copy, verify, fsync, and no-replace publish outside disposable Git space."""
 
-    source_identities = validate_evidence_tree(pending, run_id)
+    validate_publication_runtime_bound(publication_expectations, bound)
+    source_identities = validate_evidence_tree(
+        pending,
+        run_id,
+        publication_expectations=publication_expectations,
+    )
     parent, parent_fd = prepare_durable_parent(bound)
     staging_name = f".{run_id}.pending"
     final_name = run_id
@@ -1492,10 +2871,20 @@ def publish_durable_evidence(
         finally:
             for descriptor in child_fds.values():
                 os.close(descriptor)
-        source_identities_after_copy = validate_evidence_tree(pending, run_id)
+        validate_publication_runtime_bound(publication_expectations, bound)
+        source_identities_after_copy = validate_evidence_tree(
+            pending,
+            run_id,
+            publication_expectations=publication_expectations,
+        )
         if source_identities_after_copy != source_identities:
             raise WorkflowError("publication source changed while evidence was copied")
-        destination_identities = validate_evidence_tree_at(staging_fd, run_id)
+        validate_publication_runtime_bound(publication_expectations, bound)
+        destination_identities = validate_evidence_tree_at(
+            staging_fd,
+            run_id,
+            publication_expectations=publication_expectations,
+        )
         if destination_identities != source_identities:
             raise WorkflowError("durable evidence copy identity mismatch")
         os.fsync(staging_fd)
@@ -1505,6 +2894,7 @@ def publish_durable_evidence(
         # Disposable archive bytes are removed before the durable commit gate.
         remove_incomplete_run(run_root)
         verify_bound_canonical(bound)
+        validate_publication_runtime_bound(publication_expectations, bound)
         parent_metadata = validate_owned_private_directory_descriptor(
             parent_fd,
             label="durable evidence parent",
@@ -1520,7 +2910,14 @@ def publish_durable_evidence(
             root_relative_parent.st_ino,
         ):
             raise WorkflowError("durable evidence parent binding changed before publication")
-        if validate_evidence_tree_at(staging_fd, run_id) != source_identities:
+        if (
+            validate_evidence_tree_at(
+                staging_fd,
+                run_id,
+                publication_expectations=publication_expectations,
+            )
+            != source_identities
+        ):
             raise WorkflowError("durable evidence staging identity changed before publication")
 
         manifest_sha = source_identities["evidence-files.json"]["sha256"]
@@ -1544,11 +2941,16 @@ def publish_durable_evidence(
             )
         try:
             if (
-                validate_evidence_tree_at(staging_fd, run_id)
+                validate_evidence_tree_at(
+                    staging_fd,
+                    run_id,
+                    publication_expectations=publication_expectations,
+                )
                 != source_identities
             ):
                 raise WorkflowError("published durable evidence identity mismatch")
             verify_bound_canonical(bound)
+            validate_publication_runtime_bound(publication_expectations, bound)
             final_parent_metadata = validate_owned_private_directory_descriptor(
                 parent_fd,
                 label="durable evidence parent",
@@ -1576,6 +2978,7 @@ def publish_durable_evidence(
                     staging_fd,
                     run_id,
                     require_completion_marker=True,
+                    publication_expectations=publication_expectations,
                 )
                 != source_identities
             ):
@@ -1686,6 +3089,287 @@ def parse_inspector_failure(stdout: bytes, stderr: bytes) -> tuple[str, str]:
     if diagnostic_text != canonical:
         return "inspector_diagnostic_invalid", "other_nonzero"
     return stage, reason
+
+
+def _single_report_value(
+    pattern: re.Pattern[str], report_text: str, label: str
+) -> str:
+    matches = pattern.findall(report_text)
+    if len(matches) != 1 or not isinstance(matches[0], str):
+        raise WorkflowError(
+            f"inspector report must contain exactly one {label} field"
+        )
+    return matches[0]
+
+
+def _validate_incomplete_report_lines(
+    report_text: str,
+    report_lines: list[str],
+    class_counts: dict[str, int],
+    object_status: str,
+) -> None:
+    """Require the exact aggregate-only report grammar and arithmetic."""
+
+    # The helper and raw inspector each contribute one fixed, reviewed section.
+    # Validating only that every line resembles an allowlisted field is not
+    # enough: a second safe-looking field could contradict the canonical value
+    # or carry attacker-controlled text.  Bind the complete LF-terminated line
+    # sequence, including the ordered class-count ledger, instead.
+    if report_text != "\n".join(report_lines) + "\n":
+        raise WorkflowError(
+            "incomplete object-reference report is not canonical LF-terminated text"
+        )
+
+    version_value = SAFE_REPORTED_VERSION_VALUE_PATTERN
+    canonical_lines: list[str | re.Pattern[str]] = [
+        "LOVABLE CLOUD DUMP — METADATA-ONLY INSPECTION",
+        "inspection_status: REVIEW_REQUIRED",
+        f"object_reference_analysis: {object_status}",
+        "migration_duplicate_analysis: INCOMPLETE",
+        "restore_planning_gate: BLOCKED",
+        (
+            "scope: archive header, SHA-256, pg_restore TOC metadata, "
+            "aggregate unresolved-object counts"
+        ),
+        "restore_attempted: no",
+        "database_connection_attempted: no",
+        "row_payload_inspected: no",
+        re.compile(r"size_bytes: (?:0|[1-9][0-9]*)"),
+        re.compile(r"sha256: [0-9a-f]{64}"),
+        "archive_format: PostgreSQL custom archive (PGDMP)",
+        re.compile(r"archive_format_version: [0-9]+\.[0-9]+\.[0-9]+"),
+        re.compile(rf"source_postgresql_version: {version_value}"),
+        re.compile(rf"source_pg_dump_version: {version_value}"),
+        re.compile(r"pg_restore_version: 17(?:\.[0-9]+)?"),
+        "pg_restore_list_compatibility: PASS",
+        (
+            "archive_snapshot_binding: PASS "
+            "(TOC and SHA-256 use one private read-only capture)"
+        ),
+        re.compile(r"toc_entries: (?:0|[1-9][0-9]*)"),
+        re.compile(r"toc_metadata_entries: (?:0|[1-9][0-9]*)"),
+        re.compile(r"toc_data_references_not_extracted: (?:0|[1-9][0-9]*)"),
+        "unknown_toc_classes: none (inspection fails closed if encountered)",
+        re.compile(r"unresolved_known_toc_entries: (?:0|[1-9][0-9]*)"),
+        "",
+        UNRESOLVED_CLASS_COUNT_HEADER,
+    ]
+    canonical_lines.extend(
+        f"{object_class}: {class_counts[object_class]}"
+        for object_class in UNRESOLVED_OBJECT_CLASS_ALLOWLIST
+    )
+    canonical_lines.extend(
+        [
+            "",
+            "BOUNDARY",
+            "This report is an inventory aid, not a restore plan or completeness proof.",
+            (
+                "Object-reference analysis is incomplete; restore planning remains blocked."
+                if object_status == "INCOMPLETE"
+                else "Migration-duplicate analysis is incomplete; restore planning remains blocked."
+            ),
+            "",
+            "PGDMP HEADER CAPTURE",
+            re.compile(
+                r"archive_format_version_bytes: "
+                r"(?:0|[1-9][0-9]*),(?:0|[1-9][0-9]*),(?:0|[1-9][0-9]*)"
+            ),
+            re.compile(r"archive_integer_width_bytes: (?:4|8)"),
+            re.compile(r"archive_offset_width_bytes: (?:4|8)"),
+            "archive_format_code: 1",
+            re.compile(r"archive_header_bound_sha256: [0-9a-f]{64}"),
+            "expected_sha256_binding: PASS",
+        ]
+    )
+
+    if len(report_lines) != len(canonical_lines):
+        raise WorkflowError(
+            "incomplete object-reference report differs from the canonical line count"
+        )
+    for line, expected in zip(report_lines, canonical_lines):
+        if isinstance(expected, str):
+            valid = line == expected
+        else:
+            valid = expected.fullmatch(line) is not None
+        if not valid:
+            raise WorkflowError(
+                "incomplete object-reference report differs from the canonical grammar"
+            )
+
+    toc_entries = int(report_lines[18].split(": ", 1)[1])
+    metadata_entries = int(report_lines[19].split(": ", 1)[1])
+    data_references = int(report_lines[20].split(": ", 1)[1])
+    if metadata_entries + data_references != toc_entries:
+        raise WorkflowError(
+            "incomplete object-reference report TOC aggregate counts disagree"
+        )
+
+
+def _parse_unresolved_class_count_block(
+    lines: list[str],
+) -> dict[str, int]:
+    header_indexes = [
+        index
+        for index, line in enumerate(lines)
+        if line == UNRESOLVED_CLASS_COUNT_HEADER
+    ]
+    if len(header_indexes) != 1:
+        raise WorkflowError(
+            "inspector report must contain exactly one unresolved-class-count block"
+        )
+    block_start = header_indexes[0] + 1
+    block_stop = block_start
+    while block_stop < len(lines) and lines[block_stop] != "":
+        block_stop += 1
+    block_lines = lines[block_start:block_stop]
+    if not block_lines:
+        raise WorkflowError("inspector report object-class-count block is empty")
+
+    allowlisted = set(UNRESOLVED_OBJECT_CLASS_ALLOWLIST)
+    parsed: dict[str, int] = {}
+    for line in block_lines:
+        match = re.fullmatch(r"([A-Z][A-Z ]*): (0|[1-9][0-9]*)", line)
+        if match is None or match.group(1) not in allowlisted:
+            raise WorkflowError(
+                "inspector report object-class-count block differs from the allowlist"
+            )
+        object_class = match.group(1)
+        if object_class in parsed:
+            raise WorkflowError("inspector report contains a duplicate object-class count")
+        parsed[object_class] = int(match.group(2))
+    if tuple(parsed) != UNRESOLVED_OBJECT_CLASS_ALLOWLIST:
+        raise WorkflowError(
+            "inspector report object-class-count block order or coverage is invalid"
+        )
+    return parsed
+
+
+def parse_report_object_analysis(report_text: str) -> dict[str, Any]:
+    """Parse and bind the exact fail-closed TOC object-analysis summary."""
+
+    lines = report_text.splitlines()
+    exact_field_prefixes = {
+        "unresolved_known_toc_entries:": REPORT_UNRESOLVED_KNOWN_TOC_ENTRIES,
+        "object_reference_analysis:": REPORT_OBJECT_REFERENCE_ANALYSIS,
+        "migration_duplicate_analysis:": REPORT_MIGRATION_DUPLICATE_ANALYSIS,
+        "restore_planning_gate:": REPORT_RESTORE_PLANNING_GATE,
+        "inspection_status:": REPORT_INSPECTION_STATUS,
+        "toc_entries:": REPORT_TOC_ENTRIES,
+        "source_postgresql_version:": REPORT_SOURCE_POSTGRES_VERSION,
+        "source_pg_dump_version:": REPORT_SOURCE_PG_DUMP_VERSION,
+    }
+    for prefix, pattern in exact_field_prefixes.items():
+        candidates = [line for line in lines if line.startswith(prefix)]
+        if len(candidates) != 1 or pattern.fullmatch(candidates[0]) is None:
+            raise WorkflowError(
+                "inspector report contains a missing, duplicate, or unreviewed analysis field"
+            )
+
+    unresolved_total = int(
+        _single_report_value(
+            REPORT_UNRESOLVED_KNOWN_TOC_ENTRIES,
+            report_text,
+            "unresolved-known-TOC count",
+        )
+    )
+    toc_entries = int(
+        _single_report_value(REPORT_TOC_ENTRIES, report_text, "TOC-entry count")
+    )
+    object_status = _single_report_value(
+        REPORT_OBJECT_REFERENCE_ANALYSIS,
+        report_text,
+        "object-reference-analysis",
+    )
+    duplicate_status = _single_report_value(
+        REPORT_MIGRATION_DUPLICATE_ANALYSIS,
+        report_text,
+        "migration-duplicate-analysis",
+    )
+    restore_gate = _single_report_value(
+        REPORT_RESTORE_PLANNING_GATE,
+        report_text,
+        "restore-planning-gate",
+    )
+
+    class_counts = _parse_unresolved_class_count_block(lines)
+
+    if (
+        unresolved_total > toc_entries
+        or sum(class_counts.values()) != unresolved_total
+    ):
+        raise WorkflowError("inspector report unresolved-object counts disagree")
+    expected_object_status = "COMPLETE" if unresolved_total == 0 else "INCOMPLETE"
+    expected_duplicate_status = (
+        "CONSERVATIVE" if expected_object_status == "COMPLETE" else "INCOMPLETE"
+    )
+    if (
+        object_status != expected_object_status
+        or duplicate_status != expected_duplicate_status
+        or restore_gate != "BLOCKED"
+    ):
+        raise WorkflowError("inspector report object-analysis gate matrix is invalid")
+    if object_status == "INCOMPLETE":
+        _validate_incomplete_report_lines(
+            report_text,
+            lines,
+            class_counts,
+            object_status,
+        )
+
+    return {
+        "object_reference_analysis": object_status,
+        "migration_duplicate_analysis": duplicate_status,
+        "restore_planning_gate": restore_gate,
+        "unresolved_known_toc_entries": unresolved_total,
+        "unresolved_known_toc_class_counts": class_counts,
+    }
+
+
+def validate_provenance_object_analysis(provenance: Any) -> dict[str, Any]:
+    """Require the exact blocked analysis contract in every evidence package."""
+
+    if not isinstance(provenance, dict):
+        raise WorkflowError("evidence provenance must be an object")
+    expected_keys = {
+        "object_reference_analysis",
+        "migration_duplicate_analysis",
+        "restore_planning_gate",
+        "unresolved_known_toc_entries",
+        "unresolved_known_toc_class_counts",
+    }
+    analysis = {key: provenance.get(key) for key in expected_keys}
+    if any(key not in provenance for key in expected_keys):
+        raise WorkflowError("evidence provenance lacks the object-analysis gate")
+    counts = analysis["unresolved_known_toc_class_counts"]
+    if (
+        not isinstance(counts, dict)
+        or list(counts) != list(UNRESOLVED_OBJECT_CLASS_ALLOWLIST)
+        or any(
+            not isinstance(value, int) or isinstance(value, bool) or value < 0
+            for value in counts.values()
+        )
+    ):
+        raise WorkflowError("evidence provenance has invalid unresolved-class counts")
+    total = analysis["unresolved_known_toc_entries"]
+    if (
+        not isinstance(total, int)
+        or isinstance(total, bool)
+        or total < 0
+    ):
+        raise WorkflowError("evidence provenance has an invalid unresolved total")
+    expected_object_status = "COMPLETE" if total == 0 else "INCOMPLETE"
+    expected_duplicate_status = (
+        "CONSERVATIVE" if expected_object_status == "COMPLETE" else "INCOMPLETE"
+    )
+    if (
+        sum(counts.values()) != total
+        or analysis["object_reference_analysis"] != expected_object_status
+        or not isinstance(analysis["migration_duplicate_analysis"], str)
+        or analysis["migration_duplicate_analysis"] != expected_duplicate_status
+        or analysis["restore_planning_gate"] != "BLOCKED"
+    ):
+        raise WorkflowError("evidence provenance object-analysis gate matrix is invalid")
+    return analysis
 
 
 def parse_report_header_metadata(report_text: str, inner_sha: str) -> dict[str, Any]:
@@ -2147,11 +3831,6 @@ def inspect() -> Path:
             checksum_dir / "outer.workflow-observed.before.sha256"
         )
         observed_after_file = checksum_dir / "outer.workflow-observed.after.sha256"
-        write_exclusive(expected_sha_file, (expected_sha256 + "\n").encode("ascii"))
-        write_exclusive(
-            observed_before_file,
-            (bound.observed_sha256 + "\n").encode("ascii"),
-        )
 
         derived_dir = pending / ".derived"
         derived_dir.mkdir(mode=0o700)
@@ -2254,15 +3933,24 @@ def inspect() -> Path:
         reported_hashes = REPORT_SHA.findall(report_text)
         if len(reported_hashes) != 1:
             raise WorkflowError("inspector report must contain exactly one inner sha256 field")
+        object_analysis = parse_report_object_analysis(report_text)
         required_report_lines = {
             "inspection_status: REVIEW_REQUIRED",
             "restore_attempted: no",
             "database_connection_attempted: no",
             "row_payload_inspected: no",
-            "input_file: verified-inner.pgdmp",
             f"size_bytes: {inner_size}",
         }
         report_lines = set(report_text.splitlines())
+        if (
+            object_analysis["object_reference_analysis"] == "COMPLETE"
+            and object_analysis["migration_duplicate_analysis"] == "CONSERVATIVE"
+        ):
+            required_report_lines.add("input_file: verified-inner.pgdmp")
+        elif any(line.startswith("input_file:") for line in report_lines):
+            raise WorkflowError(
+                "incomplete object-reference report must not retain an input filename"
+            )
         if not required_report_lines <= report_lines or not any(
             line.startswith("archive_snapshot_binding: PASS ") for line in report_lines
         ):
@@ -2290,14 +3978,8 @@ def inspect() -> Path:
         }
         if len(outer_hashes) != 1:
             raise WorkflowError("canonical or working outer artifact changed during inspection")
-        write_exclusive(
-            observed_after_file,
-            (canonical_sha_after + "\n").encode("ascii"),
-        )
-
         report_sha = file_sha256(report)
         report_sha_file = inspection_dir / "report.sha256"
-        write_exclusive(report_sha_file, (report_sha + "\n").encode("ascii"))
 
         identities_after_execution = preflight(repo)
         if identities_after_execution != identities:
@@ -2305,13 +3987,45 @@ def inspect() -> Path:
         if repository_project_id(repo) != configured_project_ref:
             raise WorkflowError("repository project binding changed during inspection")
 
+        publication_expectations = build_publication_expectations(
+            run_id=run_id,
+            run_kind=run_kind,
+            evidence_profile=evidence_profile,
+            timeline_status=timeline_status,
+            timeline=timeline,
+            source_name=source_name,
+            source_ref=source_ref,
+            configured_project_ref=configured_project_ref,
+            ui_export_object_name=ui_object_name,
+            operator_identity=operator,
+            identities=identities,
+            bound=bound,
+            normalization=normalization,
+            inner_size_bytes=inner_size,
+            inner_sha256=inner_sha,
+            pgdmp_header=header_metadata,
+            report_sha256=report_sha,
+            object_analysis=object_analysis,
+        )
+        write_exclusive(expected_sha_file, (expected_sha256 + "\n").encode("ascii"))
+        write_exclusive(
+            observed_before_file,
+            (bound.observed_sha256 + "\n").encode("ascii"),
+        )
+        write_exclusive(
+            observed_after_file,
+            (canonical_sha_after + "\n").encode("ascii"),
+        )
+        write_exclusive(report_sha_file, (report_sha + "\n").encode("ascii"))
+
         root_metadata = os.fstat(bound.root_fd)
         file_metadata = os.fstat(bound.file_fd)
         provenance: dict[str, Any] = {
-            "format_version": 4,
+            "format_version": PROVENANCE_FORMAT_VERSION,
             "artifact_kind": "lovable_cloud_export_inspection_provenance",
             "inspection_status": "REVIEW_REQUIRED",
             "export_timeline_status": timeline_status,
+            **object_analysis,
             "run_id": run_id,
             "run_kind": run_kind,
             "export_evidence_profile": evidence_profile,
@@ -2465,17 +4179,15 @@ def inspect() -> Path:
                 "file_manifest": "evidence-files.json",
                 "file_manifest_checksum": "evidence-files.sha256",
                 "completion_marker": COMPLETION_MARKER,
+                "completion_marker_meaning": (
+                    "evidence package bytes are complete; restore planning remains blocked"
+                ),
                 "publication_semantics": (
                     "descriptor_bound_fsynced_payload_then_atomic_no_replace_"
                     "postcommit_validation_then_completion_marker"
                 ),
             },
-            "support_reported_not_independently_verified": [
-                "export source completeness and point-in-time boundary",
-                "maximum export size 5 GB",
-                "one export generation per 24 hours",
-                "Lovable UI export control to backend-project mapping",
-            ],
+            "support_reported_not_independently_verified": SUPPORT_REPORTED_BOUNDARY,
         }
         provenance_file = pending / "provenance.json"
         provenance_bytes = (
@@ -2500,9 +4212,11 @@ def inspect() -> Path:
             run_root,
             bound,
             run_id,
+            publication_expectations,
         )
         completed = True
         print("inspection_status=REVIEW_REQUIRED")
+        print("restore_planning_gate=BLOCKED")
         print(f"export_timeline_status={timeline_status}")
         print(f"evidence_run_id={run_id}")
         print(

@@ -99,10 +99,13 @@ jobs:
               Path("scripts/migration/bounded-pg-restore.py"),
               Path("scripts/migration/inspect-lovable-export.py"),
               Path("scripts/migration/normalize-lovable-export.py"),
+              Path("scripts/migration/lib/lovable_dump_report.py"),
           ):
               compile(path.read_text(encoding="utf-8"), str(path), "exec")
           PY
           bash scripts/migration/tests/inspect-lovable-dump.test.sh
+          python3 -m unittest discover \
+            -s tests/migration -p 'test_lovable_dump_report.py' -v
           python3 -m unittest discover \
             -s tests/migration -p 'test_lovable_zip_normalizer.py' -v
           python3 -m unittest discover \

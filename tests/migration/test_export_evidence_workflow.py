@@ -63,6 +63,312 @@ def git_output(checkout: Path, *arguments: str) -> str:
     ).stdout.strip()
 
 
+def synthetic_object_analysis_report(
+    *,
+    unresolved_total: int,
+    unresolved_class: str = "TABLE",
+    object_status: str | None = None,
+    duplicate_status: str | None = None,
+    restore_gate: str = "BLOCKED",
+    archive_size: int = 23,
+    archive_sha256: str = "a" * 64,
+) -> str:
+    expected_object_status = "COMPLETE" if unresolved_total == 0 else "INCOMPLETE"
+    expected_duplicate_status = (
+        "CONSERVATIVE" if unresolved_total == 0 else "INCOMPLETE"
+    )
+    counts = {
+        object_class: 0
+        for object_class in DRIVER.UNRESOLVED_OBJECT_CLASS_ALLOWLIST
+    }
+    if unresolved_total:
+        counts[unresolved_class] = unresolved_total
+    lines = [
+        "LOVABLE CLOUD DUMP — METADATA-ONLY INSPECTION",
+        "inspection_status: REVIEW_REQUIRED",
+        f"object_reference_analysis: {object_status or expected_object_status}",
+        f"migration_duplicate_analysis: {duplicate_status or expected_duplicate_status}",
+        f"restore_planning_gate: {restore_gate}",
+        (
+            "scope: archive header, SHA-256, pg_restore TOC metadata, "
+            "aggregate unresolved-object counts"
+        ),
+        "restore_attempted: no",
+        "database_connection_attempted: no",
+        "row_payload_inspected: no",
+        f"size_bytes: {archive_size}",
+        "sha256: " + archive_sha256,
+        "archive_format: PostgreSQL custom archive (PGDMP)",
+        "archive_format_version: 1.14.0",
+        "source_postgresql_version: 17.5",
+        "source_pg_dump_version: 17.5",
+        "pg_restore_version: 17.5",
+        "pg_restore_list_compatibility: PASS",
+        (
+            "archive_snapshot_binding: PASS "
+            "(TOC and SHA-256 use one private read-only capture)"
+        ),
+        f"toc_entries: {max(1, unresolved_total)}",
+        f"toc_metadata_entries: {max(1, unresolved_total)}",
+        "toc_data_references_not_extracted: 0",
+        "unknown_toc_classes: none (inspection fails closed if encountered)",
+        f"unresolved_known_toc_entries: {unresolved_total}",
+        "",
+        DRIVER.UNRESOLVED_CLASS_COUNT_HEADER,
+    ]
+    if unresolved_total == 0 and duplicate_status != "INCOMPLETE":
+        lines.insert(9, "input_file: verified-inner.pgdmp")
+    lines.extend(f"{object_class}: {counts[object_class]}" for object_class in counts)
+    lines.extend(
+        [
+            "",
+            "BOUNDARY",
+            "This report is an inventory aid, not a restore plan or completeness proof.",
+            (
+                "Object-reference analysis is incomplete; restore planning remains blocked."
+                if unresolved_total
+                else "Migration-duplicate analysis is incomplete; restore planning remains blocked."
+                if duplicate_status == "INCOMPLETE"
+                else "Object-reference analysis is complete; restore planning remains blocked."
+            ),
+            "",
+            "PGDMP HEADER CAPTURE",
+            "archive_format_version_bytes: 1,14,0",
+            "archive_integer_width_bytes: 4",
+            "archive_offset_width_bytes: 8",
+            "archive_format_code: 1",
+            "archive_header_bound_sha256: " + archive_sha256,
+            "expected_sha256_binding: PASS",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def synthetic_package_report_and_provenance(
+    run_id: str,
+    *,
+    unresolved_total: int = 0,
+    canonical_filename: str = "synthetic.backup",
+    canonical_size: int = 23,
+    canonical_sha256: str = "a" * 64,
+    approved_root: str = "/synthetic/evidence",
+    owner_uid: int = 1000,
+    canonical_mode: str = "0400",
+) -> tuple[bytes, bytes]:
+    report_text = synthetic_object_analysis_report(
+        unresolved_total=unresolved_total,
+        archive_size=canonical_size,
+        archive_sha256=canonical_sha256,
+    )
+    analysis = DRIVER.parse_report_object_analysis(report_text)
+    provenance = {
+        "format_version": DRIVER.PROVENANCE_FORMAT_VERSION,
+        "artifact_kind": "lovable_cloud_export_inspection_provenance",
+        "inspection_status": "REVIEW_REQUIRED",
+        "export_timeline_status": "COMPLETE",
+        "run_id": run_id,
+        "run_kind": "rehearsal",
+        "export_evidence_profile": "future_rehearsal",
+        **analysis,
+        "approved_execution_checkout_sha": "1" * 40,
+        "execution_checkout_sha": "1" * 40,
+        "procedure_origin_sha": DRIVER.PROCEDURE_ORIGIN_SHA,
+        "inspection_tool_git_sha": "1" * 40,
+        "inspection_baseline_git_sha": DRIVER.INSPECTION_BASELINE_GIT_SHA,
+        "procedure_readme_blob_sha": "4" * 40,
+        "execution_driver_blob_sha": "5" * 40,
+        "normalizer_blob_sha": "6" * 40,
+        "pg_restore_guard_blob_sha": "7" * 40,
+        "pgdmp_inspector_blob_sha": "8" * 40,
+        "report_helper_blob_sha": "9" * 40,
+        "supabase_config_blob_sha": "a" * 40,
+        "procedure_workflow_sha256": "b" * 64,
+        "execution_driver_sha256": "c" * 64,
+        "normalizer_sha256": "d" * 64,
+        "pg_restore_guard_sha256": "e" * 64,
+        "pgdmp_inspector_sha256": "f" * 64,
+        "report_helper_sha256": "0" * 64,
+        "supabase_config_sha256": "1" * 64,
+        "execution_python_executable": "/synthetic/python3",
+        "execution_python_sha256": "2" * 64,
+        "execution_python_implementation": "cpython",
+        "execution_python_version": "3.13.1",
+        "procedure_identity_boundary": {
+            "procedure_origin_sha_is_informational_only": True,
+            "external_approval_proof": "approved checkout must exactly equal execution checkout",
+            "inspector_identity": "approved execution checkout plus exact Git blob and file SHA-256",
+            "historical_baseline_scope": "unchanged supabase/migrations only",
+        },
+        "execution_tools": {
+            "driver": {
+                "path": "scripts/migration/inspect-lovable-export.py",
+                "git_blob_sha": "5" * 40,
+                "sha256": "c" * 64,
+            },
+            "envelope_normalizer": {
+                "path": "scripts/migration/normalize-lovable-export.py",
+                "git_blob_sha": "6" * 40,
+                "sha256": "d" * 64,
+            },
+            "bounded_pg_restore_guard": {
+                "path": "scripts/migration/bounded-pg-restore.py",
+                "git_blob_sha": "7" * 40,
+                "sha256": "e" * 64,
+                "invoked_with_execution_python_isolated_mode": True,
+            },
+            "pgdmp_inspector": {
+                "path": "scripts/migration/inspect-lovable-dump.sh",
+                "git_sha": "1" * 40,
+                "git_blob_sha": "8" * 40,
+                "sha256": "f" * 64,
+                "failure_diagnostic_format_version": 1,
+                "raw_failure_output_relayed": False,
+            },
+            "report_helper": {
+                "path": "scripts/migration/lib/lovable_dump_report.py",
+                "git_sha": "1" * 40,
+                "git_blob_sha": "9" * 40,
+                "sha256": "0" * 64,
+                "failure_diagnostic_format_version": 1,
+                "raw_failure_output_relayed": False,
+            },
+            "python_runtime": {
+                "executable": "/synthetic/python3",
+                "sha256": "2" * 64,
+                "implementation": "cpython",
+                "version": "3.13.1",
+                "isolated_mode_for_child_tools": True,
+                "inherited_python_or_shell_startup_environment": False,
+            },
+        },
+        "lovable_source_project": {
+            "name": "Synthetic Project",
+            "ref": "abcdefghijklmnopqrst",
+            "repository_binding": {
+                "path": "supabase/config.toml",
+                "declared_project_id": "abcdefghijklmnopqrst",
+                "git_blob_sha": "a" * 40,
+                "sha256": "1" * 64,
+                "exact_match": True,
+            },
+            "identity_boundary": (
+                "operator-observed UI identity plus exact approved-checkout config "
+                "equality; Lovable's internal export mapping is not independently verifiable"
+            ),
+        },
+        "export_timeline": {
+            "initiated_at_utc": {
+                "value": "2030-01-02T03:00:00Z",
+                "basis": "operator_observed",
+            },
+            "completed_at_utc": {
+                "value": "2030-01-02T03:03:00Z",
+                "basis": "operator_observed",
+            },
+            "available_at_utc": {
+                "value": "2030-01-02T03:04:05Z",
+                "basis": "operator_observed",
+            },
+            "download_completed_at_utc": {
+                "value": "2030-01-02T03:05:00Z",
+                "basis": "operator_observed",
+            },
+            "time_inference_used": False,
+        },
+        "evidence_store": {
+            "approved_root": approved_root,
+            "root_owner_uid": owner_uid,
+            "root_mode": "0700",
+            "canonical_direct_child": True,
+            "canonical_owner_uid": owner_uid,
+            "canonical_mode": canonical_mode,
+            "volume_encryption": "not_independently_verified_by_this_workflow",
+            "durable_package_relative_path": f"migration-inspection-evidence/{run_id}",
+        },
+        "outer_artifact": {
+            "role": "canonical_download_envelope",
+            "ui_observed_export_object_name": "synthetic.backup",
+            "expected_identity": {
+                "original_filename": canonical_filename,
+                "size_bytes": canonical_size,
+                "sha256": canonical_sha256,
+                "basis": "mandatory externally supplied runtime approval inputs",
+            },
+            "workflow_observed_identity": {
+                "original_filename": canonical_filename,
+                "size_bytes_before": canonical_size,
+                "size_bytes_after": canonical_size,
+                "sha256_before": canonical_sha256,
+                "sha256_after": canonical_sha256,
+            },
+            "format": "postgresql_custom_archive",
+            "normalizer_sha256": {
+                "before": canonical_sha256,
+                "after": canonical_sha256,
+            },
+            "checksum_files": {
+                "expected": "archive/outer.expected.sha256",
+                "workflow_observed_before": "archive/outer.workflow-observed.before.sha256",
+                "workflow_observed_after": "archive/outer.workflow-observed.after.sha256",
+            },
+            "working_copy_retained_in_evidence": False,
+        },
+        "zip_envelope": None,
+        "archive_member": None,
+        "ui_member_binding": {
+            "status": "not_applicable",
+            "ui_observed_name": "synthetic.backup",
+            "normalized_member_name": None,
+        },
+        "inner_pgdmp": {
+            "role": "verified_inspector_input",
+            "relationship_to_outer": "byte_copy_of_direct_pgdmp",
+            "size_bytes": canonical_size,
+            "sha256": canonical_sha256,
+            "inspector_reported_sha256": canonical_sha256,
+            "pgdmp_header": {
+                "archive_format_version_bytes": [1, 14, 0],
+                "integer_width_bytes": 4,
+                "offset_width_bytes": 8,
+                "archive_format_code": 1,
+                "bound_to_inner_sha256": canonical_sha256,
+                "captured_before_pg_restore": True,
+            },
+            "pg_restore_list": {
+                "compatibility": "PASS",
+                "failure_diagnostic": None,
+                "raw_child_output_retained": False,
+            },
+            "retained_in_evidence": False,
+            "all_bytes_consumed_by_pg_restore_list": "not_independently_verifiable",
+        },
+        "operator_identity": "Synthetic Operator",
+        "report": {
+            "filename": "rehearsal-metadata.txt",
+            "relative_path": "inspection/rehearsal-metadata.txt",
+            "sha256": hashlib.sha256(report_text.encode()).hexdigest(),
+            "checksum_file": "inspection/report.sha256",
+        },
+        "durable_publication": {
+            "relative_directory": f"migration-inspection-evidence/{run_id}",
+            "file_manifest": "evidence-files.json",
+            "file_manifest_checksum": "evidence-files.sha256",
+            "completion_marker": "EVIDENCE_COMPLETE",
+            "completion_marker_meaning": "evidence package bytes are complete; restore planning remains blocked",
+            "publication_semantics": (
+                "descriptor_bound_fsynced_payload_then_atomic_no_replace_"
+                "postcommit_validation_then_completion_marker"
+            ),
+        },
+        "support_reported_not_independently_verified": DRIVER.SUPPORT_REPORTED_BOUNDARY,
+    }
+    return (
+        report_text.encode("utf-8"),
+        (json.dumps(provenance, sort_keys=True) + "\n").encode("utf-8"),
+    )
+
+
 class DocumentedExportEvidenceWorkflowTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -351,6 +657,304 @@ esac
         durable_runs = list(durable_parent.iterdir()) if durable_parent.exists() else []
         self.assertEqual(durable_runs, [])
 
+    def build_synthetic_pending_package(
+        self,
+        run_id: str,
+        *,
+        unresolved_total: int = 0,
+        publication_bound: DRIVER.BoundCanonical | None = None,
+    ) -> tuple[Path, Path, bytes, bytes]:
+        run_root = self.checkout / "local-migration-artifacts" / run_id
+        pending = run_root / ".pending"
+        run_root.parent.mkdir(mode=0o700, exist_ok=True)
+        run_root.mkdir(mode=0o700)
+        pending.mkdir(mode=0o700)
+        (pending / "archive").mkdir(mode=0o700)
+        (pending / "inspection").mkdir(mode=0o700)
+        package_options = {}
+        if publication_bound is not None:
+            package_options = {
+                "canonical_filename": publication_bound.path.name,
+                "canonical_size": publication_bound.size,
+                "canonical_sha256": publication_bound.observed_sha256,
+                "approved_root": str(publication_bound.root),
+                "owner_uid": publication_bound.owner_uid,
+                "canonical_mode": f"{publication_bound.mode:04o}",
+            }
+        report, provenance = synthetic_package_report_and_provenance(
+            run_id,
+            unresolved_total=unresolved_total,
+            **package_options,
+        )
+        provenance_object = json.loads(provenance)
+        outer_sha = provenance_object["outer_artifact"]["expected_identity"][
+            "sha256"
+        ]
+        payloads = {
+            "archive/outer.expected.sha256": (outer_sha + "\n").encode(),
+            "archive/outer.workflow-observed.before.sha256": (
+                outer_sha + "\n"
+            ).encode(),
+            "archive/outer.workflow-observed.after.sha256": (
+                outer_sha + "\n"
+            ).encode(),
+            "inspection/rehearsal-metadata.txt": report,
+            "inspection/report.sha256": (
+                hashlib.sha256(report).hexdigest() + "\n"
+            ).encode(),
+            "provenance.json": provenance,
+            "provenance.sha256": (
+                hashlib.sha256(provenance).hexdigest() + "\n"
+            ).encode(),
+        }
+        for relative, data in payloads.items():
+            DRIVER.write_exclusive(pending / relative, data)
+        DRIVER.build_evidence_file_manifest(pending, run_id)
+        return run_root, pending, report, provenance
+
+    @staticmethod
+    def replace_private_file(path: Path, data: bytes) -> None:
+        path.chmod(0o600)
+        path.write_bytes(data)
+        path.chmod(0o400)
+
+    def rebuild_manifest_after_provenance_change(
+        self,
+        pending: Path,
+        provenance: bytes,
+        run_id: str,
+    ) -> None:
+        self.replace_private_file(pending / "provenance.json", provenance)
+        self.replace_private_file(
+            pending / "provenance.sha256",
+            (hashlib.sha256(provenance).hexdigest() + "\n").encode(),
+        )
+        (pending / "evidence-files.json").unlink()
+        (pending / "evidence-files.sha256").unlink()
+        DRIVER.build_evidence_file_manifest(
+            pending,
+            run_id,
+        )
+
+    def rebuild_package_after_coherent_change(
+        self,
+        pending: Path,
+        run_id: str,
+        report: bytes,
+        provenance: bytes,
+        *,
+        outer_sha256: str | None = None,
+    ) -> None:
+        self.replace_private_file(
+            pending / "inspection/rehearsal-metadata.txt",
+            report,
+        )
+        self.replace_private_file(
+            pending / "inspection/report.sha256",
+            (hashlib.sha256(report).hexdigest() + "\n").encode(),
+        )
+        if outer_sha256 is not None:
+            for relative in (
+                "archive/outer.expected.sha256",
+                "archive/outer.workflow-observed.before.sha256",
+                "archive/outer.workflow-observed.after.sha256",
+            ):
+                self.replace_private_file(
+                    pending / relative,
+                    (outer_sha256 + "\n").encode(),
+                )
+        self.rebuild_manifest_after_provenance_change(
+            pending,
+            provenance,
+            run_id,
+        )
+
+    def assert_runtime_expectations_block_publication(
+        self,
+        pending: Path,
+        run_root: Path,
+        run_id: str,
+        bound: DRIVER.BoundCanonical,
+        expectations: DRIVER.PublicationExpectations,
+    ) -> None:
+        # A coherent substitution may satisfy every retained/internal binding.
+        # Runtime truth, not redundant self-agreement, must be what stops it.
+        DRIVER.validate_evidence_tree(pending, run_id)
+        structural_descriptor = os.open(pending, os.O_RDONLY)
+        try:
+            DRIVER.validate_evidence_tree_at(structural_descriptor, run_id)
+        finally:
+            os.close(structural_descriptor)
+        with self.assertRaises(DRIVER.WorkflowError):
+            DRIVER.validate_evidence_tree(
+                pending,
+                run_id,
+                publication_expectations=expectations,
+            )
+        descriptor = os.open(pending, os.O_RDONLY)
+        try:
+            with self.assertRaises(DRIVER.WorkflowError):
+                DRIVER.validate_evidence_tree_at(
+                    descriptor,
+                    run_id,
+                    publication_expectations=expectations,
+                )
+        finally:
+            os.close(descriptor)
+        with self.assertRaises(DRIVER.WorkflowError):
+            DRIVER.publish_durable_evidence(
+                pending,
+                run_root,
+                bound,
+                run_id,
+                expectations,
+            )
+        durable_parent = self.evidence_store / DRIVER.DURABLE_EVIDENCE_DIRECTORY
+        self.assertFalse((durable_parent / run_id).exists())
+        self.assertFalse((durable_parent / f".{run_id}.pending").exists())
+        if durable_parent.exists():
+            self.assertEqual(list(durable_parent.rglob(DRIVER.COMPLETION_MARKER)), [])
+
+    def assert_both_evidence_validators_reject(
+        self,
+        pending: Path,
+        run_id: str,
+        *,
+        run_root: Path | None = None,
+        bound: DRIVER.BoundCanonical | None = None,
+        publication_expectations: DRIVER.PublicationExpectations | None = None,
+    ) -> None:
+        with self.assertRaises(DRIVER.WorkflowError):
+            DRIVER.validate_evidence_tree(pending, run_id)
+        descriptor = os.open(pending, os.O_RDONLY)
+        try:
+            with self.assertRaises(DRIVER.WorkflowError):
+                DRIVER.validate_evidence_tree_at(descriptor, run_id)
+        finally:
+            os.close(descriptor)
+        if (
+            run_root is not None
+            and bound is not None
+            and publication_expectations is not None
+        ):
+            with self.assertRaises(DRIVER.WorkflowError):
+                DRIVER.publish_durable_evidence(
+                    pending,
+                    run_root,
+                    bound,
+                    run_id,
+                    publication_expectations,
+                )
+        durable_parent = self.evidence_store / DRIVER.DURABLE_EVIDENCE_DIRECTORY
+        self.assertFalse((pending / DRIVER.COMPLETION_MARKER).exists())
+        self.assertFalse((pending / DRIVER.INDETERMINATE_MARKER).exists())
+        self.assertFalse((durable_parent / run_id).exists())
+        self.assertFalse((durable_parent / f".{run_id}.pending").exists())
+        if durable_parent.exists():
+            self.assertEqual(list(durable_parent.rglob(DRIVER.COMPLETION_MARKER)), [])
+
+    def bind_synthetic_canonical(self) -> DRIVER.BoundCanonical:
+        return DRIVER.open_bound_canonical(
+            self.canonical,
+            self.evidence_store,
+            self.canonical.name,
+            self.canonical.stat().st_size,
+            hashlib.sha256(self.canonical.read_bytes()).hexdigest(),
+            self.checkout,
+        )
+
+    @staticmethod
+    def synthetic_publication_expectations(
+        run_id: str,
+        report_bytes: bytes,
+        bound: DRIVER.BoundCanonical,
+    ) -> DRIVER.PublicationExpectations:
+        timeline = {
+            "initiated_at_utc": {
+                "value": "2030-01-02T03:00:00Z",
+                "basis": "operator_observed",
+            },
+            "completed_at_utc": {
+                "value": "2030-01-02T03:03:00Z",
+                "basis": "operator_observed",
+            },
+            "available_at_utc": {
+                "value": "2030-01-02T03:04:05Z",
+                "basis": "operator_observed",
+            },
+            "download_completed_at_utc": {
+                "value": "2030-01-02T03:05:00Z",
+                "basis": "operator_observed",
+            },
+            "time_inference_used": False,
+        }
+        identities = {
+            "approved_execution_checkout_sha": "1" * 40,
+            "execution_checkout_sha": "1" * 40,
+            "procedure_origin_sha": DRIVER.PROCEDURE_ORIGIN_SHA,
+            "inspection_tool_git_sha": "1" * 40,
+            "inspection_baseline_git_sha": DRIVER.INSPECTION_BASELINE_GIT_SHA,
+            "procedure_readme_blob_sha": "4" * 40,
+            "execution_driver_blob_sha": "5" * 40,
+            "normalizer_blob_sha": "6" * 40,
+            "pg_restore_guard_blob_sha": "7" * 40,
+            "pgdmp_inspector_blob_sha": "8" * 40,
+            "report_helper_blob_sha": "9" * 40,
+            "supabase_config_blob_sha": "a" * 40,
+            "procedure_workflow_sha256": "b" * 64,
+            "execution_driver_sha256": "c" * 64,
+            "normalizer_sha256": "d" * 64,
+            "pg_restore_guard_sha256": "e" * 64,
+            "pgdmp_inspector_sha256": "f" * 64,
+            "report_helper_sha256": "0" * 64,
+            "supabase_config_sha256": "1" * 64,
+            "execution_python_executable": "/synthetic/python3",
+            "execution_python_sha256": "2" * 64,
+            "execution_python_implementation": "cpython",
+            "execution_python_version": "3.13.1",
+        }
+        report_text = report_bytes.decode("utf-8")
+        analysis = DRIVER.parse_report_object_analysis(report_text)
+        header = DRIVER.parse_report_header_metadata(
+            report_text,
+            bound.observed_sha256,
+        )
+        normalization = {
+            "format_version": 1,
+            "envelope_kind": "direct_pgdmp",
+            "outer": {
+                "format": "postgresql_custom_archive",
+                "size_bytes": bound.size,
+                "sha256_before": bound.observed_sha256,
+                "sha256_after": bound.observed_sha256,
+            },
+            "member": None,
+            "inner": {
+                "size_bytes": bound.size,
+                "sha256": bound.observed_sha256,
+            },
+        }
+        return DRIVER.build_publication_expectations(
+            run_id=run_id,
+            run_kind="rehearsal",
+            evidence_profile="future_rehearsal",
+            timeline_status="COMPLETE",
+            timeline=timeline,
+            source_name="Synthetic Project",
+            source_ref="abcdefghijklmnopqrst",
+            configured_project_ref="abcdefghijklmnopqrst",
+            ui_export_object_name="synthetic.backup",
+            operator_identity="Synthetic Operator",
+            identities=identities,
+            bound=bound,
+            normalization=normalization,
+            inner_size_bytes=bound.size,
+            inner_sha256=bound.observed_sha256,
+            pgdmp_header=header,
+            report_sha256=hashlib.sha256(report_bytes).hexdigest(),
+            object_analysis=analysis,
+        )
+
     @staticmethod
     def bash_octal_bytes(value: bytes) -> str:
         return "".join(f"\\{byte:03o}" for byte in value)
@@ -412,6 +1016,49 @@ esac
                 "--quiet",
                 "-m",
                 f"synthetic helper diagnostic: {case_label}",
+            ],
+            cwd=self.checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        checkout_sha = git_output(self.checkout, "rev-parse", "HEAD")
+        return {
+            "APPROVED_EXECUTION_CHECKOUT_SHA": checkout_sha,
+            "INSPECTION_TOOL_GIT_SHA": checkout_sha,
+        }
+
+    def commit_helper_source_mutation(
+        self,
+        *,
+        old: str,
+        new: str,
+        label: str,
+        count: int = 1,
+    ) -> dict[str, str]:
+        helper = self.checkout / "scripts/migration/lib/lovable_dump_report.py"
+        source = helper.read_text(encoding="utf-8")
+        if source.count(old) < count:
+            self.fail("synthetic helper mutation target is unavailable")
+        helper.write_text(source.replace(old, new, count), encoding="utf-8")
+        subprocess.run(
+            ["git", "add", "scripts/migration/lib/lovable_dump_report.py"],
+            cwd=self.checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=Synthetic Migration Test",
+                "-c",
+                "user.email=migration-test@example.invalid",
+                "commit",
+                "--quiet",
+                "-m",
+                f"synthetic report mutation: {label}",
             ],
             cwd=self.checkout,
             check=True,
@@ -493,7 +1140,10 @@ esac
         self.assert_no_runs()
 
     def assert_success(
-        self, *, environment: dict[str, str] | None = None
+        self,
+        *,
+        environment: dict[str, str] | None = None,
+        unresolved_counts: dict[str, int] | None = None,
     ) -> tuple[dict[str, object], subprocess.CompletedProcess[str], Path]:
         expected_root = self.run_root(environment=environment)
         result = self.run_workflow(environment=environment)
@@ -544,6 +1194,7 @@ esac
             {
                 "evidence_files_sha256": evidence_manifest_sha,
                 "inspection_status": "REVIEW_REQUIRED",
+                "restore_planning_gate": "BLOCKED",
                 "run_id": expected_root.name,
             },
         )
@@ -580,6 +1231,40 @@ esac
             self.assertIsNone(provenance["zip_envelope"])
             self.assertIsNone(provenance["archive_member"])
         self.assertEqual(provenance["inspection_status"], "REVIEW_REQUIRED")
+        self.assertEqual(
+            provenance["format_version"], DRIVER.PROVENANCE_FORMAT_VERSION
+        )
+        expected_counts = {
+            object_class: 0
+            for object_class in DRIVER.UNRESOLVED_OBJECT_CLASS_ALLOWLIST
+        }
+        expected_counts.update(unresolved_counts or {})
+        expected_unresolved_total = sum(expected_counts.values())
+        expected_object_status = (
+            "INCOMPLETE" if expected_unresolved_total else "COMPLETE"
+        )
+        expected_duplicate_status = (
+            "INCOMPLETE" if expected_unresolved_total else "CONSERVATIVE"
+        )
+        self.assertEqual(
+            provenance["object_reference_analysis"], expected_object_status
+        )
+        self.assertEqual(
+            provenance["migration_duplicate_analysis"], expected_duplicate_status
+        )
+        self.assertEqual(provenance["restore_planning_gate"], "BLOCKED")
+        self.assertEqual(
+            provenance["unresolved_known_toc_entries"], expected_unresolved_total
+        )
+        self.assertEqual(
+            provenance["unresolved_known_toc_class_counts"],
+            expected_counts,
+        )
+        self.assertIn("restore_planning_gate=BLOCKED\n", result.stdout)
+        self.assertEqual(
+            provenance["durable_publication"]["completion_marker_meaning"],
+            "evidence package bytes are complete; restore planning remains blocked",
+        )
         self.assertEqual(
             provenance["durable_publication"]["publication_semantics"],
             "descriptor_bound_fsynced_payload_then_atomic_no_replace_"
@@ -781,6 +1466,94 @@ esac
         self.assertTrue(incomplete.is_dir())
         shutil.rmtree(incomplete)
 
+    def test_unresolved_known_entry_publishes_only_blocked_aggregate_evidence(self):
+        private_sentinels = (
+            "SYNTHETIC_UNRESOLVED_OBJECT_MUST_NOT_APPEAR",
+            "/private/SYNTHETIC_UNRESOLVED_PATH_MUST_NOT_APPEAR",
+            "SELECT SYNTHETIC_UNRESOLVED_SQL_MUST_NOT_APPEAR",
+        )
+        self.fake_toc.write_text(
+            "; Dumped from database version: 17.5\n"
+            "; Dumped by pg_dump version: 17.5\n"
+            "; "
+            + private_sentinels[1]
+            + "\n"
+            "1; 1259 100 TABLE "
+            + private_sentinels[0]
+            + "\n"
+            "; "
+            + private_sentinels[2]
+            + "\n",
+            encoding="utf-8",
+        )
+        provenance, result, evidence = self.assert_success(
+            unresolved_counts={"TABLE": 1}
+        )
+        report = (evidence / "inspection/rehearsal-metadata.txt").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("object_reference_analysis: INCOMPLETE\n", report)
+        self.assertIn("migration_duplicate_analysis: INCOMPLETE\n", report)
+        self.assertIn("restore_planning_gate: BLOCKED\n", report)
+        self.assertIn("unresolved_known_toc_entries: 1\n", report)
+        self.assertNotIn("TOC CLASS COUNTS", report.splitlines())
+        self.assertNotIn("input_file:", report)
+        self.assertNotIn("POSSIBLE REPO MIGRATION DUPLICATES", report)
+        self.assertEqual(provenance["restore_planning_gate"], "BLOCKED")
+        self.assertIn("restore_planning_gate=BLOCKED\n", result.stdout)
+
+        retained = result.stdout + result.stderr
+        for path in evidence.rglob("*"):
+            if path.is_file():
+                retained += path.read_text(encoding="utf-8")
+        for sentinel in private_sentinels:
+            self.assertNotIn(sentinel, retained)
+        self.assertTrue((evidence / "EVIDENCE_COMPLETE").is_file())
+        self.assertFalse((evidence / "EVIDENCE_INDETERMINATE").exists())
+        self.assertFalse((evidence / ".working").exists())
+        self.assertFalse((evidence / ".derived").exists())
+        self.assertEqual(
+            [line.split("|", 1)[0] for line in self.fake_log.read_text().splitlines()],
+            ["--version", "--list"],
+        )
+
+    def test_invalid_incomplete_gate_cleans_every_partial_evidence_file(self):
+        self.fake_toc.write_text(
+            "; Dumped from database version: 17.5\n"
+            "; Dumped by pg_dump version: 17.5\n"
+            "1; 1259 100 TABLE SYNTHETIC_PRIVATE_OBJECT_MUST_NOT_APPEAR\n",
+            encoding="utf-8",
+        )
+        environment = self.commit_helper_source_mutation(
+            old='"restore_planning_gate: BLOCKED",',
+            new='"restore_planning_gate: READY",',
+            label="false ready gate",
+        )
+        expected_root = self.run_root(environment=environment)
+        result = self.run_workflow(environment=environment)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("SYNTHETIC_PRIVATE_OBJECT_MUST_NOT_APPEAR", result.stdout)
+        self.assertNotIn("SYNTHETIC_PRIVATE_OBJECT_MUST_NOT_APPEAR", result.stderr)
+        self.assertFalse(expected_root.exists())
+        self.assert_no_runs()
+        for forbidden_name in (
+            "rehearsal-metadata.txt",
+            "report.sha256",
+            "provenance.json",
+            "provenance.sha256",
+            "evidence-files.json",
+            "evidence-files.sha256",
+            "EVIDENCE_COMPLETE",
+            "EVIDENCE_INDETERMINATE",
+            "verified-inner.pgdmp",
+            "canonical-outer.artifact",
+        ):
+            self.assertEqual(list(self.case_root.rglob(forbidden_name)), [])
+        self.assertEqual(
+            [line.split("|", 1)[0] for line in self.fake_log.read_text().splitlines()],
+            ["--version", "--list"],
+        )
+
     def test_final_file_mode_is_applied_before_fsync(self):
         real_fchmod = DRIVER.os.fchmod
         real_fsync = DRIVER.os.fsync
@@ -825,35 +1598,20 @@ esac
             os.close(directory_fd)
 
     def test_durable_copy_corruption_and_local_cleanup_failure_publish_nothing(self):
-        def make_pending(label: str) -> tuple[Path, Path, str]:
+        def make_pending(
+            label: str,
+        ) -> tuple[Path, Path, str, DRIVER.PublicationExpectations]:
             run_id = f"rehearsal-20300102T030405Z-{label}"
-            run_root = self.checkout / "local-migration-artifacts" / run_id
-            pending = run_root / ".pending"
-            pending.mkdir(parents=True, mode=0o700)
-            (pending / "archive").mkdir(mode=0o700)
-            (pending / "inspection").mkdir(mode=0o700)
-            report = b"synthetic metadata-only report\n"
-            provenance = (
-                json.dumps({"run_id": run_id}, sort_keys=True) + "\n"
-            ).encode("utf-8")
-            payloads = {
-                "archive/outer.expected.sha256": ("a" * 64 + "\n").encode(),
-                "archive/outer.workflow-observed.before.sha256": ("a" * 64 + "\n").encode(),
-                "archive/outer.workflow-observed.after.sha256": ("a" * 64 + "\n").encode(),
-                "inspection/rehearsal-metadata.txt": report,
-                "inspection/report.sha256": (
-                    hashlib.sha256(report).hexdigest() + "\n"
-                ).encode(),
-                "provenance.json": provenance,
-                "provenance.sha256": (
-                    hashlib.sha256(provenance).hexdigest() + "\n"
-                ).encode(),
-            }
-            self.assertEqual(set(payloads), DRIVER.CORE_EVIDENCE_FILES)
-            for relative, data in payloads.items():
-                DRIVER.write_exclusive(pending / relative, data)
-            DRIVER.build_evidence_file_manifest(pending, run_id)
-            return run_root, pending, run_id
+            run_root, pending, report, _ = self.build_synthetic_pending_package(
+                run_id,
+                publication_bound=bound,
+            )
+            expectations = self.synthetic_publication_expectations(
+                run_id,
+                report,
+                bound,
+            )
+            return run_root, pending, run_id, expectations
 
         bound = DRIVER.open_bound_canonical(
             self.canonical,
@@ -864,7 +1622,7 @@ esac
             self.checkout,
         )
         try:
-            run_root, pending, run_id = make_pending("copycorrupt")
+            run_root, pending, run_id, expectations = make_pending("copycorrupt")
             real_copy = DRIVER.copy_private_file_at
             corrupted = False
 
@@ -891,7 +1649,7 @@ esac
             ):
                 with self.assertRaisesRegex(DRIVER.WorkflowError, "manifest|identity"):
                     DRIVER.publish_durable_evidence(
-                        pending, run_root, bound, run_id
+                        pending, run_root, bound, run_id, expectations
                     )
             durable_parent = self.evidence_store / "migration-inspection-evidence"
             self.assertFalse((durable_parent / run_id).exists())
@@ -899,7 +1657,7 @@ esac
             self.assertTrue(run_root.exists())
             DRIVER.remove_incomplete_run(run_root)
 
-            run_root, pending, run_id = make_pending("cleanupfail")
+            run_root, pending, run_id, expectations = make_pending("cleanupfail")
             real_remove = DRIVER.remove_incomplete_run
 
             def fail_only_local(path: Path, **kwargs):
@@ -914,14 +1672,14 @@ esac
                     DRIVER.WorkflowError, "planted local cleanup failure"
                 ):
                     DRIVER.publish_durable_evidence(
-                        pending, run_root, bound, run_id
+                        pending, run_root, bound, run_id, expectations
                     )
             self.assertFalse((durable_parent / run_id).exists())
             self.assertFalse((durable_parent / f".{run_id}.pending").exists())
             self.assertTrue(run_root.exists())
             real_remove(run_root)
 
-            run_root, pending, run_id = make_pending("preexisting")
+            run_root, pending, run_id, expectations = make_pending("preexisting")
             durable_parent.mkdir(mode=0o700, exist_ok=True)
             planted = durable_parent / f".{run_id}.pending"
             planted.mkdir(mode=0o700)
@@ -930,7 +1688,9 @@ esac
             with self.assertRaisesRegex(
                 DRIVER.WorkflowError, "already exists"
             ):
-                DRIVER.publish_durable_evidence(pending, run_root, bound, run_id)
+                DRIVER.publish_durable_evidence(
+                    pending, run_root, bound, run_id, expectations
+                )
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "preexisting\n")
             shutil.rmtree(planted)
             real_remove(run_root)
@@ -938,28 +1698,21 @@ esac
             bound.close()
 
     def test_late_root_and_canonical_mutations_block_atomic_publication(self):
-        def make_pending(label: str) -> tuple[Path, Path, str]:
+        def make_pending(
+            label: str,
+            bound: DRIVER.BoundCanonical,
+        ) -> tuple[Path, Path, str, DRIVER.PublicationExpectations]:
             run_id = f"rehearsal-20300102T030405Z-{label}"
-            run_root = self.checkout / "local-migration-artifacts" / run_id
-            pending = run_root / ".pending"
-            pending.mkdir(parents=True, mode=0o700)
-            (pending / "archive").mkdir(mode=0o700)
-            (pending / "inspection").mkdir(mode=0o700)
-            report = b"synthetic metadata-only report\n"
-            provenance = (json.dumps({"run_id": run_id}) + "\n").encode()
-            payloads = {
-                "archive/outer.expected.sha256": ("a" * 64 + "\n").encode(),
-                "archive/outer.workflow-observed.before.sha256": ("a" * 64 + "\n").encode(),
-                "archive/outer.workflow-observed.after.sha256": ("a" * 64 + "\n").encode(),
-                "inspection/rehearsal-metadata.txt": report,
-                "inspection/report.sha256": (hashlib.sha256(report).hexdigest() + "\n").encode(),
-                "provenance.json": provenance,
-                "provenance.sha256": (hashlib.sha256(provenance).hexdigest() + "\n").encode(),
-            }
-            for relative, data in payloads.items():
-                DRIVER.write_exclusive(pending / relative, data)
-            DRIVER.build_evidence_file_manifest(pending, run_id)
-            return run_root, pending, run_id
+            run_root, pending, report, _ = self.build_synthetic_pending_package(
+                run_id,
+                publication_bound=bound,
+            )
+            expectations = self.synthetic_publication_expectations(
+                run_id,
+                report,
+                bound,
+            )
+            return run_root, pending, run_id, expectations
 
         def new_bound():
             return DRIVER.open_bound_canonical(
@@ -973,7 +1726,9 @@ esac
 
         bound = new_bound()
         try:
-            run_root, pending, run_id = make_pending("late-root-mode")
+            run_root, pending, run_id, expectations = make_pending(
+                "late-root-mode", bound
+            )
             real_remove = DRIVER.remove_incomplete_run
 
             def mutate_root_after_local_cleanup(path: Path, **kwargs):
@@ -988,7 +1743,9 @@ esac
                 with self.assertRaisesRegex(
                     DRIVER.WorkflowError, "approved evidence store root changed"
                 ):
-                    DRIVER.publish_durable_evidence(pending, run_root, bound, run_id)
+                    DRIVER.publish_durable_evidence(
+                        pending, run_root, bound, run_id, expectations
+                    )
             durable_parent = self.evidence_store / "migration-inspection-evidence"
             self.assertFalse((durable_parent / run_id).exists())
             self.assertFalse((durable_parent / f".{run_id}.pending").exists())
@@ -998,7 +1755,9 @@ esac
 
         bound = new_bound()
         try:
-            run_root, pending, run_id = make_pending("late-canonical-mode")
+            run_root, pending, run_id, expectations = make_pending(
+                "late-canonical-mode", bound
+            )
             real_remove = DRIVER.remove_incomplete_run
 
             def mutate_canonical_after_local_cleanup(path: Path, **kwargs):
@@ -1013,7 +1772,9 @@ esac
                 with self.assertRaisesRegex(
                     DRIVER.WorkflowError, "canonical export"
                 ):
-                    DRIVER.publish_durable_evidence(pending, run_root, bound, run_id)
+                    DRIVER.publish_durable_evidence(
+                        pending, run_root, bound, run_id, expectations
+                    )
             durable_parent = self.evidence_store / "migration-inspection-evidence"
             self.assertFalse((durable_parent / run_id).exists())
             self.assertFalse((durable_parent / f".{run_id}.pending").exists())
@@ -1024,7 +1785,9 @@ esac
         bound = new_bound()
         moved_store = self.case_root / "moved admitted evidence store"
         try:
-            run_root, pending, run_id = make_pending("late-root-replacement")
+            run_root, pending, run_id, expectations = make_pending(
+                "late-root-replacement", bound
+            )
             real_remove = DRIVER.remove_incomplete_run
 
             def replace_root_after_local_cleanup(path: Path, **kwargs):
@@ -1040,7 +1803,9 @@ esac
                 with self.assertRaisesRegex(
                     DRIVER.WorkflowError, "root path was replaced"
                 ):
-                    DRIVER.publish_durable_evidence(pending, run_root, bound, run_id)
+                    DRIVER.publish_durable_evidence(
+                        pending, run_root, bound, run_id, expectations
+                    )
             self.assertFalse(
                 (
                     moved_store
@@ -1073,25 +1838,6 @@ esac
 
     def test_post_commit_mutation_cannot_leave_a_complete_package(self):
         run_id = "rehearsal-20300102T030405Z-postcommit"
-        run_root = self.checkout / "local-migration-artifacts" / run_id
-        pending = run_root / ".pending"
-        pending.mkdir(parents=True, mode=0o700)
-        (pending / "archive").mkdir(mode=0o700)
-        (pending / "inspection").mkdir(mode=0o700)
-        report = b"synthetic metadata-only report\n"
-        provenance = (json.dumps({"run_id": run_id}) + "\n").encode()
-        payloads = {
-            "archive/outer.expected.sha256": ("a" * 64 + "\n").encode(),
-            "archive/outer.workflow-observed.before.sha256": ("a" * 64 + "\n").encode(),
-            "archive/outer.workflow-observed.after.sha256": ("a" * 64 + "\n").encode(),
-            "inspection/rehearsal-metadata.txt": report,
-            "inspection/report.sha256": (hashlib.sha256(report).hexdigest() + "\n").encode(),
-            "provenance.json": provenance,
-            "provenance.sha256": (hashlib.sha256(provenance).hexdigest() + "\n").encode(),
-        }
-        for relative, data in payloads.items():
-            DRIVER.write_exclusive(pending / relative, data)
-        DRIVER.build_evidence_file_manifest(pending, run_id)
         bound = DRIVER.open_bound_canonical(
             self.canonical,
             self.evidence_store,
@@ -1099,6 +1845,15 @@ esac
             int(self.environment["EXPECTED_OUTER_SIZE_BYTES"]),
             self.environment["EXPECTED_OUTER_SHA256"],
             self.checkout,
+        )
+        run_root, pending, report, _ = self.build_synthetic_pending_package(
+            run_id,
+            publication_bound=bound,
+        )
+        expectations = self.synthetic_publication_expectations(
+            run_id,
+            report,
+            bound,
         )
         real_rename = DRIVER.atomic_rename_no_replace_at
 
@@ -1124,7 +1879,9 @@ esac
                     DRIVER.WorkflowError,
                     "committed but final validation is indeterminate",
                 ):
-                    DRIVER.publish_durable_evidence(pending, run_root, bound, run_id)
+                    DRIVER.publish_durable_evidence(
+                        pending, run_root, bound, run_id, expectations
+                    )
         finally:
             self.canonical.chmod(0o400)
             bound.close()
@@ -1715,6 +2472,1098 @@ esac
             with self.subTest(tampered=tampered[-100:]):
                 with self.assertRaises(DRIVER.WorkflowError):
                     DRIVER.parse_report_header_metadata(tampered, inner_sha)
+
+    def test_object_analysis_parser_binds_complete_and_incomplete_reports(self):
+        complete = DRIVER.parse_report_object_analysis(
+            synthetic_object_analysis_report(unresolved_total=0)
+        )
+        self.assertEqual(
+            complete,
+            {
+                "object_reference_analysis": "COMPLETE",
+                "migration_duplicate_analysis": "CONSERVATIVE",
+                "restore_planning_gate": "BLOCKED",
+                "unresolved_known_toc_entries": 0,
+                "unresolved_known_toc_class_counts": {
+                    object_class: 0
+                    for object_class in DRIVER.UNRESOLVED_OBJECT_CLASS_ALLOWLIST
+                },
+            },
+        )
+
+        incomplete = DRIVER.parse_report_object_analysis(
+            synthetic_object_analysis_report(
+                unresolved_total=2,
+                unresolved_class="EXTENSION",
+            )
+        )
+        self.assertEqual(incomplete["object_reference_analysis"], "INCOMPLETE")
+        self.assertEqual(incomplete["migration_duplicate_analysis"], "INCOMPLETE")
+        self.assertEqual(incomplete["restore_planning_gate"], "BLOCKED")
+        self.assertEqual(incomplete["unresolved_known_toc_entries"], 2)
+        self.assertEqual(
+            incomplete["unresolved_known_toc_class_counts"]["EXTENSION"], 2
+        )
+        self.assertEqual(
+            sum(incomplete["unresolved_known_toc_class_counts"].values()), 2
+        )
+
+    def test_object_analysis_parser_rejects_invalid_matrix_counts_and_keys(self):
+        valid = synthetic_object_analysis_report(unresolved_total=1)
+        invalid_reports = {
+            "complete status with unresolved entries": valid.replace(
+                "object_reference_analysis: INCOMPLETE",
+                "object_reference_analysis: COMPLETE",
+            ),
+            "duplicate analysis falsely complete": valid.replace(
+                "migration_duplicate_analysis: INCOMPLETE",
+                "migration_duplicate_analysis: COMPLETE",
+            ),
+            "nonblocked restore gate": valid.replace(
+                "restore_planning_gate: BLOCKED",
+                "restore_planning_gate: READY",
+            ),
+            "class count differs from total": valid.replace("TABLE: 1", "TABLE: 0"),
+            "unresolved total exceeds TOC": valid.replace(
+                "unresolved_known_toc_entries: 1",
+                "unresolved_known_toc_entries: 2",
+            ),
+            "unknown class key": valid.replace("TABLE: 1", "FUTURE OBJECT: 1"),
+            "missing status": valid.replace(
+                "object_reference_analysis: INCOMPLETE\n", ""
+            ),
+            "duplicate status": valid.replace(
+                "object_reference_analysis: INCOMPLETE",
+                "object_reference_analysis: INCOMPLETE\n"
+                "object_reference_analysis: INCOMPLETE",
+            ),
+            "alternate ready status alongside blocked": valid.replace(
+                "restore_planning_gate: BLOCKED",
+                "restore_planning_gate: BLOCKED\nrestore_planning_gate: READY",
+            ),
+            "alternate inspection status alongside review required": valid.replace(
+                "inspection_status: REVIEW_REQUIRED",
+                "inspection_status: REVIEW_REQUIRED\ninspection_status: READY",
+            ),
+            "missing count block": valid.replace(
+                DRIVER.UNRESOLVED_CLASS_COUNT_HEADER,
+                "MISSING UNRESOLVED CLASS COUNTS",
+            ),
+            "duplicate count block": valid
+            + DRIVER.UNRESOLVED_CLASS_COUNT_HEADER
+            + "\n",
+        }
+        for label, report in invalid_reports.items():
+            with self.subTest(label=label):
+                with self.assertRaises(DRIVER.WorkflowError):
+                    DRIVER.parse_report_object_analysis(report)
+
+    def test_incomplete_report_rejects_every_unreviewed_or_leaking_line(self):
+        valid = synthetic_object_analysis_report(unresolved_total=1)
+        sentinels = (
+            "SYNTHETIC_SECRET_MUST_NOT_APPEAR",
+            "SYNTHETIC_ROW_PAYLOAD_MUST_NOT_APPEAR",
+            "/private/SYNTHETIC_PATH_MUST_NOT_APPEAR",
+            "SYNTHETIC_FILENAME_MUST_NOT_APPEAR.backup",
+            "SYNTHETIC_OBJECT_NAME_MUST_NOT_APPEAR",
+            "1; 1259 100 TABLE private secret owner",
+            "SELECT SYNTHETIC_SQL_MUST_NOT_APPEAR",
+        )
+        for sentinel in sentinels:
+            with self.subTest(sentinel=sentinel.split(" ", 1)[0]):
+                with self.assertRaises(DRIVER.WorkflowError):
+                    DRIVER.parse_report_object_analysis(valid + sentinel + "\n")
+
+    def test_incomplete_report_grammar_rejects_duplicate_safe_fields_and_bad_arithmetic(self):
+        valid = synthetic_object_analysis_report(unresolved_total=1)
+        poisoned_reports = {
+            "duplicate source version carrying secret": valid.replace(
+                "source_postgresql_version: 17.5\n",
+                "source_postgresql_version: 17.5\n"
+                "source_postgresql_version: "
+                "17.5SYNTHETIC_SECRET_MUST_NOT_APPEAR\n",
+            ),
+            "duplicate size": valid.replace(
+                "size_bytes: 23\n",
+                "size_bytes: 23\nsize_bytes: 999999\n",
+            ),
+            "duplicate pg_restore version": valid.replace(
+                "pg_restore_version: 17.5\n",
+                "pg_restore_version: 17.5\npg_restore_version: 17.999\n",
+            ),
+            "duplicate TOC metadata count": valid.replace(
+                "toc_metadata_entries: 1\n",
+                "toc_metadata_entries: 1\ntoc_metadata_entries: 999\n",
+            ),
+            "TOC aggregate arithmetic mismatch": valid.replace(
+                "toc_metadata_entries: 1\n",
+                "toc_metadata_entries: 0\n",
+            ),
+            "reviewed fields out of order": valid.replace(
+                "source_postgresql_version: 17.5\n"
+                "source_pg_dump_version: 17.5\n",
+                "source_pg_dump_version: 17.5\n"
+                "source_postgresql_version: 17.5\n",
+            ),
+            "missing canonical final LF": valid[:-1],
+            "noncanonical CRLF framing": valid.replace("\n", "\r\n"),
+        }
+        for label, report in poisoned_reports.items():
+            with self.subTest(label=label):
+                with self.assertRaises(DRIVER.WorkflowError):
+                    DRIVER.parse_report_object_analysis(report)
+
+    def test_complete_and_incomplete_reports_reject_unsafe_source_version_payloads(self):
+        unsafe_values = (
+            "17.5SYNTHETIC_VERSION_SHAPED_PAYLOAD_MUST_NOT_APPEAR",
+            "17.5VERSIONLEAK",
+            "17.5+vendor",
+        )
+        for unresolved_total in (0, 1):
+            valid = synthetic_object_analysis_report(
+                unresolved_total=unresolved_total
+            )
+            for field in (
+                "source_postgresql_version",
+                "source_pg_dump_version",
+            ):
+                for unsafe in unsafe_values:
+                    with self.subTest(
+                        unresolved_total=unresolved_total,
+                        field=field,
+                        unsafe=unsafe,
+                    ):
+                        poisoned = valid.replace(
+                            f"{field}: 17.5\n",
+                            f"{field}: {unsafe}\n",
+                        )
+                        self.assertNotEqual(poisoned, valid)
+                        with self.assertRaises(DRIVER.WorkflowError):
+                            DRIVER.parse_report_object_analysis(poisoned)
+
+            redacted = valid.replace(
+                "source_postgresql_version: 17.5\n",
+                "source_postgresql_version: REDACTED_UNSAFE_OR_UNRECOGNIZED\n",
+            ).replace(
+                "source_pg_dump_version: 17.5\n",
+                "source_pg_dump_version: REDACTED_UNSAFE_OR_UNRECOGNIZED\n",
+            )
+            parsed = DRIVER.parse_report_object_analysis(redacted)
+            self.assertEqual(parsed["restore_planning_gate"], "BLOCKED")
+            for unsafe in unsafe_values:
+                self.assertNotIn(unsafe, redacted)
+
+    def test_provenance_and_completion_marker_never_encode_restore_ready(self):
+        analysis = DRIVER.parse_report_object_analysis(
+            synthetic_object_analysis_report(unresolved_total=1)
+        )
+        provenance = {
+            "inspection_status": "REVIEW_REQUIRED",
+            **analysis,
+        }
+        self.assertEqual(
+            DRIVER.validate_provenance_object_analysis(provenance), analysis
+        )
+        marker = json.loads(DRIVER.completion_marker_bytes("synthetic-run", "a" * 64))
+        self.assertEqual(marker["inspection_status"], "REVIEW_REQUIRED")
+        self.assertEqual(marker["restore_planning_gate"], "BLOCKED")
+        self.assertNotIn("READY", json.dumps(marker))
+        self.assertNotIn("GREEN", json.dumps(marker))
+
+        for mutation in (
+            {"restore_planning_gate": "READY"},
+            {"object_reference_analysis": "COMPLETE"},
+            {"migration_duplicate_analysis": "COMPLETE"},
+            {"unresolved_known_toc_entries": 0},
+            {"unresolved_known_toc_class_counts": {"TABLE": 1}},
+        ):
+            with self.subTest(mutation=next(iter(mutation))):
+                with self.assertRaises(DRIVER.WorkflowError):
+                    DRIVER.validate_provenance_object_analysis(
+                        provenance | mutation
+                    )
+
+    def test_fully_rehashed_ready_mutation_fails_both_evidence_tree_validators(self):
+        run_id = "rehearsal-20300102T030405Z-rehashedready"
+        run_root = self.checkout / "local-migration-artifacts" / run_id
+        pending = run_root / ".pending"
+        run_root.parent.mkdir(mode=0o700, exist_ok=True)
+        run_root.mkdir(mode=0o700)
+        pending.mkdir(mode=0o700)
+        (pending / "archive").mkdir(mode=0o700)
+        (pending / "inspection").mkdir(mode=0o700)
+        report, provenance = synthetic_package_report_and_provenance(run_id)
+        payloads = {
+            "archive/outer.expected.sha256": ("a" * 64 + "\n").encode(),
+            "archive/outer.workflow-observed.before.sha256": (
+                "a" * 64 + "\n"
+            ).encode(),
+            "archive/outer.workflow-observed.after.sha256": (
+                "a" * 64 + "\n"
+            ).encode(),
+            "inspection/rehearsal-metadata.txt": report,
+            "inspection/report.sha256": (
+                hashlib.sha256(report).hexdigest() + "\n"
+            ).encode(),
+            "provenance.json": provenance,
+            "provenance.sha256": (
+                hashlib.sha256(provenance).hexdigest() + "\n"
+            ).encode(),
+        }
+        for relative, data in payloads.items():
+            DRIVER.write_exclusive(pending / relative, data)
+        DRIVER.build_evidence_file_manifest(pending, run_id)
+        DRIVER.validate_evidence_tree(pending, run_id)
+        descriptor = os.open(pending, os.O_RDONLY)
+        try:
+            DRIVER.validate_evidence_tree_at(descriptor, run_id)
+        finally:
+            os.close(descriptor)
+
+        ready_report = report.replace(
+            b"restore_planning_gate: BLOCKED",
+            b"restore_planning_gate: READY",
+        )
+        ready_provenance = json.loads(provenance)
+        ready_provenance["restore_planning_gate"] = "READY"
+        ready_provenance_bytes = (
+            json.dumps(ready_provenance, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        replacements = {
+            pending / "inspection/rehearsal-metadata.txt": ready_report,
+            pending / "inspection/report.sha256": (
+                hashlib.sha256(ready_report).hexdigest() + "\n"
+            ).encode(),
+            pending / "provenance.json": ready_provenance_bytes,
+            pending / "provenance.sha256": (
+                hashlib.sha256(ready_provenance_bytes).hexdigest() + "\n"
+            ).encode(),
+        }
+        for path, data in replacements.items():
+            path.chmod(0o600)
+            path.write_bytes(data)
+            path.chmod(0o400)
+        (pending / "evidence-files.json").unlink()
+        (pending / "evidence-files.sha256").unlink()
+        DRIVER.build_evidence_file_manifest(pending, run_id)
+
+        with self.assertRaises(DRIVER.WorkflowError):
+            DRIVER.validate_evidence_tree(pending, run_id)
+        descriptor = os.open(pending, os.O_RDONLY)
+        try:
+            with self.assertRaises(DRIVER.WorkflowError):
+                DRIVER.validate_evidence_tree_at(descriptor, run_id)
+        finally:
+            os.close(descriptor)
+
+        durable_parent = self.evidence_store / DRIVER.DURABLE_EVIDENCE_DIRECTORY
+        self.assertFalse((durable_parent / run_id).exists())
+        self.assertFalse((durable_parent / f".{run_id}.pending").exists())
+        DRIVER.remove_incomplete_run(run_root)
+
+    def test_fully_rehashed_duplicate_and_unknown_provenance_fields_fail_both_validators(self):
+        poisoners = {
+            "ready-then-blocked-duplicate": lambda provenance: provenance.replace(
+                b'"restore_planning_gate": "BLOCKED"',
+                b'"restore_planning_gate": "READY", '
+                b'"restore_planning_gate": "BLOCKED"',
+                1,
+            ),
+            "blocked-then-ready-duplicate": lambda provenance: provenance.replace(
+                b'"restore_planning_gate": "BLOCKED"',
+                b'"restore_planning_gate": "BLOCKED", '
+                b'"restore_planning_gate": "READY"',
+                1,
+            ),
+            "nested-duplicate": lambda provenance: provenance.replace(
+                b'"compatibility": "PASS"',
+                b'"compatibility": "FAIL", "compatibility": "PASS"',
+                1,
+            ),
+            "unknown-green-readiness": lambda provenance: provenance.replace(
+                b'{',
+                b'{"migration_readiness": "GREEN", ',
+                1,
+            ),
+            "unknown-nested-green-readiness": lambda provenance: provenance.replace(
+                b'"durable_publication": {',
+                b'"durable_publication": {"migration_readiness": "GREEN", ',
+                1,
+            ),
+            "nested-green-in-scalar-field": lambda provenance: provenance.replace(
+                b'"operator_identity": "Synthetic Operator"',
+                b'"operator_identity": {"migration_readiness": "GREEN"}',
+                1,
+            ),
+            "nonfinite-number": lambda provenance: re.sub(
+                rb'"root_owner_uid": [0-9]+',
+                b'"root_owner_uid": NaN',
+                provenance,
+                count=1,
+            ),
+        }
+        workspace = self.checkout / "local-migration-artifacts"
+        workspace.mkdir(mode=0o700, exist_ok=True)
+
+        for index, (label, poison) in enumerate(poisoners.items(), start=1):
+            with self.subTest(label=label):
+                run_id = f"rehearsal-20300102T030405Z-jsonpoison{index}"
+                bound = self.bind_synthetic_canonical()
+                try:
+                    run_root, pending, report, provenance = (
+                        self.build_synthetic_pending_package(
+                            run_id,
+                            publication_bound=bound,
+                        )
+                    )
+                    expectations = self.synthetic_publication_expectations(
+                        run_id,
+                        report,
+                        bound,
+                    )
+                    DRIVER.validate_evidence_tree(
+                        pending,
+                        run_id,
+                        publication_expectations=expectations,
+                    )
+
+                    poisoned = poison(provenance)
+                    self.assertNotEqual(poisoned, provenance)
+                    self.rebuild_manifest_after_provenance_change(
+                        pending,
+                        poisoned,
+                        run_id,
+                    )
+                    self.assert_both_evidence_validators_reject(
+                        pending,
+                        run_id,
+                        run_root=run_root,
+                        bound=bound,
+                        publication_expectations=expectations,
+                    )
+                finally:
+                    bound.close()
+                DRIVER.remove_incomplete_run(run_root)
+
+    def test_fully_rehashed_contradictory_identity_fields_cannot_publish(self):
+        mutations = {
+            "approved-checkout-disagrees": (
+                ("approved_execution_checkout_sha",),
+                "b" * 40,
+            ),
+            "driver-path-disagrees": (
+                ("execution_tools", "driver", "path"),
+                "scripts/migration/unreviewed-driver.py",
+            ),
+            "driver-hash-disagrees": (
+                ("execution_tools", "driver", "sha256"),
+                "b" * 64,
+            ),
+            "source-ref-disagrees": (
+                ("lovable_source_project", "repository_binding", "declared_project_id"),
+                "zyxwvutsrqponmlkjihg",
+            ),
+            "outer-filename-disagrees": (
+                ("outer_artifact", "workflow_observed_identity", "original_filename"),
+                "substituted.backup",
+            ),
+            "outer-size-disagrees": (
+                ("outer_artifact", "workflow_observed_identity", "size_bytes_after"),
+                24,
+            ),
+            "outer-hash-disagrees": (
+                ("outer_artifact", "workflow_observed_identity", "sha256_after"),
+                "b" * 64,
+            ),
+            "normalizer-hash-disagrees": (
+                ("outer_artifact", "normalizer_sha256", "after"),
+                "b" * 64,
+            ),
+            "checksum-path-disagrees": (
+                ("outer_artifact", "checksum_files", "expected"),
+                "archive/substituted.sha256",
+            ),
+            "inner-hash-disagrees": (
+                ("inner_pgdmp", "inspector_reported_sha256"),
+                "b" * 64,
+            ),
+            "header-hash-disagrees": (
+                ("inner_pgdmp", "pgdmp_header", "bound_to_inner_sha256"),
+                "b" * 64,
+            ),
+            "report-hash-disagrees": (
+                ("report", "sha256"),
+                "b" * 64,
+            ),
+            "canonical-mode-is-list": (
+                ("evidence_store", "canonical_mode"),
+                ["0400"],
+            ),
+            "operator-is-green-object": (
+                ("operator_identity",),
+                {"migration_readiness": "GREEN"},
+            ),
+            "durable-path-disagrees": (
+                ("durable_publication", "relative_directory"),
+                "migration-inspection-evidence/other-run",
+            ),
+        }
+        for index, (label, (path, replacement)) in enumerate(
+            mutations.items(), start=1
+        ):
+            with self.subTest(label=label):
+                run_id = f"rehearsal-20300102T030405Z-bindingpoison{index}"
+                bound = self.bind_synthetic_canonical()
+                try:
+                    run_root, pending, report, provenance_bytes = (
+                        self.build_synthetic_pending_package(
+                            run_id,
+                            publication_bound=bound,
+                        )
+                    )
+                    expectations = self.synthetic_publication_expectations(
+                        run_id,
+                        report,
+                        bound,
+                    )
+                    DRIVER.validate_evidence_tree(
+                        pending,
+                        run_id,
+                        publication_expectations=expectations,
+                    )
+                    provenance = json.loads(provenance_bytes)
+                    target = provenance
+                    for member in path[:-1]:
+                        target = target[member]
+                    target[path[-1]] = replacement
+                    poisoned = (
+                        json.dumps(provenance, sort_keys=True) + "\n"
+                    ).encode()
+                    self.rebuild_manifest_after_provenance_change(
+                        pending,
+                        poisoned,
+                        run_id,
+                    )
+                    self.assert_both_evidence_validators_reject(
+                        pending,
+                        run_id,
+                        run_root=run_root,
+                        bound=bound,
+                        publication_expectations=expectations,
+                    )
+                finally:
+                    bound.close()
+                DRIVER.remove_incomplete_run(run_root)
+
+    def test_fully_rehashed_outer_checksum_bytes_cannot_disagree_or_publish(self):
+        for index, relative in enumerate(
+            (
+                "archive/outer.expected.sha256",
+                "archive/outer.workflow-observed.before.sha256",
+                "archive/outer.workflow-observed.after.sha256",
+            ),
+            start=1,
+        ):
+            with self.subTest(relative=relative):
+                run_id = f"rehearsal-20300102T030405Z-checksumpoison{index}"
+                bound = self.bind_synthetic_canonical()
+                try:
+                    run_root, pending, report, _ = (
+                        self.build_synthetic_pending_package(
+                            run_id,
+                            publication_bound=bound,
+                        )
+                    )
+                    expectations = self.synthetic_publication_expectations(
+                        run_id,
+                        report,
+                        bound,
+                    )
+                    self.replace_private_file(
+                        pending / relative,
+                        ("b" * 64 + "\n").encode(),
+                    )
+                    (pending / "evidence-files.json").unlink()
+                    (pending / "evidence-files.sha256").unlink()
+                    DRIVER.build_evidence_file_manifest(pending, run_id)
+                    self.assert_both_evidence_validators_reject(
+                        pending,
+                        run_id,
+                        run_root=run_root,
+                        bound=bound,
+                        publication_expectations=expectations,
+                    )
+                finally:
+                    bound.close()
+                DRIVER.remove_incomplete_run(run_root)
+
+    def test_coherent_outer_inner_report_substitution_is_blocked_by_runtime_truth(self):
+        run_id = "rehearsal-20300102T030405Z-coherentouter"
+        bound = self.bind_synthetic_canonical()
+        try:
+            run_root, pending, report, provenance_bytes = (
+                self.build_synthetic_pending_package(
+                    run_id,
+                    publication_bound=bound,
+                )
+            )
+            expectations = self.synthetic_publication_expectations(
+                run_id,
+                report,
+                bound,
+            )
+            substitute_sha = "b" * 64
+            substitute_size = bound.size + 1
+            substitute_name = "coherently-substituted.backup"
+            substituted_report = report.replace(
+                bound.observed_sha256.encode(),
+                substitute_sha.encode(),
+            ).replace(
+                f"size_bytes: {bound.size}".encode(),
+                f"size_bytes: {substitute_size}".encode(),
+            )
+            provenance = json.loads(provenance_bytes)
+            expected = provenance["outer_artifact"]["expected_identity"]
+            observed = provenance["outer_artifact"]["workflow_observed_identity"]
+            normalizer = provenance["outer_artifact"]["normalizer_sha256"]
+            expected.update(
+                {
+                    "original_filename": substitute_name,
+                    "size_bytes": substitute_size,
+                    "sha256": substitute_sha,
+                }
+            )
+            observed.update(
+                {
+                    "original_filename": substitute_name,
+                    "size_bytes_before": substitute_size,
+                    "size_bytes_after": substitute_size,
+                    "sha256_before": substitute_sha,
+                    "sha256_after": substitute_sha,
+                }
+            )
+            normalizer.update({"before": substitute_sha, "after": substitute_sha})
+            inner = provenance["inner_pgdmp"]
+            inner.update(
+                {
+                    "size_bytes": substitute_size,
+                    "sha256": substitute_sha,
+                    "inspector_reported_sha256": substitute_sha,
+                }
+            )
+            inner["pgdmp_header"]["bound_to_inner_sha256"] = substitute_sha
+            provenance["report"]["sha256"] = hashlib.sha256(
+                substituted_report
+            ).hexdigest()
+            poisoned = (json.dumps(provenance, sort_keys=True) + "\n").encode()
+            self.rebuild_package_after_coherent_change(
+                pending,
+                run_id,
+                substituted_report,
+                poisoned,
+                outer_sha256=substitute_sha,
+            )
+
+            DRIVER.validate_evidence_tree(pending, run_id)
+            descriptor = os.open(pending, os.O_RDONLY)
+            try:
+                DRIVER.validate_evidence_tree_at(descriptor, run_id)
+            finally:
+                os.close(descriptor)
+            self.assert_runtime_expectations_block_publication(
+                pending,
+                run_root,
+                run_id,
+                bound,
+                expectations,
+            )
+            DRIVER.remove_incomplete_run(run_root)
+        finally:
+            bound.close()
+
+    def test_coherent_checkout_tool_config_and_project_substitution_is_blocked(self):
+        run_id = "rehearsal-20300102T030405Z-coherenttools"
+        bound = self.bind_synthetic_canonical()
+        try:
+            run_root, pending, report, provenance_bytes = (
+                self.build_synthetic_pending_package(
+                    run_id,
+                    publication_bound=bound,
+                )
+            )
+            expectations = self.synthetic_publication_expectations(
+                run_id,
+                report,
+                bound,
+            )
+            provenance = json.loads(provenance_bytes)
+            substituted_checkout = "b" * 40
+            provenance["approved_execution_checkout_sha"] = substituted_checkout
+            provenance["execution_checkout_sha"] = substituted_checkout
+            provenance["inspection_tool_git_sha"] = substituted_checkout
+            for child in ("pgdmp_inspector", "report_helper"):
+                provenance["execution_tools"][child]["git_sha"] = substituted_checkout
+
+            tool_bindings = {
+                "driver": ("execution_driver_blob_sha", "execution_driver_sha256"),
+                "envelope_normalizer": ("normalizer_blob_sha", "normalizer_sha256"),
+                "bounded_pg_restore_guard": (
+                    "pg_restore_guard_blob_sha",
+                    "pg_restore_guard_sha256",
+                ),
+                "pgdmp_inspector": (
+                    "pgdmp_inspector_blob_sha",
+                    "pgdmp_inspector_sha256",
+                ),
+                "report_helper": ("report_helper_blob_sha", "report_helper_sha256"),
+            }
+            for index, (tool, (blob_key, sha_key)) in enumerate(
+                tool_bindings.items(), start=1
+            ):
+                blob = f"{index:x}" * 40
+                sha = f"{index + 2:x}" * 64
+                provenance[blob_key] = blob
+                provenance[sha_key] = sha
+                provenance["execution_tools"][tool]["git_blob_sha"] = blob
+                provenance["execution_tools"][tool]["sha256"] = sha
+
+            substituted_ref = "zyxwvutsrqponmlkjihg"
+            provenance["lovable_source_project"]["name"] = "Substituted Project"
+            provenance["lovable_source_project"]["ref"] = substituted_ref
+            repository_binding = provenance["lovable_source_project"][
+                "repository_binding"
+            ]
+            repository_binding["declared_project_id"] = substituted_ref
+            provenance["supabase_config_blob_sha"] = "c" * 40
+            provenance["supabase_config_sha256"] = "d" * 64
+            repository_binding["git_blob_sha"] = "c" * 40
+            repository_binding["sha256"] = "d" * 64
+            poisoned = (json.dumps(provenance, sort_keys=True) + "\n").encode()
+            self.rebuild_manifest_after_provenance_change(
+                pending,
+                poisoned,
+                run_id,
+            )
+
+            DRIVER.validate_evidence_tree(pending, run_id)
+            self.assert_runtime_expectations_block_publication(
+                pending,
+                run_root,
+                run_id,
+                bound,
+                expectations,
+            )
+            DRIVER.remove_incomplete_run(run_root)
+        finally:
+            bound.close()
+
+    def test_coherent_envelope_metadata_substitution_is_blocked(self):
+        run_id = "rehearsal-20300102T030405Z-coherentenvelope"
+        bound = self.bind_synthetic_canonical()
+        try:
+            run_root, pending, report, provenance_bytes = (
+                self.build_synthetic_pending_package(
+                    run_id,
+                    publication_bound=bound,
+                )
+            )
+            expectations = self.synthetic_publication_expectations(
+                run_id,
+                report,
+                bound,
+            )
+            provenance = json.loads(provenance_bytes)
+            provenance["outer_artifact"]["format"] = "zip"
+            provenance["zip_envelope"] = {
+                "archive_comment_length": 0,
+                "central_directory_offset": 41,
+                "central_directory_size": 64,
+                "entry_count": 1,
+                "zip64": False,
+            }
+            provenance["archive_member"] = {
+                "compressed_size": bound.size,
+                "compression": "stored",
+                "crc32": "1234abcd",
+                "external_attributes": (stat.S_IFREG | 0o600) << 16,
+                "flags": 0,
+                "method": 0,
+                "name": "synthetic.backup",
+                "streamed_size": bound.size,
+                "uncompressed_size": bound.size,
+                "version_made_by": (3 << 8) | 20,
+                "version_needed": 20,
+            }
+            provenance["ui_member_binding"].update(
+                {
+                    "status": "exact_match",
+                    "normalized_member_name": "synthetic.backup",
+                }
+            )
+            provenance["inner_pgdmp"]["relationship_to_outer"] = (
+                "derived_from_single_zip_member"
+            )
+            poisoned = (json.dumps(provenance, sort_keys=True) + "\n").encode()
+            self.rebuild_manifest_after_provenance_change(
+                pending,
+                poisoned,
+                run_id,
+            )
+            DRIVER.validate_evidence_tree(pending, run_id)
+            self.assert_runtime_expectations_block_publication(
+                pending,
+                run_root,
+                run_id,
+                bound,
+                expectations,
+            )
+            DRIVER.remove_incomplete_run(run_root)
+        finally:
+            bound.close()
+
+    def test_coherent_report_and_analysis_substitution_is_blocked(self):
+        run_id = "rehearsal-20300102T030405Z-coherentanalysis"
+        bound = self.bind_synthetic_canonical()
+        try:
+            run_root, pending, report, provenance_bytes = (
+                self.build_synthetic_pending_package(
+                    run_id,
+                    publication_bound=bound,
+                )
+            )
+            expectations = self.synthetic_publication_expectations(
+                run_id,
+                report,
+                bound,
+            )
+            substituted_report = synthetic_object_analysis_report(
+                unresolved_total=1,
+                archive_size=bound.size,
+                archive_sha256=bound.observed_sha256,
+            ).encode()
+            substituted_analysis = DRIVER.parse_report_object_analysis(
+                substituted_report.decode()
+            )
+            provenance = json.loads(provenance_bytes)
+            provenance.update(substituted_analysis)
+            provenance["report"]["sha256"] = hashlib.sha256(
+                substituted_report
+            ).hexdigest()
+            poisoned = (json.dumps(provenance, sort_keys=True) + "\n").encode()
+            self.rebuild_package_after_coherent_change(
+                pending,
+                run_id,
+                substituted_report,
+                poisoned,
+            )
+            DRIVER.validate_evidence_tree(pending, run_id)
+            self.assert_runtime_expectations_block_publication(
+                pending,
+                run_root,
+                run_id,
+                bound,
+                expectations,
+            )
+            DRIVER.remove_incomplete_run(run_root)
+        finally:
+            bound.close()
+
+    def test_runtime_matched_publication_validates_every_gate_before_completion(self):
+        run_id = "rehearsal-20300102T030405Z-runtimepositive"
+        bound = self.bind_synthetic_canonical()
+        events: list[str] = []
+        try:
+            run_root, pending, report, _ = self.build_synthetic_pending_package(
+                run_id,
+                publication_bound=bound,
+            )
+            expectations = self.synthetic_publication_expectations(
+                run_id,
+                report,
+                bound,
+            )
+            real_path_validate = DRIVER.validate_evidence_tree
+            real_descriptor_validate = DRIVER.validate_evidence_tree_at
+            real_rename = DRIVER.atomic_rename_no_replace_at
+            real_write_at = DRIVER.write_exclusive_at
+
+            def tracked_path_validate(*args, **kwargs):
+                events.append("pending")
+                return real_path_validate(*args, **kwargs)
+
+            def tracked_descriptor_validate(*args, **kwargs):
+                events.append(
+                    "descriptor_complete"
+                    if kwargs.get("require_completion_marker")
+                    else "descriptor"
+                )
+                return real_descriptor_validate(*args, **kwargs)
+
+            def tracked_rename(*args, **kwargs):
+                events.append("rename")
+                return real_rename(*args, **kwargs)
+
+            def tracked_write_at(directory_fd, name, data, *args, **kwargs):
+                if name == DRIVER.COMPLETION_MARKER:
+                    events.append("completion_marker")
+                return real_write_at(directory_fd, name, data, *args, **kwargs)
+
+            with mock.patch.object(
+                DRIVER,
+                "validate_evidence_tree",
+                side_effect=tracked_path_validate,
+            ), mock.patch.object(
+                DRIVER,
+                "validate_evidence_tree_at",
+                side_effect=tracked_descriptor_validate,
+            ), mock.patch.object(
+                DRIVER,
+                "atomic_rename_no_replace_at",
+                side_effect=tracked_rename,
+            ), mock.patch.object(
+                DRIVER,
+                "write_exclusive_at",
+                side_effect=tracked_write_at,
+            ):
+                durable = DRIVER.publish_durable_evidence(
+                    pending,
+                    run_root,
+                    bound,
+                    run_id,
+                    expectations,
+                )
+
+            self.assertEqual(events[:2], ["pending", "pending"])
+            rename_index = events.index("rename")
+            marker_index = events.index("completion_marker")
+            self.assertGreaterEqual(events[:rename_index].count("descriptor"), 2)
+            self.assertIn("descriptor", events[rename_index + 1 : marker_index])
+            self.assertEqual(events[-1], "descriptor_complete")
+            self.assertTrue((durable / DRIVER.COMPLETION_MARKER).is_file())
+            self.assertFalse((durable / DRIVER.INDETERMINATE_MARKER).exists())
+            self.assertFalse(run_root.exists())
+        finally:
+            bound.close()
+
+    def test_publication_expectations_require_exact_admitted_bound_instance(self):
+        run_id = "rehearsal-20300102T030405Z-boundinstance"
+        admitted_bound = self.bind_synthetic_canonical()
+        substituted_bound = self.bind_synthetic_canonical()
+        try:
+            run_root, pending, report, _ = self.build_synthetic_pending_package(
+                run_id,
+                publication_bound=admitted_bound,
+            )
+            expectations = self.synthetic_publication_expectations(
+                run_id,
+                report,
+                admitted_bound,
+            )
+            DRIVER.validate_publication_runtime_bound(
+                expectations,
+                admitted_bound,
+            )
+            with self.assertRaisesRegex(
+                DRIVER.WorkflowError,
+                "canonical runtime truth",
+            ):
+                DRIVER.validate_publication_runtime_bound(
+                    expectations,
+                    substituted_bound,
+                )
+            with self.assertRaisesRegex(
+                DRIVER.WorkflowError,
+                "canonical runtime truth",
+            ):
+                DRIVER.publish_durable_evidence(
+                    pending,
+                    run_root,
+                    substituted_bound,
+                    run_id,
+                    expectations,
+                )
+            durable_parent = (
+                self.evidence_store / DRIVER.DURABLE_EVIDENCE_DIRECTORY
+            )
+            self.assertFalse((durable_parent / run_id).exists())
+            self.assertFalse((durable_parent / f".{run_id}.pending").exists())
+            DRIVER.remove_incomplete_run(run_root)
+        finally:
+            substituted_bound.close()
+            admitted_bound.close()
+
+    def test_fully_rehashed_manifest_contract_poison_fails_both_validators(self):
+        poisoners = {
+            "nested-bad-first-good-last-duplicate": lambda manifest: manifest.replace(
+                b'"mode": "0400",',
+                b'"mode": "0777",\n      "mode": "0400",',
+                1,
+            ),
+            "boolean-format-version": lambda manifest: manifest.replace(
+                b'"format_version": 1',
+                b'"format_version": true',
+                1,
+            ),
+            "nonfinite-size": lambda manifest: re.sub(
+                rb'"size_bytes": [0-9]+',
+                b'"size_bytes": Infinity',
+                manifest,
+                count=1,
+            ),
+            "wrong-self-hash-boundary": lambda manifest: manifest.replace(
+                DRIVER.EVIDENCE_MANIFEST_SELF_HASH_BOUNDARY.encode(),
+                b"migration readiness is GREEN",
+                1,
+            ),
+        }
+        for index, (label, poison) in enumerate(poisoners.items(), start=1):
+            with self.subTest(label=label):
+                run_id = f"rehearsal-20300102T030405Z-manifestpoison{index}"
+                run_root, pending, _, _ = self.build_synthetic_pending_package(
+                    run_id
+                )
+                manifest_path = pending / "evidence-files.json"
+                manifest = manifest_path.read_bytes()
+                poisoned = poison(manifest)
+                self.assertNotEqual(poisoned, manifest)
+                self.replace_private_file(manifest_path, poisoned)
+                self.replace_private_file(
+                    pending / "evidence-files.sha256",
+                    (hashlib.sha256(poisoned).hexdigest() + "\n").encode(),
+                )
+
+                self.assert_both_evidence_validators_reject(pending, run_id)
+                DRIVER.remove_incomplete_run(run_root)
+
+    def test_resolved_object_analysis_requires_conservative_duplicate_analysis(self):
+        analysis = DRIVER.parse_report_object_analysis(
+            synthetic_object_analysis_report(unresolved_total=0)
+        )
+        self.assertEqual(analysis["object_reference_analysis"], "COMPLETE")
+        self.assertEqual(
+            analysis["migration_duplicate_analysis"], "CONSERVATIVE"
+        )
+        self.assertEqual(analysis["restore_planning_gate"], "BLOCKED")
+        provenance = {"inspection_status": "REVIEW_REQUIRED", **analysis}
+        self.assertEqual(
+            DRIVER.validate_provenance_object_analysis(provenance),
+            analysis,
+        )
+
+        with self.assertRaises(DRIVER.WorkflowError):
+            DRIVER.parse_report_object_analysis(
+                synthetic_object_analysis_report(
+                    unresolved_total=0,
+                    duplicate_status="INCOMPLETE",
+                )
+            )
+
+        invalid = synthetic_object_analysis_report(
+            unresolved_total=1,
+            duplicate_status="COMPLETE",
+        )
+        with self.assertRaises(DRIVER.WorkflowError):
+            DRIVER.parse_report_object_analysis(invalid)
+
+    def test_fully_rehashed_incomplete_report_poison_fails_both_tree_validators(self):
+        poisoners = {
+            "duplicate-source-secret": lambda report: report.replace(
+                b"source_postgresql_version: 17.5\n",
+                b"source_postgresql_version: 17.5\n"
+                b"source_postgresql_version: "
+                b"17.5SYNTHETIC_SECRET_MUST_NOT_APPEAR\n",
+            ),
+            "duplicate-size": lambda report: report.replace(
+                b"size_bytes: 23\n",
+                b"size_bytes: 23\nsize_bytes: 999999\n",
+            ),
+            "duplicate-pg-version": lambda report: report.replace(
+                b"pg_restore_version: 17.5\n",
+                b"pg_restore_version: 17.5\npg_restore_version: 17.999\n",
+            ),
+            "duplicate-toc-metadata": lambda report: report.replace(
+                b"toc_metadata_entries: 1\n",
+                b"toc_metadata_entries: 1\ntoc_metadata_entries: 999\n",
+            ),
+            "bad-toc-arithmetic": lambda report: report.replace(
+                b"toc_metadata_entries: 1\n",
+                b"toc_metadata_entries: 0\n",
+            ),
+            "reordered-source-fields": lambda report: report.replace(
+                b"source_postgresql_version: 17.5\n"
+                b"source_pg_dump_version: 17.5\n",
+                b"source_pg_dump_version: 17.5\n"
+                b"source_postgresql_version: 17.5\n",
+            ),
+        }
+        workspace = self.checkout / "local-migration-artifacts"
+        workspace.mkdir(mode=0o700, exist_ok=True)
+
+        for index, (label, poison) in enumerate(poisoners.items(), start=1):
+            with self.subTest(label=label):
+                run_id = f"rehearsal-20300102T030405Z-reportpoison{index}"
+                run_root = workspace / run_id
+                pending = run_root / ".pending"
+                run_root.mkdir(mode=0o700)
+                pending.mkdir(mode=0o700)
+                (pending / "archive").mkdir(mode=0o700)
+                (pending / "inspection").mkdir(mode=0o700)
+                report, provenance = synthetic_package_report_and_provenance(
+                    run_id,
+                    unresolved_total=1,
+                )
+                poisoned_report = poison(report)
+                self.assertNotEqual(poisoned_report, report)
+                payloads = {
+                    "archive/outer.expected.sha256": ("a" * 64 + "\n").encode(),
+                    "archive/outer.workflow-observed.before.sha256": (
+                        "a" * 64 + "\n"
+                    ).encode(),
+                    "archive/outer.workflow-observed.after.sha256": (
+                        "a" * 64 + "\n"
+                    ).encode(),
+                    "inspection/rehearsal-metadata.txt": report,
+                    "inspection/report.sha256": (
+                        hashlib.sha256(report).hexdigest() + "\n"
+                    ).encode(),
+                    "provenance.json": provenance,
+                    "provenance.sha256": (
+                        hashlib.sha256(provenance).hexdigest() + "\n"
+                    ).encode(),
+                }
+                for relative, data in payloads.items():
+                    DRIVER.write_exclusive(pending / relative, data)
+                DRIVER.build_evidence_file_manifest(pending, run_id)
+                DRIVER.validate_evidence_tree(pending, run_id)
+                descriptor = os.open(pending, os.O_RDONLY)
+                try:
+                    DRIVER.validate_evidence_tree_at(descriptor, run_id)
+                finally:
+                    os.close(descriptor)
+
+                report_path = pending / "inspection/rehearsal-metadata.txt"
+                report_sha_path = pending / "inspection/report.sha256"
+                report_path.chmod(0o600)
+                report_path.write_bytes(poisoned_report)
+                report_path.chmod(0o400)
+                report_sha_path.chmod(0o600)
+                report_sha_path.write_bytes(
+                    (hashlib.sha256(poisoned_report).hexdigest() + "\n").encode()
+                )
+                report_sha_path.chmod(0o400)
+                (pending / "evidence-files.json").unlink()
+                (pending / "evidence-files.sha256").unlink()
+                DRIVER.build_evidence_file_manifest(pending, run_id)
+
+                with self.assertRaises(DRIVER.WorkflowError):
+                    DRIVER.validate_evidence_tree(pending, run_id)
+                descriptor = os.open(pending, os.O_RDONLY)
+                try:
+                    with self.assertRaises(DRIVER.WorkflowError):
+                        DRIVER.validate_evidence_tree_at(descriptor, run_id)
+                finally:
+                    os.close(descriptor)
+                DRIVER.remove_incomplete_run(run_root)
 
     def test_partial_normalization_failure_publishes_no_evidence(self):
         corrupted = bytearray(self.canonical.read_bytes())

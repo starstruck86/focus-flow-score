@@ -54,6 +54,15 @@ The high-level driver `inspect-lovable-export.py` performs these steps:
    SHA-256. It routes `pg_restore` through the reviewed bounded guard, which may
    invoke the absolute, non-symlink underlying executable only as `--version`
    or `--list <absolute-local-path>`.
+   PostgreSQL documents `--list` as an editable TOC summary that can be fed
+   back to `--use-list`; it does not define lossless field quoting for object
+   identity. In PostgreSQL 17's `PrintTOCSummary`, the sanitized description,
+   namespace, tag, and owner are emitted as whitespace-separated `%s` fields.
+   Names containing whitespace or punctuation therefore cannot always be
+   reconstructed unambiguously from this interface alone. See the
+   [PostgreSQL 17 `pg_restore` documentation](https://www.postgresql.org/docs/17/app-pgrestore.html)
+   and the upstream
+   [`PrintTOCSummary` implementation](https://github.com/postgres/postgres/blob/REL_17_STABLE/src/bin/pg_dump/pg_backup_archiver.c).
 7. Rechecks the canonical outer, working outer, derived inner, inspector report,
    and every digest binding. Archive bytes are deleted from working evidence.
 8. Fully prepares the metadata report, expected and workflow-observed checksum
@@ -66,7 +75,11 @@ The high-level driver `inspect-lovable-export.py` performs these steps:
    `<APPROVED_EVIDENCE_STORE_ROOT>/migration-inspection-evidence/<run-id>`, and
    then revalidates the committed descriptor-bound tree, canonical artifact,
    and store binding before adding an exact `EVIDENCE_COMPLETE` marker that
-   binds the run ID and detached-manifest identity. Disposable working evidence
+   binds the run ID, detached-manifest identity, and
+   `restore_planning_gate=BLOCKED`. `EVIDENCE_COMPLETE` means only that the
+   retained metadata evidence package is complete and durable; it never means
+   object-name analysis, restore planning, or migration readiness is complete.
+   Disposable working evidence
    and derived archive are removed before commit. A precommit failure publishes
    no final-named package; cleanup failure can leave only a hidden quarantined
    pending directory. A postcommit validation failure has no completion marker
@@ -113,6 +126,74 @@ prevent an unbounded inspection process; they do not strengthen what
 `pg_restore` semantically validates.
 
 pg_restore --list does not prove that every byte of the inner input was consumed.
+
+### TOC object-reference analysis boundary
+
+The parser accepts only small class-specific object-name grammars. In
+particular, `EXTENSION - uuid-ossp <owner>` and the ownerless
+`EXTENSION - pgcrypto` form use a narrowly scoped ASCII extension-name rule;
+hyphens are not enabled for tables, functions, or the global identifier
+grammar, and quote characters are not treated as lossless identifier syntax.
+An EXTENSION owner token contributes to the owner/role warning counts; the
+ownerless form and an explicit `-` owner do not.
+
+Source PostgreSQL and `pg_dump` header values are copied into evidence only
+when the complete header matches a bounded ASCII grammar: numeric version
+components plus the reviewed `betaN`, `rcN`, or `devel` PostgreSQL prerelease
+forms. Unrecognized, vendor-suffixed, trailing-text, or overlong values become
+the fixed `REDACTED_UNSAFE_OR_UNRECOGNIZED` token. Candidate count and byte
+length are capped, distinct candidates fail closed, and candidate text is never
+included in a diagnostic.
+
+A known TOC class whose namespace/tag/owner text cannot be resolved
+unambiguously is not an archive-integrity failure. The inspector retains a
+metadata package with `inspection_status=REVIEW_REQUIRED`, a total unresolved
+count, fixed allowlisted counts for every recognized class, and exactly these hard
+gates:
+
+- `object_reference_analysis: INCOMPLETE`
+- `migration_duplicate_analysis: INCOMPLETE`
+- `restore_planning_gate: BLOCKED`
+
+Data/payload-position and annotation classes that do not represent a standalone
+schema-object reference are explicitly exempt and retain zero unresolved
+counts; every other recognized class participates in the conservative gate.
+Migration-duplicate analysis is independent but never claims completeness.
+When object references are resolved and migration metadata is readable, the
+name scan is labeled `CONSERVATIVE`: it can flag reviewed possible duplicates,
+but it cannot prove their absence across PostgreSQL aliases, modifiers before
+an object name, object-kind ambiguity, or dynamically constructed SQL. When an
+object reference is unresolved, duplicate analysis is `INCOMPLETE` and the
+report retains only aggregate counts. `COMPLETE` is reserved for a future
+catalog-backed or genuinely executed/parsed schema comparison and is not
+emitted by this workflow. Both statuses keep
+`restore_planning_gate: BLOCKED`.
+Provenance format version 6 makes these analysis fields and the blocked gate
+mandatory; an older package cannot satisfy the current publication
+validator. Durable and pending `provenance.json` and `evidence-files.json` are
+loaded with recursive duplicate-key and nonfinite-number rejection and exact
+allowed-key schemas at every fixed object level; unknown readiness fields,
+contradictory safety values, and last-key-wins JSON cannot satisfy publication.
+Every expected scalar is type/format checked and identity fields are
+cross-bound to their parent claims and retained checksum/report bytes. Before
+evidence-package construction, the workflow freezes a runtime publication
+contract containing the live descriptor-bound canonical identity and the
+approved checkout, tool, configuration, Python, source, timeline, inner,
+report, and analysis identities. Pending validation, descriptor-bound staging
+validation, the immediate pre-rename gate, and the post-rename gate before
+`EVIDENCE_COMPLETE` each compare provenance to that same runtime contract and
+reverify the live canonical descriptor. Internal agreement among substituted
+provenance fields, sidecars, and a fully rehashed manifest is therefore not
+sufficient for publication.
+That aggregate-only path does not perform or emit name-, schema-, owner-, OID-,
+SQL-, path-, payload-, or migration-duplicate detail analysis. Unknown object
+classes, malformed TOC records, duplicate TOC IDs, conflicting source or
+`pg_dump` version headers, archive/hash failures, and unsafe helper diagnostics
+remain fatal and publish no normal evidence package. A fully resolved object
+analysis still remains `REVIEW_REQUIRED` and has
+`restore_planning_gate=BLOCKED`; no report, provenance record, stdout status, or
+completion marker from this workflow is a restore-ready or migration-green
+signal.
 
 ### Required operator inputs
 
@@ -292,8 +373,9 @@ scripts/migration/inspect-lovable-dump.sh \
 
 It refuses URLs/connection strings, missing/non-regular/empty files, non-PGDMP
 formats, incompatible tools, existing reports, unknown TOC classes, and
-unresolved known object entries. It captures a private byte snapshot and never
-connects to or restores a database.
+structurally malformed TOCs. Recognized but unresolved object entries produce
+only the aggregate, blocked `REVIEW_REQUIRED` report described above. It
+captures a private byte snapshot and never connects to or restores a database.
 
 Every low-level failure emits exactly one versioned JSON diagnostic containing
 only an allowlisted `stage` and `reason`; raw child stdout/stderr, TOC text,
@@ -309,7 +391,10 @@ is `input_validation_failed`, `dependency_validation_failed`,
 `unknown_toc_class`, `unresolved_known_toc_entry`, `malformed_toc`,
 `duplicate_toc_id`, `conflicting_source_version`,
 `conflicting_pg_dump_version`, `migration_metadata_unreadable`, or
-`other_nonzero`. The raw inspector captures helper stdout/stderr privately and
+`other_nonzero`. `unresolved_known_toc_entry` remains a protocol-compatible
+failure reason for a rejected/injected helper, but the checked-in parser now
+represents safely recognized unresolved entries as aggregate incomplete
+analysis instead of failing the package. The raw inspector captures helper stdout/stderr privately and
 accepts only one byte-exact helper record. Empty, multiline, oversized,
 non-ASCII, malformed, extra-key, wrong-version, or unknown-reason helper output
 becomes `report_helper_failed` / `other_nonzero`; no helper detail is relayed.

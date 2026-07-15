@@ -319,6 +319,19 @@ operator-recorded `UI_EXPORT_OBJECT_NAME`; a mismatch stops before `pg_restore`
 and publishes nothing. Do not conflate that UI object/member binding with the
 downloaded outer filename.
 
+PostgreSQL defines `pg_restore --list` as an editable TOC summary suitable for
+`--use-list`, not as a lossless object-identity serialization. PostgreSQL 17's
+upstream `PrintTOCSummary` writes sanitized description, namespace, tag, and
+owner values as whitespace-separated `%s` fields without a documented
+round-trip quoting grammar. See the
+[PostgreSQL 17 `pg_restore` documentation](https://www.postgresql.org/docs/17/app-pgrestore.html)
+and the upstream
+[`PrintTOCSummary` source](https://github.com/postgres/postgres/blob/REL_17_STABLE/src/bin/pg_dump/pg_backup_archiver.c).
+The inspector therefore uses conservative class-specific grammars. The
+hyphenated extension exception accepts only the reviewed ASCII EXTENSION shape;
+it does not relax identifiers globally, and quote characters are never assumed
+to be a lossless object-name quoting mechanism.
+
 For ZIP input, prefix/polyglot and trailing-junk rejection is enforced by exact
 byte-zero local-header and EOF end-of-central-directory framing. For direct raw
 `PGDMP`, the normalizer enforces a stable bounded copy and conservative header
@@ -355,6 +368,56 @@ reviewed stage/reason pairs, never a globally valid reason attached to the
 wrong stage. Reviewed `pg_restore` failure reasons are limited to
 unsupported archive version, invalid archive, truncated archive, timeout,
 output cap, or other nonzero; all unfamiliar text is `other_nonzero`.
+The checked-in helper does not fail the entire package merely because a
+recognized TOC class has an unresolvable namespace/tag/owner representation.
+Instead, it stops all object-name, schema, owner, and migration-duplicate
+analysis and emits only a total unresolved count plus fixed allowlisted
+object-class counts with:
+
+- `object_reference_analysis: INCOMPLETE`
+- `migration_duplicate_analysis: INCOMPLETE`
+- `restore_planning_gate: BLOCKED`
+
+The fixed count block covers every recognized TOC class. Classes representing
+data/payload position or annotations rather than a standalone schema-object
+reference are explicitly exempt and must retain a zero unresolved count; every
+other recognized class participates in this conservative gate.
+Migration-duplicate analysis is a separate, non-complete heuristic. When every
+TOC object reference needed by the report is resolved and migration metadata is
+readable, it is `CONSERVATIVE`: reviewed name matches may identify possible
+duplicates, but absence of a match is not proof across PostgreSQL aliases,
+pre-name modifiers, object-kind ambiguity, or dynamic SQL. When object
+references are unresolved, it is `INCOMPLETE` and only aggregate evidence is
+retained. This workflow never emits `COMPLETE`; reserve that status for a
+catalog-backed or genuinely executed/parsed schema comparison. Restore
+planning remains `BLOCKED` in either case.
+The `INCOMPLETE` aggregate path emits no TOC line, object name, schema, owner,
+OID, SQL, path, payload, or migration-match detail. A `CONSERVATIVE` detailed
+report may retain the normalized metadata references and possible checked-in
+migration matches already defined by the report contract, but never raw TOC
+lines, SQL text, or row payload; it remains blocked. Unknown classes, malformed
+TOCs, duplicate TOC IDs, conflicting version headers, archive/hash failures,
+unsafe diagnostics, and migration-metadata read failures on the resolved-object
+analysis path remain fatal and publish no normal package.
+These analysis fields are mandatory in provenance format version 6; the
+pending and descriptor-bound durable validators reject an older or missing
+provenance format rather than inferring the gate.
+Those validators also use a recursive duplicate-key- and nonfinite-number-
+rejecting JSON loader and exact allowed-key schemas at every fixed provenance
+and evidence-manifest level. Rehashed last-key-wins documents, nested duplicate
+members, unknown readiness claims, and contradictory fixed safety values are
+publication failures.
+Expected scalar values are type/format checked and cross-bound across tool,
+source/config, outer, inner/header, report, checksum, and durable-path claims.
+Before evidence-package construction, the workflow freezes an immutable
+publication expectation from the live descriptor-bound canonical artifact and
+the runtime-approved checkout, tools, configuration, Python, source, timeline,
+inner archive, report, and analysis identities. The pending package,
+descriptor-bound staging package, immediate pre-rename package, and renamed
+package before `EVIDENCE_COMPLETE` must each equal that expectation and recheck
+the live canonical descriptor. Synthetic poison cases include fully coherent,
+fully rehashed outer and checkout/tool/config/project substitutions that remain
+structurally valid but cannot pass the runtime publication gate.
 The approved workflow records its resolved execution-Python identity, runs
 child Python tools in isolated mode, pins the raw inspector to that interpreter
 and `/bin/bash`, and excludes inherited shell/Python startup hooks from the
@@ -394,7 +457,9 @@ reserve the final run path with a descriptor-relative operating-system
 no-replace rename. Reverify the committed payload, canonical artifact, store
 root, and parent binding before exclusively writing and fsyncing
 `EVIDENCE_COMPLETE`; its exact content binds the run ID and detached payload
-manifest hash. A postcommit validation failure must have no completion marker
+manifest hash and `restore_planning_gate=BLOCKED`. That marker means the
+metadata evidence bytes are durably complete; it is never a restore-ready,
+object-analysis-complete, or migration-green signal. A postcommit validation failure must have no completion marker
 and must instead carry `EVIDENCE_INDETERMINATE`. Consumers reject a missing or
 malformed completion marker, any indeterminate marker, a manifest/hash/mode
 mismatch, or a residual local run. Existing pending/final runs are never
@@ -414,9 +479,21 @@ PGDMP header bytes and binds them to the already verified inner SHA-256. The
 inspector otherwise retains its boundary: it validates a local raw custom-format
 archive, checks tool compatibility, invokes `pg_restore` only with `--version`
 and `--list`, emits metadata only, and fails closed on unknown TOC classes.
-Review every warning for owners, ACLs, roles, extensions, subscriptions, event
-triggers, publications, managed schemas, `auth`, `storage`, `supabase_*`, and
-duplicates with checked-in migrations.
+Source PostgreSQL and `pg_dump` header values are retained only when the entire
+header matches a bounded ASCII numeric-version grammar with the reviewed
+`betaN`, `rcN`, or `devel` prerelease suffix. All other candidate text becomes
+the fixed `REDACTED_UNSAFE_OR_UNRECOGNIZED` token; candidate count and byte
+length are bounded, and candidate values are never included in diagnostics.
+An EXTENSION owner token contributes to the owner/role warning count; ownerless
+and explicit `-` owner forms do not.
+When object-reference analysis is complete and migration-duplicate analysis is
+conservative, review every heuristic warning for owners,
+ACLs, roles, extensions, subscriptions, event triggers, publications, managed
+schemas, `auth`, `storage`, `supabase_*`, and possible duplicates with
+checked-in migrations. A conservative result is not proof that no other
+duplicate exists. When object-reference analysis is incomplete, the only safe
+result is the aggregate blocked package; resolve the parser/evidence gap before
+any restore planning.
 
 Exit gate: normalization and archive format/version checks pass; TOC parsing has
 no unknown class; the report contains no row data; exactly one report `sha256:`
@@ -436,7 +513,12 @@ report/provenance hashes. The approved and execution SHAs must be identical.
 The per-file manifest and detached hash must verify in the durable package, the
 disposable local run must be absent, and the externally approved expected outer
 identity must remain distinct from workflow-observed measurements. Migration
-readiness remains **RED** and inspection remains `REVIEW_REQUIRED`.
+readiness remains **RED**, inspection remains `REVIEW_REQUIRED`, and
+`restore_planning_gate` must be `BLOCKED` whether migration-duplicate analysis
+is conservative or incomplete. No downstream validation may treat
+`EVIDENCE_COMPLETE`, complete object-reference analysis, conservative duplicate
+analysis, or a matching manifest as
+restore authorization.
 
 ### 7. Decide selective restore plan
 

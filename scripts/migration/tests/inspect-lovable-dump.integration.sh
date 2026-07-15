@@ -93,16 +93,25 @@ grep -Eq '^archive_integer_width_bytes: [0-9]+$' "$REPORT"
 grep -Eq '^archive_offset_width_bytes: [0-9]+$' "$REPORT"
 grep -Fxq 'archive_format_code: 1' "$REPORT"
 grep -Eq '^archive_header_bound_sha256: [0-9a-f]{64}$' "$REPORT"
-grep -Eq '^source_postgresql_version: 17([.]|$)' "$REPORT"
-grep -Eq '^source_pg_dump_version: 17([.]|$)' "$REPORT"
+# Distribution-packaged PostgreSQL clients commonly append vendor text to
+# these headers. The report may retain a bounded numeric PostgreSQL 17 value
+# only when the whole value matches; otherwise it must use the fixed redaction.
+grep -Eq '^source_postgresql_version: (17([.][0-9]{1,3}){0,3}|REDACTED_UNSAFE_OR_UNRECOGNIZED)$' "$REPORT"
+grep -Eq '^source_pg_dump_version: (17([.][0-9]{1,3}){0,3}|REDACTED_UNSAFE_OR_UNRECOGNIZED)$' "$REPORT"
 grep -Fxq 'inspection_status: REVIEW_REQUIRED' "$REPORT"
+grep -Fxq 'object_reference_analysis: INCOMPLETE' "$REPORT"
+grep -Fxq 'migration_duplicate_analysis: INCOMPLETE' "$REPORT"
+grep -Fxq 'restore_planning_gate: BLOCKED' "$REPORT"
+grep -Eq '^unresolved_known_toc_entries: [1-9][0-9]*$' "$REPORT"
+grep -Eq '^CONSTRAINT: [1-9][0-9]*$' "$REPORT"
 grep -Fxq 'restore_attempted: no' "$REPORT"
 grep -Fxq 'database_connection_attempted: no' "$REPORT"
 grep -Fxq 'row_payload_inspected: no' "$REPORT"
 grep -Fxq 'pg_restore_list_compatibility: PASS' "$REPORT"
-grep -Fq \
-  'TABLE migration_dump_fixture.items -> 0001 synthetic fixture.sql' \
-  "$REPORT"
+if grep -Fq 'POSSIBLE REPO MIGRATION DUPLICATES' "$REPORT"; then
+  printf 'ERROR: incomplete object analysis emitted duplicate-name details\n' >&2
+  exit 1
+fi
 
 report_sha_count="$(grep -Ec '^sha256: [0-9a-f]{64}$' "$REPORT")"
 header_sha_count="$(grep -Ec '^archive_header_bound_sha256: [0-9a-f]{64}$' "$REPORT")"

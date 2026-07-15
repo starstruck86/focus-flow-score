@@ -110,6 +110,7 @@ OWNER_BEARING_CLASSES = frozenset(
         "DATABASE",
         "DOMAIN",
         "EVENT TRIGGER",
+        "EXTENSION",
         "FOREIGN DATA WRAPPER",
         "FOREIGN SERVER",
         "FOREIGN TABLE",
@@ -157,15 +158,82 @@ MANAGED_SCHEMAS = frozenset(
     }
 )
 IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
+# PostgreSQL's text TOC output does not provide a reliably parseable quoted
+# identifier for every object class.  Extension names are also control-file
+# names in practice, and repository-known extensions such as ``uuid-ossp``
+# contain a hyphen that is intentionally rejected by ``IDENTIFIER_RE``.  Keep
+# this exception class-specific and narrow: ASCII identifier-like segments,
+# separated by single hyphens, with no leading, trailing, or repeated hyphen.
+HYPHENATED_EXTENSION_NAME_RE = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)+$"
+)
+ROUTINE_TOC_RE = re.compile(
+    r"^([A-Za-z_][A-Za-z0-9_$]*|-) "
+    r"([A-Za-z_][A-Za-z0-9_$]*)\(([^()]*)\)"
+    r"(?: ([A-Za-z_][A-Za-z0-9_$]*|-))?$"
+)
+ROUTINE_TOC_CLASSES = frozenset({"AGGREGATE", "FUNCTION", "PROCEDURE"})
+GENERIC_SINGLE_NAME_TOC_CLASSES = frozenset(
+    {
+        "ACCESS METHOD",
+        "COLLATION",
+        "CONVERSION",
+        "DATABASE",
+        "DOMAIN",
+        "EVENT TRIGGER",
+        "FOREIGN DATA WRAPPER",
+        "FOREIGN SERVER",
+        "FOREIGN TABLE",
+        "INDEX",
+        "LANGUAGE",
+        "MATERIALIZED VIEW",
+        "PUBLICATION",
+        "SEQUENCE",
+        "STATISTICS",
+        "SUBSCRIPTION",
+        "TABLE",
+        "TABLESPACE",
+        "TEXT SEARCH CONFIGURATION",
+        "TEXT SEARCH DICTIONARY",
+        "TEXT SEARCH PARSER",
+        "TEXT SEARCH TEMPLATE",
+        "TRANSFORM",
+        "TYPE",
+        "VIEW",
+    }
+)
 TOC_LINE_RE = re.compile(r"^\s*(\d+);\s+(\d+)\s+(\d+)\s+(.+?)\s*$")
+# ``pg_restore --list`` emits these values as free-form comment text.  Accept
+# only an exact, bounded ASCII grammar: numeric components, or PostgreSQL's
+# explicit ``betaN``, ``rcN``, and ``devel`` prerelease forms.  Vendor suffixes
+# and any trailing text are never copied to visible or retained evidence.
+# Prefix recognition is separate so an unsafe value can be represented by one
+# fixed redaction token.
+SAFE_VERSION_VALUE_PATTERN = (
+    r"[0-9]{1,3}(?:\.[0-9]{1,3}){0,3}"
+    r"(?:(?:beta|rc)[0-9]{1,3}|devel)?"
+)
 SOURCE_POSTGRES_VERSION_RE = re.compile(
-    r"^;\s*Dumped from database version:\s*"
-    r"([0-9]+(?:\.[0-9]+)*(?:[A-Za-z0-9_.+~-]*)?)"
+    rf"^;[ \t]{{0,8}}Dumped from database version:[ \t]"
+    rf"({SAFE_VERSION_VALUE_PATTERN})[ \t]{{0,4}}$",
+    re.ASCII,
 )
 PG_DUMP_VERSION_RE = re.compile(
-    r"^;\s*Dumped by pg_dump version:\s*"
-    r"([0-9]+(?:\.[0-9]+)*(?:[A-Za-z0-9_.+~-]*)?)"
+    rf"^;[ \t]{{0,8}}Dumped by pg_dump version:[ \t]"
+    rf"({SAFE_VERSION_VALUE_PATTERN})[ \t]{{0,4}}$",
+    re.ASCII,
 )
+SOURCE_POSTGRES_VERSION_PREFIX_RE = re.compile(
+    r"^;[ \t]{0,8}Dumped from database version:[ \t]",
+    re.ASCII,
+)
+PG_DUMP_VERSION_PREFIX_RE = re.compile(
+    r"^;[ \t]{0,8}Dumped by pg_dump version:[ \t]",
+    re.ASCII,
+)
+REDACTED_VERSION = "REDACTED_UNSAFE_OR_UNRECOGNIZED"
+MAX_VERSION_HEADER_LINE_BYTES = 160
+MAX_VERSION_HEADER_CANDIDATES = 4
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 REASON_UNKNOWN_TOC_CLASS = "unknown_toc_class"
@@ -284,18 +352,52 @@ def parse_toc(path: Path) -> tuple[list[TocEntry], TocProvenance]:
         raise InspectionError(REASON_MALFORMED_TOC) from exc
     source_postgresql_versions: set[str] = set()
     pg_dump_versions: set[str] = set()
+    source_header_identities: set[str] = set()
+    pg_dump_header_identities: set[str] = set()
+    source_header_candidates = 0
+    pg_dump_header_candidates = 0
+    source_version_redacted = False
+    pg_dump_version_redacted = False
 
     for line_number, line in enumerate(text.splitlines(), start=1):
         stripped = line.strip()
         if not stripped:
             continue
         if stripped.startswith(";"):
-            source_match = SOURCE_POSTGRES_VERSION_RE.match(line)
-            if source_match:
-                source_postgresql_versions.add(source_match.group(1))
-            dump_match = PG_DUMP_VERSION_RE.match(line)
-            if dump_match:
-                pg_dump_versions.add(dump_match.group(1))
+            if SOURCE_POSTGRES_VERSION_PREFIX_RE.match(line):
+                source_header_candidates += 1
+                if source_header_candidates > MAX_VERSION_HEADER_CANDIDATES:
+                    raise InspectionError(REASON_CONFLICTING_SOURCE_VERSION)
+                encoded_header = line.encode("utf-8")
+                source_header_identities.add(
+                    hashlib.sha256(encoded_header).hexdigest()
+                )
+                source_match = (
+                    SOURCE_POSTGRES_VERSION_RE.fullmatch(line)
+                    if len(encoded_header) <= MAX_VERSION_HEADER_LINE_BYTES
+                    else None
+                )
+                if source_match is None:
+                    source_version_redacted = True
+                else:
+                    source_postgresql_versions.add(source_match.group(1))
+            if PG_DUMP_VERSION_PREFIX_RE.match(line):
+                pg_dump_header_candidates += 1
+                if pg_dump_header_candidates > MAX_VERSION_HEADER_CANDIDATES:
+                    raise InspectionError(REASON_CONFLICTING_PG_DUMP_VERSION)
+                encoded_header = line.encode("utf-8")
+                pg_dump_header_identities.add(
+                    hashlib.sha256(encoded_header).hexdigest()
+                )
+                dump_match = (
+                    PG_DUMP_VERSION_RE.fullmatch(line)
+                    if len(encoded_header) <= MAX_VERSION_HEADER_LINE_BYTES
+                    else None
+                )
+                if dump_match is None:
+                    pg_dump_version_redacted = True
+                else:
+                    pg_dump_versions.add(dump_match.group(1))
             continue
         match = TOC_LINE_RE.match(line)
         if not match:
@@ -314,21 +416,39 @@ def parse_toc(path: Path) -> tuple[list[TocEntry], TocProvenance]:
         raise InspectionError(REASON_MALFORMED_TOC)
     if len({entry.toc_id for entry in entries}) != len(entries):
         raise InspectionError(REASON_DUPLICATE_TOC_ID)
-    if len(source_postgresql_versions) > 1:
+    if len(source_header_identities) > 1:
         raise InspectionError(REASON_CONFLICTING_SOURCE_VERSION)
-    if len(pg_dump_versions) > 1:
+    if len(pg_dump_header_identities) > 1:
         raise InspectionError(REASON_CONFLICTING_PG_DUMP_VERSION)
 
     return entries, TocProvenance(
-        source_postgresql_version=next(iter(source_postgresql_versions), None),
-        pg_dump_version=next(iter(pg_dump_versions), None),
+        source_postgresql_version=(
+            REDACTED_VERSION
+            if source_version_redacted
+            else next(iter(source_postgresql_versions), None)
+        ),
+        pg_dump_version=(
+            REDACTED_VERSION
+            if pg_dump_version_redacted
+            else next(iter(pg_dump_versions), None)
+        ),
     )
 
 
 def clean_identifier(value: str) -> Optional[str]:
-    value = value.strip('"')
-    value = value.split("(", 1)[0]
+    # pg_restore --list does not promise SQL-identifier quoting here. Treat a
+    # quote as object-name data, not syntax that this parser may strip.
+    if '"' in value:
+        return None
     return value if IDENTIFIER_RE.fullmatch(value) else None
+
+
+def clean_extension_name(value: str) -> Optional[str]:
+    """Normalize only conservative ASCII extension names from a TOC entry."""
+
+    if IDENTIFIER_RE.fullmatch(value):
+        return value
+    return value if HYPHENATED_EXTENSION_NAME_RE.fullmatch(value) else None
 
 
 def object_ref(entry: TocEntry) -> Optional[ObjectRef]:
@@ -341,14 +461,53 @@ def object_ref(entry: TocEntry) -> Optional[ObjectRef]:
     }:
         return None
 
+    if entry.object_class in ROUTINE_TOC_CLASSES:
+        routine_match = ROUTINE_TOC_RE.fullmatch(entry.remainder)
+        if routine_match is None:
+            return None
+        schema = (
+            "-"
+            if routine_match.group(1) == "-"
+            else clean_identifier(routine_match.group(1))
+        )
+        name = clean_identifier(routine_match.group(2))
+        if not schema or not name:
+            return None
+        return ObjectRef(entry.object_class, schema, name)
+
     tokens = entry.remainder.split()
     if len(tokens) < 2:
         return None
 
     if entry.object_class == "SCHEMA":
+        if len(tokens) != 3 or tokens[0] != "-" or not (
+            tokens[2] == "-" or IDENTIFIER_RE.fullmatch(tokens[2])
+        ):
+            return None
         schema = clean_identifier(tokens[1])
         return ObjectRef("SCHEMA", schema, schema) if schema else None
 
+    if entry.object_class == "EXTENSION":
+        # pg_restore --list renders the repository-known shape as
+        # ``EXTENSION - uuid-ossp <owner>``; ownerless list output such as
+        # ``EXTENSION - pgcrypto`` is also emitted by PostgreSQL.  Requiring
+        # exactly those two layouts avoids accepting a whitespace-containing
+        # or otherwise ambiguous name by considering only its first token.
+        if len(tokens) not in (2, 3) or tokens[0] != "-":
+            return None
+        if len(tokens) == 3 and not (
+            tokens[2] == "-" or IDENTIFIER_RE.fullmatch(tokens[2])
+        ):
+            return None
+        name = clean_extension_name(tokens[1])
+        return ObjectRef("EXTENSION", "-", name) if name else None
+
+    if entry.object_class not in GENERIC_SINGLE_NAME_TOC_CLASSES:
+        return None
+    if len(tokens) != 3 or not (
+        tokens[2] == "-" or IDENTIFIER_RE.fullmatch(tokens[2])
+    ):
+        return None
     schema = clean_identifier(tokens[0]) if tokens[0] != "-" else "-"
     name = clean_identifier(tokens[1])
     if not schema or not name:
@@ -384,7 +543,14 @@ MIGRATION_CLASS_PREFIXES = {
     "EXTENSION": r"(?:create|alter)\s+extension",
     "FOREIGN TABLE": r"(?:create|alter)\s+foreign\s+table",
     "FUNCTION": r"(?:create|alter)(?:\s+or\s+replace)?\s+function",
-    "INDEX": r"(?:create|alter)(?:\s+unique)?\s+index",
+    "INDEX": (
+        r"(?:create(?:\s+unique)?\s+index(?:\s+concurrently)?|"
+        r"alter\s+index)"
+    ),
+    "LANGUAGE": (
+        r"(?:create(?:\s+or\s+replace)?(?:\s+trusted)?"
+        r"(?:\s+procedural)?|alter(?:\s+procedural)?)\s+language"
+    ),
     "MATERIALIZED VIEW": r"(?:create|alter)\s+materialized\s+view",
     "POLICY": r"(?:create|alter)\s+policy",
     "PROCEDURE": r"(?:create|alter)(?:\s+or\s+replace)?\s+procedure",
@@ -392,27 +558,45 @@ MIGRATION_CLASS_PREFIXES = {
     "SCHEMA": r"(?:create|alter)\s+schema",
     "SEQUENCE": r"(?:create|alter)\s+sequence",
     "STATISTICS": r"(?:create|alter)\s+statistics",
+    "SUBSCRIPTION": r"(?:create|alter)\s+subscription",
     "TABLE": r"(?:create|alter)\s+table",
     "TRIGGER": r"(?:create|alter)\s+trigger",
     "TYPE": r"(?:create|alter)\s+type",
     "VIEW": r"(?:create|alter)(?:\s+or\s+replace)?\s+view",
 }
 
-# These classes describe repository-comparable or migration-critical objects.
-# If their schema/name reference cannot be normalized, silently omitting the
-# entry could create a false "no duplicate" or "no managed object" result.
-OBJECT_REFERENCE_REQUIRED_CLASSES = frozenset(MIGRATION_CLASS_PREFIXES) | {
-    "SUBSCRIPTION"
+# These classes do not carry a standalone object reference for the report's
+# purpose, or refer only to data payload/position rather than a schema object.
+# Every other recognized TOC class participates in the conservative analysis:
+# failing to normalize any such entry makes object-reference and duplicate
+# analysis incomplete rather than silently omitting it.
+OBJECT_REFERENCE_EXEMPT_CLASSES = DATA_TOC_CLASSES | {
+    "ACL",
+    "BLOB",
+    "BLOB METADATA",
+    "COMMENT",
+    "DEFAULT ACL",
+    "LARGE OBJECT",
+    "SECURITY LABEL",
+    "SEQUENCE SET",
 }
+OBJECT_REFERENCE_REQUIRED_CLASSES = (
+    KNOWN_TOC_CLASSES - OBJECT_REFERENCE_EXEMPT_CLASSES
+)
+UNRESOLVED_CLASS_COUNT_KEYS = tuple(sorted(KNOWN_TOC_CLASSES))
 
 
-def validate_required_object_references(entries: Iterable[TocEntry]) -> None:
-    for entry in entries:
-        if (
-            entry.object_class in OBJECT_REFERENCE_REQUIRED_CLASSES
-            and object_ref(entry) is None
-        ):
-            raise InspectionError(REASON_UNRESOLVED_KNOWN_TOC_ENTRY)
+def unresolved_required_object_references(
+    entries: Iterable[TocEntry],
+) -> Counter[str]:
+    """Count recognized entries whose object reference is not losslessly parsed."""
+
+    return Counter(
+        entry.object_class
+        for entry in entries
+        if entry.object_class in OBJECT_REFERENCE_REQUIRED_CLASSES
+        and object_ref(entry) is None
+    )
 
 
 def quoted_identifier_pattern(identifier: str) -> str:
@@ -443,9 +627,7 @@ def migration_definition_pattern(ref: ObjectRef) -> Optional[re.Pattern[str]]:
     )
 
 
-def find_migration_duplicates(
-    entries: Iterable[TocEntry], migrations_dir: Path
-) -> list[tuple[ObjectRef, str]]:
+def load_migration_text(migrations_dir: Path) -> list[tuple[str, str]]:
     migration_text: list[tuple[str, str]] = []
     try:
         migration_paths = sorted(migrations_dir.rglob("*.sql"))
@@ -456,6 +638,12 @@ def find_migration_duplicates(
             migration_text.append((path.name, content))
     except (OSError, UnicodeError) as exc:
         raise InspectionError(REASON_MIGRATION_METADATA_UNREADABLE) from exc
+    return migration_text
+
+
+def find_migration_duplicates(
+    entries: Iterable[TocEntry], migration_text: Iterable[tuple[str, str]]
+) -> list[tuple[ObjectRef, str]]:
 
     duplicates: set[tuple[ObjectRef, str]] = set()
     for entry in entries:
@@ -497,8 +685,65 @@ def build_report(args: argparse.Namespace) -> str:
         raise InspectionError(REASON_OTHER_NONZERO)
 
     entries, toc_provenance = parse_toc(args.toc)
-    validate_required_object_references(entries)
     class_counts = Counter(entry.object_class for entry in entries)
+    unresolved_counts = unresolved_required_object_references(entries)
+    unresolved_total = sum(unresolved_counts.values())
+    migration_text: list[tuple[str, str]] = []
+    if not unresolved_total:
+        migration_text = load_migration_text(args.migrations_dir)
+    data_entries = sum(class_counts[name] for name in DATA_TOC_CLASSES)
+
+    source_postgresql_version = (
+        toc_provenance.source_postgresql_version or "UNKNOWN_NOT_REPORTED"
+    )
+    pg_dump_version = toc_provenance.pg_dump_version or "UNKNOWN_NOT_REPORTED"
+
+    if unresolved_total:
+        # PostgreSQL's list format is not a lossless serialization of every
+        # namespace, tag, and owner.  Once a recognized object-bearing entry
+        # cannot be normalized, do not run name-, schema-, owner-, or
+        # migration-definition analysis. Retain only fixed-class aggregate
+        # evidence and a hard blocked restore-planning gate.
+        lines = [
+            "LOVABLE CLOUD DUMP — METADATA-ONLY INSPECTION",
+            "inspection_status: REVIEW_REQUIRED",
+            "object_reference_analysis: INCOMPLETE",
+            "migration_duplicate_analysis: INCOMPLETE",
+            "restore_planning_gate: BLOCKED",
+            "scope: archive header, SHA-256, pg_restore TOC metadata, aggregate unresolved-object counts",
+            "restore_attempted: no",
+            "database_connection_attempted: no",
+            "row_payload_inspected: no",
+            f"size_bytes: {size}",
+            f"sha256: {sha256}",
+            "archive_format: PostgreSQL custom archive (PGDMP)",
+            f"archive_format_version: {archive_version}",
+            f"source_postgresql_version: {source_postgresql_version}",
+            f"source_pg_dump_version: {pg_dump_version}",
+            f"pg_restore_version: {args.pg_restore_version}",
+            "pg_restore_list_compatibility: PASS",
+            "archive_snapshot_binding: PASS "
+            "(TOC and SHA-256 use one private read-only capture)",
+            f"toc_entries: {len(entries)}",
+            f"toc_metadata_entries: {len(entries) - data_entries}",
+            f"toc_data_references_not_extracted: {data_entries}",
+            "unknown_toc_classes: none (inspection fails closed if encountered)",
+            f"unresolved_known_toc_entries: {unresolved_total}",
+            "",
+            "UNRESOLVED KNOWN TOC CLASS COUNTS",
+        ]
+        for object_class in UNRESOLVED_CLASS_COUNT_KEYS:
+            lines.append(f"{object_class}: {unresolved_counts[object_class]}")
+        lines.extend(
+            [
+                "",
+                "BOUNDARY",
+                "This report is an inventory aid, not a restore plan or completeness proof.",
+                "Object-reference analysis is incomplete; restore planning remains blocked.",
+            ]
+        )
+        return "\n".join(lines) + "\n"
+
     owners = owner_reference_count(entries)
     acl = sum(
         class_counts[name] for name in ("ACL", "DEFAULT ACL")
@@ -511,8 +756,6 @@ def build_report(args: argparse.Namespace) -> str:
         for name, count in class_counts.items()
         if name == "PUBLICATION" or name.startswith("PUBLICATION ")
     )
-    data_entries = sum(class_counts[name] for name in DATA_TOC_CLASSES)
-
     schemas = [schema_for_flag(entry) for entry in entries]
     managed = sum(schema in MANAGED_SCHEMAS for schema in schemas if schema)
     auth = sum(schema == "auth" for schema in schemas)
@@ -526,21 +769,19 @@ def build_report(args: argparse.Namespace) -> str:
         ):
             supabase_prefixed += 1
 
-    duplicates = find_migration_duplicates(entries, args.migrations_dir)
+    duplicates = find_migration_duplicates(entries, migration_text)
     role_references = owners + acl
     not_object_normalized = Counter(
         entry.object_class for entry in entries if object_ref(entry) is None
     )
 
-    source_postgresql_version = (
-        toc_provenance.source_postgresql_version or "UNKNOWN_NOT_REPORTED"
-    )
-    pg_dump_version = toc_provenance.pg_dump_version or "UNKNOWN_NOT_REPORTED"
-
     lines = [
         "LOVABLE CLOUD DUMP — METADATA-ONLY INSPECTION",
         "inspection_status: REVIEW_REQUIRED",
-        "scope: archive header, SHA-256, pg_restore TOC metadata, migration-name comparison",
+        "object_reference_analysis: COMPLETE",
+        "migration_duplicate_analysis: CONSERVATIVE",
+        "restore_planning_gate: BLOCKED",
+        "scope: archive header, SHA-256, pg_restore TOC metadata, conservative migration-name comparison",
         "restore_attempted: no",
         "database_connection_attempted: no",
         "row_payload_inspected: no",
@@ -559,12 +800,16 @@ def build_report(args: argparse.Namespace) -> str:
         f"toc_metadata_entries: {len(entries) - data_entries}",
         f"toc_data_references_not_extracted: {data_entries}",
         "unknown_toc_classes: none (inspection fails closed if encountered)",
-        "unresolved_known_toc_entries: none (required object references fail closed)",
+        "unresolved_known_toc_entries: 0",
         "",
         "TOC CLASS COUNTS",
     ]
     for object_class in sorted(class_counts):
         lines.append(f"{object_class}: {class_counts[object_class]}")
+
+    lines.extend(["", "UNRESOLVED KNOWN TOC CLASS COUNTS"])
+    for object_class in UNRESOLVED_CLASS_COUNT_KEYS:
+        lines.append(f"{object_class}: 0")
 
     lines.extend(
         [
@@ -615,6 +860,7 @@ def build_report(args: argparse.Namespace) -> str:
             "",
             "BOUNDARY",
             "This report is an inventory aid, not a restore plan or completeness proof.",
+            "Migration-duplicate analysis is conservative: possible name matches may be flagged, but absence is not proof across aliases, modifiers, or dynamic SQL.",
             "Review flagged ownership, grants, managed schemas, and duplicate definitions before any rehearsal.",
         ]
     )
