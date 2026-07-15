@@ -342,8 +342,8 @@ def verify_mode(
 
     if provenance["inspection_status"] != "REVIEW_REQUIRED":
         raise SystemExit("high-level inspection status was not REVIEW_REQUIRED")
-    if provenance.get("format_version") != 5:
-        raise SystemExit("high-level provenance format version was not 5")
+    if provenance.get("format_version") != 6:
+        raise SystemExit("high-level provenance format version was not 6")
     if provenance.get("object_reference_analysis") != "INCOMPLETE":
         raise SystemExit("real PGDMP object-reference analysis was not INCOMPLETE")
     if provenance.get("migration_duplicate_analysis") != "INCOMPLETE":
