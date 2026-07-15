@@ -10,6 +10,12 @@ configuration drifted, or what a future export contains. Secret values, owner
 email values, hardcoded user UUID values, and credential-like literals are
 intentionally omitted.
 
+Credential-containment statements added on 2026-07-15 are a separate addendum
+bound to draft PR #17 substantive commit
+`00680fdf0d766912bfc4be86ffa8791925e8f7d3`. They describe the sanitized
+repository snapshot at that commit and do not move the original inventory's
+observation point or establish any runtime fact.
+
 The detailed evidence is split into reproducible appendices:
 
 - [`sql-inventory.md`](sql-inventory.md) inventories every SQL-defined object,

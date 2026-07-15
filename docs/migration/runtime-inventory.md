@@ -6,6 +6,12 @@ system, database, secret store, production endpoint, or data was queried or
 changed during that inventory. Secret values are intentionally omitted.
 Repository paths and line numbers are its evidence boundary.
 
+Credential-containment statements added on 2026-07-15 are a separate addendum
+bound to draft PR #17 substantive commit
+`00680fdf0d766912bfc4be86ffa8791925e8f7d3`. They describe the sanitized
+repository snapshot at that commit, not the original inventory snapshot and
+not any deployed or database runtime.
+
 ## Executive findings
 
 - There are 120 deployable Edge Function directories plus supabase/functions/_shared. Every deployable directory has index.ts.

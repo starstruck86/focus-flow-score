@@ -6,6 +6,11 @@ deploy, or validate any runtime credential.
 The original migration inventories remain bound to static repository inspection
 on 2026-07-14 at `a21cd2dd90286633c08b99d83eb8a15cdf68c869`.
 
+This containment addendum is bound separately to draft PR #17 substantive
+commit `00680fdf0d766912bfc4be86ffa8791925e8f7d3` on 2026-07-15. It describes
+the sanitized repository snapshot and regression guard at that commit; it does
+not revise the original inventory's observation point or attest runtime state.
+
 ## Repository use and containment design
 
 `supabase/dynamic_staging_schema.sql` is a generated drift snapshot outside
