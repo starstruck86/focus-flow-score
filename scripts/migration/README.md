@@ -29,8 +29,8 @@ an external assertion.
 The high-level driver `inspect-lovable-export.py` performs these steps:
 
 1. Requires an externally supplied approval pin that exactly equals `HEAD`, a
-   clean checkout, an execution-checkout-bound raw inspector, the unchanged
-   report-helper/migration baseline, and reviewed
+   clean checkout, execution-checkout-bound raw-inspector and report-helper
+   bytes, the unchanged historical migration-input baseline, and reviewed
    normalizer/driver/bounded-guard/README/config bytes from that checkout.
 2. Requires `SOURCE_PROJECT_REF` to exactly equal the single strict top-level
    `project_id` in the approved checkout's `supabase/config.toml`, whose Git blob
@@ -185,10 +185,13 @@ Git provenance has distinct meanings:
   content. The driver and normalizer have separate Git-blob and file SHA-256
   identities.
 - `inspection_tool_git_sha` is the approved execution checkout containing the
-  current raw inspector; its exact Git blob and file SHA-256 are also recorded.
+  current raw inspector and report helper; each exact Git blob and file SHA-256
+  is also recorded independently.
 - `inspection_baseline_git_sha` remains
   `c87a124602eb669b3ec5a3829610c6cb465d3e26` and explicitly covers only the
-  unchanged report helper and migration-input tree.
+  unchanged migration-input tree. The helper is execution-checkout-bound
+  because this diagnostic protocol intentionally changes it after that
+  historical baseline.
 - The execution Python is resolved before the driver starts, used in isolated
   mode, and recorded by resolved path, implementation/version, and executable
   SHA-256. The driver pins `/bin/bash` and that same interpreter for the raw
@@ -301,14 +304,36 @@ is `input_validation_failed`, `dependency_validation_failed`,
 `pgdmp_header_failed`, `pg_restore_list_rejected`, `pg_restore_list_empty`,
 `snapshot_hash_after_failed`, `snapshot_identity_changed`,
 `report_helper_failed`, `report_publish_failed`, `cleanup_failed`, and
-`internal_failure`. The high-level driver accepts only the exact JSON grammar
-and this allowlist; malformed, missing, duplicated, oversized, non-ASCII, or
-mixed diagnostics collapse to `inspector_diagnostic_invalid`. No ordinary
-durable evidence package is published after any such failure.
+`internal_failure`. The report helper has its own exact ASCII wire record,
+`{"diagnostic_version":1,"reason":"<reason>"}`, and may report only
+`unknown_toc_class`, `unresolved_known_toc_entry`, `malformed_toc`,
+`duplicate_toc_id`, `conflicting_source_version`,
+`conflicting_pg_dump_version`, `migration_metadata_unreadable`, or
+`other_nonzero`. The raw inspector captures helper stdout/stderr privately and
+accepts only one byte-exact helper record. Empty, multiline, oversized,
+non-ASCII, malformed, extra-key, wrong-version, or unknown-reason helper output
+becomes `report_helper_failed` / `other_nonzero`; no helper detail is relayed.
+The high-level driver accepts only the exact outer JSON grammar and reviewed
+stage/reason combinations; malformed, missing, duplicated, oversized,
+non-ASCII, mixed, or incompatible diagnostics collapse to
+`inspector_diagnostic_invalid` / `other_nonzero`. No ordinary durable evidence
+package is published after any such failure.
 The raw inspector stages a report away from its private snapshot workspace,
 removes that workspace before publication, and atomically creates the final
 report name without replacement. A cleanup failure therefore publishes no
-final or staged report.
+final or staged report. If a standalone report hard link is created but its
+directory durability or rollback cannot be proved, the inspector replaces the
+requested path with a fixed mode-`0400` `INDETERMINATE` marker or moves the
+linked inode to an unmistakably named indeterminate quarantine. It never treats
+that path as a successful report; irreducible filesystem I/O ambiguity remains
+a manual-quarantine stop.
+
+Use `--output` whenever the report is retained as evidence; the high-level
+workflow always does. The compatibility mode that writes a successful report to
+stdout cannot make an arbitrary pipe or terminal transactional: if its consumer
+disappears mid-write, a partial successful report may already have been emitted
+before `report_publish_failed` is returned. That stream is not durable evidence
+and no report/provenance package is published.
 
 On success the additive safe-header fields are
 `archive_format_version_bytes`, `archive_integer_width_bytes`,
@@ -325,8 +350,10 @@ publication tests on macOS. It plants checkout, repository-binding,
 privacy/timeline/hash/member/publication failures, proves only
 `pg_restore --version` and `--list` are called, and scans output/evidence for a
 synthetic row-payload and secret sentinel. Planted failures exercise every raw
-inspector stage and prove child output is absent from visible diagnostics,
-logs, reports, and durable files. This validates local mechanics only. It cannot
+inspector stage, every reviewed helper reason, malformed helper records, partial
+helper reports, and combined post-link-durability/rollback failure. They prove
+child output is absent from visible diagnostics, logs, reports, provenance, and
+durable files. This validates local mechanics only. It cannot
 prove the truth or provenance of externally supplied assertions, encryption of
 the approved evidence-store volume, Lovable's UI-control-to-backend mapping, or
 source completeness. Migration readiness remains **RED**.

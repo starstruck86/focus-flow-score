@@ -168,9 +168,43 @@ PG_DUMP_VERSION_RE = re.compile(
 )
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
+REASON_UNKNOWN_TOC_CLASS = "unknown_toc_class"
+REASON_UNRESOLVED_KNOWN_TOC_ENTRY = "unresolved_known_toc_entry"
+REASON_MALFORMED_TOC = "malformed_toc"
+REASON_DUPLICATE_TOC_ID = "duplicate_toc_id"
+REASON_CONFLICTING_SOURCE_VERSION = "conflicting_source_version"
+REASON_CONFLICTING_PG_DUMP_VERSION = "conflicting_pg_dump_version"
+REASON_MIGRATION_METADATA_UNREADABLE = "migration_metadata_unreadable"
+REASON_OTHER_NONZERO = "other_nonzero"
+ALLOWED_FAILURE_REASONS = frozenset(
+    {
+        REASON_UNKNOWN_TOC_CLASS,
+        REASON_UNRESOLVED_KNOWN_TOC_ENTRY,
+        REASON_MALFORMED_TOC,
+        REASON_DUPLICATE_TOC_ID,
+        REASON_CONFLICTING_SOURCE_VERSION,
+        REASON_CONFLICTING_PG_DUMP_VERSION,
+        REASON_MIGRATION_METADATA_UNREADABLE,
+        REASON_OTHER_NONZERO,
+    }
+)
+
 
 class InspectionError(RuntimeError):
-    """An unsafe or unrecognized metadata condition."""
+    """A private helper failure reduced to one approved public reason."""
+
+    def __init__(self, reason: str):
+        if reason not in ALLOWED_FAILURE_REASONS:
+            raise ValueError("unapproved Lovable dump report failure reason")
+        self.reason = reason
+        super().__init__(reason)
+
+
+class FailClosedArgumentParser(argparse.ArgumentParser):
+    """Convert every argument failure to the non-sensitive helper protocol."""
+
+    def error(self, _message: str) -> None:
+        raise InspectionError(REASON_OTHER_NONZERO)
 
 
 @dataclass(frozen=True)
@@ -195,7 +229,7 @@ class TocProvenance:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(add_help=False)
+    parser = FailClosedArgumentParser(add_help=False)
     parser.add_argument("--dump", required=True, type=Path)
     parser.add_argument("--toc", required=True, type=Path)
     parser.add_argument("--pg-restore-version", required=True)
@@ -221,9 +255,9 @@ def archive_fingerprint(path: Path) -> tuple[int, str, str]:
             digest.update(chunk)
 
     if not header.startswith(b"PGDMP"):
-        raise InspectionError("archive no longer has the required PGDMP header")
+        raise InspectionError(REASON_OTHER_NONZERO)
     if len(header) < 8:
-        raise InspectionError("archive has a truncated PGDMP header")
+        raise InspectionError(REASON_OTHER_NONZERO)
 
     archive_version = f"{header[5]}.{header[6]}.{header[7]}"
     return size, digest.hexdigest(), archive_version
@@ -239,12 +273,15 @@ def identify_toc_class(payload: str, line_number: int) -> tuple[str, str]:
 
     # Do not echo unclassified TOC text: until the class is recognized, none
     # of that line is trusted metadata suitable for a report or error message.
-    raise InspectionError(f"unknown TOC class at line {line_number}")
+    raise InspectionError(REASON_UNKNOWN_TOC_CLASS)
 
 
 def parse_toc(path: Path) -> tuple[list[TocEntry], TocProvenance]:
     entries: list[TocEntry] = []
-    text = path.read_text(encoding="utf-8", errors="strict")
+    try:
+        text = path.read_text(encoding="utf-8", errors="strict")
+    except UnicodeError as exc:
+        raise InspectionError(REASON_MALFORMED_TOC) from exc
     source_postgresql_versions: set[str] = set()
     pg_dump_versions: set[str] = set()
 
@@ -262,7 +299,7 @@ def parse_toc(path: Path) -> tuple[list[TocEntry], TocProvenance]:
             continue
         match = TOC_LINE_RE.match(line)
         if not match:
-            raise InspectionError(f"malformed TOC metadata at line {line_number}")
+            raise InspectionError(REASON_MALFORMED_TOC)
         object_class, remainder = identify_toc_class(match.group(4), line_number)
         entries.append(
             TocEntry(
@@ -274,13 +311,13 @@ def parse_toc(path: Path) -> tuple[list[TocEntry], TocProvenance]:
         )
 
     if not entries:
-        raise InspectionError("archive TOC contains no object entries")
+        raise InspectionError(REASON_MALFORMED_TOC)
     if len({entry.toc_id for entry in entries}) != len(entries):
-        raise InspectionError("archive TOC contains duplicate entry identifiers")
+        raise InspectionError(REASON_DUPLICATE_TOC_ID)
     if len(source_postgresql_versions) > 1:
-        raise InspectionError("TOC reports conflicting source PostgreSQL versions")
+        raise InspectionError(REASON_CONFLICTING_SOURCE_VERSION)
     if len(pg_dump_versions) > 1:
-        raise InspectionError("TOC reports conflicting pg_dump versions")
+        raise InspectionError(REASON_CONFLICTING_PG_DUMP_VERSION)
 
     return entries, TocProvenance(
         source_postgresql_version=next(iter(source_postgresql_versions), None),
@@ -375,10 +412,7 @@ def validate_required_object_references(entries: Iterable[TocEntry]) -> None:
             entry.object_class in OBJECT_REFERENCE_REQUIRED_CLASSES
             and object_ref(entry) is None
         ):
-            raise InspectionError(
-                "unresolved known TOC entry at line "
-                f"{entry.line_number} ({entry.object_class})"
-            )
+            raise InspectionError(REASON_UNRESOLVED_KNOWN_TOC_ENTRY)
 
 
 def quoted_identifier_pattern(identifier: str) -> str:
@@ -413,16 +447,15 @@ def find_migration_duplicates(
     entries: Iterable[TocEntry], migrations_dir: Path
 ) -> list[tuple[ObjectRef, str]]:
     migration_text: list[tuple[str, str]] = []
-    for path in sorted(migrations_dir.rglob("*.sql")):
-        if not path.is_file():
-            continue
-        try:
+    try:
+        migration_paths = sorted(migrations_dir.rglob("*.sql"))
+        for path in migration_paths:
+            if not path.is_file():
+                continue
             content = path.read_text(encoding="utf-8", errors="strict")
-        except (OSError, UnicodeError) as exc:
-            raise InspectionError(
-                f"could not safely read migration metadata file: {path.name}"
-            ) from exc
-        migration_text.append((path.name, content))
+            migration_text.append((path.name, content))
+    except (OSError, UnicodeError) as exc:
+        raise InspectionError(REASON_MIGRATION_METADATA_UNREADABLE) from exc
 
     duplicates: set[tuple[ObjectRef, str]] = set()
     for entry in entries:
@@ -455,15 +488,13 @@ def flag_line(label: str, count: int) -> str:
 def build_report(args: argparse.Namespace) -> str:
     size, sha256, archive_version = archive_fingerprint(args.dump)
     if not SHA256_RE.fullmatch(args.expected_sha256):
-        raise InspectionError("invalid expected archive SHA-256")
+        raise InspectionError(REASON_OTHER_NONZERO)
     if sha256 != args.expected_sha256:
-        raise InspectionError(
-            "archive snapshot changed after TOC capture; refusing unbound report"
-        )
+        raise InspectionError(REASON_OTHER_NONZERO)
     if Path(args.input_name).name != args.input_name or any(
         character in args.input_name for character in ("\n", "\r")
     ):
-        raise InspectionError("unsafe input display name")
+        raise InspectionError(REASON_OTHER_NONZERO)
 
     entries, toc_provenance = parse_toc(args.toc)
     validate_required_object_references(entries)
@@ -590,17 +621,37 @@ def build_report(args: argparse.Namespace) -> str:
     return "\n".join(lines) + "\n"
 
 
+def failure_diagnostic(reason: str) -> bytes:
+    """Return the exact public helper-failure record."""
+
+    if reason not in ALLOWED_FAILURE_REASONS:
+        reason = REASON_OTHER_NONZERO
+    return f'{{"diagnostic_version":1,"reason":"{reason}"}}\n'.encode("ascii")
+
+
+def emit_failure_diagnostic(reason: str) -> None:
+    try:
+        sys.stderr.buffer.write(failure_diagnostic(reason))
+        sys.stderr.buffer.flush()
+    except Exception:
+        # Never replace the fixed diagnostic with a traceback or free-form text.
+        pass
+
+
 def main() -> int:
     try:
         args = parse_args()
         if not args.migrations_dir.is_dir():
-            raise InspectionError("migrations directory is unavailable")
+            raise InspectionError(REASON_MIGRATION_METADATA_UNREADABLE)
         report = build_report(args)
-    except (InspectionError, OSError, UnicodeError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.stdout.write(report)
+        sys.stdout.flush()
+    except InspectionError as exc:
+        emit_failure_diagnostic(exc.reason)
         return 4
-
-    sys.stdout.write(report)
+    except Exception:
+        emit_failure_diagnostic(REASON_OTHER_NONZERO)
+        return 4
     return 0
 
 

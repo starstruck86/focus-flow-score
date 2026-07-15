@@ -35,6 +35,7 @@ for required_path in \
   "$SOURCE_REPO_ROOT/scripts/migration/bounded-pg-restore.py" \
   "$SOURCE_REPO_ROOT/scripts/migration/normalize-lovable-export.py" \
   "$SOURCE_REPO_ROOT/scripts/migration/inspect-lovable-dump.sh" \
+  "$SOURCE_REPO_ROOT/scripts/migration/lib/lovable_dump_report.py" \
   "$SOURCE_REPO_ROOT/supabase/config.toml"; do
   migration_verify_require_file "$required_path"
 done
@@ -431,6 +432,29 @@ def verify_mode(
         "raw_failure_output_relayed": False,
     }:
         raise SystemExit("raw PGDMP inspector provenance mismatch")
+
+    helper_path = repo / "scripts" / "migration" / "lib" / "lovable_dump_report.py"
+    helper_blob = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "rev-parse",
+            "HEAD:scripts/migration/lib/lovable_dump_report.py",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    if provenance["execution_tools"]["report_helper"] != {
+        "path": "scripts/migration/lib/lovable_dump_report.py",
+        "git_sha": provenance["execution_checkout_sha"],
+        "git_blob_sha": helper_blob,
+        "sha256": sha256(helper_path),
+        "failure_diagnostic_format_version": 1,
+        "raw_failure_output_relayed": False,
+    }:
+        raise SystemExit("report helper provenance mismatch")
 
     python_path = Path(sys.executable).resolve()
     if provenance["execution_tools"]["python_runtime"] != {

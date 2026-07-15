@@ -81,17 +81,53 @@ INSPECTOR_STAGE_CODES = frozenset(
         "internal_failure",
     }
 )
-INSPECTOR_FAILURE_REASONS = frozenset(
+REPORT_HELPER_FAILURE_REASONS = frozenset(
     {
-        "not_applicable",
+        "unknown_toc_class",
+        "unresolved_known_toc_entry",
+        "malformed_toc",
+        "duplicate_toc_id",
+        "conflicting_source_version",
+        "conflicting_pg_dump_version",
+        "migration_metadata_unreadable",
+        "other_nonzero",
+    }
+)
+PG_RESTORE_LIST_FAILURE_REASONS = frozenset(
+    {
         "unsupported_archive_version",
         "invalid_archive",
         "truncated_archive",
         "timeout",
         "output_cap",
-        "invalid_output",
         "other_nonzero",
     }
+)
+PG_RESTORE_VERSION_FAILURE_REASONS = frozenset(
+    {"timeout", "output_cap", "invalid_output", "other_nonzero"}
+)
+INSPECTOR_STAGE_REASON_CODES = {
+    "input_validation_failed": frozenset({"not_applicable"}),
+    "dependency_validation_failed": frozenset({"not_applicable"}),
+    "workspace_setup_failed": frozenset({"not_applicable"}),
+    "pg_restore_version_failed": PG_RESTORE_VERSION_FAILURE_REASONS,
+    "snapshot_copy_failed": frozenset({"not_applicable"}),
+    "snapshot_permissions_failed": frozenset({"not_applicable"}),
+    "snapshot_hash_before_failed": frozenset({"not_applicable"}),
+    "pgdmp_header_failed": frozenset({"not_applicable", "invalid_output"}),
+    "pg_restore_list_rejected": PG_RESTORE_LIST_FAILURE_REASONS,
+    "pg_restore_list_empty": frozenset({"not_applicable"}),
+    "snapshot_hash_after_failed": frozenset({"not_applicable"}),
+    "snapshot_identity_changed": frozenset({"not_applicable"}),
+    "report_helper_failed": REPORT_HELPER_FAILURE_REASONS,
+    "report_publish_failed": frozenset({"not_applicable"}),
+    "cleanup_failed": frozenset({"not_applicable"}),
+    "internal_failure": frozenset(
+        {"not_applicable", "invalid_output", "other_nonzero"}
+    ),
+}
+INSPECTOR_FAILURE_REASONS = frozenset().union(
+    *INSPECTOR_STAGE_REASON_CODES.values()
 )
 DRIVER_INSPECTOR_STAGE_CODES = INSPECTOR_STAGE_CODES | {
     "inspector_diagnostic_invalid"
@@ -111,9 +147,13 @@ class InspectorStageError(WorkflowError):
     """A raw-inspector failure reduced to reviewed machine codes only."""
 
     def __init__(self, stage: str, reason: str):
-        if stage not in DRIVER_INSPECTOR_STAGE_CODES:
+        if stage == "inspector_diagnostic_invalid":
+            reason = "other_nonzero"
+        elif (
+            stage not in INSPECTOR_STAGE_REASON_CODES
+            or reason not in INSPECTOR_STAGE_REASON_CODES[stage]
+        ):
             stage = "inspector_diagnostic_invalid"
-        if reason not in INSPECTOR_FAILURE_REASONS:
             reason = "other_nonzero"
         self.stage = stage
         self.reason = reason
@@ -1633,7 +1673,7 @@ def parse_inspector_failure(stdout: bytes, stderr: bytes) -> tuple[str, str]:
         or not isinstance(stage, str)
         or stage not in INSPECTOR_STAGE_CODES
         or not isinstance(reason, str)
-        or reason not in INSPECTOR_FAILURE_REASONS
+        or reason not in INSPECTOR_STAGE_REASON_CODES[stage]
     ):
         return "inspector_diagnostic_invalid", "other_nonzero"
     canonical = (
@@ -1798,10 +1838,7 @@ def preflight(repo: Path) -> dict[str, str]:
     ):
         raise WorkflowError("inspection baseline commit is not an execution ancestor")
 
-    baseline_paths = [
-        "scripts/migration/lib/lovable_dump_report.py",
-        "supabase/migrations",
-    ]
+    baseline_paths = ["supabase/migrations"]
     if not git_success(
         repo,
         [
@@ -1812,9 +1849,7 @@ def preflight(repo: Path) -> dict[str, str]:
             *baseline_paths,
         ],
     ):
-        raise WorkflowError(
-            "inspection helper/migration inputs differ from their historical baseline"
-        )
+        raise WorkflowError("migration inputs differ from their historical baseline")
 
     untracked = run_git(
         repo, ["ls-files", "--others", "--exclude-standard", "--", "supabase/migrations"]
@@ -1841,6 +1876,7 @@ def preflight(repo: Path) -> dict[str, str]:
         "scripts/migration/normalize-lovable-export.py",
         "scripts/migration/bounded-pg-restore.py",
         "scripts/migration/inspect-lovable-dump.sh",
+        "scripts/migration/lib/lovable_dump_report.py",
         "supabase/config.toml",
     ]
     if not git_success(repo, ["diff", "--quiet", execution, "--", *execution_paths]):
@@ -1865,6 +1901,7 @@ def preflight(repo: Path) -> dict[str, str]:
         "normalizer_blob_sha": "scripts/migration/normalize-lovable-export.py",
         "pg_restore_guard_blob_sha": "scripts/migration/bounded-pg-restore.py",
         "pgdmp_inspector_blob_sha": "scripts/migration/inspect-lovable-dump.sh",
+        "report_helper_blob_sha": "scripts/migration/lib/lovable_dump_report.py",
         "supabase_config_blob_sha": "supabase/config.toml",
     }.items():
         blob = run_git(repo, ["rev-parse", f"HEAD:{relative}"])
@@ -1885,6 +1922,9 @@ def preflight(repo: Path) -> dict[str, str]:
     )
     identities["pgdmp_inspector_sha256"] = file_sha256(
         repo / "scripts/migration/inspect-lovable-dump.sh"
+    )
+    identities["report_helper_sha256"] = file_sha256(
+        repo / "scripts/migration/lib/lovable_dump_report.py"
     )
     identities["supabase_config_sha256"] = file_sha256(repo / "supabase/config.toml")
 
@@ -2282,9 +2322,7 @@ def inspect() -> Path:
                 "inspector_identity": (
                     "approved execution checkout plus exact Git blob and file SHA-256"
                 ),
-                "historical_baseline_scope": (
-                    "unchanged report helper and supabase/migrations only"
-                ),
+                "historical_baseline_scope": "unchanged supabase/migrations only",
             },
             "execution_tools": {
                 "driver": {
@@ -2308,6 +2346,14 @@ def inspect() -> Path:
                     "git_sha": identities["inspection_tool_git_sha"],
                     "git_blob_sha": identities["pgdmp_inspector_blob_sha"],
                     "sha256": identities["pgdmp_inspector_sha256"],
+                    "failure_diagnostic_format_version": 1,
+                    "raw_failure_output_relayed": False,
+                },
+                "report_helper": {
+                    "path": "scripts/migration/lib/lovable_dump_report.py",
+                    "git_sha": identities["inspection_tool_git_sha"],
+                    "git_blob_sha": identities["report_helper_blob_sha"],
+                    "sha256": identities["report_helper_sha256"],
                     "failure_diagnostic_format_version": 1,
                     "raw_failure_output_relayed": False,
                 },

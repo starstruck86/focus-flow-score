@@ -343,7 +343,16 @@ missing, malformed, duplicate, oversized, non-ASCII, unknown, or mixed
 diagnostic and must never relay raw child stdout/stderr, TOC text, paths, object
 names, or payload bytes. A failed run publishes no normal durable evidence
 package and removes its disposable snapshot, TOC, derived archive, partial
-report, and provenance. Reviewed `pg_restore` failure reasons are limited to
+report, and provenance. The report helper emits exactly one ASCII JSON line
+with fixed key order and version. Its only reasons are `unknown_toc_class`,
+`unresolved_known_toc_entry`, `malformed_toc`, `duplicate_toc_id`,
+`conflicting_source_version`, `conflicting_pg_dump_version`,
+`migration_metadata_unreadable`, and `other_nonzero`. Capture both helper
+channels privately; any empty, multiline, oversized, non-ASCII, malformed,
+extra-key, wrong-version, or unknown-reason diagnostic reduces to
+`report_helper_failed` / `other_nonzero`. The high-level driver accepts only
+reviewed stage/reason pairs, never a globally valid reason attached to the
+wrong stage. Reviewed `pg_restore` failure reasons are limited to
 unsupported archive version, invalid archive, truncated archive, timeout,
 output cap, or other nonzero; all unfamiliar text is `other_nonzero`.
 The approved workflow records its resolved execution-Python identity, runs
@@ -351,7 +360,16 @@ child Python tools in isolated mode, pins the raw inspector to that interpreter
 and `/bin/bash`, and excludes inherited shell/Python startup hooks from the
 child environment. The raw inspector must finish private-workspace cleanup
 before atomically publishing a no-replace report; cleanup failure publishes
-nothing.
+nothing. If a standalone report link exists but post-link directory durability
+and rollback cannot both be proved, replace its contents with a fixed private
+indeterminate marker or move it to an unmistakably named quarantine. Such an
+artifact is never a valid report; residual filesystem ambiguity is a mandatory
+manual-quarantine stop.
+
+The evidence workflow must use `--output`. Direct stdout compatibility mode is
+not transactional with an arbitrary terminal or pipe; a consumer failure can
+leave a partial stream even though the inspector returns
+`report_publish_failed`. Never retain that stream as evidence.
 
 pg_restore --list does not prove that every byte of the inner input was consumed.
 
@@ -412,7 +430,8 @@ and inspector-reported hash, the pre-`pg_restore` safe header fields bound to
 that same inner hash, operator, informational procedure-origin SHA,
 externally approved checkout SHA, actual execution-checkout SHA, committed
 README blob SHA, fenced-workflow SHA-256, execution-bound inspector Git
-blob/file SHA, historical helper/migration baseline SHA, and
+blob/file SHA, separately execution-bound report-helper Git blob/file SHA,
+historical migration-input baseline SHA, and
 report/provenance hashes. The approved and execution SHAs must be identical.
 The per-file manifest and detached hash must verify in the durable package, the
 disposable local run must be absent, and the externally approved expected outer

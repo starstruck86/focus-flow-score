@@ -51,6 +51,13 @@ reason_is_allowed() {
       timeout | \
       output_cap | \
       invalid_output | \
+      unknown_toc_class | \
+      unresolved_known_toc_entry | \
+      malformed_toc | \
+      duplicate_toc_id | \
+      conflicting_source_version | \
+      conflicting_pg_dump_version | \
+      migration_metadata_unreadable | \
       other_nonzero)
       return 0
       ;;
@@ -572,7 +579,44 @@ if ! { "$PYTHON" -I "$REPORT_HELPER" \
   --expected-sha256 "$snapshot_sha_after" \
   --input-name "$INPUT_NAME" \
   --migrations-dir "$MIGRATIONS_DIR" > "$REPORT_FILE" 2> "$REPORT_HELPER_ERROR"; } 2>/dev/null; then
-  fail 'report_helper_failed'
+  helper_reason='other_nonzero'
+  if ! helper_reason="$({ "$PYTHON" -I - "$REPORT_HELPER_ERROR" helper-diagnostic <<'PY'
+import pathlib
+import sys
+
+allowed = (
+    "unknown_toc_class",
+    "unresolved_known_toc_entry",
+    "malformed_toc",
+    "duplicate_toc_id",
+    "conflicting_source_version",
+    "conflicting_pg_dump_version",
+    "migration_metadata_unreadable",
+    "other_nonzero",
+)
+try:
+    with pathlib.Path(sys.argv[1]).open("rb") as source:
+        data = source.read(257)
+        overflow = source.read(1)
+except OSError:
+    data = b""
+    overflow = b""
+
+reason = "other_nonzero"
+if not overflow and len(data) <= 256:
+    for candidate in allowed:
+        expected = (
+            f'{{"diagnostic_version":1,"reason":"{candidate}"}}\n'.encode("ascii")
+        )
+        if data == expected:
+            reason = candidate
+            break
+print(reason)
+PY
+} 2>/dev/null)" || ! reason_is_allowed "$helper_reason"; then
+    helper_reason='other_nonzero'
+  fi
+  fail 'report_helper_failed' "$helper_reason"
 fi
 
 expected_binding='not_supplied'
@@ -586,7 +630,7 @@ if ! { printf '%s\n' \
   "archive_format_code: ${header_format}" \
   "archive_header_bound_sha256: ${snapshot_sha_after}" \
   "expected_sha256_binding: ${expected_binding}" >> "$REPORT_FILE"; } 2>/dev/null; then
-  fail 'report_helper_failed'
+  fail 'report_helper_failed' 'other_nonzero'
 fi
 
 current_stage='report_publish_failed'
@@ -664,30 +708,125 @@ publish_status=0
 if { "$PYTHON" -I - "$staged_report" "$OUTPUT_PATH" publish <<'PY'
 import os
 import pathlib
+import stat
 import sys
+import tempfile
 
 source = pathlib.Path(sys.argv[1])
 destination = pathlib.Path(sys.argv[2])
 published = False
 directory_fd = -1
+source_identity = None
+test_fault = os.environ.get("LOVABLE_INSPECTOR_TEST_PUBLISH_FAULT", "")
+indeterminate_payload = (
+    b'{"diagnostic_version":1,"inspection_status":"INDETERMINATE",'
+    b'"reason":"report_publication_rollback_unproven"}\n'
+)
+
+def destination_identity():
+    try:
+        metadata = os.stat(destination, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or source_identity is None
+        or (metadata.st_dev, metadata.st_ino) != source_identity
+    ):
+        raise OSError("published destination identity changed")
+    return metadata
+
+def mark_destination_indeterminate():
+    flags = os.O_WRONLY | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    created = False
+    try:
+        descriptor = os.open(destination, flags)
+    except FileNotFoundError:
+        descriptor = os.open(
+            destination,
+            flags | os.O_CREAT | os.O_EXCL,
+            0o600,
+        )
+        created = True
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise OSError("indeterminate marker target is not regular")
+        if not created and (
+            source_identity is None
+            or (metadata.st_dev, metadata.st_ino) != source_identity
+        ):
+            raise OSError("indeterminate marker target identity changed")
+        os.ftruncate(descriptor, 0)
+        offset = 0
+        while offset < len(indeterminate_payload):
+            written = os.write(descriptor, indeterminate_payload[offset:])
+            if written <= 0:
+                raise OSError("indeterminate marker write made no progress")
+            offset += written
+        os.fchmod(descriptor, 0o400)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    os.fsync(directory_fd)
+
+def quarantine_destination():
+    if destination_identity() is None:
+        return
+    quarantine_fd, quarantine_path = tempfile.mkstemp(
+        prefix=".lovable-report.INSPECTION_INDETERMINATE.",
+        suffix=".quarantine",
+        dir=destination.parent,
+    )
+    os.close(quarantine_fd)
+    try:
+        os.replace(destination, quarantine_path)
+        os.chmod(quarantine_path, 0o400)
+        os.fsync(directory_fd)
+    except Exception:
+        pathlib.Path(quarantine_path).unlink(missing_ok=True)
+        raise
+
 try:
+    source_metadata = os.stat(source, follow_symlinks=False)
+    if not stat.S_ISREG(source_metadata.st_mode):
+        raise OSError("staged report is not regular")
+    source_identity = (source_metadata.st_dev, source_metadata.st_ino)
     os.link(source, destination, follow_symlinks=False)
     published = True
     directory_fd = os.open(
         destination.parent,
         os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
     )
+    if test_fault == "post_link_fsync_and_rollback_unlink":
+        raise OSError("planted post-link directory fsync failure")
     os.fsync(directory_fd)
     source.unlink()
     os.fsync(directory_fd)
 except FileExistsError:
     raise SystemExit(17)
 except Exception:
+    rollback_proven = False
     if published:
         try:
-            destination.unlink(missing_ok=True)
-        except OSError:
-            pass
+            if test_fault == "post_link_fsync_and_rollback_unlink":
+                raise OSError("planted rollback unlink failure")
+            destination.unlink()
+            if os.path.lexists(destination):
+                raise OSError("published destination still exists after rollback")
+            os.fsync(directory_fd)
+            rollback_proven = True
+        except Exception:
+            rollback_proven = False
+        if not rollback_proven:
+            try:
+                mark_destination_indeterminate()
+            except Exception:
+                try:
+                    quarantine_destination()
+                except Exception:
+                    pass
     raise SystemExit(18)
 finally:
     if directory_fd >= 0:
@@ -706,4 +845,8 @@ if [[ "$publish_status" -ne 0 ]]; then
 fi
 
 staged_report=''
-printf 'Metadata-only report written to %s\n' "$OUTPUT_PATH"
+# The report is already durably committed. A best-effort human notification
+# must not retroactively turn that committed success into a failure that leaves
+# a normal report beside a failure diagnostic.
+{ printf 'Metadata-only report written to %s\n' "$OUTPUT_PATH"; } 2>/dev/null || true
+exit 0

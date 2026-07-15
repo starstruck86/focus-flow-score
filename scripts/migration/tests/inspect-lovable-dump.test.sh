@@ -48,7 +48,7 @@ assert_not_contains() {
   local unexpected="$2"
   local label="$3"
   if grep -Fq -- "$unexpected" "$file"; then
-    fail "$label (unexpected: $unexpected)"
+    fail "$label (unexpected content present)"
   else
     pass "$label"
   fi
@@ -96,11 +96,17 @@ assert_stage_failure() {
   fi
   if [[ "$(<"$stderr_file")" != "$expected" ]] ||
     [[ "$(wc -l <"$stderr_file" | tr -d ' ')" != '1' ]]; then
-    fail "$label (unexpected diagnostic: $(<"$stderr_file"))"
+    fail "$label (unexpected diagnostic bytes)"
     return
   fi
   if grep -Fq -- "$SECRET_SENTINEL" "$stderr_file" ||
     grep -Fq -- 'TOP_SECRET_TOC_COMMENT_MUST_NOT_APPEAR' "$stderr_file" ||
+    grep -Fq -- "$HELPER_SECRET_SENTINEL" "$stderr_file" ||
+    grep -Fq -- "$HELPER_ROW_SENTINEL" "$stderr_file" ||
+    grep -Fq -- "$HELPER_PATH_SENTINEL" "$stderr_file" ||
+    grep -Fq -- "$HELPER_OBJECT_SENTINEL" "$stderr_file" ||
+    grep -Fq -- "$HELPER_TOC_SENTINEL" "$stderr_file" ||
+    grep -Fq -- "$HELPER_SQL_SENTINEL" "$stderr_file" ||
     grep -Fq -- "$DUMP_FILE" "$stderr_file"; then
     fail "$label (unsafe content leaked into diagnostic)"
     return
@@ -239,6 +245,12 @@ mkdir -p "$OUTPUT_DIR" "$MIGRATIONS_DIR"
 readonly DUMP_FILE="${WORK_WITH_SPACES}/synthetic lovable dump.backup"
 readonly CANONICAL_DUMP_FILE="$(cd -P -- "$(dirname -- "$DUMP_FILE")" && pwd)/$(basename -- "$DUMP_FILE")"
 readonly SECRET_SENTINEL='TOP_SECRET_ROW_VALUE_MUST_NOT_APPEAR'
+readonly HELPER_SECRET_SENTINEL='HELPER_SECRET_VALUE_MUST_NOT_APPEAR'
+readonly HELPER_ROW_SENTINEL='HELPER_ROW_PAYLOAD_MUST_NOT_APPEAR'
+readonly HELPER_PATH_SENTINEL='/private/synthetic/helper/path/MUST_NOT_APPEAR'
+readonly HELPER_OBJECT_SENTINEL='private_customer_object_MUST_NOT_APPEAR'
+readonly HELPER_TOC_SENTINEL='999; 0 0 TABLE private forbidden_MUST_NOT_APPEAR owner'
+readonly HELPER_SQL_SENTINEL='SELECT private_secret_MUST_NOT_APPEAR FROM auth.users'
 printf 'PGDMP\001\016\000\004\010\001%s\n' "$SECRET_SENTINEL" >"$DUMP_FILE"
 printf 'CREATE TABLE public.daily_digest_items (id uuid);\n' >"${MIGRATIONS_DIR}/0001 synthetic.sql"
 
@@ -585,10 +597,120 @@ assert_stage_failure \
 
 assert_stage_failure \
   "fails closed on report-helper rejection without relaying TOC content" \
-  "report_helper_failed" "not_applicable" \
+  "report_helper_failed" "unknown_toc_class" \
   env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
     FAKE_LOG="$CALL_LOG" FAKE_TOC="${FIXTURES}/unknown-class.toc" \
     bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" "$DUMP_FILE"
+
+readonly HELPER_DIAGNOSTIC_PYTHON="${TMP_ROOT}/helper-diagnostic-python"
+cat >"$HELPER_DIAGNOSTIC_PYTHON" <<'PYTHON_WRAPPER'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${2:-}" == */lib/lovable_dump_report.py ]]; then
+  printf '%s\n' \
+    "$HELPER_SECRET_SENTINEL" \
+    "$HELPER_ROW_SENTINEL" \
+    "$HELPER_PATH_SENTINEL" \
+    "$HELPER_OBJECT_SENTINEL" \
+    "$HELPER_TOC_SENTINEL" \
+    "$HELPER_SQL_SENTINEL"
+  case "${FAKE_HELPER_DIAGNOSTIC_MODE:-empty}" in
+    exact-*)
+      reason="${FAKE_HELPER_DIAGNOSTIC_MODE#exact-}"
+      printf '{"diagnostic_version":1,"reason":"%s"}\n' "$reason" >&2
+      ;;
+    empty) ;;
+    multiline)
+      printf '%s\n%s\n' \
+        '{"diagnostic_version":1,"reason":"malformed_toc"}' \
+        "$HELPER_SECRET_SENTINEL" >&2
+      ;;
+    oversized)
+      "$REAL_PYTHON_BIN" -I - <<'PY' >&2
+import sys
+sys.stdout.write("A" * 300)
+PY
+      ;;
+    non-ascii) printf '\377' >&2 ;;
+    malformed) printf '%s\n' '{not-json}' >&2 ;;
+    extra-key)
+      printf '%s\n' \
+        '{"diagnostic_version":1,"reason":"malformed_toc","extra":true}' >&2
+      ;;
+    wrong-version)
+      printf '%s\n' \
+        '{"diagnostic_version":2,"reason":"malformed_toc"}' >&2
+      ;;
+    unknown-reason)
+      printf '%s\n' \
+        '{"diagnostic_version":1,"reason":"private_detail"}' >&2
+      ;;
+    *) exit 99 ;;
+  esac
+  exit 4
+fi
+exec "$REAL_PYTHON_BIN" "$@"
+PYTHON_WRAPPER
+chmod 0700 "$HELPER_DIAGNOSTIC_PYTHON"
+
+for helper_reason in \
+  unknown_toc_class \
+  unresolved_known_toc_entry \
+  malformed_toc \
+  duplicate_toc_id \
+  conflicting_source_version \
+  conflicting_pg_dump_version \
+  migration_metadata_unreadable \
+  other_nonzero; do
+  helper_output="${OUTPUT_DIR}/helper-${helper_reason}.txt"
+  assert_stage_failure \
+    "accepts canonical private helper reason ${helper_reason}" \
+    "report_helper_failed" "$helper_reason" \
+    env PG_RESTORE_BIN="$FAKE_PG_RESTORE" \
+      PYTHON_BIN="$HELPER_DIAGNOSTIC_PYTHON" \
+      REAL_PYTHON_BIN="$PYTHON" \
+      FAKE_HELPER_DIAGNOSTIC_MODE="exact-${helper_reason}" \
+      HELPER_SECRET_SENTINEL="$HELPER_SECRET_SENTINEL" \
+      HELPER_ROW_SENTINEL="$HELPER_ROW_SENTINEL" \
+      HELPER_PATH_SENTINEL="$HELPER_PATH_SENTINEL" \
+      HELPER_OBJECT_SENTINEL="$HELPER_OBJECT_SENTINEL" \
+      HELPER_TOC_SENTINEL="$HELPER_TOC_SENTINEL" \
+      HELPER_SQL_SENTINEL="$HELPER_SQL_SENTINEL" \
+      FAKE_LOG="$CALL_LOG" FAKE_TOC="${FIXTURES}/representative.toc" \
+      bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" \
+        --output "$helper_output" "$DUMP_FILE"
+  if [[ -e "$helper_output" ]]; then
+    fail "canonical helper failure ${helper_reason} published a report"
+  else
+    pass "canonical helper failure ${helper_reason} publishes no report"
+  fi
+done
+
+for malformed_helper_case in \
+  empty multiline oversized non-ascii malformed extra-key wrong-version unknown-reason; do
+  malformed_output="${OUTPUT_DIR}/helper-malformed-${malformed_helper_case}.txt"
+  assert_stage_failure \
+    "collapses malformed private helper output ${malformed_helper_case}" \
+    "report_helper_failed" "other_nonzero" \
+    env PG_RESTORE_BIN="$FAKE_PG_RESTORE" \
+      PYTHON_BIN="$HELPER_DIAGNOSTIC_PYTHON" \
+      REAL_PYTHON_BIN="$PYTHON" \
+      FAKE_HELPER_DIAGNOSTIC_MODE="$malformed_helper_case" \
+      HELPER_SECRET_SENTINEL="$HELPER_SECRET_SENTINEL" \
+      HELPER_ROW_SENTINEL="$HELPER_ROW_SENTINEL" \
+      HELPER_PATH_SENTINEL="$HELPER_PATH_SENTINEL" \
+      HELPER_OBJECT_SENTINEL="$HELPER_OBJECT_SENTINEL" \
+      HELPER_TOC_SENTINEL="$HELPER_TOC_SENTINEL" \
+      HELPER_SQL_SENTINEL="$HELPER_SQL_SENTINEL" \
+      FAKE_LOG="$CALL_LOG" FAKE_TOC="${FIXTURES}/representative.toc" \
+      bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" \
+        --output "$malformed_output" "$DUMP_FILE"
+  if [[ -e "$malformed_output" ]]; then
+    fail "malformed helper failure ${malformed_helper_case} published a report"
+  else
+    pass "malformed helper failure ${malformed_helper_case} publishes no report"
+  fi
+done
 
 assert_stage_failure \
   "refuses report overwrite with a report-publish stage" \
@@ -613,6 +735,54 @@ if [[ ! -e "$PARTIAL_PUBLISH_REPORT" ]] &&
   pass "report publication setup failure leaves no final or staged report"
 else
   fail "report publication setup failure leaves no final or staged report"
+fi
+
+readonly NOTIFICATION_REPORT="${OUTPUT_DIR}/notification failure report.txt"
+readonly NOTIFICATION_STDERR="${TMP_ROOT}/notification-failure.stderr"
+if env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
+  FAKE_LOG="$CALL_LOG" FAKE_TOC="${FIXTURES}/representative.toc" \
+  bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" \
+    --output "$NOTIFICATION_REPORT" "$DUMP_FILE" \
+    1>&- 2>"$NOTIFICATION_STDERR"; then
+  if [[ -f "$NOTIFICATION_REPORT" && ! -s "$NOTIFICATION_STDERR" ]] &&
+    grep -Fq 'inspection_status: REVIEW_REQUIRED' "$NOTIFICATION_REPORT"; then
+    pass "closed notification stdout cannot relabel a committed report as failure"
+  else
+    fail "closed notification stdout cannot relabel a committed report as failure"
+  fi
+else
+  fail "closed notification stdout cannot relabel a committed report as failure"
+fi
+
+readonly INDETERMINATE_REPORT="${OUTPUT_DIR}/indeterminate publish report.txt"
+assert_stage_failure \
+  "marks the requested path indeterminate when post-link fsync and rollback unlink fail" \
+  "report_publish_failed" "not_applicable" \
+  env PG_RESTORE_BIN="$FAKE_PG_RESTORE" PYTHON_BIN="$PYTHON" \
+    LOVABLE_INSPECTOR_TEST_PUBLISH_FAULT=post_link_fsync_and_rollback_unlink \
+    FAKE_LOG="$CALL_LOG" FAKE_TOC="${FIXTURES}/representative.toc" \
+    bash "$SCRIPT" --migrations-dir "$MIGRATIONS_DIR" \
+      --output "$INDETERMINATE_REPORT" "$DUMP_FILE"
+readonly INDETERMINATE_PAYLOAD='{"diagnostic_version":1,"inspection_status":"INDETERMINATE","reason":"report_publication_rollback_unproven"}'
+indeterminate_mode=''
+if [[ -f "$INDETERMINATE_REPORT" ]]; then
+  indeterminate_mode="$($PYTHON -I - "$INDETERMINATE_REPORT" <<'PY'
+import os
+import stat
+import sys
+
+print(f"{stat.S_IMODE(os.stat(sys.argv[1], follow_symlinks=False).st_mode):04o}")
+PY
+)" || indeterminate_mode=''
+fi
+if [[ -f "$INDETERMINATE_REPORT" && "$indeterminate_mode" == '0400' ]] &&
+  [[ "$(<"$INDETERMINATE_REPORT")" == "$INDETERMINATE_PAYLOAD" ]] &&
+  ! grep -Fq 'inspection_status: REVIEW_REQUIRED' "$INDETERMINATE_REPORT" &&
+  ! find "$OUTPUT_DIR" -maxdepth 1 -name '.lovable-metadata-report.*.pending' \
+    -print -quit | grep -q .; then
+  pass "combined durability and rollback failure cannot leave a normal-looking report"
+else
+  fail "combined durability and rollback failure cannot leave a normal-looking report"
 fi
 
 readonly CLEANUP_REPORT="${OUTPUT_DIR}/cleanup failure report.txt"
