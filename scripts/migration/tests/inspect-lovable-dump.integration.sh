@@ -88,11 +88,35 @@ bash "$INSPECTOR" \
 grep -Fq 'archive_format: PostgreSQL custom archive (PGDMP)' "$REPORT"
 grep -Fq 'archive_snapshot_binding: PASS' "$REPORT"
 grep -Eq '^archive_format_version: [0-9]+\.[0-9]+\.[0-9]+$' "$REPORT"
+grep -Eq '^archive_format_version_bytes: [0-9]+,[0-9]+,[0-9]+$' "$REPORT"
+grep -Eq '^archive_integer_width_bytes: [0-9]+$' "$REPORT"
+grep -Eq '^archive_offset_width_bytes: [0-9]+$' "$REPORT"
+grep -Fxq 'archive_format_code: 1' "$REPORT"
+grep -Eq '^archive_header_bound_sha256: [0-9a-f]{64}$' "$REPORT"
 grep -Eq '^source_postgresql_version: 17([.]|$)' "$REPORT"
 grep -Eq '^source_pg_dump_version: 17([.]|$)' "$REPORT"
+grep -Fxq 'inspection_status: REVIEW_REQUIRED' "$REPORT"
+grep -Fxq 'restore_attempted: no' "$REPORT"
+grep -Fxq 'database_connection_attempted: no' "$REPORT"
+grep -Fxq 'row_payload_inspected: no' "$REPORT"
+grep -Fxq 'pg_restore_list_compatibility: PASS' "$REPORT"
 grep -Fq \
   'TABLE migration_dump_fixture.items -> 0001 synthetic fixture.sql' \
   "$REPORT"
+
+report_sha_count="$(grep -Ec '^sha256: [0-9a-f]{64}$' "$REPORT")"
+header_sha_count="$(grep -Ec '^archive_header_bound_sha256: [0-9a-f]{64}$' "$REPORT")"
+if [[ "$report_sha_count" -ne 1 || "$header_sha_count" -ne 1 ]]; then
+  printf 'ERROR: expected one report SHA and one header-bound SHA\n' >&2
+  exit 1
+fi
+report_sha="$(grep -E '^sha256: [0-9a-f]{64}$' "$REPORT" | cut -d' ' -f2)"
+header_sha="$(grep -E '^archive_header_bound_sha256: [0-9a-f]{64}$' "$REPORT" | cut -d' ' -f2)"
+if [[ "$report_sha" != "$header_sha" ]]; then
+  printf 'ERROR: archive header was not bound to the reported archive SHA\n' >&2
+  exit 1
+fi
+
 if grep -Fq "$SECRET_SENTINEL" "$REPORT"; then
   printf 'ERROR: row payload leaked into metadata report\n' >&2
   exit 1

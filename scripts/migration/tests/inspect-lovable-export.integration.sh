@@ -35,6 +35,7 @@ for required_path in \
   "$SOURCE_REPO_ROOT/scripts/migration/bounded-pg-restore.py" \
   "$SOURCE_REPO_ROOT/scripts/migration/normalize-lovable-export.py" \
   "$SOURCE_REPO_ROOT/scripts/migration/inspect-lovable-dump.sh" \
+  "$SOURCE_REPO_ROOT/scripts/migration/lib/lovable_dump_report.py" \
   "$SOURCE_REPO_ROOT/supabase/config.toml"; do
   migration_verify_require_file "$required_path"
 done
@@ -117,10 +118,15 @@ fi
 mkdir -m 0700 -- "$ZIP_STORE" "$DIRECT_STORE"
 : >"$PG_RESTORE_LEDGER_PATH"
 chmod 0600 "$PG_RESTORE_LEDGER_PATH"
+printf '%s\n' "$REAL_PG_RESTORE_BIN" >"${TMP_ROOT}/real-pg_restore.path"
+chmod 0400 "${TMP_ROOT}/real-pg_restore.path"
 
 cat >"$PG_RESTORE_WRAPPER" <<'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
+wrapper_root="$(cd -P -- "$(dirname -- "$0")" && pwd)"
+ledger="${wrapper_root}/pg_restore.calls"
+real_pg_restore="$(cat -- "${wrapper_root}/real-pg_restore.path")"
 case "${1:-}" in
   --version)
     [[ $# -eq 1 ]] || exit 91
@@ -133,8 +139,8 @@ case "${1:-}" in
     exit 93
     ;;
 esac
-printf '%s\n' "$1" >>"$PG_RESTORE_LEDGER"
-exec "$REAL_PG_RESTORE" "$@"
+printf '%s\n' "$1" >>"$ledger"
+exec "$real_pg_restore" "$@"
 WRAPPER
 chmod 0700 "$PG_RESTORE_WRAPPER"
 
@@ -245,9 +251,7 @@ run_driver() {
   APPROVED_EVIDENCE_STORE_ROOT="$store" \
   APPROVED_EXECUTION_CHECKOUT_SHA="$APPROVED_CHECKOUT" \
   PG_RESTORE_BIN="$PG_RESTORE_WRAPPER" \
-  PG_RESTORE_LEDGER="$PG_RESTORE_LEDGER_PATH" \
-  REAL_PG_RESTORE="$REAL_PG_RESTORE_BIN" \
-  "$PYTHON" "$DRIVER"
+  "$PYTHON" -I "$DRIVER"
 }
 
 zip_stdout="$(run_driver "$ZIP_CANONICAL" "$ZIP_STORE" "$ZIP_MEMBER")"
@@ -402,8 +406,66 @@ def verify_mode(
         "path": "scripts/migration/bounded-pg-restore.py",
         "git_blob_sha": guard_blob,
         "sha256": sha256(guard_path),
+        "invoked_with_execution_python_isolated_mode": True,
     }:
         raise SystemExit("bounded pg_restore guard provenance mismatch")
+
+    inspector_path = repo / "scripts" / "migration" / "inspect-lovable-dump.sh"
+    inspector_blob = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "rev-parse",
+            "HEAD:scripts/migration/inspect-lovable-dump.sh",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    if provenance["execution_tools"]["pgdmp_inspector"] != {
+        "path": "scripts/migration/inspect-lovable-dump.sh",
+        "git_sha": provenance["execution_checkout_sha"],
+        "git_blob_sha": inspector_blob,
+        "sha256": sha256(inspector_path),
+        "failure_diagnostic_format_version": 1,
+        "raw_failure_output_relayed": False,
+    }:
+        raise SystemExit("raw PGDMP inspector provenance mismatch")
+
+    helper_path = repo / "scripts" / "migration" / "lib" / "lovable_dump_report.py"
+    helper_blob = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "rev-parse",
+            "HEAD:scripts/migration/lib/lovable_dump_report.py",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    if provenance["execution_tools"]["report_helper"] != {
+        "path": "scripts/migration/lib/lovable_dump_report.py",
+        "git_sha": provenance["execution_checkout_sha"],
+        "git_blob_sha": helper_blob,
+        "sha256": sha256(helper_path),
+        "failure_diagnostic_format_version": 1,
+        "raw_failure_output_relayed": False,
+    }:
+        raise SystemExit("report helper provenance mismatch")
+
+    python_path = Path(sys.executable).resolve()
+    if provenance["execution_tools"]["python_runtime"] != {
+        "executable": str(python_path),
+        "sha256": sha256(python_path),
+        "implementation": sys.implementation.name,
+        "version": ".".join(str(value) for value in sys.version_info[:3]),
+        "isolated_mode_for_child_tools": True,
+        "inherited_python_or_shell_startup_environment": False,
+    }:
+        raise SystemExit("execution Python provenance mismatch")
 
     serialized = json.dumps(provenance, sort_keys=True)
     inner_sha = provenance["inner_pgdmp"]["sha256"]
@@ -413,6 +475,36 @@ def verify_mode(
         raise SystemExit("normalizer and inspector inner hashes differ")
     if f"sha256: {inner_sha}" not in report:
         raise SystemExit("report does not bind the verified inner SHA")
+    with Path(direct_outer_text).open("rb") as source:
+        header = source.read(11)
+    if len(header) != 11 or not header.startswith(b"PGDMP"):
+        raise SystemExit("synthetic pg_dump archive has no complete PGDMP header")
+    expected_header = {
+        "archive_format_version_bytes": [header[5], header[6], header[7]],
+        "integer_width_bytes": header[8],
+        "offset_width_bytes": header[9],
+        "archive_format_code": header[10],
+        "bound_to_inner_sha256": inner_sha,
+        "captured_before_pg_restore": True,
+    }
+    if provenance["inner_pgdmp"].get("pgdmp_header") != expected_header:
+        raise SystemExit("safe PGDMP header provenance does not bind the real archive")
+    if provenance["inner_pgdmp"].get("pg_restore_list") != {
+        "compatibility": "PASS",
+        "failure_diagnostic": None,
+        "raw_child_output_retained": False,
+    }:
+        raise SystemExit("pg_restore list provenance mismatch")
+    required_header_lines = {
+        "archive_format_version_bytes: "
+        + ",".join(str(value) for value in expected_header["archive_format_version_bytes"]),
+        f"archive_integer_width_bytes: {expected_header['integer_width_bytes']}",
+        f"archive_offset_width_bytes: {expected_header['offset_width_bytes']}",
+        f"archive_format_code: {expected_header['archive_format_code']}",
+        f"archive_header_bound_sha256: {inner_sha}",
+    }
+    if not required_header_lines <= set(report.splitlines()):
+        raise SystemExit("metadata report omits the bound safe PGDMP header fields")
     if expected_kind == "zip":
         if inner_sha == outer_sha:
             raise SystemExit("ZIP outer and derived inner hashes were conflated")

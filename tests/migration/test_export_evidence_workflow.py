@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import re
@@ -13,6 +14,7 @@ import tempfile
 import types
 import unittest
 import zipfile
+from contextlib import redirect_stderr
 from pathlib import Path
 from unittest import mock
 
@@ -22,7 +24,7 @@ README = ROOT / "scripts" / "migration" / "README.md"
 WORKFLOW_LABEL = b"LOVABLE EXPORT EVIDENCE WORKFLOW"
 WORKFLOW_BEGIN = b"<!-- BEGIN " + WORKFLOW_LABEL + b" -->\n"
 WORKFLOW_END = b"\n<!-- END " + WORKFLOW_LABEL + b" -->"
-INSPECTION_TOOL_SHA = "c87a124602eb669b3ec5a3829610c6cb465d3e26"
+INSPECTION_BASELINE_SHA = "c87a124602eb669b3ec5a3829610c6cb465d3e26"
 PROCEDURE_ORIGIN_SHA = "e4eed4a21049d274738110710a468e265c2893d2"
 
 DRIVER_SPEC = importlib.util.spec_from_file_location(
@@ -92,7 +94,9 @@ class DocumentedExportEvidenceWorkflowTest(unittest.TestCase):
         for relative in (
             "scripts/migration/README.md",
             "scripts/migration/bounded-pg-restore.py",
+            "scripts/migration/inspect-lovable-dump.sh",
             "scripts/migration/inspect-lovable-export.py",
+            "scripts/migration/lib/lovable_dump_report.py",
             "scripts/migration/normalize-lovable-export.py",
         ):
             destination = cls.base_checkout / relative
@@ -115,7 +119,9 @@ class DocumentedExportEvidenceWorkflowTest(unittest.TestCase):
                 "add",
                 "scripts/migration/README.md",
                 "scripts/migration/bounded-pg-restore.py",
+                "scripts/migration/inspect-lovable-dump.sh",
                 "scripts/migration/inspect-lovable-export.py",
+                "scripts/migration/lib/lovable_dump_report.py",
                 "scripts/migration/normalize-lovable-export.py",
                 "supabase/config.toml",
             ],
@@ -167,6 +173,7 @@ class DocumentedExportEvidenceWorkflowTest(unittest.TestCase):
             text=True,
         )
         self.row_sentinel = "SYNTHETIC_ROW_PAYLOAD_MUST_NOT_APPEAR"
+        self.child_secret_sentinel = "SYNTHETIC_CHILD_SECRET_MUST_NOT_APPEAR"
         self.inner_bytes = (
             b"PGDMP\x01\x0e\x00\x04\x08\x01" + self.row_sentinel.encode("ascii")
         )
@@ -185,36 +192,56 @@ class DocumentedExportEvidenceWorkflowTest(unittest.TestCase):
 
         self.fake_log = self.case_root / "fake pg_restore calls.log"
         self.fake_log.write_text("", encoding="utf-8")
+        self.fake_control = self.case_root / "fake pg_restore control.txt"
+        self.fake_toc = self.case_root / "fake pg_restore toc.txt"
+        shutil.copy2(
+            self.checkout
+            / "scripts"
+            / "migration"
+            / "tests"
+            / "fixtures"
+            / "representative.toc",
+            self.fake_toc,
+        )
         self.fake_pg_restore = self.case_root / "fake pg_restore"
         self.fake_pg_restore.write_text(
             """#!/usr/bin/env bash
 set -euo pipefail
+fake_root="$(cd -P -- "$(dirname -- "$0")" && pwd)"
+fake_log="${fake_root}/fake pg_restore calls.log"
+fake_toc="${fake_root}/fake pg_restore toc.txt"
+fake_control="${fake_root}/fake pg_restore control.txt"
+mode="$(sed -n '1p' "$fake_control")"
+canonical_export="$(sed -n '2p' "$fake_control")"
+mutate_path="$(sed -n '3p' "$fake_control")"
+collision_path="$(sed -n '4p' "$fake_control")"
 case "${1:-}" in
   --version)
     [[ $# -eq 1 ]]
-    printf '%s\\n' '--version' >>"$FAKE_LOG"
+    printf '%s\\n' '--version' >>"$fake_log"
     printf 'pg_restore (PostgreSQL) 17.5 (synthetic)\\n'
     ;;
   --list)
     [[ $# -eq 2 ]]
-    printf '%s|%s\\n' '--list' "$2" >>"$FAKE_LOG"
-    case "${FAKE_MODE:-ok}" in
+    printf '%s|%s\\n' '--list' "$2" >>"$fake_log"
+    case "$mode" in
       fail-list)
-        printf 'synthetic list failure\\n' >&2
+        printf '%s\\n' 'SYNTHETIC_CHILD_SECRET_MUST_NOT_APPEAR'
+        printf '%s\\n' 'SYNTHETIC_CHILD_SECRET_MUST_NOT_APPEAR' >&2
         exit 9
         ;;
       mutate-canonical)
-        chmod u+w "$CANONICAL_EXPORT"
-        printf 'X' >>"$CANONICAL_EXPORT"
+        chmod u+w "$canonical_export"
+        printf 'X' >>"$canonical_export"
         ;;
       mutate-procedure)
-        printf '\n# planted mid-run mutation\n' >>"$MUTATE_PATH"
+        printf '\n# planted mid-run mutation\n' >>"$mutate_path"
         ;;
       plant-evidence-collision)
-        mkdir -p -- "$COLLISION_PATH"
+        mkdir -p -- "$collision_path"
         ;;
     esac
-    cat -- "$FAKE_TOC"
+    cat -- "$fake_toc"
     ;;
   *)
     printf 'unexpected pg_restore invocation: %s\\n' "$*" >&2
@@ -244,6 +271,7 @@ esac
                 / "fixtures"
                 / "representative.toc"
             ),
+            "CHILD_SECRET_SENTINEL": self.child_secret_sentinel,
             "EXPORT_INITIATED_BASIS": "not_observed",
             "EXPORT_INITIATED_REASON": "synthetic initiation was not observed",
             "EXPORT_COMPLETED_BASIS": "not_observed",
@@ -289,6 +317,18 @@ esac
         execution_environment = self.environment | (environment or {})
         for name in unset_environment or set():
             execution_environment.pop(name, None)
+        self.fake_control.write_text(
+            "\n".join(
+                (
+                    execution_environment.get("FAKE_MODE", "ok"),
+                    execution_environment.get("CANONICAL_EXPORT", ""),
+                    execution_environment.get("MUTATE_PATH", ""),
+                    execution_environment.get("COLLISION_PATH", ""),
+                    "",
+                )
+            ),
+            encoding="utf-8",
+        )
         workflow = extract_workflow_body(
             (self.checkout / "scripts" / "migration" / "README.md").read_bytes()
         )
@@ -310,6 +350,132 @@ esac
         durable_parent = self.evidence_store / "migration-inspection-evidence"
         durable_runs = list(durable_parent.iterdir()) if durable_parent.exists() else []
         self.assertEqual(durable_runs, [])
+
+    @staticmethod
+    def bash_octal_bytes(value: bytes) -> str:
+        return "".join(f"\\{byte:03o}" for byte in value)
+
+    def install_synthetic_failing_inspector(
+        self,
+        diagnostic: bytes,
+        *,
+        case_label: str,
+    ) -> dict[str, str]:
+        inspector = self.checkout / "scripts/migration/inspect-lovable-dump.sh"
+        encoded_diagnostic = self.bash_octal_bytes(diagnostic)
+        diagnostic_command = (
+            f"printf '%b' '{encoded_diagnostic}' >&2"
+            if diagnostic
+            else ": # deliberately empty diagnostic"
+        )
+        inspector.write_text(
+            "#!/bin/bash\n"
+            "set -euo pipefail\n"
+            f"# Synthetic helper-diagnostic case: {case_label}\n"
+            "output=''\n"
+            "while [[ $# -gt 0 ]]; do\n"
+            "  case \"$1\" in\n"
+            "    --output) output=$2; shift 2 ;;\n"
+            "    *) shift ;;\n"
+            "  esac\n"
+            "done\n"
+            "[[ -n \"$output\" ]]\n"
+            "{\n"
+            f"  printf '%s\\n' '{self.row_sentinel}'\n"
+            f"  printf '%s\\n' '{self.child_secret_sentinel}'\n"
+            "  printf '%s\\n' '/private/SYNTHETIC_HELPER_PATH_MUST_NOT_APPEAR'\n"
+            "  printf '%s\\n' 'SYNTHETIC_HELPER_FILENAME_MUST_NOT_APPEAR.backup'\n"
+            "  printf '%s\\n' 'SYNTHETIC_HELPER_OBJECT_MUST_NOT_APPEAR'\n"
+            "  printf '%s\\n' 'SYNTHETIC_HELPER_TOC_MUST_NOT_APPEAR'\n"
+            "  printf '%s\\n' 'SELECT SYNTHETIC_HELPER_SQL_MUST_NOT_APPEAR'\n"
+            "} >\"$output\"\n"
+            f"{diagnostic_command}\n"
+            "exit 4\n",
+            encoding="utf-8",
+        )
+        inspector.chmod(0o755)
+        subprocess.run(
+            ["git", "add", "scripts/migration/inspect-lovable-dump.sh"],
+            cwd=self.checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=Synthetic Migration Test",
+                "-c",
+                "user.email=migration-test@example.invalid",
+                "commit",
+                "--quiet",
+                "-m",
+                f"synthetic helper diagnostic: {case_label}",
+            ],
+            cwd=self.checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        checkout_sha = git_output(self.checkout, "rev-parse", "HEAD")
+        return {
+            "APPROVED_EXECUTION_CHECKOUT_SHA": checkout_sha,
+            "INSPECTION_TOOL_GIT_SHA": checkout_sha,
+        }
+
+    def assert_synthetic_helper_failure(
+        self,
+        *,
+        diagnostic: bytes,
+        expected_stage: str,
+        expected_reason: str,
+        case_label: str,
+    ) -> None:
+        environment = self.install_synthetic_failing_inspector(
+            diagnostic,
+            case_label=case_label,
+        )
+        expected_root = self.run_root(environment=environment)
+        result = self.run_workflow(environment=environment)
+        self.assertNotEqual(result.returncode, 0)
+        if result.stdout:
+            self.fail("helper failure exposed private stdout")
+        expected_diagnostic = (
+            '{"diagnostic_version":1,"stage":"'
+            + expected_stage
+            + '","reason":"'
+            + expected_reason
+            + '"}\n'
+        )
+        if result.stderr != expected_diagnostic:
+            self.fail("helper failure did not emit the exact safe outer diagnostic")
+        for sentinel in (
+            self.row_sentinel,
+            self.child_secret_sentinel,
+            "/private/SYNTHETIC_HELPER_PATH_MUST_NOT_APPEAR",
+            "SYNTHETIC_HELPER_FILENAME_MUST_NOT_APPEAR.backup",
+            "SYNTHETIC_HELPER_OBJECT_MUST_NOT_APPEAR",
+            "SYNTHETIC_HELPER_TOC_MUST_NOT_APPEAR",
+            "SELECT SYNTHETIC_HELPER_SQL_MUST_NOT_APPEAR",
+        ):
+            if sentinel in result.stdout or sentinel in result.stderr:
+                self.fail("private helper content reached user-visible output")
+        self.assertFalse(expected_root.exists())
+        self.assert_no_runs()
+        for forbidden_name in (
+            "rehearsal-metadata.txt",
+            "report.sha256",
+            "provenance.json",
+            "provenance.sha256",
+            "evidence-files.json",
+            "evidence-files.sha256",
+            "EVIDENCE_COMPLETE",
+            "verified-inner.pgdmp",
+            "canonical-outer.artifact",
+        ):
+            self.assertEqual(list(self.case_root.rglob(forbidden_name)), [])
+        self.assertEqual(self.fake_log.read_text(encoding="utf-8"), "")
 
     def assert_preflight_failure(
         self,
@@ -446,7 +612,75 @@ esac
             provenance["execution_checkout_sha"],
         )
         self.assertEqual(provenance["procedure_origin_sha"], PROCEDURE_ORIGIN_SHA)
-        self.assertEqual(provenance["inspection_tool_git_sha"], INSPECTION_TOOL_SHA)
+        self.assertEqual(
+            provenance["inspection_tool_git_sha"],
+            provenance["execution_checkout_sha"],
+        )
+        self.assertEqual(
+            provenance["inspection_baseline_git_sha"], INSPECTION_BASELINE_SHA
+        )
+        inspector_path = self.checkout / "scripts/migration/inspect-lovable-dump.sh"
+        helper_path = self.checkout / "scripts/migration/lib/lovable_dump_report.py"
+        guard_path = self.checkout / "scripts/migration/bounded-pg-restore.py"
+        self.assertEqual(
+            provenance["execution_tools"]["bounded_pg_restore_guard"],
+            {
+                "path": "scripts/migration/bounded-pg-restore.py",
+                "git_blob_sha": git_output(
+                    self.checkout,
+                    "rev-parse",
+                    "HEAD:scripts/migration/bounded-pg-restore.py",
+                ),
+                "sha256": hashlib.sha256(guard_path.read_bytes()).hexdigest(),
+                "invoked_with_execution_python_isolated_mode": True,
+            },
+        )
+        self.assertEqual(
+            provenance["execution_tools"]["pgdmp_inspector"],
+            {
+                "path": "scripts/migration/inspect-lovable-dump.sh",
+                "git_sha": provenance["execution_checkout_sha"],
+                "git_blob_sha": git_output(
+                    self.checkout,
+                    "rev-parse",
+                    "HEAD:scripts/migration/inspect-lovable-dump.sh",
+                ),
+                "sha256": hashlib.sha256(inspector_path.read_bytes()).hexdigest(),
+                "failure_diagnostic_format_version": 1,
+                "raw_failure_output_relayed": False,
+            },
+        )
+        self.assertEqual(
+            provenance["execution_tools"]["report_helper"],
+            {
+                "path": "scripts/migration/lib/lovable_dump_report.py",
+                "git_sha": provenance["execution_checkout_sha"],
+                "git_blob_sha": git_output(
+                    self.checkout,
+                    "rev-parse",
+                    "HEAD:scripts/migration/lib/lovable_dump_report.py",
+                ),
+                "sha256": hashlib.sha256(helper_path.read_bytes()).hexdigest(),
+                "failure_diagnostic_format_version": 1,
+                "raw_failure_output_relayed": False,
+            },
+        )
+        python_runtime = provenance["execution_tools"]["python_runtime"]
+        resolved_python = Path(sys.executable).resolve()
+        self.assertEqual(python_runtime["executable"], str(resolved_python))
+        self.assertEqual(
+            python_runtime["sha256"],
+            hashlib.sha256(resolved_python.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(python_runtime["implementation"], sys.implementation.name)
+        self.assertEqual(
+            python_runtime["version"],
+            ".".join(str(component) for component in sys.version_info[:3]),
+        )
+        self.assertTrue(python_runtime["isolated_mode_for_child_tools"])
+        self.assertFalse(
+            python_runtime["inherited_python_or_shell_startup_environment"]
+        )
         self.assertTrue(
             provenance["lovable_source_project"]["repository_binding"]["exact_match"]
         )
@@ -459,6 +693,20 @@ esac
 
         report_text = report.read_text(encoding="utf-8")
         self.assertIn(f"sha256: {inner_sha}", report_text)
+        expected_header = {
+            "archive_format_version_bytes": [1, 14, 0],
+            "integer_width_bytes": 4,
+            "offset_width_bytes": 8,
+            "archive_format_code": 1,
+            "bound_to_inner_sha256": inner_sha,
+            "captured_before_pg_restore": True,
+        }
+        self.assertEqual(provenance["inner_pgdmp"]["pgdmp_header"], expected_header)
+        self.assertIn("archive_format_version_bytes: 1,14,0", report_text)
+        self.assertIn("archive_integer_width_bytes: 4", report_text)
+        self.assertIn("archive_offset_width_bytes: 8", report_text)
+        self.assertIn("archive_format_code: 1", report_text)
+        self.assertIn(f"archive_header_bound_sha256: {inner_sha}", report_text)
         if zip_mode:
             self.assertNotIn(f"sha256: {outer_sha}", report_text)
         all_evidence_text = result.stdout + result.stderr
@@ -466,6 +714,7 @@ esac
             if path.is_file():
                 all_evidence_text += path.read_text(encoding="utf-8")
         self.assertNotIn(self.row_sentinel, all_evidence_text)
+        self.assertNotIn(self.child_secret_sentinel, all_evidence_text)
         self.assertFalse((evidence / ".working").exists())
         self.assertFalse((evidence / ".derived").exists())
         for path in evidence.rglob("*"):
@@ -1191,12 +1440,281 @@ esac
         expected_root = self.run_root()
         result = self.run_workflow(environment={"FAKE_MODE": "fail-list"})
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("inner PGDMP metadata inspection failed closed", result.stderr)
+        self.assertEqual(
+            result.stderr,
+            '{"diagnostic_version":1,"stage":"pg_restore_list_rejected",'
+            '"reason":"other_nonzero"}\n',
+        )
+        self.assertEqual(result.stdout, "")
+        self.assertNotIn(self.child_secret_sentinel, result.stderr)
+        self.assertNotIn(self.child_secret_sentinel, result.stdout)
+        self.assertNotIn(self.row_sentinel, result.stderr)
+        self.assertNotIn(self.row_sentinel, result.stdout)
         self.assertFalse(expected_root.exists())
         self.assertEqual(
             [line.split("|", 1)[0] for line in self.fake_log.read_text().splitlines()],
             ["--version", "--list"],
         )
+        self.assertNotIn(
+            self.child_secret_sentinel,
+            self.fake_log.read_text(encoding="utf-8"),
+        )
+        self.assert_no_runs()
+
+    def test_every_reviewed_helper_reason_survives_the_high_level_boundary(self):
+        for reason in sorted(DRIVER.REPORT_HELPER_FAILURE_REASONS):
+            with self.subTest(reason=reason):
+                diagnostic = (
+                    '{"diagnostic_version":1,"stage":"report_helper_failed",'
+                    '"reason":"' + reason + '"}\n'
+                ).encode("ascii")
+                self.assert_synthetic_helper_failure(
+                    diagnostic=diagnostic,
+                    expected_stage="report_helper_failed",
+                    expected_reason=reason,
+                    case_label=f"reviewed-{reason}",
+                )
+
+    def test_every_untrusted_helper_diagnostic_fallback_cleans_partial_evidence(self):
+        # The raw inspector owns parsing untrusted helper bytes. These cases model
+        # its required canonical reduction at the high-level process boundary.
+        fallback = (
+            '{"diagnostic_version":1,"stage":"report_helper_failed",'
+            '"reason":"other_nonzero"}\n'
+        ).encode("ascii")
+        for case_label in (
+            "empty",
+            "malformed",
+            "multiline",
+            "oversize",
+            "non_ascii",
+            "extra_key",
+            "wrong_version",
+            "unknown_reason",
+        ):
+            with self.subTest(case_label=case_label):
+                self.assert_synthetic_helper_failure(
+                    diagnostic=fallback,
+                    expected_stage="report_helper_failed",
+                    expected_reason="other_nonzero",
+                    case_label=f"reduced-{case_label}",
+                )
+
+    def test_unsanitized_helper_diagnostic_bytes_are_never_accepted(self):
+        secret = self.child_secret_sentinel.encode("ascii")
+        helper_prefix = (
+            b'{"diagnostic_version":1,"stage":"report_helper_failed",'
+        )
+        cases = (
+            b"",
+            b"{malformed}\n",
+            helper_prefix + b'"reason":"other_nonzero"}\n' + secret + b"\n",
+            b"x" * (DRIVER.MAX_INSPECTOR_DIAGNOSTIC_BYTES + 1),
+            helper_prefix + b'"reason":"other_nonzero"}\xff\n',
+            helper_prefix
+            + b'"reason":"other_nonzero","extra":"forbidden"}\n',
+            b'{"diagnostic_version":2,"stage":"report_helper_failed",'
+            b'"reason":"other_nonzero"}\n',
+            helper_prefix + b'"reason":"unknown_reason"}\n',
+        )
+        for diagnostic in cases:
+            with self.subTest(diagnostic=diagnostic[:60]):
+                self.assertEqual(
+                    DRIVER.parse_inspector_failure(b"", diagnostic),
+                    ("inspector_diagnostic_invalid", "other_nonzero"),
+                )
+
+    def test_driver_accepts_only_allowlisted_inspector_stage_reason_pairs(self):
+        self.assertEqual(
+            frozenset(DRIVER.INSPECTOR_STAGE_REASON_CODES),
+            DRIVER.INSPECTOR_STAGE_CODES,
+        )
+        for stage, reasons in sorted(DRIVER.INSPECTOR_STAGE_REASON_CODES.items()):
+            self.assertTrue(reasons, stage)
+            for reason in sorted(reasons):
+                with self.subTest(stage=stage, reason=reason):
+                    payload = (
+                        '{"diagnostic_version":1,"stage":"'
+                        + stage
+                        + '","reason":"'
+                        + reason
+                        + '"}\n'
+                    ).encode("ascii")
+                    self.assertEqual(
+                        DRIVER.parse_inspector_failure(b"", payload),
+                        (stage, reason),
+                    )
+
+        invalid_pairs = (
+            ("report_helper_failed", "not_applicable"),
+            ("report_helper_failed", "unsupported_archive_version"),
+            ("report_helper_failed", "invalid_output"),
+            ("pg_restore_list_rejected", "unknown_toc_class"),
+            ("pg_restore_version_failed", "migration_metadata_unreadable"),
+            ("pg_restore_version_failed", "unsupported_archive_version"),
+            ("pg_restore_version_failed", "invalid_archive"),
+            ("pg_restore_version_failed", "truncated_archive"),
+            ("snapshot_copy_failed", "other_nonzero"),
+            ("pg_restore_list_empty", "timeout"),
+        )
+        for stage, reason in invalid_pairs:
+            with self.subTest(invalid_stage=stage, invalid_reason=reason):
+                payload = (
+                    '{"diagnostic_version":1,"stage":"'
+                    + stage
+                    + '","reason":"'
+                    + reason
+                    + '"}\n'
+                ).encode("ascii")
+                self.assertEqual(
+                    DRIVER.parse_inspector_failure(b"", payload),
+                    ("inspector_diagnostic_invalid", "other_nonzero"),
+                )
+                error = DRIVER.InspectorStageError(stage, reason)
+                self.assertEqual(
+                    (error.stage, error.reason),
+                    ("inspector_diagnostic_invalid", "other_nonzero"),
+                )
+
+    def test_driver_does_not_inherit_shell_or_python_startup_overrides(self):
+        marker = self.case_root / "unreviewed startup executed"
+        bash_env = self.case_root / "malicious BASH_ENV"
+        bash_env.write_text(
+            "if [ \"$0\" != bash ]; then "
+            f"printf poison > {str(marker)!r}; exit 91; fi\n",
+            encoding="utf-8",
+        )
+        fake_python = self.case_root / "unreviewed python"
+        fake_python.write_text(
+            "#!/bin/sh\n"
+            f"printf poison > {str(marker)!r}\n"
+            "exit 92\n",
+            encoding="utf-8",
+        )
+        fake_python.chmod(0o700)
+
+        provenance, _, _ = self.assert_success(
+            environment={
+                "BASH_ENV": str(bash_env),
+                "ENV": str(bash_env),
+                "PYTHON_BIN": str(fake_python),
+                "PYTHONPATH": str(self.case_root / "unreviewed-python-path"),
+            }
+        )
+        self.assertFalse(marker.exists())
+        runtime = provenance["execution_tools"]["python_runtime"]
+        self.assertEqual(runtime["executable"], str(Path(sys.executable).resolve()))
+        self.assertFalse(runtime["inherited_python_or_shell_startup_environment"])
+
+    def test_driver_reduces_malformed_or_leaking_child_diagnostics_to_safe_code(self):
+        sentinel = self.child_secret_sentinel.encode("ascii")
+        malformed = (
+            (sentinel, b""),
+            (b"", sentinel + b"\n"),
+            (
+                b"",
+                b'{"diagnostic_version":1,"stage":"unknown",'
+                b'"reason":"other_nonzero"}\n',
+            ),
+            (
+                b"",
+                b'{"diagnostic_version":1,"stage":"pg_restore_list_rejected",'
+                b'"reason":"other_nonzero"}\n' + sentinel + b"\n",
+            ),
+            (
+                b"",
+                b'{"diagnostic_version":1,"stage":"pg_restore_list_rejected",'
+                b'"reason":"unknown_reason"}\n',
+            ),
+            (
+                b"",
+                b'{"diagnostic_version":2,"stage":"pg_restore_list_rejected",'
+                b'"reason":"other_nonzero"}\n',
+            ),
+            (
+                b"",
+                b'{"diagnostic_version":1,"stage":"pg_restore_list_rejected",'
+                b'"reason":"other_nonzero","extra":"forbidden"}\n',
+            ),
+            (
+                b"",
+                b'{"stage":"pg_restore_list_rejected","diagnostic_version":1,'
+                b'"reason":"other_nonzero"}\n',
+            ),
+            (b"", b"\xff\xfe\n"),
+            (b"", b"x" * (DRIVER.MAX_INSPECTOR_DIAGNOSTIC_BYTES + 1)),
+        )
+        for stdout, stderr in malformed:
+            with self.subTest(stdout=stdout[:20], stderr=stderr[:20]):
+                self.assertEqual(
+                    DRIVER.parse_inspector_failure(stdout, stderr),
+                    ("inspector_diagnostic_invalid", "other_nonzero"),
+                )
+
+        visible = io.StringIO()
+        with mock.patch.object(
+            DRIVER,
+            "inspect",
+            side_effect=DRIVER.InspectorStageError(
+                "inspector_diagnostic_invalid", "other_nonzero"
+            ),
+        ), redirect_stderr(visible):
+            self.assertEqual(DRIVER.main(), 4)
+        self.assertEqual(
+            visible.getvalue(),
+            '{"diagnostic_version":1,"stage":"inspector_diagnostic_invalid",'
+            '"reason":"other_nonzero"}\n',
+        )
+        self.assertNotIn(self.child_secret_sentinel, visible.getvalue())
+
+        visible = io.StringIO()
+        with mock.patch.object(
+            DRIVER,
+            "inspect",
+            side_effect=OSError("/private/SYNTHETIC_PATH_MUST_NOT_APPEAR"),
+        ), redirect_stderr(visible):
+            self.assertEqual(DRIVER.main(), 4)
+        self.assertEqual(
+            visible.getvalue(),
+            '{"diagnostic_version":1,"stage":"internal_failure",'
+            '"reason":"other_nonzero"}\n',
+        )
+        self.assertNotIn("SYNTHETIC_PATH_MUST_NOT_APPEAR", visible.getvalue())
+
+    def test_safe_header_report_parser_is_typed_unique_and_hash_bound(self):
+        inner_sha = "a" * 64
+        report = "\n".join(
+            (
+                "archive_format_version: 1.14.0",
+                "archive_format_version_bytes: 1,14,0",
+                "archive_integer_width_bytes: 4",
+                "archive_offset_width_bytes: 8",
+                "archive_format_code: 1",
+                f"archive_header_bound_sha256: {inner_sha}",
+                "",
+            )
+        )
+        self.assertEqual(
+            DRIVER.parse_report_header_metadata(report, inner_sha),
+            {
+                "archive_format_version_bytes": [1, 14, 0],
+                "integer_width_bytes": 4,
+                "offset_width_bytes": 8,
+                "archive_format_code": 1,
+                "bound_to_inner_sha256": inner_sha,
+                "captured_before_pg_restore": True,
+            },
+        )
+        for tampered in (
+            report.replace("1,14,0", "1,13,0"),
+            report.replace("integer_width_bytes: 4", "integer_width_bytes: 3"),
+            report.replace("archive_format_code: 1", "archive_format_code: 0"),
+            report.replace(inner_sha, "b" * 64),
+            report + "archive_format_code: 1\n",
+        ):
+            with self.subTest(tampered=tampered[-100:]):
+                with self.assertRaises(DRIVER.WorkflowError):
+                    DRIVER.parse_report_header_metadata(tampered, inner_sha)
 
     def test_partial_normalization_failure_publishes_no_evidence(self):
         corrupted = bytearray(self.canonical.read_bytes())
@@ -1305,13 +1823,13 @@ esac
         self.setUp()
         inspector = self.checkout / "scripts/migration/inspect-lovable-dump.sh"
         inspector.write_text(inspector.read_text() + "\n# planted modification\n")
-        self.assert_preflight_failure("inspection tool/input tree differs")
+        self.assert_preflight_failure("execution procedure differs")
 
         self.tearDown()
         self.setUp()
         helper = self.checkout / "scripts/migration/lib/lovable_dump_report.py"
         helper.write_text(helper.read_text() + "\n# planted modification\n")
-        self.assert_preflight_failure("inspection tool/input tree differs")
+        self.assert_preflight_failure("execution procedure differs")
 
         self.tearDown()
         self.setUp()
@@ -1321,7 +1839,7 @@ esac
         tracked_migration.write_text(
             tracked_migration.read_text() + "\n-- planted modification\n"
         )
-        self.assert_preflight_failure("inspection tool/input tree differs")
+        self.assert_preflight_failure("migration inputs differ")
 
         self.tearDown()
         self.setUp()

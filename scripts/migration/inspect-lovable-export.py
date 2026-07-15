@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-INSPECTION_TOOL_GIT_SHA = "c87a124602eb669b3ec5a3829610c6cb465d3e26"
+INSPECTION_BASELINE_GIT_SHA = "c87a124602eb669b3ec5a3829610c6cb465d3e26"
 PROCEDURE_ORIGIN_SHA = "e4eed4a21049d274738110710a468e265c2893d2"
 WORKFLOW_LABEL = b"LOVABLE EXPORT EVIDENCE WORKFLOW"
 HEX40 = re.compile(r"[0-9a-f]{40}")
@@ -44,6 +44,95 @@ PROJECT_REF = re.compile(r"[a-z0-9]{20}")
 RFC3339_UTC = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 PLACEHOLDER = re.compile(r"[<>]|placeholder|replace|todo|tbd", re.IGNORECASE)
 REPORT_SHA = re.compile(r"^sha256: ([0-9a-f]{64})$", re.MULTILINE)
+REPORT_ARCHIVE_VERSION = re.compile(
+    r"^archive_format_version: ([0-9]+)\.([0-9]+)\.([0-9]+)$", re.MULTILINE
+)
+REPORT_ARCHIVE_VERSION_BYTES = re.compile(
+    r"^archive_format_version_bytes: ([0-9]+),([0-9]+),([0-9]+)$",
+    re.MULTILINE,
+)
+REPORT_INTEGER_WIDTH = re.compile(
+    r"^archive_integer_width_bytes: ([0-9]+)$", re.MULTILINE
+)
+REPORT_OFFSET_WIDTH = re.compile(
+    r"^archive_offset_width_bytes: ([0-9]+)$", re.MULTILINE
+)
+REPORT_FORMAT_CODE = re.compile(r"^archive_format_code: ([0-9]+)$", re.MULTILINE)
+REPORT_HEADER_SHA = re.compile(
+    r"^archive_header_bound_sha256: ([0-9a-f]{64})$", re.MULTILINE
+)
+INSPECTOR_STAGE_CODES = frozenset(
+    {
+        "input_validation_failed",
+        "dependency_validation_failed",
+        "workspace_setup_failed",
+        "pg_restore_version_failed",
+        "snapshot_copy_failed",
+        "snapshot_permissions_failed",
+        "snapshot_hash_before_failed",
+        "pgdmp_header_failed",
+        "pg_restore_list_rejected",
+        "pg_restore_list_empty",
+        "snapshot_hash_after_failed",
+        "snapshot_identity_changed",
+        "report_helper_failed",
+        "report_publish_failed",
+        "cleanup_failed",
+        "internal_failure",
+    }
+)
+REPORT_HELPER_FAILURE_REASONS = frozenset(
+    {
+        "unknown_toc_class",
+        "unresolved_known_toc_entry",
+        "malformed_toc",
+        "duplicate_toc_id",
+        "conflicting_source_version",
+        "conflicting_pg_dump_version",
+        "migration_metadata_unreadable",
+        "other_nonzero",
+    }
+)
+PG_RESTORE_LIST_FAILURE_REASONS = frozenset(
+    {
+        "unsupported_archive_version",
+        "invalid_archive",
+        "truncated_archive",
+        "timeout",
+        "output_cap",
+        "other_nonzero",
+    }
+)
+PG_RESTORE_VERSION_FAILURE_REASONS = frozenset(
+    {"timeout", "output_cap", "invalid_output", "other_nonzero"}
+)
+INSPECTOR_STAGE_REASON_CODES = {
+    "input_validation_failed": frozenset({"not_applicable"}),
+    "dependency_validation_failed": frozenset({"not_applicable"}),
+    "workspace_setup_failed": frozenset({"not_applicable"}),
+    "pg_restore_version_failed": PG_RESTORE_VERSION_FAILURE_REASONS,
+    "snapshot_copy_failed": frozenset({"not_applicable"}),
+    "snapshot_permissions_failed": frozenset({"not_applicable"}),
+    "snapshot_hash_before_failed": frozenset({"not_applicable"}),
+    "pgdmp_header_failed": frozenset({"not_applicable", "invalid_output"}),
+    "pg_restore_list_rejected": PG_RESTORE_LIST_FAILURE_REASONS,
+    "pg_restore_list_empty": frozenset({"not_applicable"}),
+    "snapshot_hash_after_failed": frozenset({"not_applicable"}),
+    "snapshot_identity_changed": frozenset({"not_applicable"}),
+    "report_helper_failed": REPORT_HELPER_FAILURE_REASONS,
+    "report_publish_failed": frozenset({"not_applicable"}),
+    "cleanup_failed": frozenset({"not_applicable"}),
+    "internal_failure": frozenset(
+        {"not_applicable", "invalid_output", "other_nonzero"}
+    ),
+}
+INSPECTOR_FAILURE_REASONS = frozenset().union(
+    *INSPECTOR_STAGE_REASON_CODES.values()
+)
+DRIVER_INSPECTOR_STAGE_CODES = INSPECTOR_STAGE_CODES | {
+    "inspector_diagnostic_invalid"
+}
+MAX_INSPECTOR_DIAGNOSTIC_BYTES = 4096
 MAX_OUTER_BYTES = 5_000_000_000
 MIN_WORKSPACE_OVERHEAD_BYTES = 256 * 1024 * 1024
 MAX_REPORT_BYTES = 128 * 1024 * 1024
@@ -52,6 +141,23 @@ DURABLE_EVIDENCE_DIRECTORY = "migration-inspection-evidence"
 
 class WorkflowError(RuntimeError):
     """A fail-closed workflow condition."""
+
+
+class InspectorStageError(WorkflowError):
+    """A raw-inspector failure reduced to reviewed machine codes only."""
+
+    def __init__(self, stage: str, reason: str):
+        if stage == "inspector_diagnostic_invalid":
+            reason = "other_nonzero"
+        elif (
+            stage not in INSPECTOR_STAGE_REASON_CODES
+            or reason not in INSPECTOR_STAGE_REASON_CODES[stage]
+        ):
+            stage = "inspector_diagnostic_invalid"
+            reason = "other_nonzero"
+        self.stage = stage
+        self.reason = reason
+        super().__init__(stage)
 
 
 @dataclass(frozen=True)
@@ -1542,6 +1648,91 @@ def path_is_within(path: Path, parent: Path) -> bool:
     return True
 
 
+def parse_inspector_failure(stdout: bytes, stderr: bytes) -> tuple[str, str]:
+    """Accept one exact reviewed diagnostic and discard every other child byte."""
+
+    if stdout or not stderr or len(stderr) > MAX_INSPECTOR_DIAGNOSTIC_BYTES:
+        return "inspector_diagnostic_invalid", "other_nonzero"
+    try:
+        diagnostic_text = stderr.decode("ascii")
+        diagnostic = json.loads(diagnostic_text)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return "inspector_diagnostic_invalid", "other_nonzero"
+    if not diagnostic_text.endswith("\n") or diagnostic_text.count("\n") != 1:
+        return "inspector_diagnostic_invalid", "other_nonzero"
+    if not isinstance(diagnostic, dict) or set(diagnostic) != {
+        "diagnostic_version",
+        "stage",
+        "reason",
+    }:
+        return "inspector_diagnostic_invalid", "other_nonzero"
+    stage = diagnostic.get("stage")
+    reason = diagnostic.get("reason")
+    if (
+        diagnostic.get("diagnostic_version") != 1
+        or not isinstance(stage, str)
+        or stage not in INSPECTOR_STAGE_CODES
+        or not isinstance(reason, str)
+        or reason not in INSPECTOR_STAGE_REASON_CODES[stage]
+    ):
+        return "inspector_diagnostic_invalid", "other_nonzero"
+    canonical = (
+        '{"diagnostic_version":1,"stage":"'
+        + stage
+        + '","reason":"'
+        + reason
+        + '"}\n'
+    )
+    if diagnostic_text != canonical:
+        return "inspector_diagnostic_invalid", "other_nonzero"
+    return stage, reason
+
+
+def parse_report_header_metadata(report_text: str, inner_sha: str) -> dict[str, Any]:
+    """Read one additive safe header record and bind it to the verified inner SHA."""
+
+    patterns = {
+        "version": REPORT_ARCHIVE_VERSION,
+        "version_bytes": REPORT_ARCHIVE_VERSION_BYTES,
+        "integer_width_bytes": REPORT_INTEGER_WIDTH,
+        "offset_width_bytes": REPORT_OFFSET_WIDTH,
+        "format_code": REPORT_FORMAT_CODE,
+        "bound_sha256": REPORT_HEADER_SHA,
+    }
+    matches: dict[str, tuple[str, ...]] = {}
+    for label, pattern in patterns.items():
+        found = pattern.findall(report_text)
+        if len(found) != 1:
+            raise WorkflowError(
+                f"inspector report must contain exactly one {label} header field"
+            )
+        value = found[0]
+        matches[label] = value if isinstance(value, tuple) else (value,)
+
+    version = tuple(int(value) for value in matches["version"])
+    version_bytes = tuple(int(value) for value in matches["version_bytes"])
+    integer_width = int(matches["integer_width_bytes"][0])
+    offset_width = int(matches["offset_width_bytes"][0])
+    format_code = int(matches["format_code"][0])
+    bound_sha = matches["bound_sha256"][0]
+    if version != version_bytes or any(not 0 <= value <= 255 for value in version):
+        raise WorkflowError("inspector report PGDMP version fields disagree")
+    if integer_width not in {4, 8} or offset_width not in {4, 8}:
+        raise WorkflowError("inspector report PGDMP widths are unsupported")
+    if format_code != 1:
+        raise WorkflowError("inspector report does not identify custom archive format")
+    if bound_sha != inner_sha:
+        raise WorkflowError("inspector report header is not bound to the verified inner SHA")
+    return {
+        "archive_format_version_bytes": list(version_bytes),
+        "integer_width_bytes": integer_width,
+        "offset_width_bytes": offset_width,
+        "archive_format_code": format_code,
+        "bound_to_inner_sha256": bound_sha,
+        "captured_before_pg_restore": True,
+    }
+
+
 def validate_normalization(
     metadata: Any, outer_sha: str, outer_size: int
 ) -> dict[str, Any]:
@@ -1631,20 +1822,34 @@ def preflight(repo: Path) -> dict[str, str]:
         raise WorkflowError("approved execution checkout SHA does not match HEAD")
     if run_git(repo, ["rev-parse", "HEAD"]) != execution:
         raise WorkflowError("execution checkout SHA changed during preflight")
-    if not git_success(repo, ["cat-file", "-e", f"{INSPECTION_TOOL_GIT_SHA}^{{commit}}"]):
-        raise WorkflowError("inspection tool baseline commit is unavailable")
     if not git_success(
-        repo, ["merge-base", "--is-ancestor", INSPECTION_TOOL_GIT_SHA, execution]
+        repo,
+        ["cat-file", "-e", f"{INSPECTION_BASELINE_GIT_SHA}^{{commit}}"],
     ):
-        raise WorkflowError("inspection tool commit is not an execution ancestor")
+        raise WorkflowError("inspection baseline commit is unavailable")
+    if not git_success(
+        repo,
+        [
+            "merge-base",
+            "--is-ancestor",
+            INSPECTION_BASELINE_GIT_SHA,
+            execution,
+        ],
+    ):
+        raise WorkflowError("inspection baseline commit is not an execution ancestor")
 
-    tool_paths = [
-        "scripts/migration/inspect-lovable-dump.sh",
-        "scripts/migration/lib/lovable_dump_report.py",
-        "supabase/migrations",
-    ]
-    if not git_success(repo, ["diff", "--quiet", INSPECTION_TOOL_GIT_SHA, "--", *tool_paths]):
-        raise WorkflowError("inspection tool/input tree differs from its reviewed Git SHA")
+    baseline_paths = ["supabase/migrations"]
+    if not git_success(
+        repo,
+        [
+            "diff",
+            "--quiet",
+            INSPECTION_BASELINE_GIT_SHA,
+            "--",
+            *baseline_paths,
+        ],
+    ):
+        raise WorkflowError("migration inputs differ from their historical baseline")
 
     untracked = run_git(
         repo, ["ls-files", "--others", "--exclude-standard", "--", "supabase/migrations"]
@@ -1670,6 +1875,8 @@ def preflight(repo: Path) -> dict[str, str]:
         "scripts/migration/inspect-lovable-export.py",
         "scripts/migration/normalize-lovable-export.py",
         "scripts/migration/bounded-pg-restore.py",
+        "scripts/migration/inspect-lovable-dump.sh",
+        "scripts/migration/lib/lovable_dump_report.py",
         "supabase/config.toml",
     ]
     if not git_success(repo, ["diff", "--quiet", execution, "--", *execution_paths]):
@@ -1677,21 +1884,24 @@ def preflight(repo: Path) -> dict[str, str]:
     if run_git(repo, ["status", "--porcelain"]):
         raise WorkflowError("execution checkout must have a clean worktree and index")
 
-    supplied_tool_sha = os.environ.get("INSPECTION_TOOL_GIT_SHA", INSPECTION_TOOL_GIT_SHA)
-    if supplied_tool_sha != INSPECTION_TOOL_GIT_SHA:
+    supplied_tool_sha = os.environ.get("INSPECTION_TOOL_GIT_SHA", execution)
+    if supplied_tool_sha != execution:
         raise WorkflowError("unexpected inspection tool Git SHA")
 
     identities: dict[str, str] = {
         "approved_execution_checkout_sha": approved,
         "execution_checkout_sha": execution,
         "procedure_origin_sha": PROCEDURE_ORIGIN_SHA,
-        "inspection_tool_git_sha": INSPECTION_TOOL_GIT_SHA,
+        "inspection_tool_git_sha": execution,
+        "inspection_baseline_git_sha": INSPECTION_BASELINE_GIT_SHA,
     }
     for label, relative in {
         "procedure_readme_blob_sha": "scripts/migration/README.md",
         "execution_driver_blob_sha": "scripts/migration/inspect-lovable-export.py",
         "normalizer_blob_sha": "scripts/migration/normalize-lovable-export.py",
         "pg_restore_guard_blob_sha": "scripts/migration/bounded-pg-restore.py",
+        "pgdmp_inspector_blob_sha": "scripts/migration/inspect-lovable-dump.sh",
+        "report_helper_blob_sha": "scripts/migration/lib/lovable_dump_report.py",
         "supabase_config_blob_sha": "supabase/config.toml",
     }.items():
         blob = run_git(repo, ["rev-parse", f"HEAD:{relative}"])
@@ -1710,7 +1920,32 @@ def preflight(repo: Path) -> dict[str, str]:
     identities["pg_restore_guard_sha256"] = file_sha256(
         repo / "scripts/migration/bounded-pg-restore.py"
     )
+    identities["pgdmp_inspector_sha256"] = file_sha256(
+        repo / "scripts/migration/inspect-lovable-dump.sh"
+    )
+    identities["report_helper_sha256"] = file_sha256(
+        repo / "scripts/migration/lib/lovable_dump_report.py"
+    )
     identities["supabase_config_sha256"] = file_sha256(repo / "supabase/config.toml")
+
+    raw_python = sys.executable
+    if not raw_python or not os.path.isabs(raw_python) or "\n" in raw_python:
+        raise WorkflowError("execution Python must have a safe absolute path")
+    try:
+        execution_python = Path(raw_python).resolve(strict=True)
+        python_metadata = execution_python.stat()
+    except OSError as exc:
+        raise WorkflowError("execution Python is unavailable") from exc
+    if not stat.S_ISREG(python_metadata.st_mode) or not os.access(
+        execution_python, os.X_OK
+    ):
+        raise WorkflowError("execution Python must be an executable regular file")
+    identities["execution_python_executable"] = str(execution_python)
+    identities["execution_python_sha256"] = file_sha256(execution_python)
+    identities["execution_python_implementation"] = sys.implementation.name
+    identities["execution_python_version"] = ".".join(
+        str(component) for component in sys.version_info[:3]
+    )
     return identities
 
 
@@ -1925,7 +2160,8 @@ def inspect() -> Path:
         normalizer = repo / "scripts/migration/normalize-lovable-export.py"
         normalize_result = subprocess.run(
             [
-                sys.executable,
+                identities["execution_python_executable"],
+                "-I",
                 str(normalizer),
                 "--expected-outer-sha256",
                 expected_sha256,
@@ -1972,26 +2208,46 @@ def inspect() -> Path:
         inspector_temp.mkdir(mode=0o700)
         report = inspection_dir / "rehearsal-metadata.txt"
         inspector = repo / "scripts/migration/inspect-lovable-dump.sh"
-        inspector_environment = os.environ.copy()
-        inspector_environment["TMPDIR"] = str(inspector_temp)
-        inspector_environment["LOVABLE_UNDERLYING_PG_RESTORE_BIN"] = pg_restore_bin
-        inspector_environment["PG_RESTORE_BIN"] = str(
-            repo / "scripts/migration/bounded-pg-restore.py"
-        )
-        inspect_result = subprocess.run(
-            ["bash", str(inspector), "--output", str(report), str(inner_archive)],
-            cwd=repo,
-            env=inspector_environment,
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
+        python_executable = identities["execution_python_executable"]
+        inspector_environment = {
+            "LANG": "C",
+            "LC_ALL": "C",
+            "PATH": os.pathsep.join(("/usr/bin", "/bin")),
+            "TMPDIR": str(inspector_temp),
+            "LOVABLE_UNDERLYING_PG_RESTORE_BIN": pg_restore_bin,
+            "LOVABLE_PG_RESTORE_GUARD_IS_PYTHON": "1",
+            "PG_RESTORE_BIN": str(repo / "scripts/migration/bounded-pg-restore.py"),
+            "PYTHON_BIN": python_executable,
+        }
+        try:
+            inspect_result = subprocess.run(
+                [
+                    "/bin/bash",
+                    str(inspector),
+                    "--expected-sha256",
+                    inner_sha,
+                    "--output",
+                    str(report),
+                    str(inner_archive),
+                ],
+                cwd=repo,
+                env=inspector_environment,
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except OSError as exc:
+            raise InspectorStageError("internal_failure", "other_nonzero") from exc
         if inspect_result.returncode != 0:
-            raise WorkflowError("inner PGDMP metadata inspection failed closed")
-        if inspect_result.stderr or inspect_result.stdout != (
-            f"Metadata-only report written to {report}\n"
-        ):
+            stage, reason = parse_inspector_failure(
+                inspect_result.stdout,
+                inspect_result.stderr,
+            )
+            raise InspectorStageError(stage, reason)
+        expected_inspector_stdout = (
+            f"Metadata-only report written to {report}\n".encode("utf-8")
+        )
+        if inspect_result.stderr or inspect_result.stdout != expected_inspector_stdout:
             raise WorkflowError("inner PGDMP inspector emitted unexpected output")
 
         report_text = report.read_text(encoding="utf-8")
@@ -2013,6 +2269,7 @@ def inspect() -> Path:
             raise WorkflowError("inspector report is missing a required safety-boundary field")
         if not re.search(r"^pg_restore_version: 17(?:\.|$)", report_text, re.MULTILINE):
             raise WorkflowError("metadata inspection requires PostgreSQL 17 pg_restore")
+        header_metadata = parse_report_header_metadata(report_text, inner_sha)
         os.chmod(report, 0o400)
         inner_sha_after = file_sha256(inner_archive)
         if len({inner_sha, inner_sha_after, reported_hashes[0]}) != 1:
@@ -2051,7 +2308,7 @@ def inspect() -> Path:
         root_metadata = os.fstat(bound.root_fd)
         file_metadata = os.fstat(bound.file_fd)
         provenance: dict[str, Any] = {
-            "format_version": 3,
+            "format_version": 4,
             "artifact_kind": "lovable_cloud_export_inspection_provenance",
             "inspection_status": "REVIEW_REQUIRED",
             "export_timeline_status": timeline_status,
@@ -2062,6 +2319,10 @@ def inspect() -> Path:
             "procedure_identity_boundary": {
                 "procedure_origin_sha_is_informational_only": True,
                 "external_approval_proof": "approved checkout must exactly equal execution checkout",
+                "inspector_identity": (
+                    "approved execution checkout plus exact Git blob and file SHA-256"
+                ),
+                "historical_baseline_scope": "unchanged supabase/migrations only",
             },
             "execution_tools": {
                 "driver": {
@@ -2078,10 +2339,33 @@ def inspect() -> Path:
                     "path": "scripts/migration/bounded-pg-restore.py",
                     "git_blob_sha": identities["pg_restore_guard_blob_sha"],
                     "sha256": identities["pg_restore_guard_sha256"],
+                    "invoked_with_execution_python_isolated_mode": True,
                 },
                 "pgdmp_inspector": {
                     "path": "scripts/migration/inspect-lovable-dump.sh",
-                    "git_sha": INSPECTION_TOOL_GIT_SHA,
+                    "git_sha": identities["inspection_tool_git_sha"],
+                    "git_blob_sha": identities["pgdmp_inspector_blob_sha"],
+                    "sha256": identities["pgdmp_inspector_sha256"],
+                    "failure_diagnostic_format_version": 1,
+                    "raw_failure_output_relayed": False,
+                },
+                "report_helper": {
+                    "path": "scripts/migration/lib/lovable_dump_report.py",
+                    "git_sha": identities["inspection_tool_git_sha"],
+                    "git_blob_sha": identities["report_helper_blob_sha"],
+                    "sha256": identities["report_helper_sha256"],
+                    "failure_diagnostic_format_version": 1,
+                    "raw_failure_output_relayed": False,
+                },
+                "python_runtime": {
+                    "executable": identities["execution_python_executable"],
+                    "sha256": identities["execution_python_sha256"],
+                    "implementation": identities[
+                        "execution_python_implementation"
+                    ],
+                    "version": identities["execution_python_version"],
+                    "isolated_mode_for_child_tools": True,
+                    "inherited_python_or_shell_startup_environment": False,
                 },
             },
             "lovable_source_project": {
@@ -2160,6 +2444,12 @@ def inspect() -> Path:
                 "size_bytes": inner_size,
                 "sha256": inner_sha,
                 "inspector_reported_sha256": reported_hashes[0],
+                "pgdmp_header": header_metadata,
+                "pg_restore_list": {
+                    "compatibility": "PASS",
+                    "failure_diagnostic": None,
+                    "raw_child_output_retained": False,
+                },
                 "retained_in_evidence": False,
                 "all_bytes_consumed_by_pg_restore_list": "not_independently_verifiable",
             },
@@ -2229,8 +2519,25 @@ def inspect() -> Path:
 def main() -> int:
     try:
         inspect()
-    except (WorkflowError, OSError, UnicodeError, json.JSONDecodeError) as exc:
+    except InspectorStageError as exc:
+        print(
+            '{"diagnostic_version":1,"stage":"'
+            + exc.stage
+            + '","reason":"'
+            + exc.reason
+            + '"}',
+            file=sys.stderr,
+        )
+        return 4
+    except WorkflowError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
+        return 4
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        print(
+            '{"diagnostic_version":1,"stage":"internal_failure",'
+            '"reason":"other_nonzero"}',
+            file=sys.stderr,
+        )
         return 4
     return 0
 
