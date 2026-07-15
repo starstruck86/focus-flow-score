@@ -39,6 +39,20 @@ analysis `INCOMPLETE` and `restore_planning_gate: BLOCKED`; unknown classes and
 structurally malformed or conflicting TOCs remain fatal. Evidence-package
 completion never means restore planning or migration readiness is complete.
 
+Object-reference and repository-migration duplicate analysis have independent
+completeness gates. Duplicate analysis is complete only when every normalized
+class has reviewed matching support or is explicitly non-applicable; otherwise
+the aggregate-only evidence remains `REVIEW_REQUIRED` and restore planning
+remains `BLOCKED`. A broader CREATE/ALTER candidate scan ensures unreviewed,
+implicit-name, comment-obscured, or lexically unprovable repository SQL cannot
+be mislabeled complete. Pending and durable evidence JSON is validated with
+recursive duplicate-key rejection, exact fixed-object schemas, typed scalar
+leaves, identity cross-bindings, and an actual publication-path rejection test.
+Source and
+`pg_dump` version headers use a bounded allowlist and fixed redaction for every
+unrecognized value, and EXTENSION owner tokens participate in owner/role
+warnings without changing the ownerless form.
+
 The retained rehearsal's initiation time was not observed. Provenance must keep
 that event explicitly null with `basis: not_observed` and a required reason,
 record availability separately from completion, and remain

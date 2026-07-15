@@ -382,6 +382,16 @@ The fixed count block covers every recognized TOC class. Classes representing
 data/payload position or annotations rather than a standalone schema-object
 reference are explicitly exempt and must retain a zero unresolved count; every
 other recognized class participates in this conservative gate.
+Migration-duplicate analysis is a separate completeness claim. It is
+`COMPLETE` only if every normalized class has reviewed repository-migration
+matching or is explicitly non-applicable. Reviewed matching includes
+`LANGUAGE` definitions and `CREATE [UNIQUE] INDEX [CONCURRENTLY]`; an otherwise
+normalized unsupported class or form keeps duplicate analysis `INCOMPLETE`,
+retains only the aggregate report, and leaves restore planning `BLOCKED`.
+The conservative form gate discovers a broader set of PostgreSQL CREATE/ALTER
+candidates than the exact name-bearing matcher accepts. Implicit unnamed
+objects, comment-obscured grammar, unreviewed leading modifiers, and lexically
+unprovable migration text therefore cannot produce a false `COMPLETE` result.
 No TOC line, object name, schema, owner, OID, SQL, path, or payload from that
 analysis may enter the report or durable package. Unknown classes, malformed
 TOCs, duplicate TOC IDs, conflicting version headers, archive/hash failures,
@@ -390,6 +400,16 @@ analysis path remain fatal and publish no normal package.
 These analysis fields are mandatory in provenance format version 5; the
 pending and descriptor-bound durable validators reject an older or missing
 provenance format rather than inferring the gate.
+Those validators also use a recursive duplicate-key- and nonfinite-number-
+rejecting JSON loader and exact allowed-key schemas at every fixed provenance
+and evidence-manifest level. Rehashed last-key-wins documents, nested duplicate
+members, unknown readiness claims, and contradictory fixed safety values are
+publication failures.
+Expected scalar values are type/format checked and cross-bound across tool,
+source/config, outer, inner/header, report, checksum, and durable-path claims;
+the pending package is then rebound to the descriptor-held canonical artifact
+before any durable directory is created. Synthetic poison cases exercise both
+validators and the actual no-replace publication entry point.
 The approved workflow records its resolved execution-Python identity, runs
 child Python tools in isolated mode, pins the raw inspector to that interpreter
 and `/bin/bash`, and excludes inherited shell/Python startup hooks from the
@@ -451,12 +471,20 @@ PGDMP header bytes and binds them to the already verified inner SHA-256. The
 inspector otherwise retains its boundary: it validates a local raw custom-format
 archive, checks tool compatibility, invokes `pg_restore` only with `--version`
 and `--list`, emits metadata only, and fails closed on unknown TOC classes.
-When object-reference analysis is complete, review every warning for owners,
+Source PostgreSQL and `pg_dump` header values are retained only when the entire
+header matches a bounded ASCII numeric-version grammar with the reviewed
+`betaN`, `rcN`, or `devel` prerelease suffix. All other candidate text becomes
+the fixed `REDACTED_UNSAFE_OR_UNRECOGNIZED` token; candidate count and byte
+length are bounded, and candidate values are never included in diagnostics.
+An EXTENSION owner token contributes to the owner/role warning count; ownerless
+and explicit `-` owner forms do not.
+When both object-reference and migration-duplicate analysis are complete,
+review every warning for owners,
 ACLs, roles, extensions, subscriptions, event triggers, publications, managed
 schemas, `auth`, `storage`, `supabase_*`, and duplicates with checked-in
-migrations. When it is incomplete, the only safe result is the aggregate
-blocked package; resolve the parser/evidence gap under review before any restore
-planning.
+migrations. When either analysis is incomplete, the only safe result is the
+aggregate blocked package; resolve the parser/evidence gap under review before
+any restore planning.
 
 Exit gate: normalization and archive format/version checks pass; TOC parsing has
 no unknown class; the report contains no row data; exactly one report `sha256:`
@@ -477,8 +505,8 @@ The per-file manifest and detached hash must verify in the durable package, the
 disposable local run must be absent, and the externally approved expected outer
 identity must remain distinct from workflow-observed measurements. Migration
 readiness remains **RED**, inspection remains `REVIEW_REQUIRED`, and
-`restore_planning_gate` must be `BLOCKED` whether object-reference analysis is
-complete or incomplete. No downstream validation may treat
+`restore_planning_gate` must be `BLOCKED` whether object-reference analysis or
+migration-duplicate analysis is complete or incomplete. No downstream validation may treat
 `EVIDENCE_COMPLETE`, a complete object analysis, or a matching manifest as
 restore authorization.
 

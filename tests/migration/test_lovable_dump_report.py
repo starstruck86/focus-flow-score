@@ -196,11 +196,28 @@ class LovableDumpReportDiagnosticTest(unittest.TestCase):
             "1; 0 0 EXTENSION - uuid-ossp synthetic_owner\n"
             "2; 0 0 EXTENSION - pgcrypto\n"
             "3; 0 0 EXTENSION - uuid-ossp\n"
+            "4; 0 0 EXTENSION - uuid-ossp -\n"
         )
         result = self.run_helper()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, b"")
-        self.assertIn("EXTENSION: 3\n", result.stdout.decode("utf-8"))
+        report = result.stdout.decode("utf-8")
+        self.assertIn("EXTENSION: 4\n", report)
+        self.assertIn("owner_metadata: PRESENT (1)\n", report)
+        self.assertIn("role_references: PRESENT (1)\n", report)
+
+        owned = REPORT.TocEntry(1, "EXTENSION", "- uuid-ossp owner_role", 1)
+        ownerless = REPORT.TocEntry(2, "EXTENSION", "- uuid-ossp", 2)
+        explicit_ownerless = REPORT.TocEntry(3, "EXTENSION", "- uuid-ossp -", 3)
+        self.assertIn("EXTENSION", REPORT.OWNER_BEARING_CLASSES)
+        self.assertEqual(
+            REPORT.owner_reference_count([owned, ownerless, explicit_ownerless]),
+            1,
+        )
+        self.assertEqual(
+            REPORT.object_ref(explicit_ownerless),
+            REPORT.ObjectRef("EXTENSION", "-", "uuid-ossp"),
+        )
 
     def test_extension_name_exception_remains_conservative(self):
         accepted = {
@@ -372,6 +389,327 @@ class LovableDumpReportDiagnosticTest(unittest.TestCase):
         self.assertEqual(tuple(sorted(counts)), REPORT.UNRESOLVED_CLASS_COUNT_KEYS)
         self.assertEqual(sum(int(value) for value in counts.values()), 3)
         self.assertEqual(counts["ACL"], "0")
+
+    def test_supported_language_and_concurrent_index_duplicates_are_complete(self):
+        migration = self.migrations / "20260715000000_supported_forms.sql"
+        migration.write_text(
+            "CREATE LANGUAGE synthetic_language;\n"
+            "CREATE INDEX CONCURRENTLY synthetic_index "
+            "ON public.synthetic_table (id);\n",
+            encoding="utf-8",
+        )
+        self.write_toc(
+            "; Dumped from database version: 17.5\n"
+            "; Dumped by pg_dump version: 17.5\n"
+            "1; 0 0 LANGUAGE - synthetic_language synthetic_owner\n"
+            "2; 0 0 INDEX public synthetic_index synthetic_owner\n"
+        )
+
+        result = self.run_helper()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, b"")
+        report = result.stdout.decode("utf-8")
+        self.assertIn("object_reference_analysis: COMPLETE\n", report)
+        self.assertIn("migration_duplicate_analysis: COMPLETE\n", report)
+        self.assertIn("restore_planning_gate: BLOCKED\n", report)
+        self.assertIn("possible_repo_migration_duplicates: PRESENT (2)\n", report)
+        self.assertIn(
+            "LANGUAGE synthetic_language -> 20260715000000_supported_forms.sql\n",
+            report,
+        )
+        self.assertIn(
+            "INDEX public.synthetic_index -> 20260715000000_supported_forms.sql\n",
+            report,
+        )
+
+    def test_unnamed_create_index_forces_incomplete_duplicate_analysis(self):
+        private_name = "PRIVATE_UNNAMED_INDEX_TABLE"
+        migration = self.migrations / "20260715000000_unnamed_index.sql"
+        migration.write_text(
+            f"CREATE INDEX ON public.{private_name} (id);\n",
+            encoding="utf-8",
+        )
+        self.write_toc(
+            "; Dumped from database version: 17.5\n"
+            "; Dumped by pg_dump version: 17.5\n"
+            "1; 0 0 INDEX public synthetic_index synthetic_owner\n"
+        )
+
+        result = self.run_helper()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, b"")
+        report = result.stdout.decode("utf-8")
+        self.assertIn("object_reference_analysis: COMPLETE\n", report)
+        self.assertIn("migration_duplicate_analysis: INCOMPLETE\n", report)
+        self.assertIn("restore_planning_gate: BLOCKED\n", report)
+        self.assertNotIn(private_name, report)
+        self.assertNotIn("synthetic_index", report)
+        self.assertNotIn("POSSIBLE REPO MIGRATION DUPLICATES", report)
+
+    def test_comment_obscured_language_forces_incomplete_without_leaking(self):
+        private_comment = "PRIVATE_COMMENT_AND_ROW_SENTINEL"
+        private_name = "private_language_name"
+        migration = self.migrations / "20260715000000_obscured_language.sql"
+        migration.write_text(
+            f"CREATE /* {private_comment} */ LANGUAGE {private_name};\n",
+            encoding="utf-8",
+        )
+        self.write_toc(
+            "; Dumped from database version: 17.5\n"
+            "; Dumped by pg_dump version: 17.5\n"
+            f"1; 0 0 LANGUAGE - {private_name} synthetic_owner\n"
+        )
+
+        result = self.run_helper()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, b"")
+        report = result.stdout.decode("utf-8")
+        self.assertIn("object_reference_analysis: COMPLETE\n", report)
+        self.assertIn("migration_duplicate_analysis: INCOMPLETE\n", report)
+        self.assertIn("restore_planning_gate: BLOCKED\n", report)
+        self.assertNotIn(private_comment, report)
+        self.assertNotIn(private_name, report)
+        self.assertNotIn("POSSIBLE REPO MIGRATION DUPLICATES", report)
+
+    def test_broad_candidate_rejects_valid_unreviewed_create_form(self):
+        private_name = "PRIVATE_UNLOGGED_TABLE_SENTINEL"
+        migration = self.migrations / "20260715000000_unlogged_table.sql"
+        migration.write_text(
+            f"CREATE UNLOGGED TABLE public.{private_name} (id integer);\n",
+            encoding="utf-8",
+        )
+        self.write_toc(
+            "; Dumped from database version: 17.5\n"
+            "; Dumped by pg_dump version: 17.5\n"
+            "1; 0 0 TABLE public synthetic_table synthetic_owner\n"
+        )
+
+        result = self.run_helper()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, b"")
+        report = result.stdout.decode("utf-8")
+        self.assertIn("object_reference_analysis: COMPLETE\n", report)
+        self.assertIn("migration_duplicate_analysis: INCOMPLETE\n", report)
+        self.assertIn("restore_planning_gate: BLOCKED\n", report)
+        self.assertNotIn(private_name, report)
+        self.assertNotIn("synthetic_table", report)
+        self.assertNotIn("POSSIBLE REPO MIGRATION DUPLICATES", report)
+
+        # CREATE OR REPLACE TRIGGER is another valid PostgreSQL form outside
+        # the exact reviewed trigger matcher. The broad detector sees it even
+        # though object-reference handling remains independently conservative.
+        trigger_candidate = REPORT.migration_definition_candidate_pattern(
+            "TRIGGER"
+        )
+        trigger_sql = "CREATE OR REPLACE TRIGGER synthetic_trigger "
+        self.assertIsNotNone(trigger_candidate.match(trigger_sql))
+        self.assertIsNone(
+            REPORT.migration_definition_shape_pattern("TRIGGER").match(
+                trigger_sql
+            )
+        )
+
+    def test_normalized_unclassified_duplicate_class_is_incomplete(self):
+        entry = REPORT.TocEntry(
+            1,
+            "ACCESS METHOD",
+            "- synthetic_access_method synthetic_owner",
+            1,
+        )
+        self.assertIsNotNone(REPORT.object_ref(entry))
+        self.assertEqual(
+            REPORT.unsupported_migration_duplicate_classes([entry]),
+            {"ACCESS METHOD": 1},
+        )
+        self.write_toc(
+            "; Dumped from database version: 17.5\n"
+            "; Dumped by pg_dump version: 17.5\n"
+            "1; 0 0 ACCESS METHOD - synthetic_access_method synthetic_owner\n"
+        )
+
+        result = self.run_helper()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, b"")
+        report = result.stdout.decode("utf-8")
+        self.assertIn("object_reference_analysis: COMPLETE\n", report)
+        self.assertIn("migration_duplicate_analysis: INCOMPLETE\n", report)
+        self.assertIn("restore_planning_gate: BLOCKED\n", report)
+        self.assertIn("unresolved_known_toc_entries: 0\n", report)
+        self.assertNotIn("synthetic_access_method", report)
+        self.assertNotIn("POSSIBLE REPO MIGRATION DUPLICATES", report)
+
+    def test_duplicate_analysis_non_applicability_is_explicit(self):
+        self.assertEqual(
+            REPORT.MIGRATION_DUPLICATE_ANALYZED_CLASSES,
+            frozenset(REPORT.MIGRATION_CLASS_PREFIXES),
+        )
+        self.assertIn("ACL", REPORT.MIGRATION_DUPLICATE_NON_APPLICABLE_CLASSES)
+        self.assertIn(
+            "TABLE DATA", REPORT.MIGRATION_DUPLICATE_NON_APPLICABLE_CLASSES
+        )
+        self.assertNotIn(
+            "ACCESS METHOD", REPORT.MIGRATION_DUPLICATE_NON_APPLICABLE_CLASSES
+        )
+        self.assertEqual(
+            REPORT.unsupported_migration_duplicate_classes(
+                [REPORT.TocEntry(1, "ACL", "public synthetic", 1)]
+            ),
+            {},
+        )
+
+    def test_unsafe_version_headers_are_bounded_redacted_and_nonleaking(self):
+        # These short all-ASCII suffixes fit the former permissive alpha/vendor
+        # allowances.  They must now redact because they are not PostgreSQL's
+        # reviewed betaN, rcN, or devel prerelease spellings.
+        version_sentinel = "VERSIONLEAK"
+        source_sentinel = "17.5" + version_sentinel
+        dump_sentinel = "17.5+" + version_sentinel
+        self.write_toc(
+            f"; Dumped from database version: {source_sentinel}\n"
+            f"; Dumped by pg_dump version: {dump_sentinel}\n"
+            "1; 0 0 TABLE public synthetic_table synthetic_owner\n"
+        )
+
+        result = self.run_helper()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, b"")
+        report = result.stdout.decode("utf-8")
+        self.assertNotIn(version_sentinel, report)
+        self.assertNotIn(source_sentinel, report)
+        self.assertNotIn(dump_sentinel, report)
+        self.assertIn(
+            "source_postgresql_version: REDACTED_UNSAFE_OR_UNRECOGNIZED\n",
+            report,
+        )
+        self.assertIn(
+            "source_pg_dump_version: REDACTED_UNSAFE_OR_UNRECOGNIZED\n",
+            report,
+        )
+
+        # The same fixed redaction applies when object-name analysis is also
+        # incomplete; neither report path may retain version-shaped payload.
+        self.write_toc(
+            f"; Dumped from database version: {source_sentinel}\n"
+            f"; Dumped by pg_dump version: {dump_sentinel}\n"
+            f"1; 0 0 TABLE public bad.name {SENTINEL}\n"
+        )
+        incomplete_result = self.run_helper()
+        self.assertEqual(incomplete_result.returncode, 0, incomplete_result.stderr)
+        incomplete_report = incomplete_result.stdout.decode("utf-8")
+        self.assertIn("object_reference_analysis: INCOMPLETE\n", incomplete_report)
+        self.assertNotIn(version_sentinel, incomplete_report)
+        self.assertNotIn(SENTINEL, incomplete_report)
+        self.assertIn(
+            "source_postgresql_version: REDACTED_UNSAFE_OR_UNRECOGNIZED\n",
+            incomplete_report,
+        )
+        self.assertIn(
+            "source_pg_dump_version: REDACTED_UNSAFE_OR_UNRECOGNIZED\n",
+            incomplete_report,
+        )
+
+    def test_safe_and_unsafe_or_distinct_unsafe_versions_conflict(self):
+        cases = (
+            (
+                "conflicting_source_version",
+                "; Dumped from database version: 17.5\n"
+                f"; Dumped from database version: 17.5 {SENTINEL}\n",
+            ),
+            (
+                "conflicting_pg_dump_version",
+                "; Dumped by pg_dump version: 17.5\n"
+                f"; Dumped by pg_dump version: 17.5 {SENTINEL}\n",
+            ),
+            (
+                "conflicting_source_version",
+                f"; Dumped from database version: 17.5+{SENTINEL}A\n"
+                f"; Dumped from database version: 17.5+{SENTINEL}B\n",
+            ),
+            (
+                "conflicting_pg_dump_version",
+                f"; Dumped by pg_dump version: 17.5+{SENTINEL}A\n"
+                f"; Dumped by pg_dump version: 17.5+{SENTINEL}B\n",
+            ),
+        )
+        for reason, headers in cases:
+            with self.subTest(reason=reason, headers=headers[:40]):
+                self.write_toc(
+                    headers
+                    + "1; 0 0 TABLE public synthetic_table synthetic_owner\n"
+                )
+                self.assert_failure(self.run_helper(), reason)
+
+    def test_reviewed_version_grammar_requires_a_full_header_match(self):
+        self.write_toc(
+            ";     Dumped from database version: 17beta1\n"
+            ";     Dumped by pg_dump version: 18rc2\n"
+            "1; 0 0 TABLE public synthetic_table synthetic_owner\n"
+        )
+
+        result = self.run_helper()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = result.stdout.decode("utf-8")
+        self.assertIn("source_postgresql_version: 17beta1\n", report)
+        self.assertIn("source_pg_dump_version: 18rc2\n", report)
+        self.assertIsNotNone(
+            REPORT.SOURCE_POSTGRES_VERSION_RE.fullmatch(
+                "; Dumped from database version: 19devel"
+            )
+        )
+
+    def test_overlong_version_candidate_is_redacted_without_leaking(self):
+        overlong_sentinel = "OVERLONGVERSIONPAYLOAD"
+        overlong = (
+            "17.5+"
+            + ("A" * REPORT.MAX_VERSION_HEADER_LINE_BYTES)
+            + overlong_sentinel
+        )
+        self.write_toc(
+            f"; Dumped from database version: {overlong}\n"
+            "; Dumped by pg_dump version: 17.5\n"
+            "1; 0 0 TABLE public synthetic_table synthetic_owner\n"
+        )
+
+        result = self.run_helper()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = result.stdout.decode("utf-8")
+        self.assertNotIn(overlong_sentinel, report)
+        self.assertNotIn(overlong, report)
+        self.assertIn(
+            "source_postgresql_version: REDACTED_UNSAFE_OR_UNRECOGNIZED\n",
+            report,
+        )
+
+    def test_version_header_candidate_counts_are_bounded_and_nonleaking(self):
+        cases = (
+            (
+                "conflicting_source_version",
+                "; Dumped from database version: 17.5 "
+                + SENTINEL
+                + "\n",
+            ),
+            (
+                "conflicting_pg_dump_version",
+                "; Dumped by pg_dump version: 17.5 "
+                + SENTINEL
+                + "\n",
+            ),
+        )
+        for reason, header in cases:
+            with self.subTest(reason=reason):
+                self.write_toc(
+                    header * (REPORT.MAX_VERSION_HEADER_CANDIDATES + 1)
+                    + "1; 0 0 TABLE public synthetic_table synthetic_owner\n"
+                )
+                self.assert_failure(self.run_helper(), reason)
 
     def test_spaces_punctuation_and_unicode_are_incomplete_without_leaking(self):
         remainders = (

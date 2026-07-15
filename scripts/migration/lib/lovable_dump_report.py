@@ -110,6 +110,7 @@ OWNER_BEARING_CLASSES = frozenset(
         "DATABASE",
         "DOMAIN",
         "EVENT TRIGGER",
+        "EXTENSION",
         "FOREIGN DATA WRAPPER",
         "FOREIGN SERVER",
         "FOREIGN TABLE",
@@ -202,14 +203,37 @@ GENERIC_SINGLE_NAME_TOC_CLASSES = frozenset(
     }
 )
 TOC_LINE_RE = re.compile(r"^\s*(\d+);\s+(\d+)\s+(\d+)\s+(.+?)\s*$")
+# ``pg_restore --list`` emits these values as free-form comment text.  Accept
+# only an exact, bounded ASCII grammar: numeric components, or PostgreSQL's
+# explicit ``betaN``, ``rcN``, and ``devel`` prerelease forms.  Vendor suffixes
+# and any trailing text are never copied to visible or retained evidence.
+# Prefix recognition is separate so an unsafe value can be represented by one
+# fixed redaction token.
+SAFE_VERSION_VALUE_PATTERN = (
+    r"[0-9]{1,3}(?:\.[0-9]{1,3}){0,3}"
+    r"(?:(?:beta|rc)[0-9]{1,3}|devel)?"
+)
 SOURCE_POSTGRES_VERSION_RE = re.compile(
-    r"^;\s*Dumped from database version:\s*"
-    r"([0-9]+(?:\.[0-9]+)*(?:[A-Za-z0-9_.+~-]*)?)"
+    rf"^;[ \t]{{0,8}}Dumped from database version:[ \t]"
+    rf"({SAFE_VERSION_VALUE_PATTERN})[ \t]{{0,4}}$",
+    re.ASCII,
 )
 PG_DUMP_VERSION_RE = re.compile(
-    r"^;\s*Dumped by pg_dump version:\s*"
-    r"([0-9]+(?:\.[0-9]+)*(?:[A-Za-z0-9_.+~-]*)?)"
+    rf"^;[ \t]{{0,8}}Dumped by pg_dump version:[ \t]"
+    rf"({SAFE_VERSION_VALUE_PATTERN})[ \t]{{0,4}}$",
+    re.ASCII,
 )
+SOURCE_POSTGRES_VERSION_PREFIX_RE = re.compile(
+    r"^;[ \t]{0,8}Dumped from database version:[ \t]",
+    re.ASCII,
+)
+PG_DUMP_VERSION_PREFIX_RE = re.compile(
+    r"^;[ \t]{0,8}Dumped by pg_dump version:[ \t]",
+    re.ASCII,
+)
+REDACTED_VERSION = "REDACTED_UNSAFE_OR_UNRECOGNIZED"
+MAX_VERSION_HEADER_LINE_BYTES = 160
+MAX_VERSION_HEADER_CANDIDATES = 4
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 REASON_UNKNOWN_TOC_CLASS = "unknown_toc_class"
@@ -328,18 +352,52 @@ def parse_toc(path: Path) -> tuple[list[TocEntry], TocProvenance]:
         raise InspectionError(REASON_MALFORMED_TOC) from exc
     source_postgresql_versions: set[str] = set()
     pg_dump_versions: set[str] = set()
+    source_header_identities: set[str] = set()
+    pg_dump_header_identities: set[str] = set()
+    source_header_candidates = 0
+    pg_dump_header_candidates = 0
+    source_version_redacted = False
+    pg_dump_version_redacted = False
 
     for line_number, line in enumerate(text.splitlines(), start=1):
         stripped = line.strip()
         if not stripped:
             continue
         if stripped.startswith(";"):
-            source_match = SOURCE_POSTGRES_VERSION_RE.match(line)
-            if source_match:
-                source_postgresql_versions.add(source_match.group(1))
-            dump_match = PG_DUMP_VERSION_RE.match(line)
-            if dump_match:
-                pg_dump_versions.add(dump_match.group(1))
+            if SOURCE_POSTGRES_VERSION_PREFIX_RE.match(line):
+                source_header_candidates += 1
+                if source_header_candidates > MAX_VERSION_HEADER_CANDIDATES:
+                    raise InspectionError(REASON_CONFLICTING_SOURCE_VERSION)
+                encoded_header = line.encode("utf-8")
+                source_header_identities.add(
+                    hashlib.sha256(encoded_header).hexdigest()
+                )
+                source_match = (
+                    SOURCE_POSTGRES_VERSION_RE.fullmatch(line)
+                    if len(encoded_header) <= MAX_VERSION_HEADER_LINE_BYTES
+                    else None
+                )
+                if source_match is None:
+                    source_version_redacted = True
+                else:
+                    source_postgresql_versions.add(source_match.group(1))
+            if PG_DUMP_VERSION_PREFIX_RE.match(line):
+                pg_dump_header_candidates += 1
+                if pg_dump_header_candidates > MAX_VERSION_HEADER_CANDIDATES:
+                    raise InspectionError(REASON_CONFLICTING_PG_DUMP_VERSION)
+                encoded_header = line.encode("utf-8")
+                pg_dump_header_identities.add(
+                    hashlib.sha256(encoded_header).hexdigest()
+                )
+                dump_match = (
+                    PG_DUMP_VERSION_RE.fullmatch(line)
+                    if len(encoded_header) <= MAX_VERSION_HEADER_LINE_BYTES
+                    else None
+                )
+                if dump_match is None:
+                    pg_dump_version_redacted = True
+                else:
+                    pg_dump_versions.add(dump_match.group(1))
             continue
         match = TOC_LINE_RE.match(line)
         if not match:
@@ -358,14 +416,22 @@ def parse_toc(path: Path) -> tuple[list[TocEntry], TocProvenance]:
         raise InspectionError(REASON_MALFORMED_TOC)
     if len({entry.toc_id for entry in entries}) != len(entries):
         raise InspectionError(REASON_DUPLICATE_TOC_ID)
-    if len(source_postgresql_versions) > 1:
+    if len(source_header_identities) > 1:
         raise InspectionError(REASON_CONFLICTING_SOURCE_VERSION)
-    if len(pg_dump_versions) > 1:
+    if len(pg_dump_header_identities) > 1:
         raise InspectionError(REASON_CONFLICTING_PG_DUMP_VERSION)
 
     return entries, TocProvenance(
-        source_postgresql_version=next(iter(source_postgresql_versions), None),
-        pg_dump_version=next(iter(pg_dump_versions), None),
+        source_postgresql_version=(
+            REDACTED_VERSION
+            if source_version_redacted
+            else next(iter(source_postgresql_versions), None)
+        ),
+        pg_dump_version=(
+            REDACTED_VERSION
+            if pg_dump_version_redacted
+            else next(iter(pg_dump_versions), None)
+        ),
     )
 
 
@@ -477,7 +543,14 @@ MIGRATION_CLASS_PREFIXES = {
     "EXTENSION": r"(?:create|alter)\s+extension",
     "FOREIGN TABLE": r"(?:create|alter)\s+foreign\s+table",
     "FUNCTION": r"(?:create|alter)(?:\s+or\s+replace)?\s+function",
-    "INDEX": r"(?:create|alter)(?:\s+unique)?\s+index",
+    "INDEX": (
+        r"(?:create(?:\s+unique)?\s+index(?:\s+concurrently)?|"
+        r"alter\s+index)"
+    ),
+    "LANGUAGE": (
+        r"(?:create(?:\s+or\s+replace)?(?:\s+trusted)?"
+        r"(?:\s+procedural)?|alter(?:\s+procedural)?)\s+language"
+    ),
     "MATERIALIZED VIEW": r"(?:create|alter)\s+materialized\s+view",
     "POLICY": r"(?:create|alter)\s+policy",
     "PROCEDURE": r"(?:create|alter)(?:\s+or\s+replace)?\s+procedure",
@@ -485,6 +558,7 @@ MIGRATION_CLASS_PREFIXES = {
     "SCHEMA": r"(?:create|alter)\s+schema",
     "SEQUENCE": r"(?:create|alter)\s+sequence",
     "STATISTICS": r"(?:create|alter)\s+statistics",
+    "SUBSCRIPTION": r"(?:create|alter)\s+subscription",
     "TABLE": r"(?:create|alter)\s+table",
     "TRIGGER": r"(?:create|alter)\s+trigger",
     "TYPE": r"(?:create|alter)\s+type",
@@ -511,6 +585,44 @@ OBJECT_REFERENCE_REQUIRED_CLASSES = (
 )
 UNRESOLVED_CLASS_COUNT_KEYS = tuple(sorted(KNOWN_TOC_CLASSES))
 
+# Duplicate analysis is complete only when every TOC class in the snapshot is
+# classified here.  ``MIGRATION_CLASS_PREFIXES`` is the reviewed set whose
+# normalized object names are compared with repository migration SQL.
+# Metadata/data-position classes below do not represent an independently
+# creatable schema object and are explicitly non-applicable.  A class outside
+# both sets is unsupported and forces duplicate analysis to INCOMPLETE; it is
+# never silently skipped merely because its object reference normalized.
+MIGRATION_DUPLICATE_ANALYZED_CLASSES = frozenset(MIGRATION_CLASS_PREFIXES)
+MIGRATION_DUPLICATE_NON_APPLICABLE_CLASSES = OBJECT_REFERENCE_EXEMPT_CLASSES
+
+# Duplicate detection is name-based, so a report may call it COMPLETE only
+# when every relevant migration definition uses the reviewed, name-bearing SQL
+# shape. PostgreSQL accepts forms that do not expose such a name (for example
+# ``CREATE INDEX ON ...``), and comments can occur between grammar tokens.
+# Those forms are detected conservatively and make the analysis INCOMPLETE
+# rather than being treated as evidence that no duplicate exists.
+SQL_IDENTIFIER_PATTERN = (
+    r'(?:[A-Za-z_][A-Za-z0-9_$]*|"[A-Za-z_][A-Za-z0-9_$]*")'
+)
+SQL_EXTENSION_IDENTIFIER_PATTERN = (
+    r'(?:[A-Za-z_][A-Za-z0-9_$]*|'
+    r'"[A-Za-z_][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)*")'
+)
+DOLLAR_QUOTE_START_RE = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$")
+IMPLICIT_OBJECT_NAME_KEYWORDS = {
+    "INDEX": frozenset({"all", "on"}),
+    "SCHEMA": frozenset({"authorization"}),
+}
+# This is intentionally broader than ``MIGRATION_CLASS_PREFIXES``. It covers
+# PostgreSQL's leading CREATE modifiers for the normalized classes so a valid
+# but not-yet-reviewed form cannot disappear merely because the exact duplicate
+# matcher does not understand it. A broad candidate that does not match the
+# exact reviewed shape at the same byte offset makes analysis INCOMPLETE.
+MIGRATION_DDL_PREFIX_MODIFIER_PATTERN = (
+    r"(?:constraint|default|global|local|or|procedural|recursive|replace|"
+    r"temp|temporary|trusted|unique|unlogged)"
+)
+
 
 def unresolved_required_object_references(
     entries: Iterable[TocEntry],
@@ -523,6 +635,214 @@ def unresolved_required_object_references(
         if entry.object_class in OBJECT_REFERENCE_REQUIRED_CLASSES
         and object_ref(entry) is None
     )
+
+
+def unsupported_migration_duplicate_classes(
+    entries: Iterable[TocEntry],
+) -> Counter[str]:
+    """Count classes not covered by reviewed or non-applicable analysis."""
+
+    return Counter(
+        entry.object_class
+        for entry in entries
+        if entry.object_class not in MIGRATION_DUPLICATE_ANALYZED_CLASSES
+        and entry.object_class not in MIGRATION_DUPLICATE_NON_APPLICABLE_CLASSES
+    )
+
+
+def _blank_sql_span(buffer: list[str], start: int, end: int) -> None:
+    """Blank private SQL content while preserving offsets and line breaks."""
+
+    for index in range(start, end):
+        if buffer[index] not in ("\n", "\r"):
+            buffer[index] = " "
+
+
+def migration_sql_masks(content: str) -> tuple[str, str, bool]:
+    """Return offset-preserving masks for conservative DDL-form analysis.
+
+    The first mask removes comments and literals so reviewed DDL prefixes can
+    be found without matching private comment or string content. The second
+    removes literals but preserves comments, so a comment-obscured prefix does
+    not qualify as one of the exact reviewed forms. The boolean is false when
+    lexical closure cannot be proven; callers then fail the analysis closed.
+    """
+
+    candidate = list(content)
+    reviewed = list(content)
+    length = len(content)
+    index = 0
+
+    while index < length:
+        if content.startswith("--", index):
+            end = content.find("\n", index + 2)
+            if end == -1:
+                end = length
+            _blank_sql_span(candidate, index, end)
+            index = end
+            continue
+
+        if content.startswith("/*", index):
+            end = index + 2
+            depth = 1
+            while end < length and depth:
+                if content.startswith("/*", end):
+                    depth += 1
+                    end += 2
+                elif content.startswith("*/", end):
+                    depth -= 1
+                    end += 2
+                else:
+                    end += 1
+            if depth:
+                return "".join(candidate), "".join(reviewed), False
+            _blank_sql_span(candidate, index, end)
+            index = end
+            continue
+
+        if content[index] == "'":
+            end = index + 1
+            closed = False
+            while end < length:
+                if content[end] == "\\" and end + 1 < length:
+                    end += 2
+                    continue
+                if content[end] == "'":
+                    if end + 1 < length and content[end + 1] == "'":
+                        end += 2
+                        continue
+                    end += 1
+                    closed = True
+                    break
+                end += 1
+            if not closed:
+                return "".join(candidate), "".join(reviewed), False
+            _blank_sql_span(candidate, index, end)
+            _blank_sql_span(reviewed, index, end)
+            index = end
+            continue
+
+        if content[index] == "$":
+            delimiter_match = DOLLAR_QUOTE_START_RE.match(content, index)
+            if delimiter_match is not None:
+                delimiter = delimiter_match.group(0)
+                end = content.find(delimiter, delimiter_match.end())
+                if end == -1:
+                    return "".join(candidate), "".join(reviewed), False
+                end += len(delimiter)
+                _blank_sql_span(candidate, index, end)
+                _blank_sql_span(reviewed, index, end)
+                index = end
+                continue
+
+        if content[index] == '"':
+            end = index + 1
+            closed = False
+            while end < length:
+                if content[end] == '"':
+                    if end + 1 < length and content[end + 1] == '"':
+                        end += 2
+                        continue
+                    end += 1
+                    closed = True
+                    break
+                end += 1
+            if not closed:
+                return "".join(candidate), "".join(reviewed), False
+            index = end
+            continue
+
+        index += 1
+
+    return "".join(candidate), "".join(reviewed), True
+
+
+def migration_definition_shape_pattern(object_class: str) -> re.Pattern[str]:
+    """Build the exact reviewed name-bearing SQL shape for one TOC class."""
+
+    prefix = MIGRATION_CLASS_PREFIXES[object_class]
+    identifier = (
+        SQL_EXTENSION_IDENTIFIER_PATTERN
+        if object_class == "EXTENSION"
+        else SQL_IDENTIFIER_PATTERN
+    )
+    qualified = rf"{identifier}(?:\s*\.\s*{identifier})?"
+    return re.compile(
+        rf"\b{prefix}\s+(?:if\s+(?:not\s+)?exists\s+)?"
+        rf"(?P<object_name>{qualified})(?![A-Za-z0-9_$])",
+        re.IGNORECASE,
+    )
+
+
+def migration_definition_candidate_pattern(
+    object_class: str,
+) -> re.Pattern[str]:
+    """Build a broad class-keyword detector distinct from reviewed syntax."""
+
+    class_keywords = r"\s+".join(
+        re.escape(token) for token in object_class.lower().split()
+    )
+    return re.compile(
+        rf"\b(?:create|alter)"
+        rf"(?:\s+{MIGRATION_DDL_PREFIX_MODIFIER_PATTERN}){{0,8}}"
+        rf"\s+{class_keywords}(?=\s)",
+        re.IGNORECASE,
+    )
+
+
+def _uses_implicit_object_name(object_class: str, value: str) -> bool:
+    terminal = re.split(r"\s*\.\s*", value)[-1]
+    if terminal.startswith('"'):
+        return False
+    return terminal.lower() in IMPLICIT_OBJECT_NAME_KEYWORDS.get(
+        object_class, frozenset()
+    )
+
+
+def unsupported_migration_definition_forms(
+    entries: Iterable[TocEntry], migration_text: Iterable[tuple[str, str]]
+) -> int:
+    """Count files whose relevant DDL cannot be exhaustively name-compared."""
+
+    relevant_classes = {
+        ref.object_class
+        for entry in entries
+        if (ref := object_ref(entry)) is not None
+        and ref.object_class in MIGRATION_DUPLICATE_ANALYZED_CLASSES
+    }
+    if not relevant_classes:
+        return 0
+
+    unsupported_files = 0
+    for _filename, content in migration_text:
+        candidate_sql, reviewed_sql, lexically_complete = migration_sql_masks(
+            content
+        )
+        if not lexically_complete:
+            unsupported_files += 1
+            continue
+
+        file_is_unsupported = False
+        for object_class in sorted(relevant_classes):
+            candidate_pattern = migration_definition_candidate_pattern(
+                object_class
+            )
+            shape = migration_definition_shape_pattern(object_class)
+            for candidate_match in candidate_pattern.finditer(candidate_sql):
+                reviewed_match = shape.match(
+                    reviewed_sql, candidate_match.start()
+                )
+                if reviewed_match is None or _uses_implicit_object_name(
+                    object_class, reviewed_match.group("object_name")
+                ):
+                    file_is_unsupported = True
+                    break
+            if file_is_unsupported:
+                break
+        if file_is_unsupported:
+            unsupported_files += 1
+
+    return unsupported_files
 
 
 def quoted_identifier_pattern(identifier: str) -> str:
@@ -553,9 +873,7 @@ def migration_definition_pattern(ref: ObjectRef) -> Optional[re.Pattern[str]]:
     )
 
 
-def find_migration_duplicates(
-    entries: Iterable[TocEntry], migrations_dir: Path
-) -> list[tuple[ObjectRef, str]]:
+def load_migration_text(migrations_dir: Path) -> list[tuple[str, str]]:
     migration_text: list[tuple[str, str]] = []
     try:
         migration_paths = sorted(migrations_dir.rglob("*.sql"))
@@ -566,6 +884,12 @@ def find_migration_duplicates(
             migration_text.append((path.name, content))
     except (OSError, UnicodeError) as exc:
         raise InspectionError(REASON_MIGRATION_METADATA_UNREADABLE) from exc
+    return migration_text
+
+
+def find_migration_duplicates(
+    entries: Iterable[TocEntry], migration_text: Iterable[tuple[str, str]]
+) -> list[tuple[ObjectRef, str]]:
 
     duplicates: set[tuple[ObjectRef, str]] = set()
     for entry in entries:
@@ -610,6 +934,15 @@ def build_report(args: argparse.Namespace) -> str:
     class_counts = Counter(entry.object_class for entry in entries)
     unresolved_counts = unresolved_required_object_references(entries)
     unresolved_total = sum(unresolved_counts.values())
+    unsupported_duplicate_counts = unsupported_migration_duplicate_classes(entries)
+    unsupported_duplicate_total = sum(unsupported_duplicate_counts.values())
+    migration_text: list[tuple[str, str]] = []
+    unsupported_duplicate_form_total = 0
+    if not unresolved_total and not unsupported_duplicate_total:
+        migration_text = load_migration_text(args.migrations_dir)
+        unsupported_duplicate_form_total = unsupported_migration_definition_forms(
+            entries, migration_text
+        )
     data_entries = sum(class_counts[name] for name in DATA_TOC_CLASSES)
 
     source_postgresql_version = (
@@ -617,16 +950,23 @@ def build_report(args: argparse.Namespace) -> str:
     )
     pg_dump_version = toc_provenance.pg_dump_version or "UNKNOWN_NOT_REPORTED"
 
-    if unresolved_total:
+    if (
+        unresolved_total
+        or unsupported_duplicate_total
+        or unsupported_duplicate_form_total
+    ):
         # PostgreSQL's list format is not a lossless serialization of every
         # namespace, tag, and owner.  Once a recognized object-bearing entry
         # cannot be normalized, do not run name-, schema-, owner-, or
-        # migration-definition analysis.  Retain only fixed-class aggregate
-        # evidence and a hard blocked restore-planning gate.
+        # migration-definition analysis.  Likewise, a normalized class that
+        # lacks reviewed duplicate-analysis support makes that analysis
+        # incomplete rather than silently skipped.  Retain only fixed-class
+        # aggregate evidence and a hard blocked restore-planning gate.
+        object_analysis = "INCOMPLETE" if unresolved_total else "COMPLETE"
         lines = [
             "LOVABLE CLOUD DUMP — METADATA-ONLY INSPECTION",
             "inspection_status: REVIEW_REQUIRED",
-            "object_reference_analysis: INCOMPLETE",
+            f"object_reference_analysis: {object_analysis}",
             "migration_duplicate_analysis: INCOMPLETE",
             "restore_planning_gate: BLOCKED",
             "scope: archive header, SHA-256, pg_restore TOC metadata, aggregate unresolved-object counts",
@@ -658,7 +998,11 @@ def build_report(args: argparse.Namespace) -> str:
                 "",
                 "BOUNDARY",
                 "This report is an inventory aid, not a restore plan or completeness proof.",
-                "Object-reference analysis is incomplete; restore planning remains blocked.",
+                (
+                    "Object-reference analysis is incomplete; restore planning remains blocked."
+                    if unresolved_total
+                    else "Migration-duplicate analysis is incomplete; restore planning remains blocked."
+                ),
             ]
         )
         return "\n".join(lines) + "\n"
@@ -688,7 +1032,7 @@ def build_report(args: argparse.Namespace) -> str:
         ):
             supabase_prefixed += 1
 
-    duplicates = find_migration_duplicates(entries, args.migrations_dir)
+    duplicates = find_migration_duplicates(entries, migration_text)
     role_references = owners + acl
     not_object_normalized = Counter(
         entry.object_class for entry in entries if object_ref(entry) is None
