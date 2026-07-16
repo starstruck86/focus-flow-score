@@ -452,7 +452,7 @@ def has_direct_cron_job_dml(text: str) -> bool:
             if matched is None:
                 continue
             position = skip_sql_token_gap(text, matched)
-        if command in {"update", "delete"}:
+        if command in {"insert", "update", "delete"}:
             only = match_sql_keyword(text, position, "only")
             if only is not None:
                 position = skip_sql_token_gap(text, only)
@@ -547,7 +547,7 @@ def scan_text(relative: str, text: str) -> set[tuple[str, str]]:
     if relative == DERIVED_STAGING_SNAPSHOT:
         if reviewed_key_matches:
             findings.add((relative, "x_cron_secret_in_derived_snapshot"))
-        if has_executable_cron(reviewed_view):
+        if has_executable_cron(text) or has_executable_cron(reviewed_view):
             findings.add((relative, "executable_cron_in_derived_snapshot"))
         if SUPABASE_ENDPOINT_SHAPE.search(
             reviewed_view

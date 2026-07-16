@@ -673,6 +673,51 @@ class TrackedSchemaSecretScannerTest(unittest.TestCase):
                 ]:
                     self.fail("direct cron.job mutation was missed")
 
+    def test_derived_snapshot_rejects_insert_into_only_forms_without_leakage(
+        self,
+    ) -> None:
+        cases = (
+            (
+                "plain",
+                "INSERT INTO ONLY cron.job (command) VALUES ('{payload}'); "
+                "/* {filename} */\n",
+            ),
+            (
+                "mixed_case",
+                "iNsErT iNtO oNlY CrOn.JoB (command) VALUES ('{payload}'); "
+                "/* {filename} */\n",
+            ),
+            (
+                "quoted_relation",
+                'INSERT INTO ONLY "cron"."job" (command) '
+                "VALUES ('{payload}'); /* {filename} */\n",
+            ),
+            (
+                "comment_and_whitespace_gaps",
+                "INSERT /* gap */ INTO\n/* gap */ ONLY /* gap */ "
+                '"cron" /* gap */ .\n/* gap */ "job" (command) '
+                "VALUES ('{payload}'); /* {filename} */\n",
+            ),
+        )
+        relative = "supabase/dynamic_staging_schema.sql"
+        for label, template in cases:
+            with self.subTest(insert_only_form=label):
+                payload = f"{label}-row-payload-must-not-escape"
+                filename = f"{label}-private-artifact.sql"
+                self.track(
+                    relative,
+                    template.format(payload=payload, filename=filename),
+                )
+                result = self.run_scanner()
+                records = self.safe_records(
+                    result,
+                    (payload.encode(), filename.encode()),
+                )
+                if result.returncode != 1 or records != [
+                    self.finding(relative, "executable_cron_in_derived_snapshot")
+                ]:
+                    self.fail("INSERT INTO ONLY cron.job form was missed")
+
     def test_derived_snapshot_rejects_comments_between_cron_tokens(self) -> None:
         cases = (
             (
