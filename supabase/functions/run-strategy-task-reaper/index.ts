@@ -10,23 +10,12 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { sweepStalePendingRuns } from "../_shared/strategy-orchestrator/staleRunWatchdog.ts";
+import {
+  createStrategyTaskReaperHandler,
+  strategyTaskReaperCorsHeaders as corsHeaders,
+} from "./handler.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  // Cron-only endpoint — require shared secret header.
-  const cronSecret = Deno.env.get("CRON_SECRET");
-  if (!cronSecret || req.headers.get("x-cron-secret") !== cronSecret) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
+async function handleStrategyTaskReaperRequest() {
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -51,4 +40,6 @@ Deno.serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
-});
+}
+
+Deno.serve(createStrategyTaskReaperHandler(handleStrategyTaskReaperRequest));
