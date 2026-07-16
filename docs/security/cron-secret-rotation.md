@@ -35,10 +35,11 @@ this procedure.
 
 The three listed consumers independently accept a nonempty `CRON_SECRET` or
 `CRON_SECRET_NEXT`. They fail closed when neither configured value matches.
-Comparison uses fixed-length SHA-256 digests and the Deno/Node
-`timingSafeEqual` primitive rather than JavaScript string equality, and both
-configured slots are evaluated. This narrows the equality operation's timing
-surface; it is not a claim that the entire request handler has constant runtime.
+Comparison uses fixed-width, length-delimited byte representations and the
+Deno/Node `timingSafeEqual` primitive rather than JavaScript string equality,
+and both configured slots are evaluated. The credentials are not hashed,
+fingerprinted, logged, or persisted. This narrows the equality operation's
+timing surface; it is not a claim that the entire request handler has constant runtime.
 An authenticated `HEAD`
 request returns `204` without running application work; an unaccepted key
 returns `401`. Every probe response must include `Cache-Control: no-store` so a
@@ -92,18 +93,25 @@ Treat the handoff as a state machine. Failure before `LEGACY_PAUSED` makes no
 mutation and does not claim the legacy jobs stopped; once `LEGACY_PAUSED` is
 proved, every later failure leaves all affected jobs inactive. No later state
 may be entered by operator attestation alone. While
-`LEGACY_HANDOFF_MUTATION_GATE` or `CONTROLLED_DISPATCH_GATE` is `BLOCKED`, the
-actors may collect `LEGACY_IDENTITY_BOUND` evidence but must not enter
-`LEGACY_PAUSED`, invoke a wrapper, unschedule a job, or create a replacement:
+`LEGACY_HANDOFF_MUTATION_GATE` or controlled-dispatch readiness is `BLOCKED`,
+the actors may collect `LEGACY_IDENTITY_BOUND` evidence but must not enter
+`LEGACY_PAUSED`, invoke a wrapper, apply the receipt migration, deploy the strict receiver,
+unschedule a job, or create a replacement. Clearing controlled-dispatch
+*readiness* before pause means the later one-shot proof is executable and
+authorized; it does not claim that dispatch occurred before the pause. The
+index and receiver-deployment gates intentionally remain blocked through
+pause/drain and clear only at their later table transitions:
 
 | State | Required evidence and action | Stop condition |
 | --- | --- | --- |
 | `LEGACY_IDENTITY_BOUND` | Bind exactly IDs `7`, `9`, and `15` to their non-secret `jobname`, `schedule`, `username`, `database`, and reviewed function slug. Prove each tuple is unique and no other job occupies a tuple or name. Inspect legacy commands only through reviewed server-side booleans; never return command text. | Any ID is absent, extra, inactive unexpectedly, ambiguous, duplicated, or has an unreviewed caller shape. |
 | `LEGACY_PAUSED` | Under an enforced all-cron-mutation gate, call the installed `cron.alter_job` interface to set all three IDs inactive, then prove all three are inactive before releasing the transaction. Do not edit `cron.job` directly. | Any job cannot be paused atomically or another scheduler can race the gate. |
 | `LEGACY_DRAINED` | Outside a sleeping database RPC, poll bounded sanitized evidence until every run that began before the pause has a closed interval and every associated pg_net request is terminal. Record counts/booleans only. | An open run/request remains, response retention cannot cover the interval, or an old request cannot be correlated safely. |
-| `VAULT_SENDER_READY` | Install and verify one parameter-free private wrapper per bound job/function-slug tuple, including its distinct fixed endpoint, Vault names, roles, ACLs, gateway configuration, and definition fingerprint, while the legacy jobs remain inactive. No scheduled command changes yet. | Any secret source, tuple-to-wrapper mapping, wrapper identity, endpoint, privilege, or installed extension interface is uncertain. |
+| `RECEIPT_MIGRATION_APPLIED` | While every legacy job remains inactive, satisfy the separately authorized valid/ready index prerequisite, apply the receipt migration, and prove its private state, exact non-superuser wrapper owner, column ACLs, RLS policies, definitions, and grants. | The index is absent/invalid, a routine write-blocking build would be required, migration order is uncertain, or any owner/ACL/RLS/definition check differs. |
+| `VAULT_SENDER_READY` | Install and verify one parameter-free private wrapper per bound job/function-slug tuple, including its distinct fixed endpoint, canonical `x-cron-attempt-id`, Vault names, roles, ACLs, gateway configuration, and definition fingerprint, while the legacy jobs remain inactive. The sender generates exactly one fresh canonical attempt identifier per dispatch; the receiver never supplies or substitutes a missing identifier. | The receipt migration is not proved, any secret source, tuple-to-wrapper mapping, attempt-header support, wrapper identity, endpoint, privilege, or installed extension interface is uncertain. |
 | `REPLACEMENT_COMMITTED_INACTIVE` | In one serializable, cron-mutation-fenced transaction, revalidate the bound tuples; unschedule IDs `7`, `9`, and `15`; create one replacement per original tuple with the same name, schedule, owner, database, and function slug; set every replacement inactive; and require its command to equal only that tuple's fixed wrapper call. | The installed pg_cron APIs cannot preserve owner/database identity, any tuple or endpoint mapping changes, any replacement is active, or the whole transaction cannot roll back on a failed postcondition. |
-| `REPLACEMENT_VERIFIED_INACTIVE` | Prove old IDs are absent, exactly one inactive replacement occupies each bound tuple, every replacement command equals its tuple-bound reviewed wrapper call, and no cron command contains an `x-cron-secret` header construction. Re-run every wrapper owner/ACL/definition check. | Any duplicate, old ID, plaintext-header command, identity/endpoint mismatch, or non-wrapper command remains. |
+| `REPLACEMENT_VERIFIED_INACTIVE` | Prove old IDs are absent, exactly one inactive attempt-capable replacement occupies each bound tuple, every replacement command equals its tuple-bound reviewed wrapper call, and no cron command contains an `x-cron-secret` header construction. Re-run every wrapper owner/ACL/definition check. | Any duplicate, old ID, missing attempt header, plaintext-header command, identity/endpoint mismatch, active sender, or non-wrapper command remains. |
+| `STRICT_RECEIVER_DEPLOYED` | Only after `RECEIVER_DEPLOYMENT_GATE` is separately cleared, deploy the exact reviewed receipt-aware receiver bundle while all legacy and replacement schedules remain inactive. Prove the receipt migration and wrapper identities again and prove zero active caller lacks canonical attempt-ID support. The receiver rejects a missing identifier and never generates one. | The bundle precedes the migration, an active legacy/no-attempt caller exists, any replacement is active or not attempt-capable, deployment identity is uncertain, or a receiver-first rollout is proposed. |
 | `CONTROLLED_DISPATCH_VERIFIED` | After the application-receipt and mutation gates are separately cleared, keep every replacement schedule inactive and invoke the reviewed fixed wrapper directly exactly once under a separate authorization. Bind that database invocation to its pg_net request and exact application receipt/effect. Never activate a schedule to perform this probe. | A schedule becomes active, more than one wrapper invocation occurs, or any direct-invocation, transport, or application proof is missing or ambiguous. |
 | `RECEIVER_PROMOTED_PREDECESSOR_REJECTED` | After the controlled dispatch passes, promote the replacement receiver value to `CRON_SECRET`, remove `CRON_SECRET_NEXT`, and repeat bounded propagation probes proving the promoted value is accepted and the predecessor is rejected. Bind reviewed secure-management evidence proving `CRON_SECRET_NEXT` is absent; never persist either credential value. Keep every replacement job inactive. | The accepted/rejected result is inconsistent, `CRON_SECRET_NEXT` remains configured, propagation is incomplete, the predecessor is still accepted, or any replacement is active. |
 | `REPLACEMENTS_ENABLED` | Only from `RECEIVER_PROMOTED_PREDECESSOR_REJECTED`, use one serializable, cron-mutation-fenced final-enable transaction. Revalidate legacy IDs absent, the exact three replacement identities and uniqueness, that wrapper definition fingerprints match the reviewed values, plaintext-header absence, bound receiver-promotion evidence, and that all three replacements are inactive. Activate all three replacements, revalidate every identity/security/active postcondition, and only then commit. | Any stale evidence, concurrent mutation, identity/fingerprint/command drift, duplicate, legacy ID, active precondition, activation error, or failed postcondition aborts the transaction and rolls back to all three replacements inactive. |
@@ -700,12 +708,21 @@ through that header; it is not duplicated in the body, query string, or another
 header. On a cron execution request, the receiver first authenticates the cron
 secret, then strictly parses the header. Missing, repeated, non-string,
 noncanonical, or malformed identifiers stop before business work or receipt
-access. The attempt must also differ from the presented cron secret, gateway API
-key, and gateway authorization credential; equality stops before any RPC so a
-UUID-shaped credential cannot become durable receipt state. This requirement
-does not apply to `daily-digest`'s separate end-user JWT path. An authenticated
-`HEAD` remains only a side-effect-free key probe and never creates an attempt or
-receipt.
+access. One per-request environment snapshot is shared by authentication and
+attempt validation. The attempt must differ directly from the presented cron
+secret, both configured receiver slots (`CRON_SECRET` and `CRON_SECRET_NEXT`),
+the gateway API key, gateway authorization credential, and receiver
+service-role credential. Equality stops before semantic hashing, client/RPC
+creation, or business work. No protected value enters the semantic digest,
+logs, receipt state, or another fingerprint. This requirement does not apply
+to `daily-digest`'s separate end-user JWT path. An authenticated `HEAD` remains
+only a side-effect-free key probe and never creates an attempt or receipt. The
+receiver never generates a missing attempt identifier.
+For the reaper, the exact cached `SUPABASE_URL` and service-role value checked
+at that boundary are also the values supplied to client construction; the
+index module does not reread process environment after validation. Concurrent
+requests have distinct caches, and each protected name is read once per
+request.
 
 Protocol version `1` binds the attempt to the receiver slug, the reviewed
 non-secret environment/project identity, and a deterministic 64-character
@@ -732,7 +749,10 @@ The implementation status is deliberately receiver-specific:
 
 For the reaper, an exact duplicate returns the durable prior receipt without
 repeating the effect; a conflicting identity fails. Concurrent duplicates are
-serialized so at most one set-based `task_runs` transition commits. Transaction
+serialized so at most one set-based `task_runs` transition commits. Two
+distinct attempts racing for one eligible row produce exactly one applied
+transition and one legitimate no-op, with two distinct receipts and one total
+business effect. Transaction
 failure inside the effect subtransaction rolls back every row transition before
 committing the fixed `known_failure_rolled_back` receipt; if terminal receipt
 publication itself fails, the outer transaction leaves neither effect nor
@@ -754,9 +774,16 @@ effect cannot be proven absent or committed, reconciliation must classify it
 Receipt state is private. The fixed wrappers
 `public.execute_strategy_task_reaper_attempt` and
 `public.read_strategy_task_reaper_receipt` use reviewed `SECURITY DEFINER`
-ownership, an empty safe `search_path`, fully qualified objects, default-execute
+ownership under the dedicated `cron_receipt_executor` role, which is
+`NOLOGIN`, `NOSUPERUSER`, `NOBYPASSRLS`, and distinct from the `task_runs`
+owner. It has only the reviewed task-run SELECT/UPDATE columns plus receipt
+state SELECT/INSERT/UPDATE, explicit RLS policies, an empty safe `search_path`,
+fully qualified objects, default-execute
 revocation from `PUBLIC`, `anon`, and `authenticated`, and only the minimum
-service-role grant. The read wrapper returns only the reviewed receipt fields:
+service-role wrapper grant. Missing
+required column privileges, RLS, or fixed policy identities becomes only a
+rollback-proven failure and cannot become a false no-op. The read wrapper
+returns only the reviewed receipt fields:
 version, receiver, attempt-present and terminal booleans, fixed outcome/effect
 codes, receipt time, exact effect count, identity/effect consistency booleans,
 and replayed state. It cannot return business identifiers or payloads.
@@ -808,6 +835,9 @@ success/failure/duplicate/no-op and pre-dispatch domain tests, exists:
 ```text
 APPLICATION_RECEIPT_STATUS: PARTIAL_BLOCKED
 CONTROLLED_SQL_VERIFICATION_STATUS: TEMPLATE_ONLY_BLOCKED
+RECEIVER_DEPLOYMENT_GATE: BLOCKED
+RECEIPT_INDEX_DEPLOYMENT_GATE: BLOCKED
+RECEIPT_PRUNING_GATE: BLOCKED
 SENDER_ACTIVATION_GATE: BLOCKED
 CONTROLLED_DISPATCH_GATE: BLOCKED
 LEGACY_HANDOFF_MUTATION_GATE: BLOCKED
@@ -824,6 +854,91 @@ transaction, concurrency, rollback, ACL, and predicate mechanics against that
 reviewed shape; it does not prove installation over live schema drift or any
 deployed runtime.
 
+### Receipt deployment catalog and index prerequisites
+
+The receipt migration is not a routine deployment. It refuses to create any
+receipt object unless `public.task_runs` already has RLS enabled and a valid,
+ready, live btree whose exact leading keys are `(updated_at, id)` and whose
+exact predicate is `status = 'pending'`. It does not run ordinary `CREATE
+INDEX`, because that would take a write-blocking lock on `task_runs` during a
+routine migration. The repository-only
+`scripts/security/create-task-runs-reaper-index-concurrently.sql` template is a
+separate, nontransactional mutation procedure. It may be used only after a
+separately authorized PostgreSQL 17 rehearsal and live catalog review. Its
+mandatory psql bindings must exactly approve the mutation, database, execution
+actor, current `task_runs` owner, and PostgreSQL major `17`; the template also
+reads the server's own version and requires major `17`. Missing or mismatched
+bindings stop before DDL. Database/actor/owner names do not uniquely identify a
+cluster or Supabase project. The separately authorized execution record must
+therefore bind the reviewed connection endpoint/project through the secure
+control plane before invoking the template; this repository script cannot
+independently attest that control-plane binding. If a concurrent build fails,
+an invalid index may remain: stop for reviewed
+recovery; do not retry or drop it ad hoc. An explicitly authorized task-run
+maintenance window is the alternative when a concurrent path cannot be proved safe.
+`RECEIPT_INDEX_DEPLOYMENT_GATE` remains `BLOCKED` because this PR observed no
+production catalog.
+
+The receipt migration itself must run as one all-file transaction after the
+concurrent index commits. Its actor must be empirically proved able to create a
+NOLOGIN role, create policies on `task_runs`, transfer function ownership, and
+perform the exact grants/revokes. A pre-existing `cron_receipt_executor` is a
+hard stop because unknown memberships, default privileges, or ACLs cannot be
+normalized safely. The isolated test runs the migration with PostgreSQL 17
+single-transaction mode and injects a failure after the final statement,
+proving no role, schema, wrapper, policy, grant, or temporary schema-CREATE
+authority survives. The synthetic installer is privileged; this does not prove
+the managed production migration actor has those capabilities or that its
+migration runner supplies the required all-file transaction. Those facts are
+mandatory read-only/rehearsal gates before any application.
+
+Before `RECEIPT_MIGRATION_APPLIED`, mandatory production checks must be run
+read-only and retained as counts, booleans, allowlisted identifiers, and
+reviewed definition fingerprints only. They must establish:
+
+- the exact `task_runs` owner and effective table/column ACLs;
+- enabled/forced RLS state and every applicable policy role, command, and
+  reviewed `USING`/`WITH CHECK` fingerprint;
+- every trigger's allowlisted name, enabled state, function owner,
+  `SECURITY DEFINER` state, safe `search_path`, and reviewed definition
+  fingerprint;
+- every candidate index's validity/readiness/liveness, access method, ordered
+  key columns, included columns, and predicate;
+- the installed wrapper owner's `NOLOGIN`/`NOSUPERUSER`/`NOBYPASSRLS` state,
+  zero membership edges, exact required schema/table/column privileges, and
+  absence of broader task-table or private-state privileges; and
+- both wrappers' owner, ACL, `SECURITY DEFINER`, empty `search_path`, identity
+  arguments, volatility, and reviewed definition fingerprints.
+
+Any missing, duplicate, unexpected, unreadable, or live-drifted result keeps
+the migration and receiver deployment blocked. The synthetic fixture uses a
+separate task-table owner, a non-superuser/non-bypass definer, column grants,
+and RLS. It removes each required SELECT/UPDATE grant and a required policy in
+turn and proves no business effect or success/no-op can commit. That is a
+mechanics proof, not a substitute for the production inventory.
+
+### Receipt retention and privileged pruning
+
+Protocol v1 receipts are retained indefinitely while any v1 receiver accepts
+requests. A UUID carries no trustworthy issue/expiry time; deleting its receipt
+while v1 remains accepted would allow a late retry to become a fresh attempt
+and potentially apply a later business effect. The executor, `service_role`,
+`anon`, and `authenticated` therefore receive no DELETE privilege, the
+migration exposes no pruning RPC or DELETE policy, and this PR installs no
+cleanup schedule.
+
+Privileged pruning requires a future, separately reviewed mutation procedure
+and authorization. Before even a bounded owner-only batch may run, every v1
+caller must be disabled and drained, the deployed receiver must reject v1
+before database access, every in-progress/indeterminate receipt must be
+reconciled, and capacity, backup, rollback, cutoff, batch-size, audit, and
+no-retry evidence must be approved. Direct DELETE, online terminal-row cleanup,
+and timestamp-only pruning are forbidden. A finite online horizon would require
+a new protocol with trustworthy expiry or durable tombstones. Until then
+`RECEIPT_PRUNING_GATE` remains `BLOCKED`; sender activation must accept and
+monitor indefinite active-protocol retention rather than silently adding
+cleanup.
+
 The `HEAD` harness may establish receiver-key acceptance and rejection only.
 It cannot clear any of these gates. The confirmed-no-caller branch may rotate
 and retire the receiver-side value without installing or activating a sender,
@@ -834,8 +949,8 @@ Corey/Lovable management access.
 The `net._http_response` relation is internal and version-specific. A missing
 row is ambiguous among pending, expired/purged, and never processed. Verify its
 schema, privileges, and retention on the isolated target; reconcile before the
-deadline and persist only the sanitized outcome. Bound and test cleanup for the
-private attempt table.
+deadline and persist only the sanitized outcome. This transport retention is
+separate from the no-prune application-receipt contract above.
 
 The checked-in harness performs only the side-effect-free `HEAD` acceptance and
 rejection probes. Populate these environment variables through a secure process
@@ -902,10 +1017,13 @@ For each environment independently:
    in an approved password manager and adds it as `CRON_SECRET_NEXT` through the
    environment's secure function-secret surface. The value never passes through
    Codex or Git.
-3. Deploy the reviewed dual-key receiver. Run the harness with the current key
-   accepted and a known-invalid key rejected, then with the next key accepted.
-   Each accepted/rejected pairing must pass the required repeated propagation
-   probes; phase and slot labels remain operator attestations.
+3. Do not equate dual-key configuration with permission to deploy the strict
+   receipt receiver. A no-caller or already attempt-capable caller branch may
+   deploy only after its separate migration, caller, retention, and
+   `RECEIVER_DEPLOYMENT_GATE` prerequisites are proved.
+   Production's active legacy no-attempt callers must defer strict receiver deployment to the
+   paused/drained state machine in step 4. Receiver-first deployment and
+   receiver-side generation of a missing attempt identifier are forbidden.
 4. Rotate the selected caller branch:
    - **No caller/job:** install no scheduler or sender secret. Rotate only the
      receiver-side value and skip sender and controlled-job steps.
@@ -920,8 +1038,18 @@ For each environment independently:
      `LEGACY_PAUSED`; do not pause, drain, invoke, unschedule, replace, or
      enable a job. The reaper receipt alone cannot clear this gate. Only after
      every scheduled receiver has a separately reviewed exact receipt contract,
-     and a later explicit mutation authorization clears the other gates, may
-     the actor follow the production legacy-sender state machine above.
+     controlled-dispatch readiness is proved, and a later explicit mutation
+     authorization clears the other gates, may the actor atomically pause the
+     legacy jobs; drain every old run/request; satisfy the index prerequisite;
+     apply and verify the receipt migration; prepare and verify exact inactive
+     attempt-capable replacements; separately clear
+     `RECEIVER_DEPLOYMENT_GATE`; deploy the strict receiver while every sender
+     remains inactive; perform exactly one direct controlled dispatch with
+     exact invocation/transport/receipt correlation; promote/reject the
+     receiver slots; and finally activate all replacements in the all-or-none
+     transaction. A strict bundle before the migration, an active legacy
+     no-attempt sender with the strict receiver, or partial activation is a
+     rollback/stop condition.
    - **External caller:** its named owner updates the replacement in that
      system's protected secret store and proves the exact reviewed dispatch
      configuration. No database scheduler is created.

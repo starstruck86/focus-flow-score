@@ -6,6 +6,7 @@ import {
 export type CronReceiverBusinessHandler = (
   request: Request,
   isCron: boolean,
+  readEnvironment: EnvironmentReader,
 ) => Response | Promise<Response>;
 
 export type CronReceiverHandlerOptions = Readonly<{
@@ -52,9 +53,19 @@ export function createCronReceiverHandler(
       return new Response(null, { headers: options.corsHeaders });
     }
 
+    const sourceEnvironment = options.readEnvironment ??
+      ((name: string) => Deno.env.get(name));
+    const environmentValues = new Map<string, string | undefined>();
+    const requestEnvironment: EnvironmentReader = (name) => {
+      if (!environmentValues.has(name)) {
+        environmentValues.set(name, sourceEnvironment(name));
+      }
+      return environmentValues.get(name);
+    };
+
     const isCron = await hasValidCronSecret(
       request.headers,
-      options.readEnvironment,
+      requestEnvironment,
     );
 
     if (request.method === "HEAD") {
@@ -68,6 +79,10 @@ export function createCronReceiverHandler(
       return unauthorizedResponse(options.corsHeaders);
     }
 
-    return await options.handleBusinessRequest(request, isCron);
+    return await options.handleBusinessRequest(
+      request,
+      isCron,
+      requestEnvironment,
+    );
   };
 }

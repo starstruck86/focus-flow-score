@@ -19,10 +19,14 @@ export type StrategyTaskReaperBusinessHandler = (
   request: Request,
   isCron: true,
   attempt: CronAttemptContext,
+  readEnvironment: EnvironmentReader,
 ) => Response | Promise<Response>;
 
 export type StrategyTaskReaperRuntimeDependencies = Readonly<{
-  createClient: () => CronReceiptRpcClient;
+  createClient: (
+    supabaseUrl: string,
+    serviceRoleKey: string,
+  ) => CronReceiptRpcClient;
   writeInfo?: (line: string) => void;
   writeError?: (line: string) => void;
 }>;
@@ -38,10 +42,16 @@ function receiptResponseHeaders(): HeadersInit {
 export function createStrategyTaskReaperBusinessHandler(
   dependencies: StrategyTaskReaperRuntimeDependencies,
 ): StrategyTaskReaperBusinessHandler {
-  return async (_request, _isCron, attempt) => {
+  return async (_request, _isCron, attempt, readEnvironment) => {
     try {
+      // These values come from the same request-local snapshot used for cron
+      // authentication, credential-domain separation, and project binding.
+      // They are never copied into the attempt context, receipt, or logs.
+      const supabaseUrl = readEnvironment("SUPABASE_URL");
+      const serviceRoleKey = readEnvironment("SUPABASE_SERVICE_ROLE_KEY");
+      if (!supabaseUrl || !serviceRoleKey) throw new Error("runtime_unavailable");
       const receipt = await executeStrategyTaskReaperAttempt(
-        dependencies.createClient(),
+        dependencies.createClient(supabaseUrl, serviceRoleKey),
         attempt,
       );
       dependencies.writeInfo?.(JSON.stringify({
@@ -85,26 +95,34 @@ export function createStrategyTaskReaperHandler(
   handleBusinessRequest: StrategyTaskReaperBusinessHandler,
   readEnvironment?: EnvironmentReader,
 ): (request: Request) => Promise<Response> {
-  const environment = readEnvironment ?? ((name: string) => Deno.env.get(name));
   return createCronReceiverHandler({
     allowNonCronRequests: false,
     corsHeaders: strategyTaskReaperCorsHeaders,
-    handleBusinessRequest: async (request, isCron) => {
+    handleBusinessRequest: async (
+      authenticatedRequest,
+      isCron,
+      requestEnvironment,
+    ) => {
       // createCronReceiverHandler authenticates before reaching this callback,
-      // and handles HEAD before it. Attempt parsing therefore cannot persist a
-      // receipt, build a database client, or perform business work for an
-      // unauthenticated request or an authenticated HEAD probe.
+      // and handles HEAD before it. It also supplies the same per-request
+      // environment snapshot used by authentication, so a rotation cannot
+      // authenticate one slot and omit it from attempt-domain separation.
       if (!isCron) return invalidAttemptResponse();
       let attempt: CronAttemptContext;
       try {
         attempt = await buildStrategyTaskReaperAttempt(
-          request,
-          environment,
+          authenticatedRequest,
+          requestEnvironment,
         );
       } catch {
         return invalidAttemptResponse();
       }
-      return await handleBusinessRequest(request, true, attempt);
+      return await handleBusinessRequest(
+        authenticatedRequest,
+        true,
+        attempt,
+        requestEnvironment,
+      );
     },
     readEnvironment,
   });

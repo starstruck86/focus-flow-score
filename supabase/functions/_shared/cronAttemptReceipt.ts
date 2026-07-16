@@ -117,11 +117,15 @@ function authorizationCredential(value: string | null): string | null {
 function requireCredentialDomainSeparation(
   request: Request,
   attemptId: string,
+  readEnvironment: (name: string) => string | undefined,
 ): void {
   const credentialInputs = [
     request.headers.get("x-cron-secret"),
     request.headers.get("apikey"),
     authorizationCredential(request.headers.get("authorization")),
+    readEnvironment("CRON_SECRET"),
+    readEnvironment("CRON_SECRET_NEXT"),
+    readEnvironment("SUPABASE_SERVICE_ROLE_KEY"),
   ];
   if (credentialInputs.some((value) => value !== null && value === attemptId)) {
     invalidAttempt();
@@ -191,7 +195,7 @@ export async function buildStrategyTaskReaperAttempt(
   // The durable attempt UUID is not a credential. Reject equality with every
   // credential-bearing request header before hashing, RPC construction, or
   // business work so a UUID-shaped secret can never become a receipt key.
-  requireCredentialDomainSeparation(request, attemptId);
+  requireCredentialDomainSeparation(request, attemptId, readEnvironment);
   const { environment, projectRef } = projectIdentity(
     readEnvironment("SUPABASE_URL"),
   );

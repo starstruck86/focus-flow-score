@@ -6,6 +6,87 @@
 -- reaper: its bounded set-based update and terminal receipt are one database
 -- transaction because a PostgreSQL function call is one statement.
 
+-- This migration deliberately does not build an index on public.task_runs.
+-- A routine transactional CREATE INDEX would block writes. The separately
+-- authorized/rehearsed concurrent-index procedure must first provide one
+-- valid, ready, exact index; otherwise this migration fails before creating
+-- receipt objects.
+DO $index_prerequisite$
+DECLARE
+  v_task_runs regclass := pg_catalog.to_regclass('public.task_runs');
+  v_index_ready boolean;
+  v_rls_enabled boolean;
+BEGIN
+  IF v_task_runs IS NULL THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = 'cron_receipt_task_runs_missing';
+  END IF;
+
+  SELECT c.relrowsecurity
+  INTO v_rls_enabled
+  FROM pg_catalog.pg_class AS c
+  WHERE c.oid = v_task_runs;
+
+  SELECT pg_catalog.bool_or(
+    i.indisvalid
+    AND i.indisready
+    AND i.indislive
+    AND NOT i.indisunique
+    AND i.indnkeyatts = 2
+    AND i.indnatts = 2
+    AND am.amname = 'btree'
+    AND pg_catalog.pg_get_indexdef(i.indexrelid, 1, true) = 'updated_at'
+    AND pg_catalog.pg_get_indexdef(i.indexrelid, 2, true) = 'id'
+    AND pg_catalog.pg_get_expr(i.indpred, i.indrelid) =
+      '(status = ''pending''::text)'
+  )
+  INTO v_index_ready
+  FROM pg_catalog.pg_index AS i
+  JOIN pg_catalog.pg_class AS index_class ON index_class.oid = i.indexrelid
+  JOIN pg_catalog.pg_am AS am ON am.oid = index_class.relam
+  WHERE i.indrelid = v_task_runs;
+
+  IF v_rls_enabled IS DISTINCT FROM true THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = 'cron_receipt_task_runs_rls_missing';
+  END IF;
+
+  IF v_index_ready IS DISTINCT FROM true THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = 'cron_receipt_task_runs_index_prerequisite_missing';
+  END IF;
+END
+$index_prerequisite$;
+
+DO $executor_role$
+DECLARE
+  v_role_exists boolean;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_roles AS r
+    WHERE r.rolname = 'cron_receipt_executor'
+  )
+  INTO v_role_exists;
+
+  -- A pre-existing role can carry memberships, default privileges, or ACLs
+  -- that this migration cannot safely normalize. Reject it rather than
+  -- blessing role flags while retaining unknown authority.
+  IF v_role_exists THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = 'cron_receipt_executor_role_preexists';
+  END IF;
+
+  CREATE ROLE cron_receipt_executor
+    NOLOGIN NOSUPERUSER NOINHERIT NOCREATEDB NOCREATEROLE
+    NOREPLICATION NOBYPASSRLS;
+END
+$executor_role$;
+
 CREATE SCHEMA cron_receipt_private AUTHORIZATION postgres;
 
 REVOKE ALL ON SCHEMA cron_receipt_private
@@ -96,11 +177,51 @@ ALTER TABLE cron_receipt_private.cron_attempt_receipts
 REVOKE ALL ON TABLE cron_receipt_private.cron_attempt_receipts
   FROM PUBLIC, anon, authenticated, service_role;
 
--- The receiver runs every minute. Bound the candidate ordering work to the
--- pending subset instead of relying on LIMIT to hide an unbounded scan/sort.
-CREATE INDEX task_runs_pending_updated_at_id_idx
-  ON public.task_runs (updated_at, id)
-  WHERE status = 'pending';
+GRANT USAGE ON SCHEMA public, cron_receipt_private TO cron_receipt_executor;
+
+GRANT SELECT, INSERT, UPDATE
+  ON TABLE cron_receipt_private.cron_attempt_receipts
+  TO cron_receipt_executor;
+
+CREATE POLICY cron_receipt_executor_receipt_select
+  ON cron_receipt_private.cron_attempt_receipts
+  FOR SELECT TO cron_receipt_executor
+  USING (true);
+
+CREATE POLICY cron_receipt_executor_receipt_insert
+  ON cron_receipt_private.cron_attempt_receipts
+  FOR INSERT TO cron_receipt_executor
+  WITH CHECK (true);
+
+CREATE POLICY cron_receipt_executor_receipt_update
+  ON cron_receipt_private.cron_attempt_receipts
+  FOR UPDATE TO cron_receipt_executor
+  USING (true)
+  WITH CHECK (true);
+
+GRANT SELECT (id, status, progress_step, updated_at)
+  ON TABLE public.task_runs
+  TO cron_receipt_executor;
+
+GRANT UPDATE (status, progress_step, error, completed_at, updated_at)
+  ON TABLE public.task_runs
+  TO cron_receipt_executor;
+
+CREATE POLICY cron_receipt_executor_task_select
+  ON public.task_runs
+  FOR SELECT TO cron_receipt_executor
+  USING (status IN ('pending', 'failed'));
+
+CREATE POLICY cron_receipt_executor_task_update
+  ON public.task_runs
+  FOR UPDATE TO cron_receipt_executor
+  USING (status = 'pending')
+  WITH CHECK (
+    status = 'failed'
+    AND progress_step = 'failed'
+    AND error LIKE 'stage_timeout:%'
+    AND completed_at IS NOT NULL
+  );
 
 CREATE FUNCTION public.execute_strategy_task_reaper_attempt(
   p_attempt_id uuid,
@@ -248,6 +369,219 @@ BEGIN
   -- be written, the exception escapes and the outer attempt claim also rolls
   -- back, leaving no falsely terminal evidence.
   BEGIN
+    -- Missing privilege or RLS-policy drift must not become a false no-op.
+    -- Validate the fixed non-superuser execution contract before reading the
+    -- candidate set. Any failure is caught by this subtransaction and becomes
+    -- only the reviewed rollback-proven failure receipt.
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_roles AS executor_role
+      JOIN pg_catalog.pg_class AS task_table
+        ON task_table.oid = 'public.task_runs'::regclass
+      WHERE executor_role.rolname = current_user
+        AND executor_role.rolname = 'cron_receipt_executor'
+        AND NOT executor_role.rolsuper
+        AND NOT executor_role.rolinherit
+        AND NOT executor_role.rolcreatedb
+        AND NOT executor_role.rolcreaterole
+        AND NOT executor_role.rolreplication
+        AND NOT executor_role.rolbypassrls
+        AND NOT executor_role.rolcanlogin
+        AND task_table.relrowsecurity
+        AND task_table.relowner <> executor_role.oid
+    )
+      OR NOT pg_catalog.has_column_privilege(
+        current_user, 'public.task_runs', 'id', 'SELECT'
+      )
+      OR NOT pg_catalog.has_column_privilege(
+        current_user, 'public.task_runs', 'status', 'SELECT'
+      )
+      OR NOT pg_catalog.has_column_privilege(
+        current_user, 'public.task_runs', 'progress_step', 'SELECT'
+      )
+      OR NOT pg_catalog.has_column_privilege(
+        current_user, 'public.task_runs', 'updated_at', 'SELECT'
+      )
+      OR NOT pg_catalog.has_column_privilege(
+        current_user, 'public.task_runs', 'status', 'UPDATE'
+      )
+      OR NOT pg_catalog.has_column_privilege(
+        current_user, 'public.task_runs', 'progress_step', 'UPDATE'
+      )
+      OR NOT pg_catalog.has_column_privilege(
+        current_user, 'public.task_runs', 'error', 'UPDATE'
+      )
+      OR NOT pg_catalog.has_column_privilege(
+        current_user, 'public.task_runs', 'completed_at', 'UPDATE'
+      )
+      OR NOT pg_catalog.has_column_privilege(
+        current_user, 'public.task_runs', 'updated_at', 'UPDATE'
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_auth_members AS membership
+        WHERE membership.roleid = current_user::regrole::oid
+          OR membership.member = current_user::regrole::oid
+      )
+      OR pg_catalog.has_schema_privilege(
+        current_user, 'public', 'CREATE'
+      )
+      OR pg_catalog.has_schema_privilege(
+        current_user, 'cron_receipt_private', 'CREATE'
+      )
+      OR NOT pg_catalog.has_table_privilege(
+        current_user,
+        'cron_receipt_private.cron_attempt_receipts',
+        'SELECT'
+      )
+      OR NOT pg_catalog.has_table_privilege(
+        current_user,
+        'cron_receipt_private.cron_attempt_receipts',
+        'INSERT'
+      )
+      OR NOT pg_catalog.has_table_privilege(
+        current_user,
+        'cron_receipt_private.cron_attempt_receipts',
+        'UPDATE'
+      )
+      OR pg_catalog.has_table_privilege(
+        current_user,
+        'cron_receipt_private.cron_attempt_receipts',
+        'DELETE'
+      )
+      OR pg_catalog.has_table_privilege(
+        current_user,
+        'cron_receipt_private.cron_attempt_receipts',
+        'TRUNCATE'
+      )
+      OR pg_catalog.has_table_privilege(
+        current_user,
+        'cron_receipt_private.cron_attempt_receipts',
+        'REFERENCES'
+      )
+      OR pg_catalog.has_table_privilege(
+        current_user,
+        'cron_receipt_private.cron_attempt_receipts',
+        'TRIGGER'
+      )
+      OR pg_catalog.has_table_privilege(
+        current_user,
+        'cron_receipt_private.cron_attempt_receipts',
+        'MAINTAIN'
+      )
+      OR pg_catalog.has_table_privilege(
+        current_user, 'public.task_runs', 'INSERT'
+      )
+      OR pg_catalog.has_table_privilege(
+        current_user, 'public.task_runs', 'DELETE'
+      )
+      OR pg_catalog.has_table_privilege(
+        current_user, 'public.task_runs', 'TRUNCATE'
+      )
+      OR pg_catalog.has_table_privilege(
+        current_user, 'public.task_runs', 'REFERENCES'
+      )
+      OR pg_catalog.has_table_privilege(
+        current_user, 'public.task_runs', 'TRIGGER'
+      )
+      OR pg_catalog.has_table_privilege(
+        current_user, 'public.task_runs', 'MAINTAIN'
+      )
+      OR pg_catalog.has_any_column_privilege(
+        current_user, 'public.task_runs', 'INSERT'
+      )
+      OR pg_catalog.has_any_column_privilege(
+        current_user, 'public.task_runs', 'REFERENCES'
+      )
+      OR (
+        SELECT pg_catalog.count(*)
+        FROM pg_catalog.pg_attribute AS attribute
+        WHERE attribute.attrelid = 'public.task_runs'::regclass
+          AND attribute.attnum > 0
+          AND NOT attribute.attisdropped
+          AND pg_catalog.has_column_privilege(
+            current_user,
+            attribute.attrelid,
+            attribute.attnum,
+            'SELECT'
+          )
+      ) <> 4
+      OR (
+        SELECT pg_catalog.count(*)
+        FROM pg_catalog.pg_attribute AS attribute
+        WHERE attribute.attrelid = 'public.task_runs'::regclass
+          AND attribute.attnum > 0
+          AND NOT attribute.attisdropped
+          AND pg_catalog.has_column_privilege(
+            current_user,
+            attribute.attrelid,
+            attribute.attnum,
+            'UPDATE'
+          )
+      ) <> 5
+      OR (
+        SELECT pg_catalog.count(*)
+        FROM pg_catalog.pg_policy AS policy
+        WHERE policy.polrelid = 'public.task_runs'::regclass
+          AND policy.polname IN (
+            'cron_receipt_executor_task_select',
+            'cron_receipt_executor_task_update'
+          )
+          AND policy.polpermissive
+          AND policy.polroles = ARRAY[
+            'cron_receipt_executor'::regrole::oid
+          ]::oid[]
+          AND (
+            (policy.polname = 'cron_receipt_executor_task_select'
+              AND policy.polcmd = 'r'
+              AND pg_catalog.pg_get_expr(
+                policy.polqual, policy.polrelid
+              ) =
+                '(status = ANY (ARRAY[''pending''::text, ''failed''::text]))'
+              AND policy.polwithcheck IS NULL)
+            OR
+            (policy.polname = 'cron_receipt_executor_task_update'
+              AND policy.polcmd = 'w'
+              AND pg_catalog.pg_get_expr(
+                policy.polqual, policy.polrelid
+              ) = '(status = ''pending''::text)'
+              AND pg_catalog.pg_get_expr(
+                policy.polwithcheck, policy.polrelid
+              ) = '((status = ''failed''::text) AND '
+                || '(progress_step = ''failed''::text) AND '
+                || '(error ~~ ''stage_timeout:%''::text) AND '
+                || '(completed_at IS NOT NULL))')
+          )
+      ) <> 2
+      OR EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_policy AS policy
+        WHERE policy.polrelid = 'public.task_runs'::regclass
+          AND (
+            0::oid = ANY (policy.polroles)
+            OR current_user::regrole::oid = ANY (policy.polroles)
+          )
+          AND policy.polname NOT IN (
+            'cron_receipt_executor_task_select',
+            'cron_receipt_executor_task_update'
+          )
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_policy AS policy
+        WHERE policy.polrelid = 'public.task_runs'::regclass
+          AND NOT policy.polpermissive
+          AND (
+            0::oid = ANY (policy.polroles)
+            OR current_user::regrole::oid = ANY (policy.polroles)
+          )
+      )
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '55000',
+        MESSAGE = 'cron_receipt_executor_contract_rejected';
+    END IF;
+
     -- Lock a deterministic, bounded candidate set. Different attempt IDs can
     -- execute concurrently, but each eligible row is updated at most once
     -- because the lock and the status predicate are inside this transaction.
@@ -357,9 +691,14 @@ BEGIN
 END;
 $function$;
 
+-- ALTER OWNER requires the future owner to hold CREATE on the containing
+-- schema. The dedicated NOLOGIN role receives it only across the two owner
+-- changes and retains USAGE afterward.
+GRANT CREATE ON SCHEMA public TO cron_receipt_executor;
+
 ALTER FUNCTION public.execute_strategy_task_reaper_attempt(
   uuid, integer, text, text, text
-) OWNER TO postgres;
+) OWNER TO cron_receipt_executor;
 
 CREATE FUNCTION public.read_strategy_task_reaper_receipt(
   p_attempt_id uuid,
@@ -481,7 +820,9 @@ $function$;
 
 ALTER FUNCTION public.read_strategy_task_reaper_receipt(
   uuid, integer, text, text, text
-) OWNER TO postgres;
+) OWNER TO cron_receipt_executor;
+
+REVOKE CREATE ON SCHEMA public FROM cron_receipt_executor;
 
 REVOKE ALL ON FUNCTION public.execute_strategy_task_reaper_attempt(
   uuid, integer, text, text, text

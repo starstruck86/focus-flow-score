@@ -2,14 +2,14 @@
   "collection": {
     "artifact": {
       "kind": "repository_deployment_inventory",
-      "sha256": "sha256:1dc24d557bf87a5ca62167c1b6c2fb268dcfb3512bc92aae984699cc762022ab",
+      "sha256": "sha256:3b62b9223dc19b2c58163f88d5fe2d3d3a5fe339c0a1c4aff17ebe2d04147d6b",
       "source": "local source project odbjjklumdsuqdvkgwyv supabase/config.toml and resolved supabase/functions dependency closures"
     },
     "boundary": {
       "kind": "repository_content_sha256",
-      "value": "sha256:1dc24d557bf87a5ca62167c1b6c2fb268dcfb3512bc92aae984699cc762022ab"
+      "value": "sha256:3b62b9223dc19b2c58163f88d5fe2d3d3a5fe339c0a1c4aff17ebe2d04147d6b"
     },
-    "collected_at": "2026-07-16T17:42:24Z",
+    "collected_at": "2026-07-16T23:45:38Z",
     "collector": {
       "name": "inventory-edge-functions",
       "version": "2.0.0"
@@ -517,7 +517,7 @@
           "supabase/functions/daily-digest/handler.ts",
           "supabase/functions/daily-digest/index.ts"
         ],
-        "fingerprint": "sha256:27c9dd7191db04328ad1f58359c5d1bd4c200b35f5dcd06db5c2801bf9472eba",
+        "fingerprint": "sha256:6b60b6115260d7b36c66df7c080a23886af07886e365a474ea6c1380d3eed7f9",
         "kind": "edge_function_deployment_closure"
       },
       "independently_verifiable": true,
@@ -2849,7 +2849,7 @@
           "supabase/functions/run-strategy-task-reaper/handler.ts",
           "supabase/functions/run-strategy-task-reaper/index.ts"
         ],
-        "fingerprint": "sha256:285d8ea7b4e67cdabb38ec4874904da035c4309215dc5ec43ee2844c6dde29e4",
+        "fingerprint": "sha256:4a25cedd26b32af09942639ccfda7c8a462b4b7e4fe603eaf5375c097eaed17d",
         "kind": "edge_function_deployment_closure"
       },
       "independently_verifiable": true,
@@ -2910,7 +2910,7 @@
           "supabase/functions/schedule-daily-plan/handler.ts",
           "supabase/functions/schedule-daily-plan/index.ts"
         ],
-        "fingerprint": "sha256:353f1685273f0d838886c313ade104fb7864d88e89b7cc62d989922d8319b1a6",
+        "fingerprint": "sha256:6420ad483618cce1bd2af035b0d0fdcfdb00db8d3bd3ae1cc4d96acd8d4d8936",
         "kind": "edge_function_deployment_closure"
       },
       "independently_verifiable": true,

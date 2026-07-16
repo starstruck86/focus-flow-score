@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 const CRON_SECRET_HEADER = "x-cron-secret";
 const MAX_SECRET_BYTES = 4096;
 const MISSING_SLOT_VALUE = "focus-flow-score/missing-cron-secret-slot/v1";
+const FRAMED_SECRET_BYTES = MAX_SECRET_BYTES + 4;
 
 const encoder = new TextEncoder();
 
@@ -18,18 +19,19 @@ function isConfigured(value: string | undefined): value is string {
   return encoder.encode(value).byteLength <= MAX_SECRET_BYTES;
 }
 
-async function constantTimeEqual(presented: string, configured: string): Promise<boolean> {
-  const [presentedDigest, configuredDigest] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encoder.encode(presented)),
-    crypto.subtle.digest("SHA-256", encoder.encode(configured)),
-  ]);
+function frameSecret(value: string): Uint8Array {
+  const bytes = encoder.encode(value);
+  const framed = new Uint8Array(FRAMED_SECRET_BYTES);
+  framed.set(bytes);
+  new DataView(framed.buffer).setUint32(MAX_SECRET_BYTES, bytes.byteLength, false);
+  return framed;
+}
 
-  // Compare equal-length digests with the runtime's documented constant-time
-  // primitive. Both configured slots are evaluated by the caller.
-  return timingSafeEqual(
-    new Uint8Array(presentedDigest),
-    new Uint8Array(configuredDigest),
-  );
+function constantTimeEqual(presented: string, configured: string): boolean {
+  // Compare one fixed-width, length-delimited representation directly. The
+  // credentials are not hashed, fingerprinted, logged, or persisted. Both
+  // configured slots are still evaluated by the caller.
+  return timingSafeEqual(frameSecret(presented), frameSecret(configured));
 }
 
 export async function acceptsCronSecret(
@@ -43,16 +45,14 @@ export async function acceptsCronSecret(
   const nextConfigured = isConfigured(slots.next);
   if (!currentConfigured && !nextConfigured) return false;
 
-  const [currentMatches, nextMatches] = await Promise.all([
-    constantTimeEqual(
-      presented,
-      currentConfigured ? slots.current! : MISSING_SLOT_VALUE,
-    ),
-    constantTimeEqual(
-      presented,
-      nextConfigured ? slots.next! : MISSING_SLOT_VALUE,
-    ),
-  ]);
+  const currentMatches = constantTimeEqual(
+    presented,
+    currentConfigured ? slots.current! : MISSING_SLOT_VALUE,
+  );
+  const nextMatches = constantTimeEqual(
+    presented,
+    nextConfigured ? slots.next! : MISSING_SLOT_VALUE,
+  );
 
   return Boolean(
     (Number(currentConfigured) * Number(currentMatches)) |

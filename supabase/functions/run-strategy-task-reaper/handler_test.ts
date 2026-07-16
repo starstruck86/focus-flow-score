@@ -4,6 +4,15 @@ import { buildStrategyTaskReaperAttempt } from "../_shared/cronAttemptReceipt.ts
 import { createStrategyTaskReaperBusinessHandler } from "./handler.ts";
 
 const ATTEMPT_ID = "123e4567-e89b-42d3-a456-426614174000";
+const SYNTHETIC_SERVICE_ROLE = "synthetic-service-role-runtime-value";
+
+function runtimeEnvironment(name: string): string | undefined {
+  if (name === "SUPABASE_URL") {
+    return "https://uujkmcbqavsmzhnbqvmm.supabase.co";
+  }
+  if (name === "SUPABASE_SERVICE_ROLE_KEY") return SYNTHETIC_SERVICE_ROLE;
+  return undefined;
+}
 
 async function context() {
   return await buildStrategyTaskReaperAttempt(
@@ -11,9 +20,7 @@ async function context() {
       method: "POST",
       headers: { "x-cron-attempt-id": ATTEMPT_ID },
     }),
-    (name) => name === "SUPABASE_URL"
-      ? "https://uujkmcbqavsmzhnbqvmm.supabase.co"
-      : undefined,
+    runtimeEnvironment,
   );
 }
 
@@ -47,6 +54,7 @@ Deno.test("reaper business handler returns only the reviewed receipt fields", as
     new Request("https://example.test", { method: "POST" }),
     true,
     await context(),
+    runtimeEnvironment,
   );
   const visible = `${await response.text()}\n${info.join("\n")}`;
   assertEquals(response.status, 200);
@@ -75,6 +83,7 @@ Deno.test("reaper business handler suppresses poisoned RPC errors", async () => 
     new Request("https://example.test", { method: "POST" }),
     true,
     await context(),
+    runtimeEnvironment,
   );
   const visible = JSON.stringify({
     body: await response.text(),

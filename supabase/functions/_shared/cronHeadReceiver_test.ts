@@ -4,7 +4,10 @@ import type {
   CronReceiverBusinessHandler,
 } from "./cronHeadReceiver.ts";
 import { createDailyDigestHandler } from "../daily-digest/handler.ts";
-import { createStrategyTaskReaperHandler } from "../run-strategy-task-reaper/handler.ts";
+import {
+  createStrategyTaskReaperBusinessHandler,
+  createStrategyTaskReaperHandler,
+} from "../run-strategy-task-reaper/handler.ts";
 import { createScheduleDailyPlanHandler } from "../schedule-daily-plan/handler.ts";
 
 const SYNTHETIC_CURRENT_KEY = "synthetic-current-cron-key";
@@ -168,6 +171,190 @@ Deno.test("authenticated UUID-shaped cron secret cannot become an attempt key", 
   assertEquals(response.status, 400);
   assertEquals(ledger.business, 0);
   assertEquals(ledger.database, 0);
+});
+
+Deno.test("every protected reaper credential domain rejects before client or RPC creation", async () => {
+  const current = "10000000-0000-4000-8000-000000000001";
+  const next = "20000000-0000-4000-8000-000000000002";
+  const apiKey = "30000000-0000-4000-8000-000000000003";
+  const jwt = "40000000-0000-4000-8000-000000000004";
+  const serviceRole = "50000000-0000-4000-8000-000000000005";
+  const cases: ReadonlyArray<Readonly<{
+    label: string;
+    presented: string;
+    attempt: string;
+    extraHeaders?: Readonly<Record<string, string>>;
+  }>> = [
+    {
+      label: "current authenticates while attempt equals next",
+      presented: current,
+      attempt: next,
+    },
+    {
+      label: "next authenticates while attempt equals current",
+      presented: next,
+      attempt: current,
+    },
+    {
+      label: "attempt equals presented cron credential",
+      presented: current,
+      attempt: current,
+    },
+    {
+      label: "attempt equals gateway API key",
+      presented: current,
+      attempt: apiKey,
+      extraHeaders: { apikey: apiKey },
+    },
+    {
+      label: "attempt equals gateway bearer JWT",
+      presented: current,
+      attempt: jwt,
+      extraHeaders: { authorization: `Bearer ${jwt}` },
+    },
+    {
+      label: "attempt equals raw authorization credential",
+      presented: current,
+      attempt: jwt,
+      extraHeaders: { authorization: jwt },
+    },
+    {
+      label: "attempt equals service-role credential",
+      presented: current,
+      attempt: serviceRole,
+    },
+  ];
+
+  for (const testCase of cases) {
+    let clientCalls = 0;
+    let rpcCalls = 0;
+    const business = createStrategyTaskReaperBusinessHandler({
+      createClient: () => {
+        clientCalls += 1;
+        return {
+          rpc: () => {
+            rpcCalls += 1;
+            return Promise.resolve({ data: null, error: null });
+          },
+        };
+      },
+    });
+    const handler = createStrategyTaskReaperHandler(
+      business,
+      (name) => {
+        if (name === "CRON_SECRET") return current;
+        if (name === "CRON_SECRET_NEXT") return next;
+        if (name === "SUPABASE_SERVICE_ROLE_KEY") return serviceRole;
+        if (name === "SUPABASE_URL") {
+          return "https://uujkmcbqavsmzhnbqvmm.supabase.co";
+        }
+        return undefined;
+      },
+    );
+    const response = await handler(new Request(
+      "https://example.test/functions/v1/run-strategy-task-reaper",
+      {
+        method: "POST",
+        headers: {
+          "x-cron-secret": testCase.presented,
+          "x-cron-attempt-id": testCase.attempt,
+          ...testCase.extraHeaders,
+        },
+      },
+    ));
+    const visible = await response.text();
+    assertEquals(response.status, 400, testCase.label);
+    assertEquals(response.headers.get("Cache-Control"), "no-store", testCase.label);
+    assertEquals(clientCalls, 0, testCase.label);
+    assertEquals(rpcCalls, 0, testCase.label);
+    for (const protectedValue of [current, next, apiKey, jwt, serviceRole]) {
+      assertEquals(visible.includes(protectedValue), false, testCase.label);
+    }
+  }
+});
+
+Deno.test("concurrent reaper requests use isolated single-read environment snapshots", async () => {
+  const currentValues = ["synthetic-current-a", "synthetic-current-b"];
+  const nextValues = ["synthetic-next-a", "synthetic-next-b"];
+  const urlValues = [
+    "https://uujkmcbqavsmzhnbqvmm.supabase.co",
+    "https://odbjjklumdsuqdvkgwyv.supabase.co",
+  ];
+  const serviceValues = ["synthetic-service-a", "synthetic-service-b"];
+  const sequences: Readonly<Record<string, readonly string[]>> = {
+    CRON_SECRET: currentValues,
+    CRON_SECRET_NEXT: nextValues,
+    SUPABASE_URL: urlValues,
+    SUPABASE_SERVICE_ROLE_KEY: serviceValues,
+  };
+  const reads = new Map<string, number>();
+  const sourceEnvironment = (name: string): string | undefined => {
+    const values = sequences[name];
+    if (!values) return undefined;
+    const ordinal = reads.get(name) ?? 0;
+    reads.set(name, ordinal + 1);
+    return values[ordinal];
+  };
+  const clients: Array<readonly [string, string]> = [];
+  const business = createStrategyTaskReaperBusinessHandler({
+    createClient: (url, key) => {
+      clients.push([url, key]);
+      return {
+        rpc: () => Promise.resolve({
+          data: [{
+            receipt_version: 1,
+            receiver: "run-strategy-task-reaper",
+            attempt_present: true,
+            terminal: true,
+            outcome_code: "applied_success",
+            effect_code: "stale_pending_runs_reaped",
+            receipt_at: "2026-07-16T16:05:01.123456+00:00",
+            exact_effect_count: 1,
+            identity_consistent: true,
+            effect_consistent: true,
+            replayed: false,
+          }],
+          error: null,
+        }),
+      };
+    },
+  });
+  const handler = createStrategyTaskReaperHandler(
+    business,
+    sourceEnvironment,
+  );
+  const request = (secret: string, attempt: string) =>
+    new Request(
+      "https://example.test/functions/v1/run-strategy-task-reaper",
+      {
+        method: "POST",
+        headers: {
+          "x-cron-secret": secret,
+          "x-cron-attempt-id": attempt,
+        },
+      },
+    );
+
+  const responses = await Promise.all([
+    handler(request(currentValues[0], "61000000-0000-4000-8000-000000000001")),
+    handler(request(currentValues[1], "62000000-0000-4000-8000-000000000002")),
+  ]);
+
+  assertEquals(responses.map((response) => response.status), [200, 200]);
+  assertEquals(
+    [...clients].sort((left, right) => left[0].localeCompare(right[0])),
+    [
+      [urlValues[1], serviceValues[1]],
+      [urlValues[0], serviceValues[0]],
+    ],
+  );
+  for (const name of Object.keys(sequences)) {
+    assertEquals(
+      reads.get(name),
+      2,
+      `${name} must be read once per concurrent request and reused`,
+    );
+  }
 });
 
 Deno.test("valid authenticated reaper request passes one bound attempt", async () => {

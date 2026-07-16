@@ -103,6 +103,35 @@ Deno.test("attempt identity cannot equal a request credential", async () => {
   }
 });
 
+Deno.test("attempt identity cannot equal either configured receiver slot or service credential", async () => {
+  for (const protectedName of [
+    "CRON_SECRET",
+    "CRON_SECRET_NEXT",
+    "SUPABASE_SERVICE_ROLE_KEY",
+  ]) {
+    let projectIdentityReads = 0;
+    await assertRejects(
+      () => buildStrategyTaskReaperAttempt(
+        request(),
+        (name) => {
+          if (name === protectedName) return ATTEMPT_ID;
+          if (name === "SUPABASE_URL") {
+            projectIdentityReads += 1;
+            return "https://uujkmcbqavsmzhnbqvmm.supabase.co";
+          }
+          return undefined;
+        },
+      ),
+      CronAttemptInputError,
+    );
+    assertEquals(
+      projectIdentityReads,
+      0,
+      `${protectedName} equality must reject before semantic hashing`,
+    );
+  }
+});
+
 Deno.test("attempt and project inputs fail closed before receipt execution", async () => {
   const cases: Array<readonly [Request, (name: string) => string | undefined]> = [
     [request(""), environment],
