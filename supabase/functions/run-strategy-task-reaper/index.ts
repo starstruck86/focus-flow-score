@@ -9,37 +9,19 @@
 // ════════════════════════════════════════════════════════════════
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { sweepStalePendingRuns } from "../_shared/strategy-orchestrator/staleRunWatchdog.ts";
 import {
+  createStrategyTaskReaperBusinessHandler,
   createStrategyTaskReaperHandler,
-  strategyTaskReaperCorsHeaders as corsHeaders,
 } from "./handler.ts";
 
-async function handleStrategyTaskReaperRequest() {
-  try {
-    const supabase = createClient(
+const handleStrategyTaskReaperRequest = createStrategyTaskReaperBusinessHandler({
+  createClient: () =>
+    createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
-    const result = await sweepStalePendingRuns({ supabase });
-    console.log(JSON.stringify({
-      tag: "[reaper:complete]",
-      reaped: result.reaped,
-      ids: result.ids,
-    }));
-
-    return new Response(
-      JSON.stringify({ ok: true, reaped: result.reaped, ids: result.ids }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  } catch (e: any) {
-    console.error("[reaper:error]", e);
-    return new Response(
-      JSON.stringify({ error: e?.message || "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  }
-}
+    ),
+  writeInfo: console.log,
+  writeError: console.error,
+});
 
 Deno.serve(createStrategyTaskReaperHandler(handleStrategyTaskReaperRequest));

@@ -2,14 +2,14 @@
 
 Generated read-only from the tracked `supabase/migrations/*.sql` files. It does not establish which migrations ran in Lovable Cloud, which runtime objects drifted, or whether a future export includes the same objects. Unqualified identifiers below are normalized to `public.*` only for comparison; their source evidence remains authoritative.
 
-- Migration files: **281**
-- Chronological range: **20260205170426 → 20260711211528**
-- Explicit table declarations: **154 occurrences / 154 unique names**
-- Explicit table drops: **3 statements**. `strategy_synthesis_cache` is dropped and recreated in the same migration; only **2** names are dropped after their last CREATE (`public.whoop_connections`, `public.whoop_daily_metrics`), leaving **152** repository-created names in final chronological migration state. This is not a claim about runtime state.
+- Migration files: **282**
+- Chronological range: **20260205170426 → 20260716160050**
+- Explicit table declarations: **155 occurrences / 155 unique names**
+- Explicit table drops: **3 statements**. `strategy_synthesis_cache` is dropped and recreated in the same migration; only **2** names are dropped after their last CREATE (`public.whoop_connections`, `public.whoop_daily_metrics`), leaving **153** repository-created names in final chronological migration state. This is not a claim about runtime state.
 - Explicit view declarations: **6**; materialized views: **0**
-- Explicit indexes: **195**; functions: **17 declarations / 9 names**; triggers: **57**
-- Policies: **381 creates / 43 drops**; RLS state statements: **155**
-- Constraint clauses inventoried: **373** in CREATE TABLE plus **60** ALTER TABLE constraint operations
+- Explicit indexes: **196**; functions: **19 declarations / 11 names**; triggers: **57**
+- Policies: **381 creates / 43 drops**; RLS state statements: **156**
+- Constraint clauses inventoried: **380** in CREATE TABLE plus **60** ALTER TABLE constraint operations
 - Explicit enum/type declarations: **0**; explicit sequences/identity/serial declarations: **0**
 
 ## Chronological migration ledger with SHA-256
@@ -297,6 +297,7 @@ Generated read-only from the tracked `supabase/migrations/*.sql` files. It does 
 | 20260709184115 | `20260709184115_78ccebfc-3280-4533-bb7a-a8cb2a7b88c6.sql` | `09351d9930754916bc002842b90d74ad3347a308ce96d85b69c902636130323b` | create table public.function_configs; alter table public.function_configs; policies +1/-0 |
 | 20260711134232 | `20260711134232_44bcd1c9-fc73-4dbc-b6a0-c28705a3a756.sql` | `5436473972c0ebc1f4fc4b0f407af06d8f80ec0549f9dcfc7e96115187785d6c` | create table public.agent_cron_map; alter table public.agent_cron_map; policies +1/-0; grants/revokes; cron schedule |
 | 20260711211528 | `20260711211528_f1363130-12e4-4646-b023-1aa45a52a98a.sql` | `b6277901cd7b4ad6064876663f3292b4b31ab480d5009102aa2441108649a297` | update public.territory_profile |
+| 20260716160050 | `20260716160050_add_cron_attempt_receipts.sql` | `01d9d091cef3a26e9d909249fd30b7e200e73515904d1217a1202de4b5a33857` | create schema cron_receipt_private; create table cron_receipt_private.cron_attempt_receipts; create index public.task_runs_pending_updated_at_id_idx; create functions public.execute_strategy_task_reaper_attempt, public.read_strategy_task_reaper_receipt; RLS state; grants/revokes |
 
 ## Tables
 
@@ -454,6 +455,7 @@ Generated read-only from the tracked `supabase/migrations/*.sql` files. It does 
 - `public._agent_staging` — `supabase/migrations/20260704202956_96a956a3-0314-4bfa-b6eb-6a1867671c48.sql:1`
 - `public.function_configs` — `supabase/migrations/20260709184115_78ccebfc-3280-4533-bb7a-a8cb2a7b88c6.sql:1`
 - `public.agent_cron_map` — `supabase/migrations/20260711134232_44bcd1c9-fc73-4dbc-b6a0-c28705a3a756.sql:3`
+- `cron_receipt_private.cron_attempt_receipts` — `supabase/migrations/20260716160050_add_cron_attempt_receipts.sql:14`
 
 ## Views
 
@@ -656,6 +658,7 @@ None explicitly declared in tracked migrations.
 - `idx_accounts_family_user ON public.accounts` — `supabase/migrations/20260624203925_b81be102-e37c-465f-8656-19b344f261e4.sql:29`
 - `flashcards_deck_idx ON public.flashcards` — `supabase/migrations/20260702004039_98f14143-ec6a-46f8-8b6f-7481458f9f74.sql:33`
 - `flashcard_state_due_idx ON public.flashcard_state` — `supabase/migrations/20260702004039_98f14143-ec6a-46f8-8b6f-7481458f9f74.sql:49`
+- `task_runs_pending_updated_at_id_idx ON public.task_runs` — `supabase/migrations/20260716160050_add_cron_attempt_receipts.sql:101`
 - `idx_integration_runs_user_source_ran ON public.integration_runs` — `supabase/migrations/20260704023604_1eb3fe2a-28c1-4aa3-9367-550d884d098b.sql:19`
 - `idx_strategy_messages_linked_account ON public.strategy_messages` — `supabase/migrations/20260704023604_1eb3fe2a-28c1-4aa3-9367-550d884d098b.sql:31`
 - `idx_strategy_messages_linked_opp ON public.strategy_messages` — `supabase/migrations/20260704023604_1eb3fe2a-28c1-4aa3-9367-550d884d098b.sql:33`
@@ -685,6 +688,8 @@ None explicitly declared in tracked migrations.
 - `public.get_next_ki_for_dimension(p_user_id uuid, p_spider_dimension text, p_limit integer DEFAULT 1); DEFINER; search_path=public` — `supabase/migrations/20260619115649_9b20be45-2309-4a96-89e3-804eaf82f95b.sql:1`
 - `public.get_next_ki_for_dimension(p_user_id uuid, p_spider_dimension text, p_limit integer DEFAULT 1); DEFINER; search_path=public` — `supabase/migrations/20260619115818_9ccab14b-de04-4f9d-8088-f95436bc5a74.sql:3`
 - `public.calib_drills_export(); DEFINER; search_path=public` — `supabase/migrations/20260702215327_df2b95eb-a09b-4128-98c1-cd721c7dda9e.sql:1`
+- `public.execute_strategy_task_reaper_attempt(uuid, integer, text, text, text); DEFINER; empty search_path` — `supabase/migrations/20260716160050_add_cron_attempt_receipts.sql:105`
+- `public.read_strategy_task_reaper_receipt(uuid, integer, text, text, text); DEFINER; empty search_path` — `supabase/migrations/20260716160050_add_cron_attempt_receipts.sql:364`
 
 ## Triggers
 
@@ -759,6 +764,7 @@ None explicitly declared in tracked migrations.
 
 ## RLS state statements
 
+- `ENABLE RLS ON cron_receipt_private.cron_attempt_receipts` — `supabase/migrations/20260716160050_add_cron_attempt_receipts.sql:94`
 - `ENABLE RLS ON public.work_schedule_config` — `supabase/migrations/20260206162934_ecf524fe-f434-495a-a740-6ca0bc125e5e.sql:101`
 - `ENABLE RLS ON public.holidays` — `supabase/migrations/20260206162934_ecf524fe-f434-495a-a740-6ca0bc125e5e.sql:102`
 - `ENABLE RLS ON public.pto_days` — `supabase/migrations/20260206162934_ecf524fe-f434-495a-a740-6ca0bc125e5e.sql:103`
@@ -1819,6 +1825,12 @@ Every explicit PK/FK/reference/unique/check clause found inside a CREATE TABLE d
 
 ## Grants and revocations
 
+- `REVOKE ALL ON SCHEMA cron_receipt_private FROM PUBLIC, anon, authenticated, service_role;` — `supabase/migrations/20260716160050_add_cron_attempt_receipts.sql:11`
+- `REVOKE ALL ON TABLE cron_receipt_private.cron_attempt_receipts FROM PUBLIC, anon, authenticated, service_role;` — `supabase/migrations/20260716160050_add_cron_attempt_receipts.sql:96`
+- `REVOKE ALL ON FUNCTION public.execute_strategy_task_reaper_attempt(uuid, integer, text, text, text) FROM PUBLIC, anon, authenticated, service_role;` — `supabase/migrations/20260716160050_add_cron_attempt_receipts.sql:486`
+- `REVOKE ALL ON FUNCTION public.read_strategy_task_reaper_receipt(uuid, integer, text, text, text) FROM PUBLIC, anon, authenticated, service_role;` — `supabase/migrations/20260716160050_add_cron_attempt_receipts.sql:489`
+- `GRANT EXECUTE ON FUNCTION public.execute_strategy_task_reaper_attempt(uuid, integer, text, text, text) TO service_role;` — `supabase/migrations/20260716160050_add_cron_attempt_receipts.sql:493`
+- `GRANT EXECUTE ON FUNCTION public.read_strategy_task_reaper_receipt(uuid, integer, text, text, text) TO service_role;` — `supabase/migrations/20260716160050_add_cron_attempt_receipts.sql:496`
 - `REVOKE SELECT (access_token, refresh_token) ON public.whoop_connections FROM authenticated;` — `supabase/migrations/20260323192251_81c8e8ce-cdda-4d8c-a365-74a9f93e0780.sql:1`
 - `REVOKE SELECT (access_token, refresh_token) ON public.whoop_connections FROM anon;` — `supabase/migrations/20260323192251_81c8e8ce-cdda-4d8c-a365-74a9f93e0780.sql:2`
 - `REVOKE SELECT (access_token, refresh_token) ON public.whoop_connections FROM authenticated;` — `supabase/migrations/20260326175413_23f399b3-1e5c-42a4-8eaf-5edf1591786f.sql:6`

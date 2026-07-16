@@ -381,15 +381,40 @@ def controlled_sql_guard_precedes_dispatch(text: str) -> bool:
     )
 
 
-RECEIVER_SOURCES = (
-    ROOT / "supabase" / "functions" / "daily-digest" / "index.ts",
-    ROOT / "supabase" / "functions" / "daily-digest" / "handler.ts",
-    ROOT / "supabase" / "functions" / "run-strategy-task-reaper" / "index.ts",
-    ROOT / "supabase" / "functions" / "run-strategy-task-reaper" / "handler.ts",
-    ROOT / "supabase" / "functions" / "schedule-daily-plan" / "index.ts",
-    ROOT / "supabase" / "functions" / "schedule-daily-plan" / "handler.ts",
-    ROOT / "supabase" / "functions" / "_shared" / "cronHeadReceiver.ts",
-)
+def receipt_boundary_contract_is_honest(text: str) -> bool:
+    required_once = (
+        "APPLICATION_RECEIPT_STATUS: PARTIAL_BLOCKED",
+        "CONTROLLED_SQL_VERIFICATION_STATUS: TEMPLATE_ONLY_BLOCKED",
+        "SENDER_ACTIVATION_GATE: BLOCKED",
+        "CONTROLLED_DISPATCH_GATE: BLOCKED",
+        "LEGACY_HANDOFF_MUTATION_GATE: BLOCKED",
+        "PRODUCTION_ROTATION_GATE: BLOCKED",
+        "| `daily-digest` | `RED / BLOCKED` |",
+        "| `run-strategy-task-reaper` | `GREEN / IMPLEMENTED` |",
+        "| `schedule-daily-plan` | `RED / BLOCKED` |",
+    )
+    required_atomicity = (
+        "set-based transition, and terminalizes the receipt in the same PostgreSQL transaction",
+        "failure inside the effect subtransaction rolls back every row transition before\ncommitting the fixed `known_failure_rolled_back` receipt",
+        "if terminal receipt\npublication itself fails, the outer transaction leaves neither effect nor\nreceipt",
+        "No receiver may create a receipt after its business handler returns and call\nthat atomic",
+        "one receiver receipt cannot satisfy the\nthree-receiver application-proof requirement",
+        "The reaper receipt alone cannot clear this gate",
+        "A receipt for only one of the three receivers cannot clear that gate",
+    )
+    forbidden = (
+        "APPLICATION_RECEIPT_STATUS: IMPLEMENTED",
+        "daily-digest` | `GREEN / IMPLEMENTED",
+        "schedule-daily-plan` | `GREEN / IMPLEMENTED",
+        "jsonb_build_object('cron_attempt_id'",
+    )
+    return (
+        all(text.count(marker) == 1 for marker in required_once)
+        and all(marker in text for marker in required_atomicity)
+        and all(marker not in text for marker in forbidden)
+        and text.count("'x-cron-attempt-id', v_attempt_id::text") == 2
+        and text.count("body := '{}'::jsonb") == 2
+    )
 
 
 class CronRotationContractTest(unittest.TestCase):
@@ -420,6 +445,24 @@ class CronRotationContractTest(unittest.TestCase):
         self.assertIn("pg_catalog.octet_length(v_api_key)", pre_dispatch)
         self.assertIn("pg_catalog.octet_length(v_gateway_jwt)", pre_dispatch)
         self.assertNotIn("v_rejected_control", pre_dispatch)
+
+    def test_sender_uses_one_canonical_attempt_header_not_a_body_field(self) -> None:
+        self.assertEqual(self.text.count("'x-cron-attempt-id', v_attempt_id::text"), 2)
+        self.assertEqual(self.text.count("body := '{}'::jsonb"), 2)
+        self.assertNotIn("jsonb_build_object('cron_attempt_id'", self.text)
+        self.assertIn(
+            "it is not duplicated in the body, query string, or another\nheader",
+            self.text,
+        )
+
+        for marker in (
+            "single canonical transport identifier",
+            "canonical lowercase UUID",
+            "first authenticates the cron\nsecret, then strictly parses the header",
+            "side-effect-free key probe and never creates an attempt or",
+            "separate end-user JWT path",
+        ):
+            self.assertIn(marker, self.text)
 
     def test_controlled_verification_domains_are_pairwise_distinct(self) -> None:
         self.assertTrue(controlled_sql_guard_precedes_dispatch(self.text))
@@ -787,8 +830,9 @@ class CronRotationContractTest(unittest.TestCase):
         self.assertFalse(legacy_handoff_contract_is_fail_closed(planted_direct_dml))
 
     def test_application_receipt_gap_blocks_sender_and_production(self) -> None:
+        self.assertTrue(receipt_boundary_contract_is_honest(self.text))
         fixed_gates = (
-            "APPLICATION_RECEIPT_STATUS: NOT_IMPLEMENTED",
+            "APPLICATION_RECEIPT_STATUS: PARTIAL_BLOCKED",
             "CONTROLLED_SQL_VERIFICATION_STATUS: TEMPLATE_ONLY_BLOCKED",
             "SENDER_ACTIVATION_GATE: BLOCKED",
             "CONTROLLED_DISPATCH_GATE: BLOCKED",
@@ -803,6 +847,7 @@ class CronRotationContractTest(unittest.TestCase):
             )
 
         for forbidden in (
+            "APPLICATION_RECEIPT_STATUS: NOT_IMPLEMENTED",
             "APPLICATION_RECEIPT_STATUS: IMPLEMENTED",
             "CONTROLLED_SQL_VERIFICATION_STATUS: IMPLEMENTED",
             "CONTROLLED_SQL_VERIFICATION_STATUS: READY",
@@ -821,30 +866,118 @@ class CronRotationContractTest(unittest.TestCase):
             "The `HEAD` harness may establish receiver-key acceptance and rejection only.",
             self.text,
         )
+        self.assertIn(
+            "not authorize deployment, a controlled dispatch, a cron pause, a sender change,\ncredential rotation, or any production action",
+            self.text,
+        )
 
-    def test_all_receivers_are_truthfully_marked_without_receipts(self) -> None:
-        for receiver in (
-            "daily-digest",
-            "run-strategy-task-reaper",
-            "schedule-daily-plan",
+        for partial_stop in (
+            "The reaper receipt alone cannot clear this gate",
+            "A receipt for only one of the three receivers cannot clear that gate",
+            "The `HEAD` harness may establish receiver-key acceptance and rejection only",
         ):
-            self.assertIn(f"| `{receiver}` | `NOT_IMPLEMENTED` |", self.text)
+            self.assertIn(partial_stop, self.text)
 
-        for unresolved in (
-            "Success, failure, duplicate attempt ID,",
-            "and legitimate no-op semantics therefore remain unresolved.",
-            "a legitimate no-op is distinguishable",
-            "partial failure remains visibly indeterminate",
+    def test_planted_receipt_contract_overclaims_are_rejected(self) -> None:
+        planted_changes = (
+            (
+                "| `daily-digest` | `RED / BLOCKED` |",
+                "| `daily-digest` | `GREEN / IMPLEMENTED` |",
+            ),
+            (
+                "| `schedule-daily-plan` | `RED / BLOCKED` |",
+                "| `schedule-daily-plan` | `GREEN / IMPLEMENTED` |",
+            ),
+            (
+                "APPLICATION_RECEIPT_STATUS: PARTIAL_BLOCKED",
+                "APPLICATION_RECEIPT_STATUS: IMPLEMENTED",
+            ),
+            (
+                "body := '{}'::jsonb",
+                "body := pg_catalog.jsonb_build_object('cron_attempt_id', v_attempt_id)",
+            ),
+            (
+                "same PostgreSQL transaction",
+                "later best-effort receipt transaction",
+            ),
+            (
+                "The reaper receipt alone cannot clear this gate",
+                "The reaper receipt clears this gate",
+            ),
+        )
+        for original, unsafe in planted_changes:
+            with self.subTest(unsafe=unsafe):
+                planted = self.text.replace(original, unsafe, 1)
+                self.assertFalse(receipt_boundary_contract_is_honest(planted))
+
+    def test_receipt_matrix_is_honest_and_receiver_specific(self) -> None:
+        expected_rows = (
+            "| `daily-digest` | `RED / BLOCKED` |",
+            "| `run-strategy-task-reaper` | `GREEN / IMPLEMENTED` |",
+            "| `schedule-daily-plan` | `RED / BLOCKED` |",
+        )
+        for row in expected_rows:
+            self.assertEqual(self.text.count(row), 1)
+
+        for boundary in (
+            "Perplexity HTTP calls occur outside PostgreSQL",
+            "separate per-account updates and an optional delete then insert",
+            "deterministically locks eligible `task_runs`",
+            "set-based transition, and terminalizes the receipt in the same PostgreSQL transaction",
+            "invokes `generate-time-blocks` once per eligible user over HTTP",
+            "cannot be reconciled exactly to the outer attempt",
         ):
-            self.assertIn(unresolved, self.text)
+            self.assertIn(boundary, self.text)
 
-        for path in RECEIVER_SOURCES:
-            source = path.read_text(encoding="utf-8")
-            self.assertNotIn(
-                "cron_attempt_id",
-                source,
-                f"{path.relative_to(ROOT)} consumes an attempt ID; update the receipt gate",
-            )
+    def test_reaper_receipt_contract_is_atomic_and_sanitized(self) -> None:
+        for marker in (
+            "public.execute_strategy_task_reaper_attempt",
+            "public.read_strategy_task_reaper_receipt",
+            "Concurrent duplicates are\nserialized so at most one set-based `task_runs` transition commits",
+            "failure inside the effect subtransaction rolls back every row transition before\ncommitting the fixed `known_failure_rolled_back` receipt",
+            "if terminal receipt\npublication itself fails, the outer transaction leaves neither effect nor\nreceipt",
+            "A commit followed by a lost HTTP response is recovered",
+            "`applied_success` with effect\n`stale_pending_runs_reaped`",
+            "`legitimate_noop` with effect\n`no_eligible_stale_pending_runs`",
+            "`known_failure_rolled_back`/`execution_rolled_back`",
+            "`indeterminate`/`effect_indeterminate`",
+            "`known_failure_rolled_back` is terminal only after rollback is\nproven",
+            "A stale `in_progress` attempt remains nonterminal and visible",
+            "default-execute\nrevocation from `PUBLIC`, `anon`, and `authenticated`",
+            "`scripts/security/verify-cron-attempt-receipt.ts`",
+            "`CRON_RECEIPT_VERIFY_ENVIRONMENT`",
+            "`CRON_RECEIPT_VERIFY_PROJECT_REF`",
+            "`CRON_RECEIPT_VERIFY_URL`",
+            "`CRON_RECEIPT_VERIFY_API_KEY`",
+            "`CRON_RECEIPT_VERIFY_JWT`",
+            "`CRON_RECEIPT_VERIFY_ATTEMPT_ID`",
+            "command-line attempt values are forbidden",
+            "protected process environment",
+            "The attempt ID, API key, and JWT are three separate domains and must be pairwise\ndistinct",
+            "JWT must independently authorize the `service_role`-only read\nwrapper",
+            "API key is never copied into `Authorization`",
+            "nonterminal or inconsistent receipt is not application proof",
+            "database wrapper does not independently discover its Supabase project",
+            "compatible minimal `task_runs` fixture",
+        ):
+            self.assertIn(marker, self.text)
+
+        for forbidden_claim in (
+            "APPLICATION_RECEIPT_STATUS: IMPLEMENTED",
+            "daily-digest` | `GREEN / IMPLEMENTED",
+            "schedule-daily-plan` | `GREEN / IMPLEMENTED",
+        ):
+            self.assertNotIn(forbidden_claim, self.text)
+
+    def test_nonatomic_receivers_cannot_use_post_return_receipts(self) -> None:
+        for marker in (
+            "No receiver may create a receipt after its business handler returns and call\nthat atomic",
+            "a post-effect receipt write could fail after an\neffect committed",
+            "`daily-digest` and\n`schedule-daily-plan` remain blocked",
+            "HTTP `2xx`, timestamp proximity, job activity",
+            "self-reported handler success do not substitute",
+        ):
+            self.assertIn(marker, self.text)
 
 
 if __name__ == "__main__":

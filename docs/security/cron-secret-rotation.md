@@ -267,7 +267,8 @@ begin
   v_headers := pg_catalog.jsonb_build_object(
     'content-type', 'application/json',
     'apikey', v_api_key,
-    'x-cron-secret', v_cron_secret
+    'x-cron-secret', v_cron_secret,
+    'x-cron-attempt-id', v_attempt_id::text
   );
 
   if v_verify_jwt or v_independent_authorization_required then
@@ -292,7 +293,7 @@ begin
   select net.http_post(
     url := v_project_origin || '/functions/v1/__REQUIRED_FUNCTION_SLUG__',
     headers := v_headers,
-    body := pg_catalog.jsonb_build_object('cron_attempt_id', v_attempt_id),
+    body := '{}'::jsonb,
     timeout_milliseconds := 10000
   ) into strict v_request_id;
 
@@ -456,7 +457,8 @@ begin
   v_headers := pg_catalog.jsonb_build_object(
     'content-type', 'application/json',
     'apikey', v_api_key,
-    'x-cron-secret', v_dispatch_secret
+    'x-cron-secret', v_dispatch_secret,
+    'x-cron-attempt-id', v_attempt_id::text
   );
   if v_gateway_jwt is not null then
     v_headers := v_headers || pg_catalog.jsonb_build_object(
@@ -467,7 +469,7 @@ begin
   select net.http_post(
     url := v_project_origin || '/functions/v1/__REQUIRED_FUNCTION_SLUG__',
     headers := v_headers,
-    body := pg_catalog.jsonb_build_object('cron_attempt_id', v_attempt_id),
+    body := '{}'::jsonb,
     timeout_milliseconds := 10000
   ) into strict v_request_id;
   if v_request_id is null then
@@ -692,44 +694,135 @@ rotation verification is incomplete.
 
 ### Application-receipt boundary
 
-The repository does not currently implement an exact, durable,
-attempt-ID-bound application receipt for any of the three receivers:
+The single canonical transport identifier is the `x-cron-attempt-id` request
+header. The sender generates one canonical lowercase UUID and supplies it only
+through that header; it is not duplicated in the body, query string, or another
+header. On a cron execution request, the receiver first authenticates the cron
+secret, then strictly parses the header. Missing, repeated, non-string,
+noncanonical, or malformed identifiers stop before business work or receipt
+access. The attempt must also differ from the presented cron secret, gateway API
+key, and gateway authorization credential; equality stops before any RPC so a
+UUID-shaped credential cannot become durable receipt state. This requirement
+does not apply to `daily-digest`'s separate end-user JWT path. An authenticated
+`HEAD` remains only a side-effect-free key probe and never creates an attempt or
+receipt.
 
-| Receiver | Attempt-bound receipt status |
-| --- | --- |
-| `daily-digest` | `NOT_IMPLEMENTED` |
-| `run-strategy-task-reaper` | `NOT_IMPLEMENTED` |
-| `schedule-daily-plan` | `NOT_IMPLEMENTED` |
+Protocol version `1` binds the attempt to the receiver slug, the reviewed
+non-secret environment/project identity, and a deterministic 64-character
+lowercase hexadecimal semantic request fingerprint. The fingerprint excludes
+credentials, credential fingerprints, volatile transport headers, request and
+response bodies, business payloads, model prompts/output, and arbitrary error
+text. A replay must match all bound identity fields. Reusing one attempt for a
+different receiver, environment, project, protocol, or semantic fingerprint
+fails closed.
 
-Although the sender template places `cron_attempt_id` in the request body, the
-receivers do not currently validate and durably claim that UUID or persist a
-non-secret terminal result keyed to it. Success, failure, duplicate attempt ID,
-and legitimate no-op semantics therefore remain unresolved. A `2xx`, a changed
-business-row count, or the absence of a change must not be relabeled as an
-exact attempt-bound application receipt.
+The database wrapper does not independently discover its Supabase project. It
+trusts the reviewed Edge receiver to derive and supply the environment/project
+pair from the exact `SUPABASE_URL`; the wrapper then accepts only the two
+repository-reviewed pairs and binds that pair into the request fingerprint.
+This is repository contract evidence, not observed deployment configuration.
 
-A post-effect receipt write would not close this gap: business effects could
-succeed and the receipt write could fail. A pre-effect claim alone would not
-close it either: a crash could leave an indeterminate claim, and a duplicate
-could repeat non-transactional model, HTTP, or multi-table effects. Closing the
-gap requires a separately reviewed private receipt schema plus domain-specific
-idempotency and reconciliation for all four outcomes. It must prove that a
-duplicate cannot repeat effects, that a legitimate no-op is distinguishable
-from failure, and that partial failure remains visibly indeterminate rather
-than successful.
+The implementation status is deliberately receiver-specific:
 
-These fixed gates apply until separately reviewed application-receipt and
-controlled-SQL-verification implementations, including synthetic
-success/failure/duplicate/no-op and pre-dispatch domain tests, exist:
+| Receiver | Attempt-bound receipt status | Exact transaction boundary |
+| --- | --- | --- |
+| `daily-digest` | `RED / BLOCKED` | Perplexity HTTP calls occur outside PostgreSQL, followed by separate per-account updates and an optional delete then insert of digest rows. A model call, an account update, or the delete can complete before a later write or receipt fails. The existing multi-user loop cannot atomically bind all of those effects to one receipt. |
+| `run-strategy-task-reaper` | `GREEN / IMPLEMENTED` | `public.execute_strategy_task_reaper_attempt` serializes the bound attempt, deterministically locks eligible `task_runs`, performs one set-based transition, and terminalizes the receipt in the same PostgreSQL transaction. The no-eligible-row proof and legitimate-no-op receipt are committed together. |
+| `schedule-daily-plan` | `RED / BLOCKED` | The receiver loops over users and invokes `generate-time-blocks` once per eligible user over HTTP. Those downstream invocations and their database/model effects are outside one caller transaction, so a partial loop or lost response can leave effects that cannot be reconciled exactly to the outer attempt. |
+
+For the reaper, an exact duplicate returns the durable prior receipt without
+repeating the effect; a conflicting identity fails. Concurrent duplicates are
+serialized so at most one set-based `task_runs` transition commits. Transaction
+failure inside the effect subtransaction rolls back every row transition before
+committing the fixed `known_failure_rolled_back` receipt; if terminal receipt
+publication itself fails, the outer transaction leaves neither effect nor
+receipt. A commit followed by a lost HTTP response is recovered by retrying the
+same attempt and reading the same terminal receipt. The success outcomes are
+`applied_success` with effect
+`stale_pending_runs_reaped`, or `legitimate_noop` with effect
+`no_eligible_stale_pending_runs`. The no-op proves no eligible rows were visible
+to that locked statement execution; it is not a timeless claim about later
+writes. The closed vocabulary also includes
+`in_progress`/`attempt_in_progress`,
+`known_failure_rolled_back`/`execution_rolled_back`, and
+`indeterminate`/`effect_indeterminate`; no uncertain response may be converted
+to success. `known_failure_rolled_back` is terminal only after rollback is
+proven. A stale `in_progress` attempt remains nonterminal and visible; if its
+effect cannot be proven absent or committed, reconciliation must classify it
+`indeterminate` rather than silently retrying or passing verification.
+
+Receipt state is private. The fixed wrappers
+`public.execute_strategy_task_reaper_attempt` and
+`public.read_strategy_task_reaper_receipt` use reviewed `SECURITY DEFINER`
+ownership, an empty safe `search_path`, fully qualified objects, default-execute
+revocation from `PUBLIC`, `anon`, and `authenticated`, and only the minimum
+service-role grant. The read wrapper returns only the reviewed receipt fields:
+version, receiver, attempt-present and terminal booleans, fixed outcome/effect
+codes, receipt time, exact effect count, identity/effect consistency booleans,
+and replayed state. It cannot return business identifiers or payloads.
+
+The checked-in read-only verifier,
+`scripts/security/verify-cron-attempt-receipt.ts`, accepts its attempt UUID only
+through `CRON_RECEIPT_VERIFY_ATTEMPT_ID` in the protected process environment;
+command-line attempt values are forbidden. It binds the reviewed environment,
+project ref, fixed RPC URL, separately supplied gateway API key/JWT, and the
+same semantic fingerprint before calling the fixed read wrapper. Its output is
+limited to verification version, receiver, attempt-present/terminal booleans,
+fixed outcome/effect codes, receipt time, exact effect count, identity/effect
+consistency booleans, and `PASS` or `REVIEW_REQUIRED`. It never prints
+credentials, credential fingerprints, request/response bodies, business rows,
+model data, arbitrary database text, SQL errors, filenames, or paths. A
+nonterminal or inconsistent receipt is not application proof.
+
+Supply the verifier only through these six protected process-environment
+variables:
+
+- `CRON_RECEIPT_VERIFY_ENVIRONMENT`
+- `CRON_RECEIPT_VERIFY_PROJECT_REF`
+- `CRON_RECEIPT_VERIFY_URL`
+- `CRON_RECEIPT_VERIFY_API_KEY`
+- `CRON_RECEIPT_VERIFY_JWT`
+- `CRON_RECEIPT_VERIFY_ATTEMPT_ID`
+
+The attempt ID, API key, and JWT are three separate domains and must be pairwise
+distinct. The JWT must independently authorize the `service_role`-only read
+wrapper; the API key is never copied into `Authorization`, and no protected
+value is printed.
+
+No receiver may create a receipt after its business handler returns and call
+that atomic. In particular, a post-effect receipt write could fail after an
+effect committed, while a pre-effect claim alone could remain indeterminate or
+permit a duplicate nontransactional effect. `daily-digest` and
+`schedule-daily-plan` remain blocked until a larger redesign provides a single
+audited transaction boundary or a domain-specific idempotency/reconciliation
+protocol for every effect. HTTP `2xx`, timestamp proximity, job activity,
+changed row counts, and self-reported handler success do not substitute for the
+durable application receipt.
+
+These fixed global gates remain because one receiver receipt cannot satisfy the
+three-receiver application-proof requirement. They apply until the two blocked
+receivers have separately reviewed exact receipt contracts and the independent
+controlled-SQL-verification implementation, including synthetic
+success/failure/duplicate/no-op and pre-dispatch domain tests, exists:
 
 ```text
-APPLICATION_RECEIPT_STATUS: NOT_IMPLEMENTED
+APPLICATION_RECEIPT_STATUS: PARTIAL_BLOCKED
 CONTROLLED_SQL_VERIFICATION_STATUS: TEMPLATE_ONLY_BLOCKED
 SENDER_ACTIVATION_GATE: BLOCKED
 CONTROLLED_DISPATCH_GATE: BLOCKED
 LEGACY_HANDOFF_MUTATION_GATE: BLOCKED
 PRODUCTION_ROTATION_GATE: BLOCKED
 ```
+
+The reaper implementation is repository-side readiness evidence only. It does
+not authorize deployment, a controlled dispatch, a cron pause, a sender change,
+credential rotation, or any production action.
+
+The PostgreSQL integration applies the receipt migration to an isolated PG17
+database with a compatible minimal `task_runs` fixture. It proves the wrapper,
+transaction, concurrency, rollback, ACL, and predicate mechanics against that
+reviewed shape; it does not prove installation over live schema drift or any
+deployed runtime.
 
 The `HEAD` harness may establish receiver-key acceptance and rejection only.
 It cannot clear any of these gates. The confirmed-no-caller branch may rotate
@@ -825,15 +918,17 @@ For each environment independently:
      already-Vault-backed shortcut or the fresh-install same-name precondition.
      While `LEGACY_HANDOFF_MUTATION_GATE` is `BLOCKED`, stop before
      `LEGACY_PAUSED`; do not pause, drain, invoke, unschedule, replace, or
-     enable a job. Only after a separately reviewed receipt implementation and
-     explicit mutation authorization clear the gate may the actor follow the
-     production legacy-sender state machine above.
+     enable a job. The reaper receipt alone cannot clear this gate. Only after
+     every scheduled receiver has a separately reviewed exact receipt contract,
+     and a later explicit mutation authorization clears the other gates, may
+     the actor follow the production legacy-sender state machine above.
    - **External caller:** its named owner updates the replacement in that
      system's protected secret store and proves the exact reviewed dispatch
      configuration. No database scheduler is created.
 5. A caller branch stops here while `CONTROLLED_DISPATCH_GATE` is `BLOCKED`.
-   Only a separately reviewed attempt-bound receipt implementation may clear
-   that gate. After it does, one later-authorized controlled dispatch must
+   A receipt for only one of the three receivers cannot clear that gate. After
+   exact receipt contracts for all three and the independent controlled-SQL
+   prerequisite are reviewed, one later-authorized controlled dispatch must
    produce three proof layers: the applicable reviewed cron-run, direct-wrapper,
    or external-caller execution evidence; exact sanitized HTTP transport
    correlation; and the job-specific attempt-bound application receipt/effect.
