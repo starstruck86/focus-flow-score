@@ -295,6 +295,8 @@ export function parseCronAttemptReceipt(value: unknown): CronAttemptReceipt {
     !timestampValid ||
     typeof identityConsistent !== "boolean" ||
     typeof effectConsistent !== "boolean" ||
+    (attemptPresent === true &&
+      (identityConsistent !== true || effectConsistent !== true)) ||
     (attemptPresent === false && !absentCombination) ||
     typeof row.replayed !== "boolean"
   ) {
