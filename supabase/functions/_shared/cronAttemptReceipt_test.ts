@@ -77,7 +77,7 @@ Deno.test("canonical reaper attempt binds the reviewed semantic identity", async
 });
 
 Deno.test("attempt identity cannot equal a request credential", async () => {
-  const credentialHeaders = [
+  const credentialHeaders: ReadonlyArray<Readonly<Record<string, string>>> = [
     { "x-cron-secret": ATTEMPT_ID },
     { apikey: ATTEMPT_ID },
     { authorization: ATTEMPT_ID },
