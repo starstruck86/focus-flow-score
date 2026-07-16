@@ -2,14 +2,14 @@
   "collection": {
     "artifact": {
       "kind": "repository_deployment_inventory",
-      "sha256": "sha256:2adf415b0dca28cca7262b64f6f7161f5e9da93424a4cc18bbd94d55cd137ee9",
+      "sha256": "sha256:1dc24d557bf87a5ca62167c1b6c2fb268dcfb3512bc92aae984699cc762022ab",
       "source": "local source project odbjjklumdsuqdvkgwyv supabase/config.toml and resolved supabase/functions dependency closures"
     },
     "boundary": {
       "kind": "repository_content_sha256",
-      "value": "sha256:2adf415b0dca28cca7262b64f6f7161f5e9da93424a4cc18bbd94d55cd137ee9"
+      "value": "sha256:1dc24d557bf87a5ca62167c1b6c2fb268dcfb3512bc92aae984699cc762022ab"
     },
-    "collected_at": "2026-07-16T17:01:50Z",
+    "collected_at": "2026-07-16T17:42:24Z",
     "collector": {
       "name": "inventory-edge-functions",
       "version": "2.0.0"
@@ -2849,7 +2849,7 @@
           "supabase/functions/run-strategy-task-reaper/handler.ts",
           "supabase/functions/run-strategy-task-reaper/index.ts"
         ],
-        "fingerprint": "sha256:c076a75d165b7dfb109150bdd38675c73c4c52e5703efd7ca40b45f408ab872f",
+        "fingerprint": "sha256:285d8ea7b4e67cdabb38ec4874904da035c4309215dc5ec43ee2844c6dde29e4",
         "kind": "edge_function_deployment_closure"
       },
       "independently_verifiable": true,
