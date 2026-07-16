@@ -15,6 +15,7 @@ LEGACY_HANDOFF_STATES = (
     "REPLACEMENT_COMMITTED_INACTIVE",
     "REPLACEMENT_VERIFIED_INACTIVE",
     "CONTROLLED_DISPATCH_VERIFIED",
+    "RECEIVER_PROMOTED_PREDECESSOR_REJECTED",
     "REPLACEMENTS_ENABLED",
 )
 
@@ -34,6 +35,14 @@ LEGACY_HANDOFF_REQUIRED = (
     "keep every replacement schedule inactive",
     "directly exactly once",
     "Never activate a schedule to perform this probe",
+    "promoted value is accepted",
+    "`CRON_SECRET_NEXT` is absent",
+    "predecessor is rejected",
+    "one serializable, cron-mutation-fenced final-enable transaction",
+    "wrapper definition fingerprints match",
+    "all three replacements are inactive",
+    "Activate all three replacements, revalidate every identity/security/active postcondition",
+    "rolls back to all three replacements inactive",
     "invocation/transport/application gate",
     "Rollback never reinstalls or re-enables a plaintext legacy command",
 )
@@ -56,6 +65,7 @@ class SyntheticCronJob:
     function_slug: str
     active: bool
     command_kind: str
+    wrapper_fingerprint: str
 
     @property
     def identity(self):
@@ -80,6 +90,7 @@ def synthetic_legacy_jobs():
             function_slug=function_slug,
             active=True,
             command_kind="legacy-plaintext-header",
+            wrapper_fingerprint="none",
         )
         for job_id, function_slug in zip(
             (7, 9, 15),
@@ -98,6 +109,11 @@ def model_legacy_handoff(
     drained=True,
     receipt_ready=False,
     controlled_dispatches=0,
+    receiver_promoted=False,
+    next_secret_removed=False,
+    predecessor_rejected=False,
+    activation_gate_cleared=False,
+    enable_replacements=False,
     fault=None,
 ):
     original = synthetic_legacy_jobs()
@@ -126,6 +142,11 @@ def model_legacy_handoff(
                 if fault == "plaintext_residual"
                 else f"reviewed-wrapper:{job.function_slug}"
             ),
+            wrapper_fingerprint=(
+                "drifted-fingerprint"
+                if fault == "wrapper_fingerprint_drift"
+                else f"reviewed-fingerprint:{job.function_slug}"
+            ),
         )
         for job in paused
     )
@@ -149,6 +170,8 @@ def model_legacy_handoff(
         and all(
             original_endpoints.get(job.identity) == job.function_slug
             and job.command_kind == f"reviewed-wrapper:{job.function_slug}"
+            and job.wrapper_fingerprint
+            == f"reviewed-fingerprint:{job.function_slug}"
             for job in replacements
         )
     )
@@ -164,11 +187,144 @@ def model_legacy_handoff(
 
     # A controlled verification directly invokes the wrapper. It does not
     # activate a cron schedule, so a crash cannot leave a recurring dispatch.
-    return SyntheticHandoffOutcome(
-        "CONTROLLED_DISPATCH_VERIFIED",
-        replacements,
-        True,
+    if not (receiver_promoted and next_secret_removed and predecessor_rejected):
+        return SyntheticHandoffOutcome(
+            "CONTROLLED_DISPATCH_VERIFIED",
+            replacements,
+            True,
+        )
+
+    if not enable_replacements or not activation_gate_cleared:
+        return SyntheticHandoffOutcome(
+            "RECEIVER_PROMOTED_PREDECESSOR_REJECTED",
+            replacements,
+            True,
+        )
+
+    # This is a synthetic model of the future final-enable transaction. The
+    # checked-in production gates remain BLOCKED, so no repository test can
+    # authorize or perform the represented mutation.
+    original_identities_with_slugs = {
+        (*job.identity, job.function_slug) for job in original
+    }
+    final_candidates = replacements
+    if fault == "enable_identity_drift":
+        final_candidates = (
+            replace(final_candidates[0], owner="concurrent-drift"),
+            *final_candidates[1:],
+        )
+    elif fault == "enable_duplicate_insertion":
+        final_candidates += (replace(final_candidates[0], job_id=999),)
+    elif fault == "enable_wrapper_fingerprint_drift":
+        final_candidates = (
+            replace(final_candidates[0], wrapper_fingerprint="drifted-fingerprint"),
+            *final_candidates[1:],
+        )
+    elif fault == "enable_plaintext_residual":
+        final_candidates = (
+            replace(final_candidates[0], command_kind="legacy-plaintext-header"),
+            *final_candidates[1:],
+        )
+
+    def final_set_matches(jobs, *, expected_active, receiver_evidence):
+        identities = [(*job.identity, job.function_slug) for job in jobs]
+        return (
+            receiver_evidence
+            and len(jobs) == 3
+            and set(identities) == original_identities_with_slugs
+            and len(set(identities)) == 3
+            and all(job.job_id not in {7, 9, 15} for job in jobs)
+            and all(job.active is expected_active for job in jobs)
+            and all(
+                job.command_kind == f"reviewed-wrapper:{job.function_slug}"
+                and job.wrapper_fingerprint
+                == f"reviewed-fingerprint:{job.function_slug}"
+                for job in jobs
+            )
+        )
+
+    receiver_evidence = (
+        receiver_promoted and next_secret_removed and predecessor_rejected
     )
+    final_revalidation_passes = (
+        fault != "enable_concurrent_mutation"
+        and final_set_matches(
+            final_candidates,
+            expected_active=False,
+            receiver_evidence=receiver_evidence,
+        )
+    )
+    if not final_revalidation_passes:
+        return SyntheticHandoffOutcome(
+            "ENABLE_ROLLBACK_INACTIVE",
+            replacements,
+            True,
+        )
+
+    enabled = []
+    for ordinal, job in enumerate(final_candidates, start=1):
+        if fault == "enable_partial_activation" and ordinal == 2:
+            return SyntheticHandoffOutcome(
+                "ENABLE_ROLLBACK_INACTIVE",
+                replacements,
+                True,
+            )
+        if fault == "enable_second_job_failure" and ordinal == 2:
+            return SyntheticHandoffOutcome(
+                "ENABLE_ROLLBACK_INACTIVE",
+                replacements,
+                True,
+            )
+        if fault == "enable_third_job_failure" and ordinal == 3:
+            return SyntheticHandoffOutcome(
+                "ENABLE_ROLLBACK_INACTIVE",
+                replacements,
+                True,
+            )
+        enabled.append(replace(job, active=True))
+
+    enabled_tuple = tuple(enabled)
+    post_receiver_evidence = receiver_evidence
+    if fault == "enable_post_activation_identity_drift":
+        enabled_tuple = (
+            replace(enabled_tuple[0], owner="post-activation-drift"),
+            *enabled_tuple[1:],
+        )
+    elif fault == "enable_post_activation_duplicate_insertion":
+        enabled_tuple += (replace(enabled_tuple[0], job_id=998),)
+    elif fault == "enable_post_activation_wrapper_fingerprint_drift":
+        enabled_tuple = (
+            replace(enabled_tuple[0], wrapper_fingerprint="post-activation-drift"),
+            *enabled_tuple[1:],
+        )
+    elif fault == "enable_post_activation_plaintext_residual":
+        enabled_tuple = (
+            replace(enabled_tuple[0], command_kind="legacy-plaintext-header"),
+            *enabled_tuple[1:],
+        )
+    elif fault == "enable_post_activation_legacy_id":
+        enabled_tuple = (
+            replace(enabled_tuple[0], job_id=7),
+            *enabled_tuple[1:],
+        )
+    elif fault == "enable_post_activation_receiver_drift":
+        post_receiver_evidence = False
+
+    post_revalidation_passes = (
+        fault != "enable_post_activation_concurrent_mutation"
+        and final_set_matches(
+            enabled_tuple,
+            expected_active=True,
+            receiver_evidence=post_receiver_evidence,
+        )
+    )
+    if not post_revalidation_passes:
+        return SyntheticHandoffOutcome(
+            "ENABLE_ROLLBACK_INACTIVE",
+            replacements,
+            True,
+        )
+    return SyntheticHandoffOutcome("REPLACEMENTS_ENABLED", enabled_tuple, True)
 
 
 def legacy_handoff_contract_is_fail_closed(text: str) -> bool:
@@ -413,6 +569,127 @@ class CronRotationContractTest(unittest.TestCase):
             self.assertEqual(blocked.state, "REPLACEMENT_VERIFIED_INACTIVE")
             self.assertTrue(all(not job.active for job in blocked.jobs))
 
+    def test_receiver_promotion_is_explicit_before_final_enable(self) -> None:
+        controlled = model_legacy_handoff(
+            mutation_gate_cleared=True,
+            receipt_ready=True,
+            controlled_dispatches=1,
+        )
+        self.assertEqual(controlled.state, "CONTROLLED_DISPATCH_VERIFIED")
+        self.assertTrue(all(not job.active for job in controlled.jobs))
+
+        for missing in (
+            "receiver_promoted",
+            "next_secret_removed",
+            "predecessor_rejected",
+        ):
+            inputs = {
+                "mutation_gate_cleared": True,
+                "receipt_ready": True,
+                "controlled_dispatches": 1,
+                "receiver_promoted": True,
+                "next_secret_removed": True,
+                "predecessor_rejected": True,
+            }
+            inputs[missing] = False
+            with self.subTest(missing=missing):
+                outcome = model_legacy_handoff(**inputs)
+                self.assertEqual(outcome.state, "CONTROLLED_DISPATCH_VERIFIED")
+                self.assertTrue(all(not job.active for job in outcome.jobs))
+
+        promoted = model_legacy_handoff(
+            mutation_gate_cleared=True,
+            receipt_ready=True,
+            controlled_dispatches=1,
+            receiver_promoted=True,
+            next_secret_removed=True,
+            predecessor_rejected=True,
+        )
+        self.assertEqual(
+            promoted.state,
+            "RECEIVER_PROMOTED_PREDECESSOR_REJECTED",
+        )
+        self.assertTrue(all(not job.active for job in promoted.jobs))
+
+    def test_final_enable_is_all_or_none_after_promotion(self) -> None:
+        common = {
+            "mutation_gate_cleared": True,
+            "receipt_ready": True,
+            "controlled_dispatches": 1,
+            "receiver_promoted": True,
+            "next_secret_removed": True,
+            "predecessor_rejected": True,
+            "enable_replacements": True,
+        }
+        blocked = model_legacy_handoff(**common)
+        self.assertEqual(
+            blocked.state,
+            "RECEIVER_PROMOTED_PREDECESSOR_REJECTED",
+        )
+        self.assertTrue(all(not job.active for job in blocked.jobs))
+
+        enabled = model_legacy_handoff(
+            **common,
+            activation_gate_cleared=True,
+        )
+        self.assertEqual(enabled.state, "REPLACEMENTS_ENABLED")
+        self.assertEqual(len(enabled.jobs), 3)
+        self.assertTrue(all(job.active for job in enabled.jobs))
+        self.assertEqual(
+            {(*job.identity, job.function_slug) for job in enabled.jobs},
+            {(*job.identity, job.function_slug) for job in synthetic_legacy_jobs()},
+        )
+
+    def test_final_enable_faults_rollback_every_replacement_to_inactive(self) -> None:
+        for fault in (
+            "enable_partial_activation",
+            "enable_second_job_failure",
+            "enable_third_job_failure",
+            "enable_identity_drift",
+            "enable_duplicate_insertion",
+            "enable_concurrent_mutation",
+            "enable_wrapper_fingerprint_drift",
+            "enable_plaintext_residual",
+            "enable_post_activation_identity_drift",
+            "enable_post_activation_duplicate_insertion",
+            "enable_post_activation_wrapper_fingerprint_drift",
+            "enable_post_activation_plaintext_residual",
+            "enable_post_activation_legacy_id",
+            "enable_post_activation_receiver_drift",
+            "enable_post_activation_concurrent_mutation",
+        ):
+            with self.subTest(fault=fault):
+                outcome = model_legacy_handoff(
+                    mutation_gate_cleared=True,
+                    receipt_ready=True,
+                    controlled_dispatches=1,
+                    receiver_promoted=True,
+                    next_secret_removed=True,
+                    predecessor_rejected=True,
+                    enable_replacements=True,
+                    activation_gate_cleared=True,
+                    fault=fault,
+                )
+                self.assertEqual(outcome.state, "ENABLE_ROLLBACK_INACTIVE")
+                self.assertEqual(len(outcome.jobs), 3)
+                self.assertTrue(all(not job.active for job in outcome.jobs))
+                self.assertEqual(
+                    {(*job.identity, job.function_slug) for job in outcome.jobs},
+                    {
+                        (*job.identity, job.function_slug)
+                        for job in synthetic_legacy_jobs()
+                    },
+                )
+                self.assertTrue(
+                    all(
+                        job.command_kind
+                        == f"reviewed-wrapper:{job.function_slug}"
+                        and job.wrapper_fingerprint
+                        == f"reviewed-fingerprint:{job.function_slug}"
+                        for job in outcome.jobs
+                    )
+                )
+
     def test_legacy_handoff_preserves_identity_without_duplicate_schedules(self) -> None:
         for marker in (
             "same name, schedule, owner, database, and function slug",
@@ -471,6 +748,26 @@ class CronRotationContractTest(unittest.TestCase):
             (
                 "Never activate a schedule to perform this probe",
                 "A crash may leave the schedule active indefinitely",
+            ),
+            (
+                "`RECEIVER_PROMOTED_PREDECESSOR_REJECTED`",
+                "`RECEIVER_PROMOTION_ASSUMED`",
+            ),
+            (
+                "one serializable, cron-mutation-fenced final-enable transaction",
+                "three independent activation transactions",
+            ),
+            (
+                "wrapper definition fingerprints match",
+                "wrapper fingerprints are not rechecked",
+            ),
+            (
+                "Activate all three replacements, revalidate every identity/security/active postcondition",
+                "Activate whichever replacement is available without a postcondition check",
+            ),
+            (
+                "rolls back to all three replacements inactive",
+                "may commit a partially active replacement set",
             ),
             (
                 "Rollback never reinstalls or re-enables a plaintext legacy command",

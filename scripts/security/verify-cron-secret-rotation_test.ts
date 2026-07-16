@@ -114,6 +114,104 @@ Deno.test("gateway inputs fail closed before fetch", async () => {
   }
 });
 
+Deno.test("exported verifier rejects erased runtime types before fetch", async () => {
+  const trueUrl =
+    "https://uujkmcbqavsmzhnbqvmm.supabase.co/functions/v1/run-strategy-task-reaper";
+  const cases: ReadonlyArray<Readonly<{
+    label: string;
+    input: unknown;
+    reason:
+      | "invalid_environment"
+      | "invalid_phase"
+      | "invalid_attestation"
+      | "invalid_url"
+      | "invalid_secret_input"
+      | "invalid_gateway_input";
+  }>> = [
+    {
+      label: "number_and_numeric_string_are_not_equal_credentials",
+      input: { ...baseInput, acceptedSecret: 123, rejectedSecret: "123" },
+      reason: "invalid_secret_input",
+    },
+    {
+      label: "two_boxed_equal_strings_are_not_primitive_credentials",
+      input: {
+        ...baseInput,
+        acceptedSecret: new String("synthetic-boxed-equal"),
+        rejectedSecret: new String("synthetic-boxed-equal"),
+      },
+      reason: "invalid_secret_input",
+    },
+    {
+      label: "boxed_environment",
+      input: { ...baseInput, environment: new String("dynamic-staging") },
+      reason: "invalid_environment",
+    },
+    {
+      label: "array_phase",
+      input: { ...baseInput, phase: ["overlap-next"] },
+      reason: "invalid_phase",
+    },
+    {
+      label: "coercible_object_slot",
+      input: { ...baseInput, acceptedSlot: { toString: () => "next" } },
+      reason: "invalid_attestation",
+    },
+    {
+      label: "boxed_url",
+      input: { ...baseInput, url: new String(baseInput.url) },
+      reason: "invalid_url",
+    },
+    {
+      label: "array_rejected_control",
+      input: { ...baseInput, rejectedSecret: [rejectedSecret] },
+      reason: "invalid_secret_input",
+    },
+    {
+      label: "boxed_api_key",
+      input: { ...baseInput, apiKey: new String(apiKey) },
+      reason: "invalid_secret_input",
+    },
+    {
+      label: "boxed_optional_jwt",
+      input: { ...baseInput, url: trueUrl, jwt: new String(jwt) },
+      reason: "invalid_gateway_input",
+    },
+    {
+      label: "invalid_phase_enum",
+      input: { ...baseInput, phase: "next-ish" },
+      reason: "invalid_phase",
+    },
+    {
+      label: "invalid_environment_enum",
+      input: { ...baseInput, environment: "staging-ish" },
+      reason: "invalid_environment",
+    },
+    {
+      label: "invalid_slot_enum",
+      input: { ...baseInput, acceptedSlot: "future" },
+      reason: "invalid_attestation",
+    },
+  ];
+
+  for (const { label, input, reason } of cases) {
+    let calls = 0;
+    try {
+      await verifyCronSecretRotation(
+        input as Parameters<typeof verifyCronSecretRotation>[0],
+        async () => {
+          calls += 1;
+          return noStoreResponse(204);
+        },
+      );
+      throw new Error(`expected failure for ${label}`);
+    } catch (error) {
+      assert(safeFailureReason(error) === reason, `wrong reason for ${label}`);
+      assert(calls === 0, `${label} must fail before fetch`);
+    }
+  }
+});
+
 Deno.test("credential domains are pairwise distinct before fetch", async () => {
   const trueUrl =
     "https://uujkmcbqavsmzhnbqvmm.supabase.co/functions/v1/run-strategy-task-reaper";

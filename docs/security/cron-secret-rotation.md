@@ -105,7 +105,8 @@ actors may collect `LEGACY_IDENTITY_BOUND` evidence but must not enter
 | `REPLACEMENT_COMMITTED_INACTIVE` | In one serializable, cron-mutation-fenced transaction, revalidate the bound tuples; unschedule IDs `7`, `9`, and `15`; create one replacement per original tuple with the same name, schedule, owner, database, and function slug; set every replacement inactive; and require its command to equal only that tuple's fixed wrapper call. | The installed pg_cron APIs cannot preserve owner/database identity, any tuple or endpoint mapping changes, any replacement is active, or the whole transaction cannot roll back on a failed postcondition. |
 | `REPLACEMENT_VERIFIED_INACTIVE` | Prove old IDs are absent, exactly one inactive replacement occupies each bound tuple, every replacement command equals its tuple-bound reviewed wrapper call, and no cron command contains an `x-cron-secret` header construction. Re-run every wrapper owner/ACL/definition check. | Any duplicate, old ID, plaintext-header command, identity/endpoint mismatch, or non-wrapper command remains. |
 | `CONTROLLED_DISPATCH_VERIFIED` | After the application-receipt and mutation gates are separately cleared, keep every replacement schedule inactive and invoke the reviewed fixed wrapper directly exactly once under a separate authorization. Bind that database invocation to its pg_net request and exact application receipt/effect. Never activate a schedule to perform this probe. | A schedule becomes active, more than one wrapper invocation occurs, or any direct-invocation, transport, or application proof is missing or ambiguous. |
-| `REPLACEMENTS_ENABLED` | Only after all three inactive identities and the controlled dispatch pass, activate the reviewed replacement set and prove the legacy IDs remain absent. | Any replacement or receiver gate is incomplete. |
+| `RECEIVER_PROMOTED_PREDECESSOR_REJECTED` | After the controlled dispatch passes, promote the replacement receiver value to `CRON_SECRET`, remove `CRON_SECRET_NEXT`, and repeat bounded propagation probes proving the promoted value is accepted and the predecessor is rejected. Bind reviewed secure-management evidence proving `CRON_SECRET_NEXT` is absent; never persist either credential value. Keep every replacement job inactive. | The accepted/rejected result is inconsistent, `CRON_SECRET_NEXT` remains configured, propagation is incomplete, the predecessor is still accepted, or any replacement is active. |
+| `REPLACEMENTS_ENABLED` | Only from `RECEIVER_PROMOTED_PREDECESSOR_REJECTED`, use one serializable, cron-mutation-fenced final-enable transaction. Revalidate legacy IDs absent, the exact three replacement identities and uniqueness, that wrapper definition fingerprints match the reviewed values, plaintext-header absence, bound receiver-promotion evidence, and that all three replacements are inactive. Activate all three replacements, revalidate every identity/security/active postcondition, and only then commit. | Any stale evidence, concurrent mutation, identity/fingerprint/command drift, duplicate, legacy ID, active precondition, activation error, or failed postcondition aborts the transaction and rolls back to all three replacements inactive. |
 
 The replacement transaction is intentionally different from the fresh-install
 template below. It first validates and pauses the legacy jobs; after drain, it
@@ -121,9 +122,12 @@ all three tuples, stop rather than improvising direct DML against `cron.job`.
 The checked-in security test executes a deterministic synthetic state model for
 the entry gate, atomic pause outcome, drain stop, identity preservation,
 replacement rollback, duplicate/old-ID/plaintext rejection, and direct-wrapper
-single-dispatch invariant. That model is a repository contract test; it does
-not prove the installed pg_cron APIs, lock behavior, privileges, or production
-transaction semantics. Those remain mandatory isolated-rehearsal gates.
+single-dispatch invariant. It also models the future final-enable transaction,
+including partial activation, second/third-job failure, pre-commit drift,
+duplicate insertion, and concurrent mutation. That model is a repository contract test;
+it does not prove the installed pg_cron APIs, lock behavior, privileges, or
+production transaction semantics. Those remain mandatory isolated-rehearsal
+gates.
 
 The following server-side outcomes are required after commit. They are a
 review contract, not a ready-to-run query: exactly three distinct replacement
@@ -142,6 +146,25 @@ invocation/transport/application gate below. It must not activate a schedule.
 If one-dispatch control or exact application evidence is unavailable, do not
 enter `LEGACY_PAUSED`; leave the existing state unchanged and keep production
 rotation **BLOCKED**.
+
+Final activation is a second, separate all-or-none transaction; it is not an
+extension of the controlled dispatch. Under the same reviewed all-cron-mutation
+fence and serializable isolation, it must first rebind the approved tuples and
+prove: legacy IDs `7`, `9`, and `15` remain absent; exactly three unique
+replacement IDs occupy the exact approved name/schedule/owner/database/function
+slug identities; each tuple's wrapper definition fingerprint matches the
+reviewed fingerprint; every replacement command is the fixed wrapper call;
+the reviewed plaintext-header predicate is false across all cron commands;
+receiver-promotion evidence proves the promoted receiver value accepts,
+`CRON_SECRET_NEXT` is absent, and the predecessor rejects; and all three
+replacements are inactive. It then activates all three and repeats the exact
+identity, uniqueness, wrapper-fingerprint, plaintext, legacy-ID, and receiver
+checks plus the all-three-active postcondition before commit. A failure while
+activating the first, second, or third job, a postcondition failure, or detected
+concurrent drift aborts the whole transaction. No partial activation may commit;
+rollback restores and must prove all three replacements inactive. If the fence
+cannot exclude mutation or the inactive rollback state cannot be proved, stop
+as indeterminate and do not retry or activate jobs individually.
 
 Rollback never reinstalls or re-enables a plaintext legacy command. Before the
 replacement transaction commits, database rollback may restore the already
@@ -750,7 +773,11 @@ accepted cron secret, rejected control, API key, and optional JWT to be
 pairwise distinct. It must never derive, copy, or reuse one credential domain
 as another. Each input must already be canonical visible ASCII with no spaces
 or control characters; the harness rejects values that an HTTP implementation
-could trim or normalize. For reviewed `verify_jwt = false`, Authorization is omitted;
+could trim or normalize. The exported verifier revalidates the environment,
+phase, and slot enums and requires every supplied field to be a primitive
+string even when a caller bypasses the typed environment loader; numbers,
+boxed strings, arrays, objects, and other coercible values fail before fetch.
+For reviewed `verify_jwt = false`, Authorization is omitted;
 an independently required Authorization contract needs a separate reviewed
 configuration change rather than an automatic fallback.
 
@@ -814,8 +841,12 @@ For each environment independently:
    persisted. Any missing or ambiguous layer is a silent-failure stop.
 6. Promote the replacement to `CRON_SECRET`, remove `CRON_SECRET_NEXT`, and
    prove the predecessor is rejected while the promoted value is accepted.
-7. Re-enable only the verified jobs. Expire the predecessor in the relevant
-   password manager and selected caller store; retain only non-secret evidence.
+   Only complete, bound evidence for all three facts enters
+   `RECEIVER_PROMOTED_PREDECESSOR_REJECTED`; every replacement remains inactive.
+7. Re-enable all three verified jobs only through the single final-enable
+   transaction defined above. Partial or individual activation is forbidden.
+   Expire the predecessor in the relevant password manager and selected caller
+   store; retain only non-secret evidence.
 
 Rollback is allowed only before predecessor retirement: pause the selected
 caller; for pg_cron restore the predecessor behind the same stable Vault name,

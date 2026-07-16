@@ -77,7 +77,10 @@ function requireInput(readEnvironment: EnvironmentReader, name: string): string 
   return value;
 }
 
-function validateSecretInput(value: string): void {
+function validateSecretInput(value: unknown): asserts value is string {
+  if (typeof value !== "string") {
+    throw new VerificationFailure("invalid_secret_input");
+  }
   const length = encoder.encode(value).byteLength;
   // Fetch normalizes optional whitespace in header values. Limit credentials
   // to one exact, non-normalizing wire representation before comparing them.
@@ -87,6 +90,52 @@ function validateSecretInput(value: string): void {
     !/^[\x21-\x7E]+$/.test(value)
   ) {
     throw new VerificationFailure("invalid_secret_input");
+  }
+}
+
+function validateEnvironment(
+  value: unknown,
+): asserts value is RotationEnvironment {
+  if (
+    typeof value !== "string" ||
+    (value !== "dynamic-staging" && value !== "production")
+  ) {
+    throw new VerificationFailure("invalid_environment");
+  }
+}
+
+function validatePhase(value: unknown): asserts value is VerificationPhase {
+  if (
+    typeof value !== "string" ||
+    (value !== "current" && value !== "overlap-next" &&
+      value !== "retired-old")
+  ) {
+    throw new VerificationFailure("invalid_phase");
+  }
+}
+
+function validateCredentialSlot(
+  value: unknown,
+): asserts value is CredentialSlot {
+  if (
+    typeof value !== "string" ||
+    (value !== "current" && value !== "next")
+  ) {
+    throw new VerificationFailure("invalid_attestation");
+  }
+}
+
+function validateUrlInput(value: unknown): asserts value is string {
+  if (typeof value !== "string") {
+    throw new VerificationFailure("invalid_url");
+  }
+}
+
+function validateOptionalJwt(
+  value: unknown,
+): asserts value is string | undefined {
+  if (value !== undefined && typeof value !== "string") {
+    throw new VerificationFailure("invalid_gateway_input");
   }
 }
 
@@ -249,34 +298,55 @@ export async function verifyCronSecretRotation(
   input: VerificationInput,
   fetcher: ProbeFetch = fetch,
 ): Promise<VerificationResult> {
-  validateAttestation(input.phase, input.acceptedSlot);
-  validateSecretInput(input.acceptedSecret);
-  validateSecretInput(input.rejectedSecret);
-  validateSecretInput(input.apiKey);
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    throw new VerificationFailure("invalid_environment");
+  }
+  // TypeScript's VerificationInput type is erased at runtime. Snapshot every
+  // field as unknown and establish primitive/enumerated identities before URL
+  // parsing, header construction, or any fetch can occur.
+  const candidate = input as unknown as Readonly<Record<string, unknown>>;
+  const environment = candidate.environment;
+  const phase = candidate.phase;
+  const acceptedSlot = candidate.acceptedSlot;
+  const rawUrl = candidate.url;
+  const acceptedSecret = candidate.acceptedSecret;
+  const rejectedSecret = candidate.rejectedSecret;
+  const apiKey = candidate.apiKey;
+  const jwt = candidate.jwt;
+
+  validateEnvironment(environment);
+  validatePhase(phase);
+  validateCredentialSlot(acceptedSlot);
+  validateUrlInput(rawUrl);
+  validateSecretInput(acceptedSecret);
+  validateSecretInput(rejectedSecret);
+  validateSecretInput(apiKey);
+  validateOptionalJwt(jwt);
+  validateAttestation(phase, acceptedSlot);
   validateCredentialDomains(
-    input.acceptedSecret,
-    input.rejectedSecret,
-    input.apiKey,
-    input.jwt,
+    acceptedSecret,
+    rejectedSecret,
+    apiKey,
+    jwt,
   );
   const { url, projectRef, functionSlug, verifyJwt } = reviewedUrl(
-    input.url,
-    input.environment,
+    rawUrl,
+    environment,
   );
   if (verifyJwt) {
-    if (input.jwt === undefined || !isJwtShaped(input.jwt)) {
+    if (jwt === undefined || !isJwtShaped(jwt)) {
       throw new VerificationFailure("invalid_gateway_input");
     }
-  } else if (input.jwt !== undefined) {
+  } else if (jwt !== undefined) {
     throw new VerificationFailure("invalid_gateway_input");
   }
 
   for (let repetition = 0; repetition < PROBE_REPETITIONS; repetition += 1) {
     const accepted = await probe(
       url,
-      input.acceptedSecret,
-      input.apiKey,
-      input.jwt,
+      acceptedSecret,
+      apiKey,
+      jwt,
       fetcher,
     );
     if (accepted.status !== 204 || !accepted.cacheControlNoStore) {
@@ -284,9 +354,9 @@ export async function verifyCronSecretRotation(
     }
     const rejected = await probe(
       url,
-      input.rejectedSecret,
-      input.apiKey,
-      input.jwt,
+      rejectedSecret,
+      apiKey,
+      jwt,
       fetcher,
     );
     if (rejected.status !== 401 || !rejected.cacheControlNoStore) {
@@ -296,11 +366,11 @@ export async function verifyCronSecretRotation(
 
   return {
     verification_version: 1,
-    environment: input.environment,
+    environment,
     project_ref: projectRef,
     function_slug: functionSlug,
-    phase_attestation: input.phase,
-    accepted_slot_attestation: input.acceptedSlot,
+    phase_attestation: phase,
+    accepted_slot_attestation: acceptedSlot,
     reviewed_expected_verify_jwt: verifyJwt,
     api_key_sent: true,
     authorization_sent: verifyJwt,
