@@ -452,7 +452,7 @@ def has_direct_cron_job_dml(text: str) -> bool:
             if matched is None:
                 continue
             position = skip_sql_token_gap(text, matched)
-        if command in {"insert", "update", "delete"}:
+        if command in {"update", "delete"}:
             only = match_sql_keyword(text, position, "only")
             if only is not None:
                 position = skip_sql_token_gap(text, only)
