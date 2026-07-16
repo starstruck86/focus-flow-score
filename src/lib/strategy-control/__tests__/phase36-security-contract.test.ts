@@ -42,16 +42,18 @@ const AUTH_PATTERNS = [
 
 const PUBLIC_METADATA_FUNCTIONS = new Set(["version"]);
 
-type ReviewedCronReceiverBoundary = Readonly<{
+type ReviewedLexicalCronReceiverBinding = Readonly<{
   factory: string;
   handlerPath: string;
   serverCall: "Deno.serve" | "serve";
   allowNonCronRequests: boolean;
 }>;
 
-const REVIEWED_CRON_RECEIVER_BOUNDARIES = new Map<
+// This is a narrow lexical drift guard over reviewed source files. It does not
+// build a module graph, prove call reachability, or attest deployed code.
+const REVIEWED_CRON_RECEIVER_BINDINGS = new Map<
   string,
-  ReviewedCronReceiverBoundary
+  ReviewedLexicalCronReceiverBinding
 >([
   [
     "daily-digest",
@@ -82,11 +84,11 @@ const REVIEWED_CRON_RECEIVER_BOUNDARIES = new Map<
   ],
 ]);
 
-function hasReviewedCronReceiverBoundary(
+function hasReviewedLexicalCronReceiverBinding(
   name: string,
   indexSource: string,
 ): boolean {
-  const reviewed = REVIEWED_CRON_RECEIVER_BOUNDARIES.get(name);
+  const reviewed = REVIEWED_CRON_RECEIVER_BINDINGS.get(name);
   if (!reviewed) return false;
 
   const handlerSource = fs.readFileSync(
@@ -122,8 +124,8 @@ function hasAuthOrApprovedPublicMetadata(
   name: string,
   source: string,
 ): boolean {
-  if (REVIEWED_CRON_RECEIVER_BOUNDARIES.has(name)) {
-    return hasReviewedCronReceiverBoundary(name, source);
+  if (REVIEWED_CRON_RECEIVER_BINDINGS.has(name)) {
+    return hasReviewedLexicalCronReceiverBinding(name, source);
   }
   return AUTH_PATTERNS.some(pattern => pattern.test(source)) ||
     PUBLIC_METADATA_FUNCTIONS.has(name);
@@ -150,16 +152,16 @@ describe("Phase 3.6 — Security Contract", () => {
   });
 
   describe("Auth Enforcement", () => {
-    it("reviewed cron receivers bind their exact shared auth boundary", () => {
-      expect([...REVIEWED_CRON_RECEIVER_BOUNDARIES.keys()]).toEqual([
+    it("reviewed cron receivers retain their lexical shared-auth binding", () => {
+      expect([...REVIEWED_CRON_RECEIVER_BINDINGS.keys()]).toEqual([
         "daily-digest",
         "run-strategy-task-reaper",
         "schedule-daily-plan",
       ]);
-      for (const name of REVIEWED_CRON_RECEIVER_BOUNDARIES.keys()) {
+      for (const name of REVIEWED_CRON_RECEIVER_BINDINGS.keys()) {
         const source = readEdgeFunctionSource(name);
         expect(source).not.toBeNull();
-        expect(hasReviewedCronReceiverBoundary(name, source!)).toBe(true);
+        expect(hasReviewedLexicalCronReceiverBinding(name, source!)).toBe(true);
       }
     });
 

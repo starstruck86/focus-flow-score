@@ -63,7 +63,9 @@ exactly one caller branch:
    privileges, job identity, wrapper identity, secure Vault update mechanism,
    and pg_net response retention have been rehearsed. Only this branch may use
    the SQL template below, and only under a later database-mutation
-   authorization.
+   authorization. A legacy pg_cron caller with a plaintext header does not yet
+   qualify for this branch; it must use the production handoff below before it
+   can become a verified Vault-backed caller.
 3. **Other external caller.** The caller owner rotates its own protected secret
    store and dispatch configuration out of band. Do not install the database
    scheduler as a substitute. Require the same acceptance/rejection probes,
@@ -73,6 +75,83 @@ exactly one caller branch:
 If the caller branch is unknown or mixed, stop. In particular,
 `dynamic-staging` currently has zero discovered cron jobs; it must not gain a
 scheduler as a side effect of credential containment.
+
+### Production legacy-sender handoff
+
+Sanitized production evidence supplied for this review, but not independently
+observed by this repository work, identifies legacy job IDs `7`, `9`, and `15`.
+The evidence classifies all three as active Edge Function callers whose command
+text constructs an `x-cron-secret` header and does not read Vault. It does not
+expose command text or credential values. This is neither the no-caller branch
+nor the already-Vault-backed form of the pg_cron branch. Production rotation is
+**BLOCKED** until Corey plus Lovable Support/admin execute and evidence the
+following legacy-to-Vault handoff through the secure production management
+surface under a separate mutation authorization.
+
+Treat the handoff as a state machine. Failure before `LEGACY_PAUSED` makes no
+mutation and does not claim the legacy jobs stopped; once `LEGACY_PAUSED` is
+proved, every later failure leaves all affected jobs inactive. No later state
+may be entered by operator attestation alone. While
+`LEGACY_HANDOFF_MUTATION_GATE` or `CONTROLLED_DISPATCH_GATE` is `BLOCKED`, the
+actors may collect `LEGACY_IDENTITY_BOUND` evidence but must not enter
+`LEGACY_PAUSED`, invoke a wrapper, unschedule a job, or create a replacement:
+
+| State | Required evidence and action | Stop condition |
+| --- | --- | --- |
+| `LEGACY_IDENTITY_BOUND` | Bind exactly IDs `7`, `9`, and `15` to their non-secret `jobname`, `schedule`, `username`, `database`, and reviewed function slug. Prove each tuple is unique and no other job occupies a tuple or name. Inspect legacy commands only through reviewed server-side booleans; never return command text. | Any ID is absent, extra, inactive unexpectedly, ambiguous, duplicated, or has an unreviewed caller shape. |
+| `LEGACY_PAUSED` | Under an enforced all-cron-mutation gate, call the installed `cron.alter_job` interface to set all three IDs inactive, then prove all three are inactive before releasing the transaction. Do not edit `cron.job` directly. | Any job cannot be paused atomically or another scheduler can race the gate. |
+| `LEGACY_DRAINED` | Outside a sleeping database RPC, poll bounded sanitized evidence until every run that began before the pause has a closed interval and every associated pg_net request is terminal. Record counts/booleans only. | An open run/request remains, response retention cannot cover the interval, or an old request cannot be correlated safely. |
+| `VAULT_SENDER_READY` | Install and verify one parameter-free private wrapper per bound job/function-slug tuple, including its distinct fixed endpoint, Vault names, roles, ACLs, gateway configuration, and definition fingerprint, while the legacy jobs remain inactive. No scheduled command changes yet. | Any secret source, tuple-to-wrapper mapping, wrapper identity, endpoint, privilege, or installed extension interface is uncertain. |
+| `REPLACEMENT_COMMITTED_INACTIVE` | In one serializable, cron-mutation-fenced transaction, revalidate the bound tuples; unschedule IDs `7`, `9`, and `15`; create one replacement per original tuple with the same name, schedule, owner, database, and function slug; set every replacement inactive; and require its command to equal only that tuple's fixed wrapper call. | The installed pg_cron APIs cannot preserve owner/database identity, any tuple or endpoint mapping changes, any replacement is active, or the whole transaction cannot roll back on a failed postcondition. |
+| `REPLACEMENT_VERIFIED_INACTIVE` | Prove old IDs are absent, exactly one inactive replacement occupies each bound tuple, every replacement command equals its tuple-bound reviewed wrapper call, and no cron command contains an `x-cron-secret` header construction. Re-run every wrapper owner/ACL/definition check. | Any duplicate, old ID, plaintext-header command, identity/endpoint mismatch, or non-wrapper command remains. |
+| `CONTROLLED_DISPATCH_VERIFIED` | After the application-receipt and mutation gates are separately cleared, keep every replacement schedule inactive and invoke the reviewed fixed wrapper directly exactly once under a separate authorization. Bind that database invocation to its pg_net request and exact application receipt/effect. Never activate a schedule to perform this probe. | A schedule becomes active, more than one wrapper invocation occurs, or any direct-invocation, transport, or application proof is missing or ambiguous. |
+| `REPLACEMENTS_ENABLED` | Only after all three inactive identities and the controlled dispatch pass, activate the reviewed replacement set and prove the legacy IDs remain absent. | Any replacement or receiver gate is incomplete. |
+
+The replacement transaction is intentionally different from the fresh-install
+template below. It first validates and pauses the legacy jobs; after drain, it
+uses the installed `cron.unschedule` interface for each bound old ID and then
+the rehearsed `cron.schedule` or `cron.schedule_in_database` interface needed
+to reproduce the approved owner/database identity. Unscheduling and replacement
+creation occur under one lock and one serializable transaction, so no committed
+state contains both an old and replacement schedule. Each new job is disabled
+before commit. Successful unscheduling retires the three old job IDs; they are
+never reused. If the installed interfaces cannot provide those semantics for
+all three tuples, stop rather than improvising direct DML against `cron.job`.
+
+The checked-in security test executes a deterministic synthetic state model for
+the entry gate, atomic pause outcome, drain stop, identity preservation,
+replacement rollback, duplicate/old-ID/plaintext rejection, and direct-wrapper
+single-dispatch invariant. That model is a repository contract test; it does
+not prove the installed pg_cron APIs, lock behavior, privileges, or production
+transaction semantics. Those remain mandatory isolated-rehearsal gates.
+
+The following server-side outcomes are required after commit. They are a
+review contract, not a ready-to-run query: exactly three distinct replacement
+IDs; zero rows for old IDs `7`, `9`, and `15`; exactly one row for each approved
+`(jobname, schedule, username, database, reviewed function slug)` tuple; every
+replacement inactive; every command exactly its tuple-bound fixed wrapper call; and
+`count(*) filter (where position('x-cron-secret' in lower(command)) > 0) = 0`
+across `cron.job`. Return only counts and booleans. This last check proves the
+reviewed plaintext-header construction is absent; it is not a general secret
+scanner and does not expose commands.
+
+Inactive catalog verification proves installation shape only; it is not a
+successful sender rotation. Only after the fixed gates are cleared may the
+one-shot direct wrapper dispatch meet the three-layer
+invocation/transport/application gate below. It must not activate a schedule.
+If one-dispatch control or exact application evidence is unavailable, do not
+enter `LEGACY_PAUSED`; leave the existing state unchanged and keep production
+rotation **BLOCKED**.
+
+Rollback never reinstalls or re-enables a plaintext legacy command. Before the
+replacement transaction commits, database rollback may restore the already
+paused legacy rows, but they remain inactive and the handoff is incomplete.
+After commit, keep the replacement jobs inactive and either restore the last
+accepted receiver/caller value behind the same reviewed Vault name or install a
+corrected reviewed wrapper/replacement while preserving the bound non-secret
+tuples. Do not recreate IDs `7`, `9`, or `15`, interpolate a secret into a cron
+command, or reactivate a legacy sender. After predecessor retirement, roll
+forward under a new incident decision.
 
 ## Secret-free sender template
 
@@ -150,8 +229,16 @@ begin
   where name = '__REQUIRED_CRON_SECRET_VAULT_NAME__';
 
   if v_api_key is null or v_api_key = ''
-     or v_cron_secret is null or v_cron_secret = '' then
+     or v_cron_secret is null or v_cron_secret = ''
+     or pg_catalog.octet_length(v_api_key) <> pg_catalog.length(v_api_key)
+     or pg_catalog.octet_length(v_cron_secret) <> pg_catalog.length(v_cron_secret)
+     or v_api_key !~ '^[!-~]+$'
+     or v_cron_secret !~ '^[!-~]+$' then
     raise exception 'required cron dispatch configuration is unavailable';
+  end if;
+
+  if v_api_key = v_cron_secret then
+    raise exception 'credential domains must be distinct';
   end if;
 
   v_headers := pg_catalog.jsonb_build_object(
@@ -166,7 +253,11 @@ begin
     where name = '__REQUIRED_GATEWAY_JWT_VAULT_NAME__';
 
     if v_gateway_jwt is null or v_gateway_jwt = ''
-       or v_gateway_jwt = v_api_key then
+       or pg_catalog.octet_length(v_gateway_jwt) <>
+         pg_catalog.length(v_gateway_jwt)
+       or v_gateway_jwt !~ '^[!-~]+$'
+       or v_gateway_jwt = v_api_key
+       or v_gateway_jwt = v_cron_secret then
       raise exception 'required gateway JWT is unavailable';
     end if;
 
@@ -248,6 +339,135 @@ $schedule$;
 commit;
 ```
 
+The recurring sender has no rejected-control input: the rejected control is a
+verification credential, not an operational sender dependency, and must never
+appear in a scheduled command or accepted dispatch. Its complete live domain
+set is therefore the accepted cron secret, API key, and optional gateway JWT,
+which the wrapper checks pairwise before `net.http_post`.
+
+The following controlled SQL wrapper is also a non-executable template. It
+resolves accepted, rejected-control, API-key, and optional JWT values from four
+independently named Vault entries, validates the exact header representation,
+and compares all supplied domains before `net.http_post`. It must never be
+installed as a recurring schedule. The template does not itself enforce a
+single invocation; the application-receipt and controlled-SQL gates therefore
+block either branch from deployment or invocation:
+
+```sql
+begin;
+set local role __REQUIRED_DEFINER_OWNER__;
+
+create function __REQUIRED_PRIVATE_SCHEMA__.invoke_reviewed_cron_probe(
+  p_use_rejected_control boolean
+)
+returns table (attempt_id uuid, request_id bigint)
+language plpgsql
+security definer
+set search_path = ''
+as $controlled_probe$
+declare
+  v_attempt_id uuid := pg_catalog.gen_random_uuid();
+  v_project_origin constant text := 'https://__REQUIRED_PROJECT_REF__.supabase.co';
+  v_verify_jwt constant boolean := __REQUIRED_VERIFY_JWT_TRUE_OR_FALSE__;
+  v_accepted_secret text;
+  v_rejected_control text;
+  v_api_key text;
+  v_gateway_jwt text;
+  v_dispatch_secret text;
+  v_headers jsonb;
+  v_request_id bigint;
+begin
+  select decrypted_secret into strict v_accepted_secret
+  from vault.decrypted_secrets
+  where name = '__REQUIRED_ACCEPTED_CRON_SECRET_VAULT_NAME__';
+
+  select decrypted_secret into strict v_rejected_control
+  from vault.decrypted_secrets
+  where name = '__REQUIRED_REJECTED_CONTROL_VAULT_NAME__';
+
+  select decrypted_secret into strict v_api_key
+  from vault.decrypted_secrets
+  where name = '__REQUIRED_API_KEY_VAULT_NAME__';
+
+  if v_verify_jwt then
+    select decrypted_secret into strict v_gateway_jwt
+    from vault.decrypted_secrets
+    where name = '__REQUIRED_GATEWAY_JWT_VAULT_NAME__';
+  end if;
+
+  if p_use_rejected_control is null
+     or v_accepted_secret is null or v_accepted_secret = ''
+     or v_rejected_control is null or v_rejected_control = ''
+     or v_api_key is null or v_api_key = ''
+     or pg_catalog.octet_length(v_accepted_secret) <>
+       pg_catalog.length(v_accepted_secret)
+     or pg_catalog.octet_length(v_rejected_control) <>
+       pg_catalog.length(v_rejected_control)
+     or pg_catalog.octet_length(v_api_key) <> pg_catalog.length(v_api_key)
+     or v_accepted_secret !~ '^[!-~]+$'
+     or v_rejected_control !~ '^[!-~]+$'
+     or v_api_key !~ '^[!-~]+$'
+     or v_accepted_secret = v_rejected_control
+     or v_accepted_secret = v_api_key
+     or v_rejected_control = v_api_key
+     or (v_verify_jwt and v_gateway_jwt is null)
+     or (
+       v_gateway_jwt is not null
+       and (
+         v_gateway_jwt = ''
+         or pg_catalog.octet_length(v_gateway_jwt) <>
+           pg_catalog.length(v_gateway_jwt)
+         or v_gateway_jwt !~ '^[!-~]+$'
+         or v_gateway_jwt = v_accepted_secret
+         or v_gateway_jwt = v_rejected_control
+         or v_gateway_jwt = v_api_key
+       )
+     ) then
+    raise exception 'credential domains must be distinct';
+  end if;
+
+  v_dispatch_secret := case
+    when p_use_rejected_control then v_rejected_control
+    else v_accepted_secret
+  end;
+  v_headers := pg_catalog.jsonb_build_object(
+    'content-type', 'application/json',
+    'apikey', v_api_key,
+    'x-cron-secret', v_dispatch_secret
+  );
+  if v_gateway_jwt is not null then
+    v_headers := v_headers || pg_catalog.jsonb_build_object(
+      'authorization', 'Bearer ' || v_gateway_jwt
+    );
+  end if;
+
+  select net.http_post(
+    url := v_project_origin || '/functions/v1/__REQUIRED_FUNCTION_SLUG__',
+    headers := v_headers,
+    body := pg_catalog.jsonb_build_object('cron_attempt_id', v_attempt_id),
+    timeout_milliseconds := 10000
+  ) into strict v_request_id;
+  if v_request_id is null then
+    raise exception 'pg_net did not return a request identifier';
+  end if;
+  return query select v_attempt_id, v_request_id;
+end;
+$controlled_probe$;
+
+revoke all on function
+  __REQUIRED_PRIVATE_SCHEMA__.invoke_reviewed_cron_probe(boolean)
+  from public, anon, authenticated;
+
+commit;
+```
+
+The controlled wrapper requires the same exact owner, ACL, `SECURITY DEFINER`,
+empty-`search_path`, fixed-endpoint, and reviewed-definition checks as the
+recurring wrapper. This template grants execute to no operator role and remains
+owner-only and blocked. A later design must add an exact one-shot role/grant and
+durable single-invocation enforcement before clearing the gate. Creation and
+revocation stay in one transaction so a default PUBLIC grant is never committed.
+
 Before use, strictly validate every replacement marker by class, and verify the
 target's installed extension versions, exact `cron.alter_job` signature,
 transaction behavior, Vault/pg_net privileges, response retention, job role,
@@ -265,7 +485,9 @@ through an unreviewed role transition. Object creation, job-name precondition,
 scheduling, disablement, and exact postcondition are one transaction: a failed
 role entry, serialization/locking gate, or later check rolls back the whole
 installation. The API key and gateway JWT are independent, unequal inputs with
-separate Vault names and lifecycle checks. Never copy an opaque publishable API key into
+separate Vault names and lifecycle checks. Every header credential must use
+visible ASCII bytes only so HTTP optional-whitespace normalization cannot make
+two distinct inputs equal on the wire. Never copy an opaque publishable API key into
 `Authorization`. For an effectively reviewed `verify_jwt = true` deployment,
 set `v_verify_jwt` true and supply a separately obtained, currently valid JWT.
 For a reviewed `verify_jwt = false` deployment, leave Authorization absent by
@@ -439,11 +661,59 @@ Ambiguity is a stop.
 A `2xx` pg_net response proves transport, not application completion. Each
 enabled job must therefore have a pre-approved deterministic effect check using
 counts, timestamps, or server-side booleans only. The three required proof
-layers are: (1) the exact cron run's sanitized database-execution evidence,
+layers are: (1) the selected cron run's sanitized database-execution evidence,
 (2) the exact request ID's sanitized pg_net `2xx`, no-timeout, and no-error
 evidence, and (3) the correlated application receipt/effect. If no safe expected
 effect or durable application receipt exists, the job remains disabled and
 rotation verification is incomplete.
+
+### Application-receipt boundary
+
+The repository does not currently implement an exact, durable,
+attempt-ID-bound application receipt for any of the three receivers:
+
+| Receiver | Attempt-bound receipt status |
+| --- | --- |
+| `daily-digest` | `NOT_IMPLEMENTED` |
+| `run-strategy-task-reaper` | `NOT_IMPLEMENTED` |
+| `schedule-daily-plan` | `NOT_IMPLEMENTED` |
+
+Although the sender template places `cron_attempt_id` in the request body, the
+receivers do not currently validate and durably claim that UUID or persist a
+non-secret terminal result keyed to it. Success, failure, duplicate attempt ID,
+and legitimate no-op semantics therefore remain unresolved. A `2xx`, a changed
+business-row count, or the absence of a change must not be relabeled as an
+exact attempt-bound application receipt.
+
+A post-effect receipt write would not close this gap: business effects could
+succeed and the receipt write could fail. A pre-effect claim alone would not
+close it either: a crash could leave an indeterminate claim, and a duplicate
+could repeat non-transactional model, HTTP, or multi-table effects. Closing the
+gap requires a separately reviewed private receipt schema plus domain-specific
+idempotency and reconciliation for all four outcomes. It must prove that a
+duplicate cannot repeat effects, that a legitimate no-op is distinguishable
+from failure, and that partial failure remains visibly indeterminate rather
+than successful.
+
+These fixed gates apply until separately reviewed application-receipt and
+controlled-SQL-verification implementations, including synthetic
+success/failure/duplicate/no-op and pre-dispatch domain tests, exist:
+
+```text
+APPLICATION_RECEIPT_STATUS: NOT_IMPLEMENTED
+CONTROLLED_SQL_VERIFICATION_STATUS: TEMPLATE_ONLY_BLOCKED
+SENDER_ACTIVATION_GATE: BLOCKED
+CONTROLLED_DISPATCH_GATE: BLOCKED
+LEGACY_HANDOFF_MUTATION_GATE: BLOCKED
+PRODUCTION_ROTATION_GATE: BLOCKED
+```
+
+The `HEAD` harness may establish receiver-key acceptance and rejection only.
+It cannot clear any of these gates. The confirmed-no-caller branch may rotate
+and retire the receiver-side value without installing or activating a sender,
+but no environment may enable a sender or claim completed end-to-end rotation
+from this PR. Production remains blocked additionally on caller inventory and
+Corey/Lovable management access.
 
 The `net._http_response` relation is internal and version-specific. A missing
 row is ambiguous among pending, expired/purged, and never processed. Verify its
@@ -468,11 +738,19 @@ environment, never inline in shell history:
 
 The harness binds the allowlisted environment to its exact reviewed project
 host, one of the three reviewed function slugs, and the slug's reviewed
-checked-in `verify_jwt` setting before sending either input. Effective deployed
-gateway behavior remains a separate empirical precondition. The API key is
+expected checked-in `verify_jwt` setting before sending either input. This is
+reported only as `reviewed_expected_verify_jwt`; it is not an observation of
+deployed runtime configuration. CI binds the harness map to the effective
+setting in `supabase/config.toml` and the corresponding collected repository
+entry in `docs/migration/edge-functions.json`. Effective deployed gateway
+behavior remains a separate empirical precondition. The API key is
 sent only as `apikey`; the independently supplied JWT is sent only as
-`Authorization: Bearer ...`. The harness must never derive, copy, or reuse the
-API key as the JWT and rejects equal inputs before any request. For reviewed `verify_jwt = false`, Authorization is omitted;
+`Authorization: Bearer ...`. Before any request, the harness requires the
+accepted cron secret, rejected control, API key, and optional JWT to be
+pairwise distinct. It must never derive, copy, or reuse one credential domain
+as another. Each input must already be canonical visible ASCII with no spaces
+or control characters; the harness rejects values that an HTTP implementation
+could trim or normalize. For reviewed `verify_jwt = false`, Authorization is omitted;
 an independently required Authorization contract needs a separate reviewed
 configuration change rather than an automatic fallback.
 
@@ -496,12 +774,14 @@ For each environment independently:
 1. The named actor inventories receiver deployments, effective JWT settings,
    active callers, and safe effect checks, then records exactly one caller
    branch from the decision above. For the pg_cron branch also verify extension
-   versions, Vault availability, wrapper identity, and response retention. Pause
-   only confirmed callers/jobs and drain in-flight requests. Zero discovered
+   versions, Vault availability, wrapper identity, and response retention. This
+   inventory step performs no pause or drain; those actions require the selected
+   branch's cleared mutation gate and separate authorization. Zero discovered
    staging cron jobs is not permission to create one.
-2. The actor generates a new environment-specific value in an approved password
-   manager and adds it as `CRON_SECRET_NEXT` through the environment's secure
-   function-secret surface. The value never passes through Codex or Git.
+2. The actor generates a new environment-specific, visible-ASCII URL-safe value
+   in an approved password manager and adds it as `CRON_SECRET_NEXT` through the
+   environment's secure function-secret surface. The value never passes through
+   Codex or Git.
 3. Deploy the reviewed dual-key receiver. Run the harness with the current key
    accepted and a known-invalid key rejected, then with the next key accepted.
    Each accepted/rejected pairing must pass the required repeated propagation
@@ -514,15 +794,24 @@ For each environment independently:
      management API. First verify the installed Vault API and its atomic update
      behavior. The fixed wrapper and `cron.job.command` do not change, and
      decrypted bytes are never interpolated into job SQL.
+   - **Production legacy pg_cron transition:** do not apply the preceding
+     already-Vault-backed shortcut or the fresh-install same-name precondition.
+     While `LEGACY_HANDOFF_MUTATION_GATE` is `BLOCKED`, stop before
+     `LEGACY_PAUSED`; do not pause, drain, invoke, unschedule, replace, or
+     enable a job. Only after a separately reviewed receipt implementation and
+     explicit mutation authorization clear the gate may the actor follow the
+     production legacy-sender state machine above.
    - **External caller:** its named owner updates the replacement in that
      system's protected secret store and proves the exact reviewed dispatch
      configuration. No database scheduler is created.
-5. For a caller branch, run one controlled dispatch. Require the three proof
-   layers: exact cron/external execution evidence, exact sanitized HTTP
-   transport correlation, and the job-specific application effect. The cron
-   execution layer is replaced by the external scheduler's equivalent evidence
-   for an external caller. Any missing or ambiguous layer is a silent-failure
-   stop.
+5. A caller branch stops here while `CONTROLLED_DISPATCH_GATE` is `BLOCKED`.
+   Only a separately reviewed attempt-bound receipt implementation may clear
+   that gate. After it does, one later-authorized controlled dispatch must
+   produce three proof layers: the applicable reviewed cron-run, direct-wrapper,
+   or external-caller execution evidence; exact sanitized HTTP transport
+   correlation; and the job-specific attempt-bound application receipt/effect.
+   Run-to-attempt evidence remains `INFERRED` unless an exact identifier is
+   persisted. Any missing or ambiguous layer is a silent-failure stop.
 6. Promote the replacement to `CRON_SECRET`, remove `CRON_SECRET_NEXT`, and
    prove the predecessor is rejected while the promoted value is accepted.
 7. Re-enable only the verified jobs. Expire the predecessor in the relevant

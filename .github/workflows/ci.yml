@@ -10,7 +10,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Verify tracked schema credential containment
+      - name: Verify repository security contracts
         run: |
           python3 - <<'PY'
           from pathlib import Path

@@ -55,7 +55,10 @@ Deno.test("verify_jwt=false probes repeat with API key and no Authorization", as
   assert(result.result === "PASS", "expected a passing verification");
   assert(result.project_ref === "uujkmcbqavsmzhnbqvmm", "project binding missing");
   assert(result.function_slug === "daily-digest", "function binding missing");
-  assert(result.verify_jwt === false, "reviewed gateway mode missing");
+  assert(
+    result.reviewed_expected_verify_jwt === false,
+    "reviewed expected gateway mode missing",
+  );
   assert(result.authorization_sent === false, "Authorization evidence incorrect");
   assert(result.probe_repetitions === 3, "propagation count missing");
 });
@@ -81,7 +84,10 @@ Deno.test("verify_jwt=true uses a separately supplied JWT", async () => {
 
   const result = await verifyCronSecretRotation(input, fetcher);
   assert(calls === 6, "repeated gateway probes missing");
-  assert(result.verify_jwt === true, "reviewed gateway mode missing");
+  assert(
+    result.reviewed_expected_verify_jwt === true,
+    "reviewed expected gateway mode missing",
+  );
   assert(result.authorization_sent === true, "JWT evidence missing");
 });
 
@@ -90,8 +96,7 @@ Deno.test("gateway inputs fail closed before fetch", async () => {
     "https://uujkmcbqavsmzhnbqvmm.supabase.co/functions/v1/run-strategy-task-reaper";
   const cases = [
     { ...baseInput, url: trueUrl },
-    { ...baseInput, url: trueUrl, jwt: apiKey },
-    { ...baseInput, url: trueUrl, apiKey: jwt, jwt },
+    { ...baseInput, url: trueUrl, jwt: "synthetic-not-jwt-shaped" },
     { ...baseInput, jwt },
   ];
   for (const input of cases) {
@@ -106,6 +111,138 @@ Deno.test("gateway inputs fail closed before fetch", async () => {
       assert(safeFailureReason(error) === "invalid_gateway_input", "wrong reason");
       assert(calls === 0, "invalid gateway input must fail before fetch");
     }
+  }
+});
+
+Deno.test("credential domains are pairwise distinct before fetch", async () => {
+  const trueUrl =
+    "https://uujkmcbqavsmzhnbqvmm.supabase.co/functions/v1/run-strategy-task-reaper";
+  const jwtA = "domainA.payload.signature";
+  const jwtB = "domainB.payload.signature";
+  const cases = [
+    {
+      label: "accepted_equals_rejected",
+      input: { ...baseInput, rejectedSecret: acceptedSecret },
+    },
+    {
+      label: "accepted_equals_public_api_key",
+      input: { ...baseInput, acceptedSecret: apiKey },
+    },
+    {
+      label: "rejected_equals_public_api_key",
+      input: { ...baseInput, rejectedSecret: apiKey },
+    },
+    {
+      label: "accepted_equals_jwt",
+      input: {
+        ...baseInput,
+        url: trueUrl,
+        acceptedSecret: jwtA,
+        jwt: jwtA,
+      },
+    },
+    {
+      label: "rejected_equals_jwt",
+      input: {
+        ...baseInput,
+        url: trueUrl,
+        rejectedSecret: jwtA,
+        jwt: jwtA,
+      },
+    },
+    {
+      label: "api_key_equals_jwt",
+      input: {
+        ...baseInput,
+        url: trueUrl,
+        apiKey: jwtB,
+        jwt: jwtB,
+      },
+    },
+  ];
+  for (const { label, input } of cases) {
+    let calls = 0;
+    try {
+      await verifyCronSecretRotation(input, async () => {
+        calls += 1;
+        return noStoreResponse(204);
+      });
+      throw new Error("expected failure");
+    } catch (error) {
+      assert(
+        safeFailureReason(error) === "invalid_credential_domain",
+        `wrong credential-domain reason for ${label}`,
+      );
+      assert(calls === 0, `${label} must fail before fetch`);
+    }
+  }
+});
+
+Deno.test("header normalization cannot alias credential domains", async () => {
+  const cases = [
+    { ...baseInput, acceptedSecret: ` ${apiKey}` },
+    { ...baseInput, rejectedSecret: `${apiKey}\t` },
+    { ...baseInput, apiKey: `${acceptedSecret}\n` },
+  ];
+  for (const input of cases) {
+    let calls = 0;
+    try {
+      await verifyCronSecretRotation(input, async () => {
+        calls += 1;
+        return noStoreResponse(204);
+      });
+      throw new Error("expected failure");
+    } catch (error) {
+      assert(
+        safeFailureReason(error) === "invalid_secret_input",
+        "noncanonical header credential must fail closed",
+      );
+      assert(calls === 0, "header normalization risk must fail before fetch");
+    }
+  }
+});
+
+Deno.test("environment credential reuse fails during input loading", () => {
+  const environment = falseModeEnvironment();
+  environment.set("CRON_VERIFY_ACCEPT_SECRET", apiKey);
+  try {
+    loadVerificationInput((name) => environment.get(name));
+    throw new Error("expected failure");
+  } catch (error) {
+    assert(
+      safeFailureReason(error) === "invalid_credential_domain",
+      "environment credential reuse must be canonical",
+    );
+  }
+});
+
+Deno.test("credential-domain CLI failure is canonical and nonleaking", async () => {
+  const environment = falseModeEnvironment();
+  environment.set("CRON_VERIFY_ACCEPT_SECRET", apiKey);
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  let calls = 0;
+  const exitCode = await runCli(
+    (name) => environment.get(name),
+    async () => {
+      calls += 1;
+      return noStoreResponse(204);
+    },
+    (line) => stdout.push(line),
+    (line) => stderr.push(line),
+  );
+  const visible = JSON.stringify({ stdout, stderr });
+  assert(exitCode === 1, "credential-domain reuse must fail");
+  assert(calls === 0, "credential-domain reuse must fail before fetch");
+  assert(stdout.length === 0, "failure must not write stdout");
+  assert(
+    stderr.length === 1 &&
+      stderr[0] ===
+        '{"verification_version":1,"result":"FAIL","reason":"invalid_credential_domain"}',
+    "credential-domain diagnostic must be canonical",
+  );
+  for (const sentinel of [acceptedSecret, rejectedSecret, apiKey, baseInput.url]) {
+    assert(!visible.includes(sentinel), "credential-domain input must not escape");
   }
 });
 

@@ -5,10 +5,10 @@ const ENVIRONMENT_PROJECT_REFS = Object.freeze({
   "dynamic-staging": "uujkmcbqavsmzhnbqvmm",
   production: "odbjjklumdsuqdvkgwyv",
 } as const);
-const REVIEWED_FUNCTIONS = Object.freeze({
-  "daily-digest": Object.freeze({ verifyJwt: false }),
-  "run-strategy-task-reaper": Object.freeze({ verifyJwt: true }),
-  "schedule-daily-plan": Object.freeze({ verifyJwt: true }),
+const REVIEWED_EXPECTED_FUNCTIONS = Object.freeze({
+  "daily-digest": Object.freeze({ reviewedExpectedVerifyJwt: false }),
+  "run-strategy-task-reaper": Object.freeze({ reviewedExpectedVerifyJwt: true }),
+  "schedule-daily-plan": Object.freeze({ reviewedExpectedVerifyJwt: true }),
 } as const);
 
 export type RotationEnvironment = "dynamic-staging" | "production";
@@ -33,7 +33,7 @@ export type VerificationResult = Readonly<{
   function_slug: string;
   phase_attestation: VerificationPhase;
   accepted_slot_attestation: CredentialSlot;
-  verify_jwt: boolean;
+  reviewed_expected_verify_jwt: boolean;
   api_key_sent: true;
   authorization_sent: boolean;
   probe_repetitions: 3;
@@ -50,6 +50,7 @@ type FailureReason =
   | "invalid_attestation"
   | "invalid_url"
   | "invalid_secret_input"
+  | "invalid_credential_domain"
   | "invalid_gateway_input"
   | "accepted_probe_failed"
   | "rejected_probe_failed"
@@ -78,8 +79,32 @@ function requireInput(readEnvironment: EnvironmentReader, name: string): string 
 
 function validateSecretInput(value: string): void {
   const length = encoder.encode(value).byteLength;
-  if (length === 0 || length > MAX_SECRET_BYTES) {
+  // Fetch normalizes optional whitespace in header values. Limit credentials
+  // to one exact, non-normalizing wire representation before comparing them.
+  if (
+    length === 0 ||
+    length > MAX_SECRET_BYTES ||
+    !/^[\x21-\x7E]+$/.test(value)
+  ) {
     throw new VerificationFailure("invalid_secret_input");
+  }
+}
+
+function validateCredentialDomains(
+  acceptedSecret: string,
+  rejectedSecret: string,
+  apiKey: string,
+  jwt?: string,
+): void {
+  const values = jwt === undefined
+    ? [acceptedSecret, rejectedSecret, apiKey]
+    : [acceptedSecret, rejectedSecret, apiKey, jwt];
+  for (let left = 0; left < values.length; left += 1) {
+    for (let right = left + 1; right < values.length; right += 1) {
+      if (values[left] === values[right]) {
+        throw new VerificationFailure("invalid_credential_domain");
+      }
+    }
   }
 }
 
@@ -125,6 +150,7 @@ export function loadVerificationInput(
   validateSecretInput(rejectedSecret);
   validateSecretInput(apiKey);
   const jwt = readEnvironment("CRON_VERIFY_JWT") || undefined;
+  validateCredentialDomains(acceptedSecret, rejectedSecret, apiKey, jwt);
 
   return {
     environment,
@@ -144,7 +170,7 @@ function reviewedUrl(
 ): Readonly<{
   url: URL;
   projectRef: string;
-  functionSlug: keyof typeof REVIEWED_FUNCTIONS;
+  functionSlug: keyof typeof REVIEWED_EXPECTED_FUNCTIONS;
   verifyJwt: boolean;
 }> {
   let url: URL;
@@ -169,17 +195,18 @@ function reviewedUrl(
     url.search !== "" ||
     url.hash !== "" ||
     rawUrl !== url.href ||
-    !Object.hasOwn(REVIEWED_FUNCTIONS, functionSlug) ||
+    !Object.hasOwn(REVIEWED_EXPECTED_FUNCTIONS, functionSlug) ||
     url.pathname !== `/functions/v1/${functionSlug}`
   ) {
     throw new VerificationFailure("invalid_url");
   }
-  const reviewedSlug = functionSlug as keyof typeof REVIEWED_FUNCTIONS;
+  const reviewedSlug = functionSlug as keyof typeof REVIEWED_EXPECTED_FUNCTIONS;
   return {
     url,
     projectRef,
     functionSlug: reviewedSlug,
-    verifyJwt: REVIEWED_FUNCTIONS[reviewedSlug].verifyJwt,
+    verifyJwt:
+      REVIEWED_EXPECTED_FUNCTIONS[reviewedSlug].reviewedExpectedVerifyJwt,
   };
 }
 
@@ -226,16 +253,18 @@ export async function verifyCronSecretRotation(
   validateSecretInput(input.acceptedSecret);
   validateSecretInput(input.rejectedSecret);
   validateSecretInput(input.apiKey);
+  validateCredentialDomains(
+    input.acceptedSecret,
+    input.rejectedSecret,
+    input.apiKey,
+    input.jwt,
+  );
   const { url, projectRef, functionSlug, verifyJwt } = reviewedUrl(
     input.url,
     input.environment,
   );
   if (verifyJwt) {
-    if (
-      input.jwt === undefined ||
-      input.jwt === input.apiKey ||
-      !isJwtShaped(input.jwt)
-    ) {
+    if (input.jwt === undefined || !isJwtShaped(input.jwt)) {
       throw new VerificationFailure("invalid_gateway_input");
     }
   } else if (input.jwt !== undefined) {
@@ -272,7 +301,7 @@ export async function verifyCronSecretRotation(
     function_slug: functionSlug,
     phase_attestation: input.phase,
     accepted_slot_attestation: input.acceptedSlot,
-    verify_jwt: verifyJwt,
+    reviewed_expected_verify_jwt: verifyJwt,
     api_key_sent: true,
     authorization_sent: verifyJwt,
     probe_repetitions: PROBE_REPETITIONS,
