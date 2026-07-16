@@ -37,9 +37,14 @@ Interpretation rule: "not set" below means exactly that the repository does not 
 
 ## Imported shared modules
 
-The following is the complete direct import map from deployable index.ts files into ../_shared. The per-function appendix repeats this at row level.
+The following is the complete direct import map from deployable `index.ts`
+files into `../_shared`, plus explicitly marked transitive boundary imports
+through local handler modules. The per-function appendix repeats only direct
+shared imports at row level.
 
 - enforcementLog.ts: batch-actionize, extract-tactics, run-enrichment-job.
+- cronHeadReceiver.ts (through each function's local `handler.ts`): daily-digest, run-strategy-task-reaper, schedule-daily-plan.
+- cronSecretAuth.ts (through cronHeadReceiver.ts): daily-digest, run-strategy-task-reaper, schedule-daily-plan.
 - getModelConfig.ts: analyze-call, analyze-deal-outcome, analyze-sentiment, batch-extract-kis, build-resource, car-mode-audio-score, car-mode-score, classify-resource, classify-signal, clean-baseline, daily-digest, derive-library-cards, detect-knowledge-gaps, discover-contacts, discover-resources, dojo-review-score, dojo-roleplay-score, dojo-score, elevenlabs-stt, elevenlabs-transcribe, elevenlabs-tts-stream, enrich-account, expand-prompt, explain-score, extract-scenarios, extract-strategy-memory, extract-tactics, extract-tasks, generate-call-goals, generate-execution-draft, generate-flashcards, generate-lesson-content, generate-playbooks, generate-stage-playbook, grade-lesson-response, grade-mock-call, grade-objection-drill, grade-transcript, mock-call, operationalize-resource, parse-account-screenshot, parse-account-synopsis, parse-calendar-screenshot, parse-claude-import, parse-opp-synopsis, parse-screenshot, parse-uploaded-file, pdf-ocr, playbook-roleplay, preprocess-transcript, prioritize-accounts, score-micro-drill, score-original-response, simulate-chat, source-icp-accounts, suggest-resource-uses, suggest-templates, territory-copilot, transcribe-audio, voice-command, weekly-battle-plan.
 - requireUser.ts: elevenlabs-stt, elevenlabs-tts-stream, enrich-account, import-podcast, import-youtube-playlist, parse-account-screenshot, parse-claude-import, parse-screenshot, simulate-chat.
 - securityLog.ts: batch-actionize, batch-recovery-rerun, extract-tactics, log-workday-focus, process-podcast-queue, run-enrichment-job.
@@ -268,7 +273,7 @@ The environment column includes direct index.ts reads plus names discovered by r
 | `classify-signal` | not set | `getModelConfig.ts` | `LOVABLE_API_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `clean-baseline` | not set | `getModelConfig.ts` | `LOVABLE_API_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `conversion-math` | false | — | `SUPABASE_ANON_KEY`<br>`SUPABASE_URL` |
-| `daily-digest` | false | `cronSecretAuth.ts`<br>`getModelConfig.ts` | `CRON_SECRET`<br>`CRON_SECRET_NEXT`<br>`PERPLEXITY_API_KEY`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
+| `daily-digest` | false | `getModelConfig.ts` | `CRON_SECRET`<br>`CRON_SECRET_NEXT`<br>`PERPLEXITY_API_KEY`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `dave-conversation-token` | false | — | `ELEVENLABS_AGENT_ID`<br>`ELEVENLABS_API_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `dave-health-check` | true | — | `ELEVENLABS_AGENT_ID`<br>`ELEVENLABS_API_KEY` |
 | `deal-intelligence` | not set | — | `SUPABASE_ANON_KEY`<br>`SUPABASE_URL` |
@@ -338,9 +343,9 @@ The environment column includes direct index.ts reads plus names discovered by r
 | `run-strategy-eval-synthesis` | not set | `strategy-skills/index.ts`<br>`strategy-skills/manifests.ts` | `LOVABLE_API_KEY`<br>`STRATEGY_VALIDATION_KEY`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `run-strategy-job` | not set | `strategy-orchestrator/libraryCards.ts`<br>`strategy-orchestrator/registry.ts`<br>`strategy-orchestrator/runTask.ts`<br>`strategy-orchestrator/staleRunWatchdog.ts`<br>`strategy-orchestrator/types.ts` | `ANTHROPIC_API_KEY`<br>`AUTHORING_BATCH_TIMEOUT_MS`<br>`LOVABLE_API_KEY`<br>`OPENAI_API_KEY`<br>`PERPLEXITY_API_KEY`<br>`STRATEGY_DEBUG_HARNESS`<br>`STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT`<br>`STRATEGY_TARGETED_REMEDIATION`<br>`STRATEGY_VALIDATION_KEY`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `run-strategy-task` | not set | `strategy-orchestrator/idempotency.ts`<br>`strategy-orchestrator/runTask.ts`<br>`strategy-orchestrator/staleRunWatchdog.ts` | `ANTHROPIC_API_KEY`<br>`AUTHORING_BATCH_TIMEOUT_MS`<br>`LOVABLE_API_KEY`<br>`OPENAI_API_KEY`<br>`PERPLEXITY_API_KEY`<br>`STRATEGY_DEBUG_HARNESS`<br>`STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT`<br>`STRATEGY_TARGETED_REMEDIATION`<br>`STRATEGY_VALIDATION_KEY`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
-| `run-strategy-task-reaper` | not set | `cronSecretAuth.ts`<br>`strategy-orchestrator/staleRunWatchdog.ts` | `CRON_SECRET`<br>`CRON_SECRET_NEXT`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
+| `run-strategy-task-reaper` | not set | `strategy-orchestrator/staleRunWatchdog.ts` | `CRON_SECRET`<br>`CRON_SECRET_NEXT`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `run-validation-canary` | not set | — | `STRATEGY_VALIDATION_KEY`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_URL` |
-| `schedule-daily-plan` | not set | `cronSecretAuth.ts` | `CRON_SECRET`<br>`CRON_SECRET_NEXT`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
+| `schedule-daily-plan` | not set | — | `CRON_SECRET`<br>`CRON_SECRET_NEXT`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `score-micro-drill` | not set | `getModelConfig.ts` | `LOVABLE_API_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `score-original-response` | not set | `getModelConfig.ts` | `LOVABLE_API_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `search-context` | false | — | `SUPABASE_ANON_KEY`<br>`SUPABASE_URL` |

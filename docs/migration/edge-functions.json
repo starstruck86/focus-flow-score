@@ -2,14 +2,14 @@
   "collection": {
     "artifact": {
       "kind": "repository_deployment_inventory",
-      "sha256": "sha256:6e373ad6c7008d07a8acb610cdbf6f24f96eb8cdbc3215888d94c22f9354be3f",
+      "sha256": "sha256:26f0c765340425ff8cf9a6e92316e1adb2edd69180acb2b68ec56492ee04c4bb",
       "source": "local source project odbjjklumdsuqdvkgwyv supabase/config.toml and resolved supabase/functions dependency closures"
     },
     "boundary": {
       "kind": "repository_content_sha256",
-      "value": "sha256:6e373ad6c7008d07a8acb610cdbf6f24f96eb8cdbc3215888d94c22f9354be3f"
+      "value": "sha256:26f0c765340425ff8cf9a6e92316e1adb2edd69180acb2b68ec56492ee04c4bb"
     },
-    "collected_at": "2026-07-14T13:29:59Z",
+    "collected_at": "2026-07-16T10:45:51Z",
     "collector": {
       "name": "inventory-edge-functions",
       "version": "2.0.0"
@@ -511,11 +511,13 @@
       "count": null,
       "evidence": {
         "closure": [
+          "supabase/functions/_shared/cronHeadReceiver.ts",
           "supabase/functions/_shared/cronSecretAuth.ts",
           "supabase/functions/_shared/getModelConfig.ts",
+          "supabase/functions/daily-digest/handler.ts",
           "supabase/functions/daily-digest/index.ts"
         ],
-        "fingerprint": "sha256:b79b83e588a2f9ffdef070a5b0b1b032469b2fa77850d5a9149eab97ed9b2d82",
+        "fingerprint": "sha256:27c9dd7191db04328ad1f58359c5d1bd4c200b35f5dcd06db5c2801bf9472eba",
         "kind": "edge_function_deployment_closure"
       },
       "independently_verifiable": true,
@@ -2841,11 +2843,13 @@
       "count": null,
       "evidence": {
         "closure": [
+          "supabase/functions/_shared/cronHeadReceiver.ts",
           "supabase/functions/_shared/cronSecretAuth.ts",
           "supabase/functions/_shared/strategy-orchestrator/staleRunWatchdog.ts",
+          "supabase/functions/run-strategy-task-reaper/handler.ts",
           "supabase/functions/run-strategy-task-reaper/index.ts"
         ],
-        "fingerprint": "sha256:4ab6964ef4b6a44975da60221de8b8ce0f9d5d2b0965dff96f28f753fe478a87",
+        "fingerprint": "sha256:b9269c6de63c34bc9268b974e58fba047c23dd5f2ccfb2a891b26dfb7add9331",
         "kind": "edge_function_deployment_closure"
       },
       "independently_verifiable": true,
@@ -2901,10 +2905,12 @@
       "count": null,
       "evidence": {
         "closure": [
+          "supabase/functions/_shared/cronHeadReceiver.ts",
           "supabase/functions/_shared/cronSecretAuth.ts",
+          "supabase/functions/schedule-daily-plan/handler.ts",
           "supabase/functions/schedule-daily-plan/index.ts"
         ],
-        "fingerprint": "sha256:0e8e8cf528af5f24fdfe265017506ee414407e4e4e234879afdbcc5fb229cd02",
+        "fingerprint": "sha256:353f1685273f0d838886c313ade104fb7864d88e89b7cc62d989922d8319b1a6",
         "kind": "edge_function_deployment_closure"
       },
       "independently_verifiable": true,

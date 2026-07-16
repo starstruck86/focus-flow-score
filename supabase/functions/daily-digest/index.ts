@@ -1,12 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getModelConfig } from "../_shared/getModelConfig.ts";
-import { hasValidCronSecret } from "../_shared/cronSecretAuth.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-trace-id",
-};
+import {
+  createDailyDigestHandler,
+  dailyDigestCorsHeaders as corsHeaders,
+} from "./handler.ts";
 
 const CATEGORY_TO_TRIGGER: Record<string, string> = {
   executive_hire: "executive_hire",
@@ -18,22 +15,8 @@ const CATEGORY_TO_TRIGGER: Record<string, string> = {
   competitive_displacement: "competitive_displacement",
 };
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
+async function handleDailyDigestRequest(req: Request, isCron: boolean) {
   try {
-    // The HEAD probe verifies only the custom cron boundary and performs no
-    // database, model, or application work.
-    const isCron = await hasValidCronSecret(req.headers);
-    if (req.method === "HEAD") {
-      return new Response(null, {
-        status: isCron ? 204 : 401,
-        headers: corsHeaders,
-      });
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -393,4 +376,6 @@ IMPORTANT: Headlines should be factual and specific — include names, numbers, 
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}
+
+Deno.serve(createDailyDigestHandler(handleDailyDigestRequest));

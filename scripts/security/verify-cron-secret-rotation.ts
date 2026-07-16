@@ -1,25 +1,29 @@
 const MAX_SECRET_BYTES = 4096;
+const PROBE_REPETITIONS = 3;
 const encoder = new TextEncoder();
 const ENVIRONMENT_PROJECT_REFS = Object.freeze({
   "dynamic-staging": "uujkmcbqavsmzhnbqvmm",
   production: "odbjjklumdsuqdvkgwyv",
 } as const);
-const REVIEWED_FUNCTION_SLUGS = new Set([
-  "daily-digest",
-  "run-strategy-task-reaper",
-  "schedule-daily-plan",
-]);
+const REVIEWED_FUNCTIONS = Object.freeze({
+  "daily-digest": Object.freeze({ verifyJwt: false }),
+  "run-strategy-task-reaper": Object.freeze({ verifyJwt: true }),
+  "schedule-daily-plan": Object.freeze({ verifyJwt: true }),
+} as const);
 
 export type RotationEnvironment = "dynamic-staging" | "production";
 export type VerificationPhase = "current" | "overlap-next" | "retired-old";
+export type CredentialSlot = "current" | "next";
 
 export type VerificationInput = Readonly<{
   environment: RotationEnvironment;
   phase: VerificationPhase;
+  acceptedSlot: CredentialSlot;
   url: string;
   acceptedSecret: string;
   rejectedSecret: string;
-  gatewayToken?: string;
+  apiKey: string;
+  jwt?: string;
 }>;
 
 export type VerificationResult = Readonly<{
@@ -27,9 +31,15 @@ export type VerificationResult = Readonly<{
   environment: RotationEnvironment;
   project_ref: string;
   function_slug: string;
-  phase: VerificationPhase;
+  phase_attestation: VerificationPhase;
+  accepted_slot_attestation: CredentialSlot;
+  verify_jwt: boolean;
+  api_key_sent: true;
+  authorization_sent: boolean;
+  probe_repetitions: 3;
   accepted_status: 204;
   rejected_status: 401;
+  cache_control: "no-store";
   result: "PASS";
 }>;
 
@@ -37,8 +47,10 @@ type FailureReason =
   | "missing_input"
   | "invalid_environment"
   | "invalid_phase"
+  | "invalid_attestation"
   | "invalid_url"
   | "invalid_secret_input"
+  | "invalid_gateway_input"
   | "accepted_probe_failed"
   | "rejected_probe_failed"
   | "transport_error";
@@ -71,6 +83,22 @@ function validateSecretInput(value: string): void {
   }
 }
 
+function isJwtShaped(value: string): boolean {
+  if (encoder.encode(value).byteLength > MAX_SECRET_BYTES) return false;
+  const parts = value.split(".");
+  return parts.length === 3 && parts.every((part) => /^[A-Za-z0-9_-]+$/.test(part));
+}
+
+function validateAttestation(
+  phase: VerificationPhase,
+  acceptedSlot: CredentialSlot,
+): void {
+  const expectedSlot = phase === "overlap-next" ? "next" : "current";
+  if (acceptedSlot !== expectedSlot) {
+    throw new VerificationFailure("invalid_attestation");
+  }
+}
+
 export function loadVerificationInput(
   readEnvironment: EnvironmentReader,
 ): VerificationInput {
@@ -84,29 +112,41 @@ export function loadVerificationInput(
     throw new VerificationFailure("invalid_phase");
   }
 
+  const acceptedSlot = requireInput(readEnvironment, "CRON_VERIFY_ACCEPTED_SLOT");
+  if (acceptedSlot !== "current" && acceptedSlot !== "next") {
+    throw new VerificationFailure("invalid_attestation");
+  }
+  validateAttestation(phase, acceptedSlot);
+
   const acceptedSecret = requireInput(readEnvironment, "CRON_VERIFY_ACCEPT_SECRET");
   const rejectedSecret = requireInput(readEnvironment, "CRON_VERIFY_REJECT_SECRET");
+  const apiKey = requireInput(readEnvironment, "CRON_VERIFY_API_KEY");
   validateSecretInput(acceptedSecret);
   validateSecretInput(rejectedSecret);
-  const gatewayToken = readEnvironment("CRON_VERIFY_GATEWAY_TOKEN");
-  if (gatewayToken !== undefined && gatewayToken.length > 0) {
-    validateSecretInput(gatewayToken);
-  }
+  validateSecretInput(apiKey);
+  const jwt = readEnvironment("CRON_VERIFY_JWT") || undefined;
 
   return {
     environment,
     phase,
+    acceptedSlot,
     url: requireInput(readEnvironment, "CRON_VERIFY_URL"),
     acceptedSecret,
     rejectedSecret,
-    gatewayToken: gatewayToken || undefined,
+    apiKey,
+    jwt,
   };
 }
 
 function reviewedUrl(
   rawUrl: string,
   environment: RotationEnvironment,
-): Readonly<{ url: URL; projectRef: string; functionSlug: string }> {
+): Readonly<{
+  url: URL;
+  projectRef: string;
+  functionSlug: keyof typeof REVIEWED_FUNCTIONS;
+  verifyJwt: boolean;
+}> {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -129,25 +169,37 @@ function reviewedUrl(
     url.search !== "" ||
     url.hash !== "" ||
     rawUrl !== url.href ||
-    !REVIEWED_FUNCTION_SLUGS.has(functionSlug) ||
+    !Object.hasOwn(REVIEWED_FUNCTIONS, functionSlug) ||
     url.pathname !== `/functions/v1/${functionSlug}`
   ) {
     throw new VerificationFailure("invalid_url");
   }
-  return { url, projectRef, functionSlug };
+  const reviewedSlug = functionSlug as keyof typeof REVIEWED_FUNCTIONS;
+  return {
+    url,
+    projectRef,
+    functionSlug: reviewedSlug,
+    verifyJwt: REVIEWED_FUNCTIONS[reviewedSlug].verifyJwt,
+  };
 }
+
+type ProbeResult = Readonly<{ status: number; cacheControlNoStore: boolean }>;
 
 async function probe(
   url: URL,
   secret: string,
-  gatewayToken: string | undefined,
+  apiKey: string,
+  jwt: string | undefined,
   fetcher: ProbeFetch,
-): Promise<number> {
+): Promise<ProbeResult> {
   try {
-    const headers = new Headers({ "x-cron-secret": secret });
-    if (gatewayToken !== undefined) {
-      headers.set("authorization", `Bearer ${gatewayToken}`);
-      headers.set("apikey", gatewayToken);
+    const headers = new Headers({
+      "apikey": apiKey,
+      "cache-control": "no-store",
+      "x-cron-secret": secret,
+    });
+    if (jwt !== undefined) {
+      headers.set("authorization", `Bearer ${jwt}`);
     }
     const response = await fetcher(url, {
       method: "HEAD",
@@ -155,8 +207,12 @@ async function probe(
       redirect: "error",
       signal: AbortSignal.timeout(10_000),
     });
-    // Never read or relay response headers or a response body.
-    return response.status;
+    // Read only the reviewed cache policy. Never read or relay any other
+    // response header or a response body.
+    const cacheControlNoStore = (response.headers.get("cache-control") ?? "")
+      .split(",")
+      .some((directive) => directive.trim().toLowerCase() === "no-store");
+    return { status: response.status, cacheControlNoStore };
   } catch {
     throw new VerificationFailure("transport_error");
   }
@@ -166,16 +222,47 @@ export async function verifyCronSecretRotation(
   input: VerificationInput,
   fetcher: ProbeFetch = fetch,
 ): Promise<VerificationResult> {
+  validateAttestation(input.phase, input.acceptedSlot);
   validateSecretInput(input.acceptedSecret);
   validateSecretInput(input.rejectedSecret);
-  if (input.gatewayToken !== undefined) validateSecretInput(input.gatewayToken);
-  const { url, projectRef, functionSlug } = reviewedUrl(input.url, input.environment);
-
-  if ((await probe(url, input.acceptedSecret, input.gatewayToken, fetcher)) !== 204) {
-    throw new VerificationFailure("accepted_probe_failed");
+  validateSecretInput(input.apiKey);
+  const { url, projectRef, functionSlug, verifyJwt } = reviewedUrl(
+    input.url,
+    input.environment,
+  );
+  if (verifyJwt) {
+    if (
+      input.jwt === undefined ||
+      input.jwt === input.apiKey ||
+      !isJwtShaped(input.jwt)
+    ) {
+      throw new VerificationFailure("invalid_gateway_input");
+    }
+  } else if (input.jwt !== undefined) {
+    throw new VerificationFailure("invalid_gateway_input");
   }
-  if ((await probe(url, input.rejectedSecret, input.gatewayToken, fetcher)) !== 401) {
-    throw new VerificationFailure("rejected_probe_failed");
+
+  for (let repetition = 0; repetition < PROBE_REPETITIONS; repetition += 1) {
+    const accepted = await probe(
+      url,
+      input.acceptedSecret,
+      input.apiKey,
+      input.jwt,
+      fetcher,
+    );
+    if (accepted.status !== 204 || !accepted.cacheControlNoStore) {
+      throw new VerificationFailure("accepted_probe_failed");
+    }
+    const rejected = await probe(
+      url,
+      input.rejectedSecret,
+      input.apiKey,
+      input.jwt,
+      fetcher,
+    );
+    if (rejected.status !== 401 || !rejected.cacheControlNoStore) {
+      throw new VerificationFailure("rejected_probe_failed");
+    }
   }
 
   return {
@@ -183,9 +270,15 @@ export async function verifyCronSecretRotation(
     environment: input.environment,
     project_ref: projectRef,
     function_slug: functionSlug,
-    phase: input.phase,
+    phase_attestation: input.phase,
+    accepted_slot_attestation: input.acceptedSlot,
+    verify_jwt: verifyJwt,
+    api_key_sent: true,
+    authorization_sent: verifyJwt,
+    probe_repetitions: PROBE_REPETITIONS,
     accepted_status: 204,
     rejected_status: 401,
+    cache_control: "no-store",
     result: "PASS",
   };
 }
