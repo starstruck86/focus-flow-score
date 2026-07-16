@@ -79,11 +79,18 @@ jobs:
           supabase/functions/strategy-chat/index.ts
           supabase/functions/analyze-call/index.ts
           supabase/functions/version/index.ts
+          supabase/functions/daily-digest/index.ts
+          supabase/functions/run-strategy-task-reaper/index.ts
+          supabase/functions/schedule-daily-plan/index.ts
+          supabase/functions/_shared/cronSecretAuth.ts
+          scripts/security/verify-cron-secret-rotation.ts
       - run: >-
           deno test --no-lock
           supabase/functions/_shared/strategy-router/situationClassifier_test.ts
           supabase/functions/_shared/strategy-core/situationIntelligenceRetrieval_test.ts
           supabase/functions/version/index_test.ts
+          supabase/functions/_shared/cronSecretAuth_test.ts
+          scripts/security/verify-cron-secret-rotation_test.ts
       - run: npm audit --omit=dev --audit-level=high
 
   migration-envelope-macos:

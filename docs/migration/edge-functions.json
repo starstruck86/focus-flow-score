@@ -2,12 +2,12 @@
   "collection": {
     "artifact": {
       "kind": "repository_deployment_inventory",
-      "sha256": "sha256:11fc8a87e2c69bcc51dd7c3807b81d21593dbcb41c55d42d7e5170fdcdf5fada",
+      "sha256": "sha256:6e373ad6c7008d07a8acb610cdbf6f24f96eb8cdbc3215888d94c22f9354be3f",
       "source": "local source project odbjjklumdsuqdvkgwyv supabase/config.toml and resolved supabase/functions dependency closures"
     },
     "boundary": {
       "kind": "repository_content_sha256",
-      "value": "sha256:11fc8a87e2c69bcc51dd7c3807b81d21593dbcb41c55d42d7e5170fdcdf5fada"
+      "value": "sha256:6e373ad6c7008d07a8acb610cdbf6f24f96eb8cdbc3215888d94c22f9354be3f"
     },
     "collected_at": "2026-07-14T13:29:59Z",
     "collector": {
@@ -511,10 +511,11 @@
       "count": null,
       "evidence": {
         "closure": [
+          "supabase/functions/_shared/cronSecretAuth.ts",
           "supabase/functions/_shared/getModelConfig.ts",
           "supabase/functions/daily-digest/index.ts"
         ],
-        "fingerprint": "sha256:1cf09db97f85b46ca8a390dd03ac1f0b7e349aab13dcb52ea5935de2a2935c91",
+        "fingerprint": "sha256:b79b83e588a2f9ffdef070a5b0b1b032469b2fa77850d5a9149eab97ed9b2d82",
         "kind": "edge_function_deployment_closure"
       },
       "independently_verifiable": true,
@@ -2840,10 +2841,11 @@
       "count": null,
       "evidence": {
         "closure": [
+          "supabase/functions/_shared/cronSecretAuth.ts",
           "supabase/functions/_shared/strategy-orchestrator/staleRunWatchdog.ts",
           "supabase/functions/run-strategy-task-reaper/index.ts"
         ],
-        "fingerprint": "sha256:e20b22813f663b8608bbfcc4154803977a2dda3fbb646a3be4faf04c551f1165",
+        "fingerprint": "sha256:4ab6964ef4b6a44975da60221de8b8ce0f9d5d2b0965dff96f28f753fe478a87",
         "kind": "edge_function_deployment_closure"
       },
       "independently_verifiable": true,
@@ -2899,9 +2901,10 @@
       "count": null,
       "evidence": {
         "closure": [
+          "supabase/functions/_shared/cronSecretAuth.ts",
           "supabase/functions/schedule-daily-plan/index.ts"
         ],
-        "fingerprint": "sha256:4563efd81a68cd9ea64b5c0c7f7ed18e1e91c69f8df51e311197e405859889f8",
+        "fingerprint": "sha256:0e8e8cf528af5f24fdfe265017506ee414407e4e4e234879afdbcc5fb229cd02",
         "kind": "edge_function_deployment_closure"
       },
       "independently_verifiable": true,

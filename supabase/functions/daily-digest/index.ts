@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getModelConfig } from "../_shared/getModelConfig.ts";
+import { hasValidCronSecret } from "../_shared/cronSecretAuth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,16 +24,24 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    // The HEAD probe verifies only the custom cron boundary and performs no
+    // database, model, or application work.
+    const isCron = await hasValidCronSecret(req.headers);
+    if (req.method === "HEAD") {
+      return new Response(null, {
+        status: isCron ? 204 : 401,
+        headers: corsHeaders,
+      });
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const perplexityKey = Deno.env.get("PERPLEXITY_API_KEY");
-    const cronSecret = Deno.env.get("CRON_SECRET");
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     const { primary: modelId } = await getModelConfig('daily-digest');
 
     // Dual-mode auth: cron sends x-cron-secret, clients send a real user JWT.
-    const isCron = !!cronSecret && req.headers.get("x-cron-secret") === cronSecret;
     let authedUserId: string | null = null;
     if (!isCron) {
       const authHeader = req.headers.get("Authorization") || "";

@@ -55,7 +55,7 @@ The strategy-orchestrator and strategy-core trees import additional local module
 
 Edge runtime/integration names statically found:
 
-ANTHROPIC_API_KEY; AUTHORING_BATCH_TIMEOUT_MS; BENCHMARK_JUDGE_TIMEOUT_MS; BENCHMARK_PROVIDER_TIMEOUT_MS; BENCHMARK_RETRY_BASE_MS; BENCHMARK_RETRY_MAX; BENCHMARK_RETRY_MAX_MS; BROWSERLESS_API_KEY; CIRCLE_CRED_KEY; COURSE_PLATFORM_EMAIL; COURSE_PLATFORM_PASSWORD; CRON_SECRET; ELEVENLABS_AGENT_ID; ELEVENLABS_API_KEY; FIRECRAWL_API_KEY; FOCUS_TRACKER_API_KEY; INTERNAL_FUNCTION_SECRET; LOVABLE_API_KEY; OPENAI_API_KEY; OUTLOOK_ICS_URL; PERPLEXITY_API_KEY; SMOKE_TEST_MODE; STRATEGY_DEBUG_HARNESS; STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT; STRATEGY_SKILLS_ENABLED; STRATEGY_TARGETED_REMEDIATION; STRATEGY_V2_REASONING; STRATEGY_VALIDATION_KEY; SUPABASE_ANON_KEY; SUPABASE_PUBLISHABLE_KEY; SUPABASE_SERVICE_ROLE_KEY; SUPABASE_URL; TRAINING_DIGEST_SECRET.
+ANTHROPIC_API_KEY; AUTHORING_BATCH_TIMEOUT_MS; BENCHMARK_JUDGE_TIMEOUT_MS; BENCHMARK_PROVIDER_TIMEOUT_MS; BENCHMARK_RETRY_BASE_MS; BENCHMARK_RETRY_MAX; BENCHMARK_RETRY_MAX_MS; BROWSERLESS_API_KEY; CIRCLE_CRED_KEY; COURSE_PLATFORM_EMAIL; COURSE_PLATFORM_PASSWORD; CRON_SECRET; CRON_SECRET_NEXT; ELEVENLABS_AGENT_ID; ELEVENLABS_API_KEY; FIRECRAWL_API_KEY; FOCUS_TRACKER_API_KEY; INTERNAL_FUNCTION_SECRET; LOVABLE_API_KEY; OPENAI_API_KEY; OUTLOOK_ICS_URL; PERPLEXITY_API_KEY; SMOKE_TEST_MODE; STRATEGY_DEBUG_HARNESS; STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT; STRATEGY_SKILLS_ENABLED; STRATEGY_TARGETED_REMEDIATION; STRATEGY_V2_REASONING; STRATEGY_VALIDATION_KEY; SUPABASE_ANON_KEY; SUPABASE_PUBLISHABLE_KEY; SUPABASE_SERVICE_ROLE_KEY; SUPABASE_URL; TRAINING_DIGEST_SECRET.
 
 Test/diagnostic-only names additionally found: PROBE_USER_ID, VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY. Runtime-provided public metadata names used by version are DENO_DEPLOYMENT_ID and SB_REGION (supabase/functions/_shared/versionResponse.ts:8,35-38,145-146).
 
@@ -92,8 +92,8 @@ Timezone is not established by these lines. Names/docs calling jobs "6am" or "5a
 
 Function-side guards/dependencies:
 
-- daily-digest is dual-mode CRON_SECRET header or user JWT (index.ts:26-42).
-- run-strategy-task-reaper and schedule-daily-plan require CRON_SECRET (respective index.ts:22-25 and 12-15).
+- daily-digest accepts the shared cron header through the current/next rotation slots or a separately verified user JWT.
+- run-strategy-task-reaper and schedule-daily-plan require the shared cron header through the current/next rotation slots.
 - training-digest requires TRAINING_DIGEST_SECRET (index.ts:15-20), but no repository cron schedule was found.
 - process-podcast-queue declares itself unauthenticated system cron and uses service role (index.ts:587-596); it has no explicit config.toml entry. Its actual edge-boundary JWT behavior must be rehearsed, not inferred.
 - sync-calendar requires a real bearer user (index.ts:573-595), while the historical pre-containment snapshot revision recorded an HTTP schedule. The exact supported cron authentication model therefore needs reconciliation.
@@ -268,7 +268,7 @@ The environment column includes direct index.ts reads plus names discovered by r
 | `classify-signal` | not set | `getModelConfig.ts` | `LOVABLE_API_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `clean-baseline` | not set | `getModelConfig.ts` | `LOVABLE_API_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `conversion-math` | false | — | `SUPABASE_ANON_KEY`<br>`SUPABASE_URL` |
-| `daily-digest` | false | `getModelConfig.ts` | `CRON_SECRET`<br>`PERPLEXITY_API_KEY`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
+| `daily-digest` | false | `cronSecretAuth.ts`<br>`getModelConfig.ts` | `CRON_SECRET`<br>`CRON_SECRET_NEXT`<br>`PERPLEXITY_API_KEY`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `dave-conversation-token` | false | — | `ELEVENLABS_AGENT_ID`<br>`ELEVENLABS_API_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `dave-health-check` | true | — | `ELEVENLABS_AGENT_ID`<br>`ELEVENLABS_API_KEY` |
 | `deal-intelligence` | not set | — | `SUPABASE_ANON_KEY`<br>`SUPABASE_URL` |
@@ -338,9 +338,9 @@ The environment column includes direct index.ts reads plus names discovered by r
 | `run-strategy-eval-synthesis` | not set | `strategy-skills/index.ts`<br>`strategy-skills/manifests.ts` | `LOVABLE_API_KEY`<br>`STRATEGY_VALIDATION_KEY`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `run-strategy-job` | not set | `strategy-orchestrator/libraryCards.ts`<br>`strategy-orchestrator/registry.ts`<br>`strategy-orchestrator/runTask.ts`<br>`strategy-orchestrator/staleRunWatchdog.ts`<br>`strategy-orchestrator/types.ts` | `ANTHROPIC_API_KEY`<br>`AUTHORING_BATCH_TIMEOUT_MS`<br>`LOVABLE_API_KEY`<br>`OPENAI_API_KEY`<br>`PERPLEXITY_API_KEY`<br>`STRATEGY_DEBUG_HARNESS`<br>`STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT`<br>`STRATEGY_TARGETED_REMEDIATION`<br>`STRATEGY_VALIDATION_KEY`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `run-strategy-task` | not set | `strategy-orchestrator/idempotency.ts`<br>`strategy-orchestrator/runTask.ts`<br>`strategy-orchestrator/staleRunWatchdog.ts` | `ANTHROPIC_API_KEY`<br>`AUTHORING_BATCH_TIMEOUT_MS`<br>`LOVABLE_API_KEY`<br>`OPENAI_API_KEY`<br>`PERPLEXITY_API_KEY`<br>`STRATEGY_DEBUG_HARNESS`<br>`STRATEGY_DISCOVERY_PREP_SOP_ENFORCEMENT`<br>`STRATEGY_TARGETED_REMEDIATION`<br>`STRATEGY_VALIDATION_KEY`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
-| `run-strategy-task-reaper` | not set | `strategy-orchestrator/staleRunWatchdog.ts` | `CRON_SECRET`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
+| `run-strategy-task-reaper` | not set | `cronSecretAuth.ts`<br>`strategy-orchestrator/staleRunWatchdog.ts` | `CRON_SECRET`<br>`CRON_SECRET_NEXT`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `run-validation-canary` | not set | — | `STRATEGY_VALIDATION_KEY`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_URL` |
-| `schedule-daily-plan` | not set | — | `CRON_SECRET`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
+| `schedule-daily-plan` | not set | `cronSecretAuth.ts` | `CRON_SECRET`<br>`CRON_SECRET_NEXT`<br>`SUPABASE_ANON_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `score-micro-drill` | not set | `getModelConfig.ts` | `LOVABLE_API_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `score-original-response` | not set | `getModelConfig.ts` | `LOVABLE_API_KEY`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`SUPABASE_URL` |
 | `search-context` | false | — | `SUPABASE_ANON_KEY`<br>`SUPABASE_URL` |
