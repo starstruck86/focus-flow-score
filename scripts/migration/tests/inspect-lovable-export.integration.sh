@@ -16,6 +16,7 @@ readonly SOURCE_REPO_ROOT="$(cd -P -- "${TEST_DIR}/../../.." && pwd)"
 readonly SAFETY="${TEST_DIR}/lib/postgres-test-safety.sh"
 readonly FIXTURE_SCHEMA="migration_export_fixture"
 readonly ROW_SENTINEL="SYNTHETIC_HIGH_LEVEL_ROW_PAYLOAD_MUST_NOT_APPEAR"
+readonly INSPECTION_BASELINE_SHA="c87a124602eb669b3ec5a3829610c6cb465d3e26"
 
 # shellcheck source=scripts/migration/tests/lib/postgres-test-safety.sh
 source "$SAFETY"
@@ -83,9 +84,31 @@ trap cleanup EXIT HUP INT TERM
 
 readonly EXECUTION_REPO="${TMP_ROOT}/approved-execution-checkout"
 git clone --quiet --shared "$SOURCE_REPO_ROOT" "$EXECUTION_REPO"
-readonly APPROVED_CHECKOUT="$(git -C "$SOURCE_REPO_ROOT" rev-parse HEAD)"
-[[ $(git -C "$EXECUTION_REPO" rev-parse HEAD) == "$APPROVED_CHECKOUT" ]] || {
+readonly SOURCE_CHECKOUT="$(git -C "$SOURCE_REPO_ROOT" rev-parse HEAD)"
+[[ $(git -C "$EXECUTION_REPO" rev-parse HEAD) == "$SOURCE_CHECKOUT" ]] || {
   printf 'ERROR: isolated execution checkout does not match the source HEAD\n' >&2
+  exit 2
+}
+
+# Keep the production inspection contract's historical migration boundary
+# exact even when the application branch legitimately adds later migrations.
+# The synthetic approved checkout combines current reviewed tools/config with
+# the baseline migration tree; planted drift remains a fail-closed test in the
+# Python workflow suite.
+git -C "$EXECUTION_REPO" restore \
+  --source "$INSPECTION_BASELINE_SHA" \
+  --staged \
+  --worktree \
+  -- \
+  supabase/migrations
+git -C "$EXECUTION_REPO" \
+  -c user.name='Synthetic Migration Test' \
+  -c user.email='migration-test@example.invalid' \
+  commit --quiet --allow-empty -m 'synthetic approved migration baseline'
+readonly APPROVED_CHECKOUT="$(git -C "$EXECUTION_REPO" rev-parse HEAD)"
+git -C "$EXECUTION_REPO" diff --quiet \
+  "$INSPECTION_BASELINE_SHA" -- supabase/migrations || {
+  printf 'ERROR: synthetic checkout changed historical migration inputs\n' >&2
   exit 2
 }
 [[ -z $(git -C "$EXECUTION_REPO" status --porcelain) ]] || {
