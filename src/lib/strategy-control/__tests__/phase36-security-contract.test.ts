@@ -42,10 +42,89 @@ const AUTH_PATTERNS = [
 
 const PUBLIC_METADATA_FUNCTIONS = new Set(["version"]);
 
+type ReviewedCronReceiverBoundary = Readonly<{
+  factory: string;
+  handlerPath: string;
+  serverCall: "Deno.serve" | "serve";
+  allowNonCronRequests: boolean;
+}>;
+
+const REVIEWED_CRON_RECEIVER_BOUNDARIES = new Map<
+  string,
+  ReviewedCronReceiverBoundary
+>([
+  [
+    "daily-digest",
+    {
+      factory: "createDailyDigestHandler",
+      handlerPath: "supabase/functions/daily-digest/handler.ts",
+      serverCall: "Deno.serve",
+      allowNonCronRequests: true,
+    },
+  ],
+  [
+    "run-strategy-task-reaper",
+    {
+      factory: "createStrategyTaskReaperHandler",
+      handlerPath: "supabase/functions/run-strategy-task-reaper/handler.ts",
+      serverCall: "Deno.serve",
+      allowNonCronRequests: false,
+    },
+  ],
+  [
+    "schedule-daily-plan",
+    {
+      factory: "createScheduleDailyPlanHandler",
+      handlerPath: "supabase/functions/schedule-daily-plan/handler.ts",
+      serverCall: "serve",
+      allowNonCronRequests: false,
+    },
+  ],
+]);
+
+function hasReviewedCronReceiverBoundary(
+  name: string,
+  indexSource: string,
+): boolean {
+  const reviewed = REVIEWED_CRON_RECEIVER_BOUNDARIES.get(name);
+  if (!reviewed) return false;
+
+  const handlerSource = fs.readFileSync(
+    path.resolve(reviewed.handlerPath),
+    "utf-8",
+  );
+  const boundarySource = fs.readFileSync(
+    path.resolve("supabase/functions/_shared/cronHeadReceiver.ts"),
+    "utf-8",
+  );
+  const authSource = fs.readFileSync(
+    path.resolve("supabase/functions/_shared/cronSecretAuth.ts"),
+    "utf-8",
+  );
+
+  return indexSource.includes(`from "./handler.ts"`) &&
+    indexSource.includes(`${reviewed.serverCall}(${reviewed.factory}(`) &&
+    handlerSource.includes(`export function ${reviewed.factory}(`) &&
+    handlerSource.includes("return createCronReceiverHandler({") &&
+    handlerSource.includes(
+      `allowNonCronRequests: ${reviewed.allowNonCronRequests}`,
+    ) &&
+    boundarySource.includes("const isCron = await hasValidCronSecret(") &&
+    boundarySource.includes('if (request.method === "HEAD")') &&
+    boundarySource.includes("status: isCron ? 204 : 401") &&
+    boundarySource.includes("return await options.handleBusinessRequest(") &&
+    authSource.includes('readEnvironment("CRON_SECRET")') &&
+    authSource.includes('readEnvironment("CRON_SECRET_NEXT")') &&
+    authSource.includes("return acceptsCronSecret(");
+}
+
 function hasAuthOrApprovedPublicMetadata(
   name: string,
   source: string,
 ): boolean {
+  if (REVIEWED_CRON_RECEIVER_BOUNDARIES.has(name)) {
+    return hasReviewedCronReceiverBoundary(name, source);
+  }
   return AUTH_PATTERNS.some(pattern => pattern.test(source)) ||
     PUBLIC_METADATA_FUNCTIONS.has(name);
 }
@@ -71,6 +150,19 @@ describe("Phase 3.6 — Security Contract", () => {
   });
 
   describe("Auth Enforcement", () => {
+    it("reviewed cron receivers bind their exact shared auth boundary", () => {
+      expect([...REVIEWED_CRON_RECEIVER_BOUNDARIES.keys()]).toEqual([
+        "daily-digest",
+        "run-strategy-task-reaper",
+        "schedule-daily-plan",
+      ]);
+      for (const name of REVIEWED_CRON_RECEIVER_BOUNDARIES.keys()) {
+        const source = readEdgeFunctionSource(name);
+        expect(source).not.toBeNull();
+        expect(hasReviewedCronReceiverBoundary(name, source!)).toBe(true);
+      }
+    });
+
     for (const fn of edgeFunctions) {
       it(`${fn} has auth or an approved public metadata contract`, () => {
         const source = readEdgeFunctionSource(fn);
