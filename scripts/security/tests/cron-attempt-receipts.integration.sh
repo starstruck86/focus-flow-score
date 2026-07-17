@@ -209,7 +209,7 @@ SQL
 # false prevents the installer from transferring a function to that role. This
 # focused transaction proves both facts using real catalog state, then rolls all
 # synthetic roles and objects back.
-psql_fixture -A -t -F '|' -v "fixture_actor=$PGUSER" \
+psql_fixture -A -t -F '|' \
   > "$TMP_DIR/non-super-createrole.out" <<'SQL'
 BEGIN;
 CREATE ROLE receipt_fixture_non_super_installer
@@ -250,9 +250,10 @@ SELECT
      AND pg_catalog.bool_and(membership.admin_option)
      AND pg_catalog.bool_and(NOT membership.set_option)
      AND pg_catalog.bool_and(NOT membership.inherit_option)
-     AND pg_catalog.bool_and(
-       grantor_role.rolname = :'fixture_actor'
-     )
+     -- PostgreSQL records this automatic grant as issued by the bootstrap
+     -- superuser (BOOTSTRAP_SUPERUSERID), not by the connected fixture login.
+     AND pg_catalog.bool_and(grantor_role.rolsuper)
+     AND pg_catalog.bool_and(membership.grantor = 10::oid)
    FROM pg_catalog.pg_auth_members AS membership
    JOIN pg_catalog.pg_roles AS granted_role
      ON granted_role.oid = membership.roleid
