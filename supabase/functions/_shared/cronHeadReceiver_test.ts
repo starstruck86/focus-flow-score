@@ -87,7 +87,12 @@ Deno.test("daily-digest HEAD probes stop before every business dependency", asyn
 });
 
 Deno.test("run-strategy-task-reaper HEAD probes stop before every business dependency", async () => {
-  await assertHeadBoundary(createStrategyTaskReaperHandler);
+  await assertHeadBoundary((business, readEnvironment) =>
+    createStrategyTaskReaperHandler(
+      (request, isCron, _attempt, requestEnvironment) =>
+        business(request, isCron, requestEnvironment),
+      readEnvironment,
+    ));
 });
 
 Deno.test("schedule-daily-plan HEAD probes stop before every business dependency", async () => {
