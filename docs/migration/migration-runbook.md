@@ -31,12 +31,17 @@ remaining claims explicitly.
 pg_restore --list does not prove that every byte of the inner input was consumed.
 
 One authorized rehearsal export is retained offline in the approved evidence
-store. Merged ZIP-envelope support resolved the earlier wrapper mismatch, but a
-separately authorized metadata-only attempt subsequently failed closed inside
-the raw inspector without a stable stage attribution. No identifying artifact
-metadata belongs in this repository. The diagnostic hardening procedure uses
-synthetic fixtures only and does not access or retry the retained export. It
-does not make the migration ready.
+store. After the earlier fail-closed parser result, a separately authorized
+inspection under the merged PR #16 contract produced a complete durable
+metadata package with `inspection_status=REVIEW_REQUIRED` and
+`restore_planning_gate=BLOCKED`; it performed no restore. The operator-supplied
+sanitized result records 2,354 TOC entries: 2,140 metadata entries, 214 data
+references, and 1,135 recognized-but-unresolved entries. It reports source
+PostgreSQL 17.6, writer `pg_dump` 18.4, and inspecting `pg_restore` 17.10. This
+repository-only documentation turn did not access that package or the retained
+export and does not independently re-establish those observations. No artifact
+path, filename, size, digest, or timestamp belongs here. Migration readiness
+remains RED.
 
 The following are **support-reported and not yet empirically proven**:
 
@@ -57,11 +62,17 @@ Do not infer a restore command from those claims. A valid ZIP envelope and a
 `PGDMP` magic header still do not establish which schemas, owners, privileges,
 roles, extensions, or managed objects are present. The verified inner archive's
 table of contents (TOC), source PostgreSQL major version, local `pg_restore`
-version, and target constraints must be inspected first. Supabase's current
-generic Postgres migration guidance also recommends stripping owners/privileges
-and separately handling roles and RLS, which is why a wholesale restore is not
-presumed safe:
-<https://supabase.com/docs/guides/platform/migrating-to-supabase/postgres>.
+version, and target constraints must be inspected first. Supabase's current CLI
+documentation says its own `db dump` wrapper excludes managed schemas and does
+not include data or custom roles by default. That is useful target guidance,
+not evidence that Lovable used the same flags. Supabase also documents that a
+database-only project copy still requires separate reconfiguration of Storage
+objects/settings, Edge Functions, Auth settings and keys, Realtime, extensions,
+and other project configuration. Those boundaries are why a wholesale restore
+is not presumed safe. See the official
+[Supabase CLI database-dump reference](https://supabase.com/docs/reference/cli/supabase-db-dump),
+[database backup guidance](https://supabase.com/docs/guides/platform/backups),
+and [restore-to-new-project guide](https://supabase.com/docs/guides/platform/clone-project).
 
 ## Non-negotiable rollback rule
 
@@ -320,13 +331,12 @@ and publishes nothing. Do not conflate that UI object/member binding with the
 downloaded outer filename.
 
 PostgreSQL defines `pg_restore --list` as an editable TOC summary suitable for
-`--use-list`, not as a lossless object-identity serialization. PostgreSQL 17's
-upstream `PrintTOCSummary` writes sanitized description, namespace, tag, and
-owner values as whitespace-separated `%s` fields without a documented
-round-trip quoting grammar. See the
-[PostgreSQL 17 `pg_restore` documentation](https://www.postgresql.org/docs/17/app-pgrestore.html)
-and the upstream
-[`PrintTOCSummary` source](https://github.com/postgres/postgres/blob/REL_17_STABLE/src/bin/pg_dump/pg_backup_archiver.c).
+`--use-list`, not as a lossless object-identity serialization. PostgreSQL does
+not document a lossless quoting grammar for the namespace, tag, and owner text
+in that editable listing. See the
+[PostgreSQL 17 `pg_restore` documentation](https://www.postgresql.org/docs/17/app-pgrestore.html),
+and the corresponding
+[PostgreSQL 18 documentation](https://www.postgresql.org/docs/18/app-pgrestore.html).
 The inspector therefore uses conservative class-specific grammars. The
 hyphenated extension exception accepts only the reviewed ASCII EXTENSION shape;
 it does not relax identifiers globally, and quote characters are never assumed
@@ -472,6 +482,104 @@ not make an indeterminate package valid and does not authorize continuation.
 Derive the run ID from the observed availability time plus a prefix of the outer
 SHA-256, never from initiation or artifact metadata.
 
+#### Future offline private-TOC review
+
+The shareable aggregate report is not a lossless TOC. If aggregate evidence is
+complete but object-reference analysis remains `INCOMPLETE`, stop. A future
+private TOC capture requires separate authorization and must not modify or
+replace that evidence package.
+
+The future `capture-lovable-toc.py` procedure starts only after separate
+authorization recreates a private verified inner archive from the same
+canonical outer artifact and externally approves the complete aggregate
+package's identities. The tool does not reopen the outer artifact or aggregate
+package. Mandatory inputs bind their outer/inner hashes, metadata run ID,
+evidence-manifest, inspection-checkout/procedure, current checkout, and tool
+identities as externally approved attestations before the bounded
+`pg_restore --list` path. The bounded helper
+privately captures child channels; raw TOC bytes are published only to fixed,
+exclusive, no-replace mode-`0400` files beneath a mode-`0700` directory in the
+approved encrypted evidence store. They must never reach a terminal, ordinary
+log, Git, CI, chat, or the disposable worktree. Capture size/hash, reported
+client version, externally approved executable SHA-256, pre/post executable
+identity, and durable publication are checked and fsynced; timeout, output cap,
+mutation, cleanup ambiguity, existing output, or binding mismatch is a stop.
+
+Human review occurs locally against that private capture.
+`validate-lovable-toc-ledger.py` accepts only a private canonical-ASCII ledger.
+The capture assigns each entry `te1_` plus HMAC-SHA-256 under a fresh private
+32-byte key over a fixed domain, big-endian ordinal, big-endian raw-line length,
+and exact raw entry-line bytes. The validator recomputes every ID; it never
+parses an ambiguous object name. IDs are not names, owner/namespace values,
+archive OIDs/dump IDs, unsalted hashes, or reversible encodings. Keep the raw
+entry, key, index, ledger, and resulting package private.
+The ledger must be a direct child of the approved external mode-`0700` output
+root and is opened descriptor-relative with no symlink or hardlink acceptance;
+the new private tools reject repository-local workspace roots.
+Reject duplicate, missing, or extra references; unknown classes; free-form
+fields; unreviewed dispositions; count/hash drift; and any raw TOC, name, owner,
+OID, SQL, path, or payload text outside the private raw capture. Peer review must bind
+the ledger to the private capture without copying the mapping out of the
+approved store.
+The classification vocabulary is closed: `restore`,
+`exclude_supabase_managed`, `exclude_duplicate`, `dependency_only`,
+`manual_conflict`, and `unresolved`. A `manual_conflict` must carry one reviewed
+terminal disposition; `unresolved` can never pass the planning gate.
+Publication classes must be marked in the `publication` managed domain even
+while unresolved. Relationship-bearing constraint, policy, security, trigger,
+attach, publication-table, default, and sequence-ownership entries must bind
+distinct opaque parents that cover the fixed reviewed parent-class groups; an
+empty or class-incompatible parent set cannot be self-attested as complete.
+Use `parent_entry_ids`, not free-form text, and follow the exact class-group
+table in `scripts/migration/README.md`; repeated groups require distinct opaque
+IDs. The validator proves only that class structure, so peer review must still
+prove that each opaque parent is the correct semantic object. An unresolved
+managed publication uses `managed_domain=publication` plus aggregate handling
+`manual_conflict` and remains `BLOCKED`.
+The validator preserves the aggregate package's exact 214-entry data-reference
+definition. It separately treats every `SEQUENCE SET` as a state-bearing entry
+that requires an exact `SEQUENCE` metadata parent, without rewriting the bound
+aggregate count.
+The capture stores the complete fixed-key repository procedure identity and
+its digest. The classification result independently stores the validator,
+contract, schema, README, and execution-checkout identity plus its digest.
+
+PostgreSQL warns that restoring an archive can execute arbitrary code selected
+by a source superuser. Neither a private list capture nor a reviewed opaque
+ledger inspects all generated SQL or authorizes execution. It remains `BLOCKED`
+while any condition is incomplete and can become only
+`ELIGIBLE_FOR_HUMAN_REVIEW` after exact structural coverage.
+That state means opaque annotation accounting is complete; automatic
+object-reference analysis remains `INCOMPLETE` because the validator never
+parses ambiguous names.
+`restore_command_gate` stays `BLOCKED`; the ledger is an input to a later
+selective plan, not a restore list or command.
+
+The synthetic matrix includes the existing PostgreSQL 17 lane and immutable
+official-image pins for PostgreSQL 17.6 and 18.4. A PostgreSQL 18.4 `pg_dump`
+reads a disposable 17.6 source; PostgreSQL 18.4 `pg_restore --list` reads that
+archive; and the exact synthetic fixture is separately loaded into disposable
+17.6 and 18.4 targets. Contract tests cover parser, ledger, publication,
+mutation, and nonleakage plants; existing bounded-tool tests cover timeout and
+output caps. These fixtures prove local mechanics for those exact synthetic
+pairings only. They cannot prove that PostgreSQL 17 reads every PostgreSQL 18
+archive, that `pg_restore` consumed every byte, that the retained export uses
+the same grammar, or that hosted Supabase accepts the archive. The capture
+records an externally approved executable SHA-256 and checks path, hash,
+device, inode, mode, and size before and after. Because the bounded helper still
+executes the pathname rather than a held descriptor, it does not attest the
+exact executable bytes the kernel used during a path-swap-and-restore race.
+The same ceiling applies to the inner archive pathname: its approved bytes are
+hashed before and after, but a hostile same-user pathname swap cannot be ruled
+out as the bytes opened by `pg_restore`. The approved metadata workflow remains
+PostgreSQL-17-only unless a later procedure changes that pin explicitly.
+
+PostgreSQL 18 documents that its `pg_dump` can read older servers, but does not
+guarantee that newer-client output will load into an older server even when the
+source was that older version. The synthetic 18.4-to-17.6 load is therefore an
+exact-fixture result only. See the official
+[PostgreSQL 18 `pg_dump` compatibility notes](https://www.postgresql.org/docs/18/app-pgdump.html).
+
 Only the verified inner `PGDMP` is passed to the execution-bound inspector.
 Before invoking `pg_restore`, it records the numeric three-byte archive-format
 version, integer width, offset width, and custom-format code from the first 11
@@ -522,19 +630,26 @@ restore authorization.
 
 ### 7. Decide selective restore plan
 
-Classify each TOC entry as include, exclude, recreate from reviewed migrations,
-or requires vendor confirmation. Resolve whether checked-in migrations run
-before restore, after a data-only restore, or not at all. Explicitly exclude
-objects owned by the managed platform unless Supabase and Lovable document them
-as supported. Treat duplicate schema entries, migration history, owner/ACL/role
-statements, extensions, Auth, Storage metadata, publications, subscriptions,
-event triggers, and managed schemas as hard review gates.
+Do not classify real entries from the shareable aggregate report. Under a
+separately authorized future private-capture procedure, review each raw TOC
+entry locally and record only its opaque reference plus one of the six fixed
+ledger classifications defined above. Resolve whether checked-in migrations
+run before restore, after a data-only restore, or not at all. Explicitly exclude objects owned by the
+managed platform unless Supabase and Lovable document them as supported. Treat
+duplicate schema entries, migration history, owner/ACL/role statements,
+extensions, Auth, Storage metadata, publications, subscriptions, event
+triggers, and managed schemas as hard review gates. The private mapping is
+needed to implement any eventual plan but must not be copied into repository or
+chat evidence.
 
 Do **not** generate a final `pg_restore` command until this classification is
 reviewed against the real TOC and Lovable's supported restore instructions.
 
-Exit gate: a per-TOC selective plan is peer reviewed, reproducible, and has no
-unclassified entry.
+Exit gate: the private capture and opaque ledger hashes are bound to the same
+verified inner archive; ledger arithmetic accounts for every entry exactly
+once; the private mapping and every disposition are peer reviewed; and no entry
+is unclassified. This gate still does not authorize or generate a restore
+command.
 
 ### 8. Rehearsal restore
 

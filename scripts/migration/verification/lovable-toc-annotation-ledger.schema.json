@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://focus-flow-score.invalid/migration/lovable-toc-annotation-ledger-v1.schema.json",
+  "title": "Lovable TOC annotation ledger v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "annotations",
+    "artifact_kind",
+    "capture_binding",
+    "format_version",
+    "global_handling",
+    "managed_domain_handling"
+  ],
+  "properties": {
+    "artifact_kind": { "const": "lovable_toc_annotation_ledger" },
+    "format_version": { "const": 1 },
+    "capture_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capture_manifest_sha256",
+        "evidence_manifest_sha256",
+        "evidence_run_id",
+        "execution_checkout_sha",
+        "inner_archive_sha256",
+        "inspection_checkout_sha",
+        "inspection_procedure_sha256",
+        "outer_archive_sha256",
+        "pg_restore_identity_sha256",
+        "procedure_identity_sha256",
+        "raw_toc_sha256",
+        "raw_toc_size_bytes"
+      ],
+      "properties": {
+        "capture_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "evidence_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "evidence_run_id": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,160}$" },
+        "execution_checkout_sha": { "$ref": "#/$defs/gitSha" },
+        "inner_archive_sha256": { "$ref": "#/$defs/sha256" },
+        "inspection_checkout_sha": { "$ref": "#/$defs/gitSha" },
+        "inspection_procedure_sha256": { "$ref": "#/$defs/sha256" },
+        "outer_archive_sha256": { "$ref": "#/$defs/sha256" },
+        "pg_restore_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "procedure_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "raw_toc_sha256": { "$ref": "#/$defs/sha256" },
+        "raw_toc_size_bytes": { "type": "integer", "minimum": 1, "maximum": 134217728 }
+      }
+    },
+    "annotations": {
+      "type": "array",
+      "maxItems": 1000000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "classification",
+          "dependency_entry_ids",
+          "dependency_review_complete",
+          "entry_id",
+          "managed_domain",
+          "manual_conflict_disposition",
+          "metadata_parent_entry_id",
+          "parent_entry_ids"
+        ],
+        "properties": {
+          "entry_id": { "$ref": "#/$defs/entryId" },
+          "classification": {
+            "enum": [
+              "dependency_only",
+              "exclude_duplicate",
+              "exclude_supabase_managed",
+              "manual_conflict",
+              "restore",
+              "unresolved"
+            ]
+          },
+          "managed_domain": { "$ref": "#/$defs/managedDomain" },
+          "manual_conflict_disposition": {
+            "oneOf": [
+              { "type": "null" },
+              { "enum": ["dependency_only", "exclude_duplicate", "exclude_supabase_managed", "restore"] }
+            ]
+          },
+          "metadata_parent_entry_id": {
+            "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/entryId" }]
+          },
+          "parent_entry_ids": { "$ref": "#/$defs/entryIdArray" },
+          "dependency_entry_ids": { "$ref": "#/$defs/entryIdArray" },
+          "dependency_review_complete": { "const": true }
+        }
+      }
+    },
+    "global_handling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["extension", "owner", "role", "schema"],
+      "properties": {
+        "extension": { "enum": ["manual_conflict", "target_supported_only"] },
+        "owner": { "enum": ["precreate_exact_owner", "strip_and_rebind"] },
+        "role": { "enum": ["exclude_source_roles", "precreate_reviewed_roles"] },
+        "schema": { "enum": ["recreate_from_reviewed_source", "selective_restore"] }
+      }
+    },
+    "managed_domain_handling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "auth",
+        "cron",
+        "extension_owned",
+        "migration_history",
+        "net",
+        "publication",
+        "realtime",
+        "storage",
+        "supabase_prefixed",
+        "vault"
+      ],
+      "properties": {
+        "auth": { "$ref": "#/$defs/managedHandling" },
+        "cron": { "$ref": "#/$defs/managedHandling" },
+        "extension_owned": { "$ref": "#/$defs/managedHandling" },
+        "migration_history": { "$ref": "#/$defs/managedHandling" },
+        "net": { "$ref": "#/$defs/managedHandling" },
+        "publication": { "$ref": "#/$defs/managedHandling" },
+        "realtime": { "$ref": "#/$defs/managedHandling" },
+        "storage": { "$ref": "#/$defs/managedHandling" },
+        "supabase_prefixed": { "$ref": "#/$defs/managedHandling" },
+        "vault": { "$ref": "#/$defs/managedHandling" }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "entryId": { "type": "string", "pattern": "^te1_[0-9a-f]{64}$" },
+    "entryIdArray": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 1000000,
+      "items": { "$ref": "#/$defs/entryId" }
+    },
+    "managedDomain": {
+      "enum": [
+        "auth",
+        "cron",
+        "extension_owned",
+        "migration_history",
+        "net",
+        "none",
+        "publication",
+        "realtime",
+        "storage",
+        "supabase_prefixed",
+        "vault"
+      ]
+    },
+    "managedHandling": {
+      "enum": ["exclude_supabase_managed", "manual_conflict", "not_present", "restore"]
+    }
+  }
+}

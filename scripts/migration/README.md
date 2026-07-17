@@ -1,9 +1,20 @@
 # Local migration rehearsal tools
 
-These tools operate on local files or reviewed repository source only. They do
-not implement a database restore, connection, export, deployment, or migration.
-Migration readiness remains **RED** until a separately authorized empirical
-rehearsal succeeds and every runbook gate is reviewed.
+The operator-facing tools operate on local files or reviewed repository source
+only. They do not implement a retained-export/target database restore,
+connection, export, deployment, or migration. The dedicated cross-major CI
+fixture creates, dumps, and restores only disposable synthetic PostgreSQL
+databases inside isolated containers.
+Migration readiness remains **RED** until a separately authorized selective
+restore rehearsal succeeds and every runbook gate is reviewed.
+
+The retained rehearsal now has one operator-reported complete metadata evidence
+package. Its status remains `REVIEW_REQUIRED` with
+`restore_planning_gate=BLOCKED`: 2,354 TOC entries, 2,140 metadata entries, 214
+data references, and 1,135 recognized-but-unresolved entries. The sanitized
+header evidence reports source PostgreSQL 17.6, writer `pg_dump` 18.4, and
+inspecting `pg_restore` 17.10. This repository-only documentation work did not
+open that package or export, and these aggregate facts are not a restore plan.
 
 ## Inspect a Lovable export envelope
 
@@ -56,13 +67,13 @@ The high-level driver `inspect-lovable-export.py` performs these steps:
    or `--list <absolute-local-path>`.
    PostgreSQL documents `--list` as an editable TOC summary that can be fed
    back to `--use-list`; it does not define lossless field quoting for object
-   identity. In PostgreSQL 17's `PrintTOCSummary`, the sanitized description,
-   namespace, tag, and owner are emitted as whitespace-separated `%s` fields.
-   Names containing whitespace or punctuation therefore cannot always be
-   reconstructed unambiguously from this interface alone. See the
-   [PostgreSQL 17 `pg_restore` documentation](https://www.postgresql.org/docs/17/app-pgrestore.html)
-   and the upstream
-   [`PrintTOCSummary` implementation](https://github.com/postgres/postgres/blob/REL_17_STABLE/src/bin/pg_dump/pg_backup_archiver.c).
+   identity. PostgreSQL does not document a lossless quoting grammar for the
+   namespace, tag, and owner text in that editable listing, so names containing
+   whitespace or punctuation cannot be assumed to round-trip unambiguously.
+   See the
+   [PostgreSQL 17 `pg_restore` documentation](https://www.postgresql.org/docs/17/app-pgrestore.html),
+   and the corresponding
+   [PostgreSQL 18 documentation](https://www.postgresql.org/docs/18/app-pgrestore.html).
 7. Rechecks the canonical outer, working outer, derived inner, inspector report,
    and every digest binding. Archive bytes are deleted from working evidence.
 8. Fully prepares the metadata report, expected and workflow-observed checksum
@@ -194,6 +205,165 @@ analysis still remains `REVIEW_REQUIRED` and has
 `restore_planning_gate=BLOCKED`; no report, provenance record, stdout status, or
 completion marker from this workflow is a restore-ready or migration-green
 signal.
+
+### Future private TOC capture and opaque review ledger
+
+The aggregate inspector intentionally does not solve lossless object-name
+classification. The future `capture-lovable-toc.py` and
+`validate-lovable-toc-ledger.py` procedures provide a separately authorized
+**offline** private capture and opaque-ledger review path. They remain a new
+evidence layer rather than silently broadening the published metadata report.
+The existing aggregate evidence package remains immutable.
+
+The private-capture contract is:
+
+1. Start only after a separate authorization has recreated a private verified
+   inner archive from the externally approved canonical artifact and approved
+   the complete aggregate package's run/manifest identities. This tool does not
+   reopen or validate the outer artifact or aggregate package itself. It
+   requires their approved outer/inner hashes, run ID, manifest hash, and
+   inspection identities as mandatory externally approved attestations and
+   binds them into the new capture. A complete package is a prerequisite, not
+   authorization.
+2. `capture-lovable-toc.py` may invoke only the bounded
+   `pg_restore --version` and `pg_restore --list`
+   forms. The bounded wrapper privately captures child channels; the capture
+   tool discards child stderr, holds successful list bytes privately, and never
+   forwards them. Raw TOC bytes are published only into a fixed mode-`0400`
+   file beneath a mode-`0700` no-replace package in the approved evidence-store
+   root. They never go to the terminal, Git, CI, chat, or a general log.
+3. Bind the private capture to the canonical outer identity, verified inner
+   SHA-256, metadata run ID, execution checkout, inspector/guard identities,
+   reported `pg_restore` version, approved executable SHA-256, observed
+   path/device/inode/mode/size, capture byte size, and raw-capture SHA-256. The
+   capture stores the complete fixed-key repository procedure identity and its
+   digest. The ledger result separately stores and hashes the exact validator,
+   contract, schema, README, and execution-checkout identity. The
+   executable is fingerprinted before and after the two bounded calls. The
+   bounded wrapper still executes the reviewed pathname rather than a held
+   descriptor, so this does not prove which bytes the kernel executed during a
+   path-swap-and-restore race; record that ceiling rather than calling the
+   executable bytes attested. The same pathname limitation applies to the
+   inner archive: pre/post identity checks bind the approved path's bytes but
+   do not prove which bytes a hostile same-user pathname swap made
+   `pg_restore` open.
+4. Review the private TOC locally. Each entry ID is
+   `te1_` plus HMAC-SHA-256 under a fresh private 32-byte capture key over the
+   domain `focus-flow-score/lovable-toc-entry/v1\0`, big-endian 64-bit ordinal,
+   big-endian 64-bit raw-line length, and exact raw entry-line bytes. The key,
+   raw TOC, and fixed class/ordinal index all remain private. This prevents
+   dictionary guessing of common object names while allowing exact validator
+   recomputation; IDs are not archive OIDs, dump IDs, names, or reversible
+   encodings.
+5. Feed only a private, canonical-ASCII ledger matching
+   `verification/lovable-toc-annotation-ledger.schema.json` to
+   `validate-lovable-toc-ledger.py`. Reject missing, duplicate, or extra IDs;
+   unknown or contradictory fields; unknown classes; incomplete dependencies;
+   unreviewed dispositions; count or capture-hash disagreement; and any name,
+   namespace, owner, OID, SQL, path, payload, or raw TOC text outside the raw
+   private capture. The ledger and output package remain in the approved store
+   and Git-ignored; only fixed diagnostics, categories, hashes, and aggregate
+   counts may be copied to ordinary logs.
+   The classification vocabulary is closed and exact: `restore`,
+   `exclude_supabase_managed`, `exclude_duplicate`, `dependency_only`,
+   `manual_conflict`, or `unresolved`. `manual_conflict` requires a separate
+   reviewed terminal disposition; it is not itself permission to restore.
+   Every publication TOC class is structurally bound to the `publication`
+   managed domain; a still-unresolved publication remains publishable only as
+   `BLOCKED`. Constraint, policy, security, trigger, attach, publication-table,
+   default, and sequence-ownership classes require distinct opaque parent IDs
+   covering their reviewed parent-class groups. A boolean “reviewed” flag with
+   an empty or class-incompatible parent set is rejected.
+
+   Record these relationships only in `parent_entry_ids`; every repeated group
+   requires a different opaque entry ID:
+
+   | Entry class | Required parent class groups |
+   |---|---|
+   | `CHECK CONSTRAINT` | one of `DOMAIN`, `FOREIGN TABLE`, or `TABLE` |
+   | `CONSTRAINT` | one of `DOMAIN`, `FOREIGN TABLE`, or `TABLE` |
+   | `DEFAULT` | one of `FOREIGN TABLE` or `TABLE` |
+   | `FK CONSTRAINT` | two distinct `TABLE` IDs |
+   | `INDEX ATTACH` | two distinct `INDEX` IDs |
+   | `POLICY` | one `TABLE` |
+   | `PUBLICATION TABLE` | one `PUBLICATION` plus one `TABLE` |
+   | `PUBLICATION TABLES IN SCHEMA` | one `PUBLICATION` plus one `SCHEMA` |
+   | `ROW SECURITY` | one `TABLE` |
+   | `SEQUENCE OWNED BY` | one `SEQUENCE` plus one `TABLE` |
+   | `TABLE ATTACH` | one `TABLE` plus a distinct `TABLE` or `FOREIGN TABLE` ID |
+   | `TRIGGER` | one of `FOREIGN TABLE`, `TABLE`, or `VIEW` |
+
+   The tool validates only opaque ID/class structure; the reviewer remains
+   responsible for proving that each chosen parent is the correct semantic
+   object. `PUBLICATION`, `PUBLICATION TABLE`, and
+   `PUBLICATION TABLES IN SCHEMA` always require
+   `managed_domain=publication`. If such an entry is still `unresolved`, set
+   aggregate publication handling to `manual_conflict`; the result remains
+   `BLOCKED`.
+   These intentionally narrow class sets follow the official PostgreSQL 18
+   [`CREATE PUBLICATION`](https://www.postgresql.org/docs/18/sql-createpublication.html),
+   [`CREATE TRIGGER`](https://www.postgresql.org/docs/18/sql-createtrigger.html),
+   [`CREATE POLICY`](https://www.postgresql.org/docs/18/sql-createpolicy.html),
+   [`ALTER TABLE`](https://www.postgresql.org/docs/18/sql-altertable.html), and
+   [`ALTER SEQUENCE`](https://www.postgresql.org/docs/18/sql-altersequence.html)
+   object boundaries. Uncertain shapes fail closed for later review rather
+   than broadening a class group.
+   Preserve the completed aggregate report's exact 214-entry data-reference
+   definition. `SEQUENCE SET` is tracked separately as state-bearing metadata
+   and must still map to an exact `SEQUENCE` parent; it is never allowed to
+   disappear by being counted as ordinary metadata.
+6. `restore_planning_gate` stays `BLOCKED` while any entry is unresolved or any
+   exact accounting, data-parent, dependency, manual-conflict, global handling,
+   managed-domain, archive, procedure, or tool binding is incomplete. When all
+   structural conditions pass, opaque annotation accounting becomes
+   `COMPLETE` but automatic object-reference analysis remains `INCOMPLETE`; the
+   tool emits only
+   `ELIGIBLE_FOR_HUMAN_REVIEW`; `restore_command_gate` remains `BLOCKED` and
+   migration readiness remains `RED`. Human semantic correctness is an
+   attestation the validator cannot independently prove.
+
+PostgreSQL explicitly describes the list file as editable input to
+`--use-list`, and separately warns that restoring a dump can execute arbitrary
+code chosen by a source superuser. A TOC-only review therefore does not make
+the archive safe to restore or replace review of generated SQL and target
+behavior. See the official PostgreSQL 17 and 18 `pg_restore` pages linked
+above.
+
+The checked-in synthetic matrix uses a digest-pinned official PostgreSQL 18.4
+client to dump a disposable 17.6 source, list that custom archive, validate the
+list with the conservative raw-TOC parser, and load the exact synthetic fixture
+into separate disposable 17.6 and 18.4 targets. Separate unit tests use bounded
+fake children to exercise the complete private-capture and opaque-ledger
+lifecycle, including whitespace, punctuation, Unicode, duplicate,
+unknown-class, malformed/oversized input, binding, publication, cleanup, and
+leakage failures. Passing both lanes proves only those distinct synthetic
+contracts. It does not prove that an older client can read every newer archive,
+that either client consumed every input byte, that the retained Lovable archive
+has the same TOC grammar, or that an owned Supabase target accepts the archive.
+The currently approved metadata workflow remains pinned to PostgreSQL 17 until
+a later reviewed procedure explicitly changes that requirement.
+
+PostgreSQL 18 documents that its `pg_dump` can dump older servers, while its
+output is not guaranteed to load into an older server even when the source was
+that older version. Therefore the passing synthetic 18.4-to-17.6 load is one
+fixture result, not a supported production-restore guarantee. See the official
+[PostgreSQL 18 `pg_dump` compatibility notes](https://www.postgresql.org/docs/18/app-pgdump.html).
+
+Both new tools consume paths and approved identities only through mandatory
+`TOC_REVIEW_*` environment variables, never shell arguments. The capture
+requires the private inner path and output root; approved outer/inner,
+aggregate-manifest, inspection-checkout/procedure, execution-checkout, and
+`pg_restore` hashes; run ID; exact `pg_restore` path; and expected total/data
+entry counts. The ledger validator additionally requires the fixed capture
+package name, private canonical ledger path, independently approved capture
+manifest/raw-TOC/procedure-identity hashes, and the same archive/tool/procedure
+bindings. There are no defaults. The capture/output roots and the ledger file
+must be in an approved mode-`0700` private root outside the Git worktree; the
+ledger is opened descriptor-relative as a direct child and must be a
+single-link mode-`0400` regular file. The new tools deliberately reject
+`local-migration-artifacts/` because it is inside the repository. That ignored
+directory remains disposable workspace for older aggregate tooling and must
+never be the sole evidence copy.
 
 ### Required operator inputs
 

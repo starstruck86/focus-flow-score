@@ -19,17 +19,25 @@ evidence only:
   the execution-bound raw-`PGDMP` inspector, inventory, verification templates,
   and strict manifest comparison.
 
-**Migration readiness remains RED.** An authorized rehearsal export is retained
-offline in an approved evidence store. PR #15 is merged at main
-`8b872882787859b87549e7f884832c624e29ead9`. A separately authorized
-metadata-only attempt failed closed at
-`report_helper_failed/unresolved_known_toc_entry`; it produced no evidence
-package and performed no restore. No identifying artifact metadata is committed
-here. This correction and its tests use synthetic fixtures only and do not
-access, inspect, list, copy, hash, rename, or extract the retained export. They
-also do not access Lovable, Supabase, secrets, production, or any remote or
-pre-existing database. CI keeps the required PostgreSQL checks confined to
-isolated synthetic PG17 fixture databases.
+**Migration readiness remains RED.** PR #16 is the current merged aggregate
+inspection contract at main
+`1b13483be43b3d5f28a7086606b8a921a6879f18`. PR #19 later merged through the
+history-preserving main commit
+`30d5a46c30a851d89957fcfba0cc0a5a53df24d2`; its repository-only cron-receipt
+work did not deploy or change any runtime and does not change migration
+readiness.
+
+An authorized rehearsal export remains offline in an approved evidence store.
+After the earlier fail-closed parser result, a separately authorized inspection
+under PR #16 produced an operator-reported complete durable metadata package
+with `inspection_status=REVIEW_REQUIRED` and
+`restore_planning_gate=BLOCKED`; it performed no restore. The sanitized result
+records 2,354 TOC entries: 2,140 metadata entries, 214 data references, and
+1,135 recognized-but-unresolved entries. It reports source PostgreSQL 17.6,
+writer `pg_dump` 18.4, and inspecting `pg_restore` 17.10. This
+repository-documentation work did not access that package or the retained
+export and does not independently re-establish those observations. No artifact
+path, filename, size, digest, or timestamp belongs here.
 
 PostgreSQL's editable `pg_restore --list` output does not define lossless
 quoting for its whitespace-separated namespace, tag, and owner fields. A
@@ -58,23 +66,50 @@ Source and
 unrecognized value, and EXTENSION owner tokens participate in owner/role
 warnings without changing the ownerless form.
 
-The retained rehearsal's initiation time was not observed. Provenance must keep
+The retained rehearsal's initiation time was not observed. Provenance keeps
 that event explicitly null with `basis: not_observed` and a required reason,
-record availability separately from completion, and remain
+records availability separately from completion, and remains
 `export_timeline_status: INCOMPLETE` with
 `inspection_status: REVIEW_REQUIRED`. That missing evidence is irreparable for
-this rehearsal, but it does not require another export or prevent safe offline
-metadata inspection after an exact execution checkout is separately reviewed
-and approved. Every future rehearsal and final export must record initiation
-before the export action.
+this rehearsal. It did not prevent the completed offline aggregate inspection,
+but it remains part of that package's verification ceiling. Every future
+rehearsal and final export must record initiation before the export action.
 
-No restore, deployment, migration, export, or data movement is performed by the
-repository workflow. The canonical outer artifact and any verified inner
-`PGDMP` are distinct evidence with distinct hashes; neither may be committed to
-the repository.
+No retained-export, target, or runtime restore, deployment, migration, export,
+or data movement is performed by this repository workflow. CI does create,
+dump, list, and restore small disposable synthetic PostgreSQL fixtures. The
+canonical outer artifact and any verified inner `PGDMP` are distinct evidence
+with distinct hashes; neither may be committed to the repository.
 
 Inspection execution records the resolved Python executable, version, and
 SHA-256, invokes child Python in isolated mode, and removes inherited shell and
 Python startup hooks. The raw inspector cleans its private workspace before an
 atomic no-replace report publication, so cleanup failure cannot leave a normal
 report behind.
+
+The aggregate report intentionally does not disclose enough object identity to
+resolve the 1,135 recognized-but-unresolved entries. A future, separately
+authorized offline layer may use `capture-lovable-toc.py` to retain raw list
+output only in the approved private evidence store, and
+`validate-lovable-toc-ledger.py` to validate a private opaque disposition
+ledger. Per-entry IDs are keyed HMACs over exact raw entry bytes and framing,
+not automatically parsed names or unsalted hashes. The raw capture, private
+key/index/ledger, and object identities must not enter Git, CI, chat, or
+ordinary logs; only fixed diagnostics, categories, hashes, and aggregate
+arithmetic may leave the private evidence store. The gate can become only
+`ELIGIBLE_FOR_HUMAN_REVIEW` after exact structural coverage;
+`restore_command_gate` and migration readiness remain `BLOCKED`/`RED`.
+
+PostgreSQL documents `pg_restore --list` as an editable TOC listing and warns
+that restoring a dump can execute arbitrary code chosen by source
+superusers. The digest-pinned cross-major lane establishes dump/list/restore
+behavior only for its generated fixture; separate fake-child tests establish
+the private capture/ledger lifecycle. Neither establishes retained-archive
+compatibility, complete byte consumption, target acceptance, or dump safety.
+See the official PostgreSQL
+[17](https://www.postgresql.org/docs/17/app-pgrestore.html) and
+[18](https://www.postgresql.org/docs/18/app-pgrestore.html) `pg_restore`
+documentation. Supabase's own CLI dump defaults and project-copy boundaries
+are target-planning guidance, not evidence of Lovable's export flags; see the
+[CLI dump reference](https://supabase.com/docs/reference/cli/supabase-db-dump)
+and [restore-to-new-project guide](https://supabase.com/docs/guides/platform/clone-project).
