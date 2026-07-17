@@ -22,7 +22,7 @@ incident credentials.
 | --- | --- |
 | `supabase/functions/daily-digest/index.ts` | Custom cron-header consumer plus a separate user-JWT path. |
 | `supabase/functions/run-strategy-task-reaper/index.ts` | Current cron-only custom-header consumer. It remains legacy-compatible and does not require an attempt header. |
-| `supabase/functions/run-strategy-task-reaper-receipt-v1/index.ts` | Unused strict successor that requires the durable attempt-receipt contract. It is not deployed or authorized for deployment. |
+| `supabase/functions/run-strategy-task-reaper-receipt-v1/index.ts` | Repository-added strict successor that requires the durable attempt-receipt contract. No tracked caller targets this slug; no deployment was authorized or observed; production deployment state is unavailable. |
 | `supabase/functions/schedule-daily-plan/index.ts` | Cron-only custom-header consumer; its downstream call uses separate service-role authorization. |
 | `supabase/functions/_shared/cronSecretAuth.ts` | Shared current/next receiver-side verifier. |
 | `supabase/migrations/20260711134232_44bcd1c9-fc73-4dbc-b6a0-c28705a3a756.sql` | Database-only sentinel scheduler; it does not call an Edge Function or use the cron header. |
@@ -31,6 +31,18 @@ No current tracked runtime producer sends the custom cron header, and no
 repository file provisions either receiver-side secret. Other scheduled or
 secret-authenticated functions use different contracts and are not rotated by
 this procedure.
+
+Only the legacy receiver's leaf `handler.ts` and `index.ts` blobs are
+byte-identical to base `main`. Its deployable dependency closure is not:
+`supabase/functions/_shared/cronHeadReceiver.ts` and
+`supabase/functions/_shared/cronSecretAuth.ts` change in this PR. That leaf-file
+fact is not deployment evidence or a claim that the deployed legacy bundle is
+unchanged. While `RECEIVER_DEPLOYMENT_GATE` is `BLOCKED`, every unscoped or
+deploy-all Edge Function operation is prohibited, including an unscoped
+`supabase functions deploy` and any Lovable workflow that enumerates every
+tracked function directory. A future deployment requires separate
+authorization and an explicit slug allowlist; only the strict successor may be
+selected for this handoff after its gate clears.
 
 ## Receiver contract
 
@@ -57,7 +69,8 @@ exactly one caller branch:
    job, and owners of every other possible scheduler or integration confirm
    there is no external caller. Rotate the receiver credential through the
    function-secret surface. Do not install pg_cron, Vault objects, a wrapper,
-   or a schedule merely to exercise or rotate an otherwise unused receiver.
+   or a schedule merely to exercise or rotate a receiver with no confirmed
+   caller.
    The metadata-only staging observation of zero cron jobs selects neither this
    branch nor an external-caller branch by itself; it must be combined with the
    external-caller inventory.
@@ -90,7 +103,12 @@ nor the already-Vault-backed form of the pg_cron branch. Production rotation is
 following legacy-to-Vault handoff through the secure production management
 surface under a separate mutation authorization.
 
-Treat the handoff as a state machine. Failure before `LEGACY_PAUSED` makes no
+Treat the handoff as a future procedural review state machine. The checked-in
+`strict_receiver_deployment_allowed()` implementation is a deterministic
+synthetic test model, not an installed runtime predicate, pg_cron lock, or
+control-plane deployment barrier. No checked-in production SQL implements the
+pause, drain, replacement, deployment, dispatch, or final activation states.
+Failure before `LEGACY_PAUSED` makes no
 mutation and does not claim the legacy jobs stopped; once `LEGACY_PAUSED` is
 proved, every later failure leaves all affected jobs inactive. No later state
 may be entered by operator attestation alone. While
@@ -746,8 +764,8 @@ The implementation status is deliberately receiver-specific:
 | Receiver | Attempt-bound receipt status | Exact transaction boundary |
 | --- | --- | --- |
 | `daily-digest` | `RED / BLOCKED` | Perplexity HTTP calls occur outside PostgreSQL, followed by separate per-account updates and an optional delete then insert of digest rows. A model call, an account update, or the delete can complete before a later write or receipt fails. The existing multi-user loop cannot atomically bind all of those effects to one receipt. |
-| `run-strategy-task-reaper` | `YELLOW / LEGACY-COMPATIBLE` | The existing production-compatible slug still authenticates the cron secret and performs its existing sweep without requiring an attempt header. It intentionally does not claim an attempt receipt and is not changed into the strict receiver by this PR. |
-| `run-strategy-task-reaper-receipt-v1` | `GREEN / IMPLEMENTED IN REPOSITORY FIXTURES ONLY` | `public.execute_strategy_task_reaper_attempt` serializes the bound attempt, deterministically locks eligible `task_runs`, performs one set-based transition, and terminalizes the receipt in the same PostgreSQL transaction. The no-eligible-row proof and legitimate-no-op receipt are committed together. This slug is unused and must remain undeployed while the gate is blocked. |
+| `run-strategy-task-reaper` | `YELLOW / LEGACY-COMPATIBLE` | In reviewed repository code/tests, the legacy slug retains cron authentication and the no-attempt sweep contract. Only its leaf handler/index blobs match base `main`; shared authentication and HEAD-receiver dependencies change. Deployed bundle/runtime behavior was not observed. |
+| `run-strategy-task-reaper-receipt-v1` | `GREEN / IMPLEMENTED IN REPOSITORY FIXTURES ONLY` | `public.execute_strategy_task_reaper_attempt` serializes the bound attempt, deterministically locks eligible `task_runs`, performs one set-based transition, and terminalizes the receipt in the same PostgreSQL transaction. The no-eligible-row proof and legitimate-no-op receipt are committed together. No tracked caller targets this slug; no deployment was authorized or observed; production deployment state is unavailable. Deployment remains prohibited while the gate is blocked. |
 | `schedule-daily-plan` | `RED / BLOCKED` | The receiver loops over users and invokes `generate-time-blocks` once per eligible user over HTTP. Those downstream invocations and their database/model effects are outside one caller transaction, so a partial loop or lost response can leave effects that cannot be reconciled exactly to the outer attempt. |
 
 For the strict `run-strategy-task-reaper-receipt-v1` successor, an exact
@@ -868,7 +886,7 @@ SQL is deliberately located at
 `supabase/migrations`, so an ordinary Lovable/Supabase migration runner cannot
 consume it automatically. It refuses to create any
 receipt object unless `public.task_runs` already has RLS enabled and a valid,
-ready, live, nonunique btree with exactly two key attributes, no included
+ready, live, nonunique, non-exclusion btree with exactly two key attributes, no included
 attributes, ordered keys `(updated_at, id)`, and exact predicate
 `status = 'pending'`. It does not run ordinary `CREATE
 INDEX`, because that would take a write-blocking lock on `task_runs` during a
@@ -921,6 +939,11 @@ until Lovable confirms the actual migration actor, whether its runner provides
 an all-file transaction, its `CREATE ROLE` behavior, and the exact privileged
 owner-transfer procedure that can finish with zero edges. A synthetic
 privileged fixture proves mechanics only; it does not prove hosted capability.
+The same PG17 integration independently plants executor role configuration,
+nondefault connection-limit, password-presence, and nonnull-expiry drift both
+before the privileged precondition and after that precondition but before the
+postcondition. Every planted case must reject the installation and roll back
+both the planted role state and every receipt object.
 
 Before `RECEIPT_INSTALLATION_APPLIED`, mandatory production checks must be run
 read-only and retained as counts, booleans, allowlisted identifiers, and
@@ -1054,6 +1077,10 @@ For each environment independently:
    Production's active legacy no-attempt callers must defer strict receiver deployment to the
    paused/drained state machine in step 4. Receiver-first deployment and
    receiver-side generation of a missing attempt identifier are forbidden.
+   Unscoped or deploy-all function deployment is forbidden throughout this
+   procedure. After the gate clears, a separately authorized deployment must
+   target only the strict successor slug; it must not redeploy the legacy slug
+   or any unrelated function.
 4. Rotate the selected caller branch:
    - **No caller/job:** install no scheduler or sender secret. Rotate only the
      receiver-side value and skip sender and controlled-job steps.

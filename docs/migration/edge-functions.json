@@ -2,14 +2,14 @@
   "collection": {
     "artifact": {
       "kind": "repository_deployment_inventory",
-      "sha256": "sha256:b7050c0d2833d4ce5ebcbfdd68d8184a4a24abf313d6187269d2c1150d1e0a60",
+      "sha256": "sha256:40047cdc4d1c921f6d4a14b8e692d9c12e628d7c14fa99b601abf3f4fd9b2895",
       "source": "local source project odbjjklumdsuqdvkgwyv supabase/config.toml and resolved supabase/functions dependency closures"
     },
     "boundary": {
       "kind": "repository_content_sha256",
-      "value": "sha256:b7050c0d2833d4ce5ebcbfdd68d8184a4a24abf313d6187269d2c1150d1e0a60"
+      "value": "sha256:40047cdc4d1c921f6d4a14b8e692d9c12e628d7c14fa99b601abf3f4fd9b2895"
     },
-    "collected_at": "2026-07-17T01:37:02Z",
+    "collected_at": "2026-07-17T04:20:09Z",
     "collector": {
       "name": "inventory-edge-functions",
       "version": "2.0.0"
@@ -2882,7 +2882,7 @@
           "supabase/functions/run-strategy-task-reaper-receipt-v1/handler.ts",
           "supabase/functions/run-strategy-task-reaper-receipt-v1/index.ts"
         ],
-        "fingerprint": "sha256:d6fd037383ce75ff9a762090e7a099468206b715951f4b7bedca7897023a12c9",
+        "fingerprint": "sha256:0158665627ae0bf4e97499ddf17a9178ba52a050879663ef0af8aecfe4dca14d",
         "kind": "edge_function_deployment_closure"
       },
       "independently_verifiable": true,

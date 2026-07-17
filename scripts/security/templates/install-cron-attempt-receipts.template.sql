@@ -104,6 +104,7 @@ BEGIN
     AND i.indisready
     AND i.indislive
     AND NOT i.indisunique
+    AND NOT i.indisexclusion
     AND i.indnkeyatts = 2
     AND i.indnatts = 2
     AND am.amname = 'btree'

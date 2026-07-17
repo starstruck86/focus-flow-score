@@ -48,6 +48,7 @@ SELECT
       AND candidate.indisready
       AND candidate.indislive
       AND NOT candidate.indisunique
+      AND NOT candidate.indisexclusion
       AND candidate.indnkeyatts = 2
       AND candidate.indnatts = 2
       AND candidate_access_method.amname = 'btree'

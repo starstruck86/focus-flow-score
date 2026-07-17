@@ -1,6 +1,7 @@
 // Strict attempt-receipted successor to run-strategy-task-reaper.
-// This separate, currently unused slug cannot replace the legacy-compatible
-// receiver before the reviewed sender handoff reaches its deployment gate.
+// No tracked caller targets this separate strict successor. Its deployment
+// state is runtime-unverified, and deploy-all operations are prohibited while
+// the receiver gate is blocked.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {

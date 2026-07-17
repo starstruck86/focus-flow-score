@@ -106,6 +106,7 @@ class SyntheticIndexShape:
     ready: bool = True
     live: bool = True
     unique: bool = False
+    exclusion: bool = False
     key_attributes: int = 2
     total_attributes: int = 2
     access_method: str = "btree"
@@ -128,6 +129,7 @@ def index_matches_receipt_prerequisite(index):
         and index.ready
         and index.live
         and not index.unique
+        and not index.exclusion
         and index.key_attributes == 2
         and index.total_attributes == 2
         and index.access_method == "btree"
@@ -860,6 +862,24 @@ class CronRotationContractTest(unittest.TestCase):
             with self.subTest(label=label):
                 self.assertFalse(allowed(jobs))
 
+    def test_strict_receiver_deployment_claims_stay_repository_scoped(self) -> None:
+        for marker in (
+            "No tracked caller targets this slug; no deployment was authorized or observed; production deployment state is unavailable.",
+            "Only the legacy receiver's leaf `handler.ts` and `index.ts` blobs are\nbyte-identical to base `main`",
+            "`supabase/functions/_shared/cronHeadReceiver.ts` and\n`supabase/functions/_shared/cronSecretAuth.ts` change in this PR",
+            "every unscoped or\ndeploy-all Edge Function operation is prohibited",
+            "only the strict successor may be\nselected for this handoff after its gate clears",
+            "a deterministic\nsynthetic test model, not an installed runtime predicate",
+        ):
+            self.assertIn(marker, self.text)
+
+        for unsupported in (
+            "This slug is unused",
+            "must remain undeployed",
+            "It is not deployed",
+        ):
+            self.assertNotIn(unsupported, self.text)
+
     def test_no_active_strict_sender_is_reachable_before_final_activation(
         self,
     ) -> None:
@@ -1354,6 +1374,7 @@ class CronRotationContractTest(unittest.TestCase):
             "cron_receipt_task_runs_index_prerequisite_missing",
             install_template,
         )
+        self.assertIn("NOT i.indisexclusion", install_template)
         self.assertNotIn("CREATE ROLE cron_receipt_executor", install_template)
         self.assertNotIn("ALTER ROLE cron_receipt_executor", install_template)
         self.assertIn(") OWNER TO cron_receipt_executor", install_template)
@@ -1386,6 +1407,7 @@ class CronRotationContractTest(unittest.TestCase):
             "candidate.indisready",
             "candidate.indislive",
             "NOT candidate.indisunique",
+            "NOT candidate.indisexclusion",
             "candidate.indnkeyatts = 2",
             "candidate.indnatts = 2",
             "candidate_access_method.amname = 'btree'",
@@ -1414,8 +1436,39 @@ class CronRotationContractTest(unittest.TestCase):
         self.assertIn("executor-grant-option.out", integration)
         self.assertIn("executor-alternate-grantor.out", integration)
         self.assertIn("cron_receipt_nontransactional_witness_seq", integration)
+        self.assertIn(
+            "task_runs_pending_updated_at_id_exclusion_fixture",
+            integration,
+        )
+        self.assertIn(
+            "accepted an exclusion index prerequisite",
+            integration,
+        )
+        self.assertIn(
+            "preguard did not create the exact ordinary index",
+            integration,
+        )
+        self.assertEqual(
+            integration.count(
+                "for role_drift in configuration connection_limit password valid_until"
+            ),
+            2,
+        )
+        self.assertIn("executor-postcondition-${role_drift}.out", integration)
+        self.assertIn(
+            "postcondition $role_drift rollback",
+            integration,
+        )
+        for provisioning_guard in (
+            "pg_catalog.pg_db_role_setting",
+            "auth.rolconnlimit = -1",
+            "auth.rolpassword IS NULL",
+            "auth.rolvaliduntil IS NULL",
+        ):
+            self.assertIn(provisioning_guard, install_template)
+            self.assertIn(provisioning_guard, integration)
 
-    def test_unique_include_and_brin_indexes_are_not_exact_prerequisites(
+    def test_unique_exclusion_include_and_brin_indexes_are_not_exact_prerequisites(
         self,
     ) -> None:
         exact = SyntheticIndexShape()
@@ -1423,6 +1476,7 @@ class CronRotationContractTest(unittest.TestCase):
 
         near_misses = {
             "unique": replace(exact, unique=True),
+            "exclusion": replace(exact, exclusion=True),
             "include": replace(exact, total_attributes=3),
             "brin": replace(exact, access_method="brin"),
         }

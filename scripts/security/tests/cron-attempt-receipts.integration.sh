@@ -410,6 +410,64 @@ if ! grep -Fq 'receipt_index_guard_identity_rejected' \
   exit 1
 fi
 
+# A partial btree exclusion constraint can match every key/predicate/catalog
+# field used by the ordinary-index prerequisite except indisexclusion. It must
+# not satisfy the installer or make the concurrent preguard believe the
+# reviewed ordinary index already exists.
+psql_fixture -c "
+ALTER TABLE public.task_runs
+  ADD CONSTRAINT task_runs_pending_updated_at_id_exclusion_fixture
+  EXCLUDE USING btree (
+    updated_at WITH =,
+    id WITH =
+  )
+  WHERE (status = 'pending');"
+if [[ $(psql_fixture -A -t -c "
+  SELECT pg_catalog.count(*) = 1
+    AND pg_catalog.bool_and(constraint_row.contype = 'x')
+    AND pg_catalog.bool_and(index.indisexclusion)
+    AND pg_catalog.bool_and(NOT index.indisunique)
+    AND pg_catalog.bool_and(index.indisvalid)
+    AND pg_catalog.bool_and(index.indisready)
+    AND pg_catalog.bool_and(index.indislive)
+    AND pg_catalog.bool_and(index.indnkeyatts = 2)
+    AND pg_catalog.bool_and(index.indnatts = 2)
+    AND pg_catalog.bool_and(access_method.amname = 'btree')
+    AND pg_catalog.bool_and(
+      pg_catalog.pg_get_indexdef(index.indexrelid, 1, true) = 'updated_at'
+    )
+    AND pg_catalog.bool_and(
+      pg_catalog.pg_get_indexdef(index.indexrelid, 2, true) = 'id'
+    )
+    AND pg_catalog.bool_and(
+      pg_catalog.pg_get_expr(index.indpred, index.indrelid) =
+        '(status = ''pending''::text)'
+    )
+  FROM pg_catalog.pg_constraint AS constraint_row
+  JOIN pg_catalog.pg_index AS index
+    ON index.indexrelid = constraint_row.conindid
+  JOIN pg_catalog.pg_class AS index_class
+    ON index_class.oid = index.indexrelid
+  JOIN pg_catalog.pg_am AS access_method
+    ON access_method.oid = index_class.relam
+  WHERE constraint_row.conrelid = 'public.task_runs'::regclass
+    AND constraint_row.conname =
+      'task_runs_pending_updated_at_id_exclusion_fixture';") != t ]]; then
+  echo "cron receipt integration exclusion fixture did not match the planted shape" >&2
+  exit 1
+fi
+if psql_install 0 -f - < "$INSTALL_TEMPLATE" \
+  > "$TMP_DIR/exclusion-index-prerequisite.out" 2>&1; then
+  echo "cron receipt integration accepted an exclusion index prerequisite" >&2
+  exit 1
+fi
+if ! grep -Fq 'cron_receipt_task_runs_index_prerequisite_missing' \
+  "$TMP_DIR/exclusion-index-prerequisite.out"; then
+  echo "cron receipt integration returned the wrong exclusion-index stage" >&2
+  exit 1
+fi
+assert_receipt_installation_absent "exclusion-index rejection"
+
 psql_fixture \
   -v receipt_index_mutation_authorized=YES \
   -v "receipt_index_expected_database=$PGDATABASE" \
@@ -417,6 +475,44 @@ psql_fixture \
   -v receipt_index_expected_task_owner=receipt_fixture_task_owner \
   -v receipt_index_expected_server_major=17 \
   -f - < "$INDEX_TEMPLATE"
+
+if [[ $(psql_fixture -A -t -c "
+  SELECT pg_catalog.count(*) = 1
+    AND pg_catalog.bool_and(index.indisvalid)
+    AND pg_catalog.bool_and(index.indisready)
+    AND pg_catalog.bool_and(index.indislive)
+    AND pg_catalog.bool_and(NOT index.indisunique)
+    AND pg_catalog.bool_and(NOT index.indisexclusion)
+    AND pg_catalog.bool_and(index.indnkeyatts = 2)
+    AND pg_catalog.bool_and(index.indnatts = 2)
+    AND pg_catalog.bool_and(access_method.amname = 'btree')
+    AND pg_catalog.bool_and(
+      pg_catalog.pg_get_indexdef(index.indexrelid, 1, true) = 'updated_at'
+    )
+    AND pg_catalog.bool_and(
+      pg_catalog.pg_get_indexdef(index.indexrelid, 2, true) = 'id'
+    )
+    AND pg_catalog.bool_and(
+      pg_catalog.pg_get_expr(index.indpred, index.indrelid) =
+        '(status = ''pending''::text)'
+    )
+    AND pg_catalog.bool_and(
+      pg_catalog.to_regclass(
+        'public.task_runs_pending_updated_at_id_exclusion_fixture'
+      ) IS NOT NULL
+    )
+  FROM pg_catalog.pg_index AS index
+  JOIN pg_catalog.pg_class AS index_class
+    ON index_class.oid = index.indexrelid
+  JOIN pg_catalog.pg_am AS access_method
+    ON access_method.oid = index_class.relam
+  WHERE index.indrelid = 'public.task_runs'::regclass
+    AND index_class.relname = 'task_runs_pending_updated_at_id_idx';") != t ]]; then
+  echo "cron receipt integration preguard did not create the exact ordinary index" >&2
+  exit 1
+fi
+psql_fixture -c "ALTER TABLE public.task_runs DROP CONSTRAINT
+  task_runs_pending_updated_at_id_exclusion_fixture;"
 
 # The install template requires an exact externally pre-provisioned executor;
 # it never creates or alters the role. Missing role state is a hard stop.
@@ -458,6 +554,73 @@ if [[ ! $EXECUTOR_OID =~ ^[0-9]+$ ]]; then
   echo "cron receipt integration could not bind the executor OID" >&2
   exit 1
 fi
+
+assert_executor_role_provisioning_clean() {
+  local description=$1
+  local observed
+  observed=$(psql_fixture -A -t -c "
+  SELECT
+    auth.rolconnlimit = -1
+    AND auth.rolpassword IS NULL
+    AND auth.rolvaliduntil IS NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_db_role_setting AS setting
+      WHERE setting.setrole = auth.oid
+    )
+  FROM pg_catalog.pg_authid AS auth
+  WHERE auth.rolname = 'cron_receipt_executor';")
+  if [[ $observed != t ]]; then
+    echo "cron receipt integration executor provisioning drift survived: $description" >&2
+    exit 1
+  fi
+}
+
+install_with_injected_precondition_fault() {
+  local injected_sql=$1
+  awk -v injected_sql="$injected_sql" '
+    $0 == "DO $executor_precondition$" {
+      print injected_sql
+      insertion_count += 1
+    }
+    { print }
+    END {
+      if (insertion_count != 1) exit 42
+    }
+  ' "$INSTALL_TEMPLATE" | psql_install "$EXECUTOR_OID" -f -
+}
+
+# Each non-flag executor identity dimension is independently planted inside
+# the installer's transaction. The privileged catalog precondition must reject
+# it, and that failure must roll back both the plant and every receipt object.
+for role_drift in configuration connection_limit password valid_until; do
+  case $role_drift in
+    configuration)
+      injected_role_sql="ALTER ROLE cron_receipt_executor SET statement_timeout TO '7s';"
+      ;;
+    connection_limit)
+      injected_role_sql="ALTER ROLE cron_receipt_executor CONNECTION LIMIT 7;"
+      ;;
+    password)
+      injected_role_sql="ALTER ROLE cron_receipt_executor PASSWORD 'synthetic_fixture_only';"
+      ;;
+    valid_until)
+      injected_role_sql="ALTER ROLE cron_receipt_executor VALID UNTIL '2099-01-01 00:00:00+00';"
+      ;;
+  esac
+  if install_with_injected_precondition_fault "$injected_role_sql" \
+    > "$TMP_DIR/executor-${role_drift}.out" 2>&1; then
+    echo "cron receipt integration accepted executor $role_drift drift" >&2
+    exit 1
+  fi
+  if ! grep -Fq 'cron_receipt_executor_precondition_rejected' \
+    "$TMP_DIR/executor-${role_drift}.out"; then
+    echo "cron receipt integration returned the wrong $role_drift stage" >&2
+    exit 1
+  fi
+  assert_receipt_installation_absent "executor $role_drift rejection"
+  assert_executor_role_provisioning_clean "$role_drift rollback"
+done
 
 # Direct privilege and membership drift must be rejected without blessing the
 # otherwise safe-looking pre-provisioned role.
@@ -545,6 +708,7 @@ if ! grep -Fq 'synthetic_late_receipt_install_failure' \
   exit 1
 fi
 assert_receipt_installation_absent "late transactional rollback"
+assert_executor_role_provisioning_clean "late install rollback"
 if [[ $(psql_fixture -A -t -F '|' -c "
   SELECT
     NOT role.rolsuper AND NOT role.rolcanlogin
@@ -588,6 +752,40 @@ install_with_injected_postcondition_fault() {
     }
   ' "$INSTALL_TEMPLATE" | psql_install "$EXECUTOR_OID" -f -
 }
+
+# Repeat the four non-flag executor identity plants after the precondition has
+# already passed. The postcondition must independently detect each drift, and
+# the enclosing transaction must remove both the drift and the partial install.
+for role_drift in configuration connection_limit password valid_until; do
+  case $role_drift in
+    configuration)
+      injected_role_sql="ALTER ROLE cron_receipt_executor SET statement_timeout TO '7s';"
+      ;;
+    connection_limit)
+      injected_role_sql="ALTER ROLE cron_receipt_executor CONNECTION LIMIT 7;"
+      ;;
+    password)
+      injected_role_sql="ALTER ROLE cron_receipt_executor PASSWORD 'synthetic_fixture_only';"
+      ;;
+    valid_until)
+      injected_role_sql="ALTER ROLE cron_receipt_executor VALID UNTIL '2099-01-01 00:00:00+00';"
+      ;;
+  esac
+  if install_with_injected_postcondition_fault "$injected_role_sql" \
+    > "$TMP_DIR/executor-postcondition-${role_drift}.out" 2>&1; then
+    echo "cron receipt integration accepted postcondition executor $role_drift drift" >&2
+    exit 1
+  fi
+  if ! grep -Fq 'cron_receipt_executor_postcondition_rejected' \
+    "$TMP_DIR/executor-postcondition-${role_drift}.out"; then
+    echo "cron receipt integration returned the wrong postcondition $role_drift stage" >&2
+    exit 1
+  fi
+  assert_receipt_installation_absent \
+    "postcondition executor $role_drift rejection"
+  assert_executor_role_provisioning_clean \
+    "postcondition $role_drift rollback"
+done
 
 # An otherwise structurally correct direct grant is still rejected when it
 # carries delegation authority. The postcondition binds is_grantable=false,
@@ -970,11 +1168,19 @@ assert_sql_true "bounded pending-candidate index" "
 SELECT
   i.indisvalid
   AND i.indisready
+  AND i.indislive
+  AND NOT i.indisunique
+  AND NOT i.indisexclusion
+  AND i.indnkeyatts = 2
+  AND i.indnatts = 2
+  AND access_method.amname = 'btree'
+  AND pg_catalog.pg_get_indexdef(i.indexrelid, 1, true) = 'updated_at'
+  AND pg_catalog.pg_get_indexdef(i.indexrelid, 2, true) = 'id'
   AND pg_catalog.pg_get_expr(i.indpred, i.indrelid) = '(status = ''pending''::text)'
-  AND pg_catalog.pg_get_indexdef(i.indexrelid) LIKE
-    '%ON public.task_runs USING btree (updated_at, id)%'
 FROM pg_catalog.pg_index AS i
 JOIN pg_catalog.pg_class AS index_class ON index_class.oid = i.indexrelid
+JOIN pg_catalog.pg_am AS access_method
+  ON access_method.oid = index_class.relam
 WHERE index_class.relname = 'task_runs_pending_updated_at_id_idx';"
 
 expect_psql_failure \

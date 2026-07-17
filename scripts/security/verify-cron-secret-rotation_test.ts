@@ -91,7 +91,7 @@ Deno.test("verify_jwt=true uses a separately supplied JWT", async () => {
   assert(result.authorization_sent === true, "JWT evidence missing");
 });
 
-Deno.test("unused strict receipt slug has the reviewed verify_jwt=true gateway contract", async () => {
+Deno.test("strict successor slug has the reviewed verify_jwt=true gateway contract", async () => {
   const input = {
     ...baseInput,
     url:

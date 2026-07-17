@@ -14,7 +14,8 @@ not any deployed or database runtime.
 
 ## Executive findings
 
-- There are 121 deployable Edge Function directories plus supabase/functions/_shared. Every deployable directory has index.ts. The added `run-strategy-task-reaper-receipt-v1` directory is an unused strict successor; the existing legacy-compatible slug remains present.
+- There are 121 deployable Edge Function directories plus supabase/functions/_shared. Every deployable directory has index.ts. The added `run-strategy-task-reaper-receipt-v1` directory is a strict successor; no tracked caller targets it. No deployment was authorized or observed, and production deployment state is unavailable. The existing legacy-compatible slug remains present.
+- Only the legacy `run-strategy-task-reaper/handler.ts` and `run-strategy-task-reaper/index.ts` leaf blobs match base `main`. Shared `cronHeadReceiver.ts` and `cronSecretAuth.ts` change, so the deployable closure is not byte-identical. While `RECEIVER_DEPLOYMENT_GATE` is blocked, unscoped/deploy-all Edge Function operations are prohibited. A later separately authorized deployment must use an explicit allowlist and may select only the strict slug after its gate clears.
 - supabase/config.toml records verify_jwt=true for 6 functions and false for 37. Three named sections omit verify_jwt, and 75 directories have no function section. Thus 78 functions have no explicit repository JWT boolean; the effective deployed setting is not repository-provable and must be captured/recreated explicitly.
 - The existing docs/phase2-function-inventory.json is stale: it says generated 2026-04-11 and contains 75 functions (lines 3, 12, 636), versus 121 current directories.
 - The tracked supabase/dynamic_staging_schema.sql is a generated/derived schema snapshot, not a chronological migration. A historical pre-containment revision contained nine executable pg_cron schedules, hardcoded project URLs, and credential-shaped literals. The sanitized current snapshot omits that executable block and must never be treated as an executable restore plan or secret source. This is a repository statement only; no runtime schedule was inspected, disabled, removed, or changed.
@@ -100,7 +101,7 @@ Function-side guards/dependencies:
 
 - daily-digest accepts the shared cron header through the current/next rotation slots or a separately verified user JWT.
 - run-strategy-task-reaper and schedule-daily-plan require the shared cron header through the current/next rotation slots. The legacy reaper still accepts an authenticated POST without an attempt header.
-- run-strategy-task-reaper-receipt-v1 requires the same cron authentication plus a strict canonical attempt header. It is repository-only and unused; its explicit configuration does not prove deployment.
+- run-strategy-task-reaper-receipt-v1 requires the same cron authentication plus a strict canonical attempt header. No tracked caller targets this slug; no deployment was authorized or observed; production deployment state is unavailable. Its explicit configuration does not prove deployment, and the checked-in rollout predicate is a synthetic procedural model rather than an installed runtime/control-plane lock.
 - training-digest requires TRAINING_DIGEST_SECRET (index.ts:15-20), but no repository cron schedule was found.
 - process-podcast-queue declares itself unauthenticated system cron and uses service role (index.ts:587-596); it has no explicit config.toml entry. Its actual edge-boundary JWT behavior must be rehearsed, not inferred.
 - sync-calendar requires a real bearer user (index.ts:573-595), while the historical pre-containment snapshot revision recorded an HTTP schedule. The exact supported cron authentication model therefore needs reconciliation.
