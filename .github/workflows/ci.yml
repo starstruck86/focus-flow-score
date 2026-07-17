@@ -44,7 +44,9 @@ jobs:
             scripts/migration/tests/inspect-lovable-dump.test.sh \
             scripts/migration/tests/lib/postgres-test-safety.sh \
             scripts/migration/tests/postgres-target-safety.test.sh \
-            scripts/migration/tests/service-verification.test.sh
+            scripts/migration/tests/service-verification.test.sh \
+            scripts/security/tests/cron-attempt-receipts.integration.sh \
+            scripts/security/tests/cron-attempt-receipts-target-safety.test.sh
           python3 - <<'PY'
           from pathlib import Path
 
@@ -64,6 +66,8 @@ jobs:
           bash scripts/migration/tests/postgres-target-safety.test.sh
           bash scripts/migration/tests/catalog-verification.test.sh
           bash scripts/migration/tests/service-verification.test.sh
+          bash scripts/security/tests/cron-attempt-receipts-target-safety.test.sh
+          bash scripts/security/tests/cron-attempt-receipts.integration.sh
           bash scripts/migration/tests/inspect-lovable-dump.integration.sh
           bash scripts/migration/tests/inspect-lovable-export.integration.sh
           git diff --check "$PR_BASE_SHA...$PR_HEAD_SHA"
@@ -81,12 +85,16 @@ jobs:
           supabase/functions/version/index.ts
           supabase/functions/daily-digest/index.ts
           supabase/functions/run-strategy-task-reaper/index.ts
+          supabase/functions/run-strategy-task-reaper-receipt-v1/index.ts
           supabase/functions/schedule-daily-plan/index.ts
           supabase/functions/_shared/cronSecretAuth.ts
           supabase/functions/_shared/cronHeadReceiver.ts
+          supabase/functions/_shared/cronAttemptReceipt.ts
           supabase/functions/daily-digest/handler.ts
           supabase/functions/run-strategy-task-reaper/handler.ts
+          supabase/functions/run-strategy-task-reaper-receipt-v1/handler.ts
           supabase/functions/schedule-daily-plan/handler.ts
+          scripts/security/verify-cron-attempt-receipt.ts
           scripts/security/verify-cron-secret-rotation.ts
       - run: >-
           deno test --no-lock
@@ -95,6 +103,10 @@ jobs:
           supabase/functions/version/index_test.ts
           supabase/functions/_shared/cronSecretAuth_test.ts
           supabase/functions/_shared/cronHeadReceiver_test.ts
+          supabase/functions/_shared/cronAttemptReceipt_test.ts
+          supabase/functions/run-strategy-task-reaper/handler_test.ts
+          supabase/functions/run-strategy-task-reaper-receipt-v1/handler_test.ts
+          scripts/security/verify-cron-attempt-receipt_test.ts
           scripts/security/verify-cron-secret-rotation_test.ts
       - run: npm audit --omit=dev --audit-level=high
 

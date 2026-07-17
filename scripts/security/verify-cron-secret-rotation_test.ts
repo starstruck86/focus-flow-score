@@ -91,6 +91,32 @@ Deno.test("verify_jwt=true uses a separately supplied JWT", async () => {
   assert(result.authorization_sent === true, "JWT evidence missing");
 });
 
+Deno.test("strict successor slug has the reviewed verify_jwt=true gateway contract", async () => {
+  const input = {
+    ...baseInput,
+    url:
+      "https://uujkmcbqavsmzhnbqvmm.supabase.co/functions/v1/run-strategy-task-reaper-receipt-v1",
+    jwt,
+  };
+  let calls = 0;
+  const result = await verifyCronSecretRotation(input, async (_input, init) => {
+    calls += 1;
+    const headers = new Headers(init?.headers);
+    assert(headers.get("apikey") === apiKey, "API key missing");
+    assert(headers.get("authorization") === `Bearer ${jwt}`, "separate JWT missing");
+    return noStoreResponse(
+      headers.get("x-cron-secret") === acceptedSecret ? 204 : 401,
+    );
+  });
+  assert(calls === 6, "repeated gateway probes missing");
+  assert(
+    result.function_slug === "run-strategy-task-reaper-receipt-v1",
+    "strict receipt slug binding missing",
+  );
+  assert(result.reviewed_expected_verify_jwt === true, "gateway mode missing");
+  assert(result.authorization_sent === true, "JWT evidence missing");
+});
+
 Deno.test("gateway inputs fail closed before fetch", async () => {
   const trueUrl =
     "https://uujkmcbqavsmzhnbqvmm.supabase.co/functions/v1/run-strategy-task-reaper";
