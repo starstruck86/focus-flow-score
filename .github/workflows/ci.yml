@@ -43,6 +43,7 @@ jobs:
             scripts/migration/tests/inspect-lovable-export.integration.sh \
             scripts/migration/tests/inspect-lovable-dump.test.sh \
             scripts/migration/tests/lib/postgres-test-safety.sh \
+            scripts/migration/tests/postgres-cross-major-compatibility.integration.sh \
             scripts/migration/tests/postgres-target-safety.test.sh \
             scripts/migration/tests/service-verification.test.sh \
             scripts/security/tests/cron-attempt-receipts.integration.sh \
@@ -55,9 +56,13 @@ jobs:
               Path("scripts/migration/catalog-jsonl-to-manifest.py"),
               Path("scripts/migration/inventory-edge-functions.py"),
               Path("scripts/migration/bounded-pg-restore.py"),
+              Path("scripts/migration/capture-lovable-toc.py"),
               Path("scripts/migration/inspect-lovable-export.py"),
               Path("scripts/migration/normalize-lovable-export.py"),
               Path("scripts/migration/lib/lovable_dump_report.py"),
+              Path("scripts/migration/lib/lovable_toc_contract.py"),
+              Path("scripts/migration/validate-postgres-image-lock.py"),
+              Path("scripts/migration/validate-lovable-toc-ledger.py"),
           ):
               compile(path.read_text(encoding="utf-8"), str(path), "exec")
           PY
@@ -131,9 +136,12 @@ jobs:
 
           for path in (
               Path("scripts/migration/bounded-pg-restore.py"),
+              Path("scripts/migration/capture-lovable-toc.py"),
               Path("scripts/migration/inspect-lovable-export.py"),
               Path("scripts/migration/normalize-lovable-export.py"),
               Path("scripts/migration/lib/lovable_dump_report.py"),
+              Path("scripts/migration/lib/lovable_toc_contract.py"),
+              Path("scripts/migration/validate-lovable-toc-ledger.py"),
           ):
               compile(path.read_text(encoding="utf-8"), str(path), "exec")
           PY
@@ -146,3 +154,24 @@ jobs:
             -s tests/migration -p 'test_bounded_pg_restore.py' -v
           python3 -m unittest discover \
             -s tests/migration -p 'test_export_evidence_workflow.py' -v
+          python3 -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_contract.py' -v
+          python3 -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_tools.py' -v
+
+  postgres-cross-major-compatibility:
+    name: PostgreSQL 17.6/18.4 synthetic compatibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify pinned cross-major fixture syntax and identities
+        run: |
+          bash -n scripts/migration/tests/postgres-cross-major-compatibility.integration.sh
+          python3 -m unittest tests.migration.test_postgres_cross_major_contract -v
+          python3 -I scripts/migration/validate-postgres-image-lock.py \
+            scripts/migration/tests/postgres-cross-major-images.lock.json
+      - name: Run isolated PostgreSQL cross-major fixture
+        run: bash scripts/migration/tests/postgres-cross-major-compatibility.integration.sh

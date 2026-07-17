@@ -12,10 +12,28 @@ bound to draft PR #17 substantive commit
 repository snapshot at that commit, not the original inventory snapshot and
 not any deployed or database runtime.
 
+The cron-attempt-receipt findings are a later repository-only addendum bound to
+PR #19 substantive commit
+`16b05b6c2ef34d84edf14ae73f0289d7bf8a006a`, final PR head
+`63f930c23684c4c1b277d5149ed5dee1ab03bd90`, and history-preserving merged main
+`30d5a46c30a851d89957fcfba0cc0a5a53df24d2`. They establish reviewed source,
+templates, and synthetic fixtures only. No function, sender, receipt schema,
+index, role, secret, or runtime configuration was deployed or changed.
+
+The retained archive's complete aggregate metadata package is database-archive
+evidence, not runtime-configuration evidence. Its status remains
+`REVIEW_REQUIRED` with `restore_planning_gate=BLOCKED`; the operator-reported
+aggregate is 2,354 TOC entries, 2,140 metadata entries, 214 data references,
+and 1,135 recognized-but-unresolved entries, with source PostgreSQL 17.6,
+writer `pg_dump` 18.4, and inspector `pg_restore` 17.10. This documentation
+work did not access the package or export. Any future private TOC capture and
+opaque ledger must remain separately authorized and cannot substitute for the
+deployed-runtime inventories below.
+
 ## Executive findings
 
 - There are 121 deployable Edge Function directories plus supabase/functions/_shared. Every deployable directory has index.ts. The added `run-strategy-task-reaper-receipt-v1` directory is a strict successor; no tracked caller targets it. No deployment was authorized or observed, and production deployment state is unavailable. The existing legacy-compatible slug remains present.
-- Only the legacy `run-strategy-task-reaper/handler.ts` and `run-strategy-task-reaper/index.ts` leaf blobs match base `main`. Shared `cronHeadReceiver.ts` and `cronSecretAuth.ts` change, so the deployable closure is not byte-identical. While `RECEIVER_DEPLOYMENT_GATE` is blocked, unscoped/deploy-all Edge Function operations are prohibited. A later separately authorized deployment must use an explicit allowlist and may select only the strict slug after its gate clears.
+- Only the legacy `run-strategy-task-reaper/handler.ts` and `run-strategy-task-reaper/index.ts` leaf blobs match the pre-PR-#19 base main `0275d879148c3299d54846333d304c2ac8476b64`. Shared `cronHeadReceiver.ts` and `cronSecretAuth.ts` changed in PR #19, so the deployable closure is not byte-identical. While `RECEIVER_DEPLOYMENT_GATE` is blocked, unscoped/deploy-all Edge Function operations are prohibited. A later separately authorized deployment must use an explicit allowlist and may select only the strict slug after its gate clears.
 - supabase/config.toml records verify_jwt=true for 6 functions and false for 37. Three named sections omit verify_jwt, and 75 directories have no function section. Thus 78 functions have no explicit repository JWT boolean; the effective deployed setting is not repository-provable and must be captured/recreated explicitly.
 - The existing docs/phase2-function-inventory.json is stale: it says generated 2026-04-11 and contains 75 functions (lines 3, 12, 636), versus 121 current directories.
 - The tracked supabase/dynamic_staging_schema.sql is a generated/derived schema snapshot, not a chronological migration. A historical pre-containment revision contained nine executable pg_cron schedules, hardcoded project URLs, and credential-shaped literals. The sanitized current snapshot omits that executable block and must never be treated as an executable restore plan or secret source. This is a repository statement only; no runtime schedule was inspected, disabled, removed, or changed.
@@ -214,7 +232,7 @@ Hardcoded refs/URLs:
 
 - Current Lovable-managed project ref odbjjklumdsuqdvkgwyv: supabase/config.toml:1; .github/workflows/verify-production-version.yml:22-26,99-103; scripts/phase3a-debug-validation.sh:48-50; supabase/functions/mcp/index.ts:178-187; .lovable/mcp/manifest.json:4-10; docs/STATE.md.
 - The sanitized current snapshot contains zero dynamic-staging or production project-reference/endpoint literals. Remaining repository references to the staging identity are historical inventory statements or rejected planning input. The identity is explicitly out of scope and must not be used.
-- The dispatch-only production version workflow is tied to the current project ref and deployment-id prefix; it must not be invoked in this PR and must be rebound only after authorized cutover.
+- The dispatch-only production version workflow is tied to the current project ref and deployment-id prefix; migration repository work must not invoke it, and it must be rebound only after an authorized cutover.
 - scripts/phase3a-debug-validation.sh contains a hardcoded current endpoint and a credential-like public token literal. The value is intentionally omitted. Do not run it during this migration PR.
 - A historical pre-containment revision of supabase/dynamic_staging_schema.sql contained credential-shaped cron-header material. The sanitized current snapshot omits that material and its executable cron block. The public PR patch itself disclosed predecessor bytes; PR patches, history, forks, caches, archived patches, and prior clones may retain them. No repository display control is a confidentiality boundary. Rotation and historical-exposure response remain external requirements.
 - src/lib/rustBusterLinks.ts:4-14 hardcodes an organization-specific Salesforce host and report/list IDs.
@@ -246,7 +264,7 @@ Hardcoded refs/URLs:
 ## Verification requirements for rehearsal
 
 - Generate the repository source function manifest from the reviewed Git commit: slug, resolved deployment-closure fingerprint (including reachable `_shared` files), and structured effective `verify_jwt`/entrypoint/import-map settings. A locally generated target-role manifest remains non-independent until deployed source/config is collected from the owned target.
-- Compare actual deployed slugs/settings only under separately authorized read access; this PR must remain repository-local.
+- Compare actual deployed slugs/settings only under separately authorized read access; repository inventories and private archive review do not establish deployed state.
 - Inventory actual cron.job rows, active/timezone/schedule/command hashes, and reconcile to the repository without printing header values.
 - Inventory Auth counts/identity-provider counts, preserve/map UUIDs, rehearse password reset, and validate Google/OAuth/MCP redirects plus SMTP.
 - Inventory Realtime publication membership/replica identity and test every subscribed table, especially batch_runs.
@@ -254,6 +272,15 @@ Hardcoded refs/URLs:
 - Rebind every frontend/function/workflow/MCP project reference; search for both known refs before cutover.
 - Pause cron, background/self-continuation workers, user writes, webhook writers, and n8n before final export.
 - Treat all "production" statements in docs as historical claims, not current verification.
+
+Supabase documents that a database-only project copy does not carry every
+project setting or object class: Storage objects/settings, Edge Functions,
+Auth settings and keys, Realtime, extensions, and other configuration require
+separate handling. See the official [restore-to-new-project
+guide](https://supabase.com/docs/guides/platform/clone-project) and
+[backup guidance](https://supabase.com/docs/guides/platform/backups). Those
+documents inform the inventory categories; they do not prove which Lovable
+runtime settings or schemas were included in this retained export.
 
 ## Appendix: per-function matrix
 

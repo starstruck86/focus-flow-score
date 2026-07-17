@@ -28,3 +28,15 @@ dist-ssr
 
 # Local database migration rehearsal inputs and generated metadata reports
 /local-migration-artifacts/
+
+# Private future TOC-review material must never enter Git, wherever copied.
+**/raw-pg-restore-list.toc
+**/opaque-id.key
+**/opaque-index.json
+**/annotation-ledger.json
+**/toc-capture-*/
+**/toc-ledger-*/
+**/.pending-capture-*/
+**/.pending-ledger-*/
+**/.indeterminate-capture-*/
+**/.indeterminate-ledger-*/

@@ -1,0 +1,14 @@
+; Synthetic pg_restore --list fixture; contains no production metadata.
+; Dumped from database version: 17.6
+; Dumped by pg_dump version: 18.4
+1; 0 1001 POLICY synthetic_schema synthetic_policy synthetic_owner
+2; 0 1002 CONSTRAINT synthetic_schema synthetic_constraint synthetic_owner
+3; 0 1003 FK CONSTRAINT synthetic_schema synthetic_fk synthetic_owner
+4; 0 1004 ROW SECURITY synthetic_schema synthetic_table synthetic_owner
+5; 0 1005 TRIGGER synthetic_schema synthetic_trigger synthetic_owner
+6; 0 1006 INDEX ATTACH synthetic_schema synthetic_index synthetic_owner
+7; 0 1007 PUBLICATION TABLE synthetic_publication synthetic_table synthetic_owner
+8; 0 1008 TABLE ATTACH synthetic_schema synthetic_table synthetic_owner
+9; 0 1009 CHECK CONSTRAINT synthetic_schema synthetic_check synthetic_owner
+10; 0 1010 DEFAULT synthetic_schema synthetic_default synthetic_owner
+11; 0 1011 SEQUENCE OWNED BY synthetic_schema synthetic_sequence synthetic_owner
