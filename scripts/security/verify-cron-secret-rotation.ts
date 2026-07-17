@@ -8,6 +8,7 @@ const ENVIRONMENT_PROJECT_REFS = Object.freeze({
 const REVIEWED_EXPECTED_FUNCTIONS = Object.freeze({
   "daily-digest": Object.freeze({ reviewedExpectedVerifyJwt: false }),
   "run-strategy-task-reaper": Object.freeze({ reviewedExpectedVerifyJwt: true }),
+  "run-strategy-task-reaper-receipt-v1": Object.freeze({ reviewedExpectedVerifyJwt: true }),
   "schedule-daily-plan": Object.freeze({ reviewedExpectedVerifyJwt: true }),
 } as const);
 

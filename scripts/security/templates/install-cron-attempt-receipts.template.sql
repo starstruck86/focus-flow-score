@@ -1,3 +1,74 @@
+\set ON_ERROR_STOP on
+
+-- REPOSITORY TEMPLATE ONLY. This file is deliberately outside
+-- supabase/migrations and must not be consumed by an ordinary Lovable or
+-- Supabase migration runner. It requires a separately authorized hosted
+-- PostgreSQL 17 execution, an externally pre-provisioned exact executor role,
+-- a reviewed all-file transaction, and empirical proof that the execution
+-- actor can transfer function ownership without leaving a membership edge.
+-- It never creates, alters, grants, or revokes a role or role membership.
+-- Missing bindings deliberately fail before any receipt object is created.
+\if :{?receipt_install_mutation_authorized}
+\else
+  SELECT 'receipt_install_guard_missing_authorization'::integer;
+\endif
+\if :{?receipt_install_expected_database}
+\else
+  SELECT 'receipt_install_guard_missing_database'::integer;
+\endif
+\if :{?receipt_install_expected_actor}
+\else
+  SELECT 'receipt_install_guard_missing_actor'::integer;
+\endif
+\if :{?receipt_install_expected_task_owner}
+\else
+  SELECT 'receipt_install_guard_missing_task_owner'::integer;
+\endif
+\if :{?receipt_install_expected_server_major}
+\else
+  SELECT 'receipt_install_guard_missing_server_major'::integer;
+\endif
+\if :{?receipt_install_expected_executor_oid}
+\else
+  SELECT 'receipt_install_guard_missing_executor_oid'::integer;
+\endif
+
+-- psql does not interpolate variables inside dollar-quoted PL/pgSQL bodies.
+-- Bind the already-validated, non-secret execution expectations into this
+-- session once, then read the same request-local values from every guard.
+SELECT pg_catalog.set_config(
+  'cron_receipt.install_mutation_authorized',
+  :'receipt_install_mutation_authorized',
+  false
+);
+SELECT pg_catalog.set_config(
+  'cron_receipt.install_expected_database',
+  :'receipt_install_expected_database',
+  false
+);
+SELECT pg_catalog.set_config(
+  'cron_receipt.install_expected_actor',
+  :'receipt_install_expected_actor',
+  false
+);
+SELECT pg_catalog.set_config(
+  'cron_receipt.install_expected_task_owner',
+  :'receipt_install_expected_task_owner',
+  false
+);
+SELECT pg_catalog.set_config(
+  'cron_receipt.install_expected_server_major',
+  :'receipt_install_expected_server_major',
+  false
+);
+SELECT pg_catalog.set_config(
+  'cron_receipt.install_expected_executor_oid',
+  :'receipt_install_expected_executor_oid',
+  false
+);
+
+BEGIN;
+
 -- Durable, attempt-bound application receipts for reviewed cron receivers.
 --
 -- The private table contains correlation metadata only. It deliberately does
@@ -6,10 +77,10 @@
 -- reaper: its bounded set-based update and terminal receipt are one database
 -- transaction because a PostgreSQL function call is one statement.
 
--- This migration deliberately does not build an index on public.task_runs.
+-- This installer deliberately does not build an index on public.task_runs.
 -- A routine transactional CREATE INDEX would block writes. The separately
 -- authorized/rehearsed concurrent-index procedure must first provide one
--- valid, ready, exact index; otherwise this migration fails before creating
+-- valid, ready, exact index; otherwise this installer fails before creating
 -- receipt objects.
 DO $index_prerequisite$
 DECLARE
@@ -61,31 +132,196 @@ BEGIN
 END
 $index_prerequisite$;
 
-DO $executor_role$
+DO $executor_precondition$
 DECLARE
-  v_role_exists boolean;
+  v_executor_oid oid;
+  v_task_owner text;
+  v_acl_reference_count bigint;
+  v_owned_dependency_count bigint;
 BEGIN
-  SELECT EXISTS (
-    SELECT 1
-    FROM pg_catalog.pg_roles AS r
-    WHERE r.rolname = 'cron_receipt_executor'
-  )
-  INTO v_role_exists;
-
-  -- A pre-existing role can carry memberships, default privileges, or ACLs
-  -- that this migration cannot safely normalize. Reject it rather than
-  -- blessing role flags while retaining unknown authority.
-  IF v_role_exists THEN
+  IF pg_catalog.current_setting(
+      'cron_receipt.install_mutation_authorized'
+    ) <> 'YES'
+    OR pg_catalog.current_setting(
+      'cron_receipt.install_expected_server_major'
+    ) <> '17'
+    OR pg_catalog.current_setting('server_version_num')::integer / 10000 <> 17
+    OR pg_catalog.current_database() <> pg_catalog.current_setting(
+      'cron_receipt.install_expected_database'
+    )
+    OR current_user <> pg_catalog.current_setting(
+      'cron_receipt.install_expected_actor'
+    )
+  THEN
     RAISE EXCEPTION USING
       ERRCODE = '55000',
-      MESSAGE = 'cron_receipt_executor_role_preexists';
+      MESSAGE = 'receipt_install_guard_identity_rejected';
   END IF;
 
-  CREATE ROLE cron_receipt_executor
-    NOLOGIN NOSUPERUSER NOINHERIT NOCREATEDB NOCREATEROLE
-    NOREPLICATION NOBYPASSRLS;
+  SELECT task_owner.rolname
+  INTO v_task_owner
+  FROM pg_catalog.pg_class AS task_table
+  JOIN pg_catalog.pg_roles AS task_owner ON task_owner.oid = task_table.relowner
+  WHERE task_table.oid = pg_catalog.to_regclass('public.task_runs');
+
+  IF v_task_owner IS DISTINCT FROM pg_catalog.current_setting(
+    'cron_receipt.install_expected_task_owner'
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = 'receipt_install_guard_task_owner_rejected';
+  END IF;
+
+  SELECT auth.oid
+  INTO v_executor_oid
+  FROM pg_catalog.pg_authid AS auth
+  WHERE auth.rolname = 'cron_receipt_executor'
+    AND NOT auth.rolsuper
+    AND NOT auth.rolinherit
+    AND NOT auth.rolcreaterole
+    AND NOT auth.rolcreatedb
+    AND NOT auth.rolcanlogin
+    AND NOT auth.rolreplication
+    AND NOT auth.rolbypassrls
+    AND auth.rolconnlimit = -1
+    AND auth.rolpassword IS NULL
+    AND auth.rolvaliduntil IS NULL;
+
+  IF v_executor_oid IS NULL THEN
+    IF EXISTS (
+      SELECT 1 FROM pg_catalog.pg_roles
+      WHERE rolname = 'cron_receipt_executor'
+    ) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '55000',
+        MESSAGE = 'cron_receipt_executor_precondition_rejected';
+    END IF;
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = 'cron_receipt_executor_missing';
+  END IF;
+
+  IF v_executor_oid::text <> pg_catalog.current_setting(
+      'cron_receipt.install_expected_executor_oid'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_db_role_setting AS setting
+      WHERE setting.setrole = v_executor_oid
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_auth_members AS membership
+      WHERE membership.roleid = v_executor_oid
+        OR membership.member = v_executor_oid
+        OR membership.grantor = v_executor_oid
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_default_acl AS defaults
+      CROSS JOIN LATERAL pg_catalog.aclexplode(defaults.defaclacl) AS acl
+      WHERE defaults.defaclrole = v_executor_oid
+        OR acl.grantee = v_executor_oid
+        OR acl.grantor = v_executor_oid
+    )
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = 'cron_receipt_executor_precondition_rejected';
+  END IF;
+
+  -- A pre-provisioned executor must begin with no ownership dependency and no
+  -- direct ACL grant/grantor footprint. PUBLIC privileges are a separate
+  -- database baseline and do not identify this role directly.
+  SELECT pg_catalog.count(*)
+  INTO v_owned_dependency_count
+  FROM pg_catalog.pg_shdepend AS dependency
+  WHERE dependency.refclassid = 'pg_catalog.pg_authid'::regclass
+    AND dependency.refobjid = v_executor_oid
+    AND dependency.deptype = 'o';
+
+  SELECT pg_catalog.count(*)
+  INTO v_acl_reference_count
+  FROM (
+    SELECT acl.grantor, acl.grantee
+    FROM pg_catalog.pg_namespace AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.nspacl) AS acl
+    WHERE object.nspacl IS NOT NULL
+    UNION ALL
+    SELECT acl.grantor, acl.grantee
+    FROM pg_catalog.pg_class AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.relacl) AS acl
+    WHERE object.relacl IS NOT NULL
+    UNION ALL
+    SELECT acl.grantor, acl.grantee
+    FROM pg_catalog.pg_attribute AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.attacl) AS acl
+    WHERE object.attacl IS NOT NULL
+    UNION ALL
+    SELECT acl.grantor, acl.grantee
+    FROM pg_catalog.pg_proc AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.proacl) AS acl
+    WHERE object.proacl IS NOT NULL
+    UNION ALL
+    SELECT acl.grantor, acl.grantee
+    FROM pg_catalog.pg_type AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.typacl) AS acl
+    WHERE object.typacl IS NOT NULL
+    UNION ALL
+    SELECT acl.grantor, acl.grantee
+    FROM pg_catalog.pg_language AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.lanacl) AS acl
+    WHERE object.lanacl IS NOT NULL
+    UNION ALL
+    SELECT acl.grantor, acl.grantee
+    FROM pg_catalog.pg_database AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.datacl) AS acl
+    WHERE object.datacl IS NOT NULL
+    UNION ALL
+    SELECT acl.grantor, acl.grantee
+    FROM pg_catalog.pg_tablespace AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.spcacl) AS acl
+    WHERE object.spcacl IS NOT NULL
+    UNION ALL
+    SELECT acl.grantor, acl.grantee
+    FROM pg_catalog.pg_foreign_data_wrapper AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.fdwacl) AS acl
+    WHERE object.fdwacl IS NOT NULL
+    UNION ALL
+    SELECT acl.grantor, acl.grantee
+    FROM pg_catalog.pg_foreign_server AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.srvacl) AS acl
+    WHERE object.srvacl IS NOT NULL
+    UNION ALL
+    SELECT acl.grantor, acl.grantee
+    FROM pg_catalog.pg_largeobject_metadata AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.lomacl) AS acl
+    WHERE object.lomacl IS NOT NULL
+    UNION ALL
+    SELECT acl.grantor, acl.grantee
+    FROM pg_catalog.pg_parameter_acl AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.paracl) AS acl
+    WHERE object.paracl IS NOT NULL
+    UNION ALL
+    SELECT acl.grantor, acl.grantee
+    FROM pg_catalog.pg_init_privs AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.initprivs) AS acl
+  ) AS direct_acl
+  WHERE direct_acl.grantee = v_executor_oid
+    OR direct_acl.grantor = v_executor_oid;
+
+  IF v_owned_dependency_count <> 0 OR v_acl_reference_count <> 0 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = 'cron_receipt_executor_precondition_rejected';
+  END IF;
+EXCEPTION
+  WHEN insufficient_privilege OR undefined_table OR undefined_column THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = 'cron_receipt_executor_catalog_unreadable';
 END
-$executor_role$;
+$executor_precondition$;
 
 CREATE SCHEMA cron_receipt_private AUTHORIZATION postgres;
 
@@ -107,7 +343,7 @@ CREATE TABLE cron_receipt_private.cron_attempt_receipts (
   CONSTRAINT cron_attempt_receipts_receiver_check CHECK (
     receiver IN (
       'daily-digest',
-      'run-strategy-task-reaper',
+      'run-strategy-task-reaper-receipt-v1',
       'schedule-daily-plan'
     )
   ),
@@ -134,7 +370,7 @@ CREATE TABLE cron_receipt_private.cron_attempt_receipts (
     )
     OR
     (
-      receiver = 'run-strategy-task-reaper'
+      receiver = 'run-strategy-task-reaper-receipt-v1'
       AND
       outcome_code = 'applied_success'
       AND effect_code = 'stale_pending_runs_reaped'
@@ -143,7 +379,7 @@ CREATE TABLE cron_receipt_private.cron_attempt_receipts (
     )
     OR
     (
-      receiver = 'run-strategy-task-reaper'
+      receiver = 'run-strategy-task-reaper-receipt-v1'
       AND
       outcome_code = 'legitimate_noop'
       AND effect_code = 'no_eligible_stale_pending_runs'
@@ -152,7 +388,7 @@ CREATE TABLE cron_receipt_private.cron_attempt_receipts (
     )
     OR
     (
-      receiver = 'run-strategy-task-reaper'
+      receiver = 'run-strategy-task-reaper-receipt-v1'
       AND
       outcome_code = 'known_failure_rolled_back'
       AND effect_code = 'execution_rolled_back'
@@ -285,7 +521,7 @@ BEGIN
   )
   VALUES (
     p_attempt_id,
-    'run-strategy-task-reaper',
+    'run-strategy-task-reaper-receipt-v1',
     p_protocol_version,
     p_environment,
     p_project_ref,
@@ -306,7 +542,8 @@ BEGIN
   WHERE r.attempt_id = p_attempt_id
   FOR UPDATE;
 
-  IF v_receipt.receiver IS DISTINCT FROM 'run-strategy-task-reaper'
+  IF v_receipt.receiver IS DISTINCT FROM
+    'run-strategy-task-reaper-receipt-v1'
     OR v_receipt.protocol_version IS DISTINCT FROM p_protocol_version
     OR v_receipt.environment IS DISTINCT FROM p_environment
     OR v_receipt.project_ref IS DISTINCT FROM p_project_ref
@@ -754,7 +991,7 @@ BEGIN
     RETURN QUERY
     SELECT
       1,
-      'run-strategy-task-reaper'::text,
+      'run-strategy-task-reaper-receipt-v1'::text,
       false,
       false,
       'indeterminate'::text,
@@ -782,7 +1019,7 @@ BEGIN
     v_receipt.receipt_at,
     v_receipt.exact_effect_count,
     (
-      v_receipt.receiver = 'run-strategy-task-reaper'
+      v_receipt.receiver = 'run-strategy-task-reaper-receipt-v1'
       AND v_receipt.protocol_version = p_protocol_version
       AND v_receipt.environment = p_environment
       AND v_receipt.project_ref = p_project_ref
@@ -837,3 +1074,354 @@ GRANT EXECUTE ON FUNCTION public.execute_strategy_task_reaper_attempt(
 GRANT EXECUTE ON FUNCTION public.read_strategy_task_reaper_receipt(
   uuid, integer, text, text, text
 ) TO service_role;
+
+DO $executor_postcondition$
+DECLARE
+  v_executor_oid oid;
+  v_unexpected_acl_count bigint;
+BEGIN
+  SELECT auth.oid
+  INTO v_executor_oid
+  FROM pg_catalog.pg_authid AS auth
+  WHERE auth.rolname = 'cron_receipt_executor'
+    AND NOT auth.rolsuper
+    AND NOT auth.rolinherit
+    AND NOT auth.rolcreaterole
+    AND NOT auth.rolcreatedb
+    AND NOT auth.rolcanlogin
+    AND NOT auth.rolreplication
+    AND NOT auth.rolbypassrls
+    AND auth.rolconnlimit = -1
+    AND auth.rolpassword IS NULL
+    AND auth.rolvaliduntil IS NULL;
+
+  IF v_executor_oid IS NULL
+    OR v_executor_oid::text <> pg_catalog.current_setting(
+      'cron_receipt.install_expected_executor_oid'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_db_role_setting AS setting
+      WHERE setting.setrole = v_executor_oid
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_auth_members AS membership
+      WHERE membership.roleid = v_executor_oid
+        OR membership.member = v_executor_oid
+        OR membership.grantor = v_executor_oid
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_default_acl AS defaults
+      CROSS JOIN LATERAL pg_catalog.aclexplode(defaults.defaclacl) AS acl
+      WHERE defaults.defaclrole = v_executor_oid
+        OR acl.grantee = v_executor_oid
+        OR acl.grantor = v_executor_oid
+    )
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM pg_catalog.pg_proc AS function
+      JOIN pg_catalog.pg_namespace AS namespace
+        ON namespace.oid = function.pronamespace
+      WHERE function.proowner = v_executor_oid
+        AND namespace.nspname = 'public'
+        AND function.proname IN (
+          'execute_strategy_task_reaper_attempt',
+          'read_strategy_task_reaper_receipt'
+        )
+        AND pg_catalog.pg_get_function_identity_arguments(function.oid) =
+          'p_attempt_id uuid, p_protocol_version integer, p_environment text, p_project_ref text, p_request_fingerprint text'
+    ) <> 2
+    OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_shdepend AS dependency
+      WHERE dependency.refclassid = 'pg_catalog.pg_authid'::regclass
+        AND dependency.refobjid = v_executor_oid
+        AND dependency.deptype = 'o'
+        AND NOT (
+          dependency.dbid = (
+            SELECT database.oid
+            FROM pg_catalog.pg_database AS database
+            WHERE database.datname = pg_catalog.current_database()
+          )
+          AND dependency.classid = 'pg_catalog.pg_proc'::regclass
+          AND dependency.objid IN (
+            'public.execute_strategy_task_reaper_attempt(uuid,integer,text,text,text)'::regprocedure::oid,
+            'public.read_strategy_task_reaper_receipt(uuid,integer,text,text,text)'::regprocedure::oid
+          )
+        )
+    )
+    OR NOT pg_catalog.has_schema_privilege(
+      'cron_receipt_executor', 'public', 'USAGE'
+    )
+    OR pg_catalog.has_schema_privilege(
+      'cron_receipt_executor', 'public', 'CREATE'
+    )
+    OR NOT pg_catalog.has_schema_privilege(
+      'cron_receipt_executor', 'cron_receipt_private', 'USAGE'
+    )
+    OR pg_catalog.has_schema_privilege(
+      'cron_receipt_executor', 'cron_receipt_private', 'CREATE'
+    )
+    OR NOT pg_catalog.has_table_privilege(
+      'cron_receipt_executor',
+      'cron_receipt_private.cron_attempt_receipts',
+      'SELECT'
+    )
+    OR NOT pg_catalog.has_table_privilege(
+      'cron_receipt_executor',
+      'cron_receipt_private.cron_attempt_receipts',
+      'INSERT'
+    )
+    OR NOT pg_catalog.has_table_privilege(
+      'cron_receipt_executor',
+      'cron_receipt_private.cron_attempt_receipts',
+      'UPDATE'
+    )
+    OR pg_catalog.has_table_privilege(
+      'cron_receipt_executor',
+      'cron_receipt_private.cron_attempt_receipts',
+      'DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN'
+    )
+    OR pg_catalog.has_table_privilege(
+      'cron_receipt_executor',
+      'public.task_runs',
+      'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN'
+    )
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM pg_catalog.pg_attribute AS attribute
+      WHERE attribute.attrelid = 'public.task_runs'::regclass
+        AND attribute.attnum > 0
+        AND NOT attribute.attisdropped
+        AND pg_catalog.has_column_privilege(
+          'cron_receipt_executor', attribute.attrelid,
+          attribute.attnum, 'SELECT'
+        )
+    ) <> 4
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM pg_catalog.pg_attribute AS attribute
+      WHERE attribute.attrelid = 'public.task_runs'::regclass
+        AND attribute.attnum > 0
+        AND NOT attribute.attisdropped
+        AND pg_catalog.has_column_privilege(
+          'cron_receipt_executor', attribute.attrelid,
+          attribute.attnum, 'UPDATE'
+        )
+    ) <> 5
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = 'cron_receipt_executor_postcondition_rejected';
+  END IF;
+
+  -- Reject any executor ACL footprint beyond the exact reviewed schema,
+  -- private-table, task-column, and wrapper ACLs. This checks grantee,
+  -- grantor, and grant-option identity across every PostgreSQL 17 ACL-bearing
+  -- catalog; zero memberships alone is not an ACL proof.
+  SELECT pg_catalog.count(*)
+  INTO v_unexpected_acl_count
+  FROM (
+    SELECT
+      'namespace'::text AS catalog_name,
+      object.oid AS object_oid,
+      0::integer AS sub_id,
+      acl.grantor,
+      acl.grantee,
+      acl.privilege_type,
+      acl.is_grantable
+    FROM pg_catalog.pg_namespace AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.nspacl) AS acl
+    WHERE object.nspacl IS NOT NULL
+    UNION ALL
+    SELECT 'class', object.oid, 0::integer,
+      acl.grantor, acl.grantee, acl.privilege_type, acl.is_grantable
+    FROM pg_catalog.pg_class AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.relacl) AS acl
+    WHERE object.relacl IS NOT NULL
+    UNION ALL
+    SELECT 'attribute', object.attrelid, object.attnum,
+      acl.grantor, acl.grantee, acl.privilege_type, acl.is_grantable
+    FROM pg_catalog.pg_attribute AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.attacl) AS acl
+    WHERE object.attacl IS NOT NULL
+    UNION ALL
+    SELECT 'function', object.oid, 0::integer,
+      acl.grantor, acl.grantee, acl.privilege_type, acl.is_grantable
+    FROM pg_catalog.pg_proc AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.proacl) AS acl
+    WHERE object.proacl IS NOT NULL
+    UNION ALL
+    SELECT 'type', object.oid, 0::integer,
+      acl.grantor, acl.grantee, acl.privilege_type, acl.is_grantable
+    FROM pg_catalog.pg_type AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.typacl) AS acl
+    WHERE object.typacl IS NOT NULL
+    UNION ALL
+    SELECT 'language', object.oid, 0::integer,
+      acl.grantor, acl.grantee, acl.privilege_type, acl.is_grantable
+    FROM pg_catalog.pg_language AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.lanacl) AS acl
+    WHERE object.lanacl IS NOT NULL
+    UNION ALL
+    SELECT 'database', object.oid, 0::integer,
+      acl.grantor, acl.grantee, acl.privilege_type, acl.is_grantable
+    FROM pg_catalog.pg_database AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.datacl) AS acl
+    WHERE object.datacl IS NOT NULL
+    UNION ALL
+    SELECT 'tablespace', object.oid, 0::integer,
+      acl.grantor, acl.grantee, acl.privilege_type, acl.is_grantable
+    FROM pg_catalog.pg_tablespace AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.spcacl) AS acl
+    WHERE object.spcacl IS NOT NULL
+    UNION ALL
+    SELECT 'fdw', object.oid, 0::integer,
+      acl.grantor, acl.grantee, acl.privilege_type, acl.is_grantable
+    FROM pg_catalog.pg_foreign_data_wrapper AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.fdwacl) AS acl
+    WHERE object.fdwacl IS NOT NULL
+    UNION ALL
+    SELECT 'server', object.oid, 0::integer,
+      acl.grantor, acl.grantee, acl.privilege_type, acl.is_grantable
+    FROM pg_catalog.pg_foreign_server AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.srvacl) AS acl
+    WHERE object.srvacl IS NOT NULL
+    UNION ALL
+    SELECT 'largeobject', object.oid, 0::integer,
+      acl.grantor, acl.grantee, acl.privilege_type, acl.is_grantable
+    FROM pg_catalog.pg_largeobject_metadata AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.lomacl) AS acl
+    WHERE object.lomacl IS NOT NULL
+    UNION ALL
+    SELECT 'parameter', object.oid, 0::integer,
+      acl.grantor, acl.grantee, acl.privilege_type, acl.is_grantable
+    FROM pg_catalog.pg_parameter_acl AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.paracl) AS acl
+    WHERE object.paracl IS NOT NULL
+    UNION ALL
+    SELECT 'init_privs', object.objoid, object.objsubid,
+      acl.grantor, acl.grantee, acl.privilege_type, acl.is_grantable
+    FROM pg_catalog.pg_init_privs AS object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(object.initprivs) AS acl
+  ) AS direct_acl
+  WHERE (direct_acl.grantee = v_executor_oid
+      OR direct_acl.grantor = v_executor_oid)
+    AND NOT (
+      direct_acl.catalog_name = 'namespace'
+      AND direct_acl.object_oid IN (
+        'public'::regnamespace::oid,
+        'cron_receipt_private'::regnamespace::oid
+      )
+      AND direct_acl.grantee = v_executor_oid
+      AND direct_acl.privilege_type = 'USAGE'
+      AND NOT direct_acl.is_grantable
+      AND direct_acl.grantor = (
+        SELECT namespace.nspowner
+        FROM pg_catalog.pg_namespace AS namespace
+        WHERE namespace.oid = direct_acl.object_oid
+      )
+    )
+    AND NOT (
+      direct_acl.catalog_name = 'class'
+      AND direct_acl.object_oid =
+        'cron_receipt_private.cron_attempt_receipts'::regclass::oid
+      AND direct_acl.grantee = v_executor_oid
+      AND direct_acl.privilege_type IN ('SELECT', 'INSERT', 'UPDATE')
+      AND NOT direct_acl.is_grantable
+      AND direct_acl.grantor = (
+        SELECT relation.relowner
+        FROM pg_catalog.pg_class AS relation
+        WHERE relation.oid = direct_acl.object_oid
+      )
+    )
+    AND NOT (
+      direct_acl.catalog_name = 'attribute'
+      AND direct_acl.object_oid = 'public.task_runs'::regclass::oid
+      AND direct_acl.grantee = v_executor_oid
+      AND NOT direct_acl.is_grantable
+      AND direct_acl.grantor = (
+        SELECT relation.relowner
+        FROM pg_catalog.pg_class AS relation
+        WHERE relation.oid = direct_acl.object_oid
+      )
+      AND (
+        (direct_acl.privilege_type = 'SELECT' AND direct_acl.sub_id IN (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = 'public.task_runs'::regclass
+            AND attribute.attname IN ('id', 'status', 'progress_step', 'updated_at')
+        ))
+        OR
+        (direct_acl.privilege_type = 'UPDATE' AND direct_acl.sub_id IN (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = 'public.task_runs'::regclass
+            AND attribute.attname IN (
+              'status', 'progress_step', 'error', 'completed_at', 'updated_at'
+            )
+        ))
+      )
+    )
+    AND NOT (
+      direct_acl.catalog_name = 'function'
+      AND direct_acl.object_oid IN (
+        'public.execute_strategy_task_reaper_attempt(uuid,integer,text,text,text)'::regprocedure::oid,
+        'public.read_strategy_task_reaper_receipt(uuid,integer,text,text,text)'::regprocedure::oid
+      )
+      AND direct_acl.grantor = v_executor_oid
+      AND direct_acl.grantee IN (
+        v_executor_oid,
+        'service_role'::regrole::oid
+      )
+      AND direct_acl.privilege_type = 'EXECUTE'
+      AND NOT direct_acl.is_grantable
+    );
+
+  IF v_unexpected_acl_count <> 0
+    OR NOT pg_catalog.has_function_privilege(
+      'service_role',
+      'public.execute_strategy_task_reaper_attempt(uuid,integer,text,text,text)',
+      'EXECUTE'
+    )
+    OR NOT pg_catalog.has_function_privilege(
+      'service_role',
+      'public.read_strategy_task_reaper_receipt(uuid,integer,text,text,text)',
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'anon',
+      'public.execute_strategy_task_reaper_attempt(uuid,integer,text,text,text)',
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'authenticated',
+      'public.execute_strategy_task_reaper_attempt(uuid,integer,text,text,text)',
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'anon',
+      'public.read_strategy_task_reaper_receipt(uuid,integer,text,text,text)',
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'authenticated',
+      'public.read_strategy_task_reaper_receipt(uuid,integer,text,text,text)',
+      'EXECUTE'
+    )
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = 'cron_receipt_executor_postcondition_rejected';
+  END IF;
+EXCEPTION
+  WHEN insufficient_privilege OR undefined_table OR undefined_column THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = 'cron_receipt_executor_catalog_unreadable';
+END
+$executor_postcondition$;
+
+COMMIT;

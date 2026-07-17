@@ -16,7 +16,7 @@ const JWT = "syntheticHeader.syntheticPayload.syntheticSignature";
 const RPC_URL =
   "https://uujkmcbqavsmzhnbqvmm.supabase.co/rest/v1/rpc/read_strategy_task_reaper_receipt";
 const FINGERPRINT =
-  "61e0e027eafdbb977ba4519d07e226c401dc3ff96db23357d9e10f6a6e381312";
+  "24c7f4cf7f9f65cac36d8420c92c5af6b25da83df39e3cca4258ff8f1d2f6de4";
 
 function environment(): Map<string, string> {
   return new Map([
@@ -32,7 +32,7 @@ function environment(): Map<string, string> {
 function receipt(overrides: Record<string, unknown> = {}): unknown {
   return [{
     receipt_version: 1,
-    receiver: "run-strategy-task-reaper",
+    receiver: "run-strategy-task-reaper-receipt-v1",
     attempt_present: true,
     terminal: true,
     outcome_code: "applied_success",
@@ -85,7 +85,7 @@ Deno.test("read-only verifier sends the exact attempt-bound RPC and emits review
   assert(stdout.length === 1, "one canonical result expected");
   assert(
     stdout[0] ===
-      '{"verification_version":1,"receiver":"run-strategy-task-reaper","attempt_present":true,"terminal":true,"outcome_code":"applied_success","effect_code":"stale_pending_runs_reaped","receipt_at":"2026-07-16T16:05:01.123456+00:00","exact_effect_count":2,"identity_consistent":true,"effect_consistent":true,"result":"PASS"}',
+      '{"verification_version":1,"receiver":"run-strategy-task-reaper-receipt-v1","attempt_present":true,"terminal":true,"outcome_code":"applied_success","effect_code":"stale_pending_runs_reaped","receipt_at":"2026-07-16T16:05:01.123456+00:00","exact_effect_count":2,"identity_consistent":true,"effect_consistent":true,"result":"PASS"}',
     "unexpected visible schema",
   );
   for (const hidden of [ATTEMPT_ID, API_KEY, JWT, RPC_URL, FINGERPRINT]) {

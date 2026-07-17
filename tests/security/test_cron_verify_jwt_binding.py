@@ -44,6 +44,7 @@ class CronVerifyJwtBindingTest(unittest.TestCase):
     REVIEWED_EXPECTED_MAP = {
         "daily-digest": False,
         "run-strategy-task-reaper": True,
+        "run-strategy-task-reaper-receipt-v1": True,
         "schedule-daily-plan": True,
     }
 

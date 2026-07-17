@@ -1,0 +1,142 @@
+import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+
+import { buildStrategyTaskReaperAttempt } from "../_shared/cronAttemptReceipt.ts";
+import {
+  createStrategyTaskReaperReceiptBusinessHandler,
+  createStrategyTaskReaperReceiptHandler,
+} from "./handler.ts";
+
+const ATTEMPT_ID = "123e4567-e89b-42d3-a456-426614174000";
+const SYNTHETIC_CURRENT_KEY = "synthetic-current-cron-key";
+const SYNTHETIC_SERVICE_ROLE = "synthetic-service-role-runtime-value";
+
+function runtimeEnvironment(name: string): string | undefined {
+  if (name === "CRON_SECRET") return SYNTHETIC_CURRENT_KEY;
+  if (name === "SUPABASE_URL") {
+    return "https://uujkmcbqavsmzhnbqvmm.supabase.co";
+  }
+  if (name === "SUPABASE_SERVICE_ROLE_KEY") return SYNTHETIC_SERVICE_ROLE;
+  return undefined;
+}
+
+async function context() {
+  return await buildStrategyTaskReaperAttempt(
+    new Request(
+      "https://example.test/functions/v1/run-strategy-task-reaper-receipt-v1",
+      {
+        method: "POST",
+        headers: { "x-cron-attempt-id": ATTEMPT_ID },
+      },
+    ),
+    runtimeEnvironment,
+  );
+}
+
+function appliedReceipt() {
+  return [{
+    receipt_version: 1,
+    receiver: "run-strategy-task-reaper-receipt-v1",
+    attempt_present: true,
+    terminal: true,
+    outcome_code: "applied_success",
+    effect_code: "stale_pending_runs_reaped",
+    receipt_at: "2026-07-16T16:05:01.123456+00:00",
+    exact_effect_count: 1,
+    identity_consistent: true,
+    effect_consistent: true,
+    replayed: false,
+  }];
+}
+
+Deno.test("strict receipt slug rejects a missing attempt before client or RPC", async () => {
+  let clientCalls = 0;
+  let rpcCalls = 0;
+  const business = createStrategyTaskReaperReceiptBusinessHandler({
+    createClient: () => {
+      clientCalls += 1;
+      return {
+        rpc: () => {
+          rpcCalls += 1;
+          return Promise.resolve({ data: null, error: null });
+        },
+      };
+    },
+  });
+  const handler = createStrategyTaskReaperReceiptHandler(
+    business,
+    runtimeEnvironment,
+  );
+
+  const response = await handler(new Request(
+    "https://example.test/functions/v1/run-strategy-task-reaper-receipt-v1",
+    {
+      method: "POST",
+      headers: { "x-cron-secret": SYNTHETIC_CURRENT_KEY },
+    },
+  ));
+
+  assertEquals(response.status, 400);
+  assertEquals(response.headers.get("Cache-Control"), "no-store");
+  assertEquals(clientCalls, 0);
+  assertEquals(rpcCalls, 0);
+});
+
+Deno.test("strict receipt business handler returns only reviewed receipt fields", async () => {
+  const info: string[] = [];
+  const errors: string[] = [];
+  const handler = createStrategyTaskReaperReceiptBusinessHandler({
+    createClient: () => ({
+      rpc: () => Promise.resolve({ data: appliedReceipt(), error: null }),
+    }),
+    writeInfo: (line) => info.push(line),
+    writeError: (line) => errors.push(line),
+  });
+  const response = await handler(
+    new Request("https://example.test", { method: "POST" }),
+    true,
+    await context(),
+    runtimeEnvironment,
+  );
+  const visible = `${await response.text()}\n${info.join("\n")}`;
+  assertEquals(response.status, 200);
+  assertEquals(response.headers.get("cache-control"), "no-store");
+  assertEquals(errors, []);
+  assertEquals(visible.includes(ATTEMPT_ID), false);
+  assertEquals(visible.includes("business-row-id"), false);
+});
+
+Deno.test("strict receipt business handler suppresses poisoned RPC errors", async () => {
+  const sentinel =
+    "PLANTED_CREDENTIAL_PAYLOAD_FILENAME_PATH_SQL_STACK_SENTINEL";
+  const info: string[] = [];
+  const errors: string[] = [];
+  const handler = createStrategyTaskReaperReceiptBusinessHandler({
+    createClient: () => ({
+      rpc: () => Promise.resolve({
+        data: [{ arbitrary_business_payload: sentinel }],
+        error: { message: sentinel, details: sentinel, hint: sentinel },
+      }),
+    }),
+    writeInfo: (line) => info.push(line),
+    writeError: (line) => errors.push(line),
+  });
+  const response = await handler(
+    new Request("https://example.test", { method: "POST" }),
+    true,
+    await context(),
+    runtimeEnvironment,
+  );
+  const visible = JSON.stringify({
+    body: await response.text(),
+    info,
+    errors,
+  });
+  assertEquals(response.status, 500);
+  assertEquals(visible.includes(sentinel), false);
+  assertEquals(
+    errors,
+    [
+      '{"event_code":"strategy_task_reaper_receipt_failed","reason_code":"receipt_execution_failed"}',
+    ],
+  );
+});

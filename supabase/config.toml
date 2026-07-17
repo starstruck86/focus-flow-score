@@ -1,5 +1,8 @@
 project_id = "odbjjklumdsuqdvkgwyv"
 
+[functions.run-strategy-task-reaper-receipt-v1]
+verify_jwt = true
+
 [functions.drill-review]
 verify_jwt = true
 

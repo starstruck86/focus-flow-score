@@ -1,5 +1,5 @@
 const ATTEMPT_HEADER = "x-cron-attempt-id";
-const RECEIVER = "run-strategy-task-reaper";
+const RECEIVER = "run-strategy-task-reaper-receipt-v1";
 const PROTOCOL_VERSION = 1;
 const MAX_EFFECT_COUNT = 200;
 

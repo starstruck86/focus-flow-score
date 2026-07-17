@@ -5,11 +5,12 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 ROTATION_DESIGN = ROOT / "docs" / "security" / "cron-secret-rotation.md"
-RECEIPT_MIGRATION = (
+RECEIPT_INSTALL_TEMPLATE = (
     ROOT
-    / "supabase"
-    / "migrations"
-    / "20260716160050_add_cron_attempt_receipts.sql"
+    / "scripts"
+    / "security"
+    / "templates"
+    / "install-cron-attempt-receipts.template.sql"
 )
 INDEX_TEMPLATE = (
     ROOT / "scripts" / "security" / "create-task-runs-reaper-index-concurrently.sql"
@@ -23,7 +24,7 @@ LEGACY_HANDOFF_STATES = (
     "LEGACY_IDENTITY_BOUND",
     "LEGACY_PAUSED",
     "LEGACY_DRAINED",
-    "RECEIPT_MIGRATION_APPLIED",
+    "RECEIPT_INSTALLATION_APPLIED",
     "VAULT_SENDER_READY",
     "REPLACEMENT_COMMITTED_INACTIVE",
     "REPLACEMENT_VERIFIED_INACTIVE",
@@ -39,15 +40,15 @@ LEGACY_HANDOFF_REQUIRED = (
     "set all three IDs inactive",
     "Do not edit `cron.job` directly",
     "every associated pg_net request is terminal",
-    "satisfy the separately authorized valid/ready index prerequisite",
-    "exact non-superuser wrapper owner",
+    "satisfy the separately authorized valid/ready/live exact index prerequisite",
+    "exact pre-provisioned non-superuser wrapper owner",
     "one serializable, cron-mutation-fenced transaction",
     "one parameter-free private wrapper per bound job/function-slug tuple",
-    "same name, schedule, owner, database, and function slug",
+    "same name, schedule, owner, and database plus its exact reviewed endpoint mapping",
     "must not enter\n`LEGACY_PAUSED`",
     "exactly one inactive attempt-capable replacement occupies each bound tuple",
-    "zero active caller lacks canonical attempt-ID support",
-    "The receiver rejects a missing identifier and never generates one",
+    "every sender inactive, and every sender attempt-capable",
+    "The strict receiver rejects a missing identifier and never generates one",
     "zero rows for old IDs `7`, `9`, and `15`",
     "no cron command contains an `x-cron-secret` header construction",
     "keep every replacement schedule inactive",
@@ -99,6 +100,42 @@ class SyntheticHandoffOutcome:
     strict_receiver_deployed: bool = False
 
 
+@dataclass(frozen=True)
+class SyntheticIndexShape:
+    valid: bool = True
+    ready: bool = True
+    live: bool = True
+    unique: bool = False
+    key_attributes: int = 2
+    total_attributes: int = 2
+    access_method: str = "btree"
+    ordered_keys: tuple = ("updated_at", "id")
+    predicate: str = "(status = 'pending'::text)"
+
+
+STRICT_REAPER_RECEIVER_SLUG = "run-strategy-task-reaper-receipt-v1"
+
+
+def expected_replacement_slug(legacy_slug):
+    if legacy_slug == "synthetic-reaper":
+        return STRICT_REAPER_RECEIVER_SLUG
+    return legacy_slug
+
+
+def index_matches_receipt_prerequisite(index):
+    return (
+        index.valid
+        and index.ready
+        and index.live
+        and not index.unique
+        and index.key_attributes == 2
+        and index.total_attributes == 2
+        and index.access_method == "btree"
+        and index.ordered_keys == ("updated_at", "id")
+        and index.predicate == "(status = 'pending'::text)"
+    )
+
+
 def synthetic_legacy_jobs():
     return tuple(
         SyntheticCronJob(
@@ -124,13 +161,31 @@ def synthetic_legacy_jobs():
     )
 
 
+def expected_synthetic_sender_tuples():
+    return frozenset(
+        (*job.identity, expected_replacement_slug(job.function_slug))
+        for job in synthetic_legacy_jobs()
+    )
+
+
 def strict_receiver_deployment_allowed(
-    jobs, *, receipt_migration_applied, receiver_deployment_gate_cleared
+    jobs,
+    *,
+    expected_sender_tuples,
+    receipt_installation_applied,
+    receiver_deployment_gate_cleared,
 ):
+    observed_sender_tuples = [
+        (*job.identity, job.function_slug)
+        for job in jobs
+    ]
     return (
-        receipt_migration_applied
+        receipt_installation_applied
         and receiver_deployment_gate_cleared
-        and not any(job.active and not job.attempt_capable for job in jobs)
+        and len(observed_sender_tuples) == len(expected_sender_tuples)
+        and len(set(observed_sender_tuples)) == len(observed_sender_tuples)
+        and set(observed_sender_tuples) == set(expected_sender_tuples)
+        and all(not job.active and job.attempt_capable for job in jobs)
     )
 
 
@@ -139,7 +194,7 @@ def model_legacy_handoff(
     mutation_gate_cleared=False,
     drained=True,
     receipt_ready=False,
-    receipt_migration_applied=False,
+    receipt_installation_applied=False,
     attempt_capable_sender_ready=False,
     receiver_deployment_gate_cleared=False,
     deploy_strict_receiver=False,
@@ -157,7 +212,8 @@ def model_legacy_handoff(
         "active_legacy_with_strict_receiver",
     } and not strict_receiver_deployment_allowed(
         original,
-        receipt_migration_applied=receipt_migration_applied,
+        expected_sender_tuples=expected_synthetic_sender_tuples(),
+        receipt_installation_applied=receipt_installation_applied,
         receiver_deployment_gate_cleared=receiver_deployment_gate_cleared,
     ):
         # Plant the forbidden state before any pause: an attempted strict
@@ -177,11 +233,11 @@ def model_legacy_handoff(
     if not drained or fault == "concurrent_mutation":
         return SyntheticHandoffOutcome("PAUSED_ROLLBACK", paused, True)
 
-    if not receipt_migration_applied:
+    if not receipt_installation_applied:
         return SyntheticHandoffOutcome("LEGACY_DRAINED", paused, True)
 
     if not attempt_capable_sender_ready:
-        return SyntheticHandoffOutcome("RECEIPT_MIGRATION_APPLIED", paused, True)
+        return SyntheticHandoffOutcome("RECEIPT_INSTALLATION_APPLIED", paused, True)
 
     replacements = tuple(
         SyntheticCronJob(
@@ -193,18 +249,20 @@ def model_legacy_handoff(
             function_slug=(
                 "drifted-function"
                 if fault == "endpoint_drift"
-                else job.function_slug
+                else expected_replacement_slug(job.function_slug)
             ),
             active=False,
             command_kind=(
                 "legacy-plaintext-header"
                 if fault == "plaintext_residual"
-                else f"reviewed-wrapper:{job.function_slug}"
+                else "reviewed-wrapper:"
+                + expected_replacement_slug(job.function_slug)
             ),
             wrapper_fingerprint=(
                 "drifted-fingerprint"
                 if fault == "wrapper_fingerprint_drift"
-                else f"reviewed-fingerprint:{job.function_slug}"
+                else "reviewed-fingerprint:"
+                + expected_replacement_slug(job.function_slug)
             ),
             attempt_capable=(fault != "missing_attempt_capability"),
         )
@@ -217,7 +275,7 @@ def model_legacy_handoff(
 
     original_identities = {job.identity for job in original}
     original_endpoints = {
-        job.identity: job.function_slug
+        job.identity: expected_replacement_slug(job.function_slug)
         for job in original
     }
     replacement_identities = [job.identity for job in replacements]
@@ -247,7 +305,8 @@ def model_legacy_handoff(
         )
     if not strict_receiver_deployment_allowed(
         replacements,
-        receipt_migration_applied=receipt_migration_applied,
+        expected_sender_tuples=expected_synthetic_sender_tuples(),
+        receipt_installation_applied=receipt_installation_applied,
         receiver_deployment_gate_cleared=receiver_deployment_gate_cleared,
     ):
         return SyntheticHandoffOutcome(
@@ -286,7 +345,8 @@ def model_legacy_handoff(
     # checked-in production gates remain BLOCKED, so no repository test can
     # authorize or perform the represented mutation.
     original_identities_with_slugs = {
-        (*job.identity, job.function_slug) for job in original
+        (*job.identity, expected_replacement_slug(job.function_slug))
+        for job in original
     }
     final_candidates = replacements
     if fault == "enable_identity_drift":
@@ -420,7 +480,7 @@ def future_strict_receiver_inputs():
     return {
         "mutation_gate_cleared": True,
         "receipt_ready": True,
-        "receipt_migration_applied": True,
+        "receipt_installation_applied": True,
         "attempt_capable_sender_ready": True,
         "receiver_deployment_gate_cleared": True,
         "deploy_strict_receiver": True,
@@ -487,13 +547,15 @@ def receipt_boundary_contract_is_honest(text: str) -> bool:
         "CONTROLLED_SQL_VERIFICATION_STATUS: TEMPLATE_ONLY_BLOCKED",
         "RECEIVER_DEPLOYMENT_GATE: BLOCKED",
         "RECEIPT_INDEX_DEPLOYMENT_GATE: BLOCKED",
+        "RECEIPT_INSTALLATION_GATE: BLOCKED",
         "RECEIPT_PRUNING_GATE: BLOCKED",
         "SENDER_ACTIVATION_GATE: BLOCKED",
         "CONTROLLED_DISPATCH_GATE: BLOCKED",
         "LEGACY_HANDOFF_MUTATION_GATE: BLOCKED",
         "PRODUCTION_ROTATION_GATE: BLOCKED",
         "| `daily-digest` | `RED / BLOCKED` |",
-        "| `run-strategy-task-reaper` | `GREEN / IMPLEMENTED` |",
+        "| `run-strategy-task-reaper` | `YELLOW / LEGACY-COMPATIBLE` |",
+        "| `run-strategy-task-reaper-receipt-v1` | `GREEN / IMPLEMENTED IN REPOSITORY FIXTURES ONLY` |",
         "| `schedule-daily-plan` | `RED / BLOCKED` |",
     )
     required_atomicity = (
@@ -659,7 +721,7 @@ class CronRotationContractTest(unittest.TestCase):
     def test_strict_receiver_deployment_order_is_fail_closed(self) -> None:
         receiver_first = model_legacy_handoff(
             receipt_ready=True,
-            receipt_migration_applied=True,
+            receipt_installation_applied=True,
             attempt_capable_sender_ready=True,
             receiver_deployment_gate_cleared=True,
             deploy_strict_receiver=True,
@@ -673,7 +735,7 @@ class CronRotationContractTest(unittest.TestCase):
         )
         no_deployment_request = model_legacy_handoff(
             receipt_ready=True,
-            receipt_migration_applied=True,
+            receipt_installation_applied=True,
             receiver_deployment_gate_cleared=True,
             fault="receiver_first_deployment",
         )
@@ -682,7 +744,7 @@ class CronRotationContractTest(unittest.TestCase):
         bundle_before_migration = model_legacy_handoff(
             mutation_gate_cleared=True,
             receipt_ready=True,
-            receipt_migration_applied=False,
+            receipt_installation_applied=False,
             attempt_capable_sender_ready=True,
             receiver_deployment_gate_cleared=True,
             deploy_strict_receiver=True,
@@ -737,16 +799,99 @@ class CronRotationContractTest(unittest.TestCase):
         self.assertTrue(
             strict_receiver_deployment_allowed(
                 partial_activation_before_proof.jobs,
-                receipt_migration_applied=True,
+                expected_sender_tuples=expected_synthetic_sender_tuples(),
+                receipt_installation_applied=True,
                 receiver_deployment_gate_cleared=True,
             )
         )
+
+    def test_strict_receiver_requires_exact_inactive_attempt_capable_senders(
+        self,
+    ) -> None:
+        prepared = model_legacy_handoff(
+            mutation_gate_cleared=True,
+            receipt_ready=True,
+            receipt_installation_applied=True,
+            attempt_capable_sender_ready=True,
+        )
+        self.assertEqual(prepared.state, "REPLACEMENT_VERIFIED_INACTIVE")
+        expected = expected_synthetic_sender_tuples()
+
+        def allowed(jobs):
+            return strict_receiver_deployment_allowed(
+                jobs,
+                expected_sender_tuples=expected,
+                receipt_installation_applied=True,
+                receiver_deployment_gate_cleared=True,
+            )
+
+        self.assertTrue(allowed(prepared.jobs))
+        self.assertIn(
+            STRICT_REAPER_RECEIVER_SLUG,
+            {job.function_slug for job in prepared.jobs},
+        )
+
+        planted = {
+            "active_attempt_capable": (
+                replace(prepared.jobs[0], active=True),
+                *prepared.jobs[1:],
+            ),
+            "inactive_not_attempt_capable": (
+                replace(prepared.jobs[0], attempt_capable=False),
+                *prepared.jobs[1:],
+            ),
+            "missing_sender_tuple": prepared.jobs[:-1],
+            "extra_sender_tuple": prepared.jobs
+            + (
+                replace(
+                    prepared.jobs[0],
+                    job_id=998,
+                    name="synthetic-unexpected-job",
+                ),
+            ),
+            "duplicate_sender_tuple": prepared.jobs
+            + (replace(prepared.jobs[0], job_id=999),),
+            "substituted_sender_tuple": (
+                replace(prepared.jobs[0], function_slug="unexpected-receiver"),
+                *prepared.jobs[1:],
+            ),
+        }
+        for label, jobs in planted.items():
+            with self.subTest(label=label):
+                self.assertFalse(allowed(jobs))
+
+    def test_no_active_strict_sender_is_reachable_before_final_activation(
+        self,
+    ) -> None:
+        scenarios = []
+        for controlled_dispatches in (0, 1, 2):
+            for receiver_promoted in (False, True):
+                for enable_replacements in (False, True):
+                    scenarios.append(
+                        model_legacy_handoff(
+                            **future_strict_receiver_inputs(),
+                            controlled_dispatches=controlled_dispatches,
+                            receiver_promoted=receiver_promoted,
+                            next_secret_removed=receiver_promoted,
+                            predecessor_rejected=receiver_promoted,
+                            activation_gate_cleared=enable_replacements,
+                            enable_replacements=enable_replacements,
+                        )
+                    )
+
+        for outcome in scenarios:
+            with self.subTest(state=outcome.state):
+                if (
+                    outcome.strict_receiver_deployed
+                    and outcome.state != "REPLACEMENTS_ENABLED"
+                ):
+                    self.assertTrue(all(not job.active for job in outcome.jobs))
 
     def test_synthetic_future_handoff_preserves_inactive_identity(self) -> None:
         outcome = model_legacy_handoff(
             mutation_gate_cleared=True,
             receipt_ready=True,
-            receipt_migration_applied=True,
+            receipt_installation_applied=True,
             attempt_capable_sender_ready=True,
         )
         self.assertEqual(outcome.state, "REPLACEMENT_VERIFIED_INACTIVE")
@@ -779,7 +924,7 @@ class CronRotationContractTest(unittest.TestCase):
                 outcome = model_legacy_handoff(
                     mutation_gate_cleared=True,
                     receipt_ready=True,
-                    receipt_migration_applied=True,
+                    receipt_installation_applied=True,
                     attempt_capable_sender_ready=True,
                     fault=fault,
                 )
@@ -870,7 +1015,7 @@ class CronRotationContractTest(unittest.TestCase):
         self.assertTrue(all(job.active for job in enabled.jobs))
         self.assertEqual(
             {(*job.identity, job.function_slug) for job in enabled.jobs},
-            {(*job.identity, job.function_slug) for job in synthetic_legacy_jobs()},
+            expected_synthetic_sender_tuples(),
         )
 
     def test_final_enable_faults_rollback_every_replacement_to_inactive(self) -> None:
@@ -907,10 +1052,7 @@ class CronRotationContractTest(unittest.TestCase):
                 self.assertTrue(all(not job.active for job in outcome.jobs))
                 self.assertEqual(
                     {(*job.identity, job.function_slug) for job in outcome.jobs},
-                    {
-                        (*job.identity, job.function_slug)
-                        for job in synthetic_legacy_jobs()
-                    },
+                    expected_synthetic_sender_tuples(),
                 )
                 self.assertTrue(
                     all(
@@ -924,7 +1066,8 @@ class CronRotationContractTest(unittest.TestCase):
 
     def test_legacy_handoff_preserves_identity_without_duplicate_schedules(self) -> None:
         for marker in (
-            "same name, schedule, owner, database, and function slug",
+            "same name, schedule, owner, and database plus its exact reviewed endpoint mapping",
+            "The reaper endpoint changes only from the legacy slug",
             "every command exactly its tuple-bound fixed wrapper call",
             "zero rows for old IDs `7`, `9`, and `15`",
             "exactly three distinct replacement\nIDs",
@@ -958,11 +1101,11 @@ class CronRotationContractTest(unittest.TestCase):
                 "several unfenced transactions",
             ),
             (
-            "exactly one inactive attempt-capable replacement occupies each bound tuple",
+                "exactly one inactive attempt-capable replacement occupies each bound tuple",
                 "duplicate replacements are acceptable",
             ),
             (
-                "same name, schedule, owner, database, and function slug",
+                "same name, schedule, owner, and database plus its exact reviewed endpoint mapping",
                 "a replacement may change its identity",
             ),
             (
@@ -1025,6 +1168,7 @@ class CronRotationContractTest(unittest.TestCase):
             "CONTROLLED_SQL_VERIFICATION_STATUS: TEMPLATE_ONLY_BLOCKED",
             "RECEIVER_DEPLOYMENT_GATE: BLOCKED",
             "RECEIPT_INDEX_DEPLOYMENT_GATE: BLOCKED",
+            "RECEIPT_INSTALLATION_GATE: BLOCKED",
             "RECEIPT_PRUNING_GATE: BLOCKED",
             "SENDER_ACTIVATION_GATE: BLOCKED",
             "CONTROLLED_DISPATCH_GATE: BLOCKED",
@@ -1045,6 +1189,7 @@ class CronRotationContractTest(unittest.TestCase):
             "CONTROLLED_SQL_VERIFICATION_STATUS: READY",
             "RECEIVER_DEPLOYMENT_GATE: READY",
             "RECEIPT_INDEX_DEPLOYMENT_GATE: READY",
+            "RECEIPT_INSTALLATION_GATE: READY",
             "RECEIPT_PRUNING_GATE: READY",
             "SENDER_ACTIVATION_GATE: READY",
             "CONTROLLED_DISPATCH_GATE: READY",
@@ -1108,7 +1253,8 @@ class CronRotationContractTest(unittest.TestCase):
     def test_receipt_matrix_is_honest_and_receiver_specific(self) -> None:
         expected_rows = (
             "| `daily-digest` | `RED / BLOCKED` |",
-            "| `run-strategy-task-reaper` | `GREEN / IMPLEMENTED` |",
+            "| `run-strategy-task-reaper` | `YELLOW / LEGACY-COMPATIBLE` |",
+            "| `run-strategy-task-reaper-receipt-v1` | `GREEN / IMPLEMENTED IN REPOSITORY FIXTURES ONLY` |",
             "| `schedule-daily-plan` | `RED / BLOCKED` |",
         )
         for row in expected_rows:
@@ -1174,21 +1320,55 @@ class CronRotationContractTest(unittest.TestCase):
         ):
             self.assertIn(marker, self.text)
 
-    def test_receipt_installation_requires_atomic_migration_and_guarded_index(self) -> None:
-        migration = RECEIPT_MIGRATION.read_text(encoding="utf-8")
+    def test_receipt_installation_requires_separate_template_and_guarded_index(
+        self,
+    ) -> None:
+        install_template = RECEIPT_INSTALL_TEMPLATE.read_text(encoding="utf-8")
         index_template = INDEX_TEMPLATE.read_text(encoding="utf-8")
         integration = RECEIPT_INTEGRATION.read_text(encoding="utf-8")
 
-        self.assertNotIn("CREATE INDEX task_runs_pending_updated_at_id_idx", migration)
-        self.assertIn("cron_receipt_task_runs_index_prerequisite_missing", migration)
-        self.assertIn("cron_receipt_executor_role_preexists", migration)
-        self.assertIn(") OWNER TO cron_receipt_executor", migration)
-        self.assertIn("policy.polroles = ARRAY[", migration)
-        self.assertIn("policy.polpermissive", migration)
-        self.assertIn("pg_catalog.pg_get_expr(", migration)
-        self.assertIn("membership.member = current_user::regrole::oid", migration)
-        self.assertIn("0::oid = ANY (policy.polroles)", migration)
-        self.assertIn("pg_catalog.has_any_column_privilege(", migration)
+        self.assertFalse(
+            (
+                ROOT
+                / "supabase"
+                / "migrations"
+                / "20260716160050_add_cron_attempt_receipts.sql"
+            ).exists()
+        )
+        self.assertIn("REPOSITORY TEMPLATE ONLY", install_template)
+        self.assertIn("receipt_install_mutation_authorized", install_template)
+        self.assertIn("cron_receipt_executor_missing", install_template)
+        self.assertIn(
+            "cron_receipt_executor_precondition_rejected",
+            install_template,
+        )
+        self.assertIn(
+            "cron_receipt_executor_postcondition_rejected",
+            install_template,
+        )
+        self.assertNotIn(
+            "CREATE INDEX task_runs_pending_updated_at_id_idx",
+            install_template,
+        )
+        self.assertIn(
+            "cron_receipt_task_runs_index_prerequisite_missing",
+            install_template,
+        )
+        self.assertNotIn("CREATE ROLE cron_receipt_executor", install_template)
+        self.assertNotIn("ALTER ROLE cron_receipt_executor", install_template)
+        self.assertIn(") OWNER TO cron_receipt_executor", install_template)
+        self.assertIn("policy.polroles = ARRAY[", install_template)
+        self.assertIn("policy.polpermissive", install_template)
+        self.assertIn("pg_catalog.pg_get_expr(", install_template)
+        self.assertIn(
+            "membership.member = current_user::regrole::oid",
+            install_template,
+        )
+        self.assertIn("0::oid = ANY (policy.polroles)", install_template)
+        self.assertIn("pg_catalog.has_any_column_privilege(", install_template)
+        self.assertIn("pg_catalog.pg_init_privs", install_template)
+        self.assertIn("acl.is_grantable", install_template)
+        self.assertIn("AND NOT direct_acl.is_grantable", install_template)
 
         self.assertIn("CREATE INDEX CONCURRENTLY", index_template)
         for binding in (
@@ -1201,16 +1381,54 @@ class CronRotationContractTest(unittest.TestCase):
             self.assertIn(f":{{?{binding}}}", index_template)
         self.assertIn("receipt_index_guard_identity_rejected", index_template)
         self.assertIn("server_version_num", index_template)
-        self.assertIn("Database/actor/owner names do not uniquely identify", self.text)
+        for exact_catalog_guard in (
+            "candidate.indisvalid",
+            "candidate.indisready",
+            "candidate.indislive",
+            "NOT candidate.indisunique",
+            "candidate.indnkeyatts = 2",
+            "candidate.indnatts = 2",
+            "candidate_access_method.amname = 'btree'",
+            "pg_catalog.pg_get_indexdef(candidate.indexrelid, 1, true)",
+            "pg_catalog.pg_get_indexdef(candidate.indexrelid, 2, true)",
+            "pg_catalog.pg_get_expr(candidate.indpred, candidate.indrelid)",
+            "(status = ''pending''::text)",
+        ):
+            self.assertIn(exact_catalog_guard, index_template)
+        self.assertIn(
+            "Database/actor/owner names do not uniquely identify",
+            self.text,
+        )
 
-        self.assertIn('psql_fixture -1 -f - < "$MIGRATION"', integration)
-        self.assertIn("synthetic_late_receipt_migration_failure", integration)
+        self.assertIn(
+            'psql_install "$EXECUTOR_OID" -f - < "$INSTALL_TEMPLATE"',
+            integration,
+        )
+        self.assertIn("synthetic_late_receipt_install_failure", integration)
         self.assertIn("assert_receipt_installation_absent", integration)
         self.assertIn("policy-drift-${policy_fault}.out", integration)
         self.assertIn("for policy_kind in select update", integration)
         self.assertIn("extra_public_permissive", integration)
         self.assertIn("for membership_direction in inherits inherited_by", integration)
         self.assertIn("for broad_privilege in INSERT REFERENCES", integration)
+        self.assertIn("executor-grant-option.out", integration)
+        self.assertIn("executor-alternate-grantor.out", integration)
+        self.assertIn("cron_receipt_nontransactional_witness_seq", integration)
+
+    def test_unique_include_and_brin_indexes_are_not_exact_prerequisites(
+        self,
+    ) -> None:
+        exact = SyntheticIndexShape()
+        self.assertTrue(index_matches_receipt_prerequisite(exact))
+
+        near_misses = {
+            "unique": replace(exact, unique=True),
+            "include": replace(exact, total_attributes=3),
+            "brin": replace(exact, access_method="brin"),
+        }
+        for label, index in near_misses.items():
+            with self.subTest(label=label):
+                self.assertFalse(index_matches_receipt_prerequisite(index))
 
 
 if __name__ == "__main__":

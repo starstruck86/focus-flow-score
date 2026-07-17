@@ -86,15 +86,15 @@ class RepositoryArtifactTest(unittest.TestCase):
         generated = json.loads(result.stdout)
         self.assertEqual(generated, recorded)
         components = generated["components"]
-        self.assertEqual(len(components), 120)
-        self.assertEqual(sum(item["configuration_known"] for item in components), 120)
+        self.assertEqual(len(components), 121)
+        self.assertEqual(sum(item["configuration_known"] for item in components), 121)
         self.assertEqual(
             sum(
                 item["configuration"]["verify_jwt"]
                 == {"source": "explicit_config", "value": True}
                 for item in components
             ),
-            5,
+            6,
         )
         self.assertEqual(
             sum(
@@ -124,7 +124,7 @@ class RepositoryArtifactTest(unittest.TestCase):
         function_rows = [
             line for line in runtime_inventory.splitlines() if line.startswith("| `")
         ]
-        self.assertEqual(len(function_rows), 120)
+        self.assertEqual(len(function_rows), 121)
 
 
 if __name__ == "__main__":

@@ -25,10 +25,13 @@ function environment(name: string): string | undefined {
 function request(attempt = ATTEMPT_ID, method = "POST"): Request {
   const headers = new Headers();
   if (attempt !== "") headers.set("x-cron-attempt-id", attempt);
-  return new Request("https://example.test/functions/v1/run-strategy-task-reaper", {
-    method,
-    headers,
-  });
+  return new Request(
+    "https://example.test/functions/v1/run-strategy-task-reaper-receipt-v1",
+    {
+      method,
+      headers,
+    },
+  );
 }
 
 function receipt(
@@ -36,7 +39,7 @@ function receipt(
 ): ReadonlyArray<Record<string, unknown>> {
   return [{
     receipt_version: 1,
-    receiver: "run-strategy-task-reaper",
+    receiver: "run-strategy-task-reaper-receipt-v1",
     attempt_present: true,
     terminal: true,
     outcome_code: "applied_success",
@@ -54,12 +57,12 @@ Deno.test("canonical reaper attempt binds the reviewed semantic identity", async
   const result = await buildStrategyTaskReaperAttempt(request(), environment);
   assertEquals(result, {
     attemptId: ATTEMPT_ID,
-    receiver: "run-strategy-task-reaper",
+    receiver: "run-strategy-task-reaper-receipt-v1",
     protocolVersion: 1,
     environment: "dynamic-staging",
     projectRef: "uujkmcbqavsmzhnbqvmm",
     requestFingerprint:
-      "61e0e027eafdbb977ba4519d07e226c401dc3ff96db23357d9e10f6a6e381312",
+      "24c7f4cf7f9f65cac36d8420c92c5af6b25da83df39e3cca4258ff8f1d2f6de4",
   });
 
   const production = await buildStrategyTaskReaperAttempt(
@@ -72,7 +75,7 @@ Deno.test("canonical reaper attempt binds the reviewed semantic identity", async
   assertEquals(production.projectRef, "odbjjklumdsuqdvkgwyv");
   assertEquals(
     production.requestFingerprint,
-    "cbc3f2c498ed4ccc2fb7937e9d5f2b00ea302fc5402b996cd0eac83276b37166",
+    "b18b069454c17e74f9dbde9e5692b86cde402a066659438b20db0db7c098b397",
   );
 });
 
@@ -87,7 +90,7 @@ Deno.test("attempt identity cannot equal a request credential", async () => {
     await assertRejects(
       () => buildStrategyTaskReaperAttempt(
         new Request(
-          "https://example.test/functions/v1/run-strategy-task-reaper",
+          "https://example.test/functions/v1/run-strategy-task-reaper-receipt-v1",
           {
             method: "POST",
             headers: {
@@ -249,7 +252,7 @@ Deno.test("execution calls only the fixed RPC with bound arguments", async () =>
     p_environment: "dynamic-staging",
     p_project_ref: "uujkmcbqavsmzhnbqvmm",
     p_request_fingerprint:
-      "61e0e027eafdbb977ba4519d07e226c401dc3ff96db23357d9e10f6a6e381312",
+      "24c7f4cf7f9f65cac36d8420c92c5af6b25da83df39e3cca4258ff8f1d2f6de4",
   });
   assertEquals(result.outcome_code, "applied_success");
 });

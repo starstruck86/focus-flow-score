@@ -74,6 +74,16 @@ const REVIEWED_CRON_RECEIVER_BINDINGS = new Map<
     },
   ],
   [
+    "run-strategy-task-reaper-receipt-v1",
+    {
+      factory: "createStrategyTaskReaperReceiptHandler",
+      handlerPath:
+        "supabase/functions/run-strategy-task-reaper-receipt-v1/handler.ts",
+      serverCall: "Deno.serve",
+      allowNonCronRequests: false,
+    },
+  ],
+  [
     "schedule-daily-plan",
     {
       factory: "createScheduleDailyPlanHandler",
@@ -156,6 +166,7 @@ describe("Phase 3.6 — Security Contract", () => {
       expect([...REVIEWED_CRON_RECEIVER_BINDINGS.keys()]).toEqual([
         "daily-digest",
         "run-strategy-task-reaper",
+        "run-strategy-task-reaper-receipt-v1",
         "schedule-daily-plan",
       ]);
       for (const name of REVIEWED_CRON_RECEIVER_BINDINGS.keys()) {
@@ -163,6 +174,30 @@ describe("Phase 3.6 — Security Contract", () => {
         expect(source).not.toBeNull();
         expect(hasReviewedLexicalCronReceiverBinding(name, source!)).toBe(true);
       }
+    });
+
+    it("strict receipt handling is isolated from the legacy reaper slug", () => {
+      const legacyIndex = readEdgeFunctionSource("run-strategy-task-reaper")!;
+      const legacyHandler = fs.readFileSync(
+        path.resolve("supabase/functions/run-strategy-task-reaper/handler.ts"),
+        "utf-8",
+      );
+      const strictIndex = readEdgeFunctionSource(
+        "run-strategy-task-reaper-receipt-v1",
+      )!;
+      const strictHandler = fs.readFileSync(
+        path.resolve(
+          "supabase/functions/run-strategy-task-reaper-receipt-v1/handler.ts",
+        ),
+        "utf-8",
+      );
+
+      expect(legacyIndex).toContain("sweepStalePendingRuns");
+      expect(legacyHandler).not.toContain("buildStrategyTaskReaperAttempt");
+      expect(legacyHandler).not.toContain("x-cron-attempt-id");
+      expect(strictIndex).not.toContain("sweepStalePendingRuns");
+      expect(strictHandler).toContain("buildStrategyTaskReaperAttempt");
+      expect(strictHandler).toContain("x-cron-attempt-id");
     });
 
     for (const fn of edgeFunctions) {

@@ -57,7 +57,7 @@ export type ReceiptVerificationInput = Readonly<{
 
 export type ReceiptVerificationResult = Readonly<{
   verification_version: 1;
-  receiver: "run-strategy-task-reaper";
+  receiver: "run-strategy-task-reaper-receipt-v1";
   attempt_present: boolean;
   terminal: boolean;
   outcome_code: CronAttemptReceipt["outcome_code"];
@@ -267,7 +267,7 @@ export async function verifyCronAttemptReceipt(
       "x-cron-attempt-id": input.attemptId,
     });
     attempt = await buildStrategyTaskReaperAttempt(
-      new Request("https://local.invalid/run-strategy-task-reaper", {
+      new Request("https://local.invalid/run-strategy-task-reaper-receipt-v1", {
         method: "POST",
         headers,
       }),
@@ -342,7 +342,7 @@ export async function verifyCronAttemptReceipt(
       receipt.outcome_code === "legitimate_noop");
   return Object.freeze({
     verification_version: 1,
-    receiver: "run-strategy-task-reaper",
+    receiver: "run-strategy-task-reaper-receipt-v1",
     attempt_present: receipt.attempt_present,
     terminal: receipt.terminal,
     outcome_code: receipt.outcome_code,

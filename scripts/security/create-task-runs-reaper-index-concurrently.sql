@@ -39,10 +39,18 @@ SELECT
   AND NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_index AS candidate
+    JOIN pg_catalog.pg_class AS candidate_class
+      ON candidate_class.oid = candidate.indexrelid
+    JOIN pg_catalog.pg_am AS candidate_access_method
+      ON candidate_access_method.oid = candidate_class.relam
     WHERE candidate.indrelid = task_table.oid
       AND candidate.indisvalid
       AND candidate.indisready
       AND candidate.indislive
+      AND NOT candidate.indisunique
+      AND candidate.indnkeyatts = 2
+      AND candidate.indnatts = 2
+      AND candidate_access_method.amname = 'btree'
       AND pg_catalog.pg_get_indexdef(candidate.indexrelid, 1, true) =
         'updated_at'
       AND pg_catalog.pg_get_indexdef(candidate.indexrelid, 2, true) = 'id'

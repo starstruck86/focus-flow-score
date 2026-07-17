@@ -2,14 +2,14 @@
   "collection": {
     "artifact": {
       "kind": "repository_deployment_inventory",
-      "sha256": "sha256:3b62b9223dc19b2c58163f88d5fe2d3d3a5fe339c0a1c4aff17ebe2d04147d6b",
+      "sha256": "sha256:b7050c0d2833d4ce5ebcbfdd68d8184a4a24abf313d6187269d2c1150d1e0a60",
       "source": "local source project odbjjklumdsuqdvkgwyv supabase/config.toml and resolved supabase/functions dependency closures"
     },
     "boundary": {
       "kind": "repository_content_sha256",
-      "value": "sha256:3b62b9223dc19b2c58163f88d5fe2d3d3a5fe339c0a1c4aff17ebe2d04147d6b"
+      "value": "sha256:b7050c0d2833d4ce5ebcbfdd68d8184a4a24abf313d6187269d2c1150d1e0a60"
     },
-    "collected_at": "2026-07-16T23:45:38Z",
+    "collected_at": "2026-07-17T01:37:02Z",
     "collector": {
       "name": "inventory-edge-functions",
       "version": "2.0.0"
@@ -2843,17 +2843,50 @@
       "count": null,
       "evidence": {
         "closure": [
-          "supabase/functions/_shared/cronAttemptReceipt.ts",
           "supabase/functions/_shared/cronHeadReceiver.ts",
           "supabase/functions/_shared/cronSecretAuth.ts",
+          "supabase/functions/_shared/strategy-orchestrator/staleRunWatchdog.ts",
           "supabase/functions/run-strategy-task-reaper/handler.ts",
           "supabase/functions/run-strategy-task-reaper/index.ts"
         ],
-        "fingerprint": "sha256:4a25cedd26b32af09942639ccfda7c8a462b4b7e4fe603eaf5375c097eaed17d",
+        "fingerprint": "sha256:64284a591049265de3717f284d4366b6bcaec085b4f2fdafebf2f9bdf8380bc9",
         "kind": "edge_function_deployment_closure"
       },
       "independently_verifiable": true,
       "key": "run-strategy-task-reaper",
+      "kind": "edge_function",
+      "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
+    },
+    {
+      "configuration": {
+        "entrypoint": {
+          "source": "documented_default",
+          "value": "supabase/functions/run-strategy-task-reaper-receipt-v1/index.ts"
+        },
+        "import_map": {
+          "source": "documented_default",
+          "value": null
+        },
+        "verify_jwt": {
+          "source": "explicit_config",
+          "value": true
+        }
+      },
+      "configuration_known": true,
+      "count": null,
+      "evidence": {
+        "closure": [
+          "supabase/functions/_shared/cronAttemptReceipt.ts",
+          "supabase/functions/_shared/cronHeadReceiver.ts",
+          "supabase/functions/_shared/cronSecretAuth.ts",
+          "supabase/functions/run-strategy-task-reaper-receipt-v1/handler.ts",
+          "supabase/functions/run-strategy-task-reaper-receipt-v1/index.ts"
+        ],
+        "fingerprint": "sha256:d6fd037383ce75ff9a762090e7a099468206b715951f4b7bedca7897023a12c9",
+        "kind": "edge_function_deployment_closure"
+      },
+      "independently_verifiable": true,
+      "key": "run-strategy-task-reaper-receipt-v1",
       "kind": "edge_function",
       "note": "Reviewed repository source closure; compare with separately collected target deployment evidence."
     },

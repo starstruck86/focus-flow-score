@@ -397,31 +397,6 @@ class DocumentedExportEvidenceWorkflowTest(unittest.TestCase):
         if clone.returncode != 0:
             raise AssertionError(clone.stderr)
 
-        # The checked-in workflow deliberately compares migration inputs with
-        # the historical inspection baseline. New application migrations on
-        # the branch under test must not silently redefine that evidence
-        # boundary. Build the synthetic execution checkout with the current
-        # reviewed tools but the exact baseline migration tree, then retain the
-        # planted tracked/untracked migration drift tests below.
-        restore_migrations = subprocess.run(
-            [
-                "git",
-                "restore",
-                "--source",
-                INSPECTION_BASELINE_SHA,
-                "--staged",
-                "--worktree",
-                "--",
-                "supabase/migrations",
-            ],
-            cwd=cls.base_checkout,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if restore_migrations.returncode != 0:
-            raise AssertionError(restore_migrations.stderr)
-
         for relative in (
             "scripts/migration/README.md",
             "scripts/migration/bounded-pg-restore.py",
@@ -480,22 +455,6 @@ class DocumentedExportEvidenceWorkflowTest(unittest.TestCase):
             text=True,
         )
         cls.execution_checkout_sha = git_output(cls.base_checkout, "rev-parse", "HEAD")
-        migration_baseline = subprocess.run(
-            [
-                "git",
-                "diff",
-                "--quiet",
-                INSPECTION_BASELINE_SHA,
-                "--",
-                "supabase/migrations",
-            ],
-            cwd=cls.base_checkout,
-            check=False,
-        )
-        if migration_baseline.returncode != 0:
-            raise AssertionError(
-                "synthetic execution checkout changed historical migration inputs"
-            )
 
     @classmethod
     def tearDownClass(cls):

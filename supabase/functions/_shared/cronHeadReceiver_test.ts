@@ -5,9 +5,12 @@ import type {
 } from "./cronHeadReceiver.ts";
 import { createDailyDigestHandler } from "../daily-digest/handler.ts";
 import {
-  createStrategyTaskReaperBusinessHandler,
   createStrategyTaskReaperHandler,
 } from "../run-strategy-task-reaper/handler.ts";
+import {
+  createStrategyTaskReaperReceiptBusinessHandler,
+  createStrategyTaskReaperReceiptHandler,
+} from "../run-strategy-task-reaper-receipt-v1/handler.ts";
 import { createScheduleDailyPlanHandler } from "../schedule-daily-plan/handler.ts";
 
 const SYNTHETIC_CURRENT_KEY = "synthetic-current-cron-key";
@@ -87,8 +90,12 @@ Deno.test("daily-digest HEAD probes stop before every business dependency", asyn
 });
 
 Deno.test("run-strategy-task-reaper HEAD probes stop before every business dependency", async () => {
+  await assertHeadBoundary(createStrategyTaskReaperHandler);
+});
+
+Deno.test("strict reaper receipt HEAD probes stop before every business dependency", async () => {
   await assertHeadBoundary((business, readEnvironment) =>
-    createStrategyTaskReaperHandler(
+    createStrategyTaskReaperReceiptHandler(
       (request, isCron, _attempt, requestEnvironment) =>
         business(request, isCron, requestEnvironment),
       readEnvironment,
@@ -99,7 +106,7 @@ Deno.test("schedule-daily-plan HEAD probes stop before every business dependency
   await assertHeadBoundary(createScheduleDailyPlanHandler);
 });
 
-Deno.test("reaper attempt validation occurs after auth but before business work", async () => {
+Deno.test("strict reaper attempt validation occurs after auth but before business work", async () => {
   const attempt = "123e4567-e89b-42d3-a456-426614174000";
   const cases = [
     {
@@ -124,7 +131,7 @@ Deno.test("reaper attempt validation occurs after auth but before business work"
 
   for (const testCase of cases) {
     const ledger = emptyLedger();
-    const handler = createStrategyTaskReaperHandler(
+    const handler = createStrategyTaskReaperReceiptHandler(
       () => {
         ledger.business += 1;
         ledger.database += 1;
@@ -137,7 +144,7 @@ Deno.test("reaper attempt validation occurs after auth but before business work"
       headers.set("x-cron-attempt-id", testCase.attempt);
     }
     const response = await handler(new Request(
-      "https://example.test/functions/v1/run-strategy-task-reaper",
+      "https://example.test/functions/v1/run-strategy-task-reaper-receipt-v1",
       { method: "POST", headers },
     ));
     assertEquals(response.status, testCase.status, testCase.label);
@@ -149,7 +156,7 @@ Deno.test("reaper attempt validation occurs after auth but before business work"
 Deno.test("authenticated UUID-shaped cron secret cannot become an attempt key", async () => {
   const syntheticUuidCredential = "123e4567-e89b-42d3-a456-426614174000";
   const ledger = emptyLedger();
-  const handler = createStrategyTaskReaperHandler(
+  const handler = createStrategyTaskReaperReceiptHandler(
     () => {
       ledger.business += 1;
       ledger.database += 1;
@@ -164,7 +171,7 @@ Deno.test("authenticated UUID-shaped cron secret cannot become an attempt key", 
     },
   );
   const response = await handler(new Request(
-    "https://example.test/functions/v1/run-strategy-task-reaper",
+    "https://example.test/functions/v1/run-strategy-task-reaper-receipt-v1",
     {
       method: "POST",
       headers: {
@@ -178,7 +185,7 @@ Deno.test("authenticated UUID-shaped cron secret cannot become an attempt key", 
   assertEquals(ledger.database, 0);
 });
 
-Deno.test("every protected reaper credential domain rejects before client or RPC creation", async () => {
+Deno.test("every protected strict reaper credential domain rejects before client or RPC creation", async () => {
   const current = "10000000-0000-4000-8000-000000000001";
   const next = "20000000-0000-4000-8000-000000000002";
   const apiKey = "30000000-0000-4000-8000-000000000003";
@@ -233,7 +240,7 @@ Deno.test("every protected reaper credential domain rejects before client or RPC
   for (const testCase of cases) {
     let clientCalls = 0;
     let rpcCalls = 0;
-    const business = createStrategyTaskReaperBusinessHandler({
+    const business = createStrategyTaskReaperReceiptBusinessHandler({
       createClient: () => {
         clientCalls += 1;
         return {
@@ -244,7 +251,7 @@ Deno.test("every protected reaper credential domain rejects before client or RPC
         };
       },
     });
-    const handler = createStrategyTaskReaperHandler(
+    const handler = createStrategyTaskReaperReceiptHandler(
       business,
       (name) => {
         if (name === "CRON_SECRET") return current;
@@ -257,7 +264,7 @@ Deno.test("every protected reaper credential domain rejects before client or RPC
       },
     );
     const response = await handler(new Request(
-      "https://example.test/functions/v1/run-strategy-task-reaper",
+      "https://example.test/functions/v1/run-strategy-task-reaper-receipt-v1",
       {
         method: "POST",
         headers: {
@@ -278,7 +285,7 @@ Deno.test("every protected reaper credential domain rejects before client or RPC
   }
 });
 
-Deno.test("concurrent reaper requests use isolated single-read environment snapshots", async () => {
+Deno.test("concurrent strict reaper requests use isolated per-key memoized environment views", async () => {
   const currentValues = ["synthetic-current-a", "synthetic-current-b"];
   const nextValues = ["synthetic-next-a", "synthetic-next-b"];
   const urlValues = [
@@ -301,14 +308,14 @@ Deno.test("concurrent reaper requests use isolated single-read environment snaps
     return values[ordinal];
   };
   const clients: Array<readonly [string, string]> = [];
-  const business = createStrategyTaskReaperBusinessHandler({
+  const business = createStrategyTaskReaperReceiptBusinessHandler({
     createClient: (url, key) => {
       clients.push([url, key]);
       return {
         rpc: () => Promise.resolve({
           data: [{
             receipt_version: 1,
-            receiver: "run-strategy-task-reaper",
+            receiver: "run-strategy-task-reaper-receipt-v1",
             attempt_present: true,
             terminal: true,
             outcome_code: "applied_success",
@@ -324,13 +331,13 @@ Deno.test("concurrent reaper requests use isolated single-read environment snaps
       };
     },
   });
-  const handler = createStrategyTaskReaperHandler(
+  const handler = createStrategyTaskReaperReceiptHandler(
     business,
     sourceEnvironment,
   );
   const request = (secret: string, attempt: string) =>
     new Request(
-      "https://example.test/functions/v1/run-strategy-task-reaper",
+      "https://example.test/functions/v1/run-strategy-task-reaper-receipt-v1",
       {
         method: "POST",
         headers: {
@@ -362,9 +369,9 @@ Deno.test("concurrent reaper requests use isolated single-read environment snaps
   }
 });
 
-Deno.test("valid authenticated reaper request passes one bound attempt", async () => {
+Deno.test("valid authenticated strict reaper request passes one bound attempt", async () => {
   let observed: unknown;
-  const handler = createStrategyTaskReaperHandler(
+  const handler = createStrategyTaskReaperReceiptHandler(
     (_request, _isCron, attempt) => {
       observed = attempt;
       return new Response(null, { status: 200 });
@@ -372,7 +379,7 @@ Deno.test("valid authenticated reaper request passes one bound attempt", async (
     environment,
   );
   const response = await handler(new Request(
-    "https://example.test/functions/v1/run-strategy-task-reaper",
+    "https://example.test/functions/v1/run-strategy-task-reaper-receipt-v1",
     {
       method: "POST",
       headers: {
@@ -384,11 +391,11 @@ Deno.test("valid authenticated reaper request passes one bound attempt", async (
   assertEquals(response.status, 200);
   assertEquals(observed, {
     attemptId: "123e4567-e89b-42d3-a456-426614174000",
-    receiver: "run-strategy-task-reaper",
+    receiver: "run-strategy-task-reaper-receipt-v1",
     protocolVersion: 1,
     environment: "dynamic-staging",
     projectRef: "uujkmcbqavsmzhnbqvmm",
     requestFingerprint:
-      "61e0e027eafdbb977ba4519d07e226c401dc3ff96db23357d9e10f6a6e381312",
+      "24c7f4cf7f9f65cac36d8420c92c5af6b25da83df39e3cca4258ff8f1d2f6de4",
   });
 });

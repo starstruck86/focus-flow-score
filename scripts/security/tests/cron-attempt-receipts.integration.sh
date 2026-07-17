@@ -14,15 +14,22 @@ export PGPASSWORD=${PGPASSWORD:-postgres}
 export PGDATABASE=${PGDATABASE:-migration_verify_cron_receipts}
 export PGCONNECT_TIMEOUT=${PGCONNECT_TIMEOUT:-5}
 
-MIGRATION="$ROOT/supabase/migrations/20260716160050_add_cron_attempt_receipts.sql"
+INSTALL_TEMPLATE="$ROOT/scripts/security/templates/install-cron-attempt-receipts.template.sql"
+FORBIDDEN_MIGRATION="$ROOT/supabase/migrations/20260716160050_add_cron_attempt_receipts.sql"
 INDEX_TEMPLATE="$ROOT/scripts/security/create-task-runs-reaper-index-concurrently.sql"
 LATE_FAILURE_FIXTURE="$ROOT/scripts/security/tests/fixtures/cron-receipt-late-failure.sql"
 
 migration_verify_require_safe_target
 migration_verify_require_command grep
-migration_verify_require_file "$MIGRATION"
+migration_verify_require_command awk
+migration_verify_require_file "$INSTALL_TEMPLATE"
 migration_verify_require_file "$INDEX_TEMPLATE"
 migration_verify_require_file "$LATE_FAILURE_FIXTURE"
+
+if [[ -e $FORBIDDEN_MIGRATION ]]; then
+  echo "cron receipt install template remains in the ordinary migration chain" >&2
+  exit 1
+fi
 
 if [[ -n ${POSTGRES_CONTAINER:-} ]]; then
   migration_verify_require_command docker
@@ -55,6 +62,14 @@ psql_fixture() {
       -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" "$@"
   fi
 }
+
+if [[ $(psql_fixture -A -t -c "
+  SELECT rolsuper
+  FROM pg_catalog.pg_roles
+  WHERE rolname = current_user;") != t ]]; then
+  echo "cron receipt integration requires an isolated superuser fixture actor" >&2
+  exit 2
+fi
 
 if ! target_identity=$(psql_fixture -A -t -F '|' -c \
   "SELECT pg_catalog.current_database(),
@@ -99,6 +114,7 @@ DROP FUNCTION IF EXISTS public.cron_receipt_test_task_trigger() CASCADE;
 DROP SCHEMA IF EXISTS cron_receipt_private CASCADE;
 DROP TABLE IF EXISTS public.task_runs CASCADE;
 DROP TABLE IF EXISTS public.cron_receipt_effect_audit CASCADE;
+DROP SEQUENCE IF EXISTS public.cron_receipt_nontransactional_witness_seq;
 
 DO $drop_fixture_roles$
 BEGIN
@@ -113,6 +129,12 @@ BEGIN
   ) THEN
     EXECUTE 'DROP OWNED BY receipt_fixture_task_owner';
     DROP ROLE receipt_fixture_task_owner;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'receipt_fixture_acl_grantor'
+  ) THEN
+    EXECUTE 'DROP OWNED BY receipt_fixture_acl_grantor';
+    DROP ROLE receipt_fixture_acl_grantor;
   END IF;
 END
 $drop_fixture_roles$;
@@ -139,6 +161,11 @@ CREATE TABLE public.cron_receipt_effect_audit (
   task_run_id uuid NOT NULL
 );
 
+-- nextval is intentionally nontransactional. The partial-failure regression
+-- uses this sequence only as an isolated witness that an earlier row trigger
+-- ran before a later row trigger raised and the surrounding writes rolled back.
+CREATE SEQUENCE public.cron_receipt_nontransactional_witness_seq;
+
 CREATE FUNCTION public.cron_receipt_test_task_trigger()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -155,6 +182,15 @@ BEGIN
   IF pg_catalog.current_setting('cron_receipt_test.fail_task_id', true) = OLD.id::text THEN
     RAISE EXCEPTION USING MESSAGE = 'synthetic_task_dependency_failure';
   END IF;
+  IF pg_catalog.current_setting(
+    'cron_receipt_test.fail_on_second_trigger', true
+  ) = 'on' THEN
+    IF pg_catalog.nextval(
+      'public.cron_receipt_nontransactional_witness_seq'::regclass
+    ) = 2 THEN
+      RAISE EXCEPTION USING MESSAGE = 'synthetic_second_trigger_failure';
+    END IF;
+  END IF;
   INSERT INTO public.cron_receipt_effect_audit (task_run_id) VALUES (OLD.id);
   RETURN NEW;
 END
@@ -167,6 +203,97 @@ FOR EACH ROW EXECUTE FUNCTION public.cron_receipt_test_task_trigger();
 ALTER TABLE public.task_runs OWNER TO receipt_fixture_task_owner;
 SQL
 
+# PostgreSQL 17 automatically grants a non-superuser CREATEROLE installer
+# membership in each role it creates with ADMIN true, SET false, and INHERIT
+# false. That edge violates the zero-membership executor contract, while SET
+# false prevents the installer from transferring a function to that role. This
+# focused transaction proves both facts using real catalog state, then rolls all
+# synthetic roles and objects back.
+psql_fixture -A -t -F '|' -v "fixture_actor=$PGUSER" \
+  > "$TMP_DIR/non-super-createrole.out" <<'SQL'
+BEGIN;
+CREATE ROLE receipt_fixture_non_super_installer
+  NOLOGIN NOSUPERUSER NOINHERIT CREATEROLE NOCREATEDB
+  NOREPLICATION NOBYPASSRLS;
+CREATE SCHEMA receipt_fixture_role_transfer
+  AUTHORIZATION receipt_fixture_non_super_installer;
+SET SESSION AUTHORIZATION receipt_fixture_non_super_installer;
+CREATE ROLE receipt_fixture_automatic_executor
+  NOLOGIN NOSUPERUSER NOINHERIT NOCREATEROLE NOCREATEDB
+  NOREPLICATION NOBYPASSRLS;
+CREATE FUNCTION receipt_fixture_role_transfer.owner_transfer_probe()
+RETURNS integer
+LANGUAGE sql
+AS 'SELECT 1';
+GRANT CREATE ON SCHEMA receipt_fixture_role_transfer
+  TO receipt_fixture_automatic_executor;
+DO $owner_transfer_probe$
+BEGIN
+  BEGIN
+    ALTER FUNCTION receipt_fixture_role_transfer.owner_transfer_probe()
+      OWNER TO receipt_fixture_automatic_executor;
+    RAISE EXCEPTION USING
+      MESSAGE = 'synthetic_owner_transfer_unexpectedly_succeeded';
+  EXCEPTION
+    WHEN insufficient_privilege THEN
+      PERFORM pg_catalog.set_config(
+        'cron_receipt_test.owner_transfer_failed', 'on', true
+      );
+  END;
+END
+$owner_transfer_probe$;
+SELECT
+  (SELECT NOT rolsuper AND rolcreaterole
+   FROM pg_catalog.pg_roles
+   WHERE rolname = 'receipt_fixture_non_super_installer'),
+  (SELECT pg_catalog.count(*) = 1
+     AND pg_catalog.bool_and(membership.admin_option)
+     AND pg_catalog.bool_and(NOT membership.set_option)
+     AND pg_catalog.bool_and(NOT membership.inherit_option)
+     AND pg_catalog.bool_and(
+       grantor_role.rolname = :'fixture_actor'
+     )
+   FROM pg_catalog.pg_auth_members AS membership
+   JOIN pg_catalog.pg_roles AS granted_role
+     ON granted_role.oid = membership.roleid
+   JOIN pg_catalog.pg_roles AS member_role
+     ON member_role.oid = membership.member
+   JOIN pg_catalog.pg_roles AS grantor_role
+     ON grantor_role.oid = membership.grantor
+   CROSS JOIN pg_catalog.pg_roles AS executor_role
+   WHERE executor_role.rolname = 'receipt_fixture_automatic_executor'
+     AND executor_role.oid IN (
+       membership.roleid,
+       membership.member,
+       membership.grantor
+     )
+     AND granted_role.rolname = 'receipt_fixture_automatic_executor'
+     AND member_role.rolname = 'receipt_fixture_non_super_installer'),
+  pg_catalog.current_setting(
+    'cron_receipt_test.owner_transfer_failed', true
+  ) = 'on',
+  NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_auth_members AS membership
+    JOIN pg_catalog.pg_roles AS executor
+      ON executor.oid IN (membership.roleid, membership.member)
+    WHERE executor.rolname = 'receipt_fixture_automatic_executor'
+  ),
+  (SELECT owner.rolname = 'receipt_fixture_non_super_installer'
+   FROM pg_catalog.pg_proc AS function
+   JOIN pg_catalog.pg_namespace AS namespace
+     ON namespace.oid = function.pronamespace
+   JOIN pg_catalog.pg_roles AS owner ON owner.oid = function.proowner
+   WHERE namespace.nspname = 'receipt_fixture_role_transfer'
+     AND function.proname = 'owner_transfer_probe');
+RESET SESSION AUTHORIZATION;
+ROLLBACK;
+SQL
+if ! grep -Fxq 't|t|t|f|t' "$TMP_DIR/non-super-createrole.out"; then
+  echo "cron receipt integration did not reproduce PG17 creator membership and owner-transfer contradiction" >&2
+  exit 1
+fi
+
 assert_receipt_installation_absent() {
   local label=$1
   local observed
@@ -178,20 +305,43 @@ assert_receipt_installation_absent() {
     ) IS NULL,
     pg_catalog.to_regprocedure(
       'public.read_strategy_task_reaper_receipt(uuid,integer,text,text,text)'
-    ) IS NULL,
-    NOT EXISTS (
-      SELECT 1 FROM pg_catalog.pg_roles
-      WHERE rolname = 'cron_receipt_executor'
-    );")
-  if [[ $observed != 't|t|t|t' ]]; then
+    ) IS NULL;")
+  if [[ $observed != 't|t|t' ]]; then
     echo "cron receipt integration left a partial installation after $label" >&2
     exit 1
   fi
 }
 
-# The receipt migration must fail before creating any receipt object when the
+# Every install binding is mandatory. Missing authorization must fail before
+# the index/role catalog probes and before any receipt object is created.
+if psql_fixture -f - < "$INSTALL_TEMPLATE" \
+  > "$TMP_DIR/install-missing-authorization.out" 2>&1; then
+  echo "cron receipt integration accepted missing install authorization" >&2
+  exit 1
+fi
+if ! grep -Fq 'receipt_install_guard_missing_authorization' \
+  "$TMP_DIR/install-missing-authorization.out"; then
+  echo "cron receipt integration returned the wrong missing-install-binding stage" >&2
+  exit 1
+fi
+assert_receipt_installation_absent "missing install authorization"
+
+psql_install() {
+  local expected_executor_oid=$1
+  shift
+  psql_fixture \
+    -v receipt_install_mutation_authorized=YES \
+    -v "receipt_install_expected_database=$PGDATABASE" \
+    -v "receipt_install_expected_actor=$PGUSER" \
+    -v receipt_install_expected_task_owner=receipt_fixture_task_owner \
+    -v receipt_install_expected_server_major=17 \
+    -v "receipt_install_expected_executor_oid=$expected_executor_oid" \
+    "$@"
+}
+
+# The install template must fail before creating any receipt object when the
 # write-safe index prerequisite has not been prepared.
-if psql_fixture -1 -f - < "$MIGRATION" \
+if psql_install 0 -f - < "$INSTALL_TEMPLATE" \
   > "$TMP_DIR/missing-index-prerequisite.out" 2>&1; then
   echo "cron receipt integration accepted a missing index prerequisite" >&2
   exit 1
@@ -267,51 +417,212 @@ psql_fixture \
   -v receipt_index_expected_server_major=17 \
   -f - < "$INDEX_TEMPLATE"
 
-# Reject every pre-existing executor role, including one whose flags look safe
-# but which already holds a payload-column privilege. This prevents inherited
-# ACLs or memberships from being mistaken for the reviewed execution role.
-psql_fixture -c "
+# The install template requires an exact externally pre-provisioned executor;
+# it never creates or alters the role. Missing role state is a hard stop.
+if psql_install 0 -f - < "$INSTALL_TEMPLATE" \
+  > "$TMP_DIR/missing-executor.out" 2>&1; then
+  echo "cron receipt integration accepted a missing executor role" >&2
+  exit 1
+fi
+if ! grep -Fq 'cron_receipt_executor_missing' \
+  "$TMP_DIR/missing-executor.out"; then
+  echo "cron receipt integration returned the wrong missing-executor stage" >&2
+  exit 1
+fi
+assert_receipt_installation_absent "missing executor"
+
+psql_fixture <<'SQL'
 CREATE ROLE cron_receipt_executor
   NOLOGIN NOSUPERUSER NOINHERIT NOCREATEDB NOCREATEROLE
-  NOREPLICATION NOBYPASSRLS;
+  NOREPLICATION NOBYPASSRLS CONNECTION LIMIT -1;
+DO $remove_synthetic_creator_edge$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_auth_members AS membership
+    WHERE membership.roleid = 'cron_receipt_executor'::regrole::oid
+      AND membership.member = current_user::regrole::oid
+  ) THEN
+    EXECUTE pg_catalog.format(
+      'REVOKE cron_receipt_executor FROM %I', current_user
+    );
+  END IF;
+END
+$remove_synthetic_creator_edge$;
+SQL
+EXECUTOR_OID=$(psql_fixture -A -t -c "
+  SELECT oid FROM pg_catalog.pg_roles
+  WHERE rolname = 'cron_receipt_executor';")
+if [[ ! $EXECUTOR_OID =~ ^[0-9]+$ ]]; then
+  echo "cron receipt integration could not bind the executor OID" >&2
+  exit 1
+fi
+
+# Direct privilege and membership drift must be rejected without blessing the
+# otherwise safe-looking pre-provisioned role.
+psql_fixture -c "
 GRANT SELECT (business_payload)
   ON public.task_runs TO cron_receipt_executor;
 GRANT cron_receipt_executor TO receipt_unauthorized;"
-if psql_fixture -1 -f - < "$MIGRATION" \
+if psql_install "$EXECUTOR_OID" -f - < "$INSTALL_TEMPLATE" \
   > "$TMP_DIR/preexisting-executor.out" 2>&1; then
-  echo "cron receipt integration accepted a pre-existing executor role" >&2
+  echo "cron receipt integration accepted executor ACL/membership drift" >&2
   exit 1
 fi
-if ! grep -Fq 'cron_receipt_executor_role_preexists' \
+if ! grep -Fq 'cron_receipt_executor_precondition_rejected' \
   "$TMP_DIR/preexisting-executor.out"; then
   echo "cron receipt integration returned the wrong role-precondition stage" >&2
   exit 1
 fi
 psql_fixture -c "
 REVOKE cron_receipt_executor FROM receipt_unauthorized;
-DROP OWNED BY cron_receipt_executor;
-DROP ROLE cron_receipt_executor;"
+REVOKE SELECT (business_payload)
+  ON public.task_runs FROM cron_receipt_executor;"
 assert_receipt_installation_absent "executor-role rejection"
 
-# The receipt migration must be one transaction. A planted failure after its
-# final statement rolls back the role, schema, functions, grants, policies,
-# and temporary schema CREATE authority together.
-if {
-  sed -n '1,$p' "$MIGRATION"
-  sed -n '1,$p' "$LATE_FAILURE_FIXTURE"
-} | psql_fixture -1 -f - \
-    > "$TMP_DIR/late-migration-failure.out" 2>&1; then
-  echo "cron receipt integration accepted a planted late migration failure" >&2
+# Default ACLs that name the executor as owner/grantor or grantee are rejected.
+psql_fixture <<'SQL'
+CREATE ROLE receipt_fixture_default_acl_owner NOLOGIN;
+ALTER DEFAULT PRIVILEGES FOR ROLE receipt_fixture_default_acl_owner
+  IN SCHEMA public
+  GRANT SELECT ON TABLES TO cron_receipt_executor;
+SQL
+if psql_install "$EXECUTOR_OID" -f - < "$INSTALL_TEMPLATE" \
+  > "$TMP_DIR/executor-default-acl.out" 2>&1; then
+  echo "cron receipt integration accepted executor default-ACL drift" >&2
   exit 1
 fi
-if ! grep -Fq 'synthetic_late_receipt_migration_failure' \
-  "$TMP_DIR/late-migration-failure.out"; then
+if ! grep -Fq 'cron_receipt_executor_precondition_rejected' \
+  "$TMP_DIR/executor-default-acl.out"; then
+  echo "cron receipt integration returned the wrong default-ACL stage" >&2
+  exit 1
+fi
+psql_fixture <<'SQL'
+DROP OWNED BY receipt_fixture_default_acl_owner;
+DROP ROLE receipt_fixture_default_acl_owner;
+SQL
+assert_receipt_installation_absent "executor default-ACL rejection"
+
+# Stray ownership under the executor is also rejected before installation.
+psql_fixture <<'SQL'
+CREATE FUNCTION public.receipt_fixture_unexpected_executor_object()
+RETURNS integer LANGUAGE sql AS 'SELECT 1';
+GRANT CREATE ON SCHEMA public TO cron_receipt_executor;
+ALTER FUNCTION public.receipt_fixture_unexpected_executor_object()
+  OWNER TO cron_receipt_executor;
+REVOKE CREATE ON SCHEMA public FROM cron_receipt_executor;
+SQL
+if psql_install "$EXECUTOR_OID" -f - < "$INSTALL_TEMPLATE" \
+  > "$TMP_DIR/executor-unexpected-owner.out" 2>&1; then
+  echo "cron receipt integration accepted unexpected executor ownership" >&2
+  exit 1
+fi
+if ! grep -Fq 'cron_receipt_executor_precondition_rejected' \
+  "$TMP_DIR/executor-unexpected-owner.out"; then
+  echo "cron receipt integration returned the wrong ownership stage" >&2
+  exit 1
+fi
+psql_fixture -c "DROP FUNCTION public.receipt_fixture_unexpected_executor_object();"
+assert_receipt_installation_absent "executor ownership rejection"
+
+# The template owns its BEGIN/COMMIT boundary. Injecting a failure immediately
+# before that COMMIT must roll back the schema, functions, grants, policies,
+# and temporary schema CREATE authority while leaving the externally
+# pre-provisioned role unchanged.
+if {
+  sed '$d' "$INSTALL_TEMPLATE"
+  sed -n '1,$p' "$LATE_FAILURE_FIXTURE"
+  printf 'COMMIT;\n'
+} | psql_install "$EXECUTOR_OID" -f - \
+    > "$TMP_DIR/late-install-failure.out" 2>&1; then
+  echo "cron receipt integration accepted a planted late install failure" >&2
+  exit 1
+fi
+if ! grep -Fq 'synthetic_late_receipt_install_failure' \
+  "$TMP_DIR/late-install-failure.out"; then
   echo "cron receipt integration did not reach the planted late failure" >&2
   exit 1
 fi
 assert_receipt_installation_absent "late transactional rollback"
+if [[ $(psql_fixture -A -t -F '|' -c "
+  SELECT
+    NOT role.rolsuper AND NOT role.rolcanlogin
+      AND NOT role.rolinherit AND NOT role.rolcreatedb
+      AND NOT role.rolcreaterole AND NOT role.rolreplication
+      AND NOT role.rolbypassrls,
+    NOT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_auth_members AS membership
+      WHERE membership.roleid = role.oid
+        OR membership.member = role.oid
+        OR membership.grantor = role.oid
+    ),
+    NOT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_default_acl AS defaults
+      CROSS JOIN LATERAL pg_catalog.aclexplode(defaults.defaclacl) AS acl
+      WHERE defaults.defaclrole = role.oid
+        OR acl.grantee = role.oid OR acl.grantor = role.oid
+    ),
+    NOT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_shdepend AS dependency
+      WHERE dependency.refclassid = 'pg_catalog.pg_authid'::regclass
+        AND dependency.refobjid = role.oid
+        AND dependency.deptype = 'o'
+    )
+  FROM pg_catalog.pg_roles AS role
+  WHERE role.rolname = 'cron_receipt_executor';") != 't|t|t|t' ]]; then
+  echo "cron receipt integration changed pre-provisioned role during rollback" >&2
+  exit 1
+fi
 
-psql_fixture -1 -f - < "$MIGRATION"
+install_with_injected_postcondition_fault() {
+  local injected_sql=$1
+  awk -v injected_sql="$injected_sql" '
+    $0 == "DO $executor_postcondition$" {
+      print injected_sql
+      insertion_count += 1
+    }
+    { print }
+    END {
+      if (insertion_count != 1) exit 42
+    }
+  ' "$INSTALL_TEMPLATE" | psql_install "$EXECUTOR_OID" -f -
+}
+
+# An otherwise structurally correct direct grant is still rejected when it
+# carries delegation authority. The postcondition binds is_grantable=false,
+# not merely the grantee and privilege type.
+if install_with_injected_postcondition_fault \
+  "GRANT SELECT ON TABLE cron_receipt_private.cron_attempt_receipts TO cron_receipt_executor WITH GRANT OPTION;" \
+  > "$TMP_DIR/executor-grant-option.out" 2>&1; then
+  echo "cron receipt integration accepted executor grant-option drift" >&2
+  exit 1
+fi
+if ! grep -Fq 'cron_receipt_executor_postcondition_rejected' \
+  "$TMP_DIR/executor-grant-option.out"; then
+  echo "cron receipt integration returned the wrong grant-option stage" >&2
+  exit 1
+fi
+assert_receipt_installation_absent "executor grant-option rejection"
+
+# A second grantor cannot smuggle a duplicate-looking reviewed privilege into
+# the executor ACL. The accepted rows must be owner-issued with no grant
+# option; all injected objects and ACLs roll back with the failed install.
+psql_fixture -c "CREATE ROLE receipt_fixture_acl_grantor NOLOGIN;"
+if install_with_injected_postcondition_fault \
+  "GRANT USAGE ON SCHEMA cron_receipt_private TO receipt_fixture_acl_grantor; GRANT SELECT ON TABLE cron_receipt_private.cron_attempt_receipts TO receipt_fixture_acl_grantor WITH GRANT OPTION; SET ROLE receipt_fixture_acl_grantor; GRANT SELECT ON TABLE cron_receipt_private.cron_attempt_receipts TO cron_receipt_executor; RESET ROLE;" \
+  > "$TMP_DIR/executor-alternate-grantor.out" 2>&1; then
+  echo "cron receipt integration accepted alternate executor grantor" >&2
+  exit 1
+fi
+if ! grep -Fq 'cron_receipt_executor_postcondition_rejected' \
+  "$TMP_DIR/executor-alternate-grantor.out"; then
+  echo "cron receipt integration returned the wrong grantor stage" >&2
+  exit 1
+fi
+assert_receipt_installation_absent "alternate executor grantor rejection"
+psql_fixture -c "DROP ROLE receipt_fixture_acl_grantor;"
+
+psql_install "$EXECUTOR_OID" -f - < "$INSTALL_TEMPLATE"
 
 psql_fixture <<'SQL'
 CREATE FUNCTION cron_receipt_private.cron_receipt_test_terminal_trigger()
@@ -690,7 +1001,7 @@ expect_psql_failure \
   "SET ROLE service_role;
    INSERT INTO cron_receipt_private.cron_attempt_receipts VALUES (
      '10000000-0000-4000-8000-000000000001',
-     'run-strategy-task-reaper', 1, '$ENVIRONMENT', '$PROJECT_REF',
+     'run-strategy-task-reaper-receipt-v1', 1, '$ENVIRONMENT', '$PROJECT_REF',
      '$FINGERPRINT_A', 'in_progress', 'attempt_in_progress', 0,
      clock_timestamp(), NULL
    );"
@@ -722,7 +1033,7 @@ SELECT
       AND policy.polcmd = 'd'
   );"
 if grep -Eqi 'cron\.(schedule|schedule_in_database)|DELETE[[:space:]]+FROM[[:space:]]+cron_receipt_private\.cron_attempt_receipts' \
-  "$MIGRATION"; then
+  "$INSTALL_TEMPLATE"; then
   echo "cron receipt integration found an active-protocol cleanup path" >&2
   exit 1
 fi
@@ -1330,7 +1641,7 @@ INSERT INTO cron_receipt_private.cron_attempt_receipts (
   created_at, receipt_at
 ) VALUES (
   '30000000-0000-4000-8000-000000000003',
-  'run-strategy-task-reaper', 1, '$ENVIRONMENT', '$PROJECT_REF',
+  'run-strategy-task-reaper-receipt-v1', 1, '$ENVIRONMENT', '$PROJECT_REF',
   '$FINGERPRINT_A', 'in_progress', 'attempt_in_progress', 0,
   clock_timestamp() - interval '1 hour', NULL
 );"
@@ -1566,19 +1877,24 @@ SELECT
 
 # A partial dependency failure in a multi-row batch rolls back every effect
 # before committing one fixed known-failure receipt. It cannot be mistaken for
-# success and a retry reads the same durable rollback proof.
+# success and a retry reads the same durable rollback proof. The sequence is a
+# deliberately nontransactional isolated-test witness: value 2 proves that one
+# earlier row trigger executed before the second trigger raised.
 psql_fixture <<SQL
+SELECT pg_catalog.setval(
+  'public.cron_receipt_nontransactional_witness_seq'::regclass, 1, false
+);
 INSERT INTO public.task_runs (
   id, user_id, status, progress_step, updated_at, business_payload
 ) VALUES
   (
     '20000000-0000-4000-8000-000000000004', '$USER_ID', 'pending',
-    'synthesis', clock_timestamp() - interval '20 minutes',
+    'synthesis', '2000-01-01T00:00:00Z'::timestamptz,
     'PLANTED_PARTIAL_DEPENDENCY_SENTINEL_A'
   ),
   (
     '20000000-0000-4000-8000-000000000005', '$USER_ID', 'pending',
-    'synthesis', clock_timestamp() - interval '20 minutes',
+    'synthesis', '2000-01-01T00:00:00Z'::timestamptz,
     'PLANTED_PARTIAL_DEPENDENCY_SENTINEL_B'
   );
 SQL
@@ -1586,8 +1902,7 @@ run_service_execute_timestamped \
   30000000-0000-4000-8000-000000000006 \
   "$FINGERPRINT_A" \
   "$TMP_DIR/partial-dependency-failure.out" \
-  "SET cron_receipt_test.fail_task_id =
-     '20000000-0000-4000-8000-000000000005';"
+  "SET cron_receipt_test.fail_on_second_trigger = 'on';"
 if ! grep -Eq \
   '^known_failure_rolled_back\|execution_rolled_back\|0\|t\|t\|t\|f\|[^|]+$' \
   "$TMP_DIR/partial-dependency-failure.out"; then
@@ -1614,11 +1929,19 @@ if [[ -z $failure_receipt_at || $replayed_failure_receipt_at != "$failure_receip
 fi
 assert_sql_true "partial dependency failure committed only rollback proof" "
 SELECT
+  (SELECT last_value = 2 AND is_called
+   FROM public.cron_receipt_nontransactional_witness_seq)
+  AND
   (SELECT count(*) = 2 FROM public.task_runs
    WHERE id IN (
      '20000000-0000-4000-8000-000000000004',
      '20000000-0000-4000-8000-000000000005'
-   ) AND status = 'pending')
+   )
+     AND status = 'pending'
+     AND progress_step = 'synthesis'
+     AND error IS NULL
+     AND completed_at IS NULL
+     AND updated_at = '2000-01-01T00:00:00Z'::timestamptz)
   AND EXISTS (
     SELECT 1 FROM cron_receipt_private.cron_attempt_receipts
     WHERE attempt_id = '30000000-0000-4000-8000-000000000006'
@@ -1627,12 +1950,20 @@ SELECT
       AND exact_effect_count = 0
   )
   AND NOT EXISTS (
+    SELECT 1 FROM cron_receipt_private.cron_attempt_receipts
+    WHERE attempt_id = '30000000-0000-4000-8000-000000000006'
+      AND outcome_code IN ('applied_success', 'legitimate_noop')
+  )
+  AND NOT EXISTS (
     SELECT 1 FROM public.cron_receipt_effect_audit
     WHERE task_run_id IN (
       '20000000-0000-4000-8000-000000000004',
       '20000000-0000-4000-8000-000000000005'
     )
   );"
+assert_sql_true "rollback receipt replay did not rerun row triggers" "
+SELECT last_value = 2 AND is_called
+FROM public.cron_receipt_nontransactional_witness_seq;"
 
 # An explicit caller rollback models a crash before commit: no receipt or
 # business effect becomes durable.
