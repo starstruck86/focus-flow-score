@@ -266,7 +266,13 @@ class PostgresCrossMajorContractTest(unittest.TestCase):
             "ulimit -f 2048",
             "ulimit -f 2048 || exit 70; exec pg_restore --list",
             '"$toc_size" -le "$TOC_CAP_BYTES"',
-            "from lib.lovable_toc_contract import DATA_TOC_CLASSES, parse_raw_toc",
+            "stage='pg18_toc_stream'",
+            "cat /work/synthetic.toc",
+            'host_toc_size="$(wc -c <"$workspace/synthetic-private.toc"',
+            '"$host_toc_size" == "$toc_size"',
+            "stage='pg18_toc_unknown_class'",
+            "stage='pg18_toc_malformed'",
+            "from lib.lovable_toc_contract import ContractError, DATA_TOC_CLASSES, parse_raw_toc",
             "parse_raw_toc(raw, b\"s\" * 32)",
             "--tmpfs /var/lib/postgresql:rw,nosuid,nodev,noexec,size=16m",
             "docker network rm",
@@ -295,6 +301,8 @@ class PostgresCrossMajorContractTest(unittest.TestCase):
         ):
             if marker not in script:
                 self.fail("cross-major harness is missing a required safety marker")
+        if "docker cp" in script:
+            self.fail("cross-major harness uses the rejected archive-copy path")
 
         def docker_run_records(source: str) -> str:
             records: list[str] = []

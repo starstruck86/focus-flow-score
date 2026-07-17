@@ -422,7 +422,7 @@ SQL
 
 export PYTHONDONTWRITEBYTECODE=1
 
-for required_tool in docker python3 grep timeout seq sleep tr mktemp chmod rm find sort; do
+for required_tool in docker python3 grep timeout seq sleep tr wc mktemp chmod rm find sort; do
   require_tool "$required_tool" || exit 1
 done
 
@@ -598,22 +598,37 @@ timeout 30s docker exec "$client_container" sh -c '
   ! grep -Fq "SYNTHETIC_ROW_PAYLOAD_MUST_NOT_APPEAR_IN_TOC" /work/synthetic.toc
 ' >"$workspace/toc-assertions-private.log" 2>&1
 
-stage='pg18_toc_parser'
-timeout 30s docker cp "$client_container:/work/synthetic.toc" \
-  "$workspace/synthetic-private.toc" \
-  >"$workspace/toc-copy-private.log" 2>&1
+stage='pg18_toc_stream'
+timeout 30s docker exec "$client_container" \
+  sh -c 'cat /work/synthetic.toc' \
+  >"$workspace/synthetic-private.toc" \
+  2>"$workspace/toc-stream-private.log"
+host_toc_size="$(wc -c <"$workspace/synthetic-private.toc" | tr -d '[:space:]')"
+[[ "$host_toc_size" =~ ^[0-9]+$ && "$host_toc_size" == "$toc_size" ]]
+stage='pg18_toc_permissions'
 chmod 0400 "$workspace/synthetic-private.toc" >/dev/null 2>&1
-python3 -B -I - "$ROOT" "$workspace/synthetic-private.toc" \
+stage='pg18_toc_parser'
+if python3 -B -I - "$ROOT" "$workspace/synthetic-private.toc" \
   >"$workspace/toc-parser-private.log" 2>&1 <<'PY'
 from pathlib import Path
 import sys
 
 root = Path(sys.argv[1])
 sys.path.insert(0, str(root / "scripts" / "migration"))
-from lib.lovable_toc_contract import DATA_TOC_CLASSES, parse_raw_toc
+from lib.lovable_toc_contract import ContractError, DATA_TOC_CLASSES, parse_raw_toc
 
 raw = Path(sys.argv[2]).read_bytes()
-entries = parse_raw_toc(raw, b"s" * 32)
+try:
+    entries = parse_raw_toc(raw, b"s" * 32)
+except ContractError as error:
+    raise SystemExit(
+        {
+            "toc_unknown_class": 41,
+            "toc_malformed": 42,
+            "toc_duplicate_id": 43,
+            "input_invalid": 44,
+        }.get(error.code, 49)
+    )
 classes = {entry.object_class for entry in entries}
 required = {
     "FUNCTION",
@@ -625,10 +640,25 @@ required = {
     "VIEW",
 }
 if not required.issubset(classes):
-    raise SystemExit(1)
+    raise SystemExit(51)
 if sum(entry.object_class in DATA_TOC_CLASSES for entry in entries) < 1:
-    raise SystemExit(1)
+    raise SystemExit(52)
 PY
+then
+  :
+else
+  parser_status=$?
+  case "$parser_status" in
+    41) stage='pg18_toc_unknown_class' ;;
+    42) stage='pg18_toc_malformed' ;;
+    43) stage='pg18_toc_duplicate_id' ;;
+    44) stage='pg18_toc_input_invalid' ;;
+    51) stage='pg18_toc_expected_class_missing' ;;
+    52) stage='pg18_toc_data_reference_missing' ;;
+    *) stage='pg18_toc_parser_internal' ;;
+  esac
+  exit 1
+fi
 timeout 30s docker network connect "$network" "$client_container" \
   >"$workspace/reconnect-private.log" 2>&1
 
