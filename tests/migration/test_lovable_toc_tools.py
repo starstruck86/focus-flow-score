@@ -116,6 +116,7 @@ def capture_environment(root: Path, archive: Path, pg_restore: Path):
     return {
         "TOC_REVIEW_INNER_ARCHIVE": str(archive),
         "TOC_REVIEW_OUTPUT_ROOT": str(root),
+        "TOC_REVIEW_BOUNDED_TEMP_PARENT": str(root),
         "TOC_REVIEW_EVIDENCE_RUN_ID": "synthetic-run",
         "TOC_REVIEW_OUTER_SHA256": SHA_A,
         "TOC_REVIEW_INNER_SHA256": hashlib.sha256(archive.read_bytes()).hexdigest(),
@@ -401,6 +402,8 @@ class TocToolsIntegrationTest(unittest.TestCase):
                 | getattr(os, "O_CLOEXEC", 0),
             )
             environment["TOC_REVIEW_DESCRIPTOR_BOUND_WORKDIR_FD"] = str(descriptor)
+            environment.pop("TOC_REVIEW_BOUNDED_TEMP_PARENT")
+            environment["TOC_REVIEW_BOUNDED_TEMP_PARENT_FD"] = str(descriptor)
             previous = Path.cwd()
             try:
                 os.chdir(stage)
@@ -440,6 +443,8 @@ class TocToolsIntegrationTest(unittest.TestCase):
             )
             environment = capture_environment(stage, archive, pg_restore)
             environment["TOC_REVIEW_DESCRIPTOR_BOUND_WORKDIR_FD"] = str(descriptor)
+            environment.pop("TOC_REVIEW_BOUNDED_TEMP_PARENT")
+            environment["TOC_REVIEW_BOUNDED_TEMP_PARENT_FD"] = str(descriptor)
             environment["TOC_REVIEW_OUTPUT_ROOT"] = str(stage)
             previous = Path.cwd()
             try:
@@ -668,9 +673,22 @@ class TocToolsIntegrationTest(unittest.TestCase):
             environment = capture_environment(root, archive, pg_restore)
             original_run = capture_tool._run_bounded
 
-            def mutate_after_list(wrapper, executable, arguments, execution_python):
+            def mutate_after_list(
+                wrapper,
+                executable,
+                arguments,
+                execution_python,
+                *,
+                temporary_parent_fd,
+                temporary_parent,
+            ):
                 output = original_run(
-                    wrapper, executable, arguments, execution_python
+                    wrapper,
+                    executable,
+                    arguments,
+                    execution_python,
+                    temporary_parent_fd=temporary_parent_fd,
+                    temporary_parent=temporary_parent,
                 )
                 if arguments[0] == "--list":
                     archive.chmod(0o600)

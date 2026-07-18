@@ -4,8 +4,9 @@
 The underlying executable is supplied only through
 ``LOVABLE_UNDERLYING_PG_RESTORE_BIN``.  This wrapper has no restore mode: its
 entire command-line interface is either ``--version`` or ``--list PATH``.
-Child output is streamed through bounded, private capture files and is emitted
-only after pg_restore exits successfully.
+Child output is streamed through bounded capture files beneath one explicit,
+validated private parent. It is emitted only after pg_restore succeeds and the
+descriptor-relative capture cleanup plus directory fsync are proven.
 """
 
 from __future__ import annotations
@@ -42,17 +43,24 @@ if not _runtime_isolation_enabled():
 
 import dataclasses
 import re
+import secrets
 import selectors
-import shutil
 import signal
 import stat
 import subprocess
-import tempfile
 import time
 from typing import BinaryIO, Mapping, Sequence
 
 
 UNDERLYING_ENVIRONMENT_VARIABLE = "LOVABLE_UNDERLYING_PG_RESTORE_BIN"
+TEMPORARY_PARENT_FD_ENVIRONMENT_VARIABLE = "LOVABLE_BOUNDED_TEMP_PARENT_FD"
+TEMPORARY_PARENT_PATH_ENVIRONMENT_VARIABLE = "LOVABLE_BOUNDED_TEMP_PARENT"
+TEMPORARY_DIRECTORY_PREFIX = ".bounded-pg-restore."
+INDETERMINATE_MARKER = "EVIDENCE_INDETERMINATE"
+INDETERMINATE_MARKER_BYTES = (
+    b'{"artifact_kind":"bounded_pg_restore_indeterminate",'
+    b'"format_version":1,"reason":"cleanup_indeterminate"}\n'
+)
 
 VERSION_TIMEOUT_SECONDS = 15
 LIST_TIMEOUT_SECONDS = 300
@@ -312,14 +320,214 @@ def _capture_child(
                 stream.close()
 
 
-def _emit_capture(file_descriptor: int, destination: BinaryIO) -> None:
-    os.lseek(file_descriptor, 0, os.SEEK_SET)
-    while True:
-        chunk = os.read(file_descriptor, READ_CHUNK_BYTES)
-        if not chunk:
-            break
-        destination.write(chunk)
+def _emit_capture(captured: bytes, destination: BinaryIO) -> None:
+    destination.write(captured)
     destination.flush()
+
+
+def _validate_private_parent_metadata(metadata: os.stat_result) -> None:
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or stat.S_IMODE(metadata.st_mode) != 0o700
+        or metadata.st_uid != os.geteuid()
+    ):
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
+
+
+def _open_private_temporary_parent(
+    *, temporary_parent: str | None, temporary_parent_fd: int | None
+) -> int:
+    """Return an owned descriptor for exactly one validated private parent."""
+
+    if (temporary_parent is None) == (temporary_parent_fd is None):
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
+    if temporary_parent_fd is not None:
+        if isinstance(temporary_parent_fd, bool) or not isinstance(
+            temporary_parent_fd, int
+        ):
+            raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
+        if temporary_parent_fd <= 2:
+            raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
+        try:
+            descriptor = os.dup(temporary_parent_fd)
+            os.set_inheritable(descriptor, False)
+            _validate_private_parent_metadata(os.fstat(descriptor))
+        except (OSError, ValueError) as exc:
+            try:
+                os.close(descriptor)
+            except (OSError, UnboundLocalError):
+                pass
+            raise BoundedPgRestoreError(REASON_OTHER_NONZERO) from exc
+        return descriptor
+
+    if (
+        not isinstance(temporary_parent, str)
+        or not temporary_parent
+        or not os.path.isabs(temporary_parent)
+        or temporary_parent.startswith("//")
+        or os.path.normpath(temporary_parent) != temporary_parent
+    ):
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
+    try:
+        path_metadata = os.lstat(temporary_parent)
+        if stat.S_ISLNK(path_metadata.st_mode):
+            raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
+        _validate_private_parent_metadata(path_metadata)
+        descriptor = os.open(
+            temporary_parent,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+        )
+        descriptor_metadata = os.fstat(descriptor)
+        _validate_private_parent_metadata(descriptor_metadata)
+        if (descriptor_metadata.st_dev, descriptor_metadata.st_ino) != (
+            path_metadata.st_dev,
+            path_metadata.st_ino,
+        ):
+            raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
+    except BoundedPgRestoreError:
+        try:
+            os.close(descriptor)
+        except (OSError, UnboundLocalError):
+            pass
+        raise
+    except OSError as exc:
+        try:
+            os.close(descriptor)
+        except (OSError, UnboundLocalError):
+            pass
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO) from exc
+    return descriptor
+
+
+def _create_private_capture_directory(
+    parent_fd: int,
+) -> tuple[str, int, os.stat_result]:
+    for _attempt in range(128):
+        name = f"{TEMPORARY_DIRECTORY_PREFIX}{secrets.token_hex(16)}"
+        try:
+            os.mkdir(name, 0o700, dir_fd=parent_fd)
+        except FileExistsError:
+            continue
+        except OSError as exc:
+            raise BoundedPgRestoreError(REASON_OTHER_NONZERO) from exc
+        try:
+            directory_fd = os.open(
+                name,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                dir_fd=parent_fd,
+            )
+            metadata = os.fstat(directory_fd)
+            _validate_private_parent_metadata(metadata)
+            os.fsync(parent_fd)
+            return name, directory_fd, metadata
+        except BaseException:
+            try:
+                os.close(directory_fd)
+            except (OSError, UnboundLocalError):
+                pass
+            try:
+                os.rmdir(name, dir_fd=parent_fd)
+                os.fsync(parent_fd)
+            except OSError:
+                pass
+            raise
+    raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
+
+
+def _mark_private_capture_indeterminate(directory_fd: int) -> None:
+    marker_fd = -1
+    try:
+        marker_fd = os.open(
+            INDETERMINATE_MARKER,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+            0o400,
+            dir_fd=directory_fd,
+        )
+        _write_all(marker_fd, INDETERMINATE_MARKER_BYTES)
+        os.fchmod(marker_fd, 0o400)
+        os.fsync(marker_fd)
+    finally:
+        if marker_fd >= 0:
+            os.close(marker_fd)
+    os.fsync(directory_fd)
+
+
+def _remove_private_capture_directory(
+    parent_fd: int,
+    directory_fd: int,
+    name: str,
+    expected_identity: os.stat_result,
+    *,
+    cleanup_was_already_ambiguous: bool = False,
+) -> None:
+    cleanup_failed = cleanup_was_already_ambiguous
+    try:
+        descriptor_metadata = os.fstat(directory_fd)
+        named_metadata = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        _validate_private_parent_metadata(descriptor_metadata)
+        if (
+            not stat.S_ISDIR(named_metadata.st_mode)
+            or (descriptor_metadata.st_dev, descriptor_metadata.st_ino)
+            != (expected_identity.st_dev, expected_identity.st_ino)
+            or (named_metadata.st_dev, named_metadata.st_ino)
+            != (expected_identity.st_dev, expected_identity.st_ino)
+        ):
+            cleanup_failed = True
+    except (BoundedPgRestoreError, OSError):
+        cleanup_failed = True
+    for capture_name in ("stdout.capture", "stderr.capture"):
+        try:
+            os.unlink(capture_name, dir_fd=directory_fd)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            cleanup_failed = True
+    try:
+        os.fsync(directory_fd)
+    except OSError:
+        cleanup_failed = True
+    try:
+        if os.listdir(directory_fd):
+            cleanup_failed = True
+    except (OSError, TypeError):
+        cleanup_failed = True
+    if not cleanup_failed:
+        try:
+            os.rmdir(name, dir_fd=parent_fd)
+            os.fsync(parent_fd)
+        except OSError:
+            cleanup_failed = True
+    if cleanup_failed:
+        try:
+            named_metadata = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+            if (named_metadata.st_dev, named_metadata.st_ino) == (
+                expected_identity.st_dev,
+                expected_identity.st_ino,
+            ):
+                _mark_private_capture_indeterminate(directory_fd)
+                os.fsync(parent_fd)
+        except (BoundedPgRestoreError, OSError):
+            pass
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
+
+
+def _temporary_parent_from_environment(
+    environment: Mapping[str, str],
+) -> tuple[str | None, int | None]:
+    raw_path = environment.get(TEMPORARY_PARENT_PATH_ENVIRONMENT_VARIABLE)
+    raw_fd = environment.get(TEMPORARY_PARENT_FD_ENVIRONMENT_VARIABLE)
+    if (raw_path is None) == (raw_fd is None):
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
+    if raw_fd is not None:
+        if re.fullmatch(r"[1-9][0-9]{0,8}", raw_fd, re.ASCII) is None:
+            raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
+        descriptor = int(raw_fd)
+        if descriptor <= 2:
+            raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
+        return None, descriptor
+    if raw_path is None or raw_path == "":
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
+    return raw_path, None
 
 
 def run_request(
@@ -330,26 +538,29 @@ def run_request(
     stdout: BinaryIO,
     stderr: BinaryIO,
     temporary_parent: str | None = None,
+    temporary_parent_fd: int | None = None,
 ) -> None:
-    """Execute one validated request; explicit Request values support unit tests."""
+    """Execute one request under exactly one explicit private capture parent."""
 
     if not _runtime_isolation_enabled():
         raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
     request.validate_limits()
-    temporary_directory = tempfile.mkdtemp(
-        prefix=".bounded-pg-restore.",
-        dir=temporary_parent,
+    parent_fd = _open_private_temporary_parent(
+        temporary_parent=temporary_parent,
+        temporary_parent_fd=temporary_parent_fd,
     )
+    temporary_name = ""
+    temporary_identity: os.stat_result | None = None
     directory_fd = -1
     stdout_fd = -1
     stderr_fd = -1
     process: subprocess.Popen[bytes] | None = None
     request_succeeded = False
+    captured_stdout: bytes | None = None
+    captured_stderr: bytes | None = None
     try:
-        os.chmod(temporary_directory, 0o700)
-        directory_fd = os.open(
-            temporary_directory,
-            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+        temporary_name, directory_fd, temporary_identity = (
+            _create_private_capture_directory(parent_fd)
         )
         capture_flags = (
             os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
@@ -369,6 +580,8 @@ def run_request(
 
         child_environment = dict(environment)
         child_environment.pop(UNDERLYING_ENVIRONMENT_VARIABLE, None)
+        child_environment.pop(TEMPORARY_PARENT_FD_ENVIRONMENT_VARIABLE, None)
+        child_environment.pop(TEMPORARY_PARENT_PATH_ENVIRONMENT_VARIABLE, None)
         child_environment["LC_ALL"] = "C"
         child_environment["LANG"] = "C"
         child_environment.pop("LANGUAGE", None)
@@ -405,20 +618,57 @@ def run_request(
         if os.fstat(stderr_fd).st_size > request.stderr_cap_bytes:
             raise BoundedPgRestoreError(REASON_OUTPUT_CAP)
 
-        _emit_capture(stdout_fd, stdout)
-        _emit_capture(stderr_fd, stderr)
+        captured_stdout = _read_private_capture(stdout_fd, request.stdout_cap_bytes)
+        captured_stderr = _read_private_capture(stderr_fd, request.stderr_cap_bytes)
         request_succeeded = True
     finally:
         # Success is the only boundary at which no forced group cleanup is
         # needed.  Every other exit kills the recorded PGID before captures are
         # closed or their private directory is removed, even when the leader
         # has already exited.
+        cleanup_ambiguous = False
         if process is not None and not request_succeeded:
-            _kill_process_group_and_reap_leader(process)
-        for file_descriptor in (stdout_fd, stderr_fd, directory_fd):
+            try:
+                _kill_process_group_and_reap_leader(process)
+            except BaseException:
+                cleanup_ambiguous = True
+        for file_descriptor in (stdout_fd, stderr_fd):
             if file_descriptor >= 0:
-                os.close(file_descriptor)
-        shutil.rmtree(temporary_directory)
+                try:
+                    os.close(file_descriptor)
+                except BaseException:
+                    cleanup_ambiguous = True
+        try:
+            if temporary_name:
+                if temporary_identity is None:
+                    cleanup_ambiguous = True
+                else:
+                    try:
+                        _remove_private_capture_directory(
+                            parent_fd,
+                            directory_fd,
+                            temporary_name,
+                            temporary_identity,
+                            cleanup_was_already_ambiguous=cleanup_ambiguous,
+                        )
+                    except BaseException:
+                        cleanup_ambiguous = True
+        finally:
+            if directory_fd >= 0:
+                try:
+                    os.close(directory_fd)
+                except BaseException:
+                    cleanup_ambiguous = True
+            try:
+                os.close(parent_fd)
+            except BaseException:
+                cleanup_ambiguous = True
+        if cleanup_ambiguous:
+            raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
+    if captured_stdout is None or captured_stderr is None:
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
+    _emit_capture(captured_stdout, stdout)
+    _emit_capture(captured_stderr, stderr)
 
 
 def _failure_diagnostic(reason_code: str) -> bytes:
@@ -448,12 +698,17 @@ def main(arguments: Sequence[str] | None = None) -> int:
     try:
         request = parse_request(arguments)
         executable = validate_underlying_executable(os.environ)
+        temporary_parent, temporary_parent_fd = _temporary_parent_from_environment(
+            os.environ
+        )
         run_request(
             executable,
             request,
             environment=os.environ,
             stdout=sys.stdout.buffer,
             stderr=sys.stderr.buffer,
+            temporary_parent=temporary_parent,
+            temporary_parent_fd=temporary_parent_fd,
         )
     except BoundedPgRestoreError as exc:
         _emit_failure_diagnostic(exc.reason_code)

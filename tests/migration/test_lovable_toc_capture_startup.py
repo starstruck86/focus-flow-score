@@ -421,6 +421,8 @@ class TocCaptureLauncherContractTest(unittest.TestCase):
                 Path("/synthetic/pg_restore"),
                 ["--version"],
                 Path(sys.executable),
+                temporary_parent_fd=None,
+                temporary_parent=self.root,
             )
         self.assertEqual(result, b"synthetic")
         arguments = invoked.call_args.args[0]
@@ -435,6 +437,11 @@ class TocCaptureLauncherContractTest(unittest.TestCase):
                 "--version",
             ],
         )
+        self.assertEqual(
+            invoked.call_args.kwargs["env"]["LOVABLE_BOUNDED_TEMP_PARENT"],
+            str(self.root),
+        )
+        self.assertEqual(invoked.call_args.kwargs["pass_fds"], ())
 
     def _write_poison_module(
         self,

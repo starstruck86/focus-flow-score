@@ -11,6 +11,7 @@ export LC_ALL
 
 readonly TEST_DIR="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly INSPECTOR="$(cd -P -- "${TEST_DIR}/.." && pwd)/inspect-lovable-dump.sh"
+readonly BOUNDED_PG_RESTORE="$(cd -P -- "${TEST_DIR}/.." && pwd)/bounded-pg-restore.py"
 readonly PYTHON="$(command -v python3)"
 readonly PG_DUMP="$(command -v pg_dump)"
 readonly PG_RESTORE="$(command -v pg_restore)"
@@ -22,6 +23,9 @@ readonly TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/lovable-dump-integration.XXXXXX"
 readonly ARCHIVE="${TMP_ROOT}/real custom archive.dump"
 readonly REPORT="${TMP_ROOT}/metadata report.txt"
 readonly MIGRATIONS="${TMP_ROOT}/migrations with spaces"
+readonly PG_RESTORE_LEDGER_PATH="${TMP_ROOT}/bounded-pg-restore.calls"
+readonly AUDITED_PG_RESTORE="${TMP_ROOT}/audited-pg-restore"
+readonly INSPECTOR_TMP="${TMP_ROOT}/inspector-private-tmp"
 
 case "$LOCAL_HOST" in
   127.0.0.1|localhost|/var/run/postgresql|/private/tmp/*|/tmp/*) ;;
@@ -68,8 +72,26 @@ VALUES ('${SECRET_SENTINEL}'), ('synthetic second row');
 SQL
 
 mkdir -p "$MIGRATIONS"
+mkdir -m 0700 "$INSPECTOR_TMP"
 printf 'CREATE TABLE %s.items (id bigint, note text);\n' "$FIXTURE_SCHEMA" \
   >"${MIGRATIONS}/0001 synthetic fixture.sql"
+
+cat >"$AUDITED_PG_RESTORE" <<'SH'
+#!/usr/bin/env bash
+set -eu
+case "$*" in
+  --version)
+    printf '%s\n' version_exact >>"$PG_RESTORE_LEDGER"
+    ;;
+  --list\ *)
+    [[ "$#" -eq 2 && "$2" = /* ]] || exit 90
+    printf '%s\n' list_exact >>"$PG_RESTORE_LEDGER"
+    ;;
+  *) exit 91 ;;
+esac
+exec "$REAL_PG_RESTORE_BIN" "$@"
+SH
+chmod 0700 "$AUDITED_PG_RESTORE"
 
 "$PG_DUMP" \
   --format=custom \
@@ -78,8 +100,13 @@ printf 'CREATE TABLE %s.items (id bigint, note text);\n' "$FIXTURE_SCHEMA" \
   --schema="$FIXTURE_SCHEMA" \
   >"$ARCHIVE"
 
-PG_RESTORE_BIN="$PG_RESTORE" \
+LOVABLE_PG_RESTORE_GUARD_IS_PYTHON=1 \
+LOVABLE_UNDERLYING_PG_RESTORE_BIN="$AUDITED_PG_RESTORE" \
+REAL_PG_RESTORE_BIN="$PG_RESTORE" \
+PG_RESTORE_LEDGER="$PG_RESTORE_LEDGER_PATH" \
+PG_RESTORE_BIN="$BOUNDED_PG_RESTORE" \
 PYTHON_BIN="$PYTHON" \
+TMPDIR="$INSPECTOR_TMP" \
 bash "$INSPECTOR" \
   --migrations-dir "$MIGRATIONS" \
   --output "$REPORT" \
@@ -128,6 +155,15 @@ fi
 
 if grep -Fq "$SECRET_SENTINEL" "$REPORT"; then
   printf 'ERROR: row payload leaked into metadata report\n' >&2
+  exit 1
+fi
+
+if [[ "$(cat -- "$PG_RESTORE_LEDGER_PATH")" != $'version_exact\nlist_exact' ]]; then
+  printf 'ERROR: bounded pg_restore ledger was not exact\n' >&2
+  exit 1
+fi
+if find "$INSPECTOR_TMP" -mindepth 1 -print -quit | grep -q .; then
+  printf 'ERROR: bounded pg_restore private captures survived success\n' >&2
   exit 1
 fi
 

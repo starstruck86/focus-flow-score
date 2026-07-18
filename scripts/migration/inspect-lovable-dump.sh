@@ -17,6 +17,7 @@ failure_reason='not_applicable'
 current_stage='internal_failure'
 work_dir=''
 staged_report=''
+bounded_temp_parent_fd_open=0
 
 stage_is_allowed() {
   case "$1" in
@@ -81,6 +82,12 @@ fail() {
 
 remove_work_dir() {
   [[ -n "$work_dir" ]] || return 0
+  if [[ "$bounded_temp_parent_fd_open" -eq 1 ]]; then
+    if ! { exec 9<&-; } 2>/dev/null; then
+      return 1
+    fi
+    bounded_temp_parent_fd_open=0
+  fi
   if ! rm -rf -- "$work_dir" >/dev/null 2>&1; then
     return 1
   fi
@@ -303,7 +310,8 @@ esac
 
 run_pg_restore() {
   if [[ "${LOVABLE_PG_RESTORE_GUARD_IS_PYTHON:-0}" == '1' ]]; then
-    "$PYTHON" -I -S -B "$PG_RESTORE" "$@"
+    LOVABLE_BOUNDED_TEMP_PARENT_FD=9 \
+      "$PYTHON" -I -S -B "$PG_RESTORE" "$@"
   else
     "$PG_RESTORE" "$@"
   fi
@@ -314,6 +322,15 @@ if ! work_dir="$(mktemp -d "${TMPDIR:-/tmp}/lovable-dump-inspection.XXXXXX" 2>/d
   [[ -z "$work_dir" || ! -d "$work_dir" ]]; then
   work_dir=''
   fail 'workspace_setup_failed'
+fi
+if [[ "${LOVABLE_PG_RESTORE_GUARD_IS_PYTHON:-0}" == '1' ]]; then
+  # The reviewed wrapper accepts no ambient TMPDIR fallback. Hold the exact
+  # private inspection directory open and pass only this inherited descriptor
+  # for its bounded stdout/stderr captures.
+  if ! { exec 9<"$work_dir"; } 2>/dev/null; then
+    fail 'workspace_setup_failed'
+  fi
+  bounded_temp_parent_fd_open=1
 fi
 readonly SNAPSHOT_PATH="${work_dir}/archive.snapshot"
 readonly HEADER_METADATA_FILE="${work_dir}/header.metadata"

@@ -42,6 +42,10 @@ NORMALIZER = load_script(
     "normalize_lovable_export_for_driver_test",
     MIGRATION / "normalize-lovable-export.py",
 )
+BOUNDED = load_script(
+    "bounded_pg_restore_for_driver_test",
+    MIGRATION / "bounded-pg-restore.py",
+)
 
 
 LOCAL = struct.Struct("<4s5H3I2H")
@@ -168,6 +172,15 @@ class TocCaptureDriverTest(unittest.TestCase):
         self.outer.write_bytes(self.outer_bytes)
         self.outer.chmod(0o400)
         self.outer_before = self.outer.read_bytes()
+        outer_metadata = self.outer.stat()
+        self.outer_identity_before = (
+            outer_metadata.st_dev,
+            outer_metadata.st_ino,
+            outer_metadata.st_nlink,
+            outer_metadata.st_size,
+            stat.S_IMODE(outer_metadata.st_mode),
+            outer_metadata.st_mtime_ns,
+        )
         self.child_ledger = self.base / "pg-restore-ledger"
         self.tool = self.base / "pg_restore"
         self.tool.write_text(
@@ -372,7 +385,44 @@ class TocCaptureDriverTest(unittest.TestCase):
     def assert_canonical_unchanged(self) -> None:
         if self.outer.read_bytes() != self.outer_before:
             self.fail("canonical synthetic input changed")
-        self.assertEqual(stat.S_IMODE(self.outer.stat().st_mode), 0o400)
+        metadata = self.outer.stat()
+        self.assertEqual(
+            (
+                metadata.st_dev,
+                metadata.st_ino,
+                metadata.st_nlink,
+                metadata.st_size,
+                stat.S_IMODE(metadata.st_mode),
+                metadata.st_mtime_ns,
+            ),
+            self.outer_identity_before,
+        )
+
+    @staticmethod
+    def private_tree_identity(root: Path) -> tuple[tuple[object, ...], ...]:
+        identities: list[tuple[object, ...]] = []
+        for path in (root, *sorted(root.rglob("*"))):
+            metadata = path.lstat()
+            relative = "." if path == root else path.relative_to(root).as_posix()
+            digest = (
+                hashlib.sha256(path.read_bytes()).hexdigest()
+                if stat.S_ISREG(metadata.st_mode)
+                else None
+            )
+            identities.append(
+                (
+                    relative,
+                    stat.S_IFMT(metadata.st_mode),
+                    stat.S_IMODE(metadata.st_mode),
+                    metadata.st_dev,
+                    metadata.st_ino,
+                    metadata.st_nlink,
+                    metadata.st_size,
+                    metadata.st_mtime_ns,
+                    digest,
+                )
+            )
+        return tuple(identities)
 
     def assert_no_disposable_bytes(self) -> None:
         self.assertEqual(list(self.staging_root.iterdir()), [])
@@ -380,6 +430,15 @@ class TocCaptureDriverTest(unittest.TestCase):
             self.fail(f"derived archive survived outside reviewed package: {path.name}")
         for path in self.base.rglob("normalization.json"):
             self.fail(f"normalization metadata survived outside reviewed package: {path.name}")
+
+    @staticmethod
+    def system_bounded_capture_names() -> set[tuple[str, str]]:
+        roots = {Path("/tmp").resolve(), Path(tempfile.gettempdir()).resolve()}
+        return {
+            (str(root), path.name)
+            for root in roots
+            for path in root.glob(f"{BOUNDED.TEMPORARY_DIRECTORY_PREFIX}*")
+        }
 
     @staticmethod
     def diagnostic_bytes(environment: dict[str, str]) -> tuple[int, bytes, bytes]:
@@ -1871,6 +1930,185 @@ class TocCaptureDriverTest(unittest.TestCase):
         self.assertFalse((packages[0] / "EVIDENCE_COMPLETE").exists())
         self.assertTrue((packages[0] / "EVIDENCE_INDETERMINATE").exists())
         self.assert_canonical_unchanged()
+
+    def _run_bounded_cleanup_failure_through_envelope(
+        self, *, force_quarantine: bool
+    ) -> tuple[dict[str, object], bool, bytes]:
+        existing_evidence = self.approved_run / "synthetic-existing-evidence-package"
+        existing_evidence.mkdir(mode=0o700)
+        for name, content in (
+            ("evidence-files.json", b'{"synthetic":"manifest"}\n'),
+            ("EVIDENCE_COMPLETE", b'{"synthetic":"complete"}\n'),
+        ):
+            evidence_file = existing_evidence / name
+            evidence_file.write_bytes(content)
+            evidence_file.chmod(0o400)
+        evidence_before = self.private_tree_identity(existing_evidence)
+        system_before = self.system_bounded_capture_names()
+        raw_toc_observed = False
+        real_child = DRIVER._run_child
+
+        def run(arguments, *, environment, directory_fd, prefix, timeout_seconds):
+            nonlocal raw_toc_observed
+            if prefix == "normalizer":
+                return real_child(
+                    arguments,
+                    environment=environment,
+                    directory_fd=directory_fd,
+                    prefix=prefix,
+                    timeout_seconds=timeout_seconds,
+                )
+            self.assertEqual(prefix, "capture")
+            previous_directory_fd = os.open(
+                ".", os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_CLOEXEC", 0)
+            )
+            try:
+                os.fchdir(directory_fd)
+                child_environment = {"LANG": "C", "LC_ALL": "C"}
+                version_stdout = io.BytesIO()
+                BOUNDED.run_request(
+                    str(self.tool),
+                    BOUNDED.parse_request(["--version"]),
+                    environment=child_environment,
+                    stdout=version_stdout,
+                    stderr=io.BytesIO(),
+                    temporary_parent_fd=directory_fd,
+                )
+                self.assertEqual(
+                    version_stdout.getvalue(), b"pg_restore (PostgreSQL) 18.4\n"
+                )
+                archive_path = str(Path.cwd() / DRIVER.INNER_NAME)
+
+                real_unlink = BOUNDED.os.unlink
+
+                def fail_after_raw_capture(
+                    name: str, *, dir_fd: int | None = None
+                ) -> None:
+                    nonlocal raw_toc_observed
+                    if name != "stdout.capture":
+                        real_unlink(name, dir_fd=dir_fd)
+                        return
+                    self.assertIsNotNone(dir_fd)
+                    raw_fd = os.open(
+                        "stdout.capture",
+                        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                        dir_fd=dir_fd,
+                    )
+                    try:
+                        raw = bytearray()
+                        while True:
+                            chunk = os.read(raw_fd, 1024 * 1024)
+                            if not chunk:
+                                break
+                            raw.extend(chunk)
+                    finally:
+                        os.close(raw_fd)
+                    raw_toc_observed = self.object_sentinel in raw
+                    raise OSError("planted private capture cleanup failure")
+
+                with mock.patch.object(
+                    BOUNDED.os,
+                    "unlink",
+                    side_effect=fail_after_raw_capture,
+                ):
+                    with self.assertRaises(BOUNDED.BoundedPgRestoreError):
+                        BOUNDED.run_request(
+                            str(self.tool),
+                            BOUNDED.parse_request(["--list", archive_path]),
+                            environment=child_environment,
+                            stdout=io.BytesIO(),
+                            stderr=io.BytesIO(),
+                            temporary_parent_fd=directory_fd,
+                        )
+            finally:
+                os.fchdir(previous_directory_fd)
+                os.close(previous_directory_fd)
+            return DRIVER.ChildResult(
+                1,
+                self.toc_sentinel + self.object_sentinel,
+                self.secret_sentinel + self.path_sentinel + self.sql_sentinel,
+            )
+
+        patches = (
+            mock.patch.object(DRIVER, "_repository_binding", return_value={}),
+            mock.patch.object(DRIVER, "_validate_evidence_run", return_value=None),
+            mock.patch.object(DRIVER, "_run_child", side_effect=run),
+        )
+        with patches[0], patches[1], patches[2]:
+            if force_quarantine:
+                with mock.patch.object(
+                    DRIVER, "_wipe_directory_fd", return_value=False
+                ):
+                    status, stdout, stderr = self.diagnostic_bytes(self.environment())
+            else:
+                status, stdout, stderr = self.diagnostic_bytes(self.environment())
+
+        self.assertEqual(status, 1)
+        diagnostic = self.assert_fixed_failure(stderr or stdout)
+        self.assertTrue(raw_toc_observed)
+        self.assertEqual(self.system_bounded_capture_names(), system_before)
+        self.assertEqual(self.private_tree_identity(existing_evidence), evidence_before)
+        self.assert_canonical_unchanged()
+        invocations = self.child_ledger.read_text(encoding="ascii").splitlines()
+        self.assertEqual(invocations[0], "--version")
+        self.assertEqual(invocations[1].split()[0], "--list")
+        self.assertEqual(len(invocations), 2)
+        return diagnostic, raw_toc_observed, stderr or stdout
+
+    def test_pg_restore_success_then_cleanup_failure_is_removed_inside_envelope(self):
+        diagnostic, raw_toc_observed, _visible = (
+            self._run_bounded_cleanup_failure_through_envelope(
+                force_quarantine=False
+            )
+        )
+        self.assertTrue(raw_toc_observed)
+        self.assertEqual(diagnostic["reason"], "capture_failed")
+        self.assertEqual(list(self.output_root.iterdir()), [])
+        self.assert_no_disposable_bytes()
+
+    def test_pg_restore_cleanup_failure_survives_only_in_private_quarantine(self):
+        diagnostic, raw_toc_observed, visible = (
+            self._run_bounded_cleanup_failure_through_envelope(force_quarantine=True)
+        )
+        self.assertTrue(raw_toc_observed)
+        self.assertEqual(diagnostic["reason"], "cleanup_indeterminate")
+        self.assertEqual(list(self.output_root.iterdir()), [])
+        private_quarantines = [
+            path
+            for path in self.staging_root.iterdir()
+            if path.name.startswith(".indeterminate-") and path.is_dir()
+        ]
+        self.assertEqual(len(private_quarantines), 1)
+        bounded_residue = list(
+            private_quarantines[0].glob(
+                f"{BOUNDED.TEMPORARY_DIRECTORY_PREFIX}*/stdout.capture"
+            )
+        )
+        self.assertEqual(len(bounded_residue), 1)
+        indeterminate_marker = bounded_residue[0].parent / "EVIDENCE_INDETERMINATE"
+        self.assertEqual(
+            json.loads(indeterminate_marker.read_bytes()),
+            {
+                "artifact_kind": "bounded_pg_restore_indeterminate",
+                "format_version": 1,
+                "reason": "cleanup_indeterminate",
+            },
+        )
+        self.assertEqual(stat.S_IMODE(indeterminate_marker.stat().st_mode), 0o400)
+        self.assertFalse(
+            any(
+                path.name == "EVIDENCE_COMPLETE"
+                for path in self.staging_root.rglob("EVIDENCE_COMPLETE")
+            )
+        )
+        for sentinel in (
+            self.object_sentinel,
+            self.toc_sentinel,
+            self.secret_sentinel,
+            self.path_sentinel,
+            self.sql_sentinel,
+        ):
+            self.assertNotIn(sentinel, visible)
 
     def test_staging_root_path_replacement_cannot_redirect_derived_bytes(self):
         real_child = DRIVER._run_child

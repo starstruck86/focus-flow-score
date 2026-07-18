@@ -132,9 +132,29 @@ on timeout or output overflow, and passes captured output only after exit status
 zero. On failure it classifies only `unsupported_archive_version`,
 `invalid_archive`, `truncated_archive`, `timeout`, `output_cap`, or
 `other_nonzero` and emits one fixed JSON record; it never relays child output.
-These bounds
-prevent an unbounded inspection process; they do not strengthen what
-`pg_restore` semantically validates.
+Each invocation must supply exactly one explicit private temporary parent. The
+descriptor-bound TOC capture passes the already held staging-directory
+descriptor as `LOVABLE_BOUNDED_TEMP_PARENT_FD`. The standalone
+`inspect-lovable-dump.sh` opens its fresh private mode-`0700` work directory and
+passes that descriptor through the same variable. A reviewed direct wrapper
+caller may instead pass an absolute private mode-`0700` directory through
+`LOVABLE_BOUNDED_TEMP_PARENT`. The guard rejects an absent, ambiguous,
+symlinked, wrong-owner, or permissive parent, duplicates or opens the approved
+directory with no-follow semantics, and creates its random hidden mode-`0700`
+capture directory descriptor-relatively. Its two exclusive capture files are
+mode `0600`.
+
+Even after `pg_restore` exits zero, the guard withholds the bounded successful
+bytes in memory until it has closed and descriptor-relatively unlinked both
+capture files, removed the hidden directory, and fsynced the private parent. A
+cleanup or parent-fsync failure becomes fixed `other_nonzero`; no successful
+child output is released. In the descriptor-bound envelope, any residue is
+therefore confined to the exact held staging tree. The outer driver must remove
+and fsync that tree or preserve only its reviewed private
+indeterminate/quarantine state, and it can never publish a normal complete
+capture package from that failure. These bounds and cleanup gates prevent an
+unbounded inspection process and a false successful capture; they do not
+strengthen what `pg_restore` semantically validates.
 
 pg_restore --list does not prove that every byte of the inner input was consumed.
 
@@ -269,11 +289,15 @@ The private envelope-capture contract is:
    extraction API, or a member-controlled output path.
 4. The low-level capture may invoke only the bounded
    `pg_restore --version` and `pg_restore --list`
-   forms. The bounded wrapper privately captures child channels; the capture
-   tool discards child stderr, holds successful list bytes privately, and never
-   forwards them. Raw TOC bytes are published only into a fixed mode-`0400`
-   file beneath a mode-`0700` no-replace package in the approved evidence-store
-   root. They never go to the terminal, Git, CI, chat, or a general log.
+   forms. It passes the held staging-directory descriptor to the bounded
+   wrapper as the sole temporary parent; it does not let that wrapper select an
+   ambient system temporary directory. The wrapper privately captures child
+   channels and releases successful bytes only after descriptor-relative
+   capture cleanup and parent fsync. The capture tool discards child stderr,
+   holds successful list bytes privately, and never forwards them. Raw TOC
+   bytes are published only into a fixed mode-`0400` file beneath a mode-`0700`
+   no-replace package in the approved evidence-store root. They never go to the
+   terminal, Git, CI, chat, or a general log.
 5. Bind the private capture to the canonical outer identity, verified inner
    SHA-256, metadata run ID, execution checkout, inspector/guard identities,
    the externally approved execution-Python SHA-256, its safe observed
@@ -744,9 +768,17 @@ On success the additive safe-header fields are
 normalizer, derived-file, and inspector-report inner SHA-256.
 
 CI executes the complete fenced workflow in isolated synthetic Git checkouts,
-including adversarial normalizer and bounded-guard tests, a real PostgreSQL 17
-`pg_dump -Fc` high-level ZIP/direct integration on Linux, and targeted durable
-publication tests on macOS. It plants checkout, repository-binding,
+including adversarial normalizer and bounded-guard tests on Linux and macOS, a
+real PostgreSQL 17 `pg_dump -Fc` high-level ZIP/direct integration on Linux that
+reaches the guarded real `pg_restore --list`, and targeted durable publication
+tests on macOS. The bounded-guard regressions prove explicit private-parent
+selection, cleanup-before-output, wrapper cleanup-failure suppression, outer
+publication-fsync handling, and the envelope's cleanup-or-quarantine boundary.
+A quarantine may intentionally retain raw TOC captures, a derived PGDMP, or
+normalization metadata inside the reviewed private staging root. It must not be
+enumerated, logged, or treated as cleaned, and inability to persist or verify
+an indeterminate marker remains a hard manual-review stop. CI also plants checkout,
+repository-binding,
 privacy/timeline/hash/member/publication failures, proves only
 `pg_restore --version` and `--list` are called, and scans output/evidence for a
 synthetic row-payload and secret sentinel. Planted failures exercise every raw
