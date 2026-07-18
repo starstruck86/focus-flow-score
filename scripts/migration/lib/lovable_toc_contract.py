@@ -256,6 +256,23 @@ class TocEntry:
 
 
 @dataclass(frozen=True)
+class RawTocEntry:
+    """One structurally parsed TOC entry without an opaque-ID computation.
+
+    The private authoring workflow deliberately does not open the capture's
+    opaque key.  It can still prove that the raw list and opaque index agree on
+    ordinal, class, and data-reference status by using this representation.
+    ``raw_line`` remains private and must never enter an ordinary diagnostic.
+    """
+
+    ordinal: int
+    dump_id: int
+    object_class: str
+    is_data_reference: bool
+    raw_line: bytes
+
+
+@dataclass(frozen=True)
 class StableFile:
     data: bytes
     sha256: str
@@ -406,7 +423,13 @@ def _class_from_body(body: bytes) -> str:
     raise ContractError("toc_unknown_class")
 
 
-def parse_raw_toc(raw: bytes, key: bytes) -> list[TocEntry]:
+def parse_raw_toc_structure(raw: bytes) -> list[RawTocEntry]:
+    """Parse only the reviewed structural portion of ``pg_restore --list``.
+
+    This shares the exact conservative grammar used by :func:`parse_raw_toc`
+    but intentionally neither accepts nor reads an opaque-ID key.
+    """
+
     if not raw or len(raw) > MAX_RAW_TOC_BYTES:
         raise ContractError("input_invalid")
     if any(byte < 0x20 and byte not in {0x09, 0x0A} for byte in raw) or 0x7F in raw:
@@ -416,7 +439,7 @@ def parse_raw_toc(raw: bytes, key: bytes) -> list[TocEntry]:
     except UnicodeDecodeError as exc:
         raise ContractError("toc_malformed") from exc
 
-    entries: list[TocEntry] = []
+    entries: list[RawTocEntry] = []
     seen_dump_ids: set[int] = set()
     for physical_line in raw.splitlines():
         if not physical_line or physical_line.startswith(b";"):
@@ -433,13 +456,12 @@ def parse_raw_toc(raw: bytes, key: bytes) -> list[TocEntry]:
         object_class = _class_from_body(body)
         ordinal = len(entries)
         entries.append(
-            TocEntry(
+            RawTocEntry(
                 ordinal=ordinal,
                 dump_id=dump_id,
                 object_class=object_class,
                 is_data_reference=object_class in DATA_TOC_CLASSES,
                 raw_line=physical_line,
-                entry_id=opaque_entry_id(key, ordinal, physical_line),
             )
         )
         if len(entries) > MAX_ENTRY_COUNT:
@@ -447,6 +469,22 @@ def parse_raw_toc(raw: bytes, key: bytes) -> list[TocEntry]:
     if not entries:
         raise ContractError("toc_malformed")
     return entries
+
+
+def parse_raw_toc(raw: bytes, key: bytes) -> list[TocEntry]:
+    """Parse a TOC and derive its capture-bound opaque entry identifiers."""
+
+    return [
+        TocEntry(
+            ordinal=entry.ordinal,
+            dump_id=entry.dump_id,
+            object_class=entry.object_class,
+            is_data_reference=entry.is_data_reference,
+            raw_line=entry.raw_line,
+            entry_id=opaque_entry_id(key, entry.ordinal, entry.raw_line),
+        )
+        for entry in parse_raw_toc_structure(raw)
+    ]
 
 
 def stable_private_file(

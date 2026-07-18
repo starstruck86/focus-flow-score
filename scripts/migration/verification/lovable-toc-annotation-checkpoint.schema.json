@@ -1,0 +1,388 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://focus-flow-score.invalid/migration/lovable-toc-annotation-checkpoint-v1.schema.json",
+  "title": "Private Lovable TOC annotation checkpoint v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_kind",
+    "authoring_binding",
+    "capture_binding",
+    "entries",
+    "event",
+    "format_version",
+    "generation",
+    "global_decisions",
+    "managed_domain_decisions",
+    "peer_operator_identity",
+    "previous_checkpoint_sha256",
+    "primary_operator_identity"
+  ],
+  "properties": {
+    "artifact_kind": { "const": "lovable_toc_annotation_checkpoint" },
+    "format_version": { "const": 1 },
+    "generation": { "type": "integer", "minimum": 1 },
+    "previous_checkpoint_sha256": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }]
+    },
+    "primary_operator_identity": { "$ref": "#/$defs/operatorIdentity" },
+    "peer_operator_identity": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/operatorIdentity" }]
+    },
+    "authoring_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "execution_checkout_sha",
+        "execution_python_identity_sha256",
+        "procedure_identity_sha256"
+      ],
+      "properties": {
+        "execution_checkout_sha": { "$ref": "#/$defs/gitSha" },
+        "execution_python_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "procedure_identity_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "capture_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capture_execution_checkout_sha",
+        "capture_json_sha256",
+        "capture_manifest_sha256",
+        "capture_procedure_identity_sha256",
+        "data_reference_count",
+        "entry_count",
+        "evidence_manifest_sha256",
+        "evidence_run_id",
+        "inner_archive_sha256",
+        "inspection_checkout_sha",
+        "inspection_procedure_sha256",
+        "opaque_key_ctime_ns",
+        "opaque_key_device",
+        "opaque_key_gid",
+        "opaque_key_inode",
+        "opaque_key_mode",
+        "opaque_key_mtime_ns",
+        "opaque_key_nlink",
+        "opaque_key_size_bytes",
+        "opaque_key_uid",
+        "opaque_index_sha256",
+        "outer_archive_sha256",
+        "package_device",
+        "package_inode",
+        "pg_restore_identity_sha256",
+        "raw_toc_sha256",
+        "raw_toc_size_bytes"
+      ],
+      "properties": {
+        "capture_execution_checkout_sha": { "$ref": "#/$defs/gitSha" },
+        "capture_json_sha256": { "$ref": "#/$defs/sha256" },
+        "capture_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "capture_procedure_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "data_reference_count": { "type": "integer", "minimum": 0 },
+        "entry_count": { "type": "integer", "minimum": 1 },
+        "evidence_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "evidence_run_id": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,160}$" },
+        "inner_archive_sha256": { "$ref": "#/$defs/sha256" },
+        "inspection_checkout_sha": { "$ref": "#/$defs/gitSha" },
+        "inspection_procedure_sha256": { "$ref": "#/$defs/sha256" },
+        "opaque_key_ctime_ns": { "type": "integer", "minimum": 0 },
+        "opaque_key_device": { "type": "integer", "minimum": 0 },
+        "opaque_key_gid": { "type": "integer", "minimum": 0 },
+        "opaque_key_inode": { "type": "integer", "minimum": 1 },
+        "opaque_key_mode": { "const": 256 },
+        "opaque_key_mtime_ns": { "type": "integer", "minimum": 0 },
+        "opaque_key_nlink": { "const": 1 },
+        "opaque_key_size_bytes": { "const": 32 },
+        "opaque_key_uid": { "type": "integer", "minimum": 0 },
+        "opaque_index_sha256": { "$ref": "#/$defs/sha256" },
+        "outer_archive_sha256": { "$ref": "#/$defs/sha256" },
+        "package_device": { "type": "integer", "minimum": 0 },
+        "package_inode": { "type": "integer", "minimum": 1 },
+        "pg_restore_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "raw_toc_sha256": { "$ref": "#/$defs/sha256" },
+        "raw_toc_size_bytes": { "type": "integer", "minimum": 1, "maximum": 134217728 }
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "operator_identity",
+        "operator_role",
+        "operator_session_identity",
+        "reviewed_ordinal_ranges"
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "data_reference_review",
+            "initialize",
+            "managed_review",
+            "manual_conflict_review",
+            "peer_review",
+            "primary_review",
+            "relationship_review",
+            "revisit_unresolved",
+            "sequence_review"
+          ]
+        },
+        "operator_identity": { "$ref": "#/$defs/operatorIdentity" },
+        "operator_role": { "enum": ["peer", "primary"] },
+        "operator_session_identity": { "$ref": "#/$defs/operatorIdentity" },
+        "reviewed_ordinal_ranges": {
+          "type": "array",
+          "maxItems": 1000000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["end_exclusive", "start"],
+            "properties": {
+              "start": { "type": "integer", "minimum": 0 },
+              "end_exclusive": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "maxItems": 1000000,
+      "items": { "$ref": "#/$defs/entry" }
+    },
+    "global_decisions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["extension", "owner", "role", "schema"],
+      "properties": {
+        "extension": { "$ref": "#/$defs/decisionRecord" },
+        "owner": { "$ref": "#/$defs/decisionRecord" },
+        "role": { "$ref": "#/$defs/decisionRecord" },
+        "schema": { "$ref": "#/$defs/decisionRecord" }
+      }
+    },
+    "managed_domain_decisions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "auth",
+        "cron",
+        "extension_owned",
+        "migration_history",
+        "net",
+        "publication",
+        "realtime",
+        "storage",
+        "supabase_prefixed",
+        "vault"
+      ],
+      "properties": {
+        "auth": { "$ref": "#/$defs/decisionRecord" },
+        "cron": { "$ref": "#/$defs/decisionRecord" },
+        "extension_owned": { "$ref": "#/$defs/decisionRecord" },
+        "migration_history": { "$ref": "#/$defs/decisionRecord" },
+        "net": { "$ref": "#/$defs/decisionRecord" },
+        "publication": { "$ref": "#/$defs/decisionRecord" },
+        "realtime": { "$ref": "#/$defs/decisionRecord" },
+        "storage": { "$ref": "#/$defs/decisionRecord" },
+        "supabase_prefixed": { "$ref": "#/$defs/decisionRecord" },
+        "vault": { "$ref": "#/$defs/decisionRecord" }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "entryId": { "type": "string", "pattern": "^te1_[0-9a-f]{64}$" },
+    "operatorIdentity": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._@()+:-]{0,127}$"
+    },
+    "peerReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operator_identity",
+        "primary_decision_sha256",
+        "session_identity",
+        "status"
+      ],
+      "properties": {
+        "operator_identity": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/operatorIdentity" }]
+        },
+        "primary_decision_sha256": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }]
+        },
+        "session_identity": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/operatorIdentity" }]
+        },
+        "status": { "enum": ["approved", "changes_requested", "pending"] }
+      }
+    },
+    "decisionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "peer_review",
+        "primary_decision_sha256",
+        "primary_reviewed",
+        "value"
+      ],
+      "properties": {
+        "peer_review": { "$ref": "#/$defs/peerReview" },
+        "primary_decision_sha256": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }]
+        },
+        "primary_reviewed": { "type": "boolean" },
+        "value": {
+          "oneOf": [{ "type": "null" }, { "type": "string", "maxLength": 64 }]
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dependency_review_complete",
+        "entry_id",
+        "is_data_reference",
+        "mechanical_proposal",
+        "object_class",
+        "ordinal",
+        "peer_review",
+        "primary_decision",
+        "primary_decision_sha256"
+      ],
+      "properties": {
+        "dependency_review_complete": { "const": false },
+        "entry_id": { "$ref": "#/$defs/entryId" },
+        "is_data_reference": { "type": "boolean" },
+        "object_class": { "type": "string", "pattern": "^[A-Z0-9 ]{1,80}$" },
+        "ordinal": { "type": "integer", "minimum": 0 },
+        "peer_review": { "$ref": "#/$defs/peerReview" },
+        "primary_decision_sha256": { "$ref": "#/$defs/sha256" },
+        "mechanical_proposal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "classification",
+            "forced_managed_domain",
+            "proposal_version",
+            "required_review_kinds"
+          ],
+          "properties": {
+            "classification": { "const": "unresolved" },
+            "forced_managed_domain": {
+              "oneOf": [{ "type": "null" }, { "const": "publication" }]
+            },
+            "proposal_version": { "const": 1 },
+            "required_review_kinds": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "classification",
+                  "data_reference",
+                  "dependencies",
+                  "managed_domain",
+                  "peer",
+                  "relationship",
+                  "sequence_state"
+                ]
+              }
+            }
+          }
+        },
+        "primary_decision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "classification",
+            "classification_reviewed",
+            "data_reference_review_state",
+            "dependency_entry_ids",
+            "dependency_reviewed",
+            "managed_domain",
+            "managed_domain_reviewed",
+            "manual_conflict_disposition",
+            "manual_conflict_review_state",
+            "metadata_parent_entry_id",
+            "parent_entry_ids",
+            "relationship_review_state",
+            "sequence_review_state"
+          ],
+          "properties": {
+            "classification": {
+              "oneOf": [
+                { "type": "null" },
+                {
+                  "enum": [
+                    "dependency_only",
+                    "exclude_duplicate",
+                    "exclude_supabase_managed",
+                    "manual_conflict",
+                    "restore",
+                    "unresolved"
+                  ]
+                }
+              ]
+            },
+            "classification_reviewed": { "type": "boolean" },
+            "data_reference_review_state": { "$ref": "#/$defs/reviewState" },
+            "dependency_entry_ids": { "$ref": "#/$defs/entryIdArray" },
+            "dependency_reviewed": { "type": "boolean" },
+            "managed_domain": {
+              "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/managedDomain" }]
+            },
+            "managed_domain_reviewed": { "type": "boolean" },
+            "manual_conflict_disposition": {
+              "oneOf": [
+                { "type": "null" },
+                {
+                  "enum": [
+                    "dependency_only",
+                    "exclude_duplicate",
+                    "exclude_supabase_managed",
+                    "restore"
+                  ]
+                }
+              ]
+            },
+            "manual_conflict_review_state": { "$ref": "#/$defs/reviewState" },
+            "metadata_parent_entry_id": {
+              "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/entryId" }]
+            },
+            "parent_entry_ids": { "$ref": "#/$defs/entryIdArray" },
+            "relationship_review_state": { "$ref": "#/$defs/reviewState" },
+            "sequence_review_state": { "$ref": "#/$defs/reviewState" }
+          }
+        }
+      }
+    },
+    "entryIdArray": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 1000000,
+      "items": { "$ref": "#/$defs/entryId" }
+    },
+    "reviewState": { "enum": ["not_applicable", "pending", "reviewed"] },
+    "managedDomain": {
+      "enum": [
+        "auth",
+        "cron",
+        "extension_owned",
+        "migration_history",
+        "net",
+        "none",
+        "publication",
+        "realtime",
+        "storage",
+        "supabase_prefixed",
+        "vault"
+      ]
+    }
+  }
+}

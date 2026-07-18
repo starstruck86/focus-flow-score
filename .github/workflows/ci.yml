@@ -36,8 +36,14 @@ jobs:
       - run: npm test
       - name: Verify migration rehearsal tooling
         run: |
-          sh -n scripts/migration/run-lovable-toc-capture.sh
-          bash -n \
+          for launcher in \
+            scripts/migration/run-lovable-toc-capture.sh \
+            scripts/migration/run-lovable-toc-annotation-authoring.sh \
+            scripts/migration/run-lovable-toc-ledger-validation.sh
+          do
+            sh -n "$launcher"
+          done
+          for script in \
             scripts/migration/inspect-lovable-dump.sh \
             scripts/migration/tests/catalog-verification.test.sh \
             scripts/migration/tests/inspect-lovable-dump.integration.sh \
@@ -49,6 +55,9 @@ jobs:
             scripts/migration/tests/service-verification.test.sh \
             scripts/security/tests/cron-attempt-receipts.integration.sh \
             scripts/security/tests/cron-attempt-receipts-target-safety.test.sh
+          do
+            bash -n "$script"
+          done
           python3 - <<'PY'
           from pathlib import Path
 
@@ -57,17 +66,21 @@ jobs:
               Path("scripts/migration/catalog-jsonl-to-manifest.py"),
               Path("scripts/migration/inventory-edge-functions.py"),
               Path("scripts/migration/bounded-pg-restore.py"),
+              Path("scripts/migration/author-lovable-toc-annotations.py"),
               Path("scripts/migration/capture-lovable-toc-envelope.py"),
               Path("scripts/migration/capture-lovable-toc.py"),
               Path("scripts/migration/inspect-lovable-export.py"),
               Path("scripts/migration/normalize-lovable-export.py"),
               Path("scripts/migration/lib/lovable_dump_report.py"),
+              Path("scripts/migration/lib/lovable_toc_authoring_contract.py"),
               Path("scripts/migration/lib/lovable_toc_contract.py"),
               Path("scripts/migration/validate-postgres-image-lock.py"),
               Path("scripts/migration/validate-lovable-toc-ledger.py"),
           ):
               compile(path.read_text(encoding="utf-8"), str(path), "exec")
           PY
+          python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_annotation_*.py' -v
           python3 -I -S -B -m unittest discover -s tests/migration -p 'test_*.py' -v
           python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_toc_capture_driver.py' -v
@@ -131,10 +144,19 @@ jobs:
         env:
           PATH: /usr/bin:/bin
         run: |
-          sh -n scripts/migration/run-lovable-toc-capture.sh
-          bash -n \
+          for launcher in \
+            scripts/migration/run-lovable-toc-capture.sh \
+            scripts/migration/run-lovable-toc-annotation-authoring.sh \
+            scripts/migration/run-lovable-toc-ledger-validation.sh
+          do
+            sh -n "$launcher"
+          done
+          for script in \
             scripts/migration/inspect-lovable-dump.sh \
             scripts/migration/tests/inspect-lovable-dump.test.sh
+          do
+            bash -n "$script"
+          done
           /usr/bin/python3 -I -S -B - <<'PY'
           import os
           import stat
@@ -161,17 +183,21 @@ jobs:
               raise SystemExit(1)
 
           for path in (
+              Path("scripts/migration/author-lovable-toc-annotations.py"),
               Path("scripts/migration/bounded-pg-restore.py"),
               Path("scripts/migration/capture-lovable-toc-envelope.py"),
               Path("scripts/migration/capture-lovable-toc.py"),
               Path("scripts/migration/inspect-lovable-export.py"),
               Path("scripts/migration/normalize-lovable-export.py"),
               Path("scripts/migration/lib/lovable_dump_report.py"),
+              Path("scripts/migration/lib/lovable_toc_authoring_contract.py"),
               Path("scripts/migration/lib/lovable_toc_contract.py"),
               Path("scripts/migration/validate-lovable-toc-ledger.py"),
           ):
               compile(path.read_text(encoding="utf-8"), str(path), "exec")
           PY
+          /usr/bin/python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_annotation_*.py' -v
           bash scripts/migration/tests/inspect-lovable-dump.test.sh
           /usr/bin/python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_dump_report.py' -v
