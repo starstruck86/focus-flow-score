@@ -1553,7 +1553,13 @@ class TocCaptureDriverTest(unittest.TestCase):
             status, stdout, stderr = self.diagnostic_bytes(self.environment())
         child.assert_not_called()
         diagnostic = self.assert_fixed_failure(stderr or stdout)
-        self.assertEqual(diagnostic["reason"], "input_invalid")
+        # A platform may own its selected system interpreter as root or as the
+        # executing runner. Global effective-UID drift is therefore detected
+        # first either by the interpreter binding or by the private-root
+        # binding. Both reviewed codes are fail-closed; the dedicated
+        # execution-Python owner regression above remains exactly
+        # binding_mismatch on every platform.
+        self.assertIn(diagnostic["reason"], {"binding_mismatch", "input_invalid"})
         self.assertEqual(list(self.output_root.iterdir()), [])
         self.assert_no_disposable_bytes()
         self.assert_canonical_unchanged()

@@ -534,20 +534,22 @@ class TocCaptureLauncherContractTest(unittest.TestCase):
                 "PYTHONSAFEPATH",
             ):
                 control_environment.pop(name, None)
-            # Some CI-managed interpreters disable automatic user-site loading
-            # even outside isolated mode. Exercise the planted user-site .pth
-            # and sitecustomize content explicitly so the positive control
-            # proves that both payloads are viable on every runner; the actual
-            # launcher regression below still relies only on Python startup's
-            # -I/-S boundary and never performs this explicit load.
+            # CI-managed interpreters may disable automatic user-site loading.
+            # Execute the exact planted .pth import line and user-site
+            # sitecustomize module explicitly so the positive control proves
+            # both payloads are viable on every runner; the actual launcher
+            # regression below still relies only on Python startup's -I/-S
+            # boundary and never performs either explicit load.
+            pth_path = user_site / "synthetic-startup.pth"
             control = subprocess.run(
                 [
                     str(Path(sys.executable).resolve()),
                     "-S",
                     "-c",
                     (
-                        "import site;"
-                        f"site.addsitedir({str(user_site)!r});"
+                        "import pathlib,sys;"
+                        f"sys.path.insert(0,{str(user_site)!r});"
+                        f"exec(pathlib.Path({str(pth_path)!r}).read_text(encoding='ascii'),{{}});"
                         "import sitecustomize"
                     ),
                 ],
@@ -583,7 +585,16 @@ class TocCaptureLauncherContractTest(unittest.TestCase):
                 "PYTHONNOUSERSITE": "1",
             }
             path_control = subprocess.run(
-                [str(Path(sys.executable).resolve()), "-c", "pass"],
+                [
+                    str(Path(sys.executable).resolve()),
+                    "-S",
+                    "-c",
+                    (
+                        "import sys;"
+                        f"sys.path.insert(0,{str(pythonpath_root)!r});"
+                        "import sitecustomize"
+                    ),
+                ],
                 env=path_control_environment,
                 check=False,
                 capture_output=True,
