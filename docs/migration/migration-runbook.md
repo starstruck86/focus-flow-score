@@ -489,21 +489,71 @@ complete but object-reference analysis remains `INCOMPLETE`, stop. A future
 private TOC capture requires separate authorization and must not modify or
 replace that evidence package.
 
-The future `capture-lovable-toc.py` procedure starts only after separate
-authorization recreates a private verified inner archive from the same
-canonical outer artifact and externally approves the complete aggregate
-package's identities. The tool does not reopen the outer artifact or aggregate
-package. Mandatory inputs bind their outer/inner hashes, metadata run ID,
-evidence-manifest, inspection-checkout/procedure, current checkout, and tool
-identities as externally approved attestations before the bounded
-`pg_restore --list` path. The bounded helper
-privately captures child channels; raw TOC bytes are published only to fixed,
-exclusive, no-replace mode-`0400` files beneath a mode-`0700` directory in the
-approved encrypted evidence store. They must never reach a terminal, ordinary
-log, Git, CI, chat, or the disposable worktree. Capture size/hash, reported
-client version, externally approved executable SHA-256, pre/post executable
-identity, and durable publication are checked and fsynced; timeout, output cap,
-mutation, cleanup ambiguity, existing output, or binding mismatch is a stop.
+The reviewed operator entrypoint is
+`scripts/migration/capture-lovable-toc-envelope.py`. Do not invoke the
+low-level `capture-lovable-toc.py` against an operator-prepared inner file. The
+high-level driver composes the existing strict ZIP normalizer and low-level
+capture without relaxing either contract. It requires explicit, no-default
+bindings for the canonical outer path, completed aggregate evidence-run
+directory, empty private staging root, empty durable output root, canonical
+filename and UI member name, outer size/hash, inner hash, aggregate manifest
+hash, inspection checkout/procedure identities, current approved checkout,
+exact `pg_restore` path, approved executable hash, externally approved exact
+bounded version output, and expected total/data entry counts.
+
+Before staging, require all roots to be absolute, real, non-symlink,
+executing-user-owned mode-`0700` directories outside the Git worktree. The
+aggregate, staging, output, and canonical paths must not overlap; staging and
+output must share a filesystem; staging and output must be empty; and no final
+capture path may already exist. Require the canonical ZIP to be the exact
+approved basename and a single-link, executing-user-owned mode-`0400` regular
+file. Any missing, relative, permissive, wrong-owner, symlinked, pre-existing,
+overlapping, or ambiguous input is a prepublication stop. Require at least 512
+MiB available in the durable output root before staging; the strict normalizer
+separately requires capacity for the declared inner member plus its fixed 256
+MiB reserve.
+
+The driver creates one fresh hidden mode-`0700` staging directory and invokes
+only `normalize-lovable-export.py` with the externally approved outer SHA-256.
+It requires ZIP mode, exact UI/member-name equality, approved outer identity
+before and after, the observed bounded inner size and approved inner hash,
+strict normalization metadata, and one fixed mode-`0400` `PGDMP` result. That
+exact derived file is passed to the low-level capture through an inherited
+descriptor for the private staging directory, so staging-root pathname
+replacement cannot redirect publication. The bounded helper privately captures
+child channels through capped pipes and may
+invoke `pg_restore` only as `--version` and `--list`; raw TOC bytes are
+published only to fixed, exclusive, no-replace mode-`0400` files beneath a
+mode-`0700` private capture directory in the approved encrypted evidence
+store. They must never reach a terminal, ordinary log, Git, CI, chat, or the
+disposable worktree.
+
+Before publication, revalidate every runtime/archive/procedure/tool binding,
+the exact expected counts, the capture manifest, raw-TOC hash, modes, and fixed
+file set. Remove and fsync the derived inner archive and normalization metadata,
+then revalidate the canonical outer and publish atomically with no replacement.
+Withhold the low-level completion marker before promotion and recreate it
+exclusively only after descriptor-bound post-rename validation and fsync.
+Revalidate the canonical outer again after publication. Successful capture emits only fixed aggregate
+fields and stops at `REVIEW_REQUIRED` / `ANNOTATION_REQUIRED`, with
+`restore_planning_gate=BLOCKED` and `restore_command_gate=BLOCKED`. It creates
+the fresh private opaque key/index capture package but does not create,
+validate, or publish an annotation ledger and never generates a restore
+command.
+
+An ordinary failure must remove and directory-fsync every derived/working byte
+and hidden pending tree. If cleanup, rollback, publication, or durability is
+ambiguous, retain only a private hidden quarantine, mark the promoted package
+indeterminate, or retain a root-level indeterminate stop marker plus the
+exclusive root claim if package rollback cannot be proved; stop with a fixed
+allowlisted diagnostic and never report success. The later ledger validator
+requires the capture root to contain only the bound package and, when colocated,
+the one bound ledger input, so either root stop artifact blocks annotation.
+An abrupt host/kernel crash can still leave private hidden
+indeterminate remnants. Treat them as a manual-quarantine stop, never as a
+valid capture package or authorization to retry. Timeout, output cap,
+concurrent mutation, path replacement, collision, insufficient capacity, or
+binding mismatch likewise stops the one attempt.
 
 Human review occurs locally against that private capture.
 `validate-lovable-toc-ledger.py` accepts only a private canonical-ASCII ledger.
@@ -564,11 +614,28 @@ mutation, and nonleakage plants; existing bounded-tool tests cover timeout and
 output caps. These fixtures prove local mechanics for those exact synthetic
 pairings only. They cannot prove that PostgreSQL 17 reads every PostgreSQL 18
 archive, that `pg_restore` consumed every byte, that the retained export uses
-the same grammar, or that hosted Supabase accepts the archive. The capture
-records an externally approved executable SHA-256 and checks path, hash,
-device, inode, mode, and size before and after. Because the bounded helper still
-executes the pathname rather than a held descriptor, it does not attest the
-exact executable bytes the kernel used during a path-swap-and-restore race.
+the same grammar, or that hosted Supabase accepts the archive.
+
+The high-level capture driver is additionally exercised on Linux and macOS
+with synthetic ZIP/PGDMP fixtures, private temporary roots, and fake or
+disposable bounded tools. Planted cases cover successful atomic publication
+plus normalization, hash,
+capture, publication, cleanup, fsync, concurrent mutation, path replacement,
+symlink, permission, ownership, collision, disk-capacity, timeout, and
+child-output boundaries. Passing those tests does not prove source
+completeness, archive completeness, full PGDMP-byte consumption, restore
+compatibility, or target readiness.
+
+The low-level capture records an externally approved executable SHA-256 and
+version output and checks path, hash, device, inode, mode, size, and the
+observed-equal version before accepting the package. Because the
+bounded helper still executes the pathname rather than a held descriptor, it
+does not attest the exact executable bytes the kernel used during a
+path-swap-and-restore race.
+The envelope timeout is only a secondary bound around its checked-in children.
+The bounded wrapper owns the nested `pg_restore` process-group kill/reap
+contract; the envelope tests do not independently prove cleanup of a detached
+nested process if that wrapper contract is bypassed or fails.
 The same ceiling applies to the inner archive pathname: its approved bytes are
 hashed before and after, but a hostile same-user pathname swap cannot be ruled
 out as the bytes opened by `pg_restore`. The approved metadata workflow remains
@@ -631,12 +698,16 @@ restore authorization.
 ### 7. Decide selective restore plan
 
 Do not classify real entries from the shareable aggregate report. Under a
-separately authorized future private-capture procedure, review each raw TOC
-entry locally and record only its opaque reference plus one of the six fixed
-ledger classifications defined above. Resolve whether checked-in migrations
-run before restore, after a data-only restore, or not at all. Explicitly exclude objects owned by the
-managed platform unless Supabase and Lovable document them as supported. Treat
-duplicate schema entries, migration history, owner/ACL/role statements,
+separately authorized private-capture procedure, first require a complete
+high-level envelope-driver package with `ANNOTATION_REQUIRED` and both restore
+gates still `BLOCKED`. That package is not an annotation ledger and cannot
+advance this phase by itself. In a later separately authorized review, inspect
+each raw TOC entry locally and record only its opaque reference plus one of the
+six fixed ledger classifications defined above. Resolve whether checked-in
+migrations run before restore, after a data-only restore, or not at all.
+Explicitly exclude objects owned by the managed platform unless Supabase and
+Lovable document them as supported. Treat duplicate schema entries, migration
+history, owner/ACL/role statements,
 extensions, Auth, Storage metadata, publications, subscriptions, event
 triggers, and managed schemas as hard review gates. The private mapping is
 needed to implement any eventual plan but must not be copied into repository or

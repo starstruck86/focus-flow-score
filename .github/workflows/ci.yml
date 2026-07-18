@@ -56,6 +56,7 @@ jobs:
               Path("scripts/migration/catalog-jsonl-to-manifest.py"),
               Path("scripts/migration/inventory-edge-functions.py"),
               Path("scripts/migration/bounded-pg-restore.py"),
+              Path("scripts/migration/capture-lovable-toc-envelope.py"),
               Path("scripts/migration/capture-lovable-toc.py"),
               Path("scripts/migration/inspect-lovable-export.py"),
               Path("scripts/migration/normalize-lovable-export.py"),
@@ -67,6 +68,7 @@ jobs:
               compile(path.read_text(encoding="utf-8"), str(path), "exec")
           PY
           python3 -m unittest discover -s tests/migration -p 'test_*.py' -v
+          python3 -m unittest tests.migration.test_lovable_toc_capture_driver -v
           bash scripts/migration/tests/inspect-lovable-dump.test.sh
           bash scripts/migration/tests/postgres-target-safety.test.sh
           bash scripts/migration/tests/catalog-verification.test.sh
@@ -136,6 +138,7 @@ jobs:
 
           for path in (
               Path("scripts/migration/bounded-pg-restore.py"),
+              Path("scripts/migration/capture-lovable-toc-envelope.py"),
               Path("scripts/migration/capture-lovable-toc.py"),
               Path("scripts/migration/inspect-lovable-export.py"),
               Path("scripts/migration/normalize-lovable-export.py"),
@@ -158,6 +161,8 @@ jobs:
             -s tests/migration -p 'test_lovable_toc_contract.py' -v
           python3 -m unittest discover \
             -s tests/migration -p 'test_lovable_toc_tools.py' -v
+          python3 -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_capture_driver.py' -v
 
   postgres-cross-major-compatibility:
     name: PostgreSQL 17.6/18.4 synthetic compatibility

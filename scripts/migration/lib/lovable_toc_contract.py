@@ -99,14 +99,20 @@ CAPTURE_PROCEDURE_IDENTITY_KEYS = frozenset(
         "execution_checkout_sha",
         "README_md_blob_sha",
         "README_md_sha256",
+        "capture_lovable_toc_envelope_py_blob_sha",
+        "capture_lovable_toc_envelope_py_sha256",
         "capture_lovable_toc_py_blob_sha",
         "capture_lovable_toc_py_sha256",
         "bounded_pg_restore_py_blob_sha",
         "bounded_pg_restore_py_sha256",
+        "inspect_lovable_export_py_blob_sha",
+        "inspect_lovable_export_py_sha256",
         "lovable_toc_contract_py_blob_sha",
         "lovable_toc_contract_py_sha256",
         "lovable_dump_report_py_blob_sha",
         "lovable_dump_report_py_sha256",
+        "normalize_lovable_export_py_blob_sha",
+        "normalize_lovable_export_py_sha256",
         "evidence_manifest_sha256",
         "inspection_checkout_sha",
         "inspection_procedure_sha256",
@@ -641,6 +647,42 @@ def validate_private_root(path: Path, *, expected_uid: int | None = None) -> int
     return descriptor
 
 
+def duplicate_private_root_fd(
+    directory_fd: int, *, expected_uid: int | None = None
+) -> int:
+    """Duplicate and validate an already-open private directory descriptor.
+
+    This is the descriptor-relative counterpart to :func:`validate_private_root`.
+    It deliberately accepts no pathname, so a caller that inherited a reviewed
+    directory descriptor cannot be redirected by a later pathname replacement.
+    The returned descriptor is owned by the caller.
+    """
+
+    if type(directory_fd) is not int or directory_fd < 0:
+        raise ContractError("input_invalid")
+    descriptor: int | None = None
+    try:
+        descriptor = os.dup(directory_fd)
+        os.set_inheritable(descriptor, False)
+    except OSError as exc:
+        if descriptor is not None:
+            os.close(descriptor)
+        raise ContractError("input_invalid") from exc
+    owner_uid = os.geteuid() if expected_uid is None else expected_uid
+    try:
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or metadata.st_uid != owner_uid
+            or stat.S_IMODE(metadata.st_mode) != 0o700
+        ):
+            raise ContractError("input_invalid")
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
 def _write_exclusive(directory_fd: int, name: str, data: bytes) -> None:
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0)
     flags |= getattr(os, "O_NOFOLLOW", 0)
@@ -847,8 +889,9 @@ def _cleanup_failed_publication(
     raise ContractError("cleanup_indeterminate") from cause
 
 
-def publish_private_package(
-    root: Path,
+def _publish_private_package_on_open_root(
+    root_fd: int,
+    result_path: Path,
     final_name: str,
     files: Mapping[str, bytes],
     *,
@@ -859,7 +902,6 @@ def publish_private_package(
         raise ContractError("input_invalid")
     if kind not in {"capture", "ledger"}:
         raise ContractError("internal_failure")
-    root_fd = validate_private_root(root)
     pending_name = f".pending-{kind}-{secrets.token_hex(12)}"
     pending_created = False
     renamed = False
@@ -925,7 +967,7 @@ def publish_private_package(
         if fail_stage == "after_complete":
             raise ContractError("publication_failed")
         os.fsync(root_fd)
-        return PublicationResult(root / final_name, sha256_bytes(manifest_bytes))
+        return PublicationResult(result_path, sha256_bytes(manifest_bytes))
     except ContractError as exc:
         _cleanup_failed_publication(
             root_fd,
@@ -948,6 +990,57 @@ def publish_private_package(
             cause=exc,
         )
         raise ContractError("publication_failed") from exc
+
+
+def publish_private_package_at(
+    root_fd: int,
+    final_name: str,
+    files: Mapping[str, bytes],
+    *,
+    kind: str,
+    fail_stage: str | None = None,
+) -> PublicationResult:
+    """Publish beneath an already-open private root without resolving a path.
+
+    The caller's descriptor remains open.  The returned ``path`` is deliberately
+    relative and informational; descriptor-relative consumers must continue to
+    use their held root descriptor for all validation and movement.
+    """
+
+    descriptor = duplicate_private_root_fd(root_fd)
+    try:
+        return _publish_private_package_on_open_root(
+            descriptor,
+            Path(final_name),
+            final_name,
+            files,
+            kind=kind,
+            fail_stage=fail_stage,
+        )
+    finally:
+        os.close(descriptor)
+
+
+def publish_private_package(
+    root: Path,
+    final_name: str,
+    files: Mapping[str, bytes],
+    *,
+    kind: str,
+    fail_stage: str | None = None,
+) -> PublicationResult:
+    """Path-based compatibility wrapper for standalone capture/ledger tools."""
+
+    root_fd = validate_private_root(root)
+    try:
+        return _publish_private_package_on_open_root(
+            root_fd,
+            root / final_name,
+            final_name,
+            files,
+            kind=kind,
+            fail_stage=fail_stage,
+        )
     finally:
         os.close(root_fd)
 
@@ -999,11 +1092,14 @@ def build_capture_payloads(
         "format_version": CAPTURE_FORMAT_VERSION,
         "opaque_index_sha256": sha256_bytes(index_bytes),
         "opaque_key_sha256": key_sha,
+        "overall_status": "REVIEW_REQUIRED",
         "pg_restore_identity": dict(pg_restore_identity),
         "procedure_identity": procedure,
         "raw_toc_sha256": raw_sha,
         "raw_toc_size_bytes": len(raw_toc),
         "review_gate": "ANNOTATION_REQUIRED",
+        "restore_command_gate": "BLOCKED",
+        "restore_planning_gate": "BLOCKED",
     }
     capture_bytes = canonical_json_bytes(capture)
     files = {
@@ -1027,17 +1123,23 @@ def validate_capture_schema(value: Any) -> dict[str, Any]:
             "format_version",
             "opaque_index_sha256",
             "opaque_key_sha256",
+            "overall_status",
             "pg_restore_identity",
             "procedure_identity",
             "raw_toc_sha256",
             "raw_toc_size_bytes",
             "review_gate",
+            "restore_command_gate",
+            "restore_planning_gate",
         },
     )
     if (
         capture["artifact_kind"] != "lovable_toc_private_capture"
         or capture["capture_status"] != "CAPTURE_COMPLETE"
+        or capture["overall_status"] != "REVIEW_REQUIRED"
         or capture["review_gate"] != "ANNOTATION_REQUIRED"
+        or capture["restore_command_gate"] != "BLOCKED"
+        or capture["restore_planning_gate"] != "BLOCKED"
     ):
         raise ContractError("binding_mismatch")
     if require_int(

@@ -206,35 +206,60 @@ analysis still remains `REVIEW_REQUIRED` and has
 completion marker from this workflow is a restore-ready or migration-green
 signal.
 
-### Future private TOC capture and opaque review ledger
+### Reviewed private TOC envelope capture and later opaque review ledger
 
 The aggregate inspector intentionally does not solve lossless object-name
-classification. The future `capture-lovable-toc.py` and
-`validate-lovable-toc-ledger.py` procedures provide a separately authorized
-**offline** private capture and opaque-ledger review path. They remain a new
-evidence layer rather than silently broadening the published metadata report.
-The existing aggregate evidence package remains immutable.
+classification. The reviewed operator entrypoint for the next separately
+authorized **offline** step is `capture-lovable-toc-envelope.py`. It composes
+the existing strict `normalize-lovable-export.py` and low-level
+`capture-lovable-toc.py` contracts; it does not reimplement or relax either
+one. `capture-lovable-toc.py` remains an internal low-level component for this
+procedure, not an operator instruction to prepare an inner archive manually.
+The later `validate-lovable-toc-ledger.py` procedure remains separately
+authorized. The capture is a new private evidence layer and never modifies or
+replaces the completed aggregate evidence package.
 
-The private-capture contract is:
+The private envelope-capture contract is:
 
-1. Start only after a separate authorization has recreated a private verified
-   inner archive from the externally approved canonical artifact and approved
-   the complete aggregate package's run/manifest identities. This tool does not
-   reopen or validate the outer artifact or aggregate package itself. It
-   requires their approved outer/inner hashes, run ID, manifest hash, and
-   inspection identities as mandatory externally approved attestations and
-   binds them into the new capture. A complete package is a prerequisite, not
-   authorization.
-2. `capture-lovable-toc.py` may invoke only the bounded
+1. Start only after a separate authorization approves the canonical outer ZIP,
+   the complete aggregate evidence run, and every exact binding listed below.
+   The driver first validates the current clean checkout, the approved
+   aggregate package through its completion marker and manifest, the canonical
+   filename/size/hash/member binding, the inspection identities, the current
+   capture-procedure identities, and the approved `pg_restore` path, executable
+   SHA-256, and exact bounded version string. A
+   complete package is a prerequisite, not authorization.
+2. Require three distinct, existing, executing-user-owned, non-symlink private
+   roots outside the Git worktree: the completed aggregate run, an empty
+   staging root, and an empty durable capture-output root. Each directory is
+   mode `0700`; staging and output must be on one filesystem and no canonical,
+   aggregate, staging, or output path may overlap. The canonical ZIP is an
+   exact-basename, single-link, mode-`0400` regular file. Relative, ambiguous,
+   permissive, wrong-owner, symlinked, pre-existing-final, or overlapping
+   inputs fail before publication. Existing outputs are never replaced. The
+   durable output root must have at least 512 MiB available before staging;
+   the strict normalizer separately requires capacity for the declared inner
+   member plus its fixed 256 MiB reserve.
+3. In a fresh hidden mode-`0700` child of the staging root, invoke only the
+   checked-in strict normalizer with the externally approved outer SHA-256.
+   Require ZIP mode, the one exact UI-observed member name, the approved outer
+   size/hash before and after normalization, the observed bounded inner size
+   and approved inner hash, strict normalization metadata, and a mode-`0400`
+   `PGDMP` result. Pass that exact fixed derived file to the low-level capture
+   through an inherited descriptor for the private staging directory.
+   Do not use `unzip`, an
+   extraction API, or a member-controlled output path.
+4. The low-level capture may invoke only the bounded
    `pg_restore --version` and `pg_restore --list`
    forms. The bounded wrapper privately captures child channels; the capture
    tool discards child stderr, holds successful list bytes privately, and never
    forwards them. Raw TOC bytes are published only into a fixed mode-`0400`
    file beneath a mode-`0700` no-replace package in the approved evidence-store
    root. They never go to the terminal, Git, CI, chat, or a general log.
-3. Bind the private capture to the canonical outer identity, verified inner
+5. Bind the private capture to the canonical outer identity, verified inner
    SHA-256, metadata run ID, execution checkout, inspector/guard identities,
-   reported `pg_restore` version, approved executable SHA-256, observed
+   externally approved and observed-equal `pg_restore` version, approved
+   executable SHA-256, observed
    path/device/inode/mode/size, capture byte size, and raw-capture SHA-256. The
    capture stores the complete fixed-key repository procedure identity and its
    digest. The ledger result separately stores and hashes the exact validator,
@@ -247,7 +272,47 @@ The private-capture contract is:
    inner archive: pre/post identity checks bind the approved path's bytes but
    do not prove which bytes a hostile same-user pathname swap made
    `pg_restore` open.
-4. Review the private TOC locally. Each entry ID is
+   The envelope timeout is a secondary bound around each checked-in child. The
+   bounded wrapper owns the nested `pg_restore` process-group kill/reap
+   contract; envelope tests do not independently prove cleanup of a detached
+   nested process if that wrapper contract is bypassed or fails.
+6. Validate the complete hidden capture package against the live runtime
+   bindings, expected 2,354-entry and 214-data-reference counts, exact raw-TOC
+   and capture-manifest hashes, fixed file set, mode-`0400` files, and
+   mode-`0700` directories. Child output stays in bounded pipes and never
+   becomes a sidecar file. Delete and fsync the derived inner archive and
+   normalization metadata; revalidate the canonical outer, tool, and checkout;
+   then publish the capture directory atomically without replacement. Remove
+   the low-level completion marker before promotion and recreate it exclusively
+   only after descriptor-bound post-rename validation and fsync. Revalidate the
+   canonical outer again after publication. Success emits only a fixed
+   allowlisted diagnostic
+   with `REVIEW_REQUIRED`, `ANNOTATION_REQUIRED`,
+   `restore_planning_gate=BLOCKED`, and `restore_command_gate=BLOCKED`.
+   The capture creates the private raw TOC plus fresh opaque key/index package;
+   it does **not** create, validate, or publish an annotation ledger and does
+   not generate a restore command.
+7. On ordinary failure, remove and fsync all derived/working bytes and hidden
+   pending trees. If cleanup, rollback, publication, or directory durability
+   cannot be proved, retain only a private hidden quarantine, mark a promoted
+   package indeterminate, or retain a root-level indeterminate stop marker plus
+   the exclusive root claim when package rollback itself cannot be proved; emit
+   `cleanup_indeterminate` and never emit success. The later ledger validator
+   rejects every unapproved capture-root sibling, including either stop marker
+   or claim, even if a package-local completion marker survived.
+   An abrupt host or kernel crash can still leave private hidden indeterminate
+   remnants. Those remnants require manual quarantine review and are never a
+   valid capture package or permission to retry.
+   Failure output is one fixed `capture_driver` diagnostic whose reason is only
+   `input_invalid`, `binding_mismatch`, `evidence_invalid`,
+   `normalization_failed`, `normalization_timeout`,
+   `normalization_output_invalid`, `inner_identity_mismatch`,
+   `capture_failed`, `capture_timeout`, `capture_output_invalid`,
+   `canonical_mutated`, `publication_exists`, `publication_failed`,
+   `cleanup_indeterminate`, or `internal_failure`. Child output, raw TOC text,
+   object names, SQL, filenames, secrets, and payloads are never relayed.
+8. In a later, separately authorized step, review the private TOC locally. Each
+   entry ID is
    `te1_` plus HMAC-SHA-256 under a fresh private 32-byte capture key over the
    domain `focus-flow-score/lovable-toc-entry/v1\0`, big-endian 64-bit ordinal,
    big-endian 64-bit raw-line length, and exact raw entry-line bytes. The key,
@@ -255,7 +320,7 @@ The private-capture contract is:
    dictionary guessing of common object names while allowing exact validator
    recomputation; IDs are not archive OIDs, dump IDs, names, or reversible
    encodings.
-5. Feed only a private, canonical-ASCII ledger matching
+9. Feed only a private, canonical-ASCII ledger matching
    `verification/lovable-toc-annotation-ledger.schema.json` to
    `validate-lovable-toc-ledger.py`. Reject missing, duplicate, or extra IDs;
    unknown or contradictory fields; unknown classes; incomplete dependencies;
@@ -312,7 +377,7 @@ The private-capture contract is:
    definition. `SEQUENCE SET` is tracked separately as state-bearing metadata
    and must still map to an exact `SEQUENCE` parent; it is never allowed to
    disappear by being counted as ordinary metadata.
-6. `restore_planning_gate` stays `BLOCKED` while any entry is unresolved or any
+10. `restore_planning_gate` stays `BLOCKED` while any entry is unresolved or any
    exact accounting, data-parent, dependency, manual-conflict, global handling,
    managed-domain, archive, procedure, or tool binding is incomplete. When all
    structural conditions pass, opaque annotation accounting becomes
@@ -321,6 +386,11 @@ The private-capture contract is:
    `ELIGIBLE_FOR_HUMAN_REVIEW`; `restore_command_gate` remains `BLOCKED` and
    migration readiness remains `RED`. Human semantic correctness is an
    attestation the validator cannot independently prove.
+
+Even a complete private capture cannot prove source completeness, archive
+completeness, full PGDMP-byte consumption, restore compatibility, or target
+readiness. It never connects to a database, creates a target, or authorizes a
+restore.
 
 PostgreSQL explicitly describes the list file as editable input to
 `--use-list`, and separately warns that restoring a dump can execute arbitrary
@@ -349,21 +419,41 @@ that older version. Therefore the passing synthetic 18.4-to-17.6 load is one
 fixture result, not a supported production-restore guarantee. See the official
 [PostgreSQL 18 `pg_dump` compatibility notes](https://www.postgresql.org/docs/18/app-pgdump.html).
 
-Both new tools consume paths and approved identities only through mandatory
-`TOC_REVIEW_*` environment variables, never shell arguments. The capture
-requires the private inner path and output root; approved outer/inner,
-aggregate-manifest, inspection-checkout/procedure, execution-checkout, and
-`pg_restore` hashes; run ID; exact `pg_restore` path; and expected total/data
-entry counts. The ledger validator additionally requires the fixed capture
-package name, private canonical ledger path, independently approved capture
+The high-level capture driver and later ledger validator consume paths and
+approved identities only through mandatory `TOC_REVIEW_*` environment
+variables, never shell arguments. The driver has no defaults and requires:
+
+| Variable | Envelope-capture contract |
+|---|---|
+| `TOC_REVIEW_CANONICAL_OUTER` | Exact absolute canonical outer ZIP path |
+| `TOC_REVIEW_APPROVED_EVIDENCE_RUN_DIRECTORY` | Exact completed aggregate evidence-run directory |
+| `TOC_REVIEW_PRIVATE_STAGING_ROOT` | Empty private mode-`0700` staging root |
+| `TOC_REVIEW_OUTPUT_ROOT` | Empty private mode-`0700` durable capture-output root |
+| `TOC_REVIEW_EVIDENCE_RUN_ID` | Exact aggregate evidence run ID and aggregate-directory basename |
+| `TOC_REVIEW_EXPECTED_ORIGINAL_FILENAME` | Externally approved canonical basename |
+| `TOC_REVIEW_UI_EXPORT_OBJECT_NAME` | Exact UI-observed sole ZIP member name |
+| `TOC_REVIEW_EXPECTED_OUTER_SIZE_BYTES` | Externally approved positive outer size |
+| `TOC_REVIEW_OUTER_SHA256` | Externally approved outer SHA-256 |
+| `TOC_REVIEW_INNER_SHA256` | Externally approved normalized inner SHA-256 |
+| `TOC_REVIEW_EVIDENCE_MANIFEST_SHA256` | Exact completed aggregate evidence-manifest SHA-256 |
+| `TOC_REVIEW_INSPECTION_CHECKOUT_SHA` | Checkout that produced the aggregate evidence |
+| `TOC_REVIEW_INSPECTION_PROCEDURE_SHA256` | Exact fenced aggregate-inspection procedure SHA-256 |
+| `TOC_REVIEW_APPROVED_EXECUTION_CHECKOUT_SHA` | Externally approved current capture checkout, exactly equal to clean `HEAD` |
+| `TOC_REVIEW_PG_RESTORE_BIN` | Exact absolute reviewed `pg_restore` path |
+| `TOC_REVIEW_APPROVED_PG_RESTORE_SHA256` | Externally approved executable SHA-256 |
+| `TOC_REVIEW_APPROVED_PG_RESTORE_VERSION` | Externally approved exact bounded version output, for example `pg_restore (PostgreSQL) 18.4` |
+| `TOC_REVIEW_EXPECTED_ENTRY_COUNT` | Externally approved exact TOC entry count |
+| `TOC_REVIEW_EXPECTED_DATA_REFERENCE_COUNT` | Externally approved exact data-reference count |
+
+The ledger validator additionally requires the fixed capture package name,
+private canonical ledger path, independently approved capture
 manifest/raw-TOC/procedure-identity hashes, and the same archive/tool/procedure
-bindings. There are no defaults. The capture/output roots and the ledger file
-must be in an approved mode-`0700` private root outside the Git worktree; the
-ledger is opened descriptor-relative as a direct child and must be a
-single-link mode-`0400` regular file. The new tools deliberately reject
-`local-migration-artifacts/` because it is inside the repository. That ignored
-directory remains disposable workspace for older aggregate tooling and must
-never be the sole evidence copy.
+bindings. The capture/output roots and the ledger file must be in approved
+mode-`0700` private roots outside the Git worktree; the ledger is opened
+descriptor-relative as a direct child and must be a single-link mode-`0400`
+regular file. These tools deliberately reject `local-migration-artifacts/`
+because it is inside the repository. That ignored directory remains disposable
+workspace for older aggregate tooling and must never be the sole evidence copy.
 
 ### Required operator inputs
 

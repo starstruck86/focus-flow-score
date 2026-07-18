@@ -16,14 +16,20 @@ import sys
 from pathlib import Path
 from typing import Mapping
 
+SCRIPT = Path(__file__).resolve(strict=True)
+if str(SCRIPT.parent) not in sys.path:
+    sys.path.insert(0, str(SCRIPT.parent))
+
 from lib.lovable_toc_contract import (
     ContractError,
     VERSION_RE,
     build_capture_payloads,
     canonical_json_bytes,
+    duplicate_private_root_fd,
     fixed_diagnostic,
     fresh_opaque_key,
     publish_private_package,
+    publish_private_package_at,
     sha256_bytes,
     stable_regular_digest,
     validate_git_sha,
@@ -37,6 +43,9 @@ MAX_TOOL_BYTES = 100 * 1024 * 1024
 SAFE_VALUE_RE = re.compile(r"^[A-Za-z0-9._:-]{1,160}$", re.ASCII)
 POSITIVE_INTEGER_RE = re.compile(r"^[1-9][0-9]{0,9}$", re.ASCII)
 UNDERLYING_ENVIRONMENT_VARIABLE = "LOVABLE_UNDERLYING_PG_RESTORE_BIN"
+DESCRIPTOR_BOUND_WORKDIR_VARIABLE = "TOC_REVIEW_DESCRIPTOR_BOUND_WORKDIR_FD"
+DESCRIPTOR_BOUND_ARCHIVE = "verified-inner.pgdmp"
+DESCRIPTOR_BOUND_OUTPUT_ROOT = "."
 
 REQUIRED_ENVIRONMENT = (
     "TOC_REVIEW_INNER_ARCHIVE",
@@ -98,8 +107,11 @@ def _repository_binding(repo: Path, approved_checkout: str) -> dict[str, str]:
         raise ContractError("binding_mismatch")
     paths = (
         "scripts/migration/README.md",
+        "scripts/migration/capture-lovable-toc-envelope.py",
         "scripts/migration/capture-lovable-toc.py",
+        "scripts/migration/normalize-lovable-export.py",
         "scripts/migration/bounded-pg-restore.py",
+        "scripts/migration/inspect-lovable-export.py",
         "scripts/migration/lib/lovable_toc_contract.py",
         "scripts/migration/lib/lovable_dump_report.py",
     )
@@ -128,6 +140,43 @@ def _parse_count(environment: Mapping[str, str], name: str, *, allow_zero: bool)
     if parsed > 1_000_000:
         raise ContractError("input_invalid")
     return parsed
+
+
+def _descriptor_bound_workdir(
+    environment: Mapping[str, str],
+) -> int | None:
+    """Validate the high-level driver's exact inherited-directory mode.
+
+    Standalone callers retain the existing absolute-path contract.  This narrow
+    internal mode accepts only fixed relative names and requires the process
+    working directory to be the very same private directory as the inherited
+    descriptor.  Publication still uses the descriptor, never the pathname.
+    """
+
+    raw = environment.get(DESCRIPTOR_BOUND_WORKDIR_VARIABLE)
+    if raw is None:
+        return None
+    if re.fullmatch(r"[1-9][0-9]{0,8}", raw, re.ASCII) is None:
+        raise ContractError("input_invalid")
+    descriptor = int(raw)
+    if descriptor <= 2:
+        raise ContractError("input_invalid")
+    validated = duplicate_private_root_fd(descriptor)
+    try:
+        current = os.stat(".", follow_symlinks=False)
+        bound = os.fstat(validated)
+        if (
+            current.st_dev != bound.st_dev
+            or current.st_ino != bound.st_ino
+            or current.st_uid != bound.st_uid
+            or current.st_mode != bound.st_mode
+        ):
+            raise ContractError("input_invalid")
+    except OSError as exc:
+        raise ContractError("input_invalid") from exc
+    finally:
+        os.close(validated)
+    return descriptor
 
 
 def _run_bounded(
@@ -159,6 +208,8 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
     script = Path(__file__).resolve(strict=True)
     repo = script.parents[2]
 
+    descriptor_bound_fd = _descriptor_bound_workdir(environment)
+
     approved_checkout = validate_git_sha(
         _required_environment(environment, "TOC_REVIEW_APPROVED_EXECUTION_CHECKOUT_SHA")
     )
@@ -187,17 +238,27 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
     if expected_data_count > expected_entry_count:
         raise ContractError("input_invalid")
 
-    output_root = Path(_required_environment(environment, "TOC_REVIEW_OUTPUT_ROOT"))
-    resolved_output_root = output_root.resolve(strict=True)
     resolved_repo = repo.resolve(strict=True)
-    if resolved_output_root == resolved_repo or resolved_repo in resolved_output_root.parents:
-        raise ContractError("input_invalid")
-    root_fd = validate_private_root(output_root)
-    os.close(root_fd)
-
-    archive = Path(_required_environment(environment, "TOC_REVIEW_INNER_ARCHIVE"))
-    if not archive.is_absolute():
-        raise ContractError("input_invalid")
+    output_value = _required_environment(environment, "TOC_REVIEW_OUTPUT_ROOT")
+    archive_value = _required_environment(environment, "TOC_REVIEW_INNER_ARCHIVE")
+    if descriptor_bound_fd is None:
+        output_root = Path(output_value)
+        resolved_output_root = output_root.resolve(strict=True)
+        if resolved_output_root == resolved_repo or resolved_repo in resolved_output_root.parents:
+            raise ContractError("input_invalid")
+        root_fd = validate_private_root(output_root)
+        os.close(root_fd)
+        archive = Path(archive_value)
+        if not archive.is_absolute():
+            raise ContractError("input_invalid")
+    else:
+        if (
+            output_value != DESCRIPTOR_BOUND_OUTPUT_ROOT
+            or archive_value != DESCRIPTOR_BOUND_ARCHIVE
+        ):
+            raise ContractError("input_invalid")
+        output_root = Path(DESCRIPTOR_BOUND_OUTPUT_ROOT)
+        archive = Path(DESCRIPTOR_BOUND_ARCHIVE)
     resolved_archive = archive.resolve(strict=True)
     if resolved_archive == resolved_repo or resolved_repo in resolved_archive.parents:
         raise ContractError("input_invalid")
@@ -227,7 +288,10 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
         raise ContractError("tool_failed") from exc
     if VERSION_RE.fullmatch(version) is None or "\n" in version or "\r" in version:
         raise ContractError("tool_failed")
-    raw_toc = _run_bounded(wrapper, pg_restore, ["--list", str(archive)])
+    # The bounded wrapper's reviewed interface requires an absolute local path.
+    # Descriptor-bound mode still publishes through the inherited directory FD;
+    # both archive digests and the high-level driver detect path replacement.
+    raw_toc = _run_bounded(wrapper, pg_restore, ["--list", str(resolved_archive)])
 
     tool_after = stable_regular_digest(
         pg_restore, max_bytes=MAX_TOOL_BYTES, require_executable=True
@@ -280,12 +344,19 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
         expected_data_reference_count=expected_data_count,
     )
     raw_sha = capture["raw_toc_sha256"]
-    final_name = f"toc-capture-{run_id}-{raw_sha[:12]}"
+    # Evidence run IDs use UTC ``T``/``Z`` markers; private package names use
+    # the contract's lowercase no-ambiguity filename grammar.
+    final_name = f"toc-capture-{run_id.lower()}-{raw_sha[:12]}"
     if _repository_binding(repo, approved_checkout) != repository_identity:
         raise ContractError("binding_mismatch")
-    publication = publish_private_package(
-        output_root, final_name, files, kind="capture"
-    )
+    if descriptor_bound_fd is None:
+        publication = publish_private_package(
+            output_root, final_name, files, kind="capture"
+        )
+    else:
+        publication = publish_private_package_at(
+            descriptor_bound_fd, final_name, files, kind="capture"
+        )
     counts = {
         "data_reference_count": expected_data_count,
         "entry_count": len(entries),

@@ -67,18 +67,40 @@ def _required(environment: Mapping[str, str], name: str) -> str:
     return value
 
 
-def _open_package(root: Path, name: str) -> tuple[int, Path]:
+def _open_package(
+    root: Path, name: str, *, allowed_root_siblings: frozenset[str]
+) -> tuple[int, Path]:
     if SAFE_NAME_RE.fullmatch(name) is None:
         raise ContractError("input_invalid")
+    if any(
+        SAFE_NAME_RE.fullmatch(sibling) is None or sibling == name
+        for sibling in allowed_root_siblings
+    ):
+        raise ContractError("input_invalid")
     root_fd = validate_private_root(root)
+    package_fd: int | None = None
     try:
+        expected_root_names = {name, *allowed_root_siblings}
+        if _package_names(root_fd) != expected_root_names:
+            raise ContractError("input_invalid")
         flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
         flags |= getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
         package_fd = os.open(name, flags, dir_fd=root_fd)
+        if _package_names(root_fd) != expected_root_names:
+            raise ContractError("input_mutated")
     except OSError as exc:
+        if package_fd is not None:
+            os.close(package_fd)
         os.close(root_fd)
         raise ContractError("input_invalid") from exc
+    except BaseException:
+        if package_fd is not None:
+            os.close(package_fd)
+        os.close(root_fd)
+        raise
     os.close(root_fd)
+    if package_fd is None:
+        raise ContractError("internal_failure")
     metadata = os.fstat(package_fd)
     if (
         not stat.S_ISDIR(metadata.st_mode)
@@ -281,10 +303,24 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
     )
     capture_root = Path(_required(environment, "TOC_REVIEW_CAPTURE_ROOT"))
     repo = Path(__file__).resolve(strict=True).parents[2]
-    if repo.resolve(strict=True) in capture_root.resolve(strict=True).parents or capture_root.resolve(strict=True) == repo.resolve(strict=True):
+    resolved_capture_root = capture_root.resolve(strict=True)
+    if repo.resolve(strict=True) in resolved_capture_root.parents or resolved_capture_root == repo.resolve(strict=True):
         raise ContractError("input_invalid")
     capture_name = _required(environment, "TOC_REVIEW_CAPTURE_NAME")
-    package_fd, _package_path = _open_package(capture_root, capture_name)
+    ledger_candidate = Path(_required(environment, "TOC_REVIEW_LEDGER"))
+    lexical_ledger_candidate = Path(os.path.abspath(os.fspath(ledger_candidate)))
+    allowed_root_siblings: frozenset[str] = frozenset()
+    if (
+        ledger_candidate.is_absolute()
+        and lexical_ledger_candidate.parent == resolved_capture_root
+        and SAFE_NAME_RE.fullmatch(lexical_ledger_candidate.name) is not None
+    ):
+        allowed_root_siblings = frozenset({lexical_ledger_candidate.name})
+    package_fd, _package_path = _open_package(
+        capture_root,
+        capture_name,
+        allowed_root_siblings=allowed_root_siblings,
+    )
     try:
         expected_names = set(CAPTURE_FILES) | {"EVIDENCE_COMPLETE"}
         if _package_names(package_fd) != expected_names:
