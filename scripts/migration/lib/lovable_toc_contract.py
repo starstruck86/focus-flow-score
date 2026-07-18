@@ -34,6 +34,7 @@ from .lovable_dump_report import (
 CAPTURE_FORMAT_VERSION = 1
 LEDGER_FORMAT_VERSION = 1
 DIAGNOSTIC_VERSION = 1
+MAX_PUBLIC_DIAGNOSTIC_BYTES = 4096
 MAX_RAW_TOC_BYTES = 128 * 1024 * 1024
 MAX_LEDGER_BYTES = 64 * 1024 * 1024
 MAX_ENTRY_COUNT = 1_000_000
@@ -46,6 +47,12 @@ VERSION_RE = re.compile(
     r"^pg_restore \(PostgreSQL\) "
     r"[0-9]{1,3}(?:\.[0-9]{1,3}){1,3}"
     r"(?:(?:beta|rc)[0-9]{1,3}|devel)?$",
+    re.ASCII,
+)
+EXECUTION_PYTHON_VERSION_RE = re.compile(
+    r"^cpython:(?:0|[1-9][0-9]{0,2})\."
+    r"(?:0|[1-9][0-9]{0,2})\."
+    r"(?:0|[1-9][0-9]{0,2})$",
     re.ASCII,
 )
 
@@ -97,16 +104,26 @@ GLOBAL_HANDLING = {
 CAPTURE_PROCEDURE_IDENTITY_KEYS = frozenset(
     {
         "execution_checkout_sha",
+        "execution_python_approved_sha256",
+        "execution_python_identity_sha256",
         "README_md_blob_sha",
         "README_md_sha256",
+        "run_lovable_toc_capture_sh_blob_sha",
+        "run_lovable_toc_capture_sh_sha256",
+        "capture_lovable_toc_envelope_py_blob_sha",
+        "capture_lovable_toc_envelope_py_sha256",
         "capture_lovable_toc_py_blob_sha",
         "capture_lovable_toc_py_sha256",
         "bounded_pg_restore_py_blob_sha",
         "bounded_pg_restore_py_sha256",
+        "inspect_lovable_export_py_blob_sha",
+        "inspect_lovable_export_py_sha256",
         "lovable_toc_contract_py_blob_sha",
         "lovable_toc_contract_py_sha256",
         "lovable_dump_report_py_blob_sha",
         "lovable_dump_report_py_sha256",
+        "normalize_lovable_export_py_blob_sha",
+        "normalize_lovable_export_py_sha256",
         "evidence_manifest_sha256",
         "inspection_checkout_sha",
         "inspection_procedure_sha256",
@@ -641,6 +658,42 @@ def validate_private_root(path: Path, *, expected_uid: int | None = None) -> int
     return descriptor
 
 
+def duplicate_private_root_fd(
+    directory_fd: int, *, expected_uid: int | None = None
+) -> int:
+    """Duplicate and validate an already-open private directory descriptor.
+
+    This is the descriptor-relative counterpart to :func:`validate_private_root`.
+    It deliberately accepts no pathname, so a caller that inherited a reviewed
+    directory descriptor cannot be redirected by a later pathname replacement.
+    The returned descriptor is owned by the caller.
+    """
+
+    if type(directory_fd) is not int or directory_fd < 0:
+        raise ContractError("input_invalid")
+    descriptor: int | None = None
+    try:
+        descriptor = os.dup(directory_fd)
+        os.set_inheritable(descriptor, False)
+    except OSError as exc:
+        if descriptor is not None:
+            os.close(descriptor)
+        raise ContractError("input_invalid") from exc
+    owner_uid = os.geteuid() if expected_uid is None else expected_uid
+    try:
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or metadata.st_uid != owner_uid
+            or stat.S_IMODE(metadata.st_mode) != 0o700
+        ):
+            raise ContractError("input_invalid")
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
 def _write_exclusive(directory_fd: int, name: str, data: bytes) -> None:
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0)
     flags |= getattr(os, "O_NOFOLLOW", 0)
@@ -847,8 +900,9 @@ def _cleanup_failed_publication(
     raise ContractError("cleanup_indeterminate") from cause
 
 
-def publish_private_package(
-    root: Path,
+def _publish_private_package_on_open_root(
+    root_fd: int,
+    result_path: Path,
     final_name: str,
     files: Mapping[str, bytes],
     *,
@@ -859,7 +913,6 @@ def publish_private_package(
         raise ContractError("input_invalid")
     if kind not in {"capture", "ledger"}:
         raise ContractError("internal_failure")
-    root_fd = validate_private_root(root)
     pending_name = f".pending-{kind}-{secrets.token_hex(12)}"
     pending_created = False
     renamed = False
@@ -925,7 +978,7 @@ def publish_private_package(
         if fail_stage == "after_complete":
             raise ContractError("publication_failed")
         os.fsync(root_fd)
-        return PublicationResult(root / final_name, sha256_bytes(manifest_bytes))
+        return PublicationResult(result_path, sha256_bytes(manifest_bytes))
     except ContractError as exc:
         _cleanup_failed_publication(
             root_fd,
@@ -948,6 +1001,57 @@ def publish_private_package(
             cause=exc,
         )
         raise ContractError("publication_failed") from exc
+
+
+def publish_private_package_at(
+    root_fd: int,
+    final_name: str,
+    files: Mapping[str, bytes],
+    *,
+    kind: str,
+    fail_stage: str | None = None,
+) -> PublicationResult:
+    """Publish beneath an already-open private root without resolving a path.
+
+    The caller's descriptor remains open.  The returned ``path`` is deliberately
+    relative and informational; descriptor-relative consumers must continue to
+    use their held root descriptor for all validation and movement.
+    """
+
+    descriptor = duplicate_private_root_fd(root_fd)
+    try:
+        return _publish_private_package_on_open_root(
+            descriptor,
+            Path(final_name),
+            final_name,
+            files,
+            kind=kind,
+            fail_stage=fail_stage,
+        )
+    finally:
+        os.close(descriptor)
+
+
+def publish_private_package(
+    root: Path,
+    final_name: str,
+    files: Mapping[str, bytes],
+    *,
+    kind: str,
+    fail_stage: str | None = None,
+) -> PublicationResult:
+    """Path-based compatibility wrapper for standalone capture/ledger tools."""
+
+    root_fd = validate_private_root(root)
+    try:
+        return _publish_private_package_on_open_root(
+            root_fd,
+            root / final_name,
+            final_name,
+            files,
+            kind=kind,
+            fail_stage=fail_stage,
+        )
     finally:
         os.close(root_fd)
 
@@ -957,6 +1061,7 @@ def build_capture_payloads(
     raw_toc: bytes,
     key: bytes,
     binding: Mapping[str, Any],
+    execution_python_identity: Mapping[str, Any],
     pg_restore_identity: Mapping[str, Any],
     procedure_identity: Mapping[str, Any],
     expected_entry_count: int,
@@ -996,14 +1101,18 @@ def build_capture_payloads(
         "capture_status": "CAPTURE_COMPLETE",
         "data_reference_count": data_count,
         "entry_count": len(entries),
+        "execution_python_identity": dict(execution_python_identity),
         "format_version": CAPTURE_FORMAT_VERSION,
         "opaque_index_sha256": sha256_bytes(index_bytes),
         "opaque_key_sha256": key_sha,
+        "overall_status": "REVIEW_REQUIRED",
         "pg_restore_identity": dict(pg_restore_identity),
         "procedure_identity": procedure,
         "raw_toc_sha256": raw_sha,
         "raw_toc_size_bytes": len(raw_toc),
         "review_gate": "ANNOTATION_REQUIRED",
+        "restore_command_gate": "BLOCKED",
+        "restore_planning_gate": "BLOCKED",
     }
     capture_bytes = canonical_json_bytes(capture)
     files = {
@@ -1024,20 +1133,27 @@ def validate_capture_schema(value: Any) -> dict[str, Any]:
             "capture_status",
             "data_reference_count",
             "entry_count",
+            "execution_python_identity",
             "format_version",
             "opaque_index_sha256",
             "opaque_key_sha256",
+            "overall_status",
             "pg_restore_identity",
             "procedure_identity",
             "raw_toc_sha256",
             "raw_toc_size_bytes",
             "review_gate",
+            "restore_command_gate",
+            "restore_planning_gate",
         },
     )
     if (
         capture["artifact_kind"] != "lovable_toc_private_capture"
         or capture["capture_status"] != "CAPTURE_COMPLETE"
+        or capture["overall_status"] != "REVIEW_REQUIRED"
         or capture["review_gate"] != "ANNOTATION_REQUIRED"
+        or capture["restore_command_gate"] != "BLOCKED"
+        or capture["restore_planning_gate"] != "BLOCKED"
     ):
         raise ContractError("binding_mismatch")
     if require_int(
@@ -1072,6 +1188,48 @@ def validate_capture_schema(value: Any) -> dict[str, Any]:
     validate_sha(binding["inspection_procedure_sha256"])
     validate_sha(binding["outer_archive_sha256"])
     validate_sha(binding["procedure_identity_sha256"])
+    execution_python_identity = require_exact_keys(
+        capture["execution_python_identity"],
+        {
+            "approved_identity",
+            "device",
+            "executable_path",
+            "gid",
+            "inode",
+            "mode",
+            "reported_version",
+            "sha256",
+            "size_bytes",
+            "uid",
+        },
+    )
+    approved_python_identity = require_string(
+        execution_python_identity["approved_identity"]
+    )
+    if not approved_python_identity.startswith("sha256:"):
+        raise ContractError("binding_mismatch")
+    approved_python_sha256 = validate_sha(
+        approved_python_identity.removeprefix("sha256:")
+    )
+    if validate_sha(execution_python_identity["sha256"]) != approved_python_sha256:
+        raise ContractError("binding_mismatch")
+    for key in ("device", "gid", "inode", "size_bytes", "uid"):
+        require_int(execution_python_identity[key])
+    require_string(
+        execution_python_identity["mode"], pattern=re.compile(r"^[0-7]{4}$")
+    )
+    require_string(
+        execution_python_identity["reported_version"],
+        pattern=EXECUTION_PYTHON_VERSION_RE,
+    )
+    python_path = execution_python_identity["executable_path"]
+    if (
+        type(python_path) is not str
+        or not python_path.startswith("/")
+        or "\x00" in python_path
+    ):
+        raise ContractError("binding_mismatch")
+
     identity = require_exact_keys(
         capture["pg_restore_identity"],
         {
@@ -1115,7 +1273,11 @@ def validate_capture_schema(value: Any) -> dict[str, Any]:
     if procedure["inspection_checkout_sha"] != binding["inspection_checkout_sha"]:
         raise ContractError("binding_mismatch")
     if (
-        procedure["inspection_procedure_sha256"]
+        procedure["execution_python_approved_sha256"]
+        != approved_python_sha256
+        or procedure["execution_python_identity_sha256"]
+        != sha256_bytes(canonical_json_bytes(execution_python_identity))
+        or procedure["inspection_procedure_sha256"]
         != binding["inspection_procedure_sha256"]
         or procedure["evidence_manifest_sha256"]
         != binding["evidence_manifest_sha256"]
@@ -1504,6 +1666,98 @@ def fixed_diagnostic(*, stage: str, status: str, reason: str, counts: Mapping[st
         record["review_gate"] = "REVIEW_REQUIRED"
         record["restore_planning_gate"] = "BLOCKED"
     return canonical_json_bytes(record)
+
+
+def emit_fixed_diagnostic(stream: object, payload: bytes) -> bool:
+    """Best-effort one bounded diagnostic without changing workflow outcome.
+
+    Capture completion and failure are already decided before this notification
+    boundary.  A closed pipe, closed stream, or short write must therefore not
+    raise, trigger a traceback, change an exit status, or cause a second message
+    on the other channel.  Real file descriptors use unbuffered ``os.write`` so
+    Python has no diagnostic bytes left to flush during interpreter shutdown;
+    the write/flush fallback exists only for descriptor-less in-memory streams.
+
+    The caller deliberately receives only a boolean and must not retry or relay
+    any exception details.  Payload validation keeps this helper from becoming
+    an arbitrary-output path.
+    """
+
+    if (
+        type(payload) is not bytes
+        or not payload
+        or len(payload) > MAX_PUBLIC_DIAGNOSTIC_BYTES
+        or not payload.endswith(b"\n")
+    ):
+        return False
+
+    try:
+        target = getattr(stream, "buffer", stream)
+    except Exception:
+        return False
+
+    try:
+        descriptor = target.fileno()
+    except (
+        AttributeError,
+        OSError,
+        OverflowError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ):
+        descriptor = None
+
+    if descriptor is not None:
+        if type(descriptor) is not int or descriptor < 0:
+            return False
+        offset = 0
+        try:
+            while offset < len(payload):
+                written = os.write(descriptor, payload[offset:])
+                if (
+                    type(written) is not int
+                    or written <= 0
+                    or written > len(payload) - offset
+                ):
+                    return False
+                offset += written
+        except (
+            BrokenPipeError,
+            OSError,
+            OverflowError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ):
+            return False
+        return True
+
+    offset = 0
+    try:
+        while offset < len(payload):
+            written = target.write(payload[offset:])
+            if (
+                type(written) is not int
+                or written <= 0
+                or written > len(payload) - offset
+            ):
+                return False
+            offset += written
+        flush = getattr(target, "flush", None)
+        if flush is not None:
+            flush()
+    except (
+        AttributeError,
+        BrokenPipeError,
+        OSError,
+        OverflowError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ):
+        return False
+    return True
 
 
 def fresh_opaque_key() -> bytes:

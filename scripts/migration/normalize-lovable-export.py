@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Normalize a local Lovable export envelope to one verified PGDMP file.
 
-This utility has no restore or database mode.  It accepts either a direct
+This internal utility has no restore or database mode. It accepts either a direct
 PostgreSQL custom-format archive or a deliberately small subset of ZIP: one
 regular member, no extras/comments/data descriptor/ZIP64, and STORE or raw
 DEFLATE compression only.  ZIP bytes are parsed independently and the member
@@ -15,16 +15,47 @@ exclusive, no-overwrite publication; partial files are removed on failure.
 
 from __future__ import annotations
 
+import os
+import sys
+
+
+_STARTUP_FAILURE_DIAGNOSTIC = (
+    b'{"diagnostic_version":1,"reason":"input_invalid",'
+    b'"stage":"normalizer","status":"failed"}\n'
+)
+
+
+def _runtime_isolation_enabled() -> bool:
+    flags = sys.flags
+    return (
+        getattr(flags, "isolated", 0) == 1
+        and getattr(flags, "ignore_environment", 0) == 1
+        and getattr(flags, "no_user_site", 0) == 1
+        and getattr(flags, "no_site", 0) == 1
+        and getattr(flags, "dont_write_bytecode", 0) == 1
+        and sys.dont_write_bytecode is True
+    )
+
+
+def _fail_unisolated_startup() -> None:
+    try:
+        os.write(2, _STARTUP_FAILURE_DIAGNOSTIC)
+    except BaseException:
+        pass
+    raise SystemExit(1)
+
+
+if not _runtime_isolation_enabled():
+    _fail_unisolated_startup()
+
 import argparse
 import errno
 import hashlib
 import json
-import os
 import re
 import shutil
 import stat
 import struct
-import sys
 import zlib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -756,6 +787,9 @@ def normalize(
     insufficient-headroom condition without consuming real disk space.
     """
 
+    if not _runtime_isolation_enabled():
+        raise NormalizationError("normalization failed closed")
+
     limits.validate()
     if not SHA256_RE.fullmatch(expected_outer_sha256):
         raise NormalizationError(
@@ -949,6 +983,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if not _runtime_isolation_enabled():
+        _fail_unisolated_startup()
     args = parse_args(argv)
     try:
         normalize(

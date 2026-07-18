@@ -63,19 +63,46 @@ def pg_identity() -> dict[str, object]:
     }
 
 
+def execution_python_identity() -> dict[str, object]:
+    return {
+        "approved_identity": f"sha256:{SHA_B}",
+        "device": 3,
+        "executable_path": "/synthetic/python3",
+        "gid": 1,
+        "inode": 4,
+        "mode": "0755",
+        "reported_version": "cpython:3.12.9",
+        "sha256": SHA_B,
+        "size_bytes": 456,
+        "uid": 1,
+    }
+
+
 def procedure_identity() -> dict[str, str]:
     return {
         "execution_checkout_sha": GIT_A,
+        "execution_python_approved_sha256": SHA_B,
+        "execution_python_identity_sha256": contract.sha256_bytes(
+            contract.canonical_json_bytes(execution_python_identity())
+        ),
         "README_md_blob_sha": GIT_B,
         "README_md_sha256": SHA_A,
+        "run_lovable_toc_capture_sh_blob_sha": GIT_B,
+        "run_lovable_toc_capture_sh_sha256": SHA_A,
+        "capture_lovable_toc_envelope_py_blob_sha": GIT_B,
+        "capture_lovable_toc_envelope_py_sha256": SHA_A,
         "capture_lovable_toc_py_blob_sha": GIT_B,
         "capture_lovable_toc_py_sha256": SHA_A,
         "bounded_pg_restore_py_blob_sha": GIT_B,
         "bounded_pg_restore_py_sha256": SHA_A,
+        "inspect_lovable_export_py_blob_sha": GIT_B,
+        "inspect_lovable_export_py_sha256": SHA_A,
         "lovable_toc_contract_py_blob_sha": GIT_B,
         "lovable_toc_contract_py_sha256": SHA_A,
         "lovable_dump_report_py_blob_sha": GIT_B,
         "lovable_dump_report_py_sha256": SHA_A,
+        "normalize_lovable_export_py_blob_sha": GIT_B,
+        "normalize_lovable_export_py_sha256": SHA_A,
         "evidence_manifest_sha256": SHA_A,
         "inspection_checkout_sha": GIT_B,
         "inspection_procedure_sha256": SHA_C,
@@ -92,6 +119,7 @@ def capture_for(classes: list[str]):
         raw_toc=raw,
         key=b"k" * 32,
         binding=binding,
+        execution_python_identity=execution_python_identity(),
         pg_restore_identity=pg_identity(),
         procedure_identity=procedure_identity(),
         expected_entry_count=len(classes),
@@ -242,6 +270,7 @@ class RawTocContractTest(unittest.TestCase):
                 raw_toc=raw_toc(["TABLE", "TABLE DATA"]),
                 key=b"x" * 32,
                 binding=binding,
+                execution_python_identity=execution_python_identity(),
                 pg_restore_identity=pg_identity(),
                 procedure_identity=procedure_identity(),
                 expected_entry_count=3,
@@ -258,6 +287,25 @@ class RawTocContractTest(unittest.TestCase):
         changed["procedure_identity"]["README_md_sha256"] = "f" * 64
         with self.assertRaisesRegex(contract.ContractError, "binding_mismatch"):
             contract.validate_capture_schema(changed)
+
+    def test_capture_persists_review_required_and_both_restore_blocks(self):
+        _, _, _, capture = capture_for(["TABLE"])
+        self.assertEqual(capture["overall_status"], "REVIEW_REQUIRED")
+        self.assertEqual(capture["review_gate"], "ANNOTATION_REQUIRED")
+        self.assertEqual(capture["restore_planning_gate"], "BLOCKED")
+        self.assertEqual(capture["restore_command_gate"], "BLOCKED")
+        for field in (
+            "overall_status",
+            "review_gate",
+            "restore_planning_gate",
+            "restore_command_gate",
+        ):
+            changed = json.loads(contract.canonical_json_bytes(capture))
+            changed[field] = "READY"
+            with self.subTest(field=field), self.assertRaisesRegex(
+                contract.ContractError, "binding_mismatch"
+            ):
+                contract.validate_capture_schema(changed)
 
 
 class StrictJsonTest(unittest.TestCase):
@@ -723,6 +771,39 @@ class PrivateFileAndPublicationTest(unittest.TestCase):
                 )
             self.assertFalse((root / "capture-two").exists())
             self.assertFalse(any(path.name.startswith(".pending-") for path in root.iterdir()))
+
+    def test_descriptor_relative_publication_preserves_caller_fd_and_ignores_path_replacement(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary).resolve()
+            root = parent / "private-root"
+            root.mkdir(mode=0o700)
+            root_fd = os.open(
+                root,
+                os.O_RDONLY
+                | os.O_DIRECTORY
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_CLOEXEC", 0),
+            )
+            moved = parent / "held-root"
+            root.rename(moved)
+            replacement = parent / "private-root"
+            replacement.mkdir(mode=0o700)
+            files = {
+                "raw-pg-restore-list.toc": b"raw",
+                "opaque-id.key": b"k" * 32,
+                "opaque-index.json": b"{}\n",
+                "capture.json": b"{}\n",
+            }
+            try:
+                result = contract.publish_private_package_at(
+                    root_fd, "capture-held", files, kind="capture"
+                )
+                self.assertEqual(result.path, Path("capture-held"))
+                os.fstat(root_fd)  # the API must not consume the caller's descriptor
+            finally:
+                os.close(root_fd)
+            self.assertTrue((moved / "capture-held" / "EVIDENCE_COMPLETE").is_file())
+            self.assertEqual(list(replacement.iterdir()), [])
 
     def test_preexisting_pending_name_is_never_removed_as_failed_run_output(self):
         with tempfile.TemporaryDirectory() as temporary:

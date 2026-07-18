@@ -16,8 +16,8 @@ evidence only:
 - `support-follow-up.md` — facts that still require Lovable confirmation or an
   empirical rehearsal.
 - `../../scripts/migration/` — strict local ZIP-envelope normalization ahead of
-  the execution-bound raw-`PGDMP` inspector, inventory, verification templates,
-  and strict manifest comparison.
+  the execution-bound raw-`PGDMP` inspector, reviewed high-level private TOC
+  capture, inventory, verification templates, and strict manifest comparison.
 
 **Migration readiness remains RED.** PR #16 is the current merged aggregate
 inspection contract at main
@@ -25,7 +25,10 @@ inspection contract at main
 history-preserving main commit
 `30d5a46c30a851d89957fcfba0cc0a5a53df24d2`; its repository-only cron-receipt
 work did not deploy or change any runtime and does not change migration
-readiness.
+readiness. PR #20 then merged through history-preserving main commit
+`9ae5f98e44739c6a7a645e41527e6fa016d6fc63`; its private classification and
+synthetic PostgreSQL compatibility contracts likewise did not authorize or
+perform a restore.
 
 An authorized rehearsal export remains offline in an approved evidence store.
 After the earlier fail-closed parser result, a separately authorized inspection
@@ -88,9 +91,20 @@ atomic no-replace report publication, so cleanup failure cannot leave a normal
 report behind.
 
 The aggregate report intentionally does not disclose enough object identity to
-resolve the 1,135 recognized-but-unresolved entries. A future, separately
-authorized offline layer may use `capture-lovable-toc.py` to retain raw list
-output only in the approved private evidence store, and
+resolve the 1,135 recognized-but-unresolved entries. The reviewed entrypoint
+for any future, separately authorized offline raw-TOC capture is
+`capture-lovable-toc-envelope.py`. It validates the completed aggregate
+evidence package and every approved identity, uses the existing strict ZIP
+normalizer to create one temporary verified inner archive, and passes it only
+through a held private-directory descriptor to the existing low-level
+`capture-lovable-toc.py`. It publishes one
+private no-replace opaque key/index capture package, removes and fsyncs all
+derived inner and staging bytes, and emits only fixed diagnostics. Success
+still stops at `REVIEW_REQUIRED` / `ANNOTATION_REQUIRED`, with both restore
+gates `BLOCKED`. The low-level capture is not an operator procedure, and this
+step never creates or validates an annotation ledger.
+
+A later, separately authorized review may use
 `validate-lovable-toc-ledger.py` to validate a private opaque disposition
 ledger. Per-entry IDs are keyed HMACs over exact raw entry bytes and framing,
 not automatically parsed names or unsalted hashes. The raw capture, private

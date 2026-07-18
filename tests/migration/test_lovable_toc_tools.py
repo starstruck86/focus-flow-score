@@ -50,14 +50,22 @@ def fake_repository_identity():
         "execution_checkout_sha": GIT_A,
         "README_md_blob_sha": GIT_B,
         "README_md_sha256": SHA_A,
+        "run_lovable_toc_capture_sh_blob_sha": GIT_B,
+        "run_lovable_toc_capture_sh_sha256": SHA_A,
+        "capture_lovable_toc_envelope_py_blob_sha": GIT_B,
+        "capture_lovable_toc_envelope_py_sha256": SHA_A,
         "capture_lovable_toc_py_blob_sha": GIT_B,
         "capture_lovable_toc_py_sha256": SHA_A,
         "bounded_pg_restore_py_blob_sha": GIT_B,
         "bounded_pg_restore_py_sha256": SHA_A,
+        "inspect_lovable_export_py_blob_sha": GIT_B,
+        "inspect_lovable_export_py_sha256": SHA_A,
         "lovable_toc_contract_py_blob_sha": GIT_B,
         "lovable_toc_contract_py_sha256": SHA_A,
         "lovable_dump_report_py_blob_sha": GIT_B,
         "lovable_dump_report_py_sha256": SHA_A,
+        "normalize_lovable_export_py_blob_sha": GIT_B,
+        "normalize_lovable_export_py_sha256": SHA_A,
     }
 
 
@@ -115,6 +123,16 @@ def capture_environment(root: Path, archive: Path, pg_restore: Path):
         "TOC_REVIEW_INSPECTION_CHECKOUT_SHA": GIT_B,
         "TOC_REVIEW_INSPECTION_PROCEDURE_SHA256": SHA_C,
         "TOC_REVIEW_APPROVED_EXECUTION_CHECKOUT_SHA": GIT_A,
+        "TOC_REVIEW_EXECUTION_PYTHON": str(
+            Path(sys.executable).resolve(strict=True)
+        ),
+        "TOC_REVIEW_APPROVED_EXECUTION_PYTHON_SHA256": hashlib.sha256(
+            Path(sys.executable).resolve(strict=True).read_bytes()
+        ).hexdigest(),
+        "TOC_REVIEW_APPROVED_EXECUTION_PYTHON_VERSION": (
+            f"{sys.implementation.name}:{sys.version_info.major}."
+            f"{sys.version_info.minor}.{sys.version_info.micro}"
+        ),
         "TOC_REVIEW_PG_RESTORE_BIN": str(pg_restore),
         "TOC_REVIEW_APPROVED_PG_RESTORE_SHA256": hashlib.sha256(pg_restore.read_bytes()).hexdigest(),
         "TOC_REVIEW_EXPECTED_ENTRY_COUNT": "2",
@@ -296,6 +314,149 @@ class TocToolsIntegrationTest(unittest.TestCase):
                 self.fail("private raw TOC sentinel missing")
             for path in package.iterdir():
                 self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o400)
+            capture = json.loads((package / "capture.json").read_bytes())
+            self.assertEqual(capture["overall_status"], "REVIEW_REQUIRED")
+            self.assertEqual(capture["review_gate"], "ANNOTATION_REQUIRED")
+            self.assertEqual(capture["restore_planning_gate"], "BLOCKED")
+            self.assertEqual(capture["restore_command_gate"], "BLOCKED")
+            execution_python_identity = capture["execution_python_identity"]
+            self.assertEqual(
+                execution_python_identity["sha256"],
+                environment["TOC_REVIEW_APPROVED_EXECUTION_PYTHON_SHA256"],
+            )
+            self.assertEqual(
+                execution_python_identity["reported_version"],
+                environment["TOC_REVIEW_APPROVED_EXECUTION_PYTHON_VERSION"],
+            )
+            identity_digest = contract.sha256_bytes(
+                contract.canonical_json_bytes(execution_python_identity)
+            )
+            self.assertEqual(
+                capture["procedure_identity"]["execution_python_identity_sha256"],
+                identity_digest,
+            )
+
+    def test_low_level_capture_rejects_execution_python_identity_before_tool_use(self):
+        cases = ("wrong_sha", "wrong_version", "wrong_owner", "permissive_mode")
+        for label in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary:
+                root, archive, pg_restore, child_ledger = self.make_fixture(temporary)
+                environment = capture_environment(root, archive, pg_restore)
+                if label == "wrong_sha":
+                    environment["TOC_REVIEW_APPROVED_EXECUTION_PYTHON_SHA256"] = (
+                        "0" * 64
+                    )
+                elif label == "wrong_version":
+                    environment["TOC_REVIEW_APPROVED_EXECUTION_PYTHON_VERSION"] = (
+                        "cpython:1.2.3"
+                    )
+
+                context = contextlib.nullcontext()
+                if label in {"wrong_owner", "permissive_mode"}:
+                    approved = capture_tool.stable_regular_digest(
+                        Path(sys.executable).resolve(strict=True),
+                        max_bytes=capture_tool.MAX_TOOL_BYTES,
+                        require_executable=True,
+                    )
+                    values = dict(approved.__dict__)
+                    if label == "wrong_owner":
+                        values["owner_uid"] = max(1, os.geteuid() + 1)
+                    else:
+                        values["mode"] = 0o775
+                    context = mock.patch.object(
+                        capture_tool,
+                        "stable_regular_digest",
+                        return_value=type(approved)(**values),
+                    )
+                with context, self.assertRaisesRegex(
+                    contract.ContractError, "binding_mismatch"
+                ):
+                    capture_tool.execute(environment)
+                self.assertFalse(child_ledger.exists())
+                self.assertEqual(list(root.iterdir()), [])
+
+    def test_capture_internal_mode_is_fixed_name_and_descriptor_bound(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary).resolve()
+            stage = parent / "stage"
+            stage.mkdir(mode=0o700)
+            archive = stage / "verified-inner.pgdmp"
+            archive.write_bytes(b"PGDMP\x01synthetic")
+            archive.chmod(0o400)
+            pg_restore = parent / "pg_restore"
+            child_ledger = parent / "child-ledger"
+            write_fake_pg_restore(pg_restore, child_ledger)
+            environment = capture_environment(stage, archive, pg_restore)
+            environment.update(
+                {
+                    "TOC_REVIEW_INNER_ARCHIVE": "verified-inner.pgdmp",
+                    "TOC_REVIEW_OUTPUT_ROOT": ".",
+                }
+            )
+            descriptor = os.open(
+                stage,
+                os.O_RDONLY
+                | os.O_DIRECTORY
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_CLOEXEC", 0),
+            )
+            environment["TOC_REVIEW_DESCRIPTOR_BOUND_WORKDIR_FD"] = str(descriptor)
+            previous = Path.cwd()
+            try:
+                os.chdir(stage)
+                with mock.patch.object(
+                    capture_tool,
+                    "_repository_binding",
+                    return_value=fake_repository_identity(),
+                ):
+                    counts, _ = capture_tool.execute(environment)
+            finally:
+                os.chdir(previous)
+                os.close(descriptor)
+            self.assertEqual(counts, {"data_reference_count": 1, "entry_count": 2})
+            package = next(
+                path for path in stage.iterdir() if path.name.startswith("toc-capture-")
+            )
+            self.assertTrue((package / "EVIDENCE_COMPLETE").is_file())
+            self.assertEqual(len(child_ledger.read_text().splitlines()), 2)
+
+    def test_capture_internal_mode_rejects_nonfixed_paths_before_tool_use(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary).resolve()
+            stage = parent / "stage"
+            stage.mkdir(mode=0o700)
+            archive = stage / "verified-inner.pgdmp"
+            archive.write_bytes(b"PGDMP\x01synthetic")
+            archive.chmod(0o400)
+            pg_restore = parent / "pg_restore"
+            child_ledger = parent / "child-ledger"
+            write_fake_pg_restore(pg_restore, child_ledger)
+            descriptor = os.open(
+                stage,
+                os.O_RDONLY
+                | os.O_DIRECTORY
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_CLOEXEC", 0),
+            )
+            environment = capture_environment(stage, archive, pg_restore)
+            environment["TOC_REVIEW_DESCRIPTOR_BOUND_WORKDIR_FD"] = str(descriptor)
+            environment["TOC_REVIEW_OUTPUT_ROOT"] = str(stage)
+            previous = Path.cwd()
+            try:
+                os.chdir(stage)
+                with mock.patch.object(
+                    capture_tool,
+                    "_repository_binding",
+                    return_value=fake_repository_identity(),
+                ), self.assertRaisesRegex(contract.ContractError, "input_invalid"):
+                    capture_tool.execute(environment)
+            finally:
+                os.chdir(previous)
+                os.close(descriptor)
+            self.assertFalse(child_ledger.exists())
+            self.assertFalse(
+                any(path.name.startswith("toc-capture-") for path in stage.iterdir())
+            )
 
     def test_poisoned_child_failure_leaks_nothing_and_publishes_nothing(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -385,6 +546,19 @@ class TocToolsIntegrationTest(unittest.TestCase):
                 "TOC_REVIEW_APPROVED_EXECUTION_CHECKOUT_SHA": capture["binding"]["execution_checkout_sha"],
                 "TOC_REVIEW_APPROVED_PG_RESTORE_SHA256": capture["pg_restore_identity"]["sha256"],
             }
+            root_stop = root / ".indeterminate-toc-envelope-capture-synthetic"
+            root_stop.write_bytes(b"synthetic stop marker\n")
+            root_stop.chmod(0o400)
+            with mock.patch.object(
+                ledger_tool,
+                "_verify_checkout",
+                return_value=fake_ledger_procedure_identity(),
+            ), self.assertRaisesRegex(contract.ContractError, "input_invalid"):
+                ledger_tool.execute(environment)
+            self.assertFalse(
+                any(path.name.startswith("toc-ledger-") for path in root.iterdir())
+            )
+            root_stop.unlink()
             with mock.patch.object(
                 ledger_tool,
                 "_verify_checkout",
@@ -494,8 +668,10 @@ class TocToolsIntegrationTest(unittest.TestCase):
             environment = capture_environment(root, archive, pg_restore)
             original_run = capture_tool._run_bounded
 
-            def mutate_after_list(wrapper, executable, arguments):
-                output = original_run(wrapper, executable, arguments)
+            def mutate_after_list(wrapper, executable, arguments, execution_python):
+                output = original_run(
+                    wrapper, executable, arguments, execution_python
+                )
                 if arguments[0] == "--list":
                     archive.chmod(0o600)
                     archive.write_bytes(b"PGDMP\x02synthetic")

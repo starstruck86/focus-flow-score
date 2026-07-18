@@ -36,6 +36,7 @@ jobs:
       - run: npm test
       - name: Verify migration rehearsal tooling
         run: |
+          sh -n scripts/migration/run-lovable-toc-capture.sh
           bash -n \
             scripts/migration/inspect-lovable-dump.sh \
             scripts/migration/tests/catalog-verification.test.sh \
@@ -56,6 +57,7 @@ jobs:
               Path("scripts/migration/catalog-jsonl-to-manifest.py"),
               Path("scripts/migration/inventory-edge-functions.py"),
               Path("scripts/migration/bounded-pg-restore.py"),
+              Path("scripts/migration/capture-lovable-toc-envelope.py"),
               Path("scripts/migration/capture-lovable-toc.py"),
               Path("scripts/migration/inspect-lovable-export.py"),
               Path("scripts/migration/normalize-lovable-export.py"),
@@ -66,7 +68,9 @@ jobs:
           ):
               compile(path.read_text(encoding="utf-8"), str(path), "exec")
           PY
-          python3 -m unittest discover -s tests/migration -p 'test_*.py' -v
+          python3 -I -S -B -m unittest discover -s tests/migration -p 'test_*.py' -v
+          python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_capture_driver.py' -v
           bash scripts/migration/tests/inspect-lovable-dump.test.sh
           bash scripts/migration/tests/postgres-target-safety.test.sh
           bash scripts/migration/tests/catalog-verification.test.sh
@@ -123,19 +127,42 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
       - name: Exercise macOS inspection diagnostics and durable publication
+        env:
+          PATH: /usr/bin:/bin
         run: |
+          sh -n scripts/migration/run-lovable-toc-capture.sh
           bash -n \
             scripts/migration/inspect-lovable-dump.sh \
             scripts/migration/tests/inspect-lovable-dump.test.sh
-          python3 - <<'PY'
+          /usr/bin/python3 -I -S -B - <<'PY'
+          import os
+          import stat
+          import sys
           from pathlib import Path
+
+          executable = Path(sys.executable).resolve(strict=True)
+          metadata = executable.lstat()
+          mode = stat.S_IMODE(metadata.st_mode)
+          if not (
+              executable.is_absolute()
+              and stat.S_ISREG(metadata.st_mode)
+              and metadata.st_nlink == 1
+              and metadata.st_uid in {0, os.geteuid()}
+              and mode & 0o7022 == 0
+              and mode & 0o100 != 0
+              and sys.flags.isolated == 1
+              and sys.flags.ignore_environment == 1
+              and sys.flags.no_user_site == 1
+              and sys.flags.no_site == 1
+              and sys.flags.dont_write_bytecode == 1
+              and sys.dont_write_bytecode is True
+          ):
+              raise SystemExit(1)
 
           for path in (
               Path("scripts/migration/bounded-pg-restore.py"),
+              Path("scripts/migration/capture-lovable-toc-envelope.py"),
               Path("scripts/migration/capture-lovable-toc.py"),
               Path("scripts/migration/inspect-lovable-export.py"),
               Path("scripts/migration/normalize-lovable-export.py"),
@@ -146,18 +173,26 @@ jobs:
               compile(path.read_text(encoding="utf-8"), str(path), "exec")
           PY
           bash scripts/migration/tests/inspect-lovable-dump.test.sh
-          python3 -m unittest discover \
+          /usr/bin/python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_dump_report.py' -v
-          python3 -m unittest discover \
+          /usr/bin/python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_zip_normalizer.py' -v
-          python3 -m unittest discover \
+          /usr/bin/python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_bounded_pg_restore.py' -v
-          python3 -m unittest discover \
+          /usr/bin/python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_export_evidence_workflow.py' -v
-          python3 -m unittest discover \
+          /usr/bin/python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_toc_contract.py' -v
-          python3 -m unittest discover \
+          /usr/bin/python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_toc_tools.py' -v
+          /usr/bin/python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_capture_driver.py' -v
+          /usr/bin/python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_capture_startup.py' -v
+          /usr/bin/python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_preimport_guard.py' -v
+          /usr/bin/python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_diagnostic_writer.py' -v
 
   postgres-cross-major-compatibility:
     name: PostgreSQL 17.6/18.4 synthetic compatibility
