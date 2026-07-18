@@ -228,7 +228,10 @@ The private envelope-capture contract is:
    filename/size/hash/member binding, the inspection identities, the current
    capture-procedure identities, and the approved `pg_restore` path, executable
    SHA-256, and exact bounded version string. A
-   complete package is a prerequisite, not authorization.
+   complete package is a prerequisite, not authorization. The two capture
+   entrypoints disable repository-local Python bytecode writes before importing
+   reviewed modules, and Python children use `-B`, so a clean-checkout binding
+   cannot be invalidated or masked by an untracked `__pycache__` side effect.
 2. Require three distinct, existing, executing-user-owned, non-symlink private
    roots outside the Git worktree: the completed aggregate run, an empty
    staging root, and an empty durable capture-output root. Each directory is

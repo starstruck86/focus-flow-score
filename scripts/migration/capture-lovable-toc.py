@@ -16,6 +16,11 @@ import sys
 from pathlib import Path
 from typing import Mapping
 
+# The clean-checkout identity below must not be invalidated by importing this
+# reviewed repository-local module.  Callers also use ``-B``; this explicit
+# guard protects direct execution and import-based tests.
+sys.dont_write_bytecode = True
+
 SCRIPT = Path(__file__).resolve(strict=True)
 if str(SCRIPT.parent) not in sys.path:
     sys.path.insert(0, str(SCRIPT.parent))
@@ -190,7 +195,7 @@ def _run_bounded(
         UNDERLYING_ENVIRONMENT_VARIABLE: str(pg_restore),
     }
     result = subprocess.run(
-        [sys.executable, str(wrapper), *arguments],
+        [sys.executable, "-B", str(wrapper), *arguments],
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,

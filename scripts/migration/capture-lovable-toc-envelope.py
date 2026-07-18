@@ -29,6 +29,13 @@ from pathlib import Path
 from typing import Any
 
 
+# Repository cleanliness is an execution binding, so importing a reviewed
+# repository-local module must not create an untracked ``__pycache__`` before
+# or between the repeated clean-worktree checks.  Keep the child ``-B`` flags
+# below as defense in depth; this process-level guard also covers modules loaded
+# later through ``importlib``.
+sys.dont_write_bytecode = True
+
 SCRIPT = Path(__file__).resolve(strict=True)
 REPO = SCRIPT.parents[2]
 LIB = SCRIPT.parent / "lib"
@@ -1625,6 +1632,7 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
                 normalizer_result = _run_child(
                     [
                         sys.executable,
+                        "-B",
                         "-I",
                         str(REPO / "scripts/migration/normalize-lovable-export.py"),
                         "--expected-outer-sha256",
@@ -1664,6 +1672,7 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
                 capture_result = _run_child(
                     [
                         sys.executable,
+                        "-B",
                         "-I",
                         str(REPO / "scripts/migration/capture-lovable-toc.py"),
                     ],

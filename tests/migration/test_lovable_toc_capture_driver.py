@@ -665,6 +665,8 @@ class TocCaptureDriverTest(unittest.TestCase):
         result = subprocess.run(
             [
                 sys.executable,
+                "-X",
+                "pycache_prefix=",
                 "-I",
                 str(checkout / "scripts/migration/capture-lovable-toc-envelope.py"),
             ],
@@ -711,6 +713,8 @@ class TocCaptureDriverTest(unittest.TestCase):
         self.assertEqual(capture["review_gate"], "ANNOTATION_REQUIRED")
         self.assertEqual(capture["restore_planning_gate"], "BLOCKED")
         self.assertEqual(capture["restore_command_gate"], "BLOCKED")
+        self.assertEqual(list(checkout.rglob("__pycache__")), [])
+        self.assertEqual(list(checkout.rglob("*.pyc")), [])
         self.assert_no_disposable_bytes()
 
     def test_missing_binding_fails_before_children_or_publication(self):

@@ -500,6 +500,10 @@ filename and UI member name, outer size/hash, inner hash, aggregate manifest
 hash, inspection checkout/procedure identities, current approved checkout,
 exact `pg_restore` path, approved executable hash, externally approved exact
 bounded version output, and expected total/data entry counts.
+Both capture entrypoints disable repository-local bytecode writes before
+reviewed imports, and their Python children use `-B`; an untracked
+`__pycache__` is therefore neither an accepted checkout mutation nor an
+ignored execution artifact.
 
 Before staging, require all roots to be absolute, real, non-symlink,
 executing-user-owned mode-`0700` directories outside the Git worktree. The
