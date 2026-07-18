@@ -123,6 +123,7 @@ def fake_capture_repository_identity() -> dict[str, str]:
     result = {"execution_checkout_sha": "a" * 40}
     for name in (
         "README_md",
+        "run_lovable_toc_capture_sh",
         "capture_lovable_toc_envelope_py",
         "capture_lovable_toc_py",
         "bounded_pg_restore_py",
@@ -211,6 +212,14 @@ class TocCaptureDriverTest(unittest.TestCase):
             "TOC_REVIEW_INSPECTION_CHECKOUT_SHA": "b" * 40,
             "TOC_REVIEW_INSPECTION_PROCEDURE_SHA256": "c" * 64,
             "TOC_REVIEW_APPROVED_EXECUTION_CHECKOUT_SHA": "a" * 40,
+            "TOC_REVIEW_EXECUTION_PYTHON": str(Path(sys.executable).resolve(strict=True)),
+            "TOC_REVIEW_APPROVED_EXECUTION_PYTHON_SHA256": sha256(
+                Path(sys.executable).resolve(strict=True).read_bytes()
+            ),
+            "TOC_REVIEW_APPROVED_EXECUTION_PYTHON_VERSION": (
+                f"{sys.implementation.name}:{sys.version_info.major}."
+                f"{sys.version_info.minor}.{sys.version_info.micro}"
+            ),
             "TOC_REVIEW_PG_RESTORE_BIN": str(self.tool),
             "TOC_REVIEW_APPROVED_PG_RESTORE_SHA256": sha256(
                 self.tool.read_bytes()
@@ -242,6 +251,7 @@ class TocCaptureDriverTest(unittest.TestCase):
             self.fail("synthetic checkout creation failed")
         reviewed_paths = (
             "scripts/migration/README.md",
+            "scripts/migration/run-lovable-toc-capture.sh",
             "scripts/migration/bounded-pg-restore.py",
             "scripts/migration/capture-lovable-toc-envelope.py",
             "scripts/migration/capture-lovable-toc.py",
@@ -599,6 +609,40 @@ class TocCaptureDriverTest(unittest.TestCase):
         self.assertEqual(capture["review_gate"], "ANNOTATION_REQUIRED")
         self.assertEqual(capture["restore_planning_gate"], "BLOCKED")
         self.assertEqual(capture["restore_command_gate"], "BLOCKED")
+        execution_python_identity = capture["execution_python_identity"]
+        self.assertEqual(
+            execution_python_identity["approved_identity"],
+            "sha256:"
+            + environment["TOC_REVIEW_APPROVED_EXECUTION_PYTHON_SHA256"],
+        )
+        self.assertEqual(
+            execution_python_identity["sha256"],
+            environment["TOC_REVIEW_APPROVED_EXECUTION_PYTHON_SHA256"],
+        )
+        self.assertEqual(
+            execution_python_identity["reported_version"],
+            environment["TOC_REVIEW_APPROVED_EXECUTION_PYTHON_VERSION"],
+        )
+        expected_python_identity_digest = sha256(
+            (
+                json.dumps(
+                    execution_python_identity,
+                    ensure_ascii=True,
+                    allow_nan=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                + "\n"
+            ).encode("ascii")
+        )
+        self.assertEqual(
+            capture["procedure_identity"]["execution_python_approved_sha256"],
+            environment["TOC_REVIEW_APPROVED_EXECUTION_PYTHON_SHA256"],
+        )
+        self.assertEqual(
+            capture["procedure_identity"]["execution_python_identity_sha256"],
+            expected_python_identity_digest,
+        )
         retained = b"".join(path.read_bytes() for path in package.iterdir())
         for forbidden in (
             self.row_sentinel,
@@ -617,6 +661,70 @@ class TocCaptureDriverTest(unittest.TestCase):
         self.assertEqual(len(invocations), 2)
         self.assert_no_disposable_bytes()
         self.assert_canonical_unchanged()
+
+    def test_execution_python_sha_version_owner_and_mode_fail_before_children(self):
+        expected_reason = "binding_mismatch"
+        for label, mutate in (
+            (
+                "wrong_sha",
+                lambda environment: environment.__setitem__(
+                    "TOC_REVIEW_APPROVED_EXECUTION_PYTHON_SHA256", "0" * 64
+                ),
+            ),
+            (
+                "wrong_version",
+                lambda environment: environment.__setitem__(
+                    "TOC_REVIEW_APPROVED_EXECUTION_PYTHON_VERSION", "cpython:1.2.3"
+                ),
+            ),
+        ):
+            with self.subTest(label=label):
+                environment = self.environment()
+                mutate(environment)
+                status, stdout, stderr = self.diagnostic_bytes(environment)
+                self.assertEqual(status, 1)
+                self.assertEqual(stdout, b"")
+                self.assertEqual(
+                    self.assert_fixed_failure(stderr)["reason"], expected_reason
+                )
+                self.assertFalse(self.child_ledger.exists())
+                self.assertEqual(list(self.output_root.iterdir()), [])
+                self.assert_no_disposable_bytes()
+
+        approved = DRIVER.stable_regular_digest(
+            Path(sys.executable).resolve(strict=True),
+            max_bytes=DRIVER.MAX_TOOL_BYTES,
+            require_executable=True,
+        )
+        unsafe_identities = (
+            (
+                "wrong_owner",
+                type(approved)(
+                    **{
+                        **approved.__dict__,
+                        "owner_uid": max(1, os.geteuid() + 1),
+                    }
+                ),
+            ),
+            (
+                "permissive_mode",
+                type(approved)(**{**approved.__dict__, "mode": 0o775}),
+            ),
+        )
+        for label, unsafe_identity in unsafe_identities:
+            with self.subTest(label=label):
+                with mock.patch.object(
+                    DRIVER, "stable_regular_digest", return_value=unsafe_identity
+                ):
+                    status, stdout, stderr = self.diagnostic_bytes(self.environment())
+                self.assertEqual(status, 1)
+                self.assertEqual(stdout, b"")
+                self.assertEqual(
+                    self.assert_fixed_failure(stderr)["reason"], expected_reason
+                )
+                self.assertFalse(self.child_ledger.exists())
+                self.assertEqual(list(self.output_root.iterdir()), [])
+                self.assert_no_disposable_bytes()
 
     def test_checked_in_driver_subprocess_composes_real_inspection_normalizer_and_capture(self):
         checkout, canonical, approved_checkout, provenance = (
@@ -653,6 +761,16 @@ class TocCaptureDriverTest(unittest.TestCase):
                 provenance["procedure_workflow_sha256"]
             ),
             "TOC_REVIEW_APPROVED_EXECUTION_CHECKOUT_SHA": approved_checkout,
+            "TOC_REVIEW_EXECUTION_PYTHON": str(
+                Path(sys.executable).resolve(strict=True)
+            ),
+            "TOC_REVIEW_APPROVED_EXECUTION_PYTHON_SHA256": sha256(
+                Path(sys.executable).resolve(strict=True).read_bytes()
+            ),
+            "TOC_REVIEW_APPROVED_EXECUTION_PYTHON_VERSION": (
+                f"{sys.implementation.name}:{sys.version_info.major}."
+                f"{sys.version_info.minor}.{sys.version_info.micro}"
+            ),
             "TOC_REVIEW_PG_RESTORE_BIN": str(self.tool),
             "TOC_REVIEW_APPROVED_PG_RESTORE_SHA256": sha256(
                 self.tool.read_bytes()
@@ -663,13 +781,7 @@ class TocCaptureDriverTest(unittest.TestCase):
         }
         canonical_before = canonical.read_bytes()
         result = subprocess.run(
-            [
-                sys.executable,
-                "-X",
-                "pycache_prefix=",
-                "-I",
-                str(checkout / "scripts/migration/capture-lovable-toc-envelope.py"),
-            ],
+            ["/bin/sh", str(checkout / "scripts/migration/run-lovable-toc-capture.sh")],
             cwd=checkout,
             env=environment,
             check=False,
@@ -971,10 +1083,40 @@ class TocCaptureDriverTest(unittest.TestCase):
         def tool_substitution(capture: dict[str, object]) -> None:
             capture["pg_restore_identity"]["device"] += 1
 
+        def execution_python_substitution(capture: dict[str, object]) -> None:
+            capture["execution_python_identity"]["device"] += 1
+            capture["procedure_identity"]["execution_python_identity_sha256"] = (
+                sha256(
+                    (
+                        json.dumps(
+                            capture["execution_python_identity"],
+                            ensure_ascii=True,
+                            allow_nan=False,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        )
+                        + "\n"
+                    ).encode("ascii")
+                )
+            )
+            capture["binding"]["procedure_identity_sha256"] = sha256(
+                (
+                    json.dumps(
+                        capture["procedure_identity"],
+                        ensure_ascii=True,
+                        allow_nan=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                    + "\n"
+                ).encode("ascii")
+            )
+
         for label, mutate in (
             ("outer", outer_substitution),
             ("checkout-and-procedure", checkout_substitution),
             ("tool-device", tool_substitution),
+            ("execution-python-device-and-procedure", execution_python_substitution),
         ):
             with self.subTest(label=label):
                 real_child = DRIVER._run_child
@@ -1168,7 +1310,7 @@ class TocCaptureDriverTest(unittest.TestCase):
         try:
             with self.assertRaises(DRIVER.ChildOutputLimit):
                 DRIVER._run_child(
-                    [sys.executable, "-I", str(child)],
+                    [sys.executable, "-I", "-S", "-B", str(child)],
                     environment={},
                     directory_fd=directory_fd,
                     prefix="normalizer",
@@ -1190,7 +1332,7 @@ class TocCaptureDriverTest(unittest.TestCase):
         try:
             with self.assertRaises(TimeoutError):
                 DRIVER._run_child(
-                    [sys.executable, "-I", str(child)],
+                    [sys.executable, "-I", "-S", "-B", str(child)],
                     environment={},
                     directory_fd=directory_fd,
                     prefix="capture",

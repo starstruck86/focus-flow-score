@@ -1,27 +1,226 @@
 #!/usr/bin/env python3
 """Safely normalize one approved Lovable ZIP and publish one private TOC capture.
 
-This is the reviewed high-level entrypoint for the private TOC-capture phase.
-It composes the existing strict ZIP normalizer and low-level TOC capture without
-adding a restore or database mode.  All child output is private and bounded;
-only one fixed diagnostic is emitted.
+This is the internal high-level component reached only through the reviewed
+shell launcher for the private TOC-capture phase. It composes the existing
+strict ZIP normalizer and low-level TOC capture without adding a restore or
+database mode. All child output is private and bounded; only one fixed
+diagnostic is emitted.
 """
 
 from __future__ import annotations
+
+import os
+import stat as _startup_stat
+import subprocess as _startup_subprocess
+import sys
+
+
+_STARTUP_FAILURE_DIAGNOSTIC = (
+    b'{"diagnostic_version":1,"reason":"input_invalid",'
+    b'"stage":"capture_driver","status":"failed"}\n'
+)
+_STARTUP_BINDING_FAILURE_DIAGNOSTIC = (
+    b'{"diagnostic_version":1,"reason":"binding_mismatch",'
+    b'"stage":"capture_driver","status":"failed"}\n'
+)
+_REVIEWED_GIT = "/usr/bin/git"
+_REVIEWED_GIT_CONFIG = (
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "core.untrackedCache=false",
+)
+_REVIEWED_GIT_ENVIRONMENT = {
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_SYSTEM": "/dev/null",
+    "GIT_NO_REPLACE_OBJECTS": "1",
+    "GIT_OPTIONAL_LOCKS": "0",
+    "GIT_TERMINAL_PROMPT": "0",
+    "LANG": "C",
+    "LC_ALL": "C",
+    "PATH": "/usr/bin:/bin",
+}
+_MAX_REVIEWED_GIT_OUTPUT_BYTES = 1024 * 1024
+
+
+class _ReviewedGitFailure(RuntimeError):
+    """A private failure whose data is never included in a diagnostic."""
+
+
+def _runtime_isolation_enabled() -> bool:
+    flags = sys.flags
+    return (
+        getattr(flags, "isolated", 0) == 1
+        and getattr(flags, "ignore_environment", 0) == 1
+        and getattr(flags, "no_user_site", 0) == 1
+        and getattr(flags, "no_site", 0) == 1
+        and getattr(flags, "dont_write_bytecode", 0) == 1
+        and sys.dont_write_bytecode is True
+    )
+
+
+def _fail_unisolated_startup() -> None:
+    try:
+        os.write(2, _STARTUP_FAILURE_DIAGNOSTIC)
+    except BaseException:
+        pass
+    raise SystemExit(1)
+
+
+def _fail_startup_binding() -> None:
+    try:
+        os.write(2, _STARTUP_BINDING_FAILURE_DIAGNOSTIC)
+    except BaseException:
+        pass
+    raise SystemExit(1)
+
+
+def _reviewed_git_bytes(
+    repository: str, arguments: list[str], *, timeout_seconds: int
+) -> bytes:
+    """Run only the reviewed system Git under a closed configuration domain."""
+
+    try:
+        metadata = os.lstat(_REVIEWED_GIT)
+        if (
+            _startup_stat.S_ISLNK(metadata.st_mode)
+            or not _startup_stat.S_ISREG(metadata.st_mode)
+            or not os.access(_REVIEWED_GIT, os.X_OK)
+        ):
+            raise _ReviewedGitFailure
+        result = _startup_subprocess.run(
+            [_REVIEWED_GIT, *_REVIEWED_GIT_CONFIG, *arguments],
+            cwd=repository,
+            check=False,
+            stdin=_startup_subprocess.DEVNULL,
+            stdout=_startup_subprocess.PIPE,
+            stderr=_startup_subprocess.DEVNULL,
+            env=dict(_REVIEWED_GIT_ENVIRONMENT),
+            timeout=timeout_seconds,
+            close_fds=True,
+        )
+    except BaseException as exc:
+        raise _ReviewedGitFailure from exc
+    if (
+        result.returncode != 0
+        or len(result.stdout) > _MAX_REVIEWED_GIT_OUTPUT_BYTES
+    ):
+        raise _ReviewedGitFailure
+    return result.stdout
+
+
+def _is_full_lowercase_git_sha(value: str | None) -> bool:
+    return (
+        type(value) is str
+        and len(value) == 40
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _preimport_repository_guard() -> None:
+    """Prove the checkout before making its directory importable."""
+
+    approved = os.environ.get("TOC_REVIEW_APPROVED_EXECUTION_CHECKOUT_SHA")
+    if not _is_full_lowercase_git_sha(approved):
+        raise _ReviewedGitFailure
+    script = os.path.realpath(__file__)
+    repository = os.path.dirname(os.path.dirname(os.path.dirname(script)))
+    head = _reviewed_git_bytes(
+        repository, ["rev-parse", "HEAD"], timeout_seconds=20
+    ).strip()
+    if head != approved.encode("ascii"):
+        raise _ReviewedGitFailure
+    if _reviewed_git_bytes(
+        repository,
+        ["status", "--porcelain=v1", "--untracked-files=all"],
+        timeout_seconds=20,
+    ):
+        raise _ReviewedGitFailure
+    for untracked_arguments in (
+        [
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "--",
+            "scripts/migration",
+        ],
+        [
+            "ls-files",
+            "--others",
+            "--ignored",
+            "--exclude-standard",
+            "--",
+            "scripts/migration",
+        ],
+    ):
+        if _reviewed_git_bytes(
+            repository, untracked_arguments, timeout_seconds=20
+        ):
+            raise _ReviewedGitFailure
+
+    migration_directory = os.path.dirname(script)
+    shadow_paths = (
+        os.path.join(migration_directory, "lib.py"),
+        os.path.join(migration_directory, "lib", "__init__.py"),
+        os.path.join(migration_directory, "argparse.py"),
+    )
+    for shadow_path in shadow_paths:
+        try:
+            os.lstat(shadow_path)
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise _ReviewedGitFailure from exc
+        raise _ReviewedGitFailure
+
+    relative_paths = (
+        "scripts/migration/capture-lovable-toc-envelope.py",
+        "scripts/migration/lib/lovable_toc_contract.py",
+        "scripts/migration/lib/lovable_dump_report.py",
+    )
+    for relative_path in relative_paths:
+        blob = _reviewed_git_bytes(
+            repository,
+            ["rev-parse", f"HEAD:{relative_path}"],
+            timeout_seconds=20,
+        ).strip()
+        working = _reviewed_git_bytes(
+            repository,
+            ["hash-object", "--", relative_path],
+            timeout_seconds=20,
+        ).strip()
+        if (
+            len(blob) != 40
+            or any(byte not in b"0123456789abcdef" for byte in blob)
+            or working != blob
+        ):
+            raise _ReviewedGitFailure
+
+
+if not _runtime_isolation_enabled():
+    _fail_unisolated_startup()
+
+if __name__ == "__main__":
+    try:
+        _preimport_repository_guard()
+    except BaseException:
+        _fail_startup_binding()
 
 import ctypes
 import errno
 import hashlib
 import importlib.util
 import json
-import os
 import re
 import selectors
 import secrets
 import signal
 import stat
 import subprocess
-import sys
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -29,12 +228,9 @@ from pathlib import Path
 from typing import Any
 
 
-# Repository cleanliness is an execution binding, so importing a reviewed
-# repository-local module must not create an untracked ``__pycache__`` before
-# or between the repeated clean-worktree checks.  Keep the child ``-B`` flags
-# below as defense in depth; this process-level guard also covers modules loaded
-# later through ``importlib``.
-sys.dont_write_bytecode = True
+# The pre-import guard above requires the real ``-B`` runtime flag rather than
+# mutating ``sys.dont_write_bytecode`` after startup. It therefore covers this
+# repository-local import and modules loaded later through ``importlib``.
 
 SCRIPT = Path(__file__).resolve(strict=True)
 REPO = SCRIPT.parents[2]
@@ -53,6 +249,7 @@ from lib.lovable_toc_contract import (  # noqa: E402
     _open_private_directory_at,
     _unlink_tree_at,
     canonical_json_bytes,
+    emit_fixed_diagnostic,
     parse_raw_toc,
     sha256_bytes,
     stable_private_file_at,
@@ -78,6 +275,12 @@ CAPTURE_TIMEOUT_SECONDS = 420
 SAFE_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,254}\Z", re.ASCII)
 SAFE_RUN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,100}\Z", re.ASCII)
 POSITIVE_INTEGER_RE = re.compile(r"[1-9][0-9]*\Z", re.ASCII)
+EXECUTION_PYTHON_VERSION_RE = re.compile(
+    r"cpython:(?:0|[1-9][0-9]{0,2})\."
+    r"(?:0|[1-9][0-9]{0,2})\."
+    r"(?:0|[1-9][0-9]{0,2})\Z",
+    re.ASCII,
+)
 ROOT_LOCK_NAME = ".toc-capture-driver.lock"
 INNER_NAME = "verified-inner.pgdmp"
 NORMALIZATION_NAME = "normalization.json"
@@ -98,6 +301,9 @@ REQUIRED_ENVIRONMENT = frozenset(
         "TOC_REVIEW_INSPECTION_CHECKOUT_SHA",
         "TOC_REVIEW_INSPECTION_PROCEDURE_SHA256",
         "TOC_REVIEW_APPROVED_EXECUTION_CHECKOUT_SHA",
+        "TOC_REVIEW_EXECUTION_PYTHON",
+        "TOC_REVIEW_APPROVED_EXECUTION_PYTHON_SHA256",
+        "TOC_REVIEW_APPROVED_EXECUTION_PYTHON_VERSION",
         "TOC_REVIEW_PG_RESTORE_BIN",
         "TOC_REVIEW_APPROVED_PG_RESTORE_SHA256",
         "TOC_REVIEW_APPROVED_PG_RESTORE_VERSION",
@@ -159,6 +365,9 @@ class Inputs:
     inspection_checkout_sha: str
     inspection_procedure_sha256: str
     approved_checkout_sha: str
+    execution_python: Path
+    approved_execution_python_sha256: str
+    approved_execution_python_version: str
     pg_restore: Path
     approved_pg_restore_sha256: str
     approved_pg_restore_version: str
@@ -288,6 +497,11 @@ def _parse_inputs(environment: Mapping[str, str]) -> Inputs:
     )
     if VERSION_RE.fullmatch(approved_pg_restore_version) is None:
         raise DriverError("input_invalid")
+    approved_execution_python_version = _required(
+        environment, "TOC_REVIEW_APPROVED_EXECUTION_PYTHON_VERSION"
+    )
+    if EXECUTION_PYTHON_VERSION_RE.fullmatch(approved_execution_python_version) is None:
+        raise DriverError("input_invalid")
     return Inputs(
         canonical_outer=Path(_required(environment, "TOC_REVIEW_CANONICAL_OUTER")),
         evidence_run_directory=Path(
@@ -320,6 +534,11 @@ def _parse_inputs(environment: Mapping[str, str]) -> Inputs:
         approved_checkout_sha=validate_git_sha(
             _required(environment, "TOC_REVIEW_APPROVED_EXECUTION_CHECKOUT_SHA")
         ),
+        execution_python=Path(_required(environment, "TOC_REVIEW_EXECUTION_PYTHON")),
+        approved_execution_python_sha256=validate_sha(
+            _required(environment, "TOC_REVIEW_APPROVED_EXECUTION_PYTHON_SHA256")
+        ),
+        approved_execution_python_version=approved_execution_python_version,
         pg_restore=Path(_required(environment, "TOC_REVIEW_PG_RESTORE_BIN")),
         approved_pg_restore_sha256=validate_sha(
             _required(environment, "TOC_REVIEW_APPROVED_PG_RESTORE_SHA256")
@@ -331,18 +550,13 @@ def _parse_inputs(environment: Mapping[str, str]) -> Inputs:
 
 
 def _git(arguments: list[str]) -> str:
-    result = subprocess.run(
-        ["git", *arguments],
-        cwd=REPO,
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True,
-        timeout=20,
-    )
-    if result.returncode != 0:
+    try:
+        output = _reviewed_git_bytes(
+            os.fspath(REPO), arguments, timeout_seconds=20
+        )
+        return output.decode("ascii", errors="strict").strip()
+    except (UnicodeDecodeError, _ReviewedGitFailure) as exc:
         raise DriverError("binding_mismatch")
-    return result.stdout.strip()
 
 
 def _repository_binding(approved_checkout: str) -> dict[str, str]:
@@ -352,6 +566,7 @@ def _repository_binding(approved_checkout: str) -> dict[str, str]:
         raise DriverError("binding_mismatch")
     paths = (
         "scripts/migration/README.md",
+        "scripts/migration/run-lovable-toc-capture.sh",
         "scripts/migration/capture-lovable-toc-envelope.py",
         "scripts/migration/capture-lovable-toc.py",
         "scripts/migration/normalize-lovable-export.py",
@@ -581,6 +796,66 @@ def _tool_identity(inputs: Inputs):
     if identity.sha256 != inputs.approved_pg_restore_sha256:
         raise DriverError("binding_mismatch")
     return identity
+
+
+def _execution_python_identity(inputs: Inputs):
+    """Bind the explicit canonical interpreter to this isolated process."""
+
+    raw_path = os.fspath(inputs.execution_python)
+    if (
+        not inputs.execution_python.is_absolute()
+        or raw_path != os.path.abspath(raw_path)
+        or inputs.execution_python.is_symlink()
+    ):
+        raise DriverError("input_invalid")
+    try:
+        resolved = inputs.execution_python.resolve(strict=True)
+        running = Path(sys.executable)
+        running_resolved = running.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise DriverError("input_invalid") from exc
+    if (
+        resolved != inputs.execution_python
+        or not running.is_absolute()
+        or running_resolved != resolved
+    ):
+        raise DriverError("binding_mismatch")
+    try:
+        identity = stable_regular_digest(
+            resolved,
+            max_bytes=MAX_TOOL_BYTES,
+            require_executable=True,
+        )
+    except ContractError as exc:
+        raise DriverError("input_invalid") from exc
+    runtime_version = (
+        f"{sys.implementation.name}:{sys.version_info.major}."
+        f"{sys.version_info.minor}.{sys.version_info.micro}"
+    )
+    if (
+        identity.sha256 != inputs.approved_execution_python_sha256
+        or runtime_version != inputs.approved_execution_python_version
+        or identity.owner_uid not in {0, os.geteuid()}
+        or identity.mode & 0o7022
+        or identity.mode & 0o100 == 0
+    ):
+        raise DriverError("binding_mismatch")
+    return identity
+
+
+def _execution_python_provenance(inputs: Inputs, identity: Any) -> dict[str, Any]:
+    return {
+        "approved_identity": f"sha256:{inputs.approved_execution_python_sha256}",
+        "device": identity.device,
+        "executable_path": str(inputs.execution_python),
+        "gid": identity.owner_gid,
+        "inode": identity.inode,
+        "mode": format(identity.mode, "04o"),
+        "reported_version": inputs.approved_execution_python_version,
+        "sha256": identity.sha256,
+        "size_bytes": identity.size,
+        "uid": identity.owner_uid,
+    }
 
 
 def _mkdir_private_at(parent_fd: int, name: str) -> None:
@@ -953,6 +1228,13 @@ def _capture_environment(inputs: Inputs, workdir_fd: int) -> dict[str, str]:
         "TOC_REVIEW_INSPECTION_CHECKOUT_SHA": inputs.inspection_checkout_sha,
         "TOC_REVIEW_INSPECTION_PROCEDURE_SHA256": inputs.inspection_procedure_sha256,
         "TOC_REVIEW_APPROVED_EXECUTION_CHECKOUT_SHA": inputs.approved_checkout_sha,
+        "TOC_REVIEW_EXECUTION_PYTHON": str(inputs.execution_python),
+        "TOC_REVIEW_APPROVED_EXECUTION_PYTHON_SHA256": (
+            inputs.approved_execution_python_sha256
+        ),
+        "TOC_REVIEW_APPROVED_EXECUTION_PYTHON_VERSION": (
+            inputs.approved_execution_python_version
+        ),
         "TOC_REVIEW_PG_RESTORE_BIN": str(inputs.pg_restore),
         "TOC_REVIEW_APPROVED_PG_RESTORE_SHA256": inputs.approved_pg_restore_sha256,
         "TOC_REVIEW_EXPECTED_ENTRY_COUNT": str(inputs.expected_entry_count),
@@ -986,6 +1268,7 @@ def _read_capture_package(
     counts: Mapping[str, int],
     hashes: Mapping[str, str],
     *,
+    execution_python_identity: Any,
     tool_identity: Any,
     repository_identity: Mapping[str, str],
     require_marker: bool,
@@ -1055,8 +1338,17 @@ def _read_capture_package(
 
         binding = capture["binding"]
         pg_identity = capture["pg_restore_identity"]
+        expected_execution_python_identity = _execution_python_provenance(
+            inputs, execution_python_identity
+        )
         expected_procedure = {
             **repository_identity,
+            "execution_python_approved_sha256": (
+                inputs.approved_execution_python_sha256
+            ),
+            "execution_python_identity_sha256": sha256_bytes(
+                canonical_json_bytes(expected_execution_python_identity)
+            ),
             "evidence_manifest_sha256": inputs.evidence_manifest_sha256,
             "inspection_checkout_sha": inputs.inspection_checkout_sha,
             "inspection_procedure_sha256": inputs.inspection_procedure_sha256,
@@ -1098,6 +1390,8 @@ def _read_capture_package(
             or binding["procedure_identity_sha256"]
             != sha256_bytes(canonical_json_bytes(expected_procedure))
             or capture["procedure_identity"] != expected_procedure
+            or capture["execution_python_identity"]
+            != expected_execution_python_identity
             or pg_identity != expected_pg_identity
         ):
             raise DriverError("binding_mismatch")
@@ -1483,6 +1777,7 @@ def _revalidate_runtime_bindings(
     inputs: Inputs,
     *,
     canonical_before: Any,
+    execution_python_before: Any,
     tool_before: Any,
     repository_before: Mapping[str, str],
     root_metadata: Mapping[str, os.stat_result],
@@ -1497,6 +1792,12 @@ def _revalidate_runtime_bindings(
         raise DriverError("canonical_mutated") from exc
     if canonical_after != canonical_before:
         raise DriverError("canonical_mutated")
+    try:
+        execution_python_after = _execution_python_identity(inputs)
+    except DriverError as exc:
+        raise DriverError("binding_mismatch") from exc
+    if execution_python_after != execution_python_before:
+        raise DriverError("binding_mismatch")
     try:
         tool_after = _tool_identity(inputs)
     except DriverError as exc:
@@ -1549,7 +1850,10 @@ def _revalidate_runtime_bindings(
 
 
 def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, str]]:
+    if not _runtime_isolation_enabled():
+        raise DriverError("input_invalid")
     inputs = _parse_inputs(environment)
+    execution_python_before = _execution_python_identity(inputs)
     repository_before = _repository_binding(inputs.approved_checkout_sha)
     _, root_metadata = _validate_paths(inputs)
     _validate_evidence_run(inputs)
@@ -1631,9 +1935,10 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
             try:
                 normalizer_result = _run_child(
                     [
-                        sys.executable,
-                        "-B",
+                        str(inputs.execution_python),
                         "-I",
+                        "-S",
+                        "-B",
                         str(REPO / "scripts/migration/normalize-lovable-export.py"),
                         "--expected-outer-sha256",
                         inputs.outer_sha256,
@@ -1671,9 +1976,10 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
             try:
                 capture_result = _run_child(
                     [
-                        sys.executable,
-                        "-B",
+                        str(inputs.execution_python),
                         "-I",
+                        "-S",
+                        "-B",
                         str(REPO / "scripts/migration/capture-lovable-toc.py"),
                     ],
                     environment=_capture_environment(inputs, stage_child_fd),
@@ -1713,6 +2019,7 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
                 inputs,
                 counts,
                 hashes,
+                execution_python_identity=execution_python_before,
                 tool_identity=tool_before,
                 repository_identity=repository_before,
                 require_marker=True,
@@ -1726,6 +2033,7 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
                 inputs,
                 counts,
                 hashes,
+                execution_python_identity=execution_python_before,
                 tool_identity=tool_before,
                 repository_identity=repository_before,
                 require_marker=False,
@@ -1742,6 +2050,7 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
         _revalidate_runtime_bindings(
             inputs,
             canonical_before=canonical_before,
+            execution_python_before=execution_python_before,
             tool_before=tool_before,
             repository_before=repository_before,
             root_metadata=root_metadata,
@@ -1782,6 +2091,7 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
             inputs,
             counts,
             hashes,
+            execution_python_identity=execution_python_before,
             tool_identity=tool_before,
             repository_identity=repository_before,
             require_marker=False,
@@ -1789,6 +2099,7 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
         _revalidate_runtime_bindings(
             inputs,
             canonical_before=canonical_before,
+            execution_python_before=execution_python_before,
             tool_before=tool_before,
             repository_before=repository_before,
             root_metadata=root_metadata,
@@ -1816,6 +2127,7 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
             inputs,
             counts,
             hashes,
+            execution_python_identity=execution_python_before,
             tool_identity=tool_before,
             repository_identity=repository_before,
             require_marker=True,
@@ -1823,6 +2135,7 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
         _revalidate_runtime_bindings(
             inputs,
             canonical_before=canonical_before,
+            execution_python_before=execution_python_before,
             tool_before=tool_before,
             repository_before=repository_before,
             root_metadata=root_metadata,
@@ -1844,6 +2157,7 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
             inputs,
             counts,
             hashes,
+            execution_python_identity=execution_python_before,
             tool_identity=tool_before,
             repository_identity=repository_before,
             require_marker=True,
@@ -1851,6 +2165,7 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
         _revalidate_runtime_bindings(
             inputs,
             canonical_before=canonical_before,
+            execution_python_before=execution_python_before,
             tool_before=tool_before,
             repository_before=repository_before,
             root_metadata=root_metadata,
@@ -1919,6 +2234,7 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
             _revalidate_runtime_bindings(
                 inputs,
                 canonical_before=canonical_before,
+                execution_python_before=execution_python_before,
                 tool_before=tool_before,
                 repository_before=repository_before,
                 root_metadata=root_metadata,
@@ -1951,18 +2267,24 @@ def main() -> int:
     try:
         counts, hashes = execute(os.environ)
     except DriverError as exc:
-        sys.stderr.buffer.write(_diagnostic(status="failed", reason=exc.reason))
+        emit_fixed_diagnostic(
+            sys.stderr, _diagnostic(status="failed", reason=exc.reason)
+        )
         return 1
     except BaseException:
-        sys.stderr.buffer.write(_diagnostic(status="failed", reason="internal_failure"))
+        emit_fixed_diagnostic(
+            sys.stderr,
+            _diagnostic(status="failed", reason="internal_failure"),
+        )
         return 1
-    sys.stdout.buffer.write(
+    emit_fixed_diagnostic(
+        sys.stdout,
         _diagnostic(
             status="review_required",
             reason="blocked",
             counts=counts,
             hashes=hashes,
-        )
+        ),
     )
     return 2
 

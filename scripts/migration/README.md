@@ -209,8 +209,13 @@ signal.
 ### Reviewed private TOC envelope capture and later opaque review ledger
 
 The aggregate inspector intentionally does not solve lossless object-name
-classification. The reviewed operator entrypoint for the next separately
-authorized **offline** step is `capture-lovable-toc-envelope.py`. It composes
+classification. The sole reviewed operator entrypoint for the next separately
+authorized **offline** step is `run-lovable-toc-capture.sh`. It requires an
+explicit absolute, canonical, non-symlink execution-Python path, an externally
+approved exact executable SHA-256 and `cpython:MAJOR.MINOR.MICRO` identity, and
+invokes `capture-lovable-toc-envelope.py` with exactly `-I -S -B`. The Python driver,
+normalizer, low-level capture, and bounded wrapper are internal components, not
+supported direct operator entrypoints. The driver composes
 the existing strict `normalize-lovable-export.py` and low-level
 `capture-lovable-toc.py` contracts; it does not reimplement or relax either
 one. `capture-lovable-toc.py` remains an internal low-level component for this
@@ -228,10 +233,20 @@ The private envelope-capture contract is:
    filename/size/hash/member binding, the inspection identities, the current
    capture-procedure identities, and the approved `pg_restore` path, executable
    SHA-256, and exact bounded version string. A
-   complete package is a prerequisite, not authorization. The two capture
-   entrypoints disable repository-local Python bytecode writes before importing
-   reviewed modules, and Python children use `-B`, so a clean-checkout binding
-   cannot be invalidated or masked by an untracked `__pycache__` side effect.
+   complete package is a prerequisite, not authorization. The capture-chain
+   components reject execution unless Python reports isolated mode,
+   ignored environment configuration, disabled user and system site loading,
+   and disabled bytecode writes before repository-local imports or private
+   processing. Before the capture entrypoints make the reviewed repository
+   directory importable, a fixed `/usr/bin/git` invocation under a minimal
+   environment disables system/global configuration, hooks, `core.fsmonitor`,
+   and the untracked cache; it proves the approved `HEAD`, tracked byte
+   identities, a clean checkout, and the absence of both ordinary and ignored
+   untracked inputs below `scripts/migration/`. Every Python child uses the
+   same bound interpreter with exactly `-I -S -B`, so user-site `.pth`,
+   `sitecustomize`, and `PYTHONPATH` startup hooks cannot run and a
+   clean-checkout binding cannot be invalidated or masked by an untracked
+   `__pycache__` side effect.
 2. Require three distinct, existing, executing-user-owned, non-symlink private
    roots outside the Git worktree: the completed aggregate run, an empty
    staging root, and an empty durable capture-output root. Each directory is
@@ -261,7 +276,10 @@ The private envelope-capture contract is:
    root. They never go to the terminal, Git, CI, chat, or a general log.
 5. Bind the private capture to the canonical outer identity, verified inner
    SHA-256, metadata run ID, execution checkout, inspector/guard identities,
-   externally approved and observed-equal `pg_restore` version, approved
+   the externally approved execution-Python SHA-256, its safe observed
+   version/path/device/inode/owner/mode/size identity, that identity's
+   canonical digest, externally approved and observed-equal `pg_restore`
+   version, approved
    executable SHA-256, observed
    path/device/inode/mode/size, capture byte size, and raw-capture SHA-256. The
    capture stores the complete fixed-key repository procedure identity and its
@@ -442,6 +460,9 @@ variables, never shell arguments. The driver has no defaults and requires:
 | `TOC_REVIEW_INSPECTION_CHECKOUT_SHA` | Checkout that produced the aggregate evidence |
 | `TOC_REVIEW_INSPECTION_PROCEDURE_SHA256` | Exact fenced aggregate-inspection procedure SHA-256 |
 | `TOC_REVIEW_APPROVED_EXECUTION_CHECKOUT_SHA` | Externally approved current capture checkout, exactly equal to clean `HEAD` |
+| `TOC_REVIEW_EXECUTION_PYTHON` | Explicit absolute, canonical, non-symlink executable used by the reviewed launcher and every Python child; no default |
+| `TOC_REVIEW_APPROVED_EXECUTION_PYTHON_SHA256` | Externally approved exact SHA-256; checked by the shell before `exec`, rechecked by both capture components, and durably cross-bound |
+| `TOC_REVIEW_APPROVED_EXECUTION_PYTHON_VERSION` | Externally approved exact safe runtime identity in `cpython:MAJOR.MINOR.MICRO` form |
 | `TOC_REVIEW_PG_RESTORE_BIN` | Exact absolute reviewed `pg_restore` path |
 | `TOC_REVIEW_APPROVED_PG_RESTORE_SHA256` | Externally approved executable SHA-256 |
 | `TOC_REVIEW_APPROVED_PG_RESTORE_VERSION` | Externally approved exact bounded version output, for example `pg_restore (PostgreSQL) 18.4` |
@@ -457,6 +478,37 @@ descriptor-relative as a direct child and must be a single-link mode-`0400`
 regular file. These tools deliberately reject `local-migration-artifacts/`
 because it is inside the repository. That ignored directory remains disposable
 workspace for older aggregate tooling and must never be the sole evidence copy.
+
+After every separately authorized input is exported into the process
+environment, invoke only:
+
+```bash
+scripts/migration/run-lovable-toc-capture.sh
+```
+
+Do not invoke any capture-chain `.py` file directly. The launcher and each
+component independently enforce the startup flags; the high-level driver then
+passes only its reviewed minimal environment to child components. A closed or
+broken diagnostic stream cannot produce a Python traceback or relabel an
+already decided durable outcome; operators must inspect the exit status and
+the private no-replace package state together.
+
+The launcher validates the canonical configured interpreter pathname, safe
+owner/mode, externally approved SHA-256, and isolated reported version before
+`exec`; both capture components recheck the approved digest/version, safe
+ownership/write mode, and stable runtime identity.
+The canonical runtime-identity digest is retained in the capture procedure
+identity. This still does not turn the shell's pathname-based `exec` into
+descriptor-bound execution: an actor with parent-directory replacement
+capability could replace the path between the launcher digest check and
+execution. The launcher rehashes after its version probe, privately caps both
+final-child channels, and releases only an exact allowlisted capture diagnostic;
+native exec errors and all other child bytes collapse to the fixed
+`capture_launcher` / `child_diagnostic_invalid` record. That prevents a path or
+payload disclosure, but it cannot prove which executable bytes the kernel ran.
+The completed aggregate
+evidence's existing interpreter identity remains part of the separately
+validated evidence contract.
 
 ### Required operator inputs
 

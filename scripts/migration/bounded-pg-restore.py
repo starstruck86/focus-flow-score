@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the metadata-only pg_restore operations behind fixed resource bounds.
+"""Run internal metadata-only pg_restore operations behind fixed resource bounds.
 
 The underlying executable is supplied only through
 ``LOVABLE_UNDERLYING_PG_RESTORE_BIN``.  This wrapper has no restore mode: its
@@ -10,15 +10,43 @@ only after pg_restore exits successfully.
 
 from __future__ import annotations
 
-import dataclasses
 import os
+import sys
+
+
+_STARTUP_FAILURE_DIAGNOSTIC = b'{"diagnostic_version":1,"reason":"other_nonzero"}\n'
+
+
+def _runtime_isolation_enabled() -> bool:
+    flags = sys.flags
+    return (
+        getattr(flags, "isolated", 0) == 1
+        and getattr(flags, "ignore_environment", 0) == 1
+        and getattr(flags, "no_user_site", 0) == 1
+        and getattr(flags, "no_site", 0) == 1
+        and getattr(flags, "dont_write_bytecode", 0) == 1
+        and sys.dont_write_bytecode is True
+    )
+
+
+def _fail_unisolated_startup() -> None:
+    try:
+        os.write(2, _STARTUP_FAILURE_DIAGNOSTIC)
+    except BaseException:
+        pass
+    raise SystemExit(1)
+
+
+if not _runtime_isolation_enabled():
+    _fail_unisolated_startup()
+
+import dataclasses
 import re
 import selectors
 import shutil
 import signal
 import stat
 import subprocess
-import sys
 import tempfile
 import time
 from typing import BinaryIO, Mapping, Sequence
@@ -305,6 +333,8 @@ def run_request(
 ) -> None:
     """Execute one validated request; explicit Request values support unit tests."""
 
+    if not _runtime_isolation_enabled():
+        raise BoundedPgRestoreError(REASON_OTHER_NONZERO)
     request.validate_limits()
     temporary_directory = tempfile.mkdtemp(
         prefix=".bounded-pg-restore.",
@@ -410,6 +440,9 @@ def _emit_failure_diagnostic(reason_code: str) -> None:
 
 
 def main(arguments: Sequence[str] | None = None) -> int:
+    if not _runtime_isolation_enabled():
+        _emit_failure_diagnostic(REASON_OTHER_NONZERO)
+        return 1
     if arguments is None:
         arguments = sys.argv[1:]
     try:

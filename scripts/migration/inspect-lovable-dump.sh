@@ -303,7 +303,7 @@ esac
 
 run_pg_restore() {
   if [[ "${LOVABLE_PG_RESTORE_GUARD_IS_PYTHON:-0}" == '1' ]]; then
-    "$PYTHON" -I "$PG_RESTORE" "$@"
+    "$PYTHON" -I -S -B "$PG_RESTORE" "$@"
   else
     "$PG_RESTORE" "$@"
   fi

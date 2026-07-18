@@ -122,7 +122,7 @@ class BoundedPgRestoreTest(unittest.TestCase):
 
     def run_cli(self, *arguments: str, environment=None):
         return subprocess.run(
-            [sys.executable, str(TOOL), *arguments],
+            [sys.executable, "-I", "-S", "-B", str(TOOL), *arguments],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

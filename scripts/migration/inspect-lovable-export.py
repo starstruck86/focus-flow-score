@@ -3841,6 +3841,8 @@ def inspect() -> Path:
             [
                 identities["execution_python_executable"],
                 "-I",
+                "-S",
+                "-B",
                 str(normalizer),
                 "--expected-outer-sha256",
                 expected_sha256,

@@ -36,6 +36,7 @@ jobs:
       - run: npm test
       - name: Verify migration rehearsal tooling
         run: |
+          sh -n scripts/migration/run-lovable-toc-capture.sh
           bash -n \
             scripts/migration/inspect-lovable-dump.sh \
             scripts/migration/tests/catalog-verification.test.sh \
@@ -67,8 +68,9 @@ jobs:
           ):
               compile(path.read_text(encoding="utf-8"), str(path), "exec")
           PY
-          python3 -m unittest discover -s tests/migration -p 'test_*.py' -v
-          python3 -m unittest tests.migration.test_lovable_toc_capture_driver -v
+          python3 -I -S -B -m unittest discover -s tests/migration -p 'test_*.py' -v
+          python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_capture_driver.py' -v
           bash scripts/migration/tests/inspect-lovable-dump.test.sh
           bash scripts/migration/tests/postgres-target-safety.test.sh
           bash scripts/migration/tests/catalog-verification.test.sh
@@ -130,6 +132,7 @@ jobs:
           python-version: "3.12"
       - name: Exercise macOS inspection diagnostics and durable publication
         run: |
+          sh -n scripts/migration/run-lovable-toc-capture.sh
           bash -n \
             scripts/migration/inspect-lovable-dump.sh \
             scripts/migration/tests/inspect-lovable-dump.test.sh
@@ -149,20 +152,26 @@ jobs:
               compile(path.read_text(encoding="utf-8"), str(path), "exec")
           PY
           bash scripts/migration/tests/inspect-lovable-dump.test.sh
-          python3 -m unittest discover \
+          python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_dump_report.py' -v
-          python3 -m unittest discover \
+          python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_zip_normalizer.py' -v
-          python3 -m unittest discover \
+          python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_bounded_pg_restore.py' -v
-          python3 -m unittest discover \
+          python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_export_evidence_workflow.py' -v
-          python3 -m unittest discover \
+          python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_toc_contract.py' -v
-          python3 -m unittest discover \
+          python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_toc_tools.py' -v
-          python3 -m unittest discover \
+          python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_toc_capture_driver.py' -v
+          python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_capture_startup.py' -v
+          python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_preimport_guard.py' -v
+          python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_diagnostic_writer.py' -v
 
   postgres-cross-major-compatibility:
     name: PostgreSQL 17.6/18.4 synthetic compatibility

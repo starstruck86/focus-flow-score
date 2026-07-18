@@ -63,11 +63,32 @@ def pg_identity() -> dict[str, object]:
     }
 
 
+def execution_python_identity() -> dict[str, object]:
+    return {
+        "approved_identity": f"sha256:{SHA_B}",
+        "device": 3,
+        "executable_path": "/synthetic/python3",
+        "gid": 1,
+        "inode": 4,
+        "mode": "0755",
+        "reported_version": "cpython:3.12.9",
+        "sha256": SHA_B,
+        "size_bytes": 456,
+        "uid": 1,
+    }
+
+
 def procedure_identity() -> dict[str, str]:
     return {
         "execution_checkout_sha": GIT_A,
+        "execution_python_approved_sha256": SHA_B,
+        "execution_python_identity_sha256": contract.sha256_bytes(
+            contract.canonical_json_bytes(execution_python_identity())
+        ),
         "README_md_blob_sha": GIT_B,
         "README_md_sha256": SHA_A,
+        "run_lovable_toc_capture_sh_blob_sha": GIT_B,
+        "run_lovable_toc_capture_sh_sha256": SHA_A,
         "capture_lovable_toc_envelope_py_blob_sha": GIT_B,
         "capture_lovable_toc_envelope_py_sha256": SHA_A,
         "capture_lovable_toc_py_blob_sha": GIT_B,
@@ -98,6 +119,7 @@ def capture_for(classes: list[str]):
         raw_toc=raw,
         key=b"k" * 32,
         binding=binding,
+        execution_python_identity=execution_python_identity(),
         pg_restore_identity=pg_identity(),
         procedure_identity=procedure_identity(),
         expected_entry_count=len(classes),
@@ -248,6 +270,7 @@ class RawTocContractTest(unittest.TestCase):
                 raw_toc=raw_toc(["TABLE", "TABLE DATA"]),
                 key=b"x" * 32,
                 binding=binding,
+                execution_python_identity=execution_python_identity(),
                 pg_restore_identity=pg_identity(),
                 procedure_identity=procedure_identity(),
                 expected_entry_count=3,

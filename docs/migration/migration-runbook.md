@@ -489,10 +489,15 @@ complete but object-reference analysis remains `INCOMPLETE`, stop. A future
 private TOC capture requires separate authorization and must not modify or
 replace that evidence package.
 
-The reviewed operator entrypoint is
-`scripts/migration/capture-lovable-toc-envelope.py`. Do not invoke the
-low-level `capture-lovable-toc.py` against an operator-prepared inner file. The
-high-level driver composes the existing strict ZIP normalizer and low-level
+The sole reviewed operator entrypoint is
+`scripts/migration/run-lovable-toc-capture.sh`. It requires the separately
+approved `TOC_REVIEW_EXECUTION_PYTHON` to be an explicit absolute, canonical,
+non-symlink executable, requires its separately approved exact SHA-256 and
+`cpython:MAJOR.MINOR.MICRO` identity, and invokes the internal high-level driver
+with exactly `-I -S -B`. Do not directly invoke `capture-lovable-toc-envelope.py`, the
+low-level `capture-lovable-toc.py`, the normalizer, or the bounded wrapper, and
+do not prepare an inner archive manually. The high-level driver composes the
+existing strict ZIP normalizer and low-level
 capture without relaxing either contract. It requires explicit, no-default
 bindings for the canonical outer path, completed aggregate evidence-run
 directory, empty private staging root, empty durable output root, canonical
@@ -500,10 +505,46 @@ filename and UI member name, outer size/hash, inner hash, aggregate manifest
 hash, inspection checkout/procedure identities, current approved checkout,
 exact `pg_restore` path, approved executable hash, externally approved exact
 bounded version output, and expected total/data entry counts.
-Both capture entrypoints disable repository-local bytecode writes before
-reviewed imports, and their Python children use `-B`; an untracked
-`__pycache__` is therefore neither an accepted checkout mutation nor an
-ignored execution artifact.
+Every capture-chain Python component checks, before repository-local imports or
+private processing, that isolated mode and ignored environment configuration
+are active, user and system site loading are disabled, and bytecode writes are
+disabled. Before either capture entrypoint adds the repository tools to
+`sys.path`, a fixed `/usr/bin/git` under a closed minimal environment disables
+system/global configuration, hooks, `core.fsmonitor`, and the untracked cache;
+it requires the approved `HEAD`, tracked byte identity, a clean worktree, and
+zero ordinary or ignored untracked inputs beneath `scripts/migration/`. The
+high-level driver binds and revalidates the explicit interpreter;
+normalizer, low-level capture, and bounded-wrapper children all use that same
+path with exactly `-I -S -B` and reviewed minimal environments. User-site
+`.pth`, `sitecustomize`, and `PYTHONPATH` hooks are therefore excluded, and an
+untracked `__pycache__` is neither an accepted checkout mutation nor an ignored
+execution artifact. `PYTHONSTARTUP` is not the proof boundary because ordinary
+noninteractive script execution does not use it.
+
+After a separate authorization supplies every exact `TOC_REVIEW_*` value,
+including `TOC_REVIEW_EXECUTION_PYTHON`, invoke only:
+
+```bash
+scripts/migration/run-lovable-toc-capture.sh
+```
+
+If the diagnostic output channel is closed or broken, the bounded writer emits
+no traceback and does not fall back to another channel. The already-decided
+durable status and exit status remain authoritative; inspect private package
+state before any human decision, and never infer permission to retry.
+The launcher validates the canonical pathname, safe owner/mode, externally
+approved Python digest, and isolated reported version before asking the shell
+to execute it. Both capture components recheck
+the exact digest/version, safe ownership/write mode, and stable identity, and
+the capture procedure identity retains the canonical runtime-identity digest.
+The shell still does not hold an executable descriptor, so an actor with
+parent-directory replacement capability can exploit the digest-check-to-`exec`
+window. The launcher rehashes after its isolated version probe, captures the
+final child's stdout/stderr through private 4 KiB-bounded channels, and releases
+only an exact allowlisted driver record; native exec errors and all other bytes
+become `capture_launcher` / `child_diagnostic_invalid`. This preserves the
+nonleaking public diagnostic contract, but it does not attest the executable
+bytes the kernel ultimately ran.
 
 Before staging, require all roots to be absolute, real, non-symlink,
 executing-user-owned mode-`0700` directories outside the Git worktree. The
