@@ -675,7 +675,26 @@ class TocCaptureDriverTest(unittest.TestCase):
             timeout=90,
         )
         if result.returncode != 2 or result.stderr:
-            self.fail("checked-in synthetic driver subprocess failed")
+            safe_detail = "diagnostic_unavailable"
+            candidate = result.stderr or result.stdout
+            try:
+                diagnostic = json.loads(candidate)
+                if (
+                    type(diagnostic) is dict
+                    and set(diagnostic)
+                    == {"diagnostic_version", "reason", "stage", "status"}
+                    and diagnostic.get("diagnostic_version") == 1
+                    and diagnostic.get("status") == "failed"
+                    and diagnostic.get("stage") == "capture_driver"
+                    and diagnostic.get("reason") in DRIVER.FAILURE_REASONS
+                ):
+                    safe_detail = f"capture_driver/{diagnostic['reason']}"
+            except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+                pass
+            self.fail(
+                "checked-in synthetic driver subprocess failed with "
+                f"{safe_detail}"
+            )
         visible = json.loads(result.stdout)
         self.assertEqual(visible["status"], "review_required")
         self.assertEqual(visible["review_gate"], "REVIEW_REQUIRED")
