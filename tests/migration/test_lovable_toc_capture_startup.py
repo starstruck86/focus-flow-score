@@ -56,6 +56,26 @@ class TocCaptureLauncherContractTest(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
+    def test_macos_ci_uses_the_reviewed_system_interpreter_contract(self):
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        start = workflow.index("  migration-envelope-macos:\n")
+        end = workflow.index("  postgres-cross-major-compatibility:\n", start)
+        macos_job = workflow[start:end]
+        self.assertNotIn("actions/setup-python", macos_job)
+        self.assertIn("PATH: /usr/bin:/bin", macos_job)
+        self.assertGreaterEqual(macos_job.count("/usr/bin/python3 -I -S -B"), 11)
+        for required_guard in (
+            "metadata.st_uid in {0, os.geteuid()}",
+            "mode & 0o7022 == 0",
+            "metadata.st_nlink == 1",
+            "sys.flags.isolated == 1",
+            "sys.flags.ignore_environment == 1",
+            "sys.flags.no_user_site == 1",
+            "sys.flags.no_site == 1",
+            "sys.flags.dont_write_bytecode == 1",
+        ):
+            self.assertIn(required_guard, macos_job)
+
     def test_launcher_requires_absolute_regular_nonsymlink_execution_python(self):
         ledger = self.root / "safe-launcher-ledger"
         fake_python = self.root / "reviewed-python"
@@ -514,8 +534,23 @@ class TocCaptureLauncherContractTest(unittest.TestCase):
                 "PYTHONSAFEPATH",
             ):
                 control_environment.pop(name, None)
+            # Some CI-managed interpreters disable automatic user-site loading
+            # even outside isolated mode. Exercise the planted user-site .pth
+            # and sitecustomize content explicitly so the positive control
+            # proves that both payloads are viable on every runner; the actual
+            # launcher regression below still relies only on Python startup's
+            # -I/-S boundary and never performs this explicit load.
             control = subprocess.run(
-                [str(Path(sys.executable).resolve()), "-c", "pass"],
+                [
+                    str(Path(sys.executable).resolve()),
+                    "-S",
+                    "-c",
+                    (
+                        "import site;"
+                        f"site.addsitedir({str(user_site)!r});"
+                        "import sitecustomize"
+                    ),
+                ],
                 env=control_environment,
                 check=False,
                 capture_output=True,
