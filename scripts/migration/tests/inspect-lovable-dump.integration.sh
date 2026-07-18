@@ -23,7 +23,7 @@ readonly TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/lovable-dump-integration.XXXXXX"
 readonly ARCHIVE="${TMP_ROOT}/real custom archive.dump"
 readonly REPORT="${TMP_ROOT}/metadata report.txt"
 readonly MIGRATIONS="${TMP_ROOT}/migrations with spaces"
-readonly PG_RESTORE_LEDGER="${TMP_ROOT}/bounded-pg-restore.calls"
+readonly PG_RESTORE_LEDGER_PATH="${TMP_ROOT}/bounded-pg-restore.calls"
 readonly AUDITED_PG_RESTORE="${TMP_ROOT}/audited-pg-restore"
 readonly INSPECTOR_TMP="${TMP_ROOT}/inspector-private-tmp"
 
@@ -103,7 +103,7 @@ chmod 0700 "$AUDITED_PG_RESTORE"
 LOVABLE_PG_RESTORE_GUARD_IS_PYTHON=1 \
 LOVABLE_UNDERLYING_PG_RESTORE_BIN="$AUDITED_PG_RESTORE" \
 REAL_PG_RESTORE_BIN="$PG_RESTORE" \
-PG_RESTORE_LEDGER="$PG_RESTORE_LEDGER" \
+PG_RESTORE_LEDGER="$PG_RESTORE_LEDGER_PATH" \
 PG_RESTORE_BIN="$BOUNDED_PG_RESTORE" \
 PYTHON_BIN="$PYTHON" \
 TMPDIR="$INSPECTOR_TMP" \
@@ -158,7 +158,7 @@ if grep -Fq "$SECRET_SENTINEL" "$REPORT"; then
   exit 1
 fi
 
-if [[ "$(cat -- "$PG_RESTORE_LEDGER")" != $'version_exact\nlist_exact' ]]; then
+if [[ "$(cat -- "$PG_RESTORE_LEDGER_PATH")" != $'version_exact\nlist_exact' ]]; then
   printf 'ERROR: bounded pg_restore ledger was not exact\n' >&2
   exit 1
 fi
