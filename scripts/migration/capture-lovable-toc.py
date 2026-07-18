@@ -245,6 +245,10 @@ MAX_TOOL_BYTES = 100 * 1024 * 1024
 SAFE_VALUE_RE = re.compile(r"^[A-Za-z0-9._:-]{1,160}$", re.ASCII)
 POSITIVE_INTEGER_RE = re.compile(r"^[1-9][0-9]{0,9}$", re.ASCII)
 UNDERLYING_ENVIRONMENT_VARIABLE = "LOVABLE_UNDERLYING_PG_RESTORE_BIN"
+BOUNDED_TEMP_PARENT_FD_VARIABLE = "TOC_REVIEW_BOUNDED_TEMP_PARENT_FD"
+BOUNDED_TEMP_PARENT_PATH_VARIABLE = "TOC_REVIEW_BOUNDED_TEMP_PARENT"
+WRAPPER_TEMP_PARENT_FD_VARIABLE = "LOVABLE_BOUNDED_TEMP_PARENT_FD"
+WRAPPER_TEMP_PARENT_PATH_VARIABLE = "LOVABLE_BOUNDED_TEMP_PARENT"
 DESCRIPTOR_BOUND_WORKDIR_VARIABLE = "TOC_REVIEW_DESCRIPTOR_BOUND_WORKDIR_FD"
 DESCRIPTOR_BOUND_ARCHIVE = "verified-inner.pgdmp"
 DESCRIPTOR_BOUND_OUTPUT_ROOT = "."
@@ -421,10 +425,11 @@ def _descriptor_bound_workdir(
 ) -> int | None:
     """Validate the high-level driver's exact inherited-directory mode.
 
-    Standalone callers retain the existing absolute-path contract.  This narrow
-    internal mode accepts only fixed relative names and requires the process
-    working directory to be the very same private directory as the inherited
-    descriptor.  Publication still uses the descriptor, never the pathname.
+    This narrow envelope mode accepts only fixed relative archive/output names
+    and requires the process working directory to be the same private directory
+    as the inherited descriptor. Publication still uses the descriptor, never
+    the pathname. Standalone tests separately declare one validated private
+    bounded-capture parent.
     """
 
     raw = environment.get(DESCRIPTOR_BOUND_WORKDIR_VARIABLE)
@@ -453,17 +458,104 @@ def _descriptor_bound_workdir(
     return descriptor
 
 
+def _bounded_temporary_parent(
+    environment: Mapping[str, str],
+    descriptor_bound_fd: int | None,
+    repository: Path,
+) -> tuple[int | None, Path | None]:
+    """Validate one explicit parent; envelope mode accepts only its held FD."""
+
+    raw_fd = environment.get(BOUNDED_TEMP_PARENT_FD_VARIABLE)
+    raw_path = environment.get(BOUNDED_TEMP_PARENT_PATH_VARIABLE)
+    if (raw_fd is None) == (raw_path is None):
+        raise ContractError("input_invalid")
+    if descriptor_bound_fd is not None and raw_path is not None:
+        raise ContractError("input_invalid")
+    if raw_fd is not None:
+        if re.fullmatch(r"[1-9][0-9]{0,8}", raw_fd, re.ASCII) is None:
+            raise ContractError("input_invalid")
+        descriptor = int(raw_fd)
+        if descriptor <= 2:
+            raise ContractError("input_invalid")
+        validated = duplicate_private_root_fd(descriptor)
+        try:
+            temporary_parent = os.fstat(validated)
+            if descriptor_bound_fd is not None:
+                workdir = os.fstat(descriptor_bound_fd)
+                if (
+                    temporary_parent.st_dev != workdir.st_dev
+                    or temporary_parent.st_ino != workdir.st_ino
+                    or temporary_parent.st_uid != workdir.st_uid
+                    or temporary_parent.st_mode != workdir.st_mode
+                ):
+                    raise ContractError("input_invalid")
+        except OSError as exc:
+            raise ContractError("input_invalid") from exc
+        finally:
+            os.close(validated)
+        return descriptor, None
+
+    if (
+        raw_path is None
+        or raw_path == ""
+        or raw_path != raw_path.strip()
+        or "\x00" in raw_path
+        or any(
+            ord(character) < 0x20 or ord(character) == 0x7F
+            for character in raw_path
+        )
+    ):
+        raise ContractError("input_invalid")
+    temporary_path = Path(raw_path)
+    if not temporary_path.is_absolute():
+        raise ContractError("input_invalid")
+    try:
+        resolved = temporary_path.resolve(strict=True)
+    except OSError as exc:
+        raise ContractError("input_invalid") from exc
+    if resolved != temporary_path:
+        raise ContractError("input_invalid")
+    resolved_repository = repository.resolve(strict=True)
+    if resolved == resolved_repository or resolved_repository in resolved.parents:
+        raise ContractError("input_invalid")
+    try:
+        validated = validate_private_root(temporary_path)
+    except ContractError as exc:
+        raise ContractError("input_invalid") from exc
+    os.close(validated)
+    return None, resolved
+
+
 def _run_bounded(
     wrapper: Path,
     pg_restore: Path,
     arguments: list[str],
     execution_python: Path,
+    *,
+    temporary_parent_fd: int | None,
+    temporary_parent: Path | None,
 ) -> bytes:
+    if (temporary_parent_fd is None) == (temporary_parent is None):
+        raise ContractError("input_invalid")
     environment = {
         "LANG": "C",
         "LC_ALL": "C",
         UNDERLYING_ENVIRONMENT_VARIABLE: str(pg_restore),
     }
+    pass_fds: tuple[int, ...] = ()
+    if temporary_parent_fd is not None:
+        if (
+            isinstance(temporary_parent_fd, bool)
+            or not isinstance(temporary_parent_fd, int)
+            or temporary_parent_fd <= 2
+        ):
+            raise ContractError("input_invalid")
+        environment[WRAPPER_TEMP_PARENT_FD_VARIABLE] = str(temporary_parent_fd)
+        pass_fds = (temporary_parent_fd,)
+    else:
+        if temporary_parent is None or not temporary_parent.is_absolute():
+            raise ContractError("input_invalid")
+        environment[WRAPPER_TEMP_PARENT_PATH_VARIABLE] = str(temporary_parent)
     result = subprocess.run(
         [str(execution_python), "-I", "-S", "-B", str(wrapper), *arguments],
         check=False,
@@ -471,6 +563,8 @@ def _run_bounded(
         stderr=subprocess.DEVNULL,
         env=environment,
         timeout=330,
+        close_fds=True,
+        pass_fds=pass_fds,
     )
     if result.returncode != 0:
         raise ContractError("tool_failed")
@@ -505,6 +599,9 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
     )
 
     descriptor_bound_fd = _descriptor_bound_workdir(environment)
+    bounded_temporary_parent_fd, bounded_temporary_parent = (
+        _bounded_temporary_parent(environment, descriptor_bound_fd, repo)
+    )
 
     approved_checkout = validate_git_sha(
         _required_environment(environment, "TOC_REVIEW_APPROVED_EXECUTION_CHECKOUT_SHA")
@@ -578,7 +675,12 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
 
     wrapper = repo / "scripts/migration/bounded-pg-restore.py"
     version_bytes = _run_bounded(
-        wrapper, pg_restore, ["--version"], execution_python
+        wrapper,
+        pg_restore,
+        ["--version"],
+        execution_python,
+        temporary_parent_fd=bounded_temporary_parent_fd,
+        temporary_parent=bounded_temporary_parent,
     )
     try:
         version = version_bytes.decode("ascii", errors="strict").rstrip("\n")
@@ -594,6 +696,8 @@ def execute(environment: Mapping[str, str]) -> tuple[dict[str, int], dict[str, s
         pg_restore,
         ["--list", str(resolved_archive)],
         execution_python,
+        temporary_parent_fd=bounded_temporary_parent_fd,
+        temporary_parent=bounded_temporary_parent,
     )
 
     tool_after = stable_regular_digest(

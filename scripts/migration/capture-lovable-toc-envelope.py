@@ -1221,6 +1221,7 @@ def _capture_environment(inputs: Inputs, workdir_fd: int) -> dict[str, str]:
         "TOC_REVIEW_INNER_ARCHIVE": INNER_NAME,
         "TOC_REVIEW_OUTPUT_ROOT": ".",
         "TOC_REVIEW_DESCRIPTOR_BOUND_WORKDIR_FD": str(workdir_fd),
+        "TOC_REVIEW_BOUNDED_TEMP_PARENT_FD": str(workdir_fd),
         "TOC_REVIEW_EVIDENCE_RUN_ID": inputs.run_id,
         "TOC_REVIEW_OUTER_SHA256": inputs.outer_sha256,
         "TOC_REVIEW_INNER_SHA256": inputs.inner_sha256,

@@ -357,8 +357,26 @@ a symlink; the guard accepts only `--version` or `--list <absolute-local-path>`.
 Fixed limits permit 15 seconds and 1 MiB stdout for `--version`, 300 seconds and
 128 MiB stdout for `--list`, and 1 MiB stderr for either. It streams both
 channels into private exclusive captures, kills the process group and
-waits for/reaps its direct child leader on timeout or overflow, passes output
-only after exit zero, and removes every capture.
+waits for/reaps its direct child leader on timeout or overflow, and accepts
+exactly one explicit private temporary parent. Descriptor-bound capture passes
+the held staging-directory descriptor through
+`LOVABLE_BOUNDED_TEMP_PARENT_FD`; standalone `inspect-lovable-dump.sh` opens its
+fresh private mode-`0700` work directory and passes its descriptor through the
+same variable. A reviewed direct wrapper caller may instead pass an absolute
+private mode-`0700` directory through `LOVABLE_BOUNDED_TEMP_PARENT`. The guard
+rejects no parent, both parents, symlinks, wrong ownership, and permissive modes.
+It creates one random hidden mode-`0700` directory and two exclusive mode-`0600`
+captures descriptor-relatively beneath that parent.
+
+Do not treat child exit zero as sufficient to release the captured bytes. The
+guard first buffers the bounded successful output, closes and
+descriptor-relatively unlinks both capture files, removes their directory, and
+fsyncs the private parent. Only then may it emit the successful bytes. Any
+cleanup or parent-fsync ambiguity returns fixed `other_nonzero` and emits no
+successful child output. In the high-level envelope, any residue is confined to
+the exact held staging tree; the outer driver must remove and fsync that tree or
+retain only a reviewed private indeterminate/quarantine stop. Such a failure
+cannot yield a normal complete capture package.
 
 Every raw-inspector failure must emit one exact versioned JSON record containing
 only an allowlisted stage and safe reason. The high-level driver must reject a
@@ -565,8 +583,11 @@ before and after, the observed bounded inner size and approved inner hash,
 strict normalization metadata, and one fixed mode-`0400` `PGDMP` result. That
 exact derived file is passed to the low-level capture through an inherited
 descriptor for the private staging directory, so staging-root pathname
-replacement cannot redirect publication. The bounded helper privately captures
-child channels through capped pipes and may
+replacement cannot redirect publication. The low-level capture passes that
+same held descriptor as the bounded helper's sole temporary parent, so bounded
+stdout/stderr capture cannot escape to an ambient system temporary directory.
+The helper privately captures child channels through bounded exclusive files, withholds
+successful bytes until descriptor-relative cleanup and parent fsync succeed, and may
 invoke `pg_restore` only as `--version` and `--list`; raw TOC bytes are
 published only to fixed, exclusive, no-replace mode-`0400` files beneath a
 mode-`0700` private capture directory in the approved encrypted evidence
@@ -667,7 +688,15 @@ disposable bounded tools. Planted cases cover successful atomic publication
 plus normalization, hash,
 capture, publication, cleanup, fsync, concurrent mutation, path replacement,
 symlink, permission, ownership, collision, disk-capacity, timeout, and
-child-output boundaries. Passing those tests does not prove source
+child-output boundaries. Both platforms exercise explicit bounded temporary
+parents and cleanup-before-output failures; the Linux PostgreSQL 17 integration
+additionally reaches a real synthetic `pg_restore --list` through the guard.
+If the outer driver cannot prove cleanup, private quarantine may intentionally
+retain raw TOC captures, the derived PGDMP, or normalization metadata. Do not
+enumerate, log, or treat those bytes as cleaned; an absent or unprovable
+indeterminate marker is still a hard stop requiring manual review of the held
+private staging root.
+Passing those tests does not prove source
 completeness, archive completeness, full PGDMP-byte consumption, restore
 compatibility, or target readiness.
 

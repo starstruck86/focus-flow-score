@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -11,6 +12,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -115,6 +117,9 @@ class BoundedPgRestoreTest(unittest.TestCase):
         self.capture_parent.mkdir(mode=0o700)
         self.environment = dict(os.environ)
         self.environment[WRAPPER.UNDERLYING_ENVIRONMENT_VARIABLE] = str(self.fake)
+        self.environment[
+            WRAPPER.TEMPORARY_PARENT_PATH_ENVIRONMENT_VARIABLE
+        ] = str(self.capture_parent)
         self.environment["FAKE_LEDGER"] = str(self.ledger)
 
     def tearDown(self):
@@ -208,6 +213,368 @@ class BoundedPgRestoreTest(unittest.TestCase):
             self.ledger_entries(),
             [["--version"], ["--list", str(self.archive)]],
         )
+
+    def test_cli_requires_exactly_one_explicit_private_temporary_parent(self):
+        missing = dict(self.environment)
+        missing.pop(WRAPPER.TEMPORARY_PARENT_PATH_ENVIRONMENT_VARIABLE)
+        self.assert_failure_diagnostic(
+            self.run_cli("--version", environment=missing),
+            reason_code=WRAPPER.REASON_OTHER_NONZERO,
+        )
+
+        both = dict(self.environment)
+        parent_fd = os.open(self.capture_parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            both[WRAPPER.TEMPORARY_PARENT_FD_ENVIRONMENT_VARIABLE] = str(parent_fd)
+            self.assert_failure_diagnostic(
+                self.run_cli("--version", environment=both),
+                reason_code=WRAPPER.REASON_OTHER_NONZERO,
+            )
+        finally:
+            os.close(parent_fd)
+
+        relative = dict(self.environment)
+        relative[WRAPPER.TEMPORARY_PARENT_PATH_ENVIRONMENT_VARIABLE] = "captures"
+        self.assert_failure_diagnostic(
+            self.run_cli("--version", environment=relative),
+            reason_code=WRAPPER.REASON_OTHER_NONZERO,
+        )
+
+        linked_parent = self.root / "linked-captures"
+        linked_parent.symlink_to(self.capture_parent, target_is_directory=True)
+        symlinked = dict(self.environment)
+        symlinked[WRAPPER.TEMPORARY_PARENT_PATH_ENVIRONMENT_VARIABLE] = str(
+            linked_parent
+        )
+        self.assert_failure_diagnostic(
+            self.run_cli("--version", environment=symlinked),
+            reason_code=WRAPPER.REASON_OTHER_NONZERO,
+        )
+
+        self.capture_parent.chmod(0o750)
+        try:
+            self.assert_failure_diagnostic(
+                self.run_cli("--version"),
+                reason_code=WRAPPER.REASON_OTHER_NONZERO,
+            )
+        finally:
+            self.capture_parent.chmod(0o700)
+
+        self.assertEqual(self.ledger_entries(), [])
+        self.assertEqual(list(self.capture_parent.iterdir()), [])
+
+    def test_inherited_private_parent_fd_contains_all_capture_bytes(self):
+        environment = dict(self.environment)
+        environment.pop(WRAPPER.TEMPORARY_PARENT_PATH_ENVIRONMENT_VARIABLE)
+        parent_fd = os.open(self.capture_parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            environment[WRAPPER.TEMPORARY_PARENT_FD_ENVIRONMENT_VARIABLE] = str(
+                parent_fd
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-S",
+                    "-B",
+                    str(TOOL),
+                    "--list",
+                    str(self.archive),
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=environment,
+                close_fds=True,
+                pass_fds=(parent_fd,),
+                check=False,
+                timeout=5,
+            )
+        finally:
+            os.close(parent_fd)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, b"; synthetic TOC\n")
+        self.assertEqual(result.stderr, b"")
+        self.assertEqual(self.ledger_entries(), [["--list", str(self.archive)]])
+        self.assertEqual(list(self.capture_parent.iterdir()), [])
+
+    def test_successful_list_then_cleanup_failure_is_private_and_nonemitting(self):
+        request = WRAPPER.parse_request(["--list", str(self.archive)])
+        stdout = io.BytesIO()
+        stderr = io.BytesIO()
+        raw_capture_observed = False
+        system_roots = {
+            Path("/tmp").resolve(),
+            Path(tempfile.gettempdir()).resolve(),
+        }
+        before = {
+            (str(root), path.name)
+            for root in system_roots
+            for path in root.glob(f"{WRAPPER.TEMPORARY_DIRECTORY_PREFIX}*")
+        }
+
+        real_unlink = WRAPPER.os.unlink
+
+        def fail_stdout_cleanup(
+            name: str, *, dir_fd: int | None = None
+        ) -> None:
+            nonlocal raw_capture_observed
+            if name != "stdout.capture":
+                real_unlink(name, dir_fd=dir_fd)
+                return
+            self.assertIsNotNone(dir_fd)
+            raw_fd = os.open(
+                "stdout.capture",
+                os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=dir_fd,
+            )
+            try:
+                raw_capture_observed = os.read(raw_fd, 4096) == b"; synthetic TOC\n"
+            finally:
+                os.close(raw_fd)
+            raise OSError("planted private capture cleanup failure")
+
+        with mock.patch.object(
+            WRAPPER.os,
+            "unlink",
+            side_effect=fail_stdout_cleanup,
+        ):
+            with self.assertRaises(WRAPPER.BoundedPgRestoreError) as caught:
+                WRAPPER.run_request(
+                    str(self.fake),
+                    request,
+                    environment=self.environment,
+                    stdout=stdout,
+                    stderr=stderr,
+                    temporary_parent=str(self.capture_parent),
+                )
+
+        self.assertEqual(caught.exception.reason_code, WRAPPER.REASON_OTHER_NONZERO)
+        self.assertTrue(raw_capture_observed)
+        self.assertEqual(stdout.getvalue(), b"")
+        self.assertEqual(stderr.getvalue(), b"")
+        self.assertEqual(self.ledger_entries(), [["--list", str(self.archive)]])
+        after = {
+            (str(root), path.name)
+            for root in system_roots
+            for path in root.glob(f"{WRAPPER.TEMPORARY_DIRECTORY_PREFIX}*")
+        }
+        self.assertEqual(after, before)
+        residue = list(
+            self.capture_parent.glob(f"{WRAPPER.TEMPORARY_DIRECTORY_PREFIX}*")
+        )
+        self.assertEqual(len(residue), 1)
+        self.assertEqual(
+            (residue[0] / "stdout.capture").read_bytes(), b"; synthetic TOC\n"
+        )
+        self.assertEqual(
+            json.loads((residue[0] / "EVIDENCE_INDETERMINATE").read_bytes()),
+            {
+                "artifact_kind": "bounded_pg_restore_indeterminate",
+                "format_version": 1,
+                "reason": "cleanup_indeterminate",
+            },
+        )
+        self.assertEqual(
+            stat.S_IMODE((residue[0] / "EVIDENCE_INDETERMINATE").stat().st_mode),
+            0o400,
+        )
+
+    def test_successful_list_then_cleanup_fsync_failure_is_private_and_nonemitting(self):
+        request = WRAPPER.parse_request(["--list", str(self.archive)])
+        stdout = io.BytesIO()
+        stderr = io.BytesIO()
+        real_fsync = WRAPPER.os.fsync
+        fsync_calls = 0
+
+        def fail_first_capture_directory_fsync(file_descriptor: int) -> None:
+            nonlocal fsync_calls
+            fsync_calls += 1
+            # The first call publishes creation beneath the parent; the second
+            # is the post-capture child-directory cleanup durability check.
+            if fsync_calls == 2:
+                raise OSError("planted private cleanup fsync failure")
+            real_fsync(file_descriptor)
+
+        with mock.patch.object(
+            WRAPPER.os,
+            "fsync",
+            side_effect=fail_first_capture_directory_fsync,
+        ):
+            with self.assertRaises(WRAPPER.BoundedPgRestoreError) as caught:
+                WRAPPER.run_request(
+                    str(self.fake),
+                    request,
+                    environment=self.environment,
+                    stdout=stdout,
+                    stderr=stderr,
+                    temporary_parent=str(self.capture_parent),
+                )
+
+        self.assertEqual(caught.exception.reason_code, WRAPPER.REASON_OTHER_NONZERO)
+        self.assertEqual(stdout.getvalue(), b"")
+        self.assertEqual(stderr.getvalue(), b"")
+        self.assertEqual(self.ledger_entries(), [["--list", str(self.archive)]])
+        residue = list(
+            self.capture_parent.glob(f"{WRAPPER.TEMPORARY_DIRECTORY_PREFIX}*")
+        )
+        self.assertEqual(len(residue), 1)
+        self.assertEqual(
+            set(path.name for path in residue[0].iterdir()),
+            {WRAPPER.INDETERMINATE_MARKER},
+        )
+        self.assertEqual(
+            json.loads((residue[0] / WRAPPER.INDETERMINATE_MARKER).read_bytes()),
+            {
+                "artifact_kind": "bounded_pg_restore_indeterminate",
+                "format_version": 1,
+                "reason": "cleanup_indeterminate",
+            },
+        )
+
+    def test_capture_fd_close_failure_cannot_bypass_private_indeterminate_marker(self):
+        request = WRAPPER.parse_request(["--list", str(self.archive)])
+        stdout = io.BytesIO()
+        stderr = io.BytesIO()
+        real_close = WRAPPER.os.close
+        failed_descriptor: int | None = None
+
+        def fail_first_explicit_close(file_descriptor: int) -> None:
+            nonlocal failed_descriptor
+            if failed_descriptor is None:
+                try:
+                    metadata = os.fstat(file_descriptor)
+                except OSError:
+                    metadata = None
+                if metadata is not None and stat.S_ISREG(metadata.st_mode):
+                    failed_descriptor = file_descriptor
+                    raise OSError("planted capture descriptor close failure")
+            real_close(file_descriptor)
+
+        try:
+            with mock.patch.object(
+                WRAPPER.os,
+                "close",
+                side_effect=fail_first_explicit_close,
+            ):
+                with self.assertRaises(WRAPPER.BoundedPgRestoreError) as caught:
+                    WRAPPER.run_request(
+                        str(self.fake),
+                        request,
+                        environment=self.environment,
+                        stdout=stdout,
+                        stderr=stderr,
+                        temporary_parent=str(self.capture_parent),
+                    )
+        finally:
+            if failed_descriptor is not None:
+                try:
+                    real_close(failed_descriptor)
+                except OSError:
+                    pass
+
+        self.assertEqual(caught.exception.reason_code, WRAPPER.REASON_OTHER_NONZERO)
+        self.assertEqual(stdout.getvalue(), b"")
+        self.assertEqual(stderr.getvalue(), b"")
+        residue = list(
+            self.capture_parent.glob(f"{WRAPPER.TEMPORARY_DIRECTORY_PREFIX}*")
+        )
+        self.assertEqual(len(residue), 1)
+        self.assertEqual(
+            set(path.name for path in residue[0].iterdir()),
+            {WRAPPER.INDETERMINATE_MARKER},
+        )
+
+    def test_real_postgresql17_list_uses_inherited_private_parent_fd(self):
+        if os.environ.get("MIGRATION_VERIFY_ALLOW_FIXTURE") != "1":
+            self.skipTest("requires the explicitly authorized local CI fixture")
+        database = os.environ.get("PGDATABASE", "")
+        host = os.environ.get("PGHOST", "")
+        if not database.startswith("migration_verify_") or host not in {
+            "/var/run/postgresql",
+            "/tmp",
+        }:
+            self.skipTest("requires a local migration_verify_* PostgreSQL fixture")
+        pg_dump = shutil.which("pg_dump")
+        pg_restore = shutil.which("pg_restore")
+        if pg_dump is None or pg_restore is None:
+            self.skipTest("PostgreSQL client tools are unavailable")
+        for tool in (pg_dump, pg_restore):
+            version = subprocess.run(
+                [tool, "--version"],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=5,
+            )
+            self.assertEqual(version.returncode, 0)
+            self.assertRegex(version.stdout, rb"\(PostgreSQL\) 17(?:[. ]|$)")
+
+        archive = self.root / "real-postgresql17-schema.backup"
+        dump = subprocess.run(
+            [
+                pg_dump,
+                "--format=custom",
+                "--schema-only",
+                "--no-owner",
+                "--no-privileges",
+                f"--file={archive}",
+            ],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            env=os.environ,
+            timeout=30,
+        )
+        self.assertEqual(dump.returncode, 0, b"synthetic pg_dump failed")
+        self.assertTrue(archive.read_bytes().startswith(b"PGDMP"))
+
+        real_ledger = self.root / "real-pg-restore-ledger"
+        audited = self.root / "audited-pg-restore"
+        audited.write_text(
+            "#!/bin/sh\nset -eu\n"
+            f"printf '%s\\n' \"$1\" >> {str(real_ledger)!r}\n"
+            f"exec {pg_restore!r} \"$@\"\n",
+            encoding="ascii",
+        )
+        audited.chmod(0o500)
+        environment = {
+            "LANG": "C",
+            "LC_ALL": "C",
+            WRAPPER.UNDERLYING_ENVIRONMENT_VARIABLE: str(audited),
+        }
+        parent_fd = os.open(self.capture_parent, os.O_RDONLY | os.O_DIRECTORY)
+        environment[WRAPPER.TEMPORARY_PARENT_FD_ENVIRONMENT_VARIABLE] = str(parent_fd)
+        try:
+            results = [
+                subprocess.run(
+                    [sys.executable, "-I", "-S", "-B", str(TOOL), *arguments],
+                    check=False,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=environment,
+                    close_fds=True,
+                    pass_fds=(parent_fd,),
+                    timeout=30,
+                )
+                for arguments in (("--version",), ("--list", str(archive)))
+            ]
+        finally:
+            os.close(parent_fd)
+        for result in results:
+            self.assertEqual(
+                result.returncode,
+                0,
+                "bounded PostgreSQL 17 metadata invocation failed",
+            )
+            self.assertEqual(result.stderr, b"")
+        self.assertRegex(results[0].stdout, rb"\(PostgreSQL\) 17(?:[. ]|$)")
+        self.assertTrue(results[1].stdout.startswith(b";"))
+        self.assertEqual(
+            real_ledger.read_text(encoding="ascii").splitlines(),
+            ["--version", "--list"],
+        )
+        self.assertEqual(list(self.capture_parent.iterdir()), [])
 
     def test_success_preserves_child_stdout_and_stderr_bytes(self):
         environment = dict(self.environment)
