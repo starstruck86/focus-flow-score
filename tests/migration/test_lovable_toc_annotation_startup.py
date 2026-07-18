@@ -402,15 +402,35 @@ class LovableTocAnnotationStartupTest(unittest.TestCase):
             encoding="ascii",
         )
 
-        # Positive controls prove both vectors would execute without isolation.
+        # CI-managed interpreters may disable automatic user-site loading.
+        # Execute the exact planted modules outside isolation so the controls
+        # prove that both payloads are viable on every runner.  The launcher
+        # regression below never performs either explicit load and continues
+        # to rely only on its reviewed startup boundary.
         controls = (
-            {"PYTHONPATH": os.fspath(pythonpath)},
-            {"PYTHONUSERBASE": os.fspath(userbase)},
+            (
+                pythonpath,
+                "import sitecustomize",
+                {"PYTHONPATH": os.fspath(pythonpath)},
+            ),
+            (
+                user_site,
+                (
+                    "import pathlib;"
+                    f"exec(pathlib.Path({os.fspath(pth)!r}).read_text(encoding='ascii'),{{}})"
+                ),
+                {"PYTHONUSERBASE": os.fspath(userbase)},
+            ),
         )
-        for poison_environment in controls:
+        for import_root, statement, poison_environment in controls:
             with self.subTest(positive_control=poison_environment):
                 control = subprocess.run(
-                    [os.fspath(PYTHON), "-c", "pass"],
+                    [
+                        os.fspath(PYTHON),
+                        "-S",
+                        "-c",
+                        f"import sys;sys.path.insert(0,{os.fspath(import_root)!r});{statement}",
+                    ],
                     env={"LANG": "C", "LC_ALL": "C", **poison_environment},
                     check=False,
                     stdin=subprocess.DEVNULL,
@@ -430,7 +450,12 @@ class LovableTocAnnotationStartupTest(unittest.TestCase):
             encoding="ascii",
         )
         control = subprocess.run(
-            [os.fspath(PYTHON), "-c", "pass"],
+            [
+                os.fspath(PYTHON),
+                "-S",
+                "-c",
+                f"import sys;sys.path.insert(0,{os.fspath(user_site)!r});import sitecustomize",
+            ],
             env={"LANG": "C", "LC_ALL": "C", "PYTHONUSERBASE": os.fspath(userbase)},
             check=False,
             stdin=subprocess.DEVNULL,
