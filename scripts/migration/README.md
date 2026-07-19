@@ -450,15 +450,19 @@ generations advance only through `PRIMARY_REVIEW_REQUIRED` ->
 `PEER_REVIEW_REQUIRED` -> `FINALIZATION_REVIEW_REQUIRED` ->
 `FINALIZATION_ELIGIBLE`. `FINALIZATION_REVIEW_REQUIRED` means every recorded
 phase is complete but the exact semantic finalization check still rejects the
-decisions. Only then may `correction_review` select an explicit, sorted batch
-of at most 100 ordinals through the controlled TTY and apply one existing
-primary-review phase. That immutable correction invalidates the affected peer
-approval and requires peer reapproval before eligibility can be recomputed.
+decisions. Before any final-candidate publication, `correction_review` may run
+from either `FINALIZATION_REVIEW_REQUIRED` or `FINALIZATION_ELIGIBLE`; mechanical
+eligibility is not semantic infallibility or restore readiness. It selects an
+explicit, sorted batch of at most 100 ordinals through the controlled TTY and
+applies one existing scoped primary-review phase. That immutable correction
+invalidates the affected peer approval and requires peer reapproval before
+eligibility can be recomputed.
 These are deterministic, enforced phase priorities, not permission to infer a
 decision or silently complete an earlier review. Ordinary review actions do
 not interleave: only a peer-requested correction or the explicit semantic
-`correction_review` route may return to an earlier phase. Finalization requires
-the conjunction of every phase predicate.
+`correction_review` route may return to an earlier phase. A published final
+candidate makes the root terminal; no correction is allowed afterward.
+Finalization requires the conjunction of every phase predicate.
 `initialize` is the sole initializer; `status` and `finalize` are orchestration
 actions and do not silently create ordinary review transitions. `finalize` is
 separately authorized rather than a continuation of an ordinary review
@@ -633,6 +637,23 @@ a different named operator and cannot reuse the primary operator identity.
 `status` and the finalization eligibility check report only fixed states and
 aggregate counts, never IDs or object metadata.
 
+The private `correction_review` route remains field-scoped. A relationship
+correction is recorded as the distinct internal `relationship_correction`
+checkpoint action and re-prompts both `dependency` and applicable
+`structural_parent` roles even when they were previously reviewed. It may
+clear, replace, or reselect those assignments, recomputes the canonical
+decision hash, and resets the affected peer approval; it cannot change
+classification, managed, metadata-parent, or unrelated review fields. If a
+required structural-parent selection is cleared, relationship review returns
+to `pending` so the ordinary role-labeled phase can reselect it without a
+phase-order bypass. If a `SEQUENCE OWNED BY` structural-parent list changes,
+the exact transition contract requires `sequence_review_state=pending`, followed by fresh
+role-labeled `sequence_structural_parent` context and acknowledgement and then
+fresh peer approval. A forged transition retaining the old sequence approval
+is rejected. `SEQUENCE SET` correction remains confined to
+`sequence_metadata_parent`, and ordinary data-reference correction remains
+confined to `metadata_parent`. Multi-role contexts remain separately labeled.
+
 Finalization is allowed only through a later invocation with
 `TOC_AUTHOR_ACTION=finalize`, the exact expected checkpoint head, and a
 separate explicit finalization authorization. It requires complete primary and
@@ -646,7 +667,10 @@ and leaves the immutable checkpoint chain intact. It never invokes
 `validate-lovable-toc-ledger.py`. Creation therefore means only
 `REVIEW_REQUIRED`; it is not validation, restore planning, a restore command,
 or migration readiness. The final package makes the authoring root terminal;
-all later authoring actions stop before reading private capture input.
+all later authoring actions stop before reading private capture input. An
+operator who withholds finalization authorization after finding a wrong
+decision may use the scoped correction route while the root is still
+unpublished, including from `FINALIZATION_ELIGIBLE`.
 
 `run-lovable-toc-ledger-validation.sh` is the separately authorized,
 zero-argument startup-isolated launcher for the existing validator. It applies

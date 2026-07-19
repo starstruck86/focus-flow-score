@@ -1215,7 +1215,8 @@ def _entry_updates(
             decision["manual_conflict_review_state"] = (
                 "pending" if classification == "manual_conflict" else "not_applicable"
             )
-        elif action == "relationship_review":
+        elif action in {"relationship_review", "relationship_correction"}:
+            previous_parent_entry_ids = list(decision["parent_entry_ids"])
             decision["dependency_entry_ids"] = _prompt_ordinals(
                 tty_fd,
                 capture,
@@ -1224,7 +1225,10 @@ def _entry_updates(
                 single=False,
             )
             decision["dependency_reviewed"] = True
-            if decision["relationship_review_state"] == "pending":
+            relationship_state = decision["relationship_review_state"]
+            if relationship_state == "pending" or (
+                action == "relationship_correction" and relationship_state == "reviewed"
+            ):
                 decision["parent_entry_ids"] = _prompt_ordinals(
                     tty_fd,
                     capture,
@@ -1232,7 +1236,19 @@ def _entry_updates(
                     role="structural_parent",
                     single=False,
                 )
-                decision["relationship_review_state"] = "reviewed"
+                decision["relationship_review_state"] = (
+                    "pending"
+                    if action == "relationship_correction"
+                    and not decision["parent_entry_ids"]
+                    else "reviewed"
+                )
+            if (
+                action == "relationship_correction"
+                and capture.entries_by_ordinal[ordinal].object_class
+                == "SEQUENCE OWNED BY"
+                and decision["parent_entry_ids"] != previous_parent_entry_ids
+            ):
+                decision["sequence_review_state"] = "pending"
         elif action == "data_reference_review":
             selected = _prompt_ordinals(
                 tty_fd,
@@ -1826,7 +1842,8 @@ def execute_authoring(
                 status = aggregate_status(checkpoint, capture)
             else:
                 semantic_correction = (
-                    current_state == "FINALIZATION_REVIEW_REQUIRED"
+                    current_state
+                    in {"FINALIZATION_REVIEW_REQUIRED", "FINALIZATION_ELIGIBLE"}
                     and action == "correction_review"
                 )
                 correcting_peer_rejection = (
@@ -1899,8 +1916,14 @@ def execute_authoring(
                     ordinals = requested[:100]
                 else:
                     ordinals = next_review_ordinals(checkpoint, action, batch_size=100)
+                checkpoint_action = (
+                    "relationship_correction"
+                    if semantic_correction
+                    and transition_action == "relationship_review"
+                    else transition_action
+                )
                 entry_updates = _entry_updates(
-                    transition_action, checkpoint, capture, ordinals, tty_fd
+                    checkpoint_action, checkpoint, capture, ordinals, tty_fd
                 )
                 global_updates, managed_updates = _global_updates(
                     transition_action,
@@ -1919,7 +1942,7 @@ def execute_authoring(
                         checkpoint,
                         capture,
                         binding,
-                        action=transition_action,
+                        action=checkpoint_action,
                         operator_identity=operator,
                         session_identity=session,
                         reviewed_ordinal_ranges=_ranges(ordinals),

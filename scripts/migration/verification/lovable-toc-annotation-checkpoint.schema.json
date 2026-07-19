@@ -124,6 +124,7 @@
             "manual_conflict_review",
             "peer_review",
             "primary_review",
+            "relationship_correction",
             "relationship_review",
             "revisit_unresolved",
             "sequence_review"

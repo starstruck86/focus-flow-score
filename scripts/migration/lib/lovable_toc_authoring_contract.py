@@ -68,6 +68,7 @@ CHECKPOINT_ACTIONS = frozenset(
     {
         "initialize",
         "primary_review",
+        "relationship_correction",
         "revisit_unresolved",
         "relationship_review",
         "data_reference_review",
@@ -80,6 +81,7 @@ CHECKPOINT_ACTIONS = frozenset(
 ENTRY_PRIMARY_ACTIONS = frozenset(
     {
         "primary_review",
+        "relationship_correction",
         "revisit_unresolved",
         "relationship_review",
         "data_reference_review",
@@ -146,6 +148,14 @@ DECISION_FIELDS_BY_ACTION = {
             "dependency_reviewed",
             "parent_entry_ids",
             "relationship_review_state",
+        }
+    ),
+    "relationship_correction": frozenset(
+        {
+            "dependency_entry_ids",
+            "parent_entry_ids",
+            "relationship_review_state",
+            "sequence_review_state",
         }
     ),
     "data_reference_review": frozenset(
@@ -1143,6 +1153,65 @@ def _changed_keys(before: Mapping[str, Any], after: Mapping[str, Any]) -> set[st
     return {name for name in before if before[name] != after[name]}
 
 
+def _validate_relationship_transition(
+    action: str, before: Mapping[str, Any], after: Mapping[str, Any]
+) -> None:
+    before_decision = before["primary_decision"]
+    after_decision = after["primary_decision"]
+    parents_changed = (
+        before_decision["parent_entry_ids"] != after_decision["parent_entry_ids"]
+    )
+
+    if action == "relationship_review":
+        if (
+            before_decision["dependency_reviewed"]
+            and before_decision["relationship_review_state"] != "pending"
+        ):
+            _fail("review_transition_invalid")
+    elif action == "relationship_correction":
+        if (
+            not before_decision["dependency_reviewed"]
+            or before_decision["relationship_review_state"]
+            not in {"reviewed", "not_applicable"}
+            or after_decision["dependency_reviewed"] is not True
+        ):
+            _fail("review_transition_invalid")
+        if before["object_class"] in RELATIONSHIP_PARENT_GROUPS:
+            expected_relationship_state = (
+                "pending"
+                if parents_changed and not after_decision["parent_entry_ids"]
+                else before_decision["relationship_review_state"]
+            )
+            if (
+                after_decision["relationship_review_state"]
+                != expected_relationship_state
+            ):
+                _fail("review_transition_invalid")
+        elif (
+            parents_changed
+            or after_decision["relationship_review_state"]
+            != before_decision["relationship_review_state"]
+        ):
+            _fail("review_transition_invalid")
+        if (
+            before_decision["dependency_entry_ids"]
+            == after_decision["dependency_entry_ids"]
+            and not parents_changed
+        ):
+            _fail("review_transition_invalid")
+    else:
+        _fail("review_transition_invalid")
+
+    if before["object_class"] == "SEQUENCE OWNED BY" and parents_changed:
+        if after_decision["sequence_review_state"] != "pending":
+            _fail("review_transition_invalid")
+    elif (
+        after_decision["sequence_review_state"]
+        != before_decision["sequence_review_state"]
+    ):
+        _fail("review_transition_invalid")
+
+
 def _validate_transition(
     previous: Mapping[str, Any], current: Mapping[str, Any]
 ) -> None:
@@ -1162,6 +1231,11 @@ def _validate_transition(
     action = current["event"]["action"]
     if action == "initialize":
         _fail("history_invalid")
+    if (
+        action == "relationship_correction"
+        and _review_phase_state(previous) != "FINALIZATION_REVIEW_REQUIRED"
+    ):
+        _fail("review_transition_invalid")
     covered = _ordinals_for_ranges(current["event"]["reviewed_ordinal_ranges"])
     if action == "peer_review":
         if current["peer_operator_identity"] != current["event"]["operator_identity"]:
@@ -1242,6 +1316,8 @@ def _validate_transition(
                 - allowed
             ):
                 _fail("review_transition_invalid")
+            if action in {"relationship_review", "relationship_correction"}:
+                _validate_relationship_transition(action, before, after)
             if after["peer_review"] != _pending_peer():
                 _fail("review_transition_invalid")
     if action != "managed_review" and action != "peer_review":

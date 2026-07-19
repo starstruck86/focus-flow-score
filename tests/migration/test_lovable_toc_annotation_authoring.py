@@ -1827,6 +1827,188 @@ class AuthoringContractTest(unittest.TestCase):
         history.append(checkpoint)
         return history
 
+    def fully_reviewed_capture_history(
+        self,
+        capture,
+        *,
+        binding=None,
+        dependencies=None,
+        structural_parents=None,
+        metadata_parents=None,
+        primary_operator="Primary",
+        peer_operator="Peer",
+    ):
+        """Build a valid synthetic chain for every entry in a capture."""
+
+        binding = self.binding if binding is None else binding
+        dependencies = dict(dependencies or {})
+        structural_parents = dict(structural_parents or {})
+        metadata_parents = dict(metadata_parents or {})
+        entry_count = len(capture.entries_by_ordinal)
+        all_ranges = [{"start": 0, "end_exclusive": entry_count}]
+        history = []
+
+        checkpoint = authoring.initialize_checkpoint(
+            capture, binding, primary_operator, "bulk-session-1"
+        )
+        history.append(checkpoint)
+
+        primary_updates = []
+        for ordinal, record in enumerate(checkpoint["entries"]):
+            decision = copy.deepcopy(record["primary_decision"])
+            decision["classification"] = "restore"
+            decision["classification_reviewed"] = True
+            primary_updates.append({"ordinal": ordinal, "primary_decision": decision})
+        checkpoint = authoring.apply_transition(
+            checkpoint,
+            capture,
+            binding,
+            action="primary_review",
+            operator_identity=primary_operator,
+            session_identity="bulk-session-2",
+            reviewed_ordinal_ranges=all_ranges,
+            entry_updates=primary_updates,
+        )
+        history.append(checkpoint)
+
+        relationship_updates = []
+        for ordinal, record in enumerate(checkpoint["entries"]):
+            decision = copy.deepcopy(record["primary_decision"])
+            decision["dependency_entry_ids"] = [
+                capture.entries_by_ordinal[target].entry_id
+                for target in dependencies.get(ordinal, ())
+            ]
+            decision["dependency_reviewed"] = True
+            if decision["relationship_review_state"] == "pending":
+                decision["parent_entry_ids"] = [
+                    capture.entries_by_ordinal[target].entry_id
+                    for target in structural_parents.get(ordinal, ())
+                ]
+                decision["relationship_review_state"] = "reviewed"
+            relationship_updates.append(
+                {"ordinal": ordinal, "primary_decision": decision}
+            )
+        checkpoint = authoring.apply_transition(
+            checkpoint,
+            capture,
+            binding,
+            action="relationship_review",
+            operator_identity=primary_operator,
+            session_identity="bulk-session-3",
+            reviewed_ordinal_ranges=all_ranges,
+            entry_updates=relationship_updates,
+        )
+        history.append(checkpoint)
+
+        data_ordinals = tuple(
+            entry.ordinal for entry in capture.entries_by_ordinal if entry.is_data_reference
+        )
+        if data_ordinals:
+            data_updates = []
+            for ordinal in data_ordinals:
+                decision = copy.deepcopy(
+                    checkpoint["entries"][ordinal]["primary_decision"]
+                )
+                decision["metadata_parent_entry_id"] = capture.entries_by_ordinal[
+                    metadata_parents[ordinal]
+                ].entry_id
+                decision["data_reference_review_state"] = "reviewed"
+                data_updates.append({"ordinal": ordinal, "primary_decision": decision})
+            checkpoint = authoring.apply_transition(
+                checkpoint,
+                capture,
+                binding,
+                action="data_reference_review",
+                operator_identity=primary_operator,
+                session_identity="bulk-session-4",
+                reviewed_ordinal_ranges=AUTHOR._ranges(data_ordinals),
+                entry_updates=data_updates,
+            )
+            history.append(checkpoint)
+
+        sequence_ordinals = tuple(
+            entry.ordinal
+            for entry in capture.entries_by_ordinal
+            if entry.object_class in authoring.STATE_BEARING_REVIEW_CLASSES
+        )
+        if sequence_ordinals:
+            sequence_updates = []
+            for ordinal in sequence_ordinals:
+                decision = copy.deepcopy(
+                    checkpoint["entries"][ordinal]["primary_decision"]
+                )
+                if capture.entries_by_ordinal[ordinal].object_class == "SEQUENCE SET":
+                    decision["metadata_parent_entry_id"] = capture.entries_by_ordinal[
+                        metadata_parents[ordinal]
+                    ].entry_id
+                decision["sequence_review_state"] = "reviewed"
+                sequence_updates.append(
+                    {"ordinal": ordinal, "primary_decision": decision}
+                )
+            checkpoint = authoring.apply_transition(
+                checkpoint,
+                capture,
+                binding,
+                action="sequence_review",
+                operator_identity=primary_operator,
+                session_identity="bulk-session-5",
+                reviewed_ordinal_ranges=AUTHOR._ranges(sequence_ordinals),
+                entry_updates=sequence_updates,
+            )
+            history.append(checkpoint)
+
+        managed_updates = []
+        for ordinal, record in enumerate(checkpoint["entries"]):
+            decision = copy.deepcopy(record["primary_decision"])
+            decision["managed_domain"] = "none"
+            decision["managed_domain_reviewed"] = True
+            managed_updates.append({"ordinal": ordinal, "primary_decision": decision})
+        globals_selected = {
+            "extension": "target_supported_only",
+            "owner": "strip_and_rebind",
+            "role": "exclude_source_roles",
+            "schema": "selective_restore",
+        }
+        managed_selected = {
+            name: "not_present" for name in capture_contract.MANAGED_DOMAINS
+        }
+        checkpoint = authoring.apply_transition(
+            checkpoint,
+            capture,
+            binding,
+            action="managed_review",
+            operator_identity=primary_operator,
+            session_identity="bulk-session-6",
+            reviewed_ordinal_ranges=all_ranges,
+            entry_updates=managed_updates,
+            global_updates=globals_selected,
+            managed_updates=managed_selected,
+        )
+        history.append(checkpoint)
+
+        peer_updates = [
+            {
+                "ordinal": ordinal,
+                "peer_status": "approved",
+                "primary_decision_sha256": record["primary_decision_sha256"],
+            }
+            for ordinal, record in enumerate(checkpoint["entries"])
+        ]
+        checkpoint = authoring.apply_transition(
+            checkpoint,
+            capture,
+            binding,
+            action="peer_review",
+            operator_identity=peer_operator,
+            session_identity="bulk-session-7",
+            reviewed_ordinal_ranges=all_ranges,
+            entry_updates=peer_updates,
+            global_updates={name: "approved" for name in globals_selected},
+            managed_updates={name: "approved" for name in managed_selected},
+        )
+        history.append(checkpoint)
+        return history
+
     def fully_reviewed_checkpoint(self):
         capture, _package, _expectations = self.load_capture(["TABLE"])
         return capture, self.fully_reviewed_history(capture)[-1]
@@ -2046,6 +2228,570 @@ class AuthoringContractTest(unittest.TestCase):
             "FINALIZATION_ELIGIBLE",
         )
         self.assertTrue(authoring.build_final_ledger(reapproved, capture, self.binding))
+
+    def test_relationship_correction_swaps_clears_and_reselects_parent(self):
+        capture, _package, _expectations = self.load_capture(
+            ["TRIGGER", "TABLE", "VIEW", "SEQUENCE"]
+        )
+        history = self.fully_reviewed_capture_history(
+            capture,
+            dependencies={0: (3,)},
+            structural_parents={0: (1,)},
+        )
+        eligible = history[-1]
+        self.assertEqual(
+            authoring.aggregate_status(eligible, capture)["authoring_state"],
+            "FINALIZATION_ELIGIBLE",
+        )
+        original = eligible["entries"][0]
+
+        swapped_decision = copy.deepcopy(original["primary_decision"])
+        swapped_decision["parent_entry_ids"] = [
+            capture.entries_by_ordinal[2].entry_id
+        ]
+        swapped = authoring.apply_transition(
+            eligible,
+            capture,
+            self.binding,
+            action="relationship_correction",
+            operator_identity="Primary",
+            session_identity="swap-parent",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[{"ordinal": 0, "primary_decision": swapped_decision}],
+        )
+        self.assertNotEqual(
+            swapped["entries"][0]["primary_decision_sha256"],
+            original["primary_decision_sha256"],
+        )
+        self.assertEqual(swapped["entries"][0]["peer_review"], authoring._pending_peer())
+        self.assertEqual(
+            swapped["entries"][0]["primary_decision"]["parent_entry_ids"],
+            [capture.entries_by_ordinal[2].entry_id],
+        )
+
+        cleared_decision = copy.deepcopy(original["primary_decision"])
+        cleared_decision["parent_entry_ids"] = []
+        cleared_decision["relationship_review_state"] = "pending"
+        cleared = authoring.apply_transition(
+            eligible,
+            capture,
+            self.binding,
+            action="relationship_correction",
+            operator_identity="Primary",
+            session_identity="clear-parent",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[{"ordinal": 0, "primary_decision": cleared_decision}],
+        )
+        self.assertEqual(
+            authoring.aggregate_status(cleared, capture)["authoring_state"],
+            "RELATIONSHIP_REVIEW_REQUIRED",
+        )
+        reselected_decision = copy.deepcopy(
+            cleared["entries"][0]["primary_decision"]
+        )
+        reselected_decision["parent_entry_ids"] = [
+            capture.entries_by_ordinal[2].entry_id
+        ]
+        reselected_decision["relationship_review_state"] = "reviewed"
+        reselected = authoring.apply_transition(
+            cleared,
+            capture,
+            self.binding,
+            action="relationship_review",
+            operator_identity="Primary",
+            session_identity="reselect-parent",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[{"ordinal": 0, "primary_decision": reselected_decision}],
+        )
+        self.assertEqual(
+            reselected["entries"][0]["primary_decision"]["parent_entry_ids"],
+            [capture.entries_by_ordinal[2].entry_id],
+        )
+        self.assertEqual(
+            reselected["entries"][0]["peer_review"], authoring._pending_peer()
+        )
+        self.assertNotEqual(
+            reselected["entries"][0]["primary_decision_sha256"],
+            cleared["entries"][0]["primary_decision_sha256"],
+        )
+
+        early = history[2]
+        early_decision = copy.deepcopy(early["entries"][0]["primary_decision"])
+        early_decision["parent_entry_ids"] = [capture.entries_by_ordinal[2].entry_id]
+        with self.assertRaisesRegex(
+            authoring.AuthoringContractError, "review_transition_invalid"
+        ):
+            authoring.apply_transition(
+                early,
+                capture,
+                self.binding,
+                action="relationship_correction",
+                operator_identity="Primary",
+                session_identity="too-early",
+                reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+                entry_updates=[{"ordinal": 0, "primary_decision": early_decision}],
+            )
+
+        with self.assertRaisesRegex(
+            authoring.AuthoringContractError, "review_transition_invalid"
+        ):
+            authoring.apply_transition(
+                eligible,
+                capture,
+                self.binding,
+                action="relationship_review",
+                operator_identity="Primary",
+                session_identity="ordinary-review-correction-bypass",
+                reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+                entry_updates=[
+                    {"ordinal": 0, "primary_decision": swapped_decision}
+                ],
+            )
+
+        unrelated_decision = copy.deepcopy(swapped_decision)
+        unrelated_decision["classification"] = "dependency_only"
+        with self.assertRaisesRegex(
+            authoring.AuthoringContractError, "review_transition_invalid"
+        ):
+            authoring.apply_transition(
+                eligible,
+                capture,
+                self.binding,
+                action="relationship_correction",
+                operator_identity="Primary",
+                session_identity="unrelated-field-correction",
+                reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+                entry_updates=[
+                    {"ordinal": 0, "primary_decision": unrelated_decision}
+                ],
+            )
+        self.assertNotIn("relationship_correction", AUTHOR.ACTION_VALUES)
+
+    def test_entrypoint_relationship_correction_handles_both_final_states(self):
+        poison = "RAW_NAME_OWNER_SQL_PATH_SECRET_PAYLOAD_SENTINEL"
+        for label, initial_parents, expected_state in (
+            ("eligible", (1,), "FINALIZATION_ELIGIBLE"),
+            ("semantic-blocked", (), "FINALIZATION_REVIEW_REQUIRED"),
+        ):
+            with self.subTest(state=label):
+                capture_root = self.root / ("entrypoint-correction-" + label)
+                package, expectations, _capture, _entries = make_capture_package(
+                    capture_root,
+                    ["TRIGGER", "TABLE", "VIEW", "SEQUENCE"],
+                    poison=poison,
+                )
+                package_fd = open_directory(package)
+                try:
+                    loaded = authoring.load_capture_for_authoring(
+                        package_fd, expectations
+                    )
+                finally:
+                    os.close(package_fd)
+                private_root = self.root / ("entrypoint-private-" + label)
+                private_root.mkdir(mode=0o700)
+                binding_environment = self.author_environment(
+                    package,
+                    expectations,
+                    private_root,
+                    action="status",
+                    generation=0,
+                    head_sha256="0" * 64,
+                )
+                runtime_binding = authoring.AuthoringBinding(
+                    GIT_A,
+                    SHA_C,
+                    binding_environment[
+                        "TOC_AUTHOR_APPROVED_EXECUTION_PYTHON_SHA256"
+                    ],
+                )
+                history = self.fully_reviewed_capture_history(
+                    loaded,
+                    binding=runtime_binding,
+                    dependencies={0: (3,)},
+                    structural_parents={0: initial_parents},
+                    primary_operator="Primary Reviewer",
+                )
+                self.assertEqual(
+                    authoring.aggregate_status(history[-1], loaded)[
+                        "authoring_state"
+                    ],
+                    expected_state,
+                )
+                checkpoints = private_root / AUTHOR.CHECKPOINTS_NAME
+                checkpoints.mkdir(mode=0o700)
+                checkpoints_fd = open_directory(checkpoints)
+                try:
+                    for checkpoint in history:
+                        authoring.publish_checkpoint_at(checkpoints_fd, checkpoint)
+                finally:
+                    os.close(checkpoints_fd)
+                mark_authoring_released(private_root)
+                old_release_token = released_token(private_root)
+                head = authoring.checkpoint_sha256(history[-1])
+                environment = self.author_environment(
+                    package,
+                    expectations,
+                    private_root,
+                    action="correction_review",
+                    generation=history[-1]["generation"],
+                    head_sha256=head,
+                )
+                writes: list[bytes] = []
+                with mock.patch.object(
+                    AUTHOR, "_authoring_procedure_identity", return_value=SHA_C
+                ), mock.patch.object(
+                    AUTHOR, "_prompt_choice", return_value="relationship_review"
+                ), mock.patch.object(
+                    AUTHOR, "_prompt_correction_ordinals", return_value=(0,)
+                ), mock.patch.object(
+                    AUTHOR,
+                    "_read_tty_line",
+                    side_effect=("show:4", "4", "show:3", "3"),
+                ), mock.patch.object(
+                    AUTHOR,
+                    "_write_tty",
+                    side_effect=lambda _descriptor, payload: writes.append(payload),
+                ), mock.patch.object(
+                    AUTHOR, "_require_resume_acknowledgement", return_value=None
+                ), mock.patch.object(
+                    AUTHOR._startup_subprocess,
+                    "run",
+                    side_effect=AssertionError("unexpected child process"),
+                ), mock.patch.object(
+                    socket,
+                    "socket",
+                    side_effect=AssertionError("unexpected network operation"),
+                ):
+                    exit_status, diagnostic = AUTHOR.execute_authoring(environment, 9)
+                self.assertEqual(exit_status, 2)
+                transcript = b"".join(writes)
+                self.assertIn(b"dependency_ordinals_csv_or_none", transcript)
+                self.assertIn(
+                    b"reference_role=dependency\nordinal=4", transcript
+                )
+                self.assertIn(
+                    b"structural_parent_ordinals_csv_or_none", transcript
+                )
+                self.assertIn(
+                    b"reference_role=structural_parent\nordinal=3", transcript
+                )
+                for entry in loaded.entries_by_ordinal:
+                    self.assertNotIn(entry.entry_id.encode("ascii"), transcript)
+                    self.assertNotIn(entry.entry_id.encode("ascii"), diagnostic)
+                for private_value in (
+                    poison,
+                    os.fspath(package),
+                    os.fspath(private_root),
+                    head,
+                    old_release_token,
+                ):
+                    self.assertNotIn(private_value.encode("utf-8"), diagnostic)
+                checkpoints_fd = open_directory(checkpoints)
+                try:
+                    chain = authoring.load_checkpoint_chain(
+                        checkpoints_fd, loaded, runtime_binding
+                    )
+                finally:
+                    os.close(checkpoints_fd)
+                self.assertEqual(
+                    chain.head["event"]["action"], "relationship_correction"
+                )
+                self.assertEqual(
+                    chain.head["entries"][0]["primary_decision"][
+                        "parent_entry_ids"
+                    ],
+                    [loaded.entries_by_ordinal[2].entry_id],
+                )
+                self.assertEqual(
+                    chain.head["entries"][0]["peer_review"], authoring._pending_peer()
+                )
+                self.assertFalse(
+                    any(
+                        AUTHOR.FINAL_PACKAGE_RE.fullmatch(path.name)
+                        for path in private_root.iterdir()
+                    )
+                )
+
+    def test_sequence_owned_parent_correction_invalidates_sequence_and_peer(self):
+        poison = "SEQUENCE_OWNER_SQL_PATH_SECRET_PAYLOAD_SENTINEL"
+        capture_root = self.root / "sequence-owned-correction"
+        package, expectations, _capture, _entries = make_capture_package(
+            capture_root,
+            ["SEQUENCE OWNED BY", "SEQUENCE", "TABLE", "SEQUENCE"],
+            poison=poison,
+        )
+        descriptor = open_directory(package)
+        try:
+            capture = authoring.load_capture_for_authoring(descriptor, expectations)
+        finally:
+            os.close(descriptor)
+        eligible = self.fully_reviewed_capture_history(
+            capture, structural_parents={0: (1, 2)}
+        )[-1]
+        self.assertEqual(
+            authoring.aggregate_status(eligible, capture)["authoring_state"],
+            "FINALIZATION_ELIGIBLE",
+        )
+        stale = copy.deepcopy(eligible["entries"][0]["primary_decision"])
+        stale["parent_entry_ids"] = [
+            capture.entries_by_ordinal[3].entry_id,
+            capture.entries_by_ordinal[2].entry_id,
+        ]
+        self.assertEqual(stale["sequence_review_state"], "reviewed")
+        with self.assertRaisesRegex(
+            authoring.AuthoringContractError, "review_transition_invalid"
+        ):
+            authoring.apply_transition(
+                eligible,
+                capture,
+                self.binding,
+                action="relationship_correction",
+                operator_identity="Primary",
+                session_identity="stale-sequence-review",
+                reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+                entry_updates=[{"ordinal": 0, "primary_decision": stale}],
+            )
+
+        corrected_decision = copy.deepcopy(stale)
+        corrected_decision["sequence_review_state"] = "pending"
+        corrected = authoring.apply_transition(
+            eligible,
+            capture,
+            self.binding,
+            action="relationship_correction",
+            operator_identity="Primary",
+            session_identity="invalidate-sequence-review",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[{"ordinal": 0, "primary_decision": corrected_decision}],
+        )
+        corrected_record = corrected["entries"][0]
+        self.assertEqual(
+            corrected_record["primary_decision"]["sequence_review_state"], "pending"
+        )
+        self.assertEqual(corrected_record["peer_review"], authoring._pending_peer())
+        self.assertNotEqual(
+            corrected_record["primary_decision_sha256"],
+            eligible["entries"][0]["primary_decision_sha256"],
+        )
+        self.assertEqual(
+            authoring.aggregate_status(corrected, capture)["authoring_state"],
+            "SEQUENCE_REVIEW_REQUIRED",
+        )
+
+        writes: list[bytes] = []
+
+        def sequence_choice(_descriptor, *, allowed):
+            if "context_reviewed" in allowed:
+                return "context_reviewed"
+            return "confirmed"
+
+        with mock.patch.object(
+            AUTHOR,
+            "_write_tty",
+            side_effect=lambda _descriptor, payload: writes.append(payload),
+        ), mock.patch.object(AUTHOR, "_read_tty_choice", side_effect=sequence_choice):
+            update = AUTHOR._entry_updates(
+                "sequence_review", corrected, capture, (0,), 9
+            )[0]["primary_decision"]
+        transcript = b"".join(writes)
+        self.assertIn(
+            b"reference_role=sequence_structural_parent\nordinal=4", transcript
+        )
+        self.assertIn(
+            b"reference_role=sequence_structural_parent\nordinal=3", transcript
+        )
+        self.assertNotIn(
+            b"reference_role=sequence_structural_parent\nordinal=2", transcript
+        )
+        for entry in capture.entries_by_ordinal:
+            self.assertNotIn(entry.entry_id.encode("ascii"), transcript)
+        reviewed = authoring.apply_transition(
+            corrected,
+            capture,
+            self.binding,
+            action="sequence_review",
+            operator_identity="Primary",
+            session_identity="fresh-sequence-review",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[{"ordinal": 0, "primary_decision": update}],
+        )
+        self.assertEqual(
+            authoring.aggregate_status(reviewed, capture)["authoring_state"],
+            "PEER_REVIEW_REQUIRED",
+        )
+        reapproved = authoring.apply_transition(
+            reviewed,
+            capture,
+            self.binding,
+            action="peer_review",
+            operator_identity="Peer",
+            session_identity="fresh-sequence-peer",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[
+                {
+                    "ordinal": 0,
+                    "peer_status": "approved",
+                    "primary_decision_sha256": reviewed["entries"][0][
+                        "primary_decision_sha256"
+                    ],
+                }
+            ],
+        )
+        self.assertEqual(
+            authoring.aggregate_status(reapproved, capture)["authoring_state"],
+            "FINALIZATION_ELIGIBLE",
+        )
+        ordinary = AUTHOR._fixed_diagnostic(status="failed", reason="input_invalid")
+        self.assertNotIn(poison.encode("ascii"), ordinary)
+
+    def test_sequence_set_and_data_reference_corrections_are_role_confined(self):
+        sequence_capture, _package, _expectations = self.load_capture(
+            ["SEQUENCE SET", "SEQUENCE", "SEQUENCE"]
+        )
+        sequence_eligible = self.fully_reviewed_capture_history(
+            sequence_capture,
+            dependencies={0: (1,)},
+            metadata_parents={0: 2},
+        )[-1]
+        sequence_before = sequence_eligible["entries"][0]["primary_decision"]
+        sequence_writes: list[bytes] = []
+        with mock.patch.object(
+            AUTHOR, "_read_tty_line", side_effect=("show:2", "2")
+        ), mock.patch.object(
+            AUTHOR,
+            "_write_tty",
+            side_effect=lambda _descriptor, payload: sequence_writes.append(payload),
+        ):
+            sequence_update = AUTHOR._entry_updates(
+                "sequence_review", sequence_eligible, sequence_capture, (0,), 9
+            )[0]["primary_decision"]
+        sequence_transcript = b"".join(sequence_writes)
+        self.assertIn(b"sequence_metadata_parent_ordinal", sequence_transcript)
+        self.assertIn(
+            b"reference_role=sequence_metadata_parent\nordinal=2",
+            sequence_transcript,
+        )
+        self.assertNotIn(b"structural_parent_ordinals", sequence_transcript)
+        self.assertEqual(
+            authoring._changed_keys(sequence_before, sequence_update),
+            {"metadata_parent_entry_id"},
+        )
+        sequence_corrected = authoring.apply_transition(
+            sequence_eligible,
+            sequence_capture,
+            self.binding,
+            action="sequence_review",
+            operator_identity="Primary",
+            session_identity="sequence-set-correction",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[{"ordinal": 0, "primary_decision": sequence_update}],
+        )
+        self.assertEqual(
+            sequence_corrected["entries"][0]["peer_review"],
+            authoring._pending_peer(),
+        )
+
+        peer_writes: list[bytes] = []
+
+        def peer_choice(_descriptor, *, allowed):
+            if "summary_reviewed" in allowed:
+                return "summary_reviewed"
+            return "context_reviewed"
+
+        with mock.patch.object(
+            AUTHOR,
+            "_write_tty",
+            side_effect=lambda _descriptor, payload: peer_writes.append(payload),
+        ), mock.patch.object(AUTHOR, "_read_tty_choice", side_effect=peer_choice):
+            AUTHOR._show_peer_decision(
+                9, sequence_capture, sequence_corrected["entries"][0]
+            )
+        peer_transcript = b"".join(peer_writes)
+        for role in ("dependency", "metadata_parent", "sequence_metadata_parent"):
+            self.assertIn(
+                ("reference_role=%s\nordinal=2" % role).encode("ascii"),
+                peer_transcript,
+            )
+        for entry in sequence_capture.entries_by_ordinal:
+            self.assertNotIn(entry.entry_id.encode("ascii"), peer_transcript)
+
+        forged_sequence = copy.deepcopy(sequence_update)
+        forged_sequence["parent_entry_ids"] = [
+            sequence_capture.entries_by_ordinal[2].entry_id
+        ]
+        with self.assertRaisesRegex(
+            authoring.AuthoringContractError, "review_transition_invalid"
+        ):
+            authoring.apply_transition(
+                sequence_eligible,
+                sequence_capture,
+                self.binding,
+                action="sequence_review",
+                operator_identity="Primary",
+                session_identity="forged-sequence-set-parent",
+                reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+                entry_updates=[{"ordinal": 0, "primary_decision": forged_sequence}],
+            )
+
+        data_capture, _package, _expectations = self.load_capture(
+            ["TABLE DATA", "TABLE", "TABLE"]
+        )
+        data_eligible = self.fully_reviewed_capture_history(
+            data_capture, metadata_parents={0: 1}
+        )[-1]
+        data_before = data_eligible["entries"][0]["primary_decision"]
+        data_writes: list[bytes] = []
+        with mock.patch.object(
+            AUTHOR, "_read_tty_line", side_effect=("show:3", "3")
+        ), mock.patch.object(
+            AUTHOR,
+            "_write_tty",
+            side_effect=lambda _descriptor, payload: data_writes.append(payload),
+        ):
+            data_update = AUTHOR._entry_updates(
+                "data_reference_review", data_eligible, data_capture, (0,), 9
+            )[0]["primary_decision"]
+        data_transcript = b"".join(data_writes)
+        self.assertIn(b"metadata_parent_ordinal", data_transcript)
+        self.assertIn(
+            b"reference_role=metadata_parent\nordinal=3", data_transcript
+        )
+        self.assertNotIn(b"structural_parent_ordinals", data_transcript)
+        self.assertNotIn(b"sequence_metadata_parent", data_transcript)
+        self.assertEqual(
+            authoring._changed_keys(data_before, data_update),
+            {"metadata_parent_entry_id"},
+        )
+        data_corrected = authoring.apply_transition(
+            data_eligible,
+            data_capture,
+            self.binding,
+            action="data_reference_review",
+            operator_identity="Primary",
+            session_identity="data-reference-correction",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[{"ordinal": 0, "primary_decision": data_update}],
+        )
+        self.assertEqual(
+            data_corrected["entries"][0]["peer_review"], authoring._pending_peer()
+        )
+        forged_data = copy.deepcopy(data_update)
+        forged_data["dependency_entry_ids"] = [
+            data_capture.entries_by_ordinal[1].entry_id
+        ]
+        with self.assertRaisesRegex(
+            authoring.AuthoringContractError, "review_transition_invalid"
+        ):
+            authoring.apply_transition(
+                data_eligible,
+                data_capture,
+                self.binding,
+                action="data_reference_review",
+                operator_identity="Primary",
+                session_identity="forged-data-dependency",
+                reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+                entry_updates=[{"ordinal": 0, "primary_decision": forged_data}],
+            )
 
     def test_entrypoint_semantic_correction_is_tty_selected_and_checkpointed(self):
         capture_root = self.root / "correction-capture"
@@ -2643,6 +3389,12 @@ class AuthoringContractTest(unittest.TestCase):
             checkpoint_schema["$defs"]["entry"]["properties"][
                 "dependency_review_complete"
             ]["const"]
+        )
+        self.assertIn(
+            "relationship_correction",
+            checkpoint_schema["properties"]["event"]["properties"]["action"][
+                "enum"
+            ],
         )
         for raw in (
             b'{"generation":1,"generation":2}\n',

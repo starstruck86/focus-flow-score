@@ -144,6 +144,18 @@ keyed assignments rather than a count or union. Peer review acknowledges its
 primary-decision summary before the first screen clear, then pauses after each
 role-labeled context. Multi-parent sequence review also pauses after each
 parent before another screen clear can replace it.
+Before final-candidate publication, `correction_review` is available from both
+`FINALIZATION_REVIEW_REQUIRED` and `FINALIZATION_ELIGIBLE`. Relationship
+correction re-prompts only the exact `dependency` and applicable
+`structural_parent` roles, recomputes their canonical decision hash, and resets
+the affected peer approval. A changed `SEQUENCE OWNED BY` structural-parent
+list invalidates the prior sequence confirmation and requires fresh
+`sequence_structural_parent` context, acknowledgement, and peer approval.
+Clearing a required structural parent returns relationship review to `pending`
+so reselection uses the ordinary role-labeled phase rather than bypassing order.
+`SEQUENCE SET` correction remains confined to `sequence_metadata_parent`, and
+data-reference correction remains confined to `metadata_parent`; unrelated
+fields cannot change. Final-package publication remains no-replace and terminal.
 Mechanical proposals are never approvals. Finalization is a distinct
 authorized action and publishes one canonical private ledger package without
 replacement only after every entry, data reference, dependency, sequence,

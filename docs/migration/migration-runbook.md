@@ -673,10 +673,13 @@ peer-requested correction or explicit semantic `correction_review` may return
 to an earlier phase; finalization requires every phase predicate simultaneously.
 `FINALIZATION_REVIEW_REQUIRED` is a fixed fail-closed state: all phase flags
 are present but the semantic finalization contract still rejects the combined
-decisions. Only in that state may `correction_review` choose one sorted,
-explicit TTY-only batch of at most 100 ordinals and one existing primary-review
-phase. The new immutable generation invalidates affected peer approval, so a
-distinct peer must reapprove it before finalization eligibility is recomputed.
+decisions. Before final-candidate publication, `correction_review` may run from
+either `FINALIZATION_REVIEW_REQUIRED` or `FINALIZATION_ELIGIBLE`; eligibility is
+not proof that a human decision is semantically infallible or restore-ready. It
+chooses one sorted, explicit TTY-only batch of at most 100 ordinals and one
+existing scoped primary-review phase. The new immutable generation invalidates
+affected peer approval, so a distinct peer must reapprove it before
+finalization eligibility is recomputed.
 
 `initialize` alone creates the bound draft state. Primary review proceeds in
 deterministic ordinal batches, normally 100 entries. The later passes must
@@ -701,6 +704,23 @@ transition. Every successful checkpoint-publishing review action displays the
 exact next generation and full checkpoint SHA-256 only on the controlled
 private TTY for a later exact resume; neither value enters ordinary
 stdout/stderr or the aggregate-only `status` result.
+
+Relationship correction is persisted under the internal
+`relationship_correction` checkpoint action and remains reachable only through
+the operator's `correction_review` choice. It re-prompts `dependency` and every
+applicable `structural_parent` even when their states were already reviewed,
+allowing clear, replacement, or reselection. The canonical role-keyed decision
+hash is recomputed and the affected peer approval returns to pending. If a
+required structural-parent selection is cleared, relationship review also
+returns to `pending`, and reselection must use the ordinary role-labeled phase.
+If a `SEQUENCE OWNED BY` structural-parent list changes, the transition is
+valid only with `sequence_review_state=pending`; fresh role-labeled
+`sequence_structural_parent` display and acknowledgement, then fresh peer
+approval, are mandatory. A forged transition that preserves stale sequence
+approval fails. `SEQUENCE SET` correction can change only
+`sequence_metadata_parent`, ordinary data-reference correction can change only
+`metadata_parent`, and relationship correction cannot mutate classification,
+managed, metadata-parent, or unrelated review fields.
 
 The interactive surface is one verified local foreground controlling TTY in an
 alternate screen. Raw context is bounded and escaped and goes only to the held
@@ -778,7 +798,9 @@ publishes without replacement one private
 checkpoint chain intact. Finalization never runs the validator. The resulting
 ledger remains `REVIEW_REQUIRED`; it is neither validated nor restore-ready.
 The final package makes the authoring root terminal; later authoring actions
-stop before private capture input.
+stop before private capture input. Before publication, an operator who withholds
+finalization authorization after finding a wrong decision may return through
+the scoped correction route even from `FINALIZATION_ELIGIBLE`.
 
 A later, separately authorized validation must use the zero-argument
 `scripts/migration/run-lovable-toc-ledger-validation.sh` launcher. That launcher
