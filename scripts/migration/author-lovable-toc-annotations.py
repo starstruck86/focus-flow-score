@@ -652,10 +652,14 @@ def _read_tty_choice(tty_fd: int, *, allowed: frozenset[str]) -> str:
         for value in allowed
     ):
         raise AuthoringEntrypointError("internal_failure")
-    original = termios.tcgetattr(tty_fd)
+    try:
+        original = termios.tcgetattr(tty_fd)
+    except BaseException as exc:
+        raise AuthoringEntrypointError("tty_invalid") from exc
     adjusted = list(original)
     adjusted[3] &= ~(termios.ECHO | termios.ECHONL)
     data = bytearray()
+    pending_error: BaseException | None = None
     try:
         termios.tcsetattr(tty_fd, termios.TCSAFLUSH, adjusted)
         while len(data) <= MAX_TTY_INPUT_BYTES:
@@ -669,13 +673,17 @@ def _read_tty_choice(tty_fd: int, *, allowed: frozenset[str]) -> str:
             data.extend(chunk)
         else:
             raise AuthoringEntrypointError("tty_invalid")
-    except OSError as exc:
-        raise AuthoringEntrypointError("tty_invalid") from exc
+    except BaseException as exc:
+        pending_error = exc
     finally:
         try:
             termios.tcsetattr(tty_fd, termios.TCSAFLUSH, original)
-        except BaseException:
-            pass
+        except BaseException as exc:
+            pending_error = exc
+    if pending_error is not None:
+        if isinstance(pending_error, AuthoringEntrypointError):
+            raise pending_error
+        raise AuthoringEntrypointError("tty_invalid") from pending_error
     try:
         value = bytes(data).decode("ascii", errors="strict")
     except UnicodeDecodeError as exc:
@@ -689,10 +697,14 @@ def _require_resume_acknowledgement(tty_fd: int) -> None:
     """Hold the private tuple on screen until one exact non-echoed response."""
 
     expected = b"resume_values_recorded"
-    original = termios.tcgetattr(tty_fd)
+    try:
+        original = termios.tcgetattr(tty_fd)
+    except BaseException as exc:
+        raise AuthoringEntrypointError("tty_invalid") from exc
     adjusted = list(original)
     adjusted[3] &= ~(termios.ECHO | termios.ECHONL)
     data = bytearray()
+    pending_error: BaseException | None = None
     try:
         termios.tcsetattr(tty_fd, termios.TCSAFLUSH, adjusted)
         _write_tty(tty_fd, b"type_resume_values_recorded_to_confirm\n")
@@ -709,13 +721,17 @@ def _require_resume_acknowledgement(tty_fd: int) -> None:
             raise AuthoringEntrypointError("tty_invalid")
         if bytes(data) != expected:
             raise AuthoringEntrypointError("tty_invalid")
-    except OSError as exc:
-        raise AuthoringEntrypointError("tty_invalid") from exc
+    except BaseException as exc:
+        pending_error = exc
     finally:
         try:
             termios.tcsetattr(tty_fd, termios.TCSAFLUSH, original)
-        except BaseException:
-            pass
+        except BaseException as exc:
+            pending_error = exc
+    if pending_error is not None:
+        if isinstance(pending_error, AuthoringEntrypointError):
+            raise pending_error
+        raise AuthoringEntrypointError("tty_invalid") from pending_error
 
 
 def _clear_tty_best_effort(tty_fd: int) -> None:
@@ -891,10 +907,14 @@ def _authoring_procedure_identity(approved_checkout: str) -> str:
 
 
 def _read_tty_line(tty_fd: int) -> str:
-    original = termios.tcgetattr(tty_fd)
+    try:
+        original = termios.tcgetattr(tty_fd)
+    except BaseException as exc:
+        raise AuthoringEntrypointError("tty_invalid") from exc
     adjusted = list(original)
     adjusted[3] &= ~(termios.ECHO | termios.ECHONL)
     data = bytearray()
+    pending_error: BaseException | None = None
     try:
         termios.tcsetattr(tty_fd, termios.TCSAFLUSH, adjusted)
         while len(data) <= MAX_TTY_INPUT_BYTES:
@@ -908,13 +928,17 @@ def _read_tty_line(tty_fd: int) -> str:
             data.extend(chunk)
         else:
             raise AuthoringEntrypointError("tty_invalid")
-    except OSError as exc:
-        raise AuthoringEntrypointError("tty_invalid") from exc
+    except BaseException as exc:
+        pending_error = exc
     finally:
         try:
             termios.tcsetattr(tty_fd, termios.TCSAFLUSH, original)
-        except BaseException:
-            pass
+        except BaseException as exc:
+            pending_error = exc
+    if pending_error is not None:
+        if isinstance(pending_error, AuthoringEntrypointError):
+            raise pending_error
+        raise AuthoringEntrypointError("tty_invalid") from pending_error
     try:
         return bytes(data).decode("ascii", errors="strict")
     except UnicodeDecodeError as exc:
@@ -927,12 +951,40 @@ def _prompt_choice(tty_fd: int, label: bytes, allowed: frozenset[str]) -> str:
     return _read_tty_choice(tty_fd, allowed=allowed)
 
 
-def _show_review_context(tty_fd: int, capture: Any, ordinal: int, *, reference: bool = False) -> None:
+REFERENCE_ROLES = frozenset(
+    {
+        "dependency",
+        "structural_parent",
+        "metadata_parent",
+        "sequence_metadata_parent",
+        "sequence_structural_parent",
+    }
+)
+
+
+def _show_review_context(
+    tty_fd: int,
+    capture: Any,
+    ordinal: int,
+    *,
+    reference_role: str | None = None,
+) -> None:
     entry = capture.entries_by_ordinal[ordinal]
-    heading = b"REFERENCE_CONTEXT" if reference else b"PRIVATE_REVIEW_CONTEXT"
+    if reference_role is not None and reference_role not in REFERENCE_ROLES:
+        raise AuthoringEntrypointError("internal_failure")
+    heading = (
+        b"REFERENCE_CONTEXT"
+        if reference_role is not None
+        else b"PRIVATE_REVIEW_CONTEXT"
+    )
     context = (
         CLEAR_SCREEN
         + heading
+        + (
+            b"\nreference_role=" + reference_role.encode("ascii")
+            if reference_role is not None
+            else b""
+        )
         + b"\nordinal="
         + str(ordinal + 1).encode("ascii")
         + b"\nclass="
@@ -947,9 +999,22 @@ def _show_review_context(tty_fd: int, capture: Any, ordinal: int, *, reference: 
 
 
 def _prompt_ordinals(
-    tty_fd: int, capture: Any, *, current: int, single: bool
+    tty_fd: int,
+    capture: Any,
+    *,
+    current: int,
+    role: str,
+    single: bool,
 ) -> list[str]:
-    prompt = b"parent_ordinal" if single else b"ordinals_csv_or_none"
+    prompts = {
+        ("dependency", False): b"dependency_ordinals_csv_or_none",
+        ("structural_parent", False): b"structural_parent_ordinals_csv_or_none",
+        ("metadata_parent", True): b"metadata_parent_ordinal",
+        ("sequence_metadata_parent", True): b"sequence_metadata_parent_ordinal",
+    }
+    prompt = prompts.get((role, single))
+    if prompt is None:
+        raise AuthoringEntrypointError("internal_failure")
     shown: set[int] = set()
     while True:
         _write_tty(tty_fd, prompt + b" (show:N displays local context)\n")
@@ -961,7 +1026,9 @@ def _prompt_ordinals(
             ordinal = int(raw) - 1
             if ordinal < 0 or ordinal >= len(capture.entries_by_ordinal):
                 raise AuthoringEntrypointError("input_invalid")
-            _show_review_context(tty_fd, capture, ordinal, reference=True)
+            _show_review_context(
+                tty_fd, capture, ordinal, reference_role=role
+            )
             shown.add(ordinal)
             continue
         if value == "none" and not single:
@@ -985,6 +1052,21 @@ def _prompt_ordinals(
         if not set(ordinals).issubset(shown):
             raise AuthoringEntrypointError("input_invalid")
         return [capture.entries_by_ordinal[item].entry_id for item in ordinals]
+
+
+def _show_role_context_and_acknowledge(
+    tty_fd: int, capture: Any, ordinal: int, *, role: str
+) -> None:
+    if role not in REFERENCE_ROLES:
+        raise AuthoringEntrypointError("internal_failure")
+    _show_review_context(tty_fd, capture, ordinal, reference_role=role)
+    confirmation = _prompt_choice(
+        tty_fd,
+        b"confirm_" + role.encode("ascii") + b"_context_reviewed",
+        frozenset({"context_reviewed"}),
+    )
+    if confirmation != "context_reviewed":
+        raise AuthoringEntrypointError("input_invalid")
 
 
 def _prompt_correction_ordinals(
@@ -1062,18 +1144,43 @@ def _show_peer_decision(
     lines.extend(
         (
             b"dependency_count=" + str(len(decision["dependency_entry_ids"])).encode("ascii"),
-            b"parent_count=" + str(len(decision["parent_entry_ids"])).encode("ascii"),
+            b"structural_parent_count="
+            + str(len(decision["parent_entry_ids"])).encode("ascii"),
             b"metadata_parent_present="
             + (b"true" if decision["metadata_parent_entry_id"] is not None else b"false"),
         )
     )
     _write_tty(tty_fd, b"\n".join(lines) + b"\n")
+    summary_confirmation = _prompt_choice(
+        tty_fd,
+        b"confirm_primary_decision_summary_reviewed",
+        frozenset({"summary_reviewed"}),
+    )
+    if summary_confirmation != "summary_reviewed":
+        raise AuthoringEntrypointError("input_invalid")
     by_id = {entry.entry_id: entry.ordinal for entry in capture.entries_by_ordinal}
-    referenced = set(decision["dependency_entry_ids"]) | set(decision["parent_entry_ids"])
-    if decision["metadata_parent_entry_id"] is not None:
-        referenced.add(decision["metadata_parent_entry_id"])
-    for entry_id in sorted(referenced, key=lambda value: by_id[value]):
-        _show_review_context(tty_fd, capture, by_id[entry_id], reference=True)
+    role_assignments: list[tuple[str, list[str]]] = [
+        ("dependency", list(decision["dependency_entry_ids"])),
+        ("structural_parent", list(decision["parent_entry_ids"])),
+    ]
+    metadata_parent = decision["metadata_parent_entry_id"]
+    if metadata_parent is not None:
+        role_assignments.append(("metadata_parent", [metadata_parent]))
+    object_class = capture.entries_by_ordinal[record["ordinal"]].object_class
+    if object_class == "SEQUENCE SET" and metadata_parent is not None:
+        role_assignments.append(("sequence_metadata_parent", [metadata_parent]))
+    if object_class == "SEQUENCE OWNED BY":
+        role_assignments.append(
+            ("sequence_structural_parent", list(decision["parent_entry_ids"]))
+        )
+    for role, entry_ids in role_assignments:
+        for entry_id in sorted(entry_ids, key=lambda value: by_id[value]):
+            _show_role_context_and_acknowledge(
+                tty_fd,
+                capture,
+                by_id[entry_id],
+                role=role,
+            )
 
 
 def _entry_updates(
@@ -1110,21 +1217,41 @@ def _entry_updates(
             )
         elif action == "relationship_review":
             decision["dependency_entry_ids"] = _prompt_ordinals(
-                tty_fd, capture, current=ordinal, single=False
+                tty_fd,
+                capture,
+                current=ordinal,
+                role="dependency",
+                single=False,
             )
             decision["dependency_reviewed"] = True
             if decision["relationship_review_state"] == "pending":
                 decision["parent_entry_ids"] = _prompt_ordinals(
-                    tty_fd, capture, current=ordinal, single=False
+                    tty_fd,
+                    capture,
+                    current=ordinal,
+                    role="structural_parent",
+                    single=False,
                 )
                 decision["relationship_review_state"] = "reviewed"
         elif action == "data_reference_review":
-            selected = _prompt_ordinals(tty_fd, capture, current=ordinal, single=True)
+            selected = _prompt_ordinals(
+                tty_fd,
+                capture,
+                current=ordinal,
+                role="metadata_parent",
+                single=True,
+            )
             decision["metadata_parent_entry_id"] = selected[0]
             decision["data_reference_review_state"] = "reviewed"
         elif action == "sequence_review":
             if capture.entries_by_ordinal[ordinal].object_class == "SEQUENCE SET":
-                selected = _prompt_ordinals(tty_fd, capture, current=ordinal, single=True)
+                selected = _prompt_ordinals(
+                    tty_fd,
+                    capture,
+                    current=ordinal,
+                    role="sequence_metadata_parent",
+                    single=True,
+                )
                 decision["metadata_parent_entry_id"] = selected[0]
             elif (
                 capture.entries_by_ordinal[ordinal].object_class == "SEQUENCE OWNED BY"
@@ -1136,12 +1263,15 @@ def _entry_updates(
                         entry.entry_id: entry.ordinal
                         for entry in capture.entries_by_ordinal
                     }
-                    _show_review_context(
-                        tty_fd, capture, by_id[entry_id], reference=True
+                    _show_role_context_and_acknowledge(
+                        tty_fd,
+                        capture,
+                        by_id[entry_id],
+                        role="sequence_structural_parent",
                     )
                 confirmation = _prompt_choice(
                     tty_fd,
-                    b"confirm_reviewed_sequence_relationship",
+                    b"confirm_sequence_structural_parent_relationship",
                     frozenset({"confirmed"}),
                 )
                 if confirmation != "confirmed":
@@ -1410,9 +1540,9 @@ def _release_lock(root_fd: int, active_token: str) -> str:
             except OSError:
                 pass
         # If the unlink happened but its durability could not be proven,
-        # restore a live blocking name from the same inode. The externally
-        # returned release token is emitted only after this function succeeds,
-        # so a release-only remnant is also unusable after a failed invocation.
+        # restore a live blocking name from the same inode. The token was
+        # privately displayed and acknowledged before this function, but a
+        # failed release remains a no-retry hard stop.
         try:
             os.link(
                 RELEASED_NAME,
@@ -1439,6 +1569,12 @@ def execute_authoring(
     action = _required(environment, "TOC_AUTHOR_ACTION")
     if action not in ACTION_VALUES:
         raise AuthoringEntrypointError("input_invalid")
+    if (
+        action == "finalize"
+        and environment.get("TOC_AUTHOR_FINALIZATION_AUTHORIZATION")
+        != FINALIZATION_AUTHORIZATION
+    ):
+        raise AuthoringEntrypointError("finalization_incomplete")
     approved_checkout = _required(
         environment, "TOC_AUTHOR_APPROVED_EXECUTION_CHECKOUT_SHA"
     )
@@ -1914,35 +2050,50 @@ def execute_authoring(
             cleanup_ambiguous = True
         if publication_attempted and cleanup_ambiguous:
             operation_succeeded = False
-        if lock_held and private_root_fd >= 0:
-            if cleanup_ambiguous:
-                _mark_indeterminate(private_root_fd)
-                raise AuthoringEntrypointError("cleanup_indeterminate")
-            if active_lock_token is None:
-                raise AuthoringEntrypointError("cleanup_indeterminate")
-            released_token = _release_lock(private_root_fd, active_lock_token)
-            if tty_fd >= 0 and (not operation_succeeded or action != "finalize"):
-                private_resume = b"resume_release_token=" + released_token.encode(
-                    "ascii"
-                ) + b"\n"
-                if operation_succeeded:
+        try:
+            if lock_held and private_root_fd >= 0:
+                if cleanup_ambiguous:
+                    _mark_indeterminate(private_root_fd)
+                    raise AuthoringEntrypointError("cleanup_indeterminate")
+                if active_lock_token is None:
+                    raise AuthoringEntrypointError("cleanup_indeterminate")
+                if operation_succeeded and action != "finalize":
+                    if tty_fd < 0:
+                        _mark_indeterminate(private_root_fd)
+                        raise AuthoringEntrypointError("tty_invalid")
                     private_resume = (
                         b"resume_generation="
                         + str(expected_final_generation).encode("ascii")
                         + b"\nresume_checkpoint_sha256="
                         + expected_final_head.encode("ascii")
+                        + b"\nresume_release_token="
+                        + active_lock_token.encode("ascii")
                         + b"\n"
-                        + private_resume
                     )
-                _write_tty(tty_fd, private_resume)
-                _require_resume_acknowledgement(tty_fd)
-        if private_root_fd >= 0:
-            try:
-                os.close(private_root_fd)
-            except OSError:
-                # Process exit closes the read-only descriptor; all persistent
-                # publication and lock durability has already been fsynced.
-                pass
+                    try:
+                        _write_tty(tty_fd, private_resume)
+                        _require_resume_acknowledgement(tty_fd)
+                    except BaseException:
+                        # The durable lock still exists. Add a second blocking
+                        # marker where possible, but never release after an
+                        # incomplete private handoff.
+                        _mark_indeterminate(private_root_fd)
+                        raise
+                    _release_lock(private_root_fd, active_lock_token)
+                elif operation_succeeded:
+                    _release_lock(private_root_fd, active_lock_token)
+                else:
+                    # Any failed operation keeps the durable writer lock. It is
+                    # never converted into a normal resumable release state.
+                    _mark_indeterminate(private_root_fd)
+        finally:
+            if private_root_fd >= 0:
+                try:
+                    os.close(private_root_fd)
+                except OSError:
+                    # Process exit closes the read-only descriptor; all persistent
+                    # publication and lock durability has already been fsynced.
+                    pass
 
 
 def main() -> int:

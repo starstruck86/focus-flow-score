@@ -683,8 +683,17 @@ deterministic ordinal batches, normally 100 entries. The later passes must
 explicitly revisit unresolved decisions, relationships and dependencies, every
 data reference, all sequence/state-bearing relationships, managed-domain and
 global handling, and each manual conflict. Mechanical proposals remain labeled
-proposals and never count as approval. Every decision and semantic relationship
-requires explicit primary review. Peer review is separate and requires a named
+proposals and never count as approval. Primary prompts and peer review label
+each relationship as `dependency`, `structural_parent`, or `metadata_parent`;
+applicable sequence relationships are separately labeled
+`sequence_metadata_parent` or `sequence_structural_parent`. The same ordinal is
+shown once per role when it occupies multiple roles. The decision/peer hash
+binds the exact role-keyed assignments rather than counts or their union. Peer
+review acknowledges the primary-decision summary before its first screen clear
+and then acknowledges every role-labeled context. Multi-parent sequence review
+also acknowledges each parent before the next clear. Every
+decision and semantic relationship requires explicit primary review. Peer
+review is separate and requires a named
 operator different from the primary reviewer. `status` displays fixed states
 and aggregate counts only; it never reveals an opaque identifier or object
 metadata. `finalize` checks eligibility but cannot manufacture a missing review
@@ -704,10 +713,14 @@ local and not being
 recorded. Clear the alternate screen on reviewed exit where possible, but do
 not claim this proves the absence of an unknown or disguised recorder, screen
 capture, photography, a hostile terminal, or a hostile same-user process.
-After a lock release, keep the exact resume generation, checkpoint SHA, and
-private release token visible until the operator types the fixed
-`resume_values_recorded` acknowledgement. Do not pipe or record the terminal
-to retain them; use the separately approved private operator record.
+Keep the exact resume generation, checkpoint SHA, and private release token
+visible while the durable authoring lock still exists, until the operator
+types the fixed `resume_values_recorded` acknowledgement. Only then may the
+procedure durably publish `AUTHORING_RELEASED` and remove the lock. A TTY
+write failure, EOF, wrong acknowledgement, or terminal attribute/read failure
+leaves a blocking lock and, where possible, an indeterminate marker; it must
+not look normally resumable. Do not pipe or record the terminal to retain the
+tuple; use the separately approved private operator record.
 
 Authoring opens the bound raw TOC and opaque structural index for review
 content, and reads `capture.json`, `evidence-files.json`, and
@@ -724,11 +737,15 @@ checkpoint schema, never the final ledger schema. The fixed mode-`0400`
 `AUTHORING_LOCK` serializes writers; a stale or conflicting lock is a hard stop
 and is never auto-removed. The launcher disables soft and hard core dumps
 before the isolated child starts. Successful release leaves a durable fixed
-mode-`0400` `AUTHORING_RELEASED` marker carrying a fresh random private token.
-The launcher returns that token only through the controlled TTY after release
-succeeds; the next invocation must supply it and consumes the marker only after
-a new durable lock exists. A release failure returns no token and best-effort
-restores a blocking lock or indeterminate state. Each review action creates one no-replace,
+mode-`0400` `AUTHORING_RELEASED` marker carrying the token displayed and
+acknowledged with the exact checkpoint tuple while the lock was still held.
+That token becomes usable only after durable release; the next invocation must
+supply it and consumes the marker only after a new durable lock exists. An
+incomplete private handoff does not release. A release durability failure
+best-effort restores a blocking lock or indeterminate state. If the filesystem
+rejects both restoration paths after a durability error, the remaining names
+are ambiguous and the fixed failure is a no-retry stop; do not treat a release
+name as recovery authorization. Each review action creates one no-replace,
 single-link mode-`0400`
 `checkpoints/checkpoint-g<16-digit-generation>-<full-sha256>.json`, fsyncs it,
 atomically publishes it without replacement, and fsyncs its parent. There is no

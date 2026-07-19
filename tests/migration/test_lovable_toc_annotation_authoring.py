@@ -329,6 +329,16 @@ class AuthoringContractTest(unittest.TestCase):
             "TOC_AUTHOR_FINALIZATION_AUTHORIZATION": "",
         }
 
+    def execute_with_private_ack(
+        self, environment: dict[str, str]
+    ) -> tuple[int, bytes]:
+        """Exercise the internal component with a synthetic private handoff."""
+
+        with mock.patch.object(AUTHOR, "_write_tty", return_value=None), mock.patch.object(
+            AUTHOR, "_require_resume_acknowledgement", return_value=None
+        ):
+            return AUTHOR.execute_authoring(environment, 9)
+
     def test_structure_parser_matches_existing_parser_without_key(self):
         raw = raw_toc(["TABLE", "TABLE DATA", "SEQUENCE OWNED BY"])
         structural = capture_contract.parse_raw_toc_structure(raw)
@@ -360,7 +370,7 @@ class AuthoringContractTest(unittest.TestCase):
             head_sha256="0" * 64,
         )
         with mock.patch.object(AUTHOR, "_authoring_procedure_identity", return_value=SHA_C):
-            exit_status, diagnostic = AUTHOR.execute_authoring(environment, -1)
+            exit_status, diagnostic = self.execute_with_private_ack(environment)
         self.assertEqual(exit_status, 2)
         if b"synthetic-private-object" in diagnostic:
             self.fail("private synthetic object escaped into diagnostic")
@@ -389,10 +399,10 @@ class AuthoringContractTest(unittest.TestCase):
             with self.assertRaisesRegex(
                 AUTHOR.AuthoringEntrypointError, "history_conflict"
             ):
-                AUTHOR.execute_authoring(wrong_release, -1)
+                self.execute_with_private_ack(wrong_release)
         private_capture_read.assert_not_called()
         with mock.patch.object(AUTHOR, "_authoring_procedure_identity", return_value=SHA_C):
-            exit_status, diagnostic = AUTHOR.execute_authoring(status_environment, -1)
+            exit_status, diagnostic = self.execute_with_private_ack(status_environment)
         self.assertEqual(exit_status, 2)
         visible = json.loads(diagnostic)
         self.assertEqual(visible["review_gate"], "REVIEW_REQUIRED")
@@ -407,7 +417,7 @@ class AuthoringContractTest(unittest.TestCase):
             with self.assertRaisesRegex(
                 AUTHOR.AuthoringEntrypointError, "review_transition_invalid"
             ):
-                AUTHOR.execute_authoring(skipped, -1)
+                self.execute_with_private_ack(skipped)
         self.assertEqual(len(list(checkpoints.iterdir())), 1)
 
     def test_checkpoint_head_is_returned_only_through_private_tty(self):
@@ -426,14 +436,38 @@ class AuthoringContractTest(unittest.TestCase):
             head_sha256="0" * 64,
         )
         private_writes: list[bytes] = []
+        handoff_events: list[str] = []
+        real_release = AUTHOR._release_lock
+
+        def record_write(_descriptor: int, payload: bytes) -> None:
+            self.assertTrue((private_root / AUTHOR.LOCK_NAME).is_file())
+            self.assertFalse((private_root / AUTHOR.RELEASED_NAME).exists())
+            handoff_events.append("write")
+            private_writes.append(payload)
+
+        def record_ack(_descriptor: int) -> None:
+            self.assertTrue((private_root / AUTHOR.LOCK_NAME).is_file())
+            self.assertFalse((private_root / AUTHOR.RELEASED_NAME).exists())
+            handoff_events.append("ack")
+
+        def record_release(descriptor: int, token: str) -> str:
+            self.assertTrue((private_root / AUTHOR.LOCK_NAME).is_file())
+            self.assertFalse((private_root / AUTHOR.RELEASED_NAME).exists())
+            handoff_events.append("release")
+            return real_release(descriptor, token)
+
         with mock.patch.object(
             AUTHOR, "_authoring_procedure_identity", return_value=SHA_C
         ), mock.patch.object(
             AUTHOR,
             "_write_tty",
-            side_effect=lambda _descriptor, payload: private_writes.append(payload),
+            side_effect=record_write,
         ), mock.patch.object(
-            AUTHOR, "_require_resume_acknowledgement", return_value=None
+            AUTHOR,
+            "_require_resume_acknowledgement",
+            side_effect=record_ack,
+        ), mock.patch.object(
+            AUTHOR, "_release_lock", side_effect=record_release
         ):
             exit_status, diagnostic = AUTHOR.execute_authoring(environment, 9)
         self.assertEqual(exit_status, 2)
@@ -452,6 +486,237 @@ class AuthoringContractTest(unittest.TestCase):
             self.fail("checkpoint head escaped into aggregate ordinary output")
         if release_token in diagnostic:
             self.fail("release token escaped into aggregate ordinary output")
+        self.assertEqual(handoff_events, ["write", "ack", "release"])
+
+    def test_review_prompt_restore_failure_blocks_before_publication_and_release(self):
+        capture_root = self.root / "prompt-restore-capture"
+        package, expectations, _capture, _entries = make_capture_package(
+            capture_root, ["TABLE"], poison="PRIVATE_PROMPT_RESTORE_SENTINEL"
+        )
+        private_root = self.root / "prompt-restore-private"
+        private_root.mkdir(mode=0o700)
+        initialize = self.author_environment(
+            package,
+            expectations,
+            private_root,
+            action="initialize",
+            generation=0,
+            head_sha256="0" * 64,
+        )
+        with mock.patch.object(
+            AUTHOR, "_authoring_procedure_identity", return_value=SHA_C
+        ):
+            self.execute_with_private_ack(initialize)
+        checkpoints = private_root / AUTHOR.CHECKPOINTS_NAME
+        head = next(checkpoints.iterdir())
+        primary = self.author_environment(
+            package,
+            expectations,
+            private_root,
+            action="primary_review",
+            generation=1,
+            head_sha256=hashlib.sha256(head.read_bytes()).hexdigest(),
+        )
+        original_prompt = AUTHOR._prompt_choice
+
+        def restoration_failure(descriptor: int, label: bytes, allowed) -> str:
+            self.assertEqual(label, b"classification")
+            with mock.patch.object(
+                AUTHOR.termios, "tcgetattr", return_value=[0, 0, 0, 0, 0, 0, []]
+            ), mock.patch.object(
+                AUTHOR.termios,
+                "tcsetattr",
+                side_effect=(None, OSError("synthetic prompt restore failure")),
+            ), mock.patch.object(
+                AUTHOR.os, "read", side_effect=iter(bytes((value,)) for value in b"restore\n")
+            ):
+                return original_prompt(descriptor, label, allowed)
+
+        with mock.patch.object(
+            AUTHOR, "_authoring_procedure_identity", return_value=SHA_C
+        ), mock.patch.object(
+            AUTHOR, "_write_tty", return_value=None
+        ), mock.patch.object(
+            AUTHOR, "_prompt_choice", side_effect=restoration_failure
+        ):
+            with self.assertRaisesRegex(
+                AUTHOR.AuthoringEntrypointError, "tty_invalid"
+            ):
+                AUTHOR.execute_authoring(primary, 9)
+        self.assertEqual(len(list(checkpoints.iterdir())), 1)
+        self.assertTrue((private_root / AUTHOR.LOCK_NAME).is_file())
+        self.assertTrue((private_root / AUTHOR.INDETERMINATE_NAME).is_file())
+        self.assertFalse((private_root / AUTHOR.RELEASED_NAME).exists())
+        ordinary = AUTHOR._fixed_diagnostic(status="failed", reason="tty_invalid")
+        self.assertNotIn(b"PRIVATE_PROMPT_RESTORE_SENTINEL", ordinary)
+
+        for reader, value in (
+            (AUTHOR._read_tty_choice, b"restore\n"),
+            (AUTHOR._read_tty_line, b"2\n"),
+        ):
+            with self.subTest(reader=reader.__name__), mock.patch.object(
+                AUTHOR.termios, "tcgetattr", return_value=[0, 0, 0, 0, 0, 0, []]
+            ), mock.patch.object(
+                AUTHOR.termios,
+                "tcsetattr",
+                side_effect=(None, OSError("synthetic prompt restore failure")),
+            ), mock.patch.object(
+                AUTHOR.os, "read", side_effect=iter(bytes((item,)) for item in value)
+            ):
+                with self.assertRaisesRegex(
+                    AUTHOR.AuthoringEntrypointError, "tty_invalid"
+                ):
+                    if reader is AUTHOR._read_tty_choice:
+                        reader(9, allowed=frozenset({"restore"}))
+                    else:
+                        reader(9)
+
+    def test_resume_handoff_failures_remain_persistently_blocked(self):
+        original_ack = AUTHOR._require_resume_acknowledgement
+
+        def synthetic_read(values: bytes):
+            iterator = iter(bytes((value,)) for value in values)
+
+            def read_one(_descriptor: int, _size: int) -> bytes:
+                return next(iterator, b"")
+
+            return read_one
+
+        def ack_eof(descriptor: int) -> None:
+            with mock.patch.object(
+                AUTHOR.termios, "tcgetattr", return_value=[0, 0, 0, 0, 0, 0, []]
+            ), mock.patch.object(
+                AUTHOR.termios, "tcsetattr", return_value=None
+            ), mock.patch.object(AUTHOR.os, "read", return_value=b""):
+                original_ack(descriptor)
+
+        def ack_wrong(descriptor: int) -> None:
+            with mock.patch.object(
+                AUTHOR.termios, "tcgetattr", return_value=[0, 0, 0, 0, 0, 0, []]
+            ), mock.patch.object(
+                AUTHOR.termios, "tcsetattr", return_value=None
+            ), mock.patch.object(
+                AUTHOR.os, "read", side_effect=synthetic_read(b"wrong\n")
+            ):
+                original_ack(descriptor)
+
+        def ack_attribute_read_failure(descriptor: int) -> None:
+            with mock.patch.object(
+                AUTHOR.termios,
+                "tcgetattr",
+                side_effect=OSError("synthetic terminal attribute failure"),
+            ):
+                original_ack(descriptor)
+
+        def ack_initial_attribute_write_failure(descriptor: int) -> None:
+            with mock.patch.object(
+                AUTHOR.termios, "tcgetattr", return_value=[0, 0, 0, 0, 0, 0, []]
+            ), mock.patch.object(
+                AUTHOR.termios,
+                "tcsetattr",
+                side_effect=(OSError("synthetic terminal adjustment failure"), None),
+            ):
+                original_ack(descriptor)
+
+        def ack_restore_failure(descriptor: int) -> None:
+            with mock.patch.object(
+                AUTHOR.termios, "tcgetattr", return_value=[0, 0, 0, 0, 0, 0, []]
+            ), mock.patch.object(
+                AUTHOR.termios,
+                "tcsetattr",
+                side_effect=(None, OSError("synthetic terminal restore failure")),
+            ), mock.patch.object(
+                AUTHOR.os,
+                "read",
+                side_effect=synthetic_read(b"resume_values_recorded\n"),
+            ):
+                original_ack(descriptor)
+
+        def ack_read_failure(descriptor: int) -> None:
+            with mock.patch.object(
+                AUTHOR.termios, "tcgetattr", return_value=[0, 0, 0, 0, 0, 0, []]
+            ), mock.patch.object(
+                AUTHOR.termios, "tcsetattr", return_value=None
+            ), mock.patch.object(
+                AUTHOR.os,
+                "read",
+                side_effect=OSError("synthetic terminal read failure"),
+            ):
+                original_ack(descriptor)
+
+        cases = {
+            "tty_write": None,
+            "ack_eof": ack_eof,
+            "ack_wrong": ack_wrong,
+            "attribute_read": ack_attribute_read_failure,
+            "attribute_adjust": ack_initial_attribute_write_failure,
+            "attribute_restore": ack_restore_failure,
+            "terminal_read": ack_read_failure,
+        }
+        for case, acknowledgement in cases.items():
+            with self.subTest(case=case):
+                capture_root = self.root / ("handoff-capture-" + case)
+                package, expectations, _capture, _entries = make_capture_package(
+                    capture_root, ["TABLE"], poison="PRIVATE_HANDOFF_SENTINEL"
+                )
+                private_root = self.root / ("handoff-private-" + case)
+                private_root.mkdir(mode=0o700)
+                environment = self.author_environment(
+                    package,
+                    expectations,
+                    private_root,
+                    action="initialize",
+                    generation=0,
+                    head_sha256="0" * 64,
+                )
+                write_effect = (
+                    AUTHOR.AuthoringEntrypointError("tty_invalid")
+                    if acknowledgement is None
+                    else None
+                )
+                acknowledgement_effect = (
+                    (lambda _descriptor: None)
+                    if acknowledgement is None
+                    else acknowledgement
+                )
+                with mock.patch.object(
+                    AUTHOR, "_authoring_procedure_identity", return_value=SHA_C
+                ), mock.patch.object(
+                    AUTHOR, "_write_tty", side_effect=write_effect
+                ), mock.patch.object(
+                    AUTHOR,
+                    "_require_resume_acknowledgement",
+                    side_effect=acknowledgement_effect,
+                ):
+                    with self.assertRaisesRegex(
+                        AUTHOR.AuthoringEntrypointError, "tty_invalid"
+                    ) as raised:
+                        AUTHOR.execute_authoring(environment, 9)
+                self.assertEqual(str(raised.exception), "tty_invalid")
+                names = {path.name for path in private_root.iterdir()}
+                self.assertIn(AUTHOR.LOCK_NAME, names)
+                self.assertIn(AUTHOR.INDETERMINATE_NAME, names)
+                self.assertNotIn(AUTHOR.RELEASED_NAME, names)
+                lock_metadata = (private_root / AUTHOR.LOCK_NAME).stat()
+                self.assertEqual(stat.S_IMODE(lock_metadata.st_mode), 0o400)
+                self.assertEqual(lock_metadata.st_nlink, 1)
+                checkpoints = list((private_root / AUTHOR.CHECKPOINTS_NAME).iterdir())
+                self.assertEqual(len(checkpoints), 1)
+                ordinary = AUTHOR._fixed_diagnostic(
+                    status="failed", reason="tty_invalid"
+                )
+                self.assertNotIn(b"PRIVATE_HANDOFF_SENTINEL", ordinary)
+                self.assertNotIn(checkpoints[0].name.encode("ascii"), ordinary)
+                with mock.patch.object(
+                    AUTHOR, "load_capture_for_authoring"
+                ) as capture_reader, mock.patch.object(
+                    AUTHOR, "_authoring_procedure_identity", return_value=SHA_C
+                ):
+                    with self.assertRaisesRegex(
+                        AUTHOR.AuthoringEntrypointError, "history_conflict"
+                    ):
+                        self.execute_with_private_ack(environment)
+                capture_reader.assert_not_called()
 
     def test_status_path_detects_concurrent_checkpoint_insertion(self):
         capture_root = self.root / "status-race-capture"
@@ -469,7 +734,7 @@ class AuthoringContractTest(unittest.TestCase):
             head_sha256="0" * 64,
         )
         with mock.patch.object(AUTHOR, "_authoring_procedure_identity", return_value=SHA_C):
-            AUTHOR.execute_authoring(initialize_environment, -1)
+            self.execute_with_private_ack(initialize_environment)
         checkpoints = private_root / AUTHOR.CHECKPOINTS_NAME
         head_path = next(checkpoints.iterdir())
         head_sha = hashlib.sha256(head_path.read_bytes()).hexdigest()
@@ -498,9 +763,11 @@ class AuthoringContractTest(unittest.TestCase):
                 with self.assertRaisesRegex(
                     AUTHOR.AuthoringEntrypointError, "history_conflict"
                 ):
-                    AUTHOR.execute_authoring(status_environment, -1)
+                    self.execute_with_private_ack(status_environment)
         self.assertTrue((checkpoints / ".concurrent-insertion").exists())
-        self.assertFalse((private_root / AUTHOR.LOCK_NAME).exists())
+        self.assertTrue((private_root / AUTHOR.LOCK_NAME).exists())
+        self.assertTrue((private_root / AUTHOR.INDETERMINATE_NAME).exists())
+        self.assertFalse((private_root / AUTHOR.RELEASED_NAME).exists())
 
     def test_entrypoint_rejects_stale_lock_and_permissive_root(self):
         capture_root = self.root / "blocked-capture"
@@ -522,14 +789,14 @@ class AuthoringContractTest(unittest.TestCase):
         )
         with mock.patch.object(AUTHOR, "_authoring_procedure_identity", return_value=SHA_C):
             with self.assertRaisesRegex(AUTHOR.AuthoringEntrypointError, "history_conflict"):
-                AUTHOR.execute_authoring(environment, -1)
+                self.execute_with_private_ack(environment)
         self.assertTrue(lock.exists())
 
         lock.unlink()
         private_root.chmod(0o755)
         with mock.patch.object(AUTHOR, "_authoring_procedure_identity", return_value=SHA_C):
             with self.assertRaisesRegex(AUTHOR.AuthoringEntrypointError, "input_invalid"):
-                AUTHOR.execute_authoring(environment, -1)
+                self.execute_with_private_ack(environment)
         self.assertEqual(list(private_root.iterdir()), [])
 
     def test_entrypoint_rejects_unsafe_identity_before_private_input(self):
@@ -561,7 +828,7 @@ class AuthoringContractTest(unittest.TestCase):
                     with self.assertRaisesRegex(
                         AUTHOR.AuthoringEntrypointError, "input_invalid"
                     ):
-                        AUTHOR.execute_authoring(poisoned, -1)
+                        self.execute_with_private_ack(poisoned)
                 private_open.assert_not_called()
         self.assertEqual(list(private_root.iterdir()), [])
 
@@ -679,7 +946,7 @@ class AuthoringContractTest(unittest.TestCase):
                     AUTHOR, "_authoring_procedure_identity", return_value=SHA_C
                 ):
                     with self.assertRaises(AUTHOR.AuthoringEntrypointError):
-                        AUTHOR.execute_authoring(environment, -1)
+                        self.execute_with_private_ack(environment)
                 capture_reader.assert_not_called()
 
     def test_existing_final_package_shape_blocks_before_capture_read(self):
@@ -717,7 +984,7 @@ class AuthoringContractTest(unittest.TestCase):
                     with self.assertRaisesRegex(
                         AUTHOR.AuthoringEntrypointError, "publication_exists"
                     ):
-                        AUTHOR.execute_authoring(environment, -1)
+                        self.execute_with_private_ack(environment)
                 capture_reader.assert_not_called()
 
     def test_named_root_replacement_is_detected(self):
@@ -926,6 +1193,273 @@ class AuthoringContractTest(unittest.TestCase):
             "pending",
         )
 
+    def test_primary_relationship_prompts_are_role_specific_and_role_exact(self):
+        capture, _package, _expectations = self.load_capture(
+            ["TRIGGER", "TABLE", "VIEW"]
+        )
+        checkpoint = authoring.initialize_checkpoint(
+            capture, self.binding, "Primary", "session-1"
+        )
+        writes: list[bytes] = []
+        with mock.patch.object(
+            AUTHOR,
+            "_read_tty_line",
+            side_effect=("show:2", "2", "show:3", "3"),
+        ), mock.patch.object(
+            AUTHOR,
+            "_write_tty",
+            side_effect=lambda _descriptor, payload: writes.append(payload),
+        ):
+            update = AUTHOR._entry_updates(
+                "relationship_review", checkpoint, capture, (0,), 9
+            )[0]["primary_decision"]
+        transcript = b"".join(writes)
+        self.assertIn(b"dependency_ordinals_csv_or_none", transcript)
+        self.assertIn(b"structural_parent_ordinals_csv_or_none", transcript)
+        self.assertIn(b"reference_role=dependency\nordinal=2", transcript)
+        self.assertIn(b"reference_role=structural_parent\nordinal=3", transcript)
+        self.assertEqual(
+            update["dependency_entry_ids"],
+            [capture.entries_by_ordinal[1].entry_id],
+        )
+        self.assertEqual(
+            update["parent_entry_ids"],
+            [capture.entries_by_ordinal[2].entry_id],
+        )
+
+        data_capture, _package, _expectations = self.load_capture(
+            ["TABLE DATA", "TABLE"]
+        )
+        data_checkpoint = authoring.initialize_checkpoint(
+            data_capture, self.binding, "Primary", "session-1"
+        )
+        writes = []
+        with mock.patch.object(
+            AUTHOR, "_read_tty_line", side_effect=("show:2", "2")
+        ), mock.patch.object(
+            AUTHOR,
+            "_write_tty",
+            side_effect=lambda _descriptor, payload: writes.append(payload),
+        ):
+            data_update = AUTHOR._entry_updates(
+                "data_reference_review", data_checkpoint, data_capture, (0,), 9
+            )[0]["primary_decision"]
+        self.assertIn(b"metadata_parent_ordinal", b"".join(writes))
+        self.assertEqual(
+            data_update["metadata_parent_entry_id"],
+            data_capture.entries_by_ordinal[1].entry_id,
+        )
+
+        sequence_capture, _package, _expectations = self.load_capture(
+            ["SEQUENCE SET", "SEQUENCE"]
+        )
+        sequence_checkpoint = authoring.initialize_checkpoint(
+            sequence_capture, self.binding, "Primary", "session-1"
+        )
+        writes = []
+        with mock.patch.object(
+            AUTHOR, "_read_tty_line", side_effect=("show:2", "2")
+        ), mock.patch.object(
+            AUTHOR,
+            "_write_tty",
+            side_effect=lambda _descriptor, payload: writes.append(payload),
+        ):
+            sequence_update = AUTHOR._entry_updates(
+                "sequence_review", sequence_checkpoint, sequence_capture, (0,), 9
+            )[0]["primary_decision"]
+        self.assertIn(b"sequence_metadata_parent_ordinal", b"".join(writes))
+        self.assertEqual(
+            sequence_update["metadata_parent_entry_id"],
+            sequence_capture.entries_by_ordinal[1].entry_id,
+        )
+
+    def test_peer_transcript_binds_swapped_and_multi_role_assignments(self):
+        poison = "PRIVATE_ROLE_SQL_OWNER_PATH_SECRET_PAYLOAD_SENTINEL"
+        capture_root = self.root / "role-peer-capture"
+        package, expectations, _capture, _entries = make_capture_package(
+            capture_root, ["TRIGGER", "TABLE", "VIEW"], poison=poison
+        )
+        descriptor = open_directory(package)
+        try:
+            capture = authoring.load_capture_for_authoring(descriptor, expectations)
+        finally:
+            os.close(descriptor)
+        checkpoint = authoring.initialize_checkpoint(
+            capture, self.binding, "Primary", "session-1"
+        )
+        first = copy.deepcopy(checkpoint["entries"][0])
+        first_decision = first["primary_decision"]
+        first_decision["dependency_entry_ids"] = [capture.entries_by_ordinal[1].entry_id]
+        first_decision["parent_entry_ids"] = [capture.entries_by_ordinal[2].entry_id]
+        first["primary_decision_sha256"] = authoring._decision_sha256(first_decision)
+        second = copy.deepcopy(first)
+        second_decision = second["primary_decision"]
+        second_decision["dependency_entry_ids"] = [capture.entries_by_ordinal[2].entry_id]
+        second_decision["parent_entry_ids"] = [capture.entries_by_ordinal[1].entry_id]
+        second["primary_decision_sha256"] = authoring._decision_sha256(second_decision)
+        self.assertEqual(
+            len(first_decision["dependency_entry_ids"]),
+            len(second_decision["dependency_entry_ids"]),
+        )
+        self.assertEqual(
+            set(
+                first_decision["dependency_entry_ids"]
+                + first_decision["parent_entry_ids"]
+            ),
+            set(
+                second_decision["dependency_entry_ids"]
+                + second_decision["parent_entry_ids"]
+            ),
+        )
+        self.assertNotEqual(
+            first["primary_decision_sha256"], second["primary_decision_sha256"]
+        )
+
+        transcripts: list[bytes] = []
+
+        def peer_read_choice(_descriptor, *, allowed):
+            if "summary_reviewed" in allowed:
+                return "summary_reviewed"
+            return "context_reviewed"
+
+        for record in (first, second):
+            writes: list[bytes] = []
+            with mock.patch.object(
+                AUTHOR,
+                "_write_tty",
+                side_effect=lambda _descriptor, payload: writes.append(payload),
+            ), mock.patch.object(
+                AUTHOR, "_read_tty_choice", side_effect=peer_read_choice
+            ):
+                AUTHOR._show_peer_decision(9, capture, record)
+            transcripts.append(b"".join(writes))
+        self.assertNotEqual(transcripts[0], transcripts[1])
+        self.assertIn(b"reference_role=dependency\nordinal=2", transcripts[0])
+        self.assertIn(b"reference_role=structural_parent\nordinal=3", transcripts[0])
+        self.assertIn(b"reference_role=dependency\nordinal=3", transcripts[1])
+        self.assertIn(b"reference_role=structural_parent\nordinal=2", transcripts[1])
+        self.assertIn(poison.encode("ascii"), transcripts[0])
+        self.assertLess(
+            transcripts[0].index(b"PRIMARY_DECISION_FOR_PEER_REVIEW"),
+            transcripts[0].index(b"confirm_primary_decision_summary_reviewed"),
+        )
+        self.assertLess(
+            transcripts[0].index(b"confirm_primary_decision_summary_reviewed"),
+            transcripts[0].index(b"reference_role=dependency\nordinal=2"),
+        )
+        self.assertLess(
+            transcripts[0].index(b"reference_role=dependency\nordinal=2"),
+            transcripts[0].index(b"confirm_dependency_context_reviewed"),
+        )
+        self.assertLess(
+            transcripts[0].index(b"confirm_dependency_context_reviewed"),
+            transcripts[0].index(b"reference_role=structural_parent\nordinal=3"),
+        )
+        self.assertLess(
+            transcripts[0].index(b"reference_role=structural_parent\nordinal=3"),
+            transcripts[0].index(b"confirm_structural_parent_context_reviewed"),
+        )
+        for transcript in transcripts:
+            for entry in capture.entries_by_ordinal:
+                self.assertNotIn(entry.entry_id.encode("ascii"), transcript)
+
+        data_capture, _package, _expectations = self.load_capture(
+            ["TABLE DATA", "TABLE"]
+        )
+        data_checkpoint = authoring.initialize_checkpoint(
+            data_capture, self.binding, "Primary", "session-1"
+        )
+        multi = copy.deepcopy(data_checkpoint["entries"][0])
+        shared = data_capture.entries_by_ordinal[1].entry_id
+        multi["primary_decision"]["dependency_entry_ids"] = [shared]
+        multi["primary_decision"]["metadata_parent_entry_id"] = shared
+        writes = []
+        with mock.patch.object(
+            AUTHOR,
+            "_write_tty",
+            side_effect=lambda _descriptor, payload: writes.append(payload),
+        ), mock.patch.object(
+            AUTHOR, "_read_tty_choice", side_effect=peer_read_choice
+        ):
+            AUTHOR._show_peer_decision(9, data_capture, multi)
+        multi_transcript = b"".join(writes)
+        self.assertIn(b"reference_role=dependency\nordinal=2", multi_transcript)
+        self.assertIn(b"reference_role=metadata_parent\nordinal=2", multi_transcript)
+
+        sequence_capture, _package, _expectations = self.load_capture(
+            ["SEQUENCE SET", "SEQUENCE"]
+        )
+        sequence_checkpoint = authoring.initialize_checkpoint(
+            sequence_capture, self.binding, "Primary", "session-1"
+        )
+        sequence_record = copy.deepcopy(sequence_checkpoint["entries"][0])
+        sequence_record["primary_decision"]["metadata_parent_entry_id"] = (
+            sequence_capture.entries_by_ordinal[1].entry_id
+        )
+        writes = []
+        with mock.patch.object(
+            AUTHOR,
+            "_write_tty",
+            side_effect=lambda _descriptor, payload: writes.append(payload),
+        ), mock.patch.object(
+            AUTHOR, "_read_tty_choice", side_effect=peer_read_choice
+        ):
+            AUTHOR._show_peer_decision(9, sequence_capture, sequence_record)
+        sequence_transcript = b"".join(writes)
+        self.assertIn(b"reference_role=metadata_parent\nordinal=2", sequence_transcript)
+        self.assertIn(
+            b"reference_role=sequence_metadata_parent\nordinal=2",
+            sequence_transcript,
+        )
+
+        owned_capture, _package, _expectations = self.load_capture(
+            ["SEQUENCE OWNED BY", "SEQUENCE", "TABLE"]
+        )
+        owned_checkpoint = authoring.initialize_checkpoint(
+            owned_capture, self.binding, "Primary", "session-1"
+        )
+        owned_record = copy.deepcopy(owned_checkpoint["entries"][0])
+        owned_record["primary_decision"]["parent_entry_ids"] = [
+            owned_capture.entries_by_ordinal[1].entry_id,
+            owned_capture.entries_by_ordinal[2].entry_id,
+        ]
+        owned_record["primary_decision"]["relationship_review_state"] = "reviewed"
+        writes = []
+
+        def owned_choice(_descriptor, *, allowed):
+            if "summary_reviewed" in allowed:
+                return "summary_reviewed"
+            if "context_reviewed" in allowed:
+                return "context_reviewed"
+            return "confirmed"
+
+        with mock.patch.object(
+            AUTHOR,
+            "_write_tty",
+            side_effect=lambda _descriptor, payload: writes.append(payload),
+        ), mock.patch.object(AUTHOR, "_read_tty_choice", side_effect=owned_choice):
+            AUTHOR._entry_updates(
+                "sequence_review",
+                {"entries": [owned_record]},
+                owned_capture,
+                (0,),
+                9,
+            )
+            AUTHOR._show_peer_decision(9, owned_capture, owned_record)
+        owned_transcript = b"".join(writes)
+        self.assertIn(
+            b"reference_role=sequence_structural_parent\nordinal=2",
+            owned_transcript,
+        )
+        self.assertIn(
+            b"reference_role=sequence_structural_parent\nordinal=3",
+            owned_transcript,
+        )
+        ordinary = AUTHOR._fixed_diagnostic(status="failed", reason="tty_invalid")
+        self.assertNotIn(poison.encode("ascii"), ordinary)
+        for entry in capture.entries_by_ordinal:
+            self.assertNotIn(entry.entry_id.encode("ascii"), ordinary)
+
     def test_authoring_action_invokes_no_child_process_or_network(self):
         capture_root = self.root / "isolated-capture"
         sentinel = "RAW_NAME_SQL_OWNER_PATH_SECRET_PAYLOAD_SENTINEL"
@@ -953,7 +1487,7 @@ class AuthoringContractTest(unittest.TestCase):
             "socket",
             side_effect=AssertionError("unexpected network operation"),
         ):
-            exit_status, diagnostic = AUTHOR.execute_authoring(environment, -1)
+            exit_status, diagnostic = self.execute_with_private_ack(environment)
         self.assertEqual(exit_status, 2)
         if sentinel.encode("ascii") in diagnostic:
             self.fail("private sentinel escaped into an ordinary diagnostic")
@@ -1576,9 +2110,11 @@ class AuthoringContractTest(unittest.TestCase):
                 with mock.patch.object(
                     AUTHOR, "_prompt_correction_ordinals", return_value=(0,)
                 ):
-                    with mock.patch.object(AUTHOR, "_write_tty"):
+                    with mock.patch.object(AUTHOR, "_write_tty"), mock.patch.object(
+                        AUTHOR, "_require_resume_acknowledgement", return_value=None
+                    ):
                         exit_status, diagnostic = AUTHOR.execute_authoring(
-                            environment, -1
+                            environment, 9
                         )
         self.assertEqual(exit_status, 2)
         if b"synthetic-private-object" in diagnostic:
@@ -1663,7 +2199,7 @@ class AuthoringContractTest(unittest.TestCase):
                     AUTHOR, "_authoring_procedure_identity", return_value=SHA_C
                 ):
                     with self.assertRaises(AUTHOR.AuthoringEntrypointError):
-                        AUTHOR.execute_authoring(rejected, -1)
+                        self.execute_with_private_ack(rejected)
                 self.assertEqual(
                     sorted(path.name for path in checkpoints.iterdir()), before_names
                 )
@@ -1682,7 +2218,7 @@ class AuthoringContractTest(unittest.TestCase):
         with mock.patch.object(
             AUTHOR, "_authoring_procedure_identity", return_value=SHA_C
         ):
-            exit_status, diagnostic = AUTHOR.execute_authoring(approved, -1)
+            exit_status, diagnostic = self.execute_with_private_ack(approved)
         self.assertEqual(exit_status, 2)
         if b"synthetic-private-object" in diagnostic:
             self.fail("private synthetic object escaped into diagnostic")
@@ -1705,7 +2241,7 @@ class AuthoringContractTest(unittest.TestCase):
             with self.assertRaisesRegex(
                 AUTHOR.AuthoringEntrypointError, "publication_exists"
             ):
-                AUTHOR.execute_authoring(approved, -1)
+                self.execute_with_private_ack(approved)
         self.assertEqual(len(final_names), 1)
 
     def test_checkpoint_publication_resume_and_fork_fail_closed(self):
@@ -2062,7 +2598,7 @@ class AuthoringContractTest(unittest.TestCase):
                 with self.assertRaisesRegex(
                     AUTHOR.AuthoringEntrypointError, "cleanup_indeterminate"
                 ):
-                    AUTHOR.execute_authoring(environment, -1)
+                    self.execute_with_private_ack(environment)
         self.assertTrue((private_root / AUTHOR.INDETERMINATE_NAME).exists())
         self.assertTrue((private_root / AUTHOR.LOCK_NAME).exists())
 

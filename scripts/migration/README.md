@@ -497,7 +497,7 @@ Git, shell history, CI, or chat:
 | `TOC_AUTHOR_SESSION_IDENTITY` | Operator-provided reviewed-session identity |
 | `TOC_AUTHOR_EXPECTED_HEAD_GENERATION` | Exact latest generation (`0` only before initialization) |
 | `TOC_AUTHOR_EXPECTED_HEAD_SHA256` | Exact latest checkpoint SHA-256 (64 zeroes only before initialization) |
-| `TOC_AUTHOR_EXPECTED_RELEASE_TOKEN` | Exact private 64-hex release token returned only when the preceding invocation's lock release succeeded; 64 zeroes only for initialization |
+| `TOC_AUTHOR_EXPECTED_RELEASE_TOKEN` | Exact private 64-hex token displayed and acknowledged while the preceding invocation still held its lock, and usable only after that invocation durably released the lock; 64 zeroes only for initialization |
 | `TOC_AUTHOR_LOCAL_TTY_ATTESTATION` | Exact `LOCAL_CONTROLLING_TTY_NO_RECORDING_NO_REMOTE_NO_CLIPBOARD` operator attestation |
 | `TOC_AUTHOR_FINALIZATION_AUTHORIZATION` | Empty for ordinary actions; exact `CREATE_UNVALIDATED_LEDGER` only for the separately approved finalization invocation |
 
@@ -510,10 +510,14 @@ exact next-resume values only on the held private TTY as
 `resume_release_token`; they never enter ordinary
 stdout/stderr and are not part of the aggregate-only `status` result. Review
 batches are deterministic and capped at 100 entries by the operator workflow.
-The alternate screen remains visible until the operator types the exact
-`resume_values_recorded` acknowledgement; only then may the launcher clear it
-and exit. This is a human recording checkpoint, not permission to pipe or
-record the terminal.
+The alternate screen remains visible while the durable lock is still held,
+until the operator types the exact `resume_values_recorded` acknowledgement.
+Only after that acknowledgement may the procedure durably convert the lock to
+the released marker, clear the screen, and exit. A write, EOF, wrong response,
+terminal attribute/read failure, or other incomplete handoff leaves a blocking
+lock and, where possible, an indeterminate marker; it never leaves a normal
+released state. This is a human recording checkpoint, not permission to pipe
+or record the terminal.
 
 The launcher requires an explicitly approved absolute canonical CPython path,
 its externally approved SHA-256 and exact `cpython:MAJOR.MINOR.MICRO` version,
@@ -571,12 +575,18 @@ ledger schema. The private authoring root must be an absolute canonical,
 executor-owned, non-symlink mode-`0700` directory outside Git. A fixed
 exclusive mode-`0400` `AUTHORING_LOCK` serializes writers. A stale lock is a
 hard stop and is never auto-deleted. Successful release leaves a fixed
-mode-`0400` `AUTHORING_RELEASED` marker carrying a fresh random private release
-token. The next invocation must supply the exact token returned only after the
-preceding release completed, and consumes the marker only after a new durable
-lock exists. A failed release returns no token and best-effort restores a
-blocking lock/indeterminate state, so a release-only filesystem remnant from a
-failed invocation is not sufficient to authorize resume.
+mode-`0400` `AUTHORING_RELEASED` marker carrying the private token that was
+displayed with the exact generation and checkpoint SHA and acknowledged while
+`AUTHORING_LOCK` still existed. The token becomes resumable only after the
+subsequent durable release. The next invocation must supply that exact token
+and consumes the marker only after a new durable lock exists. A private TTY
+write/acknowledgement/terminal failure never reaches release; a release
+durability failure best-effort restores a blocking lock/indeterminate state.
+A release-only filesystem remnant from a failed invocation is not sufficient
+to authorize resume. If the filesystem rejects both lock restoration and
+indeterminate-marker publication after a release durability error, the tool
+cannot prove which names are durable; the fixed failure is a no-retry hard
+stop, not a recovery token.
 Every successful review action publishes
 one new immutable, single-link, mode-`0400`
 `checkpoints/checkpoint-g<16-digit-generation>-<full-sha256>.json` generation
@@ -601,9 +611,21 @@ rename, repair, or reinterpret stale locks, conflicting heads, or indeterminate
 state without a separately reviewed recovery procedure.
 
 Mechanical proposals are versioned suggestions only. They never become human
-decisions automatically. Every entry requires an explicit primary decision;
-every semantic parent and dependency requires explicit review; every data
-reference and each sequence/state-bearing relation has a dedicated pass; and
+decisions automatically. Every entry requires an explicit primary decision.
+The private primary prompts and peer transcript label exact roles:
+`dependency_entry_ids` as `dependency`, `parent_entry_ids` as
+`structural_parent`, and `metadata_parent_entry_id` as `metadata_parent`.
+Applicable sequence views are additionally labeled
+`sequence_metadata_parent` or `sequence_structural_parent`. A referenced entry
+that occupies multiple roles is displayed separately under every role; roles
+are never collapsed to counts or a reference union. Peer review requires a
+fixed acknowledgement of its primary-decision summary before the first screen
+clear, then one fixed acknowledgement for each role-labeled context. An
+applicable multi-parent sequence review likewise acknowledges each parent
+before the next clear. The canonical primary
+decision hash and peer binding cover the exact keyed role assignments. Every
+semantic parent and dependency requires explicit review; every data reference
+and each sequence/state-bearing relation has a dedicated pass; and
 managed-domain, schema, owner, role, extension, duplicate, global-handling,
 and manual-conflict decisions require explicit human approval. Draft
 `dependency_review_complete` remains false. Peer review is a separate pass by

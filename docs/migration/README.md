@@ -122,9 +122,12 @@ and known remote or multiplexer contexts are rejected; the workflow provides no 
 transport. Clearing the alternate screen does not
 attest the absence of an unknown or disguised recorder, screen recording,
 photography, a hostile terminal, or a hostile same-user process.
-The exact resume tuple remains visible until the operator enters the fixed
-`resume_values_recorded` acknowledgement; piping or terminal recording is
-still prohibited.
+The exact resume tuple remains visible while the durable authoring lock is
+still held until the operator enters the fixed `resume_values_recorded`
+acknowledgement. Only then may the lock become a durable released marker. A TTY
+write, EOF, wrong acknowledgement, or terminal attribute/read failure remains
+blocked by the lock and, where possible, an indeterminate marker; piping or
+terminal recording is still prohibited.
 
 Authoring never opens `opaque-id.key` bytes: it only validates the key file's
 safe metadata. It uses the already private raw TOC and opaque structural index,
@@ -132,8 +135,15 @@ plus the fixed capture/evidence manifests and completion marker needed to bind
 that content, records primary decisions and distinct peer review in an
 immutable full-hash checkpoint chain, and stops on stale locks, forks, missing
 generations, mutation, collisions, or indeterminate filesystem state.
-Exact resume also requires the fresh private release token returned through
-the controlled TTY only after the preceding lock release succeeds.
+Exact resume also requires the private release token displayed and acknowledged
+with its exact generation and checkpoint SHA before the preceding durable lock
+release. Primary and peer private displays preserve the exact `dependency`,
+`structural_parent`, `metadata_parent`, and applicable sequence-role mappings;
+multi-role references are repeated per role, and the decision hash binds those
+keyed assignments rather than a count or union. Peer review acknowledges its
+primary-decision summary before the first screen clear, then pauses after each
+role-labeled context. Multi-parent sequence review also pauses after each
+parent before another screen clear can replace it.
 Mechanical proposals are never approvals. Finalization is a distinct
 authorized action and publishes one canonical private ledger package without
 replacement only after every entry, data reference, dependency, sequence,
