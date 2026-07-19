@@ -758,6 +758,119 @@ def _required_count(environment: Mapping[str, str], name: str, *, allow_zero: bo
     return observed
 
 
+@dataclass(frozen=True)
+class ActionInvocation:
+    action: str
+    approved_checkout: str
+    primary_operator: str
+    operator: str
+    session: str
+    expected_generation: int
+    expected_head: str
+    expected_release_token: str
+    finalization_authorization: str
+    inspection_checkout_sha: str
+    capture_execution_checkout_sha: str
+
+
+def _validate_action_invocation(
+    environment: Mapping[str, str],
+) -> ActionInvocation:
+    """Parse and reject a static invocation before any private-path access."""
+
+    action = _required(environment, "TOC_AUTHOR_ACTION")
+    if action not in ACTION_VALUES:
+        raise AuthoringEntrypointError("input_invalid")
+    approved_checkout = _required(
+        environment, "TOC_AUTHOR_APPROVED_EXECUTION_CHECKOUT_SHA"
+    )
+    if re.fullmatch(r"[0-9a-f]{40}", approved_checkout, re.ASCII) is None:
+        raise AuthoringEntrypointError("input_invalid")
+    primary_operator = _required(environment, "TOC_AUTHOR_PRIMARY_OPERATOR_IDENTITY")
+    operator = _required(environment, "TOC_AUTHOR_OPERATOR_IDENTITY")
+    session = _required(environment, "TOC_AUTHOR_SESSION_IDENTITY")
+    if any(
+        value != value.strip()
+        or "  " in value
+        or SAFE_IDENTITY_RE.fullmatch(value) is None
+        for value in (primary_operator, operator, session)
+    ):
+        raise AuthoringEntrypointError("input_invalid")
+    expected_generation = _required_count(
+        environment, "TOC_AUTHOR_EXPECTED_HEAD_GENERATION", allow_zero=True
+    )
+    expected_head = _required(environment, "TOC_AUTHOR_EXPECTED_HEAD_SHA256")
+    expected_release_token = _required_sha(
+        environment, "TOC_AUTHOR_EXPECTED_RELEASE_TOKEN"
+    )
+    finalization_authorization = environment.get(
+        "TOC_AUTHOR_FINALIZATION_AUTHORIZATION", ""
+    )
+    inspection_checkout_sha = _required(
+        environment, "TOC_AUTHOR_INSPECTION_CHECKOUT_SHA"
+    )
+    capture_execution_checkout_sha = _required(
+        environment, "TOC_AUTHOR_CAPTURE_EXECUTION_CHECKOUT_SHA"
+    )
+
+    zero_sha = "0" * 64
+    sha_is_valid = (
+        re.fullmatch(r"[0-9a-f]{64}", expected_head, re.ASCII) is not None
+    )
+    token_is_valid = (
+        re.fullmatch(r"[0-9a-f]{64}", expected_release_token, re.ASCII) is not None
+    )
+    checkouts_are_valid = all(
+        re.fullmatch(r"[0-9a-f]{40}", value, re.ASCII) is not None
+        for value in (inspection_checkout_sha, capture_execution_checkout_sha)
+    )
+    if action == "initialize":
+        structurally_valid = (
+            expected_generation == 0
+            and expected_head == zero_sha
+            and expected_release_token == INITIAL_RELEASE_TOKEN
+        )
+    else:
+        structurally_valid = (
+            expected_generation > 0
+            and sha_is_valid
+            and expected_head != zero_sha
+            and token_is_valid
+            and expected_release_token != INITIAL_RELEASE_TOKEN
+        )
+    if not structurally_valid or not checkouts_are_valid:
+        raise AuthoringEntrypointError("input_invalid")
+
+    if action == "finalize":
+        if (
+            type(finalization_authorization) is not str
+            or finalization_authorization != FINALIZATION_AUTHORIZATION
+        ):
+            raise AuthoringEntrypointError("finalization_incomplete")
+    elif type(finalization_authorization) is not str or finalization_authorization:
+        raise AuthoringEntrypointError("input_invalid")
+
+    if action == "peer_review":
+        if operator.casefold() == primary_operator.casefold():
+            raise AuthoringEntrypointError("binding_mismatch")
+    elif operator != primary_operator:
+        raise AuthoringEntrypointError("binding_mismatch")
+
+    return ActionInvocation(
+        action=action,
+        approved_checkout=approved_checkout,
+        primary_operator=primary_operator,
+        operator=operator,
+        session=session,
+        expected_generation=expected_generation,
+        expected_head=expected_head,
+        expected_release_token=expected_release_token,
+        finalization_authorization=finalization_authorization,
+        inspection_checkout_sha=inspection_checkout_sha,
+        capture_execution_checkout_sha=capture_execution_checkout_sha,
+    )
+
+
 def _open_private_directory_path(raw: str) -> tuple[int, Path, os.stat_result]:
     if type(raw) is not str or not raw or "\x00" in raw:
         raise AuthoringEntrypointError("input_invalid")
@@ -1582,44 +1695,15 @@ def execute_authoring(
 ) -> tuple[int, bytes]:
     """Run exactly one descriptor-bound authoring operation."""
 
-    action = _required(environment, "TOC_AUTHOR_ACTION")
-    if action not in ACTION_VALUES:
-        raise AuthoringEntrypointError("input_invalid")
-    if (
-        action == "finalize"
-        and environment.get("TOC_AUTHOR_FINALIZATION_AUTHORIZATION")
-        != FINALIZATION_AUTHORIZATION
-    ):
-        raise AuthoringEntrypointError("finalization_incomplete")
-    approved_checkout = _required(
-        environment, "TOC_AUTHOR_APPROVED_EXECUTION_CHECKOUT_SHA"
-    )
-    if re.fullmatch(r"[0-9a-f]{40}", approved_checkout, re.ASCII) is None:
-        raise AuthoringEntrypointError("input_invalid")
-    primary_operator = _required(environment, "TOC_AUTHOR_PRIMARY_OPERATOR_IDENTITY")
-    operator = _required(environment, "TOC_AUTHOR_OPERATOR_IDENTITY")
-    session = _required(environment, "TOC_AUTHOR_SESSION_IDENTITY")
-    if any(
-        value != value.strip()
-        or "  " in value
-        or SAFE_IDENTITY_RE.fullmatch(value) is None
-        for value in (primary_operator, operator, session)
-    ):
-        raise AuthoringEntrypointError("input_invalid")
-    expected_generation = _required_count(
-        environment, "TOC_AUTHOR_EXPECTED_HEAD_GENERATION", allow_zero=True
-    )
-    expected_head = _required(environment, "TOC_AUTHOR_EXPECTED_HEAD_SHA256")
-    if expected_generation == 0:
-        if expected_head != "0" * 64:
-            raise AuthoringEntrypointError("input_invalid")
-    elif re.fullmatch(r"[0-9a-f]{64}", expected_head, re.ASCII) is None:
-        raise AuthoringEntrypointError("input_invalid")
-    expected_release_token = _required_sha(
-        environment, "TOC_AUTHOR_EXPECTED_RELEASE_TOKEN"
-    )
-    if action == "initialize" and expected_release_token != INITIAL_RELEASE_TOKEN:
-        raise AuthoringEntrypointError("input_invalid")
+    invocation = _validate_action_invocation(environment)
+    action = invocation.action
+    approved_checkout = invocation.approved_checkout
+    primary_operator = invocation.primary_operator
+    operator = invocation.operator
+    session = invocation.session
+    expected_generation = invocation.expected_generation
+    expected_head = invocation.expected_head
+    expected_release_token = invocation.expected_release_token
 
     expectations = CaptureExpectations(
         capture_manifest_sha256=_required_sha(
@@ -1641,15 +1725,11 @@ def execute_authoring(
         evidence_manifest_sha256=_required_sha(
             environment, "TOC_AUTHOR_EVIDENCE_MANIFEST_SHA256"
         ),
-        inspection_checkout_sha=_required(
-            environment, "TOC_AUTHOR_INSPECTION_CHECKOUT_SHA"
-        ),
+        inspection_checkout_sha=invocation.inspection_checkout_sha,
         inspection_procedure_sha256=_required_sha(
             environment, "TOC_AUTHOR_INSPECTION_PROCEDURE_SHA256"
         ),
-        capture_execution_checkout_sha=_required(
-            environment, "TOC_AUTHOR_CAPTURE_EXECUTION_CHECKOUT_SHA"
-        ),
+        capture_execution_checkout_sha=invocation.capture_execution_checkout_sha,
         capture_procedure_identity_sha256=_required_sha(
             environment, "TOC_AUTHOR_EXPECTED_CAPTURE_PROCEDURE_IDENTITY_SHA256"
         ),
@@ -1794,7 +1874,7 @@ def execute_authoring(
                 if required_action != "finalize":
                     raise AuthoringEntrypointError("finalization_incomplete")
                 if (
-                    _required(environment, "TOC_AUTHOR_FINALIZATION_AUTHORIZATION")
+                    invocation.finalization_authorization
                     != FINALIZATION_AUTHORIZATION
                 ):
                     raise AuthoringEntrypointError("finalization_incomplete")
@@ -2122,10 +2202,12 @@ def execute_authoring(
 
 def main() -> int:
     tty_fd = -1
+    screen_entered = False
     try:
         tty_fd = _validate_tty(os.environ)
+        _validate_action_invocation(os.environ)
         _write_tty(tty_fd, ENTER_ALTERNATE_SCREEN + CLEAR_SCREEN)
-        _validate_execution_python(os.environ)
+        screen_entered = True
         status, diagnostic = execute_authoring(os.environ, tty_fd)
         if status not in {0, 2}:
             raise AuthoringEntrypointError("internal_failure")
@@ -2144,7 +2226,7 @@ def main() -> int:
         )
         return 1
     finally:
-        if tty_fd >= 0:
+        if tty_fd >= 0 and screen_entered:
             _clear_tty_best_effort(tty_fd)
     _emit_operator_diagnostic(
         "TOC_INTERNAL_DIAGNOSTIC_STDOUT_FD", sys.stdout, diagnostic

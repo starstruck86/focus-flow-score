@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from contextlib import ExitStack
 import hashlib
 import importlib.util
 import json
@@ -251,6 +252,32 @@ def released_token(private_root: Path) -> str:
     return token
 
 
+def immutable_tree_snapshot(root: Path) -> tuple[tuple[object, ...], ...]:
+    """Capture synthetic fixture names, metadata, and regular-file bytes."""
+
+    records: list[tuple[object, ...]] = []
+    paths = [root, *sorted(root.rglob("*"), key=lambda item: item.as_posix())]
+    for path in paths:
+        metadata = path.lstat()
+        relative = "." if path == root else path.relative_to(root).as_posix()
+        digest = None
+        if stat.S_ISREG(metadata.st_mode):
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        records.append(
+            (
+                relative,
+                stat.S_IFMT(metadata.st_mode),
+                stat.S_IMODE(metadata.st_mode),
+                metadata.st_uid,
+                metadata.st_gid,
+                metadata.st_nlink,
+                metadata.st_size,
+                digest,
+            )
+        )
+    return tuple(records)
+
+
 class AuthoringContractTest(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -339,6 +366,64 @@ class AuthoringContractTest(unittest.TestCase):
         ):
             return AUTHOR.execute_authoring(environment, 9)
 
+    def assert_preaccess_rejection(
+        self,
+        environment: dict[str, object],
+        *,
+        capture_root: Path,
+        private_root: Path,
+        reason: str,
+    ) -> None:
+        capture_before = immutable_tree_snapshot(capture_root)
+        private_before = immutable_tree_snapshot(private_root)
+        guarded_names = (
+            "_open_private_directory_path",
+            "_open_private_child_directory",
+            "_acquire_lock",
+            "load_capture_for_authoring",
+            "load_checkpoint_chain",
+            "initialize_checkpoint",
+            "publish_checkpoint_at",
+            "publish_final_candidate_at",
+            "_write_tty",
+            "_require_resume_acknowledgement",
+            "_validate_execution_python",
+            "_authoring_procedure_identity",
+        )
+        guarded: dict[str, mock.Mock] = {}
+        with ExitStack() as stack:
+            for name in guarded_names:
+                guarded[name] = stack.enter_context(mock.patch.object(AUTHOR, name))
+            with self.assertRaises(AUTHOR.AuthoringEntrypointError) as raised:
+                AUTHOR.execute_authoring(environment, 9)
+        self.assertEqual(raised.exception.reason, reason)
+        for name, operation in guarded.items():
+            self.assertEqual(operation.call_count, 0, name)
+
+        self.assertEqual(immutable_tree_snapshot(capture_root), capture_before)
+        self.assertEqual(immutable_tree_snapshot(private_root), private_before)
+        self.assertEqual(list(private_root.iterdir()), [])
+        for forbidden in (
+            AUTHOR.LOCK_NAME,
+            AUTHOR.CHECKPOINTS_NAME,
+            AUTHOR.INDETERMINATE_NAME,
+            AUTHOR.RELEASED_NAME,
+        ):
+            self.assertFalse((private_root / forbidden).exists())
+        self.assertFalse(
+            any(item.name.startswith("final-ledger-") for item in private_root.iterdir())
+        )
+
+        diagnostic = AUTHOR._fixed_diagnostic(status="failed", reason=reason)
+        parsed = json.loads(diagnostic)
+        self.assertEqual(
+            set(parsed), {"diagnostic_version", "reason", "stage", "status"}
+        )
+        self.assertEqual(parsed["reason"], reason)
+        for value in environment.values():
+            if type(value) is str and value and len(value) >= 8:
+                self.assertNotIn(value.encode("utf-8"), diagnostic)
+
     def test_structure_parser_matches_existing_parser_without_key(self):
         raw = raw_toc(["TABLE", "TABLE DATA", "SEQUENCE OWNED BY"])
         structural = capture_contract.parse_raw_toc_structure(raw)
@@ -397,7 +482,7 @@ class AuthoringContractTest(unittest.TestCase):
             AUTHOR, "_authoring_procedure_identity", return_value=SHA_C
         ):
             with self.assertRaisesRegex(
-                AUTHOR.AuthoringEntrypointError, "history_conflict"
+                AUTHOR.AuthoringEntrypointError, "input_invalid"
             ):
                 self.execute_with_private_ack(wrong_release)
         private_capture_read.assert_not_called()
@@ -412,6 +497,7 @@ class AuthoringContractTest(unittest.TestCase):
 
         skipped = dict(status_environment)
         skipped["TOC_AUTHOR_ACTION"] = "peer_review"
+        skipped["TOC_AUTHOR_OPERATOR_IDENTITY"] = "Distinct Peer"
         skipped["TOC_AUTHOR_EXPECTED_RELEASE_TOKEN"] = released_token(private_root)
         with mock.patch.object(AUTHOR, "_authoring_procedure_identity", return_value=SHA_C):
             with self.assertRaisesRegex(
@@ -419,6 +505,164 @@ class AuthoringContractTest(unittest.TestCase):
             ):
                 self.execute_with_private_ack(skipped)
         self.assertEqual(len(list(checkpoints.iterdir())), 1)
+
+    def test_static_action_tuple_rejects_before_every_private_operation(self):
+        poison = "PREACCESS_PRIVATE_PATH_OBJECT_SQL_SECRET_PAYLOAD_SENTINEL"
+        capture_root = self.root / "preaccess-capture"
+        package, expectations, _capture, _entries = make_capture_package(
+            capture_root, ["TABLE"], poison=poison
+        )
+        private_root = self.root / "preaccess-private"
+        private_root.mkdir(mode=0o700)
+        base_initialize = self.author_environment(
+            package,
+            expectations,
+            private_root,
+            action="initialize",
+            generation=0,
+            head_sha256="0" * 64,
+        )
+
+        def resume(action: str = "status") -> dict[str, object]:
+            environment: dict[str, object] = dict(base_initialize)
+            environment.update(
+                {
+                    "TOC_AUTHOR_ACTION": action,
+                    "TOC_AUTHOR_EXPECTED_HEAD_GENERATION": "1",
+                    "TOC_AUTHOR_EXPECTED_HEAD_SHA256": "e" * 64,
+                    "TOC_AUTHOR_EXPECTED_RELEASE_TOKEN": "d" * 64,
+                }
+            )
+            if action == "peer_review":
+                environment["TOC_AUTHOR_OPERATOR_IDENTITY"] = "Distinct Peer"
+            if action == "finalize":
+                environment["TOC_AUTHOR_FINALIZATION_AUTHORIZATION"] = (
+                    AUTHOR.FINALIZATION_AUTHORIZATION
+                )
+            return environment
+
+        cases: list[tuple[str, dict[str, object], str]] = []
+
+        invalid = dict(base_initialize)
+        invalid["TOC_AUTHOR_EXPECTED_HEAD_GENERATION"] = "1"
+        invalid["TOC_AUTHOR_EXPECTED_HEAD_SHA256"] = "e" * 64
+        cases.append(("initialize_nonzero_generation", invalid, "input_invalid"))
+
+        invalid = resume()
+        invalid["TOC_AUTHOR_EXPECTED_HEAD_SHA256"] = "0" * 64
+        cases.append(("resume_zero_head", invalid, "input_invalid"))
+
+        invalid = resume()
+        invalid["TOC_AUTHOR_EXPECTED_HEAD_GENERATION"] = "0"
+        invalid["TOC_AUTHOR_EXPECTED_HEAD_SHA256"] = "e" * 64
+        cases.append(("zero_generation_nonzero_head", invalid, "input_invalid"))
+
+        invalid = dict(base_initialize)
+        invalid["TOC_AUTHOR_EXPECTED_RELEASE_TOKEN"] = "d" * 64
+        cases.append(("initialize_nonzero_release", invalid, "input_invalid"))
+
+        for operator in ("Different Reviewer", "primary reviewer"):
+            invalid = dict(base_initialize)
+            invalid["TOC_AUTHOR_OPERATOR_IDENTITY"] = operator
+            cases.append(("initialize_operator_mismatch", invalid, "binding_mismatch"))
+
+        for action in sorted(AUTHOR.ACTION_VALUES - {"initialize"}):
+            invalid = resume(action)
+            invalid["TOC_AUTHOR_EXPECTED_HEAD_GENERATION"] = "0"
+            invalid["TOC_AUTHOR_EXPECTED_HEAD_SHA256"] = "0" * 64
+            invalid["TOC_AUTHOR_EXPECTED_RELEASE_TOKEN"] = "0" * 64
+            cases.append(("zero_resume_tuple_" + action, invalid, "input_invalid"))
+
+        invalid = resume()
+        invalid["TOC_AUTHOR_FINALIZATION_AUTHORIZATION"] = "NOT_FOR_STATUS"
+        cases.append(("ordinary_action_authorization", invalid, "input_invalid"))
+
+        invalid = resume()
+        invalid["TOC_AUTHOR_OPERATOR_IDENTITY"] = "Different Reviewer"
+        cases.append(("status_operator_mismatch", invalid, "binding_mismatch"))
+
+        invalid = resume("finalize")
+        invalid["TOC_AUTHOR_OPERATOR_IDENTITY"] = "Different Reviewer"
+        cases.append(("finalize_operator_mismatch", invalid, "binding_mismatch"))
+
+        for operator in ("Primary Reviewer", "primary reviewer"):
+            invalid = resume("peer_review")
+            invalid["TOC_AUTHOR_OPERATOR_IDENTITY"] = operator
+            cases.append(("peer_operator_collision", invalid, "binding_mismatch"))
+
+        for field in (
+            "TOC_AUTHOR_INSPECTION_CHECKOUT_SHA",
+            "TOC_AUTHOR_CAPTURE_EXECUTION_CHECKOUT_SHA",
+        ):
+            for malformed in ("a" * 39, "g" * 40, "A" * 40):
+                invalid = dict(base_initialize)
+                invalid[field] = malformed
+                cases.append(
+                    ("malformed_checkout_" + field, invalid, "input_invalid")
+                )
+
+        for authorization in (None, "", "WRONG_AUTHORIZATION"):
+            invalid = resume("finalize")
+            if authorization is None:
+                invalid.pop("TOC_AUTHOR_FINALIZATION_AUTHORIZATION")
+            else:
+                invalid["TOC_AUTHOR_FINALIZATION_AUTHORIZATION"] = authorization
+            cases.append(("finalize_authorization", invalid, "finalization_incomplete"))
+
+        for name, environment, reason in cases:
+            with self.subTest(case=name):
+                self.assert_preaccess_rejection(
+                    environment,
+                    capture_root=capture_root,
+                    private_root=private_root,
+                    reason=reason,
+                )
+
+    def test_static_action_tuple_rejects_nonprimitive_and_alias_inputs(self):
+        capture_root = self.root / "preaccess-types-capture"
+        package, expectations, _capture, _entries = make_capture_package(
+            capture_root, ["TABLE"]
+        )
+        private_root = self.root / "preaccess-types-private"
+        private_root.mkdir(mode=0o700)
+        base = self.author_environment(
+            package,
+            expectations,
+            private_root,
+            action="initialize",
+            generation=0,
+            head_sha256="0" * 64,
+        )
+
+        class BoxedString(str):
+            pass
+
+        cases: tuple[tuple[str, object], ...] = (
+            ("TOC_AUTHOR_ACTION", BoxedString("initialize")),
+            ("TOC_AUTHOR_EXPECTED_HEAD_GENERATION", 0),
+            ("TOC_AUTHOR_EXPECTED_HEAD_GENERATION", True),
+            ("TOC_AUTHOR_EXPECTED_HEAD_GENERATION", "00"),
+            ("TOC_AUTHOR_EXPECTED_HEAD_GENERATION", "+0"),
+            ("TOC_AUTHOR_EXPECTED_HEAD_SHA256", BoxedString("0" * 64)),
+            ("TOC_AUTHOR_EXPECTED_HEAD_SHA256", 0),
+            ("TOC_AUTHOR_EXPECTED_RELEASE_TOKEN", ["0" * 64]),
+            ("TOC_AUTHOR_OPERATOR_IDENTITY", BoxedString("Primary Reviewer")),
+            ("TOC_AUTHOR_OPERATOR_IDENTITY", 123),
+            ("TOC_AUTHOR_FINALIZATION_AUTHORIZATION", BoxedString("")),
+            ("TOC_AUTHOR_FINALIZATION_AUTHORIZATION", 0),
+            ("TOC_AUTHOR_INSPECTION_CHECKOUT_SHA", {"sha": "b" * 40}),
+            ("TOC_AUTHOR_CAPTURE_EXECUTION_CHECKOUT_SHA", b"a" * 40),
+        )
+        for field, value in cases:
+            with self.subTest(field=field, kind=type(value).__name__):
+                invalid: dict[str, object] = dict(base)
+                invalid[field] = value
+                self.assert_preaccess_rejection(
+                    invalid,
+                    capture_root=capture_root,
+                    private_root=private_root,
+                    reason="input_invalid",
+                )
 
     def test_status_descriptor_close_failure_overrides_review_boundary(self):
         poison = "STATUS_CLOSE_RAW_NAME_OWNER_SQL_PATH_SECRET_PAYLOAD_SENTINEL"

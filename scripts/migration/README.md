@@ -515,6 +515,22 @@ Git, shell history, CI, or chat:
 | `TOC_AUTHOR_LOCAL_TTY_ATTESTATION` | Exact `LOCAL_CONTROLLING_TTY_NO_RECORDING_NO_REMOTE_NO_CLIPBOARD` operator attestation |
 | `TOC_AUTHOR_FINALIZATION_AUTHORIZATION` | Empty for ordinary actions; exact `CREATE_UNVALIDATED_LEDGER` only for the separately approved finalization invocation |
 
+Before any of the following can occur—execution-tool validation, private or
+capture path opening, lock or directory creation, capture reads, or checkpoint
+loading—the internal component validates the complete static action tuple.
+`initialize` requires generation `0`, an all-zero head and release token,
+identical primary/current operator identities, and empty finalization
+authorization. Every other action requires a positive generation plus a
+nonzero lowercase 64-hex head and release token. Every non-peer action requires
+the current operator to equal the primary operator; `peer_review` requires a
+case-insensitively distinct operator. `finalize` alone requires exact
+`CREATE_UNVALIDATED_LEDGER`, and the predecessor inspection/capture checkout
+bindings must already be lowercase 40-hex. Structural tuple errors emit fixed
+`input_invalid`, role errors emit fixed `binding_mismatch`, and missing or wrong
+finalization approval emits fixed `finalization_incomplete`; no supplied private
+value is echoed. Package- and checkpoint-bound checks after private opening
+remain defense in depth.
+
 Initialization therefore binds generation `0` plus the all-zero expected head
 and publishes generation `1`. Every later invocation must be supplied the exact
 observed generation and full checkpoint SHA-256; the procedure does not infer
