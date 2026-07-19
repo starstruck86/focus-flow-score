@@ -307,20 +307,38 @@ class LovableTocMetadataReattestationStartupTest(unittest.TestCase):
         # macOS may strip DYLD_* before a protected shell starts. Source the
         # launcher from an already-started clean shell after planting the
         # variable so the shell-level guard itself is exercised deterministically.
-        source_command = (
-            "launcher=$1; set --; "
-            "DYLD_LIBRARY_PATH=PRIVATE_LOADER_SENTINEL; "
-            "export DYLD_LIBRARY_PATH; . \"$launcher\""
+        for name in ("DYLD_LIBRARY_PATH", "DYLD_PRINT_TO_FILE", "DYLD_PRINT_ENV"):
+            with self.subTest(name=name):
+                source_command = (
+                    "launcher=$1; set --; "
+                    f"{name}=PRIVATE_LOADER_SENTINEL; "
+                    f"export {name}; . \"$launcher\""
+                )
+                before = tree_snapshot(self.fixture.root)
+                status, transcript = run_in_pty(
+                    Path("/bin/sh"),
+                    self.supported_environment(),
+                    arguments=[
+                        "-c",
+                        source_command,
+                        "synthetic-sh",
+                        os.fspath(self.launcher),
+                    ],
+                )
+                self.assertEqual(status, 1)
+                self.assertEqual(json.loads(transcript)["reason"], "input_invalid")
+                self.assertNotIn(b"PRIVATE_LOADER_SENTINEL", transcript)
+                self.assertEqual(before, tree_snapshot(self.fixture.root))
+
+    def test_reviewer_must_be_independent_of_authorizer_before_private_access(self) -> None:
+        environment = self.supported_environment()
+        environment["TOC_REATTEST_INDEPENDENT_REVIEWER_IDENTITY"] = (
+            environment["TOC_REATTEST_AUTHORIZER_IDENTITY"].swapcase()
         )
         before = tree_snapshot(self.fixture.root)
-        status, transcript = run_in_pty(
-            Path("/bin/sh"),
-            self.supported_environment(),
-            arguments=["-c", source_command, "synthetic-sh", os.fspath(self.launcher)],
-        )
+        status, transcript = run_in_pty(self.launcher, environment)
         self.assertEqual(status, 1)
-        self.assertEqual(json.loads(transcript)["reason"], "input_invalid")
-        self.assertNotIn(b"PRIVATE_LOADER_SENTINEL", transcript)
+        self.assertEqual(json.loads(transcript)["reason"], "binding_mismatch")
         self.assertEqual(before, tree_snapshot(self.fixture.root))
 
     def test_dirty_untracked_and_ignored_tool_inputs_fail_before_private_access(self) -> None:

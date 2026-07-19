@@ -638,6 +638,8 @@ destination whose device and inode are externally pinned. It uses `env -i` and
 `-I -S -B`; the stdlib-only probe creates no
 file, child, network connection, cache, or log. The root and exact direct-child
 package are opened descriptor-relatively and held through all validation.
+The independent reviewer must differ case-insensitively from both the named
+authorizer and executing operator.
 
 Only `capture.json`, `evidence-files.json`, and `EVIDENCE_COMPLETE` may be
 content-opened. The raw TOC, opaque index, and opaque key receive only

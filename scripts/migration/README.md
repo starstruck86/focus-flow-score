@@ -440,7 +440,9 @@ candidates needed before annotation initialization. It takes no arguments,
 disables core dumps, rejects native-loader and Python-startup variables, binds
 one exact clean checkout plus launcher/probe/README/runbook Git blobs and
 SHA-256 values, verifies the complete externally approved CPython file
-identity, creates a minimal `env -i` child environment, and executes the
+identity, requires the independent reviewer to differ case-insensitively from
+both the authorizer and executing operator, creates a minimal `env -i` child
+environment, and executes the
 stdlib-only internal probe with `-I -S -B`. The `.py` file is not a supported
 operator entrypoint. The probe itself creates no file, invokes no subprocess,
 performs no network operation, and imports no repository-local module.

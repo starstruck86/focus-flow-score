@@ -739,15 +739,19 @@ def _load_expectations() -> Expectations:
     expiry = _parse_expiry(
         _string(os.environ.get("TOC_REATTEST_METADATA_SESSION_EXPIRES_AT_UTC"))
     )
-    for identity_name in (
-        "TOC_REATTEST_AUTHORIZER_IDENTITY",
-        "TOC_REATTEST_EXECUTING_OPERATOR_IDENTITY",
-        "TOC_REATTEST_INDEPENDENT_REVIEWER_IDENTITY",
-    ):
-        _string(os.environ.get(identity_name), SAFE_ID_RE)
-    if os.environ["TOC_REATTEST_EXECUTING_OPERATOR_IDENTITY"].casefold() == os.environ[
-        "TOC_REATTEST_INDEPENDENT_REVIEWER_IDENTITY"
-    ].casefold():
+    authorizer = _string(
+        os.environ.get("TOC_REATTEST_AUTHORIZER_IDENTITY"), SAFE_ID_RE
+    )
+    executing_operator = _string(
+        os.environ.get("TOC_REATTEST_EXECUTING_OPERATOR_IDENTITY"), SAFE_ID_RE
+    )
+    independent_reviewer = _string(
+        os.environ.get("TOC_REATTEST_INDEPENDENT_REVIEWER_IDENTITY"), SAFE_ID_RE
+    )
+    if independent_reviewer.casefold() in {
+        authorizer.casefold(),
+        executing_operator.casefold(),
+    }:
         raise ProbeFailure("binding_mismatch")
     if (
         os.environ.get("TOC_REATTEST_OUTPUT_DESTINATION_ATTESTATION")

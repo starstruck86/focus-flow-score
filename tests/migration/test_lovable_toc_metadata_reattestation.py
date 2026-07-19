@@ -862,6 +862,11 @@ class LovableTocMetadataReattestationTest(unittest.TestCase):
                 "syntheticoperator",
                 "binding_mismatch",
             ),
+            (
+                "TOC_REATTEST_INDEPENDENT_REVIEWER_IDENTITY",
+                "syntheticauthorizer",
+                "binding_mismatch",
+            ),
         )
         for key, value, reason in cases:
             with self.subTest(key=key):
