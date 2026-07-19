@@ -680,6 +680,15 @@ chooses one sorted, explicit TTY-only batch of at most 100 ordinals and one
 existing scoped primary-review phase. The new immutable generation invalidates
 affected peer approval, so a distinct peer must reapprove it before
 finalization eligibility is recomputed.
+If the selected correction phase is `primary_review`, classification review is
+coupled to manual-conflict invalidation. A prior final disposition may change
+only to null; the resulting classification must be marked reviewed, with
+manual-conflict review `pending` for `manual_conflict` and `not_applicable` for
+all other classes. Final disposition selection remains exclusive to
+`manual_conflict_review`. Retaining or substituting a final disposition, or
+retaining stale `reviewed` state, fails closed. The canonical decision hash and
+peer approval are invalidated in both finalization states and after a peer
+requests changes.
 
 `initialize` alone creates the bound draft state. Primary review proceeds in
 deterministic ordinal batches, normally 100 entries. The later passes must
@@ -785,6 +794,10 @@ incomplete pending generation may be removed and its parent fsynced. If write,
 rename, rollback, cleanup, or fsync cannot be proved, retain private
 `AUTHORING_INDETERMINATE`, emit only the fixed `cleanup_indeterminate` result,
 and block resume and finalization pending a separately reviewed recovery.
+The same rule governs read-only `status`: any descriptor-close or cleanup
+ambiguity overrides its nominal review-boundary result with the fixed failure,
+leaves a blocking lock/indeterminate state, and withholds a normal release token
+and durable release marker.
 
 Draft `dependency_review_complete` stays false. A separate, explicitly
 authorized `TOC_AUTHOR_ACTION=finalize` may proceed only from

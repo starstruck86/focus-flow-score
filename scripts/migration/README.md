@@ -457,6 +457,16 @@ explicit, sorted batch of at most 100 ordinals through the controlled TTY and
 applies one existing scoped primary-review phase. That immutable correction
 invalidates the affected peer approval and requires peer reapproval before
 eligibility can be recomputed.
+When the scoped phase is `primary_review`, reconsidering classification is
+coupled narrowly to the prior manual-conflict state: an existing final
+`manual_conflict_disposition` may only be cleared to null. The resulting
+decision must have `classification_reviewed=true`; `manual_conflict` returns
+to `manual_conflict_review_state=pending`, while every other classification
+uses `not_applicable`. A fresh final disposition remains exclusive to
+`manual_conflict_review`. Retaining or substituting a final disposition, or
+retaining a stale `reviewed` state, is rejected. The corrected decision hash is
+recomputed and peer approval returns to pending, including after peer-requested
+re-review.
 These are deterministic, enforced phase priorities, not permission to infer a
 decision or silently complete an earlier review. Ordinary review actions do
 not interleave: only a peer-requested correction or the explicit semantic
@@ -613,6 +623,10 @@ procedure retains a private fixed `AUTHORING_INDETERMINATE` marker, emits only
 `cleanup_indeterminate`, and blocks resume and finalization. Do not delete,
 rename, repair, or reinterpret stale locks, conflicting heads, or indeterminate
 state without a separately reviewed recovery procedure.
+This override applies to read-only orchestration too: a descriptor-close or
+cleanup ambiguity during a nominal `status` result replaces the review-boundary
+exit with the fixed failure, leaves a blocking lock/indeterminate state, and
+does not publish normal resume values or a durable release marker.
 
 Mechanical proposals are versioned suggestions only. They never become human
 decisions automatically. Every entry requires an explicit primary decision.
@@ -653,6 +667,13 @@ fresh peer approval. A forged transition retaining the old sequence approval
 is rejected. `SEQUENCE SET` correction remains confined to
 `sequence_metadata_parent`, and ordinary data-reference correction remains
 confined to `metadata_parent`. Multi-role contexts remain separately labeled.
+For the scoped `primary_review` correction, classification reconsideration may
+clear a prior manual-conflict disposition only to null. Selecting
+`manual_conflict` requires a new manual-conflict review; selecting any other
+class makes that phase not applicable. Either path changes the canonical
+decision hash and requires fresh peer approval. The transition contract rejects
+old or replacement final dispositions and stale reviewed state; only the later
+`manual_conflict_review` phase may choose a final disposition.
 
 Finalization is allowed only through a later invocation with
 `TOC_AUTHOR_ACTION=finalize`, the exact expected checkpoint head, and a

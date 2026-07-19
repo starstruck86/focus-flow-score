@@ -132,6 +132,7 @@ DECISION_FIELDS_BY_ACTION = {
         {
             "classification",
             "classification_reviewed",
+            "manual_conflict_disposition",
             "manual_conflict_review_state",
         }
     ),
@@ -1212,6 +1213,30 @@ def _validate_relationship_transition(
         _fail("review_transition_invalid")
 
 
+def _validate_primary_classification_transition(
+    before: Mapping[str, Any], after: Mapping[str, Any]
+) -> None:
+    before_decision = before["primary_decision"]
+    after_decision = after["primary_decision"]
+    if after_decision["classification_reviewed"] is not True:
+        _fail("review_transition_invalid")
+    if (
+        before_decision["manual_conflict_disposition"]
+        != after_decision["manual_conflict_disposition"]
+        and after_decision["manual_conflict_disposition"] is not None
+    ):
+        _fail("review_transition_invalid")
+    if after_decision["manual_conflict_disposition"] is not None:
+        _fail("review_transition_invalid")
+    expected_review_state = (
+        "pending"
+        if after_decision["classification"] == "manual_conflict"
+        else "not_applicable"
+    )
+    if after_decision["manual_conflict_review_state"] != expected_review_state:
+        _fail("review_transition_invalid")
+
+
 def _validate_transition(
     previous: Mapping[str, Any], current: Mapping[str, Any]
 ) -> None:
@@ -1318,6 +1343,8 @@ def _validate_transition(
                 _fail("review_transition_invalid")
             if action in {"relationship_review", "relationship_correction"}:
                 _validate_relationship_transition(action, before, after)
+            if action in {"primary_review", "revisit_unresolved"}:
+                _validate_primary_classification_transition(before, after)
             if after["peer_review"] != _pending_peer():
                 _fail("review_transition_invalid")
     if action != "managed_review" and action != "peer_review":

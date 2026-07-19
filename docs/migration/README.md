@@ -156,6 +156,14 @@ so reselection uses the ordinary role-labeled phase rather than bypassing order.
 `SEQUENCE SET` correction remains confined to `sequence_metadata_parent`, and
 data-reference correction remains confined to `metadata_parent`; unrelated
 fields cannot change. Final-package publication remains no-replace and terminal.
+The scoped primary-classification correction may clear an existing
+manual-conflict disposition only to null. It must leave classification reviewed
+and either require a fresh `manual_conflict_review` or mark that phase not
+applicable, depending on the new class. Old/substituted final dispositions and
+stale reviewed state are rejected; the decision hash changes and peer approval
+must be repeated. Any descriptor-close or cleanup ambiguity, including during
+aggregate-only `status`, overrides the nominal result with the fixed failure and
+leaves blocking private state rather than a normal release.
 Mechanical proposals are never approvals. Finalization is a distinct
 authorized action and publishes one canonical private ledger package without
 replacement only after every entry, data reference, dependency, sequence,

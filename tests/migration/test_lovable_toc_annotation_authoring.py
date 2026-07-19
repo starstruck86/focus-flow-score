@@ -420,6 +420,120 @@ class AuthoringContractTest(unittest.TestCase):
                 self.execute_with_private_ack(skipped)
         self.assertEqual(len(list(checkpoints.iterdir())), 1)
 
+    def test_status_descriptor_close_failure_overrides_review_boundary(self):
+        poison = "STATUS_CLOSE_RAW_NAME_OWNER_SQL_PATH_SECRET_PAYLOAD_SENTINEL"
+        capture_root = self.root / "status-close-capture"
+        package, expectations, _capture, _entries = make_capture_package(
+            capture_root, ["TABLE"], poison=poison
+        )
+        private_root = self.root / "status-close-private"
+        private_root.mkdir(mode=0o700)
+        initialize = self.author_environment(
+            package,
+            expectations,
+            private_root,
+            action="initialize",
+            generation=0,
+            head_sha256="0" * 64,
+        )
+        with mock.patch.object(
+            AUTHOR, "_authoring_procedure_identity", return_value=SHA_C
+        ):
+            self.execute_with_private_ack(initialize)
+        checkpoints = private_root / AUTHOR.CHECKPOINTS_NAME
+        checkpoint = next(checkpoints.iterdir())
+        checkpoint_bytes = checkpoint.read_bytes()
+        checkpoint_head = hashlib.sha256(checkpoint_bytes).hexdigest()
+        prior_release_token = released_token(private_root)
+        status_environment = self.author_environment(
+            package,
+            expectations,
+            private_root,
+            action="status",
+            generation=1,
+            head_sha256=checkpoint_head,
+        )
+
+        real_open_child = AUTHOR._open_private_child_directory
+        real_close = AUTHOR.os.close
+        close_target = {"fd": -1, "failed": False}
+
+        def record_child(parent_fd, name):
+            result = real_open_child(parent_fd, name)
+            if name == AUTHOR.CHECKPOINTS_NAME:
+                close_target["fd"] = result[0]
+            return result
+
+        def fail_checkpoint_close(descriptor):
+            if descriptor == close_target["fd"] and not close_target["failed"]:
+                close_target["failed"] = True
+                real_close(descriptor)
+                raise OSError("synthetic close-only failure")
+            return real_close(descriptor)
+
+        diagnostics: list[bytes] = []
+        tty_writes: list[bytes] = []
+        with mock.patch.object(AUTHOR.os, "environ", status_environment), mock.patch.object(
+            AUTHOR, "_validate_tty", return_value=9
+        ), mock.patch.object(
+            AUTHOR, "_authoring_procedure_identity", return_value=SHA_C
+        ), mock.patch.object(
+            AUTHOR,
+            "_open_private_child_directory",
+            side_effect=record_child,
+        ), mock.patch.object(
+            AUTHOR.os, "close", side_effect=fail_checkpoint_close
+        ), mock.patch.object(
+            AUTHOR,
+            "_write_tty",
+            side_effect=lambda _descriptor, payload: tty_writes.append(payload),
+        ), mock.patch.object(
+            AUTHOR, "_require_resume_acknowledgement"
+        ) as acknowledge, mock.patch.object(
+            AUTHOR, "_release_lock"
+        ) as release, mock.patch.object(
+            AUTHOR,
+            "_emit_operator_diagnostic",
+            side_effect=lambda _name, _stream, payload: diagnostics.append(payload),
+        ), mock.patch.object(
+            AUTHOR, "_clear_tty_best_effort", return_value=None
+        ):
+            exit_status = AUTHOR.main()
+
+        self.assertEqual(exit_status, 1)
+        self.assertTrue(close_target["failed"])
+        acknowledge.assert_not_called()
+        release.assert_not_called()
+        self.assertEqual(len(tty_writes), 1)
+        self.assertEqual(tty_writes[0], AUTHOR.ENTER_ALTERNATE_SCREEN + AUTHOR.CLEAR_SCREEN)
+        self.assertEqual(
+            diagnostics,
+            [AUTHOR._fixed_diagnostic(status="failed", reason="cleanup_indeterminate")],
+        )
+        self.assertEqual(checkpoint.read_bytes(), checkpoint_bytes)
+        self.assertEqual(
+            {path.name for path in private_root.iterdir()},
+            {
+                AUTHOR.CHECKPOINTS_NAME,
+                AUTHOR.INDETERMINATE_NAME,
+                AUTHOR.LOCK_NAME,
+            },
+        )
+        for private_value in (
+            poison,
+            os.fspath(package),
+            os.fspath(private_root),
+            checkpoint_head,
+            prior_release_token,
+        ):
+            self.assertNotIn(private_value.encode("utf-8"), b"".join(diagnostics))
+        self.assertFalse(
+            any(
+                AUTHOR.FINAL_PACKAGE_RE.fullmatch(path.name)
+                for path in private_root.iterdir()
+            )
+        )
+
     def test_checkpoint_head_is_returned_only_through_private_tty(self):
         capture_root = self.root / "head-display-capture"
         package, expectations, _capture, _entries = make_capture_package(
@@ -1742,6 +1856,7 @@ class AuthoringContractTest(unittest.TestCase):
         *,
         binding=None,
         classification="restore",
+        manual_conflict_disposition="restore",
         managed_domain="none",
         primary_operator="Primary",
         peer_operator="Peer",
@@ -1755,6 +1870,9 @@ class AuthoringContractTest(unittest.TestCase):
         decision = copy.deepcopy(checkpoint["entries"][0]["primary_decision"])
         decision["classification"] = classification
         decision["classification_reviewed"] = True
+        decision["manual_conflict_review_state"] = (
+            "pending" if classification == "manual_conflict" else "not_applicable"
+        )
         checkpoint = authoring.apply_transition(
             checkpoint,
             capture,
@@ -1804,6 +1922,21 @@ class AuthoringContractTest(unittest.TestCase):
             managed_updates=managed_selected,
         )
         history.append(checkpoint)
+        if classification == "manual_conflict":
+            decision = copy.deepcopy(checkpoint["entries"][0]["primary_decision"])
+            decision["manual_conflict_disposition"] = manual_conflict_disposition
+            decision["manual_conflict_review_state"] = "reviewed"
+            checkpoint = authoring.apply_transition(
+                checkpoint,
+                capture,
+                binding,
+                action="manual_conflict_review",
+                operator_identity=primary_operator,
+                session_identity="session-manual-conflict",
+                reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+                entry_updates=[{"ordinal": 0, "primary_decision": decision}],
+            )
+            history.append(checkpoint)
         checkpoint = authoring.apply_transition(
             checkpoint,
             capture,
@@ -2008,6 +2141,98 @@ class AuthoringContractTest(unittest.TestCase):
         )
         history.append(checkpoint)
         return history
+
+    def reclassify_primary_decision(
+        self,
+        checkpoint,
+        capture,
+        classification,
+        *,
+        session_identity,
+    ):
+        decision = copy.deepcopy(checkpoint["entries"][0]["primary_decision"])
+        decision["classification"] = classification
+        decision["classification_reviewed"] = True
+        decision["manual_conflict_disposition"] = None
+        decision["manual_conflict_review_state"] = (
+            "pending" if classification == "manual_conflict" else "not_applicable"
+        )
+        return authoring.apply_transition(
+            checkpoint,
+            capture,
+            self.binding,
+            action="primary_review",
+            operator_identity="Primary",
+            session_identity=session_identity,
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[{"ordinal": 0, "primary_decision": decision}],
+        )
+
+    def approve_entry_peer(self, checkpoint, capture, *, session_identity):
+        return authoring.apply_transition(
+            checkpoint,
+            capture,
+            self.binding,
+            action="peer_review",
+            operator_identity="Peer",
+            session_identity=session_identity,
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[
+                {
+                    "ordinal": 0,
+                    "peer_status": "approved",
+                    "primary_decision_sha256": checkpoint["entries"][0][
+                        "primary_decision_sha256"
+                    ],
+                }
+            ],
+        )
+
+    def complete_rejected_entry_primary_phases(
+        self,
+        checkpoint,
+        capture,
+        classification,
+        *,
+        session_prefix,
+    ):
+        states = []
+        checkpoint = self.reclassify_primary_decision(
+            checkpoint,
+            capture,
+            classification,
+            session_identity=session_prefix + "-primary",
+        )
+        states.append(authoring.aggregate_status(checkpoint, capture)["authoring_state"])
+
+        decision = copy.deepcopy(checkpoint["entries"][0]["primary_decision"])
+        decision["dependency_reviewed"] = True
+        checkpoint = authoring.apply_transition(
+            checkpoint,
+            capture,
+            self.binding,
+            action="relationship_review",
+            operator_identity="Primary",
+            session_identity=session_prefix + "-relationship",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[{"ordinal": 0, "primary_decision": decision}],
+        )
+        states.append(authoring.aggregate_status(checkpoint, capture)["authoring_state"])
+
+        decision = copy.deepcopy(checkpoint["entries"][0]["primary_decision"])
+        decision["managed_domain_reviewed"] = True
+        checkpoint = authoring.apply_transition(
+            checkpoint,
+            capture,
+            self.binding,
+            action="managed_review",
+            operator_identity="Primary",
+            session_identity=session_prefix + "-managed",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[{"ordinal": 0, "primary_decision": decision}],
+        )
+        states.append(authoring.aggregate_status(checkpoint, capture)["authoring_state"])
+        return checkpoint, states
 
     def fully_reviewed_checkpoint(self):
         capture, _package, _expectations = self.load_capture(["TABLE"])
@@ -2228,6 +2453,447 @@ class AuthoringContractTest(unittest.TestCase):
             "FINALIZATION_ELIGIBLE",
         )
         self.assertTrue(authoring.build_final_ledger(reapproved, capture, self.binding))
+
+    def test_finalization_eligible_manual_conflict_reclassifies_and_reapproves(self):
+        capture, _package, _expectations = self.load_capture(["TABLE"])
+        eligible = self.fully_reviewed_history(
+            capture,
+            classification="manual_conflict",
+            manual_conflict_disposition="restore",
+        )[-1]
+        self.assertEqual(
+            authoring.aggregate_status(eligible, capture)["authoring_state"],
+            "FINALIZATION_ELIGIBLE",
+        )
+        before = eligible["entries"][0]
+        corrected = self.reclassify_primary_decision(
+            eligible,
+            capture,
+            "restore",
+            session_identity="eligible-manual-to-restore",
+        )
+        decision = corrected["entries"][0]["primary_decision"]
+        self.assertIsNone(decision["manual_conflict_disposition"])
+        self.assertEqual(decision["manual_conflict_review_state"], "not_applicable")
+        self.assertNotEqual(
+            corrected["entries"][0]["primary_decision_sha256"],
+            before["primary_decision_sha256"],
+        )
+        self.assertEqual(corrected["entries"][0]["peer_review"], authoring._pending_peer())
+        self.assertEqual(
+            authoring.aggregate_status(corrected, capture)["authoring_state"],
+            "PEER_REVIEW_REQUIRED",
+        )
+        reapproved = self.approve_entry_peer(
+            corrected, capture, session_identity="eligible-manual-peer-reapproval"
+        )
+        self.assertEqual(
+            authoring.aggregate_status(reapproved, capture)["authoring_state"],
+            "FINALIZATION_ELIGIBLE",
+        )
+
+    def test_finalization_review_required_manual_conflict_reclassifies(self):
+        capture, _package, _expectations = self.load_capture(["TABLE"])
+        semantic_failure = self.fully_reviewed_history(
+            capture,
+            classification="manual_conflict",
+            manual_conflict_disposition="dependency_only",
+        )[-1]
+        self.assertEqual(
+            authoring.aggregate_status(semantic_failure, capture)["authoring_state"],
+            "FINALIZATION_REVIEW_REQUIRED",
+        )
+        corrected = self.reclassify_primary_decision(
+            semantic_failure,
+            capture,
+            "exclude_duplicate",
+            session_identity="semantic-manual-to-nonmanual",
+        )
+        decision = corrected["entries"][0]["primary_decision"]
+        self.assertEqual(decision["classification"], "exclude_duplicate")
+        self.assertIsNone(decision["manual_conflict_disposition"])
+        self.assertEqual(decision["manual_conflict_review_state"], "not_applicable")
+        self.assertEqual(corrected["entries"][0]["peer_review"], authoring._pending_peer())
+        self.assertEqual(
+            authoring.aggregate_status(corrected, capture)["authoring_state"],
+            "PEER_REVIEW_REQUIRED",
+        )
+
+    def test_manual_conflict_reselection_requires_new_disposition_and_peer(self):
+        capture, _package, _expectations = self.load_capture(["TABLE"])
+        eligible = self.fully_reviewed_history(
+            capture,
+            classification="manual_conflict",
+            manual_conflict_disposition="restore",
+        )[-1]
+        before_hash = eligible["entries"][0]["primary_decision_sha256"]
+        corrected = self.reclassify_primary_decision(
+            eligible,
+            capture,
+            "manual_conflict",
+            session_identity="eligible-manual-reselection",
+        )
+        decision = corrected["entries"][0]["primary_decision"]
+        self.assertIsNone(decision["manual_conflict_disposition"])
+        self.assertEqual(decision["manual_conflict_review_state"], "pending")
+        self.assertNotEqual(
+            corrected["entries"][0]["primary_decision_sha256"], before_hash
+        )
+        self.assertEqual(corrected["entries"][0]["peer_review"], authoring._pending_peer())
+        self.assertEqual(
+            authoring.aggregate_status(corrected, capture)["authoring_state"],
+            "MANUAL_CONFLICT_REVIEW_REQUIRED",
+        )
+
+        reviewed_decision = copy.deepcopy(decision)
+        reviewed_decision["manual_conflict_disposition"] = "exclude_duplicate"
+        reviewed_decision["manual_conflict_review_state"] = "reviewed"
+        reviewed = authoring.apply_transition(
+            corrected,
+            capture,
+            self.binding,
+            action="manual_conflict_review",
+            operator_identity="Primary",
+            session_identity="fresh-manual-disposition",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[{"ordinal": 0, "primary_decision": reviewed_decision}],
+        )
+        self.assertEqual(
+            authoring.aggregate_status(reviewed, capture)["authoring_state"],
+            "PEER_REVIEW_REQUIRED",
+        )
+        reapproved = self.approve_entry_peer(
+            reviewed, capture, session_identity="fresh-manual-peer"
+        )
+        self.assertEqual(
+            authoring.aggregate_status(reapproved, capture)["authoring_state"],
+            "FINALIZATION_ELIGIBLE",
+        )
+
+    def test_peer_rejected_manual_conflict_can_be_reclassified(self):
+        capture, _package, _expectations = self.load_capture(["TABLE"])
+        eligible = self.fully_reviewed_history(
+            capture,
+            classification="manual_conflict",
+            manual_conflict_disposition="restore",
+        )[-1]
+        rejected = authoring.apply_transition(
+            eligible,
+            capture,
+            self.binding,
+            action="peer_review",
+            operator_identity="Peer",
+            session_identity="reject-manual-for-reclassification",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[
+                {
+                    "ordinal": 0,
+                    "peer_status": "changes_requested",
+                    "primary_decision_sha256": eligible["entries"][0][
+                        "primary_decision_sha256"
+                    ],
+                }
+            ],
+        )
+        retained = rejected["entries"][0]["primary_decision"]
+        self.assertEqual(retained["manual_conflict_disposition"], "restore")
+        self.assertEqual(
+            authoring.aggregate_status(rejected, capture)["authoring_state"],
+            "PRIMARY_REVIEW_REQUIRED",
+        )
+        reviewed, states = self.complete_rejected_entry_primary_phases(
+            rejected,
+            capture,
+            "restore",
+            session_prefix="rejected-manual-to-restore",
+        )
+        self.assertEqual(
+            states,
+            [
+                "RELATIONSHIP_REVIEW_REQUIRED",
+                "MANAGED_GLOBAL_REVIEW_REQUIRED",
+                "PEER_REVIEW_REQUIRED",
+            ],
+        )
+        self.assertIsNone(
+            reviewed["entries"][0]["primary_decision"]["manual_conflict_disposition"]
+        )
+        reapproved = self.approve_entry_peer(
+            reviewed, capture, session_identity="rejected-nonmanual-peer"
+        )
+        self.assertEqual(
+            authoring.aggregate_status(reapproved, capture)["authoring_state"],
+            "FINALIZATION_ELIGIBLE",
+        )
+
+    def test_peer_rejected_manual_conflict_requires_fresh_manual_review(self):
+        capture, _package, _expectations = self.load_capture(["TABLE"])
+        eligible = self.fully_reviewed_history(
+            capture,
+            classification="manual_conflict",
+            manual_conflict_disposition="restore",
+        )[-1]
+        rejected = authoring.apply_transition(
+            eligible,
+            capture,
+            self.binding,
+            action="peer_review",
+            operator_identity="Peer",
+            session_identity="reject-manual-for-manual-rereview",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[
+                {
+                    "ordinal": 0,
+                    "peer_status": "changes_requested",
+                    "primary_decision_sha256": eligible["entries"][0][
+                        "primary_decision_sha256"
+                    ],
+                }
+            ],
+        )
+        reviewed, states = self.complete_rejected_entry_primary_phases(
+            rejected,
+            capture,
+            "manual_conflict",
+            session_prefix="rejected-manual-rereview",
+        )
+        self.assertEqual(
+            states,
+            [
+                "RELATIONSHIP_REVIEW_REQUIRED",
+                "MANAGED_GLOBAL_REVIEW_REQUIRED",
+                "MANUAL_CONFLICT_REVIEW_REQUIRED",
+            ],
+        )
+        decision = reviewed["entries"][0]["primary_decision"]
+        self.assertIsNone(decision["manual_conflict_disposition"])
+        self.assertEqual(decision["manual_conflict_review_state"], "pending")
+        self.assertEqual(
+            authoring.aggregate_status(reviewed, capture)["authoring_state"],
+            "MANUAL_CONFLICT_REVIEW_REQUIRED",
+        )
+
+        disposition = copy.deepcopy(decision)
+        disposition["manual_conflict_disposition"] = "restore"
+        disposition["manual_conflict_review_state"] = "reviewed"
+        reviewed = authoring.apply_transition(
+            reviewed,
+            capture,
+            self.binding,
+            action="manual_conflict_review",
+            operator_identity="Primary",
+            session_identity="rejected-fresh-manual-disposition",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[{"ordinal": 0, "primary_decision": disposition}],
+        )
+        reapproved = self.approve_entry_peer(
+            reviewed, capture, session_identity="rejected-fresh-manual-peer"
+        )
+        self.assertEqual(
+            authoring.aggregate_status(reapproved, capture)["authoring_state"],
+            "FINALIZATION_ELIGIBLE",
+        )
+
+    def test_primary_review_rejects_stale_or_substituted_manual_disposition(self):
+        capture, _package, _expectations = self.load_capture(["TABLE"])
+        eligible = self.fully_reviewed_history(
+            capture,
+            classification="manual_conflict",
+            manual_conflict_disposition="restore",
+        )[-1]
+        prior = eligible["entries"][0]["primary_decision"]
+
+        retained = copy.deepcopy(prior)
+        retained["classification"] = "exclude_duplicate"
+        retained["manual_conflict_review_state"] = "not_applicable"
+        substituted = copy.deepcopy(prior)
+        substituted["manual_conflict_disposition"] = "exclude_duplicate"
+        stale_review = copy.deepcopy(prior)
+        stale_review["manual_conflict_disposition"] = None
+        classification_unreviewed = copy.deepcopy(prior)
+        classification_unreviewed["manual_conflict_disposition"] = None
+        classification_unreviewed["manual_conflict_review_state"] = "pending"
+        classification_unreviewed["classification_reviewed"] = False
+
+        for name, forged, expected_code in (
+            ("retained", retained, "checkpoint_invalid"),
+            ("substituted", substituted, "review_transition_invalid"),
+            ("stale_review", stale_review, "review_transition_invalid"),
+            (
+                "classification_unreviewed",
+                classification_unreviewed,
+                "review_transition_invalid",
+            ),
+        ):
+            with self.subTest(case=name):
+                with self.assertRaisesRegex(
+                    authoring.AuthoringContractError, expected_code
+                ):
+                    authoring.apply_transition(
+                        eligible,
+                        capture,
+                        self.binding,
+                        action="primary_review",
+                        operator_identity="Primary",
+                        session_identity="forged-primary-" + name,
+                        reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+                        entry_updates=[
+                            {"ordinal": 0, "primary_decision": forged}
+                        ],
+                    )
+
+        initial = authoring.initialize_checkpoint(
+            capture, self.binding, "Primary", "unresolved-initialize"
+        )
+        unresolved_decision = copy.deepcopy(initial["entries"][0]["primary_decision"])
+        unresolved_decision["classification"] = "unresolved"
+        unresolved_decision["classification_reviewed"] = True
+        unresolved = authoring.apply_transition(
+            initial,
+            capture,
+            self.binding,
+            action="primary_review",
+            operator_identity="Primary",
+            session_identity="unresolved-primary",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[
+                {"ordinal": 0, "primary_decision": unresolved_decision}
+            ],
+        )
+        forged_revisit = copy.deepcopy(
+            unresolved["entries"][0]["primary_decision"]
+        )
+        forged_revisit["classification"] = "manual_conflict"
+        forged_revisit["manual_conflict_review_state"] = "reviewed"
+        with self.assertRaisesRegex(
+            authoring.AuthoringContractError, "review_transition_invalid"
+        ):
+            authoring.apply_transition(
+                unresolved,
+                capture,
+                self.binding,
+                action="revisit_unresolved",
+                operator_identity="Primary",
+                session_identity="forged-unresolved-manual-review",
+                reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+                entry_updates=[
+                    {"ordinal": 0, "primary_decision": forged_revisit}
+                ],
+            )
+
+    def test_manual_conflict_correction_entrypoint_is_fixed_and_nonleaking(self):
+        poison = "MANUAL_RAW_NAME_OWNER_SQL_PATH_SECRET_PAYLOAD_SENTINEL"
+        capture_root = self.root / "manual-correction-capture"
+        package, expectations, _capture, _entries = make_capture_package(
+            capture_root, ["TABLE"], poison=poison
+        )
+        package_fd = open_directory(package)
+        try:
+            loaded = authoring.load_capture_for_authoring(package_fd, expectations)
+        finally:
+            os.close(package_fd)
+        private_root = self.root / "manual-correction-private"
+        private_root.mkdir(mode=0o700)
+        binding_environment = self.author_environment(
+            package,
+            expectations,
+            private_root,
+            action="status",
+            generation=0,
+            head_sha256="0" * 64,
+        )
+        runtime_binding = authoring.AuthoringBinding(
+            GIT_A,
+            SHA_C,
+            binding_environment[
+                "TOC_AUTHOR_APPROVED_EXECUTION_PYTHON_SHA256"
+            ],
+        )
+        history = self.fully_reviewed_history(
+            loaded,
+            binding=runtime_binding,
+            classification="manual_conflict",
+            manual_conflict_disposition="restore",
+            primary_operator="Primary Reviewer",
+        )
+        checkpoints = private_root / AUTHOR.CHECKPOINTS_NAME
+        checkpoints.mkdir(mode=0o700)
+        checkpoints_fd = open_directory(checkpoints)
+        try:
+            for checkpoint in history:
+                authoring.publish_checkpoint_at(checkpoints_fd, checkpoint)
+        finally:
+            os.close(checkpoints_fd)
+        mark_authoring_released(private_root)
+        old_head = authoring.checkpoint_sha256(history[-1])
+        old_release_token = released_token(private_root)
+        environment = self.author_environment(
+            package,
+            expectations,
+            private_root,
+            action="correction_review",
+            generation=history[-1]["generation"],
+            head_sha256=old_head,
+        )
+        writes: list[bytes] = []
+        with mock.patch.object(
+            AUTHOR, "_authoring_procedure_identity", return_value=SHA_C
+        ), mock.patch.object(
+            AUTHOR, "_prompt_choice", side_effect=("primary_review", "restore")
+        ), mock.patch.object(
+            AUTHOR, "_prompt_correction_ordinals", return_value=(0,)
+        ), mock.patch.object(
+            AUTHOR,
+            "_write_tty",
+            side_effect=lambda _descriptor, payload: writes.append(payload),
+        ), mock.patch.object(
+            AUTHOR, "_require_resume_acknowledgement", return_value=None
+        ), mock.patch.object(
+            AUTHOR._startup_subprocess,
+            "run",
+            side_effect=AssertionError("unexpected child process"),
+        ), mock.patch.object(
+            socket,
+            "socket",
+            side_effect=AssertionError("unexpected network operation"),
+        ):
+            exit_status, diagnostic = AUTHOR.execute_authoring(environment, 9)
+        self.assertEqual(exit_status, 2)
+        checkpoints_fd = open_directory(checkpoints)
+        try:
+            chain = authoring.load_checkpoint_chain(
+                checkpoints_fd, loaded, runtime_binding
+            )
+        finally:
+            os.close(checkpoints_fd)
+        self.assertEqual(chain.head["entries"][0]["primary_decision"]["classification"], "restore")
+        self.assertIsNone(
+            chain.head["entries"][0]["primary_decision"][
+                "manual_conflict_disposition"
+            ]
+        )
+        self.assertEqual(chain.head["entries"][0]["peer_review"], authoring._pending_peer())
+        self.assertNotEqual(
+            chain.head["entries"][0]["primary_decision_sha256"],
+            history[-1]["entries"][0]["primary_decision_sha256"],
+        )
+        for private_value in (
+            poison,
+            os.fspath(package),
+            os.fspath(private_root),
+            old_head,
+            old_release_token,
+        ):
+            self.assertNotIn(private_value.encode("utf-8"), diagnostic)
+        for entry in loaded.entries_by_ordinal:
+            self.assertNotIn(entry.entry_id.encode("ascii"), diagnostic)
+        self.assertFalse(
+            any(
+                AUTHOR.FINAL_PACKAGE_RE.fullmatch(path.name)
+                for path in private_root.iterdir()
+            )
+        )
+        self.assertTrue(writes)
 
     def test_relationship_correction_swaps_clears_and_reselects_parent(self):
         capture, _package, _expectations = self.load_capture(

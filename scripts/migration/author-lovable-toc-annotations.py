@@ -2041,6 +2041,7 @@ def execute_authoring(
                     os.close(descriptor)
                 except OSError:
                     operation_succeeded = False
+                    cleanup_ambiguous = True
         if (
             created_checkpoints
             and not operation_succeeded
