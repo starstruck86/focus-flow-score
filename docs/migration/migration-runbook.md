@@ -621,7 +621,210 @@ valid capture package or authorization to retry. Timeout, output cap,
 concurrent mutation, path replacement, collision, insufficient capacity, or
 binding mismatch likewise stops the one attempt.
 
-Human review occurs locally against that private capture.
+#### Private annotation authoring and checkpoint gates
+
+Human review occurs locally against that private capture only through the
+zero-argument
+`scripts/migration/run-lovable-toc-annotation-authoring.sh` launcher. Do not
+run its Python component directly. Before opening private input, the launcher
+requires an explicitly approved canonical CPython path, SHA-256, exact version,
+safe ownership/mode/link count, a clean approved checkout, exact reviewed tool
+blobs, and no ordinary or ignored untracked migration-tool inputs. It rejects
+loader/Python startup variables before reviewed Python and private-input
+access, creates a minimal `/usr/bin/env -i` environment, and invokes the
+internal component with `-I -S -B`. The invoking shell/native loader has
+already started before shell code can inspect its environment, so launch from
+a trusted sanitized local parent; this guard does not attest that hostile
+pre-shell loader code never executed. It makes no
+network call and never invokes `pg_restore`, a database client, restore tooling,
+or the ledger validator. Hash-before/probe/hash-after binds the reviewed
+interpreter pathname, but `exec` is still path based; it cannot independently
+attest the bytes consumed across a hostile same-user path-swap-and-restore race.
+Treat that as a local trust ceiling, not as executable-byte attestation.
+
+`TOC_AUTHOR_ACTION` chooses exactly one closed operation per invocation:
+`initialize`, `primary_review`, `revisit_unresolved`,
+`relationship_review`, `data_reference_review`, `sequence_review`,
+`managed_review`, `manual_conflict_review`, `peer_review`,
+`correction_review`, `status`, or `finalize`. The immutable generations advance
+through these derived states:
+
+Before an authorized session, bind every mandatory `TOC_AUTHOR_*` input using
+the exact operator table in `scripts/migration/README.md`; there are no private
+path, artifact-identity, interpreter-identity, operator, session, or checkpoint
+head defaults. Generation `0` and the all-zero head are valid only for the
+one-time initialization. Every resume must use the exact latest generation and
+full checkpoint SHA-256 reported through the private evidence process.
+
+1. `PRIMARY_REVIEW_REQUIRED`
+2. `REVISIT_REQUIRED`
+3. `RELATIONSHIP_REVIEW_REQUIRED`
+4. `DATA_REFERENCE_REVIEW_REQUIRED`
+5. `SEQUENCE_REVIEW_REQUIRED`
+6. `MANAGED_GLOBAL_REVIEW_REQUIRED`
+7. `MANUAL_CONFLICT_REVIEW_REQUIRED`
+8. `PEER_REVIEW_REQUIRED`
+9. `FINALIZATION_REVIEW_REQUIRED`
+10. `FINALIZATION_ELIGIBLE`
+
+These states are deterministic, enforced phase priorities. They do not infer a
+missing decision, and ordinary review actions do not interleave. Only a
+peer-requested correction or explicit semantic `correction_review` may return
+to an earlier phase; finalization requires every phase predicate simultaneously.
+`FINALIZATION_REVIEW_REQUIRED` is a fixed fail-closed state: all phase flags
+are present but the semantic finalization contract still rejects the combined
+decisions. Before final-candidate publication, `correction_review` may run from
+either `FINALIZATION_REVIEW_REQUIRED` or `FINALIZATION_ELIGIBLE`; eligibility is
+not proof that a human decision is semantically infallible or restore-ready. It
+chooses one sorted, explicit TTY-only batch of at most 100 ordinals and one
+existing scoped primary-review phase. The new immutable generation invalidates
+affected peer approval, so a distinct peer must reapprove it before
+finalization eligibility is recomputed.
+If the selected correction phase is `primary_review`, classification review is
+coupled to manual-conflict invalidation. A prior final disposition may change
+only to null; the resulting classification must be marked reviewed, with
+manual-conflict review `pending` for `manual_conflict` and `not_applicable` for
+all other classes. Final disposition selection remains exclusive to
+`manual_conflict_review`. Retaining or substituting a final disposition, or
+retaining stale `reviewed` state, fails closed. The canonical decision hash and
+peer approval are invalidated in both finalization states and after a peer
+requests changes.
+
+`initialize` alone creates the bound draft state. Primary review proceeds in
+deterministic ordinal batches, normally 100 entries. The later passes must
+explicitly revisit unresolved decisions, relationships and dependencies, every
+data reference, all sequence/state-bearing relationships, managed-domain and
+global handling, and each manual conflict. Mechanical proposals remain labeled
+proposals and never count as approval. Primary prompts and peer review label
+each relationship as `dependency`, `structural_parent`, or `metadata_parent`;
+applicable sequence relationships are separately labeled
+`sequence_metadata_parent` or `sequence_structural_parent`. The same ordinal is
+shown once per role when it occupies multiple roles. The decision/peer hash
+binds the exact role-keyed assignments rather than counts or their union. Peer
+review acknowledges the primary-decision summary before its first screen clear
+and then acknowledges every role-labeled context. Multi-parent sequence review
+also acknowledges each parent before the next clear. Every
+decision and semantic relationship requires explicit primary review. Peer
+review is separate and requires a named
+operator different from the primary reviewer. `status` displays fixed states
+and aggregate counts only; it never reveals an opaque identifier or object
+metadata. `finalize` checks eligibility but cannot manufacture a missing review
+transition. Every successful checkpoint-publishing review action displays the
+exact next generation and full checkpoint SHA-256 only on the controlled
+private TTY for a later exact resume; neither value enters ordinary
+stdout/stderr or the aggregate-only `status` result.
+
+Relationship correction is persisted under the internal
+`relationship_correction` checkpoint action and remains reachable only through
+the operator's `correction_review` choice. It re-prompts `dependency` and every
+applicable `structural_parent` even when their states were already reviewed,
+allowing clear, replacement, or reselection. The canonical role-keyed decision
+hash is recomputed and the affected peer approval returns to pending. If a
+required structural-parent selection is cleared, relationship review also
+returns to `pending`, and reselection must use the ordinary role-labeled phase.
+If a `SEQUENCE OWNED BY` structural-parent list changes, the transition is
+valid only with `sequence_review_state=pending`; fresh role-labeled
+`sequence_structural_parent` display and acknowledgement, then fresh peer
+approval, are mandatory. A forged transition that preserves stale sequence
+approval fails. `SEQUENCE SET` correction can change only
+`sequence_metadata_parent`, ordinary data-reference correction can change only
+`metadata_parent`, and relationship correction cannot mutate classification,
+managed, metadata-parent, or unrelated review fields.
+
+The interactive surface is one verified local foreground controlling TTY in an
+alternate screen. Raw context is bounded and escaped and goes only to the held
+TTY descriptor; ordinary stdout/stderr retain fixed diagnostics and aggregate
+counts. Refuse pipes, redirection, and non-TTY execution; reject known
+record-to-file ancestor processes and known remote/multiplexer/editor-terminal
+markers. The workflow provides no
+browser or clipboard transport. The operator must attest that the session is
+local and not being
+recorded. Clear the alternate screen on reviewed exit where possible, but do
+not claim this proves the absence of an unknown or disguised recorder, screen
+capture, photography, a hostile terminal, or a hostile same-user process.
+Keep the exact resume generation, checkpoint SHA, and private release token
+visible while the durable authoring lock still exists, until the operator
+types the fixed `resume_values_recorded` acknowledgement. Only then may the
+procedure durably publish `AUTHORING_RELEASED` and remove the lock. A TTY
+write failure, EOF, wrong acknowledgement, or terminal attribute/read failure
+leaves a blocking lock and, where possible, an indeterminate marker; it must
+not look normally resumable. Do not pipe or record the terminal to retain the
+tuple; use the separately approved private operator record.
+
+Authoring opens the bound raw TOC and opaque structural index for review
+content, and reads `capture.json`, `evidence-files.json`, and
+`EVIDENCE_COMPLETE` only to verify the complete package binding. It stats
+`opaque-id.key` to bind safe filesystem metadata but must never open or copy
+the key bytes. It verifies the approved raw/index hashes and their ordinal,
+class, and data-reference structure without recomputing keyed IDs. That is
+deliberately weaker than later validator recomputation and cannot advance a
+validation gate.
+
+Keep authoring state in a separate absolute canonical, operator-owned,
+non-symlink mode-`0700` root outside Git. Unfinished generations use the draft
+checkpoint schema, never the final ledger schema. The fixed mode-`0400`
+`AUTHORING_LOCK` serializes writers; a stale or conflicting lock is a hard stop
+and is never auto-removed. The launcher disables soft and hard core dumps
+before the isolated child starts. Successful release leaves a durable fixed
+mode-`0400` `AUTHORING_RELEASED` marker carrying the token displayed and
+acknowledged with the exact checkpoint tuple while the lock was still held.
+That token becomes usable only after durable release; the next invocation must
+supply it and consumes the marker only after a new durable lock exists. An
+incomplete private handoff does not release. A release durability failure
+best-effort restores a blocking lock or indeterminate state. If the filesystem
+rejects both restoration paths after a durability error, the remaining names
+are ambiguous and the fixed failure is a no-retry stop; do not treat a release
+name as recovery authorization. Each review action creates one no-replace,
+single-link mode-`0400`
+`checkpoints/checkpoint-g<16-digit-generation>-<full-sha256>.json`, fsyncs it,
+atomically publishes it without replacement, and fsyncs its parent. There is no
+mutable head pointer. Every generation binds the complete capture identity,
+raw/index and procedure hashes, checkout, prior-generation hash, monotonic
+generation, named operator and session identity, exact ordinal range, decisions,
+and primary/peer state.
+
+Resume only from one uniquely determined contiguous head whose exact generation,
+SHA-256, and preceding successful release token the operator supplied. Stop on
+a fork, missing generation, broken
+hash chain, malformed or oversized checkpoint, duplicate JSON key, nonfinite
+value, wrong mode/owner/link count, symlink, unexpected sibling, concurrent
+writer, path/input mutation, stale lock, collision, or filesystem ambiguity.
+Never choose a branch or delete ambiguous state automatically. A provably
+incomplete pending generation may be removed and its parent fsynced. If write,
+rename, rollback, cleanup, or fsync cannot be proved, retain private
+`AUTHORING_INDETERMINATE`, emit only the fixed `cleanup_indeterminate` result,
+and block resume and finalization pending a separately reviewed recovery.
+The same rule governs read-only `status`: any descriptor-close or cleanup
+ambiguity overrides its nominal review-boundary result with the fixed failure,
+leaves a blocking lock/indeterminate state, and withholds a normal release token
+and durable release marker.
+
+Draft `dependency_review_complete` stays false. A separate, explicitly
+authorized `TOC_AUTHOR_ACTION=finalize` may proceed only from
+`FINALIZATION_ELIGIBLE`, with exact expected head identity, distinct peer
+approval, zero unresolved decisions, complete relationship/data/sequence/
+managed/manual/global reviews, and exact entry/data-reference accounting. It
+publishes without replacement one private
+`final-ledger-<checkpoint-sha-prefix>/` package containing
+`annotation-ledger.json`, `authoring-finalization.json`,
+`evidence-files.json`, and `EVIDENCE_COMPLETE`, all mode `0400`, and leaves the
+checkpoint chain intact. Finalization never runs the validator. The resulting
+ledger remains `REVIEW_REQUIRED`; it is neither validated nor restore-ready.
+The final package makes the authoring root terminal; later authoring actions
+stop before private capture input. Before publication, an operator who withholds
+finalization authorization after finding a wrong decision may return through
+the scoped correction route even from `FINALIZATION_ELIGIBLE`.
+
+A later, separately authorized validation must use the zero-argument
+`scripts/migration/run-lovable-toc-ledger-validation.sh` launcher. That launcher
+adds explicit interpreter identity, minimal `env -i`, clean-checkout and
+reviewed-blob checks, then invokes the existing validator with `-I -S -B` and
+preserves its existing 15-variable `TOC_REVIEW_*` contract. Authoring never
+calls it. Its maximum possible result remains
+`ELIGIBLE_FOR_HUMAN_REVIEW`; restore planning receives no execution
+authorization, `restore_command_gate` remains `BLOCKED`, and migration
+readiness remains `RED`.
+
 `validate-lovable-toc-ledger.py` accepts only a private canonical-ASCII ledger.
 The capture assigns each entry `te1_` plus HMAC-SHA-256 under a fresh private
 32-byte key over a fixed domain, big-endian ordinal, big-endian raw-line length,

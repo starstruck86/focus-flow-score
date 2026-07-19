@@ -17,7 +17,8 @@ evidence only:
   empirical rehearsal.
 - `../../scripts/migration/` — strict local ZIP-envelope normalization ahead of
   the execution-bound raw-`PGDMP` inspector, reviewed high-level private TOC
-  capture, inventory, verification templates, and strict manifest comparison.
+  capture, private annotation authoring/checkpointing, inventory, verification
+  templates, and strict manifest comparison.
 
 **Migration readiness remains RED.** PR #16 is the current merged aggregate
 inspection contract at main
@@ -28,7 +29,11 @@ work did not deploy or change any runtime and does not change migration
 readiness. PR #20 then merged through history-preserving main commit
 `9ae5f98e44739c6a7a645e41527e6fa016d6fc63`; its private classification and
 synthetic PostgreSQL compatibility contracts likewise did not authorize or
-perform a restore.
+perform a restore. PR #21 subsequently merged the isolated high-level capture
+launcher at main `6bdcb83e4006d04e8a8e6c54d1b6c243ec48adb1`. PR #22 then merged the
+descriptor-bound bounded-output cleanup correction at main
+`c78a0e09373235fe38d045c2bfa7a0fd8a32d364`. Those merges authorize neither a
+capture nor annotation, and all downstream gates remain blocked.
 
 An authorized rehearsal export remains offline in an approved evidence store.
 After the earlier fail-closed parser result, a separately authorized inspection
@@ -93,26 +98,90 @@ report behind.
 The aggregate report intentionally does not disclose enough object identity to
 resolve the 1,135 recognized-but-unresolved entries. The reviewed entrypoint
 for any future, separately authorized offline raw-TOC capture is
-`capture-lovable-toc-envelope.py`. It validates the completed aggregate
-evidence package and every approved identity, uses the existing strict ZIP
-normalizer to create one temporary verified inner archive, and passes it only
-through a held private-directory descriptor to the existing low-level
-`capture-lovable-toc.py`. It publishes one
+`run-lovable-toc-capture.sh`; its Python envelope and low-level capture files
+are internal components, not supported direct operator entrypoints. The
+launcher validates the approved interpreter and invokes the envelope only with
+`-I -S -B` under a minimal environment. The envelope validates the completed
+aggregate evidence package and every approved identity, uses the existing
+strict ZIP normalizer to create one temporary verified inner archive, and
+passes it only through a held private-directory descriptor to the existing
+low-level capture. It publishes one
 private no-replace opaque key/index capture package, removes and fsyncs all
 derived inner and staging bytes, and emits only fixed diagnostics. Success
 still stops at `REVIEW_REQUIRED` / `ANNOTATION_REQUIRED`, with both restore
 gates `BLOCKED`. The low-level capture is not an operator procedure, and this
 step never creates or validates an annotation ledger.
 
-A later, separately authorized review may use
-`validate-lovable-toc-ledger.py` to validate a private opaque disposition
-ledger. Per-entry IDs are keyed HMACs over exact raw entry bytes and framing,
-not automatically parsed names or unsalted hashes. The raw capture, private
-key/index/ledger, and object identities must not enter Git, CI, chat, or
-ordinary logs; only fixed diagnostics, categories, hashes, and aggregate
-arithmetic may leave the private evidence store. The gate can become only
-`ELIGIBLE_FOR_HUMAN_REVIEW` after exact structural coverage;
-`restore_command_gate` and migration readiness remain `BLOCKED`/`RED`.
+A separately authorized local authoring session must use only the zero-argument
+`run-lovable-toc-annotation-authoring.sh` launcher. It requires one approved
+CPython identity, minimal `env -i`, `-I -S -B`, an approved clean checkout, and
+a verified foreground controlling TTY. Raw TOC context appears only in a
+bounded local alternate-screen view; stdout/stderr remain fixed and aggregate.
+Redirected, piped, and non-TTY contexts are rejected. Known recorder ancestors
+and known remote or multiplexer contexts are rejected; the workflow provides no browser or clipboard
+transport. Clearing the alternate screen does not
+attest the absence of an unknown or disguised recorder, screen recording,
+photography, a hostile terminal, or a hostile same-user process.
+The exact resume tuple remains visible while the durable authoring lock is
+still held until the operator enters the fixed `resume_values_recorded`
+acknowledgement. Only then may the lock become a durable released marker. A TTY
+write, EOF, wrong acknowledgement, or terminal attribute/read failure remains
+blocked by the lock and, where possible, an indeterminate marker; piping or
+terminal recording is still prohibited.
+
+Authoring never opens `opaque-id.key` bytes: it only validates the key file's
+safe metadata. It uses the already private raw TOC and opaque structural index,
+plus the fixed capture/evidence manifests and completion marker needed to bind
+that content, records primary decisions and distinct peer review in an
+immutable full-hash checkpoint chain, and stops on stale locks, forks, missing
+generations, mutation, collisions, or indeterminate filesystem state.
+Exact resume also requires the private release token displayed and acknowledged
+with its exact generation and checkpoint SHA before the preceding durable lock
+release. Primary and peer private displays preserve the exact `dependency`,
+`structural_parent`, `metadata_parent`, and applicable sequence-role mappings;
+multi-role references are repeated per role, and the decision hash binds those
+keyed assignments rather than a count or union. Peer review acknowledges its
+primary-decision summary before the first screen clear, then pauses after each
+role-labeled context. Multi-parent sequence review also pauses after each
+parent before another screen clear can replace it.
+Before final-candidate publication, `correction_review` is available from both
+`FINALIZATION_REVIEW_REQUIRED` and `FINALIZATION_ELIGIBLE`. Relationship
+correction re-prompts only the exact `dependency` and applicable
+`structural_parent` roles, recomputes their canonical decision hash, and resets
+the affected peer approval. A changed `SEQUENCE OWNED BY` structural-parent
+list invalidates the prior sequence confirmation and requires fresh
+`sequence_structural_parent` context, acknowledgement, and peer approval.
+Clearing a required structural parent returns relationship review to `pending`
+so reselection uses the ordinary role-labeled phase rather than bypassing order.
+`SEQUENCE SET` correction remains confined to `sequence_metadata_parent`, and
+data-reference correction remains confined to `metadata_parent`; unrelated
+fields cannot change. Final-package publication remains no-replace and terminal.
+The scoped primary-classification correction may clear an existing
+manual-conflict disposition only to null. It must leave classification reviewed
+and either require a fresh `manual_conflict_review` or mark that phase not
+applicable, depending on the new class. Old/substituted final dispositions and
+stale reviewed state are rejected; the decision hash changes and peer approval
+must be repeated. Any descriptor-close or cleanup ambiguity, including during
+aggregate-only `status`, overrides the nominal result with the fixed failure and
+leaves blocking private state rather than a normal release.
+Mechanical proposals are never approvals. Finalization is a distinct
+authorized action and publishes one canonical private ledger package without
+replacement only after every entry, data reference, dependency, sequence,
+managed/global decision, and manual conflict has primary and peer review. It
+does not invoke the validator and the created ledger remains
+`REVIEW_REQUIRED`.
+
+A later, separately authorized review may use only
+`run-lovable-toc-ledger-validation.sh` to invoke the existing private opaque
+ledger validator under the same isolated interpreter and checkout boundary.
+Per-entry IDs are keyed HMACs over exact raw entry bytes and framing, not
+automatically parsed names or unsalted hashes. The raw capture, private
+key/index/checkpoints/ledger, and object identities must not enter Git, CI,
+chat, or ordinary logs; only fixed diagnostics, categories, hashes, and
+aggregate arithmetic may leave the private evidence store. Validation can
+become only `ELIGIBLE_FOR_HUMAN_REVIEW` after exact structural coverage;
+`restore_planning_gate` gains no restore authorization, `restore_command_gate`
+remains `BLOCKED`, and migration readiness remains `RED`.
 
 PostgreSQL documents `pg_restore --list` as an editable TOC listing and warns
 that restoring a dump can execute arbitrary code chosen by source
