@@ -50,7 +50,10 @@ def load_script(name: str, path: Path):
 
 
 AUTHOR = load_script("lovable_toc_annotation_entrypoint", AUTHOR_COMPONENT)
-from test_lovable_toc_annotation_authoring import make_capture_package  # noqa: E402
+from test_lovable_toc_annotation_authoring import (  # noqa: E402
+    immutable_tree_snapshot,
+    make_capture_package,
+)
 
 
 def _wait_status_code(status: int) -> int:
@@ -231,6 +234,49 @@ class LovableTocAnnotationStartupTest(unittest.TestCase):
             text=True,
         ).stdout.strip()
 
+    def _supported_author_environment(
+        self, package: Path, expectations, private_root: Path
+    ) -> dict[str, str]:
+        python_digest = hashlib.sha256(PYTHON.read_bytes()).hexdigest()
+        python_version = (
+            f"{sys.implementation.name}:{sys.version_info.major}."
+            f"{sys.version_info.minor}.{sys.version_info.micro}"
+        )
+        return {
+            "TOC_AUTHOR_ACTION": "initialize",
+            "TOC_AUTHOR_EXECUTION_PYTHON": os.fspath(PYTHON),
+            "TOC_AUTHOR_APPROVED_EXECUTION_PYTHON_SHA256": python_digest,
+            "TOC_AUTHOR_APPROVED_EXECUTION_PYTHON_VERSION": python_version,
+            "TOC_AUTHOR_APPROVED_EXECUTION_CHECKOUT_SHA": self.synthetic_checkout,
+            "TOC_AUTHOR_CAPTURE_ROOT": os.fspath(package.parent),
+            "TOC_AUTHOR_CAPTURE_NAME": package.name,
+            "TOC_AUTHOR_PRIVATE_ROOT": os.fspath(private_root),
+            "TOC_AUTHOR_EXPECTED_CAPTURE_MANIFEST_SHA256": expectations.capture_manifest_sha256,
+            "TOC_AUTHOR_EXPECTED_RAW_TOC_SHA256": expectations.raw_toc_sha256,
+            "TOC_AUTHOR_EXPECTED_OPAQUE_INDEX_SHA256": expectations.opaque_index_sha256,
+            "TOC_AUTHOR_EXPECTED_ENTRY_COUNT": str(expectations.entry_count),
+            "TOC_AUTHOR_EXPECTED_DATA_REFERENCE_COUNT": str(
+                expectations.data_reference_count
+            ),
+            "TOC_AUTHOR_EVIDENCE_RUN_ID": expectations.evidence_run_id,
+            "TOC_AUTHOR_OUTER_SHA256": expectations.outer_archive_sha256,
+            "TOC_AUTHOR_INNER_SHA256": expectations.inner_archive_sha256,
+            "TOC_AUTHOR_EVIDENCE_MANIFEST_SHA256": expectations.evidence_manifest_sha256,
+            "TOC_AUTHOR_INSPECTION_CHECKOUT_SHA": expectations.inspection_checkout_sha,
+            "TOC_AUTHOR_INSPECTION_PROCEDURE_SHA256": expectations.inspection_procedure_sha256,
+            "TOC_AUTHOR_CAPTURE_EXECUTION_CHECKOUT_SHA": expectations.capture_execution_checkout_sha,
+            "TOC_AUTHOR_EXPECTED_CAPTURE_PROCEDURE_IDENTITY_SHA256": expectations.capture_procedure_identity_sha256,
+            "TOC_AUTHOR_APPROVED_PG_RESTORE_SHA256": expectations.approved_pg_restore_sha256,
+            "TOC_AUTHOR_PRIMARY_OPERATOR_IDENTITY": "Synthetic Primary",
+            "TOC_AUTHOR_OPERATOR_IDENTITY": "Synthetic Primary",
+            "TOC_AUTHOR_SESSION_IDENTITY": "synthetic-supported-session",
+            "TOC_AUTHOR_EXPECTED_HEAD_GENERATION": "0",
+            "TOC_AUTHOR_EXPECTED_HEAD_SHA256": "0" * 64,
+            "TOC_AUTHOR_EXPECTED_RELEASE_TOKEN": "0" * 64,
+            "TOC_AUTHOR_LOCAL_TTY_ATTESTATION": TTY_ATTESTATION,
+            "TOC_AUTHOR_FINALIZATION_AUTHORIZATION": "",
+        }
+
     def test_author_launcher_uses_tty_and_minimal_isolated_child_environment(self) -> None:
         fake, digest, ledger = self._fake_python()
         status, transcript = run_in_pty(
@@ -280,45 +326,9 @@ class LovableTocAnnotationStartupTest(unittest.TestCase):
         )
         private_root = self.root / "supported-private"
         private_root.mkdir(mode=0o700)
-        python_digest = hashlib.sha256(PYTHON.read_bytes()).hexdigest()
-        python_version = (
-            f"{sys.implementation.name}:{sys.version_info.major}."
-            f"{sys.version_info.minor}.{sys.version_info.micro}"
+        environment = self._supported_author_environment(
+            package, expectations, private_root
         )
-        environment = {
-            "TOC_AUTHOR_ACTION": "initialize",
-            "TOC_AUTHOR_EXECUTION_PYTHON": os.fspath(PYTHON),
-            "TOC_AUTHOR_APPROVED_EXECUTION_PYTHON_SHA256": python_digest,
-            "TOC_AUTHOR_APPROVED_EXECUTION_PYTHON_VERSION": python_version,
-            "TOC_AUTHOR_APPROVED_EXECUTION_CHECKOUT_SHA": self.synthetic_checkout,
-            "TOC_AUTHOR_CAPTURE_ROOT": os.fspath(package.parent),
-            "TOC_AUTHOR_CAPTURE_NAME": package.name,
-            "TOC_AUTHOR_PRIVATE_ROOT": os.fspath(private_root),
-            "TOC_AUTHOR_EXPECTED_CAPTURE_MANIFEST_SHA256": expectations.capture_manifest_sha256,
-            "TOC_AUTHOR_EXPECTED_RAW_TOC_SHA256": expectations.raw_toc_sha256,
-            "TOC_AUTHOR_EXPECTED_OPAQUE_INDEX_SHA256": expectations.opaque_index_sha256,
-            "TOC_AUTHOR_EXPECTED_ENTRY_COUNT": str(expectations.entry_count),
-            "TOC_AUTHOR_EXPECTED_DATA_REFERENCE_COUNT": str(
-                expectations.data_reference_count
-            ),
-            "TOC_AUTHOR_EVIDENCE_RUN_ID": expectations.evidence_run_id,
-            "TOC_AUTHOR_OUTER_SHA256": expectations.outer_archive_sha256,
-            "TOC_AUTHOR_INNER_SHA256": expectations.inner_archive_sha256,
-            "TOC_AUTHOR_EVIDENCE_MANIFEST_SHA256": expectations.evidence_manifest_sha256,
-            "TOC_AUTHOR_INSPECTION_CHECKOUT_SHA": expectations.inspection_checkout_sha,
-            "TOC_AUTHOR_INSPECTION_PROCEDURE_SHA256": expectations.inspection_procedure_sha256,
-            "TOC_AUTHOR_CAPTURE_EXECUTION_CHECKOUT_SHA": expectations.capture_execution_checkout_sha,
-            "TOC_AUTHOR_EXPECTED_CAPTURE_PROCEDURE_IDENTITY_SHA256": expectations.capture_procedure_identity_sha256,
-            "TOC_AUTHOR_APPROVED_PG_RESTORE_SHA256": expectations.approved_pg_restore_sha256,
-            "TOC_AUTHOR_PRIMARY_OPERATOR_IDENTITY": "Synthetic Primary",
-            "TOC_AUTHOR_OPERATOR_IDENTITY": "Synthetic Primary",
-            "TOC_AUTHOR_SESSION_IDENTITY": "synthetic-supported-session",
-            "TOC_AUTHOR_EXPECTED_HEAD_GENERATION": "0",
-            "TOC_AUTHOR_EXPECTED_HEAD_SHA256": "0" * 64,
-            "TOC_AUTHOR_EXPECTED_RELEASE_TOKEN": "0" * 64,
-            "TOC_AUTHOR_LOCAL_TTY_ATTESTATION": TTY_ATTESTATION,
-            "TOC_AUTHOR_FINALIZATION_AUTHORIZATION": "",
-        }
         status, transcript = run_in_pty(
             self.author_launcher,
             environment,
@@ -340,6 +350,58 @@ class LovableTocAnnotationStartupTest(unittest.TestCase):
         checkpoint_names = list((private_root / "checkpoints").iterdir())
         self.assertEqual(len(checkpoint_names), 1)
         self.assertEqual(stat.S_IMODE(checkpoint_names[0].stat().st_mode), 0o400)
+
+    def test_real_launcher_rejects_invalid_initialize_before_private_roots(self) -> None:
+        try:
+            ps_probe = subprocess.run(
+                ["/bin/ps", "-p", str(os.getpid()), "-o", "comm="],
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+        except OSError:
+            self.skipTest("local sandbox denies the reviewed process-ancestry probe")
+        if ps_probe.returncode != 0:
+            self.skipTest("local sandbox denies the reviewed process-ancestry probe")
+        poison = "PTY_PREACCESS_PRIVATE_OBJECT_SQL_SECRET_PAYLOAD_SENTINEL"
+        capture_root = self.root / "preaccess-capture"
+        package, expectations, _capture, _entries = make_capture_package(
+            capture_root, ["TABLE"], poison=poison
+        )
+        private_root = self.root / "preaccess-private"
+        private_root.mkdir(mode=0o700)
+        capture_before = immutable_tree_snapshot(capture_root)
+        private_before = immutable_tree_snapshot(private_root)
+        environment = self._supported_author_environment(
+            package, expectations, private_root
+        )
+        environment["TOC_AUTHOR_EXPECTED_HEAD_GENERATION"] = "1"
+        environment["TOC_AUTHOR_EXPECTED_HEAD_SHA256"] = "e" * 64
+
+        status, transcript = run_in_pty(
+            self.author_launcher, environment, timeout_seconds=30
+        )
+        self.assertEqual(status, 1)
+        visible = json.loads(transcript.replace(b"\r", b"").strip())
+        self.assertEqual(
+            visible,
+            {
+                "diagnostic_version": 1,
+                "reason": "input_invalid",
+                "stage": "annotation_authoring",
+                "status": "failed",
+            },
+        )
+        self.assertNotIn(b"\x1b", transcript)
+        self.assertNotIn(b"resume_", transcript)
+        self.assertNotIn(poison.encode("ascii"), transcript)
+        self.assertNotIn(os.fspath(capture_root).encode("utf-8"), transcript)
+        self.assertNotIn(os.fspath(private_root).encode("utf-8"), transcript)
+        self.assertEqual(immutable_tree_snapshot(capture_root), capture_before)
+        self.assertEqual(immutable_tree_snapshot(private_root), private_before)
+        self.assertEqual(list(private_root.iterdir()), [])
 
     def test_non_tty_and_poisoned_startup_fail_before_interpreter(self) -> None:
         fake, digest, ledger = self._fake_python()

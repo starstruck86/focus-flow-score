@@ -656,6 +656,15 @@ head defaults. Generation `0` and the all-zero head are valid only for the
 one-time initialization. Every resume must use the exact latest generation and
 full checkpoint SHA-256 reported through the private evidence process.
 
+Before private or capture path access or mutation, the component validates the
+complete static action tuple: the one generation-0/all-zero/identical-operator
+initialization shape; positive-generation/nonzero-head/nonzero-token resumes;
+exact primary-versus-peer role rules; finalization authorization only on
+`finalize`; and lowercase 40-hex predecessor checkout bindings. Invalid tuples
+stop with fixed diagnostics before tool validation, locks, directories, capture
+reads, or checkpoint loading. Later package and checkpoint comparisons remain
+mandatory defense in depth.
+
 1. `PRIMARY_REVIEW_REQUIRED`
 2. `REVISIT_REQUIRED`
 3. `RELATIONSHIP_REVIEW_REQUIRED`
