@@ -38,6 +38,7 @@ jobs:
         run: |
           for launcher in \
             scripts/migration/run-lovable-toc-capture.sh \
+            scripts/migration/run-lovable-toc-capture-metadata-reattestation.sh \
             scripts/migration/run-lovable-toc-annotation-authoring.sh \
             scripts/migration/run-lovable-toc-ledger-validation.sh
           do
@@ -71,6 +72,7 @@ jobs:
               Path("scripts/migration/capture-lovable-toc.py"),
               Path("scripts/migration/inspect-lovable-export.py"),
               Path("scripts/migration/normalize-lovable-export.py"),
+              Path("scripts/migration/probe-lovable-toc-capture-metadata.py"),
               Path("scripts/migration/lib/lovable_dump_report.py"),
               Path("scripts/migration/lib/lovable_toc_authoring_contract.py"),
               Path("scripts/migration/lib/lovable_toc_contract.py"),
@@ -81,6 +83,8 @@ jobs:
           PY
           python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_toc_annotation_*.py' -v
+          python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_metadata_reattestation*.py' -v
           python3 -I -S -B -m unittest discover -s tests/migration -p 'test_*.py' -v
           python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_toc_capture_driver.py' -v
@@ -146,6 +150,7 @@ jobs:
         run: |
           for launcher in \
             scripts/migration/run-lovable-toc-capture.sh \
+            scripts/migration/run-lovable-toc-capture-metadata-reattestation.sh \
             scripts/migration/run-lovable-toc-annotation-authoring.sh \
             scripts/migration/run-lovable-toc-ledger-validation.sh
           do
@@ -189,6 +194,7 @@ jobs:
               Path("scripts/migration/capture-lovable-toc.py"),
               Path("scripts/migration/inspect-lovable-export.py"),
               Path("scripts/migration/normalize-lovable-export.py"),
+              Path("scripts/migration/probe-lovable-toc-capture-metadata.py"),
               Path("scripts/migration/lib/lovable_dump_report.py"),
               Path("scripts/migration/lib/lovable_toc_authoring_contract.py"),
               Path("scripts/migration/lib/lovable_toc_contract.py"),
@@ -198,6 +204,8 @@ jobs:
           PY
           /usr/bin/python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_toc_annotation_*.py' -v
+          /usr/bin/python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_metadata_reattestation*.py' -v
           bash scripts/migration/tests/inspect-lovable-dump.test.sh
           /usr/bin/python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_dump_report.py' -v
