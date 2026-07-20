@@ -621,6 +621,75 @@ valid capture package or authorization to retry. Timeout, output cap,
 concurrent mutation, path replacement, collision, insufficient capacity, or
 binding mismatch likewise stops the one attempt.
 
+#### Metadata-only capture re-attestation gate
+
+If annotation preflight lacks an independently approved recorded opaque-index
+hash or needs to re-attest the recorded capture-procedure candidate, do not run
+the authoring, validation, or capture workflows. Obtain a separate one-attempt
+authorization for only
+`scripts/migration/run-lovable-toc-capture-metadata-reattestation.sh` using the
+complete variable template in `scripts/migration/README.md`.
+
+This zero-argument launcher binds an externally approved clean checkout, its
+four-file procedure identity, the full CPython file identity, a fresh
+single-use session/nonce with a maximum 24-hour expiry, three named roles, one
+approved host/device/encryption domain, and one local foreground terminal
+destination whose device and inode are externally pinned. It uses `env -i` and
+`-I -S -B`; the stdlib-only probe creates no
+file, child, network connection, cache, or log. The root and exact direct-child
+package are opened descriptor-relatively and held through all validation.
+The independent reviewer must differ case-insensitively from both the named
+authorizer and executing operator.
+
+Only `capture.json`, `evidence-files.json`, and `EVIDENCE_COMPLETE` may be
+content-opened. The raw TOC, opaque index, and opaque key receive only
+no-follow metadata checks for type, ownership, group, mode, link count, device,
+and recorded size. They are never opened, read, hashed, copied, parsed, mapped,
+or displayed by this probe. The exact six-name package, directory identities,
+and all file identities are checked before and after the permitted reads.
+
+The external trust root is the approved whole-file SHA-256 of
+`evidence-files.json`; agreement between package files is never enough by
+itself. The exact completion marker contains only artifact kind, that manifest
+SHA-256, and format version. It does **not** contain the run ID. The marker
+binds the externally pinned manifest; the manifest binds the permitted
+`capture.json` record; and canonical `capture.json` then binds the approved run
+ID, archive/evidence/checkouts/tool/count values, and capture procedure. Record
+the opaque-index SHA from `/opaque_index_sha256` only after its recorded string
+agrees with the manifest. Call it a `recorded_candidate`: no forbidden bytes
+were read or independently hashed.
+
+The exact externally compared capture pointers are
+`/binding/evidence_run_id`, `/binding/outer_archive_sha256`,
+`/binding/inner_archive_sha256`, `/binding/evidence_manifest_sha256`,
+`/binding/inspection_checkout_sha`,
+`/binding/inspection_procedure_sha256`,
+`/binding/execution_checkout_sha`,
+`/binding/procedure_identity_sha256`, `/pg_restore_identity`, `/entry_count`,
+`/data_reference_count`, `/raw_toc_sha256`, and `/raw_toc_size_bytes`.
+Manifest records use only the fixed `/files/*/{name,sha256,size_bytes}` schema.
+Every forbidden-file digest comparison remains a recorded-string comparison.
+
+Success releases one canonical JSON line containing only the session ID, fixed
+true binding booleans, capture-procedure match, and the recorded opaque-index
+candidate. Failure contains no candidate and only a fixed reason. Neither path
+may disclose filenames, paths, names, TOC lines, SQL, owners, OIDs, secret or
+payload data, raw exceptions, or unapproved metadata values. A successful
+probe does not approve either candidate. Corey must later approve both exact
+values before a separately authorized annotation-root creation and
+initialization attempt.
+
+The no-retry rule and single-use nonce are procedural because a read-only probe
+cannot persist consumption. The invoking shell/native loader, local terminal,
+same-user swap-and-restore, and permitted-read atime effects remain explicit
+ceilings. A terminal write is not transactional: a short success-line write
+can expose a prefix before the probe detects it, exits nonzero, and withholds
+all fallback output. Stop unless the exact authorization accepts these
+ceilings. Exit gate: at most
+two recorded candidates are available for later human approval; annotation
+initialization remains unrun and `BLOCKED`. Validation, restore planning,
+restore command, and migration readiness remain `BLOCKED`/`RED`.
+
 #### Private annotation authoring and checkpoint gates
 
 Human review occurs locally against that private capture only through the

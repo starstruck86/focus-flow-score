@@ -432,6 +432,178 @@ The private envelope-capture contract is:
    migration readiness remains `RED`. Human semantic correctness is an
    attestation the validator cannot independently prove.
 
+### Metadata-only capture re-attestation
+
+`run-lovable-toc-capture-metadata-reattestation.sh` is the only supported
+operator entrypoint for recovering the two private-capture provenance
+candidates needed before annotation initialization. It takes no arguments,
+disables core dumps, rejects native-loader and Python-startup variables, binds
+one exact clean checkout plus launcher/probe/README/runbook Git blobs and
+SHA-256 values, verifies the complete externally approved CPython file
+identity, requires the independent reviewer to differ case-insensitively from
+both the authorizer and executing operator, creates a minimal `env -i` child
+environment, and executes the
+stdlib-only internal probe with `-I -S -B`. The `.py` file is not a supported
+operator entrypoint. The probe itself creates no file, invokes no subprocess,
+performs no network operation, and imports no repository-local module.
+
+The probe may content-open exactly `capture.json`, `evidence-files.json`, and
+`EVIDENCE_COMPLETE`. It must never content-open, read, hash, copy, parse, mmap,
+or display `raw-pg-restore-list.toc`, `opaque-index.json`, or `opaque-id.key`.
+Those three forbidden files are inspected only with descriptor-relative,
+no-follow metadata calls to require a regular non-symlink, one link, exact
+owner/group/device, mode `0400`, and the manifest-recorded size. The capture
+root and direct-child package stay open by descriptor for the entire probe;
+both must be absolute canonical mode-`0700` directories outside Git, on the
+approved device, with exact owner/group. The package has the exact six-name
+allowlist, no omission, extra, alias, or case collision. Every directory and
+file identity is revalidated after the three permitted reads.
+
+The trust chain is deliberately asymmetric and must be described exactly:
+
+1. `TOC_REATTEST_EXPECTED_CAPTURE_EVIDENCE_FILES_SHA256` is the externally
+   approved whole-file SHA-256 of `evidence-files.json`.
+2. `EVIDENCE_COMPLETE` has exactly the canonical bytes
+   `{"artifact_kind":"lovable_toc_capture_complete","evidence_files_sha256":"<manifest-sha256>","format_version":1}\n`.
+   It directly binds the manifest only; it has no run-ID field.
+3. The externally pinned manifest binds the permitted `capture.json` through
+   its exact `/files` record (`name`, SHA-256, and byte size).
+4. Canonical `capture.json` then binds the run ID and archive/evidence/checkouts
+   under `/binding`, the counts, the complete `pg_restore_identity`, the raw
+   TOC's recorded hash/size, `/opaque_index_sha256`, and the complete capture
+   procedure object. The run-ID binding is therefore transitive through the
+   pinned manifest, never a claim about the completion marker alone.
+5. The recorded opaque-index candidate is read only from
+   `/opaque_index_sha256` and must equal the manifest's recorded
+   `/files/*[name="opaque-index.json"]/sha256`. The capture procedure candidate
+   is `/binding/procedure_identity_sha256`; it must equal SHA-256 of canonical
+   `/procedure_identity` and the separately approved expected candidate.
+
+The externally approved comparisons use these exact `capture.json` pointers:
+
+- run: `/binding/evidence_run_id`;
+- outer and inner archives: `/binding/outer_archive_sha256` and
+  `/binding/inner_archive_sha256`;
+- prior inspection evidence: `/binding/evidence_manifest_sha256`;
+- inspection checkout and procedure: `/binding/inspection_checkout_sha` and
+  `/binding/inspection_procedure_sha256`;
+- capture checkout and procedure: `/binding/execution_checkout_sha` and
+  `/binding/procedure_identity_sha256`;
+- tool: the exact fixed-schema object `/pg_restore_identity` plus its approved
+  canonical-object SHA-256;
+- aggregate counts: `/entry_count` and `/data_reference_count`;
+- raw-TOC recorded binding: `/raw_toc_sha256` and
+  `/raw_toc_size_bytes`.
+
+The manifest pointers are `/files/*/name`, `/files/*/sha256`, and
+`/files/*/size_bytes`; records are selected only by the four fixed allowlisted
+names. These are exact recorded-field comparisons. They do not turn any
+forbidden payload hash into an independently recomputed content hash.
+
+Comparisons for raw TOC, opaque index, and opaque key hashes are comparisons of
+recorded strings only. Same-length changes to their bytes are intentionally not
+detected because opening or hashing those files would violate this probe's
+scope. The returned opaque-index value is always a `recorded_candidate`, never
+an approved or independently computed hash. A successful probe proves only
+that the externally pinned metadata manifest binds the permitted metadata
+bytes and that their recorded strings agree with the checked filesystem sizes.
+
+Success attempts exactly one bounded write of one canonical ASCII JSON line to
+the approved inherited foreground terminal, whose device and inode are
+externally pinned. It contains only diagnostic version/stage, the approved
+metadata-session ID, `status: pass`, the recorded opaque-index candidate,
+`capture_procedure_identity_match: true`, and fixed true booleans for the
+approved manifest, run, archive, evidence, checkout, tool, and count bindings.
+Constructed failure diagnostics contain the session ID, `status: failed`, and
+one closed reason; they never contain the candidate. Paths, unexpected names,
+sizes, timestamps, owners, UIDs, OS/JSON errors, SQL, TOC/object data, opaque
+key hashes, or arbitrary metadata never enter either output channel. A broken
+output has no fallback channel and no traceback. Terminal writes are not
+transactional: a short write of a success line can irreversibly expose a prefix
+before the process detects it and exits nonzero. The launcher does not retry,
+append, or substitute a failure line in that case. This
+partial-terminal-write ceiling must be explicitly accepted.
+
+The following is the complete future-authorization structure. Replace every
+placeholder through a reviewed out-of-band channel; do not store real values
+in Git, CI, or shell history. The externally computed procedure identity is
+SHA-256 of canonical JSON containing `format_version: 1`, the approved checkout,
+and the Git blob plus SHA-256 for the four fixed procedure files.
+
+```text
+AUTHORIZER=[EXACT NAMED AUTHORIZER]
+TOC_REATTEST_AUTHORIZER_IDENTITY=[SAFE EXACT AUTHORIZER ID]
+TOC_REATTEST_EXECUTING_OPERATOR_IDENTITY=[SAFE EXACT OPERATOR ID]
+TOC_REATTEST_INDEPENDENT_REVIEWER_IDENTITY=[SAFE DISTINCT REVIEWER ID]
+TOC_REATTEST_APPROVED_EXECUTION_CHECKOUT_SHA=[FULL LOWERCASE 40HEX]
+TOC_REATTEST_APPROVED_PROCEDURE_IDENTITY_SHA256=[FULL LOWERCASE 64HEX]
+TOC_REATTEST_EXECUTION_PYTHON=[ABSOLUTE CANONICAL CPYTHON PATH]
+TOC_REATTEST_APPROVED_EXECUTION_PYTHON_SHA256=[64HEX]
+TOC_REATTEST_APPROVED_EXECUTION_PYTHON_VERSION=[cpython:MAJOR.MINOR.MICRO]
+TOC_REATTEST_APPROVED_EXECUTION_PYTHON_DEVICE=[DECIMAL]
+TOC_REATTEST_APPROVED_EXECUTION_PYTHON_INODE=[DECIMAL]
+TOC_REATTEST_APPROVED_EXECUTION_PYTHON_SIZE_BYTES=[DECIMAL]
+TOC_REATTEST_APPROVED_EXECUTION_PYTHON_UID=[DECIMAL]
+TOC_REATTEST_APPROVED_EXECUTION_PYTHON_GID=[DECIMAL]
+TOC_REATTEST_APPROVED_EXECUTION_PYTHON_MODE=[FOUR OCTAL DIGITS]
+TOC_REATTEST_CAPTURE_ROOT=[ABSOLUTE CANONICAL PRIVATE ROOT]
+TOC_REATTEST_CAPTURE_PACKAGE_NAME=[EXACT SAFE DIRECT-CHILD BASENAME]
+TOC_REATTEST_EXPECTED_UID=[DECIMAL]
+TOC_REATTEST_EXPECTED_GID=[DECIMAL]
+TOC_REATTEST_EXPECTED_DEVICE=[DECIMAL]
+TOC_REATTEST_EXPECTED_HOST_ID=[EXACT SAFE HOST ID]
+TOC_REATTEST_ENCRYPTION_ATTESTATION=APPROVED_ENCRYPTED_LOCAL_VOLUME
+TOC_REATTEST_EXPECTED_CAPTURE_EVIDENCE_FILES_SHA256=[WHOLE evidence-files.json 64HEX]
+TOC_REATTEST_EXPECTED_RUN_ID=[EXACT APPROVED RUN ID]
+TOC_REATTEST_EXPECTED_OUTER_ARCHIVE_SHA256=[64HEX]
+TOC_REATTEST_EXPECTED_INNER_ARCHIVE_SHA256=[64HEX]
+TOC_REATTEST_EXPECTED_INSPECTION_EVIDENCE_MANIFEST_SHA256=[64HEX]
+TOC_REATTEST_EXPECTED_INSPECTION_CHECKOUT_SHA=[40HEX]
+TOC_REATTEST_EXPECTED_INSPECTION_PROCEDURE_SHA256=[64HEX]
+TOC_REATTEST_EXPECTED_CAPTURE_EXECUTION_CHECKOUT_SHA=[40HEX]
+TOC_REATTEST_EXPECTED_CAPTURE_PROCEDURE_IDENTITY_SHA256=[64HEX CANDIDATE]
+TOC_REATTEST_EXPECTED_RAW_TOC_SHA256=[64HEX RECORDED/APPROVED BINDING]
+TOC_REATTEST_EXPECTED_ENTRY_COUNT=[DECIMAL]
+TOC_REATTEST_EXPECTED_DATA_REFERENCE_COUNT=[DECIMAL]
+TOC_REATTEST_EXPECTED_PG_RESTORE_PATH=[ABSOLUTE RECORDED PATH]
+TOC_REATTEST_EXPECTED_PG_RESTORE_SHA256=[64HEX]
+TOC_REATTEST_EXPECTED_PG_RESTORE_VERSION=[EXACT pg_restore VERSION]
+TOC_REATTEST_EXPECTED_PG_RESTORE_DEVICE=[DECIMAL]
+TOC_REATTEST_EXPECTED_PG_RESTORE_INODE=[DECIMAL]
+TOC_REATTEST_EXPECTED_PG_RESTORE_SIZE_BYTES=[DECIMAL]
+TOC_REATTEST_EXPECTED_PG_RESTORE_UID=[DECIMAL]
+TOC_REATTEST_EXPECTED_PG_RESTORE_GID=[DECIMAL]
+TOC_REATTEST_EXPECTED_PG_RESTORE_MODE=[FOUR OCTAL DIGITS]
+TOC_REATTEST_EXPECTED_PG_RESTORE_IDENTITY_SHA256=[64HEX OF CANONICAL IDENTITY]
+TOC_REATTEST_METADATA_SESSION_ID=[FRESH SAFE SINGLE-USE SESSION ID]
+TOC_REATTEST_METADATA_SESSION_NONCE=[FRESH LOWERCASE 64HEX]
+TOC_REATTEST_METADATA_SESSION_EXPIRES_AT_UTC=[UTC WITHIN 24 HOURS]
+TOC_REATTEST_OUTPUT_DESTINATION_ATTESTATION=LOCAL_FOREGROUND_STDOUT_NO_RECORDING
+TOC_REATTEST_EXPECTED_OUTPUT_DEVICE=[SIGNED DECIMAL CONTROLLING-TTY DEVICE]
+TOC_REATTEST_EXPECTED_OUTPUT_INODE=[DECIMAL CONTROLLING-TTY INODE]
+NO_RETRY_AFTER_PRIVATE_ACCESS=ACKNOWLEDGED
+CANDIDATE_DISCLOSURE=RECORDED_OPAQUE_INDEX_SHA256_ONLY
+CEILINGS_ACCEPTED=TERMINAL_PARTIAL_WRITE_SAME_USER_PATH_SWAP_ATIME_AND_READ_ONLY_NONCE
+```
+
+The authorization must explicitly permit disclosure of only the recorded
+opaque-index candidate and must state that no retry follows any private access.
+The probe is read-only and therefore cannot persist or independently enforce
+nonce consumption. The invoking shell/native loader starts before shell code
+can reject inherited loader variables; launch it only from a trusted sanitized
+local parent. Descriptor holding and pre/post identity checks narrow but cannot
+eliminate a hostile same-user swap-and-restore race. Permitted reads may update
+filesystem atime. A local terminal can still be recorded, photographed, or
+controlled by a hostile same-user process, and a short terminal write cannot
+be rolled back. Stop unless the authorizer accepts all documented ceilings.
+
+A pass does not approve either recovered candidate. A later human message must
+explicitly approve both the recorded opaque-index candidate and the capture
+procedure identity before any annotation-root creation or initialization
+authorization. Metadata re-attestation itself creates no annotation root,
+checkpoint, ledger, restore plan, or restore command. All downstream gates
+remain `BLOCKED`/`RED`.
+
 ### Private annotation authoring and immutable checkpoints
 
 `run-lovable-toc-annotation-authoring.sh` is the only supported operator

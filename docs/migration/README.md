@@ -20,6 +20,15 @@ evidence only:
   capture, private annotation authoring/checkpointing, inventory, verification
   templates, and strict manifest comparison.
 
+The metadata-only provenance re-attestation entrypoint is
+`../../scripts/migration/run-lovable-toc-capture-metadata-reattestation.sh`.
+Under a separate one-attempt authorization it may open only the capture
+manifest, `capture.json`, and the completion marker. It never opens or hashes
+the raw TOC, opaque index, or opaque key. Its opaque-index result is a recorded
+candidate, not a content attestation or approval; the capture procedure must
+also match its separately approved candidate. Even a pass leaves annotation
+initialization unrun and every validation/restore/migration gate blocked.
+
 **Migration readiness remains RED.** PR #16 is the current merged aggregate
 inspection contract at main
 `1b13483be43b3d5f28a7086606b8a921a6879f18`. PR #19 later merged through the
