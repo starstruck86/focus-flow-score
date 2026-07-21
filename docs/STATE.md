@@ -145,6 +145,12 @@ Trust-but-verify held throughout the session: it caught an unmerged PR before a 
 
 > Append-only, newest first. Add each new immutable entry directly below this note; never rewrite prior entries.
 
+## 2026-07-21 — Codex — TOC metadata re-attestation pass recorded
+
+- **Who:** Codex, at Corey Hartin's direction.
+- **What:** Recorded the consumed metadata session `reattest-20260721182028-cf763fc2a864`. The one-shot TOC metadata re-attestation returned `status=pass` with every fixed binding boolean true, and no retry occurred. Before execution, the session ID, nonce, expiry, and TTY device/inode were copied into recorded Codex chat. A subsequent independent repository-only audit classified that copy as a documented procedural exception within the accepted terminal and `READ_ONLY_NONCE` ceilings, not a validity defect, and the passing result stands. This entry intentionally does not include the nonce, expiry, TTY values, or recorded candidate hash in Git. Neither the recorded opaque-index candidate nor the capture-procedure comparison candidate is approved by this STATE entry. Annotation-root creation, initialization, validation, restore planning, restore commands, database access, and migration readiness remain `BLOCKED`/`RED`. PR #26 is merged at main `bd6bf5bf37b924e1ef3805dbd219e8fe11541a45`. No private artifact, capture/evidence package, export, Lovable, Supabase, n8n, database, target, secret, deployment, or runtime was accessed or changed by this documentation-only PR.
+- **SHAs:** metadata re-attestation diagnostics substantive commit `fe34b9ded47b3405e034edf2c70025cc79c705d2`; PR #26 final reviewed head `d387d61efeea425a6d870ec608b7244e6daf189a`; PR #26 merge/main `bd6bf5bf37b924e1ef3805dbd219e8fe11541a45`.
+
 ## 2026-07-21 — Codex — TOC metadata re-attestation diagnostics categorized
 
 - **Who:** Codex, at Corey Hartin's direction.
