@@ -515,14 +515,26 @@ metadata-session ID, `status: pass`, the recorded opaque-index candidate,
 `capture_procedure_identity_match: true`, and fixed true booleans for the
 approved manifest, run, archive, evidence, checkout, tool, and count bindings.
 Constructed failure diagnostics contain the session ID, `status: failed`, and
-one closed reason; they never contain the candidate. Paths, unexpected names,
-sizes, timestamps, owners, UIDs, OS/JSON errors, SQL, TOC/object data, opaque
-key hashes, or arbitrary metadata never enter either output channel. A broken
-output has no fallback channel and no traceback. Terminal writes are not
-transactional: a short write of a success line can irreversibly expose a prefix
-before the process detects it and exits nonzero. The launcher does not retry,
-append, or substitute a failure line in that case. This
-partial-terminal-write ceiling must be explicitly accepted.
+one closed reason; they never contain the candidate. The reviewed categorical
+binding reasons are
+`terminal_output_binding_mismatch`,
+`operator_reviewer_session_binding_mismatch`,
+`execution_python_identity_mismatch`, `pg_restore_tool_identity_mismatch`,
+`package_filesystem_identity_mismatch`,
+`manifest_completion_binding_mismatch`,
+`archive_inspection_provenance_mismatch`,
+`capture_procedure_binding_mismatch`, `run_count_binding_mismatch`, and
+`recorded_payload_metadata_mismatch`. Syntax/schema failures still use
+`input_invalid`, `session_invalid`, `metadata_invalid`,
+`repository_binding_mismatch`, `input_mutated`, `output_failed`, or
+`internal_failure` as applicable. Paths, unexpected names, sizes, timestamps,
+owners, UIDs, OS/JSON errors, SQL, TOC/object data, opaque key hashes, or
+arbitrary metadata never enter either output channel. A broken output has no
+fallback channel and no traceback. Terminal writes are not transactional: a
+short write of a success line can irreversibly expose a prefix before the
+process detects it and exits nonzero. The launcher does not retry, append, or
+substitute a failure line in that case. This partial-terminal-write ceiling
+must be explicitly accepted.
 
 The following is the complete future-authorization structure. Replace every
 placeholder through a reviewed out-of-band channel; do not store real values
@@ -603,6 +615,13 @@ procedure identity before any annotation-root creation or initialization
 authorization. Metadata re-attestation itself creates no annotation root,
 checkpoint, ledger, restore plan, or restore command. All downstream gates
 remain `BLOCKED`/`RED`.
+
+Session `reattest-20260721140611-06424ec656ea` was consumed before categorical
+binding diagnostics existed and failed with the legacy fixed
+`binding_mismatch` reason. That result is safe but intentionally
+non-localizing. Do not infer terminal, package, manifest, or provenance cause
+from that legacy reason alone, and do not retry without a fresh one-attempt
+authorization.
 
 ### Private annotation authoring and immutable checkpoints
 

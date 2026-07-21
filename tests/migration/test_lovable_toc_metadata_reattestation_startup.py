@@ -338,7 +338,10 @@ class LovableTocMetadataReattestationStartupTest(unittest.TestCase):
         before = tree_snapshot(self.fixture.root)
         status, transcript = run_in_pty(self.launcher, environment)
         self.assertEqual(status, 1)
-        self.assertEqual(json.loads(transcript)["reason"], "binding_mismatch")
+        self.assertEqual(
+            json.loads(transcript)["reason"],
+            "operator_reviewer_session_binding_mismatch",
+        )
         self.assertEqual(before, tree_snapshot(self.fixture.root))
 
     def test_dirty_untracked_and_ignored_tool_inputs_fail_before_private_access(self) -> None:
@@ -401,21 +404,41 @@ class LovableTocMetadataReattestationStartupTest(unittest.TestCase):
                 self.assertEqual(status, 1)
                 self.assertIn(
                     json.loads(transcript)["reason"],
-                    {"binding_mismatch", "input_invalid"},
+                    {"execution_python_identity_mismatch", "input_invalid"},
                 )
                 self.assertEqual(before, tree_snapshot(self.fixture.root))
 
     def test_output_binding_and_acknowledgements_fail_before_private_access(self) -> None:
         cases = (
-            ("TOC_REATTEST_EXPECTED_OUTPUT_DEVICE", None),
-            ("TOC_REATTEST_EXPECTED_OUTPUT_INODE", None),
-            ("TOC_REATTEST_EXPECTED_OUTPUT_DEVICE", "999999999"),
-            ("TOC_REATTEST_EXPECTED_OUTPUT_INODE", "999999999"),
-            ("NO_RETRY_AFTER_PRIVATE_ACCESS", "NOT_ACKNOWLEDGED"),
-            ("CANDIDATE_DISCLOSURE", "TOO_BROAD"),
-            ("CEILINGS_ACCEPTED", "NOT_ACCEPTED"),
+            ("TOC_REATTEST_EXPECTED_OUTPUT_DEVICE", None, "input_invalid"),
+            ("TOC_REATTEST_EXPECTED_OUTPUT_INODE", None, "input_invalid"),
+            (
+                "TOC_REATTEST_EXPECTED_OUTPUT_DEVICE",
+                "999999999",
+                "terminal_output_binding_mismatch",
+            ),
+            (
+                "TOC_REATTEST_EXPECTED_OUTPUT_INODE",
+                "999999999",
+                "terminal_output_binding_mismatch",
+            ),
+            (
+                "NO_RETRY_AFTER_PRIVATE_ACCESS",
+                "NOT_ACKNOWLEDGED",
+                "operator_reviewer_session_binding_mismatch",
+            ),
+            (
+                "CANDIDATE_DISCLOSURE",
+                "TOO_BROAD",
+                "operator_reviewer_session_binding_mismatch",
+            ),
+            (
+                "CEILINGS_ACCEPTED",
+                "NOT_ACCEPTED",
+                "operator_reviewer_session_binding_mismatch",
+            ),
         )
-        for key, value in cases:
+        for key, value, expected_reason in cases:
             with self.subTest(key=key, value=value):
                 environment = self.supported_environment()
                 if value is None:
@@ -425,10 +448,7 @@ class LovableTocMetadataReattestationStartupTest(unittest.TestCase):
                 before = tree_snapshot(self.fixture.root)
                 status, transcript = run_in_pty(self.launcher, environment)
                 self.assertEqual(status, 1)
-                self.assertIn(
-                    json.loads(transcript)["reason"],
-                    {"binding_mismatch", "input_invalid"},
-                )
+                self.assertEqual(json.loads(transcript)["reason"], expected_reason)
                 self.assertEqual(before, tree_snapshot(self.fixture.root))
 
     def test_non_tty_and_redirected_output_are_rejected(self) -> None:
@@ -443,7 +463,9 @@ class LovableTocMetadataReattestationStartupTest(unittest.TestCase):
             stderr=subprocess.PIPE,
         )
         self.assertEqual(result.returncode, 1)
-        self.assertEqual(json.loads(result.stdout)["reason"], "binding_mismatch")
+        self.assertEqual(
+            json.loads(result.stdout)["reason"], "terminal_output_binding_mismatch"
+        )
         self.assertEqual(result.stderr, b"")
         self.assertEqual(before, tree_snapshot(self.fixture.root))
 
