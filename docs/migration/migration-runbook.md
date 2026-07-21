@@ -672,11 +672,16 @@ Every forbidden-file digest comparison remains a recorded-string comparison.
 
 Success releases one canonical JSON line containing only the session ID, fixed
 true binding booleans, capture-procedure match, and the recorded opaque-index
-candidate. Failure contains no candidate and only a fixed reason. Neither path
-may disclose filenames, paths, names, TOC lines, SQL, owners, OIDs, secret or
-payload data, raw exceptions, or unapproved metadata values. A successful
-probe does not approve either candidate. Corey must later approve both exact
-values before a separately authorized annotation-root creation and
+candidate. Failure contains no candidate and only one fixed reason. The
+binding categories are limited to terminal/output, operator/reviewer/session,
+execution-Python identity, pg_restore/tool identity, package filesystem
+identity, manifest/completion binding, archive/inspection provenance,
+capture-procedure binding, run/count binding, and recorded raw/index/key
+metadata agreement. Neither path may disclose filenames, paths, names, TOC
+lines, SQL, owners, OIDs, secret or payload data, raw exceptions, expected or
+observed values, hashes, sizes, identities, or unapproved metadata values. A
+successful probe does not approve either candidate. Corey must later approve
+both exact values before a separately authorized annotation-root creation and
 initialization attempt.
 
 The no-retry rule and single-use nonce are procedural because a read-only probe
@@ -689,6 +694,11 @@ ceilings. Exit gate: at most
 two recorded candidates are available for later human approval; annotation
 initialization remains unrun and `BLOCKED`. Validation, restore planning,
 restore command, and migration readiness remain `BLOCKED`/`RED`.
+
+The consumed `reattest-20260721140611-06424ec656ea` attempt failed before this
+categorical vocabulary existed and returned only the legacy fixed
+`binding_mismatch` reason. Treat that result as non-localizing: it does not
+establish a terminal, package, manifest, provenance, or tool cause.
 
 #### Private annotation authoring and checkpoint gates
 

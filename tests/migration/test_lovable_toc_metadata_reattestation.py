@@ -398,6 +398,26 @@ class LovableTocMetadataReattestationTest(unittest.TestCase):
         for permitted in PROBE.PERMITTED_CONTENT_FILES:
             self.assertEqual(opened.count(permitted), 1)
 
+    def test_failure_path_never_content_opens_forbidden_files(self) -> None:
+        path = self.fixture.package / "raw-pg-restore-list.toc"
+        path.chmod(0o600)
+        path.write_bytes(self.fixture.raw + b"x")
+        path.chmod(0o400)
+        opened: list[str] = []
+        real_open = os.open
+
+        def observed_open(path, flags, *args, **kwargs):
+            opened.append(os.fspath(path))
+            self.assertEqual(flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT), 0)
+            return real_open(path, flags, *args, **kwargs)
+
+        with mock.patch.object(PROBE.os, "open", side_effect=observed_open):
+            status, output = self.run_probe()
+        self.assertEqual(status, 1)
+        self.assert_fixed_failure(output, "recorded_payload_metadata_mismatch")
+        for forbidden in PROBE.FORBIDDEN_CONTENT_FILES:
+            self.assertNotIn(forbidden, opened)
+
     def test_same_length_forbidden_byte_changes_are_intentionally_unread(self) -> None:
         baseline_status, baseline = self.run_probe()
         self.assertEqual(baseline_status, 0)
@@ -425,7 +445,7 @@ class LovableTocMetadataReattestationTest(unittest.TestCase):
         path.chmod(0o400)
         status, output = self.run_probe()
         self.assertEqual(status, 1)
-        self.assert_fixed_failure(output, "binding_mismatch")
+        self.assert_fixed_failure(output, "recorded_payload_metadata_mismatch")
 
     def test_package_shape_link_mode_owner_group_and_device_fail_closed(self) -> None:
         mutations = (
@@ -498,7 +518,9 @@ class LovableTocMetadataReattestationTest(unittest.TestCase):
                     else:
                         status, output = self.run_probe(env)
                     self.assertEqual(status, 1)
-                    self.assert_fixed_failure(output, "package_invalid")
+                    self.assert_fixed_failure(
+                        output, "package_filesystem_identity_mismatch"
+                    )
 
     def test_completion_and_manifest_content_substitutions_fail_closed(self) -> None:
         marker = self.fixture.package / "EVIDENCE_COMPLETE"
@@ -517,7 +539,7 @@ class LovableTocMetadataReattestationTest(unittest.TestCase):
         marker.chmod(0o400)
         status, output = self.run_probe()
         self.assertEqual(status, 1)
-        self.assert_fixed_failure(output, "binding_mismatch")
+        self.assert_fixed_failure(output, "manifest_completion_binding_mismatch")
 
         self.setUp_fixture_again()
         manifest = dict(self.fixture.manifest)
@@ -608,7 +630,9 @@ class LovableTocMetadataReattestationTest(unittest.TestCase):
                 self.assertEqual(status, 1)
                 self.assert_fixed_failure(
                     output,
-                    "package_invalid" if label == "oversized" else "metadata_invalid",
+                    "package_filesystem_identity_mismatch"
+                    if label == "oversized"
+                    else "metadata_invalid",
                 )
                 self.setUp_fixture_again()
 
@@ -619,22 +643,44 @@ class LovableTocMetadataReattestationTest(unittest.TestCase):
         self.fixture = MetadataProbeFixture(self.root)
 
     def test_manifest_completion_and_all_capture_bindings_are_externally_pinned(self) -> None:
-        environment_keys = (
-            "TOC_REATTEST_EXPECTED_CAPTURE_EVIDENCE_FILES_SHA256",
-            "TOC_REATTEST_EXPECTED_RUN_ID",
-            "TOC_REATTEST_EXPECTED_OUTER_ARCHIVE_SHA256",
-            "TOC_REATTEST_EXPECTED_INNER_ARCHIVE_SHA256",
-            "TOC_REATTEST_EXPECTED_INSPECTION_EVIDENCE_MANIFEST_SHA256",
-            "TOC_REATTEST_EXPECTED_INSPECTION_CHECKOUT_SHA",
-            "TOC_REATTEST_EXPECTED_INSPECTION_PROCEDURE_SHA256",
-            "TOC_REATTEST_EXPECTED_CAPTURE_EXECUTION_CHECKOUT_SHA",
-            "TOC_REATTEST_EXPECTED_CAPTURE_PROCEDURE_IDENTITY_SHA256",
-            "TOC_REATTEST_EXPECTED_PG_RESTORE_IDENTITY_SHA256",
-            "TOC_REATTEST_EXPECTED_RAW_TOC_SHA256",
-            "TOC_REATTEST_EXPECTED_ENTRY_COUNT",
-            "TOC_REATTEST_EXPECTED_DATA_REFERENCE_COUNT",
-        )
-        for key in environment_keys:
+        environment_keys = {
+            "TOC_REATTEST_EXPECTED_CAPTURE_EVIDENCE_FILES_SHA256": (
+                "manifest_completion_binding_mismatch"
+            ),
+            "TOC_REATTEST_EXPECTED_RUN_ID": "run_count_binding_mismatch",
+            "TOC_REATTEST_EXPECTED_OUTER_ARCHIVE_SHA256": (
+                "archive_inspection_provenance_mismatch"
+            ),
+            "TOC_REATTEST_EXPECTED_INNER_ARCHIVE_SHA256": (
+                "archive_inspection_provenance_mismatch"
+            ),
+            "TOC_REATTEST_EXPECTED_INSPECTION_EVIDENCE_MANIFEST_SHA256": (
+                "archive_inspection_provenance_mismatch"
+            ),
+            "TOC_REATTEST_EXPECTED_INSPECTION_CHECKOUT_SHA": (
+                "archive_inspection_provenance_mismatch"
+            ),
+            "TOC_REATTEST_EXPECTED_INSPECTION_PROCEDURE_SHA256": (
+                "archive_inspection_provenance_mismatch"
+            ),
+            "TOC_REATTEST_EXPECTED_CAPTURE_EXECUTION_CHECKOUT_SHA": (
+                "capture_procedure_binding_mismatch"
+            ),
+            "TOC_REATTEST_EXPECTED_CAPTURE_PROCEDURE_IDENTITY_SHA256": (
+                "capture_procedure_binding_mismatch"
+            ),
+            "TOC_REATTEST_EXPECTED_PG_RESTORE_IDENTITY_SHA256": (
+                "pg_restore_tool_identity_mismatch"
+            ),
+            "TOC_REATTEST_EXPECTED_RAW_TOC_SHA256": (
+                "recorded_payload_metadata_mismatch"
+            ),
+            "TOC_REATTEST_EXPECTED_ENTRY_COUNT": "run_count_binding_mismatch",
+            "TOC_REATTEST_EXPECTED_DATA_REFERENCE_COUNT": (
+                "run_count_binding_mismatch"
+            ),
+        }
+        for key, expected_reason in environment_keys.items():
             with self.subTest(key=key):
                 environment = dict(self.fixture.environment)
                 current = environment[key]
@@ -648,23 +694,58 @@ class LovableTocMetadataReattestationTest(unittest.TestCase):
                     environment[key] = "different-approved-value"
                 status, output = self.run_probe(environment)
                 self.assertEqual(status, 1)
-                self.assert_fixed_failure(output, "binding_mismatch")
+                self.assert_fixed_failure(output, expected_reason)
 
     def test_capture_provenance_substitutions_fail_after_internal_rehash(self) -> None:
         substitutions = (
-            ("binding", "evidence_manifest_sha256", "9" * 64),
-            ("binding", "evidence_run_id", "substituted-run"),
-            ("binding", "execution_checkout_sha", "9" * 40),
-            ("binding", "inner_archive_sha256", "9" * 64),
-            ("binding", "outer_archive_sha256", "9" * 64),
-            ("binding", "inspection_checkout_sha", "9" * 40),
-            ("binding", "inspection_procedure_sha256", "9" * 64),
-            ("binding", "procedure_identity_sha256", "9" * 64),
-            (None, "entry_count", 2),
-            (None, "data_reference_count", 1),
-            (None, "raw_toc_sha256", "9" * 64),
+            (
+                "binding",
+                "evidence_manifest_sha256",
+                "9" * 64,
+                "archive_inspection_provenance_mismatch",
+            ),
+            ("binding", "evidence_run_id", "substituted-run", "run_count_binding_mismatch"),
+            (
+                "binding",
+                "execution_checkout_sha",
+                "9" * 40,
+                "capture_procedure_binding_mismatch",
+            ),
+            (
+                "binding",
+                "inner_archive_sha256",
+                "9" * 64,
+                "archive_inspection_provenance_mismatch",
+            ),
+            (
+                "binding",
+                "outer_archive_sha256",
+                "9" * 64,
+                "archive_inspection_provenance_mismatch",
+            ),
+            (
+                "binding",
+                "inspection_checkout_sha",
+                "9" * 40,
+                "archive_inspection_provenance_mismatch",
+            ),
+            (
+                "binding",
+                "inspection_procedure_sha256",
+                "9" * 64,
+                "archive_inspection_provenance_mismatch",
+            ),
+            (
+                "binding",
+                "procedure_identity_sha256",
+                "9" * 64,
+                "capture_procedure_binding_mismatch",
+            ),
+            (None, "entry_count", 2, "run_count_binding_mismatch"),
+            (None, "data_reference_count", 1, "run_count_binding_mismatch"),
+            (None, "raw_toc_sha256", "9" * 64, "recorded_payload_metadata_mismatch"),
         )
-        for parent, name, value in substitutions:
+        for parent, name, value, expected_reason in substitutions:
             with self.subTest(field=name):
                 with tempfile.TemporaryDirectory(prefix="toc-probe-substitute.") as temporary:
                     fixture = MetadataProbeFixture(Path(temporary).resolve())
@@ -677,20 +758,22 @@ class LovableTocMetadataReattestationTest(unittest.TestCase):
                     status, output = self.run_probe(fixture.environment)
                     self.assertEqual(status, 1)
                     self.assertNotIn(b"recorded_opaque_index_sha256", output)
-                    reason = json.loads(output)["reason"]
-                    self.assertIn(reason, {"binding_mismatch", "metadata_invalid"})
+                    self.assertIn(
+                        json.loads(output)["reason"],
+                        {expected_reason, "metadata_invalid"},
+                    )
 
     def test_coherent_metadata_substitutions_cannot_replace_external_truth(self) -> None:
         cases = (
-            ("inner_binding", "9" * 64),
-            ("inspection_evidence", "8" * 64),
-            ("capture_checkout", "7" * 40),
-            ("pg_path", "/synthetic/substituted/pg_restore"),
-            ("pg_inode", 999),
-            ("capture_procedure", "6" * 64),
-            ("execution_python_inode", 888),
+            ("inner_binding", "9" * 64, "archive_inspection_provenance_mismatch"),
+            ("inspection_evidence", "8" * 64, "archive_inspection_provenance_mismatch"),
+            ("capture_checkout", "7" * 40, "capture_procedure_binding_mismatch"),
+            ("pg_path", "/synthetic/substituted/pg_restore", "pg_restore_tool_identity_mismatch"),
+            ("pg_inode", 999, "pg_restore_tool_identity_mismatch"),
+            ("capture_procedure", "6" * 64, "capture_procedure_binding_mismatch"),
+            ("execution_python_inode", 888, "capture_procedure_binding_mismatch"),
         )
-        for label, value in cases:
+        for label, value, expected_reason in cases:
             with self.subTest(label=label), tempfile.TemporaryDirectory(
                 prefix="toc-probe-coherent."
             ) as temporary:
@@ -732,10 +815,7 @@ class LovableTocMetadataReattestationTest(unittest.TestCase):
                 status, output = self.run_probe(fixture.environment)
                 self.assertEqual(status, 1)
                 self.assertNotIn(b"recorded_opaque_index_sha256", output)
-                self.assertIn(
-                    json.loads(output)["reason"],
-                    {"binding_mismatch", "metadata_invalid"},
-                )
+                self.assert_fixed_failure(output, expected_reason)
 
     def test_every_nested_procedure_and_runtime_identity_substitution_fails(self) -> None:
         groups = (
@@ -781,10 +861,12 @@ class LovableTocMetadataReattestationTest(unittest.TestCase):
                     status, output = self.run_probe(fixture.environment)
                     self.assertEqual(status, 1)
                     self.assertNotIn(b"recorded_opaque_index_sha256", output)
-                    self.assertIn(
-                        json.loads(output)["reason"],
-                        {"binding_mismatch", "metadata_invalid"},
+                    expected = (
+                        {"capture_procedure_binding_mismatch", "metadata_invalid"}
+                        if group in {"procedure_identity", "execution_python_identity"}
+                        else {"pg_restore_tool_identity_mismatch", "metadata_invalid"}
                     )
+                    self.assertIn(json.loads(output)["reason"], expected)
 
     def test_concurrent_mutation_and_path_replacement_fail(self) -> None:
         def mutate(stage: str) -> None:
@@ -860,12 +942,12 @@ class LovableTocMetadataReattestationTest(unittest.TestCase):
             (
                 "TOC_REATTEST_INDEPENDENT_REVIEWER_IDENTITY",
                 "syntheticoperator",
-                "binding_mismatch",
+                "operator_reviewer_session_binding_mismatch",
             ),
             (
                 "TOC_REATTEST_INDEPENDENT_REVIEWER_IDENTITY",
                 "syntheticauthorizer",
-                "binding_mismatch",
+                "operator_reviewer_session_binding_mismatch",
             ),
         )
         for key, value, reason in cases:
@@ -889,11 +971,31 @@ class LovableTocMetadataReattestationTest(unittest.TestCase):
 
     def test_output_identity_and_authorization_acknowledgements_fail_before_open(self) -> None:
         cases = (
-            ("TOC_REATTEST_EXPECTED_OUTPUT_DEVICE", "999999999", "binding_mismatch"),
-            ("TOC_REATTEST_EXPECTED_OUTPUT_INODE", "999999999", "binding_mismatch"),
-            ("NO_RETRY_AFTER_PRIVATE_ACCESS", "NOT_ACKNOWLEDGED", "binding_mismatch"),
-            ("CANDIDATE_DISCLOSURE", "TOO_BROAD", "binding_mismatch"),
-            ("CEILINGS_ACCEPTED", "NOT_ACCEPTED", "binding_mismatch"),
+            (
+                "TOC_REATTEST_EXPECTED_OUTPUT_DEVICE",
+                "999999999",
+                "terminal_output_binding_mismatch",
+            ),
+            (
+                "TOC_REATTEST_EXPECTED_OUTPUT_INODE",
+                "999999999",
+                "terminal_output_binding_mismatch",
+            ),
+            (
+                "NO_RETRY_AFTER_PRIVATE_ACCESS",
+                "NOT_ACKNOWLEDGED",
+                "operator_reviewer_session_binding_mismatch",
+            ),
+            (
+                "CANDIDATE_DISCLOSURE",
+                "TOO_BROAD",
+                "operator_reviewer_session_binding_mismatch",
+            ),
+            (
+                "CEILINGS_ACCEPTED",
+                "NOT_ACCEPTED",
+                "operator_reviewer_session_binding_mismatch",
+            ),
         )
         for key, value, reason in cases:
             with self.subTest(key=key):

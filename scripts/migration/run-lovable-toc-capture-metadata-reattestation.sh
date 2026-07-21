@@ -15,7 +15,14 @@ esac
 fail() {
   reason=$1
   case "$reason" in
-    input_invalid | session_invalid | repository_binding_mismatch | binding_mismatch) ;;
+    archive_inspection_provenance_mismatch | input_invalid | input_mutated | \
+      internal_failure | manifest_completion_binding_mismatch | \
+      metadata_invalid | operator_reviewer_session_binding_mismatch | \
+      output_failed | package_filesystem_identity_mismatch | \
+      capture_procedure_binding_mismatch | pg_restore_tool_identity_mismatch | \
+      repository_binding_mismatch | recorded_payload_metadata_mismatch | \
+      run_count_binding_mismatch | session_invalid | \
+      terminal_output_binding_mismatch | execution_python_identity_mismatch) ;;
     *) reason=internal_failure ;;
   esac
   printf '%s\n' \
@@ -57,17 +64,17 @@ done
 # The only supported output is the invoking local foreground terminal. This is
 # an explicit human boundary, not proof that screen capture is absent.
 [ "${TOC_REATTEST_OUTPUT_DESTINATION_ATTESTATION-}" = \
-  LOCAL_FOREGROUND_STDOUT_NO_RECORDING ] || fail binding_mismatch
-[ "${NO_RETRY_AFTER_PRIVATE_ACCESS-}" = ACKNOWLEDGED ] || fail binding_mismatch
-[ "${CANDIDATE_DISCLOSURE-}" = RECORDED_OPAQUE_INDEX_SHA256_ONLY ] || fail binding_mismatch
+  LOCAL_FOREGROUND_STDOUT_NO_RECORDING ] || fail terminal_output_binding_mismatch
+[ "${NO_RETRY_AFTER_PRIVATE_ACCESS-}" = ACKNOWLEDGED ] || fail operator_reviewer_session_binding_mismatch
+[ "${CANDIDATE_DISCLOSURE-}" = RECORDED_OPAQUE_INDEX_SHA256_ONLY ] || fail operator_reviewer_session_binding_mismatch
 [ "${CEILINGS_ACCEPTED-}" = \
-  TERMINAL_PARTIAL_WRITE_SAME_USER_PATH_SWAP_ATIME_AND_READ_ONLY_NONCE ] || fail binding_mismatch
-[ -t 0 ] && [ -t 1 ] && [ -t 2 ] || fail binding_mismatch
+  TERMINAL_PARTIAL_WRITE_SAME_USER_PATH_SWAP_ATIME_AND_READ_ONLY_NONCE ] || fail operator_reviewer_session_binding_mismatch
+[ -t 0 ] && [ -t 1 ] && [ -t 2 ] || fail terminal_output_binding_mismatch
 for remote_name in SSH_CONNECTION SSH_CLIENT SSH_TTY MOSH_IP MOSH_PORT TMUX STY \
   INSIDE_EMACS VSCODE_IPC_HOOK_CLI
 do
   eval "remote_is_set=\${${remote_name}+x}"
-  [ "$remote_is_set" != x ] || fail binding_mismatch
+  [ "$remote_is_set" != x ] || fail terminal_output_binding_mismatch
 done
 
 execution_python=${TOC_REATTEST_EXECUTION_PYTHON-}
@@ -119,11 +126,11 @@ observed_mode=$(printf '%04o' "$((0$6))" 2>/dev/null) || fail input_invalid
 [ "$1" = "$approved_python_device" ] && [ "$2" = "$approved_python_inode" ] && \
   [ "$3" = "$approved_python_size" ] && [ "$4" = "$approved_python_uid" ] && \
   [ "$5" = "$approved_python_gid" ] && [ "$observed_mode" = "$approved_python_mode" ] && \
-  [ "$7" = 1 ] || fail binding_mismatch
+  [ "$7" = 1 ] || fail execution_python_identity_mismatch
 operator_uid=$(/usr/bin/id -u 2>/dev/null) || fail input_invalid
-[ "$4" = 0 ] || [ "$4" = "$operator_uid" ] || fail binding_mismatch
+[ "$4" = 0 ] || [ "$4" = "$operator_uid" ] || fail execution_python_identity_mismatch
 mode_value=$((0$6))
-[ $((mode_value & 07022)) -eq 0 ] && [ $((mode_value & 00100)) -ne 0 ] || fail binding_mismatch
+[ $((mode_value & 07022)) -eq 0 ] && [ $((mode_value & 00100)) -ne 0 ] || fail execution_python_identity_mismatch
 
 digest_file() {
   target=$1
@@ -140,15 +147,15 @@ digest_file() {
   printf '%s' "$observed_digest"
 }
 
-[ "$(digest_file "$execution_python")" = "$approved_python_sha" ] || fail binding_mismatch
+[ "$(digest_file "$execution_python")" = "$approved_python_sha" ] || fail execution_python_identity_mismatch
 observed_python_version=$(
   /usr/bin/env -i LANG=C LC_ALL=C \
     "$execution_python" -I -S -B -c \
     'import sys; print(f"{sys.implementation.name}:{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")' \
     2>/dev/null
-) || fail binding_mismatch
-[ "$observed_python_version" = "$approved_python_version" ] || fail binding_mismatch
-[ "$(digest_file "$execution_python")" = "$approved_python_sha" ] || fail binding_mismatch
+) || fail execution_python_identity_mismatch
+[ "$observed_python_version" = "$approved_python_version" ] || fail execution_python_identity_mismatch
+[ "$(digest_file "$execution_python")" = "$approved_python_sha" ] || fail execution_python_identity_mismatch
 
 script_directory=$(CDPATH= cd -P -- "$(/usr/bin/dirname -- "$0")" 2>/dev/null && pwd -P) || fail repository_binding_mismatch
 repository=$(CDPATH= cd -P -- "${script_directory}/../.." 2>/dev/null && pwd -P) || fail repository_binding_mismatch

@@ -113,15 +113,23 @@ PROCEDURE_PATH_KEYS = (
 )
 FAILURE_REASONS = frozenset(
     {
-        "binding_mismatch",
+        "archive_inspection_provenance_mismatch",
         "input_invalid",
         "input_mutated",
         "internal_failure",
+        "manifest_completion_binding_mismatch",
         "metadata_invalid",
+        "operator_reviewer_session_binding_mismatch",
         "output_failed",
-        "package_invalid",
+        "package_filesystem_identity_mismatch",
+        "capture_procedure_binding_mismatch",
+        "pg_restore_tool_identity_mismatch",
         "repository_binding_mismatch",
+        "recorded_payload_metadata_mismatch",
+        "run_count_binding_mismatch",
         "session_invalid",
+        "terminal_output_binding_mismatch",
+        "execution_python_identity_mismatch",
     }
 )
 
@@ -202,6 +210,17 @@ class ProbeFailure(RuntimeError):
     def __init__(self, reason: str):
         self.reason = reason if reason in FAILURE_REASONS else "internal_failure"
         super().__init__(self.reason)
+
+
+TERMINAL_OUTPUT_MISMATCH = "terminal_output_binding_mismatch"
+OPERATOR_SESSION_MISMATCH = "operator_reviewer_session_binding_mismatch"
+PG_RESTORE_TOOL_MISMATCH = "pg_restore_tool_identity_mismatch"
+PACKAGE_FILESYSTEM_MISMATCH = "package_filesystem_identity_mismatch"
+MANIFEST_COMPLETION_MISMATCH = "manifest_completion_binding_mismatch"
+ARCHIVE_INSPECTION_MISMATCH = "archive_inspection_provenance_mismatch"
+CAPTURE_PROCEDURE_MISMATCH = "capture_procedure_binding_mismatch"
+RUN_COUNT_MISMATCH = "run_count_binding_mismatch"
+RECORDED_PAYLOAD_METADATA_MISMATCH = "recorded_payload_metadata_mismatch"
 
 
 @dataclass(frozen=True)
@@ -432,7 +451,7 @@ def _read_stable_metadata_file(
     try:
         descriptor = os.open(name, flags, dir_fd=package_fd)
     except OSError as exc:
-        raise ProbeFailure("package_invalid") from exc
+        raise ProbeFailure(PACKAGE_FILESYSTEM_MISMATCH) from exc
     try:
         before_raw = os.fstat(descriptor)
         before = _identity(before_raw)
@@ -446,7 +465,7 @@ def _read_stable_metadata_file(
             or before.size <= 0
             or before.size > MAX_METADATA_BYTES
         ):
-            raise ProbeFailure("package_invalid")
+            raise ProbeFailure(PACKAGE_FILESYSTEM_MISMATCH)
         chunks: list[bytes] = []
         observed = 0
         while True:
@@ -481,7 +500,7 @@ def _stat_package_entry(
     try:
         raw = os.stat(name, dir_fd=package_fd, follow_symlinks=False)
     except OSError as exc:
-        raise ProbeFailure("package_invalid") from exc
+        raise ProbeFailure(PACKAGE_FILESYSTEM_MISMATCH) from exc
     identity = _identity(raw)
     if (
         not stat.S_ISREG(raw.st_mode)
@@ -492,11 +511,11 @@ def _stat_package_entry(
         or identity.mode != 0o400
         or identity.size <= 0
     ):
-        raise ProbeFailure("package_invalid")
+        raise ProbeFailure(PACKAGE_FILESYSTEM_MISMATCH)
     if name == "opaque-id.key" and identity.size != 32:
-        raise ProbeFailure("package_invalid")
+        raise ProbeFailure(PACKAGE_FILESYSTEM_MISMATCH)
     if name in PERMITTED_CONTENT_FILES and identity.size > MAX_METADATA_BYTES:
-        raise ProbeFailure("package_invalid")
+        raise ProbeFailure(PACKAGE_FILESYSTEM_MISMATCH)
     return identity
 
 
@@ -504,13 +523,13 @@ def _list_package(package_fd: int) -> None:
     try:
         names = os.listdir(package_fd)
     except (OSError, TypeError) as exc:
-        raise ProbeFailure("package_invalid") from exc
+        raise ProbeFailure(PACKAGE_FILESYSTEM_MISMATCH) from exc
     if (
         len(names) != len(PACKAGE_FILES)
         or set(names) != PACKAGE_FILES
         or len({name.casefold() for name in names}) != len(names)
     ):
-        raise ProbeFailure("package_invalid")
+        raise ProbeFailure(PACKAGE_FILESYSTEM_MISMATCH)
 
 
 def _open_directory(path: str) -> int:
@@ -519,7 +538,7 @@ def _open_directory(path: str) -> int:
     try:
         return os.open(path, flags)
     except OSError as exc:
-        raise ProbeFailure("package_invalid") from exc
+        raise ProbeFailure(PACKAGE_FILESYSTEM_MISMATCH) from exc
 
 
 def _open_child_directory(parent_fd: int, name: str) -> int:
@@ -528,7 +547,7 @@ def _open_child_directory(parent_fd: int, name: str) -> int:
     try:
         return os.open(name, flags, dir_fd=parent_fd)
     except OSError as exc:
-        raise ProbeFailure("package_invalid") from exc
+        raise ProbeFailure(PACKAGE_FILESYSTEM_MISMATCH) from exc
 
 
 def _validate_directory(
@@ -541,7 +560,7 @@ def _validate_directory(
     try:
         metadata = os.fstat(descriptor)
     except OSError as exc:
-        raise ProbeFailure("package_invalid") from exc
+        raise ProbeFailure(PACKAGE_FILESYSTEM_MISMATCH) from exc
     if (
         not stat.S_ISDIR(metadata.st_mode)
         or metadata.st_uid != expected_uid
@@ -549,7 +568,7 @@ def _validate_directory(
         or metadata.st_dev != expected_device
         or stat.S_IMODE(metadata.st_mode) != 0o700
     ):
-        raise ProbeFailure("package_invalid")
+        raise ProbeFailure(PACKAGE_FILESYSTEM_MISMATCH)
     return metadata
 
 
@@ -733,7 +752,7 @@ def _load_expectations() -> Expectations:
         or os.environ.get("CEILINGS_ACCEPTED")
         != "TERMINAL_PARTIAL_WRITE_SAME_USER_PATH_SWAP_ATIME_AND_READ_ONLY_NONCE"
     ):
-        raise ProbeFailure("binding_mismatch")
+        raise ProbeFailure(OPERATOR_SESSION_MISMATCH)
     session_id = _string(os.environ.get("TOC_REATTEST_METADATA_SESSION_ID"), SAFE_ID_RE)
     nonce = _sha(os.environ.get("TOC_REATTEST_METADATA_SESSION_NONCE"))
     expiry = _parse_expiry(
@@ -752,16 +771,19 @@ def _load_expectations() -> Expectations:
         authorizer.casefold(),
         executing_operator.casefold(),
     }:
-        raise ProbeFailure("binding_mismatch")
+        raise ProbeFailure(OPERATOR_SESSION_MISMATCH)
     if (
         os.environ.get("TOC_REATTEST_OUTPUT_DESTINATION_ATTESTATION")
         != "LOCAL_FOREGROUND_STDOUT_NO_RECORDING"
-        or os.environ.get("TOC_REATTEST_ENCRYPTION_ATTESTATION")
+    ):
+        raise ProbeFailure(TERMINAL_OUTPUT_MISMATCH)
+    if (
+        os.environ.get("TOC_REATTEST_ENCRYPTION_ATTESTATION")
         != "APPROVED_ENCRYPTED_LOCAL_VOLUME"
         or _string(os.environ.get("TOC_REATTEST_EXPECTED_HOST_ID"), SAFE_ID_RE)
         != os.uname().nodename
     ):
-        raise ProbeFailure("binding_mismatch")
+        raise ProbeFailure(OPERATOR_SESSION_MISMATCH)
 
     repository_root = os.environ["TOC_INTERNAL_REPOSITORY_ROOT"]
     procedure_text = os.environ["TOC_INTERNAL_PROCEDURE_IDENTITY_JSON"]
@@ -816,7 +838,7 @@ def _load_expectations() -> Expectations:
         hashlib.sha256(_canonical_json(pg_identity)).hexdigest()
         != _sha(os.environ["TOC_REATTEST_EXPECTED_PG_RESTORE_IDENTITY_SHA256"])
     ):
-        raise ProbeFailure("binding_mismatch")
+        raise ProbeFailure(PG_RESTORE_TOOL_MISMATCH)
 
     capture_root = os.environ["TOC_REATTEST_CAPTURE_ROOT"]
     package_name = _string(
@@ -938,14 +960,14 @@ def _validate_output_destination(descriptor: int) -> None:
     try:
         metadata = os.fstat(descriptor)
     except OSError as exc:
-        raise ProbeFailure("binding_mismatch") from exc
+        raise ProbeFailure(TERMINAL_OUTPUT_MISMATCH) from exc
     if (
         not (stat.S_ISCHR(metadata.st_mode) or stat.S_ISFIFO(metadata.st_mode))
         or metadata.st_dev != _env_device("TOC_REATTEST_EXPECTED_OUTPUT_DEVICE")
         or metadata.st_ino
         != _env_integer("TOC_REATTEST_EXPECTED_OUTPUT_INODE", maximum=2**64 - 1)
     ):
-        raise ProbeFailure("binding_mismatch")
+        raise ProbeFailure(TERMINAL_OUTPUT_MISMATCH)
 
 
 def _probe(expectations: Expectations) -> str:
@@ -970,7 +992,7 @@ def _probe(expectations: Expectations) -> str:
             package_before.st_dev,
             package_before.st_ino,
         ):
-            raise ProbeFailure("package_invalid")
+            raise ProbeFailure(PACKAGE_FILESYSTEM_MISMATCH)
         _list_package(package_fd)
         before = {
             name: _stat_package_entry(
@@ -996,11 +1018,13 @@ def _probe(expectations: Expectations) -> str:
             or hashlib.sha256(evidence_bytes).hexdigest()
             != expectations.capture_manifest_sha256
         ):
-            raise ProbeFailure("binding_mismatch")
+            raise ProbeFailure(MANIFEST_COMPLETION_MISMATCH)
         records, _ = _manifest_records(evidence_bytes)
         for name in MANIFEST_PAYLOAD_FILES:
             if records[name]["size_bytes"] != before[name].size:
-                raise ProbeFailure("binding_mismatch")
+                if name in FORBIDDEN_CONTENT_FILES:
+                    raise ProbeFailure(RECORDED_PAYLOAD_METADATA_MISMATCH)
+                raise ProbeFailure(MANIFEST_COMPLETION_MISMATCH)
         _hook("after_manifest")
 
         capture_bytes, capture_identity = _read_stable_metadata_file(
@@ -1015,7 +1039,7 @@ def _probe(expectations: Expectations) -> str:
             "sha256": hashlib.sha256(capture_bytes).hexdigest(),
             "size_bytes": len(capture_bytes),
         }:
-            raise ProbeFailure("binding_mismatch")
+            raise ProbeFailure(MANIFEST_COMPLETION_MISMATCH)
         capture = _validate_capture(_strict_json(capture_bytes))
         _hook("after_capture")
 
@@ -1036,54 +1060,66 @@ def _probe(expectations: Expectations) -> str:
             or marker_bytes != _canonical_json(expected_marker)
             or _strict_json(marker_bytes) != expected_marker
         ):
-            raise ProbeFailure("binding_mismatch")
+            raise ProbeFailure(MANIFEST_COMPLETION_MISMATCH)
 
         binding = capture["binding"]
-        if binding != {
-            "evidence_manifest_sha256": expectations.inspection_evidence_manifest_sha256,
-            "evidence_run_id": expectations.evidence_run_id,
-            "execution_checkout_sha": expectations.capture_execution_checkout_sha,
-            "inner_archive_sha256": expectations.inner_archive_sha256,
-            "inspection_checkout_sha": expectations.inspection_checkout_sha,
-            "inspection_procedure_sha256": expectations.inspection_procedure_sha256,
-            "outer_archive_sha256": expectations.outer_archive_sha256,
-            "procedure_identity_sha256": expectations.capture_procedure_identity_sha256,
-        }:
-            raise ProbeFailure("binding_mismatch")
+        if binding["evidence_run_id"] != expectations.evidence_run_id:
+            raise ProbeFailure(RUN_COUNT_MISMATCH)
+        if (
+            binding["outer_archive_sha256"] != expectations.outer_archive_sha256
+            or binding["inner_archive_sha256"] != expectations.inner_archive_sha256
+            or binding["evidence_manifest_sha256"]
+            != expectations.inspection_evidence_manifest_sha256
+            or binding["inspection_checkout_sha"] != expectations.inspection_checkout_sha
+            or binding["inspection_procedure_sha256"]
+            != expectations.inspection_procedure_sha256
+        ):
+            raise ProbeFailure(ARCHIVE_INSPECTION_MISMATCH)
+        if (
+            binding["execution_checkout_sha"]
+            != expectations.capture_execution_checkout_sha
+            or binding["procedure_identity_sha256"]
+            != expectations.capture_procedure_identity_sha256
+        ):
+            raise ProbeFailure(CAPTURE_PROCEDURE_MISMATCH)
         if (
             capture["entry_count"] != expectations.entry_count
             or capture["data_reference_count"] != expectations.data_reference_count
-            or capture["raw_toc_sha256"] != expectations.raw_toc_sha256
-            or capture["pg_restore_identity"] != expectations.pg_restore_identity
+        ):
+            raise ProbeFailure(RUN_COUNT_MISMATCH)
+        if capture["raw_toc_sha256"] != expectations.raw_toc_sha256:
+            raise ProbeFailure(RECORDED_PAYLOAD_METADATA_MISMATCH)
+        if (
+            capture["pg_restore_identity"] != expectations.pg_restore_identity
             or hashlib.sha256(
                 _canonical_json(capture["pg_restore_identity"])
             ).hexdigest()
             != expectations.pg_restore_identity_sha256
         ):
-            raise ProbeFailure("binding_mismatch")
+            raise ProbeFailure(PG_RESTORE_TOOL_MISMATCH)
         if records["raw-pg-restore-list.toc"] != {
             "name": "raw-pg-restore-list.toc",
             "sha256": capture["raw_toc_sha256"],
             "size_bytes": capture["raw_toc_size_bytes"],
         }:
-            raise ProbeFailure("binding_mismatch")
+            raise ProbeFailure(RECORDED_PAYLOAD_METADATA_MISMATCH)
         if records["opaque-index.json"] != {
             "name": "opaque-index.json",
             "sha256": capture["opaque_index_sha256"],
             "size_bytes": before["opaque-index.json"].size,
         }:
-            raise ProbeFailure("binding_mismatch")
+            raise ProbeFailure(RECORDED_PAYLOAD_METADATA_MISMATCH)
         if records["opaque-id.key"] != {
             "name": "opaque-id.key",
             "sha256": capture["opaque_key_sha256"],
             "size_bytes": 32,
         }:
-            raise ProbeFailure("binding_mismatch")
+            raise ProbeFailure(RECORDED_PAYLOAD_METADATA_MISMATCH)
         if (
             binding["procedure_identity_sha256"]
             != hashlib.sha256(_canonical_json(capture["procedure_identity"])).hexdigest()
         ):
-            raise ProbeFailure("binding_mismatch")
+            raise ProbeFailure(CAPTURE_PROCEDURE_MISMATCH)
 
         _hook("before_revalidation")
         _list_package(package_fd)
