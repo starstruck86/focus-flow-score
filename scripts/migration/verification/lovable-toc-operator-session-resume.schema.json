@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "annotation_root": { "type": "string" },
+    "artifact_kind": { "const": "lovable_toc_operator_resume" },
+    "authorization_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "authoring_session_identity": { "type": "string" },
+    "capture": {
+      "additionalProperties": false,
+      "properties": {
+        "capture_manifest_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "evidence_run_id": { "type": "string" },
+        "opaque_index_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "raw_toc_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+      },
+      "required": [
+        "capture_manifest_sha256",
+        "evidence_run_id",
+        "opaque_index_sha256",
+        "raw_toc_sha256"
+      ],
+      "type": "object"
+    },
+    "execution_checkout_sha": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+    "format_version": { "const": 1 },
+    "operator_session_procedure_identity_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "operator_identity": { "type": "string" },
+    "primary_operator_identity": { "type": "string" },
+    "procedure_identity_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "python_identity_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "resume_checkpoint_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "resume_generation": { "minimum": 1, "type": "integer" },
+    "resume_release_token": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "session_id": { "type": "string" }
+  },
+  "required": [
+    "annotation_root",
+    "artifact_kind",
+    "authorization_sha256",
+    "authoring_session_identity",
+    "capture",
+    "execution_checkout_sha",
+    "format_version",
+    "operator_session_procedure_identity_sha256",
+    "operator_identity",
+    "primary_operator_identity",
+    "procedure_identity_sha256",
+    "python_identity_sha256",
+    "resume_checkpoint_sha256",
+    "resume_generation",
+    "resume_release_token",
+    "session_id"
+  ],
+  "type": "object"
+}

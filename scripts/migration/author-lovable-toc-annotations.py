@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Internal, isolated TTY entrypoint for private TOC annotation authoring.
 
-Operators must use ``run-lovable-toc-annotation-authoring.sh``.  This component
+Operators must use ``run-lovable-toc-annotation-operator-session.sh`` for the
+first real initialization session, then the reviewed zero-argument launcher
+``run-lovable-toc-annotation-authoring.sh`` for later authorized actions after
+private resume-record consumption.  This component
 never invokes the ledger validator, pg_restore, a database client, or a network
 operation.  Private review context is written only to the inherited controlling
 TTY descriptor; stdout and stderr carry fixed diagnostics only.
@@ -1691,7 +1694,10 @@ def _release_lock(root_fd: int, active_token: str) -> str:
 
 
 def execute_authoring(
-    environment: Mapping[str, str], tty_fd: int
+    environment: Mapping[str, str],
+    tty_fd: int,
+    *,
+    resume_recorder: Callable[[int, str, str], None] | None = None,
 ) -> tuple[int, bytes]:
     """Run exactly one descriptor-bound authoring operation."""
 
@@ -2165,6 +2171,12 @@ def execute_authoring(
                     if tty_fd < 0:
                         _mark_indeterminate(private_root_fd)
                         raise AuthoringEntrypointError("tty_invalid")
+                    if resume_recorder is not None:
+                        resume_recorder(
+                            expected_final_generation,
+                            expected_final_head,
+                            active_lock_token,
+                        )
                     private_resume = (
                         b"resume_generation="
                         + str(expected_final_generation).encode("ascii")

@@ -625,11 +625,26 @@ authorization.
 
 ### Private annotation authoring and immutable checkpoints
 
-`run-lovable-toc-annotation-authoring.sh` is the only supported operator
-entrypoint for drafting the private annotation ledger. It takes no arguments.
-The requested operation is supplied through the mandatory
-`TOC_AUTHOR_ACTION` environment variable; every invocation performs exactly
-one operation and then exits. Its closed vocabulary is `initialize`,
+`run-lovable-toc-annotation-operator-session.sh` is the supported operator
+entrypoint for one practical initialization session when real `TOC_AUTHOR_*`
+bindings must not pass through argv, exported shell environment, shell history,
+chat, clipboard/browser transport, Git, CI, diagnostics, or ambient temporary
+files. It is zero-argument and startup-isolated. It prompts only through the
+verified local controlling TTY, feeds the approved Python/check-out bootstrap
+to the isolated child over stdin, writes one immutable private authorization
+record, creates the empty annotation root with no replacement, invokes the
+internal authoring engine in memory for `initialize`, and writes one immutable
+private resume record for generation 1. It does not classify entries, invoke
+the validator, create a final ledger, generate restore planning, connect to a
+database, or perform a network operation.
+
+`run-lovable-toc-annotation-authoring.sh` remains the lower-level checked-in
+authoring launcher. It takes no arguments. The requested operation is supplied
+through the mandatory `TOC_AUTHOR_ACTION` environment variable; every invocation
+performs exactly one operation and then exits. Do not use that lower-level
+launcher for real initialization unless a separate reviewed mechanism supplies
+the `TOC_AUTHOR_*` values without history, environment, clipboard/browser, chat,
+Git, CI, or diagnostics exposure. Its closed vocabulary is `initialize`,
 `primary_review`, `revisit_unresolved`, `relationship_review`,
 `data_reference_review`, `sequence_review`, `managed_review`,
 `manual_conflict_review`, `peer_review`, `correction_review`, `status`, and
@@ -667,7 +682,64 @@ Finalization requires the conjunction of every phase predicate.
 `initialize` is the sole initializer; `status` and `finalize` are orchestration
 actions and do not silently create ordinary review transitions. `finalize` is
 separately authorized rather than a continuation of an ordinary review
-session.
+session. The operator-session wrapper intentionally exposes only initialization
+in this PR.
+
+#### Operator-session authorization and resume records
+
+The operator-session wrapper creates a separate private session root. This root
+is distinct from the annotation root because the annotation root has strict
+contents (`checkpoints/`, authoring lock/release/indeterminate names, and later
+optional final package). Both roots must be absolute, canonical, executor-owned,
+non-symlink directories outside Git, mode `0700`, and on the approved private
+filesystem. The session wrapper creates the session root and annotation root
+with no replacement; an existing path stops fail-closed. All session files are
+single-link regular files at mode `0400`, published by no-replace atomic rename
+with file and directory fsync.
+
+The authorization record schema is
+`verification/lovable-toc-operator-session-authorization.schema.json`. The
+resume record schema is
+`verification/lovable-toc-operator-session-resume.schema.json`. Both are
+canonical JSON (`sort_keys`, compact separators, ASCII, one trailing LF) and are
+read with duplicate-key and nonfinite rejection. The authorization record binds
+action `initialize`; session root and annotation root; primary/current operator
+and authoring-session identity; execution checkout, approved CPython
+path/SHA/version, operator-session procedure identity, and lower-level authoring
+procedure identity; capture package root/name and every approved capture, raw
+TOC, opaque-index, archive, inspection, count, and `pg_restore` identity;
+generation 0, all-zero checkpoint head, all-zero release token, empty
+finalization authorization, and the local controlling-TTY attestation.
+
+The authorization digest is the SHA-256 of the exact canonical authorization
+record. The wrapper displays that digest only on the private TTY and requires
+the operator to type `authorization_digest_recorded` before it creates the
+annotation root or invokes authoring. That digest is an operator-session anchor:
+it does not self-approve any observed package metadata. External approval
+remains the trust anchor for every expected value supplied to the session.
+
+When the internal authoring engine publishes generation 1, the wrapper records
+`resume_generation`, `resume_checkpoint_sha256`, and `resume_release_token`
+directly into a private mode-`0400` resume record before the lower-level engine
+displays the same tuple and asks for `resume_values_recorded`. The lock is not
+released until the local-TTY acknowledgement succeeds. If resume-record
+publication, TTY display, acknowledgement, release, cleanup, or fsync becomes
+ambiguous, the annotation root and/or session root retain blocking lock or
+indeterminate state and no normal resumable-looking state is claimed. A future
+review action must consume the resume record descriptor-relatively, validate
+its authorization digest, generation, checkpoint SHA, operator, session, and
+token binding, and pass the token in memory to the lower-level authoring engine;
+it must not place the tuple in argv, exported environment, shell history, chat,
+CI, or diagnostics.
+
+The operator-session wrapper itself still has local trust ceilings. It cannot
+prove an unknown recorder is absent, prevent a human from using a clipboard
+despite the typed attestation, attest a hostile same-user process, or provide a
+kernel-held executable descriptor for Python. It minimizes these surfaces by
+requiring a fresh local foreground TTY, no known recorder/remote/multiplexer
+markers, no shell command line containing the bindings, no exported
+`TOC_AUTHOR_*` block, no ordinary temp file, disabled core files, clean checkout
+and reviewed blob checks, and isolated `-I -S -B` Python.
 
 The launcher has no defaults for private inputs or approval identities. Supply
 the following environment contract out of band; do not place a real value in

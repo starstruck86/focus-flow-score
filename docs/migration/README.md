@@ -121,22 +121,28 @@ still stops at `REVIEW_REQUIRED` / `ANNOTATION_REQUIRED`, with both restore
 gates `BLOCKED`. The low-level capture is not an operator procedure, and this
 step never creates or validates an annotation ledger.
 
-A separately authorized local authoring session must use only the zero-argument
-`run-lovable-toc-annotation-authoring.sh` launcher. It requires one approved
-CPython identity, minimal `env -i`, `-I -S -B`, an approved clean checkout, and
-a verified foreground controlling TTY. Raw TOC context appears only in a
-bounded local alternate-screen view; stdout/stderr remain fixed and aggregate.
-Redirected, piped, and non-TTY contexts are rejected. Known recorder ancestors
-and known remote or multiplexer contexts are rejected; the workflow provides no browser or clipboard
-transport. Clearing the alternate screen does not
-attest the absence of an unknown or disguised recorder, screen recording,
-photography, a hostile terminal, or a hostile same-user process.
-The exact resume tuple remains visible while the durable authoring lock is
-still held until the operator enters the fixed `resume_values_recorded`
-acknowledgement. Only then may the lock become a durable released marker. A TTY
-write, EOF, wrong acknowledgement, or terminal attribute/read failure remains
-blocked by the lock and, where possible, an indeterminate marker; piping or
-terminal recording is still prohibited.
+The first practical initialization path uses the separate zero-argument
+operator-session launcher. It collects approved bindings through the private
+local TTY instead of argv, exported environment, shell history, clipboard,
+chat, CI, or temp files; publishes a private authorization record; creates the
+empty annotation root with no replacement; invokes only generation-0
+initialization; and writes a private resume record for generation 1. The exact
+resume tuple remains visible while the durable authoring lock is still held
+until the operator enters the fixed `resume_values_recorded` acknowledgement.
+Only then may the lock become a durable released marker. A TTY write, EOF,
+wrong acknowledgement, terminal attribute/read failure, or private
+record-publication ambiguity remains blocked by the lock and/or indeterminate
+state; piping, clipboard transfer, shell-history retention, chat retention, and
+terminal recording are still prohibited.
+
+Later reviewed authoring actions still use the lower-level zero-argument
+`run-lovable-toc-annotation-authoring.sh` launcher, but only after a reviewed
+private resume-record consumption path supplies the exact tuple in memory.
+Private raw TOC context remains confined to the bounded local alternate-screen
+view; stdout/stderr stay fixed and aggregate. Redirected, piped, non-TTY,
+known recorder, remote, and multiplexer contexts are rejected. Clearing the
+alternate screen does not attest the absence of an unknown recorder, screen
+capture, photography, a hostile terminal, or a hostile same-user process.
 
 Authoring never opens `opaque-id.key` bytes: it only validates the key file's
 safe metadata. It uses the already private raw TOC and opaque structural index,

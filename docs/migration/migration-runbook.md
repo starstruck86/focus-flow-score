@@ -702,10 +702,17 @@ establish a terminal, package, manifest, provenance, or tool cause.
 
 #### Private annotation authoring and checkpoint gates
 
-Human review occurs locally against that private capture only through the
-zero-argument
-`scripts/migration/run-lovable-toc-annotation-authoring.sh` launcher. Do not
-run its Python component directly. Before opening private input, the launcher
+Human review initialization occurs locally against that private capture through
+the zero-argument
+`scripts/migration/run-lovable-toc-annotation-operator-session.sh` launcher.
+It publishes a private authorization record, creates the empty annotation root,
+invokes only generation-0 initialization, and captures the generation-1 resume
+tuple directly into a private operator record. Later reviewed authoring actions
+still use the lower-level zero-argument
+`scripts/migration/run-lovable-toc-annotation-authoring.sh` launcher only after
+a reviewed private resume-record consumption path supplies the exact tuple in
+memory. Do not run either Python component directly. Before opening private
+input, the launcher
 requires an explicitly approved canonical CPython path, SHA-256, exact version,
 safe ownership/mode/link count, a clean approved checkout, exact reviewed tool
 blobs, and no ordinary or ignored untracked migration-tool inputs. It rejects
@@ -728,12 +735,37 @@ Treat that as a local trust ceiling, not as executable-byte attestation.
 `correction_review`, `status`, or `finalize`. The immutable generations advance
 through these derived states:
 
-Before an authorized session, bind every mandatory `TOC_AUTHOR_*` input using
-the exact operator table in `scripts/migration/README.md`; there are no private
-path, artifact-identity, interpreter-identity, operator, session, or checkpoint
-head defaults. Generation `0` and the all-zero head are valid only for the
-one-time initialization. Every resume must use the exact latest generation and
-full checkpoint SHA-256 reported through the private evidence process.
+Before an authorized first initialization session, use the zero-argument
+`scripts/migration/run-lovable-toc-annotation-operator-session.sh` wrapper
+rather than hand-exporting `TOC_AUTHOR_*` values. It prompts through the
+verified local controlling TTY, passes only the approved Python/check-out
+bootstrap to the isolated child over stdin, and writes a private immutable
+authorization record before it creates the annotation root or invokes
+authoring. The operator-session root is separate from the annotation root; both
+must be approved owner-private mode-`0700` roots outside Git. Authorization and
+resume records are canonical JSON, single-link mode-`0400`, no-replace,
+fsynced files. The authorization digest is displayed on the private TTY and
+requires `authorization_digest_recorded`; it is not self-approval of observed
+package metadata. External approval remains the trust anchor for all expected
+bindings.
+
+The wrapper invokes only generation-0 `initialize` and can publish only
+generation 1. It records the exact `resume_generation`,
+`resume_checkpoint_sha256`, and `resume_release_token` directly into the
+private session record before the lower-level authoring engine displays the
+same tuple and requires `resume_values_recorded`. Every later resume must use
+the exact latest generation, full checkpoint SHA-256, and private release token
+from that approved operator record. A later action must consume the resume
+record descriptor-relatively and inject the tuple in memory, never through argv,
+ordinary environment, shell history, clipboard/browser transport, chat, CI, or
+diagnostics.
+
+The lower-level authoring launcher still has the mandatory `TOC_AUTHOR_*`
+contract in `scripts/migration/README.md`; there are no private path,
+artifact-identity, interpreter-identity, operator, session, or checkpoint-head
+defaults. Use it directly only after a separate reviewed private injection
+mechanism exists for the intended action. Generation `0` and the all-zero head
+remain valid only for one-time initialization.
 
 Before private or capture path access or mutation, the component validates the
 complete static action tuple: the one generation-0/all-zero/identical-operator
