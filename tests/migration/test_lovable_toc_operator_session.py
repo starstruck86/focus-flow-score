@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -49,6 +50,71 @@ SESSION = load_session()
 AUTHOR = SESSION.AUTHOR
 ZERO64 = "0" * 64
 LAUNCHER = MIGRATION / "run-lovable-toc-annotation-operator-session.sh"
+
+LAUNCHER_POISON_VARIABLES = (
+    "LD_PRELOAD",
+    "LD_LIBRARY_PATH",
+    "LD_AUDIT",
+    "LD_DEBUG",
+    "LD_DEBUG_OUTPUT",
+    "LD_PROFILE",
+    "LD_PROFILE_OUTPUT",
+    "LD_ORIGIN_PATH",
+    "LD_ASSUME_KERNEL",
+    "LD_TRACE_LOADED_OBJECTS",
+    "LD_BIND_NOW",
+    "LD_BIND_NOT",
+    "LD_SHOW_AUXV",
+    "LD_VERBOSE",
+    "LD_WARN",
+    "LD_DYNAMIC_WEAK",
+    "LD_HWCAP_MASK",
+    "LD_POINTER_GUARD",
+    "GLIBC_TUNABLES",
+    "DYLD_INSERT_LIBRARIES",
+    "DYLD_LIBRARY_PATH",
+    "DYLD_FRAMEWORK_PATH",
+    "DYLD_FALLBACK_LIBRARY_PATH",
+    "DYLD_FALLBACK_FRAMEWORK_PATH",
+    "DYLD_IMAGE_SUFFIX",
+    "DYLD_ROOT_PATH",
+    "DYLD_FORCE_FLAT_NAMESPACE",
+    "DYLD_SHARED_REGION",
+    "DYLD_PRINT_LIBRARIES",
+    "DYLD_PRINT_LIBRARIES_POST_LAUNCH",
+    "DYLD_PRINT_APIS",
+    "DYLD_PRINT_BINDINGS",
+    "DYLD_PRINT_TO_FILE",
+    "DYLD_PRINT_RPATHS",
+    "DYLD_PRINT_ENV",
+    "DYLD_PRINT_OPTS",
+    "DYLD_PRINT_WARNINGS",
+    "DYLD_PRINT_INITIALIZERS",
+    "DYLD_PRINT_SEGMENTS",
+    "DYLD_PRINT_STATISTICS",
+    "DYLD_PRINT_STATISTICS_DETAILS",
+    "DYLD_PRINT_INTERPOSING",
+    "DYLD_PRINT_SEARCHING",
+    "DYLD_PRINT_UUIDS",
+    "DYLD_PRINT_DOFS",
+    "DYLD_PRINT_LINKS_WITH",
+    "DYLD_PRINT_FIXUPS",
+    "DYLD_USE_CLOSURES",
+    "DYLD_DISABLE_CLOSURES",
+    "DYLD_SHARED_CACHE_DIR",
+    "PYTHONHOME",
+    "PYTHONPATH",
+    "PYTHONUSERBASE",
+    "PYTHONSTARTUP",
+    "PYTHONINSPECT",
+    "PYTHONBREAKPOINT",
+    "PYTHONWARNINGS",
+    "PYTHONMALLOC",
+    "PYTHONTRACEMALLOC",
+    "PYTHONPROFILEIMPORTTIME",
+    "ENV",
+    "BASH_ENV",
+)
 
 
 class TocOperatorSessionTest(unittest.TestCase):
@@ -116,7 +182,7 @@ class TocOperatorSessionTest(unittest.TestCase):
             authorization_ack,
         ]
 
-    def run_with_responses(self, responses: list[str]):
+    def run_with_responses(self, responses: list[str], *, execute_authoring_side_effect=None):
         seen_prompts: list[bytes] = []
         iterator = iter(responses)
 
@@ -144,6 +210,14 @@ class TocOperatorSessionTest(unittest.TestCase):
             stack.enter_context(mock.patch.object(AUTHOR, "_authoring_procedure_identity", return_value=SHA_C))
             stack.enter_context(mock.patch.object(AUTHOR, "_write_tty", return_value=None))
             stack.enter_context(mock.patch.object(AUTHOR, "_require_resume_acknowledgement", return_value=None))
+            if execute_authoring_side_effect is not None:
+                stack.enter_context(
+                    mock.patch.object(
+                        AUTHOR,
+                        "execute_authoring",
+                        side_effect=execute_authoring_side_effect,
+                    )
+                )
             result = SESSION.run_session(9, self.bootstrap)
         return result, seen_prompts, tty_writes
 
@@ -321,6 +395,91 @@ class TocOperatorSessionTest(unittest.TestCase):
             },
         )
 
+    def _char_stat(self, *, inode: int = 20, mode: int | None = None):
+        return types.SimpleNamespace(
+            st_dev=10,
+            st_ino=inode,
+            st_mode=(stat.S_IFCHR | 0o600) if mode is None else mode,
+            st_rdev=30,
+        )
+
+    def test_validate_tty_fd_checks_controlling_foreground_termios_and_stability(self):
+        tty = self._char_stat()
+        controlling = self._char_stat(inode=21)
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch.dict(SESSION.os.environ, {"TOC_OPERATOR_TTY_FD": "3"}))
+            stack.enter_context(
+                mock.patch.object(SESSION.os, "fstat", side_effect=[tty, controlling, tty])
+            )
+            stack.enter_context(mock.patch.object(SESSION.os, "isatty", return_value=True))
+            stack.enter_context(mock.patch.object(SESSION.os, "open", return_value=4))
+            close_mock = stack.enter_context(mock.patch.object(SESSION.os, "close", return_value=None))
+            stack.enter_context(mock.patch.object(SESSION.os, "getpgrp", return_value=123))
+            stack.enter_context(mock.patch.object(SESSION.os, "tcgetpgrp", return_value=123))
+            stack.enter_context(
+                mock.patch.object(SESSION.termios, "tcgetattr", return_value=[0, 0, 0, 0, 0, 0, []])
+            )
+            self.assertEqual(SESSION._validate_tty_fd(), 3)
+            close_mock.assert_called_once_with(4)
+
+    def test_validate_tty_fd_rejects_background_process_group(self):
+        tty = self._char_stat()
+        controlling = self._char_stat(inode=21)
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch.dict(SESSION.os.environ, {"TOC_OPERATOR_TTY_FD": "3"}))
+            stack.enter_context(
+                mock.patch.object(SESSION.os, "fstat", side_effect=[tty, controlling])
+            )
+            stack.enter_context(mock.patch.object(SESSION.os, "isatty", return_value=True))
+            stack.enter_context(mock.patch.object(SESSION.os, "open", return_value=4))
+            stack.enter_context(mock.patch.object(SESSION.os, "close", return_value=None))
+            stack.enter_context(mock.patch.object(SESSION.os, "getpgrp", return_value=123))
+            stack.enter_context(mock.patch.object(SESSION.os, "tcgetpgrp", return_value=456))
+            with self.assertRaises(SESSION.OperatorSessionError) as raised:
+                SESSION._validate_tty_fd()
+        self.assertEqual(raised.exception.reason, "tty_invalid")
+
+    def test_validate_tty_fd_rejects_termios_failure(self):
+        tty = self._char_stat()
+        controlling = self._char_stat(inode=21)
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch.dict(SESSION.os.environ, {"TOC_OPERATOR_TTY_FD": "3"}))
+            stack.enter_context(
+                mock.patch.object(SESSION.os, "fstat", side_effect=[tty, controlling])
+            )
+            stack.enter_context(mock.patch.object(SESSION.os, "isatty", return_value=True))
+            stack.enter_context(mock.patch.object(SESSION.os, "open", return_value=4))
+            stack.enter_context(mock.patch.object(SESSION.os, "close", return_value=None))
+            stack.enter_context(mock.patch.object(SESSION.os, "getpgrp", return_value=123))
+            stack.enter_context(mock.patch.object(SESSION.os, "tcgetpgrp", return_value=123))
+            stack.enter_context(mock.patch.object(SESSION.termios, "tcgetattr", side_effect=OSError("termios")))
+            with self.assertRaises(SESSION.OperatorSessionError) as raised:
+                SESSION._validate_tty_fd()
+        self.assertEqual(raised.exception.reason, "tty_invalid")
+
+    def test_validate_tty_fd_rejects_descriptor_replacement(self):
+        tty_before = self._char_stat(inode=20)
+        controlling = self._char_stat(inode=21)
+        tty_after = self._char_stat(inode=22)
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch.dict(SESSION.os.environ, {"TOC_OPERATOR_TTY_FD": "3"}))
+            stack.enter_context(
+                mock.patch.object(
+                    SESSION.os, "fstat", side_effect=[tty_before, controlling, tty_after]
+                )
+            )
+            stack.enter_context(mock.patch.object(SESSION.os, "isatty", return_value=True))
+            stack.enter_context(mock.patch.object(SESSION.os, "open", return_value=4))
+            stack.enter_context(mock.patch.object(SESSION.os, "close", return_value=None))
+            stack.enter_context(mock.patch.object(SESSION.os, "getpgrp", return_value=123))
+            stack.enter_context(mock.patch.object(SESSION.os, "tcgetpgrp", return_value=123))
+            stack.enter_context(
+                mock.patch.object(SESSION.termios, "tcgetattr", return_value=[0, 0, 0, 0, 0, 0, []])
+            )
+            with self.assertRaises(SESSION.OperatorSessionError) as raised:
+                SESSION._validate_tty_fd()
+        self.assertEqual(raised.exception.reason, "tty_invalid")
+
     def test_publication_fsync_failure_leaves_indeterminate_no_resume(self):
         with mock.patch.object(SESSION.os, "fsync", side_effect=OSError("planted")):
             with self.assertRaises(SESSION.OperatorSessionError) as raised:
@@ -328,6 +487,19 @@ class TocOperatorSessionTest(unittest.TestCase):
         self.assertIn(raised.exception.reason, {"cleanup_indeterminate", "publication_failed"})
         if self.session_root.exists():
             self.assertFalse(any(path.name.startswith("resume-g") for path in self.session_root.iterdir()))
+
+    def test_resume_recorder_rejects_non_generation_one(self):
+        def fake_execute(_environment, _tty_fd, *, resume_recorder):
+            resume_recorder(2, SHA_A, SHA_B)
+            return 2, b"{}"
+
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.responses(), execute_authoring_side_effect=fake_execute
+            )
+        self.assertEqual(raised.exception.reason, "internal_failure")
+        self.assertTrue((self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists())
+        self.assertFalse(any(path.name.startswith("resume-g") for path in self.session_root.iterdir()))
 
     def test_contract_publication_failure_removes_pending_record(self):
         self.session_root.mkdir(mode=0o700)
@@ -415,8 +587,6 @@ class TocOperatorSessionTest(unittest.TestCase):
                 "LANG": "C",
                 "LC_ALL": "C",
                 "TERM": "xterm-256color",
-                "PYTHONPATH": "SYNTHETIC_PYTHONPATH_POISON",
-                "PYTHONSTARTUP": "SYNTHETIC_PYTHONSTARTUP_POISON",
                 "TOC_AUTHOR_CAPTURE_ROOT": os.fspath(self.capture_root),
                 "TOC_AUTHOR_EXPECTED_OPAQUE_INDEX_SHA256": self.expectations.opaque_index_sha256,
             },
@@ -439,12 +609,108 @@ class TocOperatorSessionTest(unittest.TestCase):
             os.fspath(self.capture_root),
             self.expectations.opaque_index_sha256,
             "synthetic-private-object",
-            "SYNTHETIC_PYTHONPATH_POISON",
-            "SYNTHETIC_PYTHONSTARTUP_POISON",
         ):
             self.assertNotIn(value, json.dumps(arguments))
             self.assertNotIn(value, json.dumps(child_environment))
             self.assertNotIn(value.encode(), transcript)
+
+    def test_launcher_rejects_asciinema_marker_for_all_terminal_identities(self):
+        for term_program in ("Apple_Terminal", "iTerm.app"):
+            with self.subTest(term_program=term_program):
+                exit_status, transcript = run_pty_command(
+                    LAUNCHER,
+                    [],
+                    environment={
+                        "LANG": "C",
+                        "LC_ALL": "C",
+                        "TERM": "xterm-256color",
+                        "TERM_PROGRAM": term_program,
+                        "ASCIINEMA_REC": "1",
+                    },
+                )
+                self.assertEqual(exit_status, 1)
+                self.assertIn(b'"reason":"tty_invalid"', transcript)
+                self.assertNotIn(b"execution_python_absolute_path", transcript)
+
+    def test_launcher_rejects_every_startup_poison_variable_before_prompt(self):
+        launcher_source = LAUNCHER.read_text(encoding="utf-8")
+        for variable in LAUNCHER_POISON_VARIABLES:
+            with self.subTest(variable=variable):
+                self.assertIn(variable, launcher_source)
+                environment = {
+                    "LANG": "C",
+                    "LC_ALL": "C",
+                    "TERM": "xterm-256color",
+                    variable: "",
+                }
+                if variable in {"BASH_ENV", "ENV"}:
+                    marker = self.root / f"{variable}-sourced"
+                    poison = self.root / f"{variable}-poison"
+                    poison.write_text(
+                        f"echo sourced > {str(marker)!r}\n",
+                        encoding="ascii",
+                    )
+                    environment[variable] = os.fspath(poison)
+                result = subprocess.run(
+                    [os.fspath(LAUNCHER)],
+                    env=environment,
+                    check=False,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=10,
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.stdout, b"")
+                diagnostic = json.loads(result.stderr)
+                if variable.startswith("DYLD_") and diagnostic["reason"] == "tty_invalid":
+                    # macOS SIP can strip DYLD_* variables before /bin/sh starts.
+                    # The source-list assertion above still pins the reviewed
+                    # rejection for hosts where the variable is observable.
+                    pass
+                else:
+                    self.assertEqual(diagnostic["reason"], "startup_environment_invalid")
+                self.assertNotIn(variable.encode("ascii"), result.stderr)
+                if variable in {"BASH_ENV", "ENV"}:
+                    self.assertFalse(marker.exists())
+
+    def test_launcher_rejects_pythonpath_poison_before_private_prompt(self):
+        exit_status, transcript = run_pty_command(
+            LAUNCHER,
+            [],
+            environment={
+                "LANG": "C",
+                "LC_ALL": "C",
+                "TERM": "xterm-256color",
+                "PYTHONPATH": "SYNTHETIC_PYTHONPATH_POISON",
+            },
+        )
+        self.assertEqual(exit_status, 1)
+        self.assertIn(b'"reason":"startup_environment_invalid"', transcript)
+        self.assertNotIn(b"execution_python_absolute_path", transcript)
+        self.assertNotIn(b"SYNTHETIC_PYTHONPATH_POISON", transcript)
+
+    def test_operator_component_rejects_direct_nonisolated_python(self):
+        result = subprocess.run(
+            [sys.executable, os.fspath(MIGRATION / "author-lovable-toc-operator-session.py")],
+            check=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=10,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, b"")
+        self.assertEqual(
+            json.loads(result.stderr),
+            {
+                "diagnostic_version": 1,
+                "reason": "startup_environment_invalid",
+                "stage": "annotation_operator_session",
+                "status": "failed",
+            },
+        )
+        self.assertNotIn(b"Traceback", result.stderr)
 
 
 def _wait_status(status: int) -> int:

@@ -1007,10 +1007,42 @@ def _validate_tty_fd() -> int:
     if descriptor < 3:
         _fail("tty_invalid")
     try:
-        metadata = os.fstat(descriptor)
-    except OSError as exc:
+        before = os.fstat(descriptor)
+        if not stat.S_ISCHR(before.st_mode) or not os.isatty(descriptor):
+            _fail("tty_invalid")
+        controlling_fd = os.open(
+            "/dev/tty", os.O_RDONLY | getattr(os, "O_NOCTTY", 0)
+        )
+        try:
+            controlling = os.fstat(controlling_fd)
+            if (
+                not stat.S_ISCHR(controlling.st_mode)
+                or not os.isatty(controlling_fd)
+                or (controlling.st_dev, controlling.st_rdev)
+                != (before.st_dev, before.st_rdev)
+            ):
+                _fail("tty_invalid")
+        finally:
+            os.close(controlling_fd)
+        if os.tcgetpgrp(descriptor) != os.getpgrp():
+            _fail("tty_invalid")
+        termios.tcgetattr(descriptor)
+        after = os.fstat(descriptor)
+    except OperatorSessionError:
+        raise
+    except (OSError, termios.error) as exc:
         raise OperatorSessionError("tty_invalid") from exc
-    if not stat.S_ISCHR(metadata.st_mode):
+    if (
+        before.st_dev,
+        before.st_ino,
+        before.st_rdev,
+        before.st_mode,
+    ) != (
+        after.st_dev,
+        after.st_ino,
+        after.st_rdev,
+        after.st_mode,
+    ):
         _fail("tty_invalid")
     return descriptor
 

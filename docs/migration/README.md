@@ -133,7 +133,11 @@ Only then may the lock become a durable released marker. A TTY write, EOF,
 wrong acknowledgement, terminal attribute/read failure, or private
 record-publication ambiguity remains blocked by the lock and/or indeterminate
 state; piping, clipboard transfer, shell-history retention, chat retention, and
-terminal recording are still prohibited.
+terminal recording are still prohibited. The session and annotation roots, and
+their direct parents, must be approved owner-private mode-`0700` directories
+outside Git. The wrapper rejects known startup-loader, remote, multiplexer, and
+recorder markers before private input, and the isolated Python component
+revalidates its descriptor as the stable foreground controlling TTY.
 
 Later reviewed authoring actions still use the lower-level zero-argument
 `run-lovable-toc-annotation-authoring.sh` launcher, but only after a reviewed

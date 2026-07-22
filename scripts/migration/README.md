@@ -692,8 +692,11 @@ is distinct from the annotation root because the annotation root has strict
 contents (`checkpoints/`, authoring lock/release/indeterminate names, and later
 optional final package). Both roots must be absolute, canonical, executor-owned,
 non-symlink directories outside Git, mode `0700`, and on the approved private
-filesystem. The session wrapper creates the session root and annotation root
-with no replacement; an existing path stops fail-closed. All session files are
+filesystem. The direct parent of each root must already be an approved
+executor-owned, non-symlink, mode-`0700` private directory on that same approved
+filesystem; a permissive or ambiguous parent is outside the operator contract.
+The session wrapper creates the session root and annotation root with no
+replacement; an existing path stops fail-closed. All session files are
 single-link regular files at mode `0400`, published by no-replace atomic rename
 with file and directory fsync.
 
@@ -739,7 +742,13 @@ kernel-held executable descriptor for Python. It minimizes these surfaces by
 requiring a fresh local foreground TTY, no known recorder/remote/multiplexer
 markers, no shell command line containing the bindings, no exported
 `TOC_AUTHOR_*` block, no ordinary temp file, disabled core files, clean checkout
-and reviewed blob checks, and isolated `-I -S -B` Python.
+and reviewed blob checks, and isolated `-I -S -B` Python. The operator-session
+launcher rejects the same reviewed native-loader, shell-startup, and
+Python-startup poison variables used by sibling migration launchers, rejects
+`ASCIINEMA_REC` regardless of terminal brand, and the Python component then
+revalidates its private descriptor as a stable character-device controlling TTY
+in the current foreground process group with readable termios state before any
+private operator prompt is accepted.
 
 The launcher has no defaults for private inputs or approval identities. Supply
 the following environment contract out of band; do not place a real value in

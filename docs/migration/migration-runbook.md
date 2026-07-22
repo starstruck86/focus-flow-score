@@ -742,12 +742,18 @@ verified local controlling TTY, passes only the approved Python/check-out
 bootstrap to the isolated child over stdin, and writes a private immutable
 authorization record before it creates the annotation root or invokes
 authoring. The operator-session root is separate from the annotation root; both
-must be approved owner-private mode-`0700` roots outside Git. Authorization and
-resume records are canonical JSON, single-link mode-`0400`, no-replace,
-fsynced files. The authorization digest is displayed on the private TTY and
-requires `authorization_digest_recorded`; it is not self-approval of observed
-package metadata. External approval remains the trust anchor for all expected
-bindings.
+must be approved owner-private mode-`0700` roots outside Git, and each direct
+parent must already be an approved owner-private, non-symlink, mode-`0700`
+directory on the approved filesystem. Authorization and resume records are
+canonical JSON, single-link mode-`0400`, no-replace, fsynced files. The
+authorization digest is displayed on the private TTY and requires
+`authorization_digest_recorded`; it is not self-approval of observed package
+metadata. External approval remains the trust anchor for all expected bindings.
+The wrapper rejects reviewed native-loader, shell-startup, Python-startup,
+remote, multiplexer, IDE-terminal, and recorder markers before private input;
+its isolated Python child then rechecks the inherited private descriptor as a
+stable character-device controlling TTY in the current foreground process group
+with readable termios state.
 
 The wrapper invokes only generation-0 `initialize` and can publish only
 generation 1. It records the exact `resume_generation`,
