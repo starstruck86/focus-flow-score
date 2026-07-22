@@ -1,11 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
-  "properties": {
-    "annotation_root": { "type": "string" },
-    "artifact_kind": { "const": "lovable_toc_operator_resume" },
-    "authorization_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
-    "authoring_session_identity": { "type": "string" },
+  "$defs": {
     "capture": {
       "additionalProperties": false,
       "properties": {
@@ -22,35 +17,96 @@
       ],
       "type": "object"
     },
-    "execution_checkout_sha": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
-    "format_version": { "const": 1 },
-    "operator_session_procedure_identity_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
-    "operator_identity": { "type": "string" },
-    "primary_operator_identity": { "type": "string" },
-    "procedure_identity_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
-    "python_identity_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
-    "resume_checkpoint_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
-    "resume_generation": { "minimum": 1, "type": "integer" },
-    "resume_release_token": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
-    "session_id": { "type": "string" }
+    "predecessor": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "correction_review",
+            "data_reference_review",
+            "finalize",
+            "managed_review",
+            "manual_conflict_review",
+            "peer_review",
+            "primary_review",
+            "relationship_review",
+            "revisit_unresolved",
+            "sequence_review",
+            "status"
+          ]
+        },
+        "action_authorization_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "resume_name": { "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$", "type": "string" },
+        "resume_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+      },
+      "required": [
+        "action",
+        "action_authorization_sha256",
+        "resume_name",
+        "resume_sha256"
+      ],
+      "type": "object"
+    }
   },
-  "required": [
-    "annotation_root",
-    "artifact_kind",
-    "authorization_sha256",
-    "authoring_session_identity",
-    "capture",
-    "execution_checkout_sha",
-    "format_version",
-    "operator_session_procedure_identity_sha256",
-    "operator_identity",
-    "primary_operator_identity",
-    "procedure_identity_sha256",
-    "python_identity_sha256",
-    "resume_checkpoint_sha256",
-    "resume_generation",
-    "resume_release_token",
-    "session_id"
-  ],
-  "type": "object"
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "annotation_root": { "type": "string" },
+        "artifact_kind": { "const": "lovable_toc_operator_resume" },
+        "authorization_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "authoring_session_identity": { "type": "string" },
+        "capture": { "$ref": "#/$defs/capture" },
+        "execution_checkout_sha": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+        "format_version": { "const": 2 },
+        "operator_session_procedure_identity_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "predecessor": { "$ref": "#/$defs/predecessor" },
+        "primary_operator_identity": { "type": "string" },
+        "procedure_identity_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "python_identity_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "resume_checkpoint_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "resume_generation": { "minimum": 1, "type": "integer" },
+        "resume_release_token": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+      },
+      "required": [
+        "annotation_root",
+        "artifact_kind",
+        "authorization_sha256",
+        "authoring_session_identity",
+        "capture",
+        "execution_checkout_sha",
+        "format_version",
+        "operator_session_procedure_identity_sha256",
+        "primary_operator_identity",
+        "procedure_identity_sha256",
+        "python_identity_sha256",
+        "resume_checkpoint_sha256",
+        "resume_generation",
+        "resume_release_token"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_kind": { "const": "lovable_toc_operator_terminal" },
+        "finalization_authorization_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "format_version": { "const": 2 },
+        "predecessor": { "$ref": "#/$defs/predecessor" },
+        "resume_checkpoint_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "resume_generation": { "minimum": 1, "type": "integer" },
+        "status": { "const": "final_candidate_published_unvalidated" }
+      },
+      "required": [
+        "artifact_kind",
+        "finalization_authorization_sha256",
+        "format_version",
+        "predecessor",
+        "resume_checkpoint_sha256",
+        "resume_generation",
+        "status"
+      ],
+      "type": "object"
+    }
+  ]
 }

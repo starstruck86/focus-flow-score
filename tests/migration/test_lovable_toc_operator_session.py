@@ -158,6 +158,7 @@ class TocOperatorSessionTest(unittest.TestCase):
         authorization_ack: str = "authorization_digest_recorded",
     ) -> list[str]:
         return [
+            "initialize",
             session_id,
             primary,
             operator,
@@ -186,7 +187,13 @@ class TocOperatorSessionTest(unittest.TestCase):
             authorization_ack,
         ]
 
-    def run_with_responses(self, responses: list[str], *, execute_authoring_side_effect=None):
+    def run_with_responses(
+        self,
+        responses: list[str],
+        *,
+        execute_authoring_side_effect=None,
+        tty_write_side_effect=None,
+    ):
         seen_prompts: list[bytes] = []
         iterator = iter(responses)
 
@@ -202,9 +209,18 @@ class TocOperatorSessionTest(unittest.TestCase):
         def fake_tty_write(_tty_fd: int, payload: bytes) -> None:
             tty_writes.append(payload)
 
+        def fake_author_tty_write(_tty_fd: int, payload: bytes) -> None:
+            tty_writes.append(payload)
+
         with ExitStack() as stack:
             stack.enter_context(mock.patch.object(SESSION, "_read_line", side_effect=fake_read))
-            stack.enter_context(mock.patch.object(SESSION, "_tty_write", side_effect=fake_tty_write))
+            stack.enter_context(
+                mock.patch.object(
+                    SESSION,
+                    "_tty_write",
+                    side_effect=tty_write_side_effect or fake_tty_write,
+                )
+            )
             stack.enter_context(
                 mock.patch.object(
                     SESSION, "_operator_session_procedure_identity", return_value=SHA_D
@@ -212,7 +228,7 @@ class TocOperatorSessionTest(unittest.TestCase):
             )
             stack.enter_context(mock.patch.object(SESSION, "_procedure_identity", return_value=SHA_C))
             stack.enter_context(mock.patch.object(AUTHOR, "_authoring_procedure_identity", return_value=SHA_C))
-            stack.enter_context(mock.patch.object(AUTHOR, "_write_tty", return_value=None))
+            stack.enter_context(mock.patch.object(AUTHOR, "_write_tty", side_effect=fake_author_tty_write))
             stack.enter_context(mock.patch.object(AUTHOR, "_require_resume_acknowledgement", return_value=None))
             if execute_authoring_side_effect is not None:
                 stack.enter_context(
@@ -224,6 +240,82 @@ class TocOperatorSessionTest(unittest.TestCase):
                 )
             result = SESSION.run_session(9, self.bootstrap)
         return result, seen_prompts, tty_writes
+
+    def action_responses(
+        self,
+        action: str,
+        *,
+        primary: str = "Primary Reviewer",
+        operator: str = "Primary Reviewer",
+        session_id: str = "operator-session-action",
+        authoring_session: str = "authoring-session-action",
+        expected_state: str = "PRIMARY_REVIEW_REQUIRED",
+        finalization_authorization: str = "",
+        action_ack: str = "action_authorization_digest_recorded",
+    ) -> list[str]:
+        responses = [
+            action,
+            session_id,
+            primary,
+            operator,
+            authoring_session,
+            expected_state,
+        ]
+        if action == "finalize":
+            responses.append(finalization_authorization or AUTHOR.FINALIZATION_AUTHORIZATION)
+        responses.extend(
+            [
+                os.fspath(self.session_root),
+                SHA_D,
+                SHA_C,
+                SESSION.TTY_ATTESTATION,
+                action_ack,
+            ]
+        )
+        return responses
+
+    def current_resume_path(self) -> Path:
+        matches = [
+            path
+            for path in self.session_root.iterdir()
+            if path.name.startswith(SESSION.CURRENT_RESUME_PREFIX)
+        ]
+        self.assertEqual(len(matches), 1)
+        return matches[0]
+
+    def load_private_json(self, path: Path):
+        return capture_contract.strict_json_loads(path.read_bytes())
+
+    def digest_for(self, label: str) -> str:
+        return hashlib.sha256(label.encode("ascii")).hexdigest()
+
+    def initialize_operator_session(self) -> dict:
+        status, _diagnostic = self.run_with_responses(self.responses())[0]
+        self.assertEqual(status, 2)
+        return self.load_private_json(self.current_resume_path())
+
+    def fake_action_execute(self, action: str, seen: list[dict[str, str]]):
+        def fake_execute(environment, _tty_fd, *, resume_recorder):
+            copied = dict(environment)
+            seen.append(copied)
+            if action != "finalize":
+                current_generation = int(copied["TOC_AUTHOR_EXPECTED_HEAD_GENERATION"])
+                if action == "status":
+                    next_generation = current_generation
+                    next_head = copied["TOC_AUTHOR_EXPECTED_HEAD_SHA256"]
+                else:
+                    next_generation = current_generation + 1
+                    next_head = self.digest_for(f"{action}-checkpoint-{current_generation}")
+                next_token = self.digest_for(f"{action}-release-{current_generation}")
+                resume_recorder(next_generation, next_head, next_token)
+            return (
+                2,
+                b'{"authoring_state":"SYNTHETIC","diagnostic_version":1,'
+                b'"reason":"blocked","review_gate":"REVIEW_REQUIRED",'
+                b'"status":"review_required"}\n',
+            )
+
+        return fake_execute
 
     def test_initialize_creates_private_authorization_and_resume_records(self):
         status, diagnostic = self.run_with_responses(self.responses())[0]
@@ -239,7 +331,7 @@ class TocOperatorSessionTest(unittest.TestCase):
 
         session_names = sorted(path.name for path in self.session_root.iterdir())
         authorization_names = [name for name in session_names if name.startswith("authorization-")]
-        resume_names = [name for name in session_names if name.startswith("resume-g")]
+        resume_names = [name for name in session_names if name.startswith("resume-current-g")]
         self.assertEqual(len(authorization_names), 1)
         self.assertEqual(len(resume_names), 1)
         for name in authorization_names + resume_names:
@@ -337,8 +429,8 @@ class TocOperatorSessionTest(unittest.TestCase):
     def test_resume_record_consumption_returns_token_only_on_exact_match(self):
         status, _diagnostic = self.run_with_responses(self.responses())[0]
         self.assertEqual(status, 2)
-        resume_path = next(path for path in self.session_root.iterdir() if path.name.startswith("resume-g"))
-        authorization_path = next(path for path in self.session_root.iterdir() if path.name.startswith("authorization-"))
+        resume_path = next(path for path in self.session_root.iterdir() if path.name.startswith("resume-current-g"))
+        authorization_path = next(path for path in self.session_root.iterdir() if path.name.startswith("authorization-root-"))
         authorization = capture_contract.strict_json_loads(authorization_path.read_bytes())
         authorization_sha = hashlib.sha256(
             capture_contract.canonical_json_bytes(authorization)
@@ -356,7 +448,6 @@ class TocOperatorSessionTest(unittest.TestCase):
                 expected_generation=1,
                 expected_checkpoint_sha256=resume["resume_checkpoint_sha256"],
                 expected_operator_identity="Primary Reviewer",
-                expected_session_id="operator-session-1",
             )
             self.assertEqual(token, resume["resume_release_token"])
             with self.assertRaises(SESSION.OperatorSessionError):
@@ -371,6 +462,319 @@ class TocOperatorSessionTest(unittest.TestCase):
                 )
         finally:
             os.close(root_fd)
+
+    def test_every_existing_post_initialize_action_consumes_resume_and_retires_predecessor(self):
+        resume = self.initialize_operator_session()
+        actions = [
+            action
+            for action in sorted(AUTHOR.ACTION_VALUES - {"initialize", "finalize"})
+        ] + ["finalize"]
+        for action in actions:
+            with self.subTest(action=action):
+                before_path = self.current_resume_path()
+                before_resume = self.load_private_json(before_path)
+                before_sha = hashlib.sha256(before_path.read_bytes()).hexdigest()
+                seen: list[dict[str, str]] = []
+                operator = "Peer Human" if action == "peer_review" else "Primary Reviewer"
+                expected_state = "PEER_REVIEW_REQUIRED" if action == "peer_review" else "PRIMARY_REVIEW_REQUIRED"
+                if action == "finalize":
+                    expected_state = "FINALIZATION_ELIGIBLE"
+                result, prompts, writes = self.run_with_responses(
+                    self.action_responses(
+                        action,
+                        operator=operator,
+                        expected_state=expected_state,
+                    ),
+                    execute_authoring_side_effect=self.fake_action_execute(action, seen),
+                )
+                self.assertEqual(result[0], 2)
+                self.assertEqual(len(seen), 1)
+                environment = seen[0]
+                self.assertEqual(environment["TOC_AUTHOR_ACTION"], action)
+                self.assertEqual(
+                    environment["TOC_AUTHOR_EXPECTED_HEAD_GENERATION"],
+                    str(before_resume["resume_generation"]),
+                )
+                self.assertEqual(
+                    environment["TOC_AUTHOR_EXPECTED_HEAD_SHA256"],
+                    before_resume["resume_checkpoint_sha256"],
+                )
+                self.assertEqual(
+                    environment["TOC_AUTHOR_EXPECTED_RELEASE_TOKEN"],
+                    before_resume["resume_release_token"],
+                )
+                self.assertEqual(
+                    environment.get("TOC_AUTHOR_EXPECTED_REVIEW_STATE"),
+                    expected_state,
+                )
+                self.assertEqual(
+                    environment["TOC_AUTHOR_OPERATOR_IDENTITY"],
+                    operator,
+                )
+                self.assertEqual(
+                    environment["TOC_AUTHOR_FINALIZATION_AUTHORIZATION"],
+                    AUTHOR.FINALIZATION_AUTHORIZATION if action == "finalize" else "",
+                )
+                prompt_bytes = b"".join(prompts)
+                self.assertNotIn(b"resume_generation", prompt_bytes)
+                self.assertNotIn(b"resume_checkpoint_sha256", prompt_bytes)
+                self.assertNotIn(b"resume_release_token", prompt_bytes)
+                self.assertIn(
+                    b"action_authorization_digest=", b"".join(writes)
+                )
+
+                session_names = sorted(path.name for path in self.session_root.iterdir())
+                self.assertNotIn(SESSION.OPERATOR_SESSION_LOCK_NAME, session_names)
+                self.assertNotIn("OPERATOR_SESSION_INDETERMINATE", session_names)
+                self.assertFalse(before_path.exists())
+                retired_names = [
+                    name for name in session_names if name.startswith(SESSION.RETIRED_RESUME_PREFIX)
+                ]
+                self.assertTrue(retired_names)
+                self.assertTrue(
+                    any(
+                        hashlib.sha256((self.session_root / name).read_bytes()).hexdigest()
+                        == before_sha
+                        for name in retired_names
+                    )
+                )
+                action_auth_names = [
+                    name for name in session_names if name.startswith("authorization-action-")
+                ]
+                self.assertTrue(action_auth_names)
+                action_auth_matches = [
+                    self.load_private_json(self.session_root / name)
+                    for name in action_auth_names
+                    if self.load_private_json(self.session_root / name)["resume"]["name"]
+                    == before_path.name
+                ]
+                self.assertEqual(len(action_auth_matches), 1)
+                action_auth = action_auth_matches[0]
+                action_auth_sha = hashlib.sha256(
+                    capture_contract.canonical_json_bytes(action_auth)
+                ).hexdigest()
+                self.assertEqual(action_auth["action"], action)
+                self.assertEqual(action_auth["resume"]["name"], before_path.name)
+                self.assertEqual(action_auth["resume"]["sha256"], before_sha)
+                if action == "finalize":
+                    self.assertFalse(
+                        any(
+                            path.name.startswith(SESSION.CURRENT_RESUME_PREFIX)
+                            for path in self.session_root.iterdir()
+                        )
+                    )
+                    terminal_names = [
+                        name
+                        for name in session_names
+                        if name.startswith(SESSION.TERMINAL_RESUME_PREFIX)
+                    ]
+                    self.assertEqual(len(terminal_names), 1)
+                    terminal = self.load_private_json(self.session_root / terminal_names[0])
+                    self.assertEqual(terminal["artifact_kind"], SESSION.TERMINAL_RESUME_KIND)
+                    self.assertEqual(
+                        terminal["predecessor"]["action_authorization_sha256"],
+                        action_auth_sha,
+                    )
+                else:
+                    resume_path = self.current_resume_path()
+                    resume = self.load_private_json(resume_path)
+                    self.assertEqual(resume["artifact_kind"], SESSION.RESUME_KIND)
+                    self.assertEqual(resume["format_version"], SESSION.RESUME_FORMAT_VERSION)
+                    self.assertEqual(resume["predecessor"]["action"], action)
+                    self.assertEqual(
+                        resume["predecessor"]["action_authorization_sha256"],
+                        action_auth_sha,
+                    )
+                    self.assertEqual(resume["predecessor"]["resume_name"], before_path.name)
+                    self.assertEqual(resume["predecessor"]["resume_sha256"], before_sha)
+
+    def test_real_status_action_keeps_same_checkpoint_but_rotates_private_resume_record(self):
+        initial_resume = self.initialize_operator_session()
+        before_path = self.current_resume_path()
+        before_sha = hashlib.sha256(before_path.read_bytes()).hexdigest()
+        result, _prompts, writes = self.run_with_responses(
+            self.action_responses("status", expected_state="PRIMARY_REVIEW_REQUIRED")
+        )
+        self.assertEqual(result[0], 2)
+        after_path = self.current_resume_path()
+        after_resume = self.load_private_json(after_path)
+        self.assertEqual(after_resume["resume_generation"], initial_resume["resume_generation"])
+        self.assertEqual(
+            after_resume["resume_checkpoint_sha256"],
+            initial_resume["resume_checkpoint_sha256"],
+        )
+        self.assertNotEqual(after_resume["resume_release_token"], initial_resume["resume_release_token"])
+        self.assertNotEqual(after_path.name, before_path.name)
+        self.assertFalse(before_path.exists())
+        self.assertTrue(
+            any(path.name.startswith(SESSION.RETIRED_RESUME_PREFIX) for path in self.session_root.iterdir())
+        )
+        self.assertIn(b"resume_record_private", b"".join(writes))
+        self.assertNotIn(initial_resume["resume_release_token"].encode("ascii"), b"".join(writes))
+        retired = [
+            path
+            for path in self.session_root.iterdir()
+            if path.name.startswith(SESSION.RETIRED_RESUME_PREFIX)
+        ][0]
+        self.assertEqual(hashlib.sha256(retired.read_bytes()).hexdigest(), before_sha)
+
+    def test_wrong_expected_review_state_fails_with_fixed_reason_and_keeps_resume_current(self):
+        self.initialize_operator_session()
+        current = self.current_resume_path()
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses("status", expected_state="FINALIZATION_ELIGIBLE")
+            )
+        self.assertEqual(raised.exception.reason, "review_transition_invalid")
+        self.assertTrue(current.exists())
+        self.assertFalse(any(path.name.startswith(SESSION.RETIRED_RESUME_PREFIX) for path in self.session_root.iterdir()))
+        self.assertTrue((self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists())
+
+    def test_action_prompt_rejects_peer_identity_substitution_before_private_access(self):
+        for operator in ("Primary Reviewer", "primary reviewer", "codex-agent"):
+            with self.subTest(operator=operator):
+                capture_before = immutable_tree_snapshot(self.capture_root)
+                with self.assertRaises(SESSION.OperatorSessionError) as raised:
+                    self.run_with_responses(
+                        self.action_responses(
+                            "peer_review",
+                            operator=operator,
+                            expected_state="PEER_REVIEW_REQUIRED",
+                        )
+                    )
+                self.assertEqual(raised.exception.reason, "binding_mismatch")
+                self.assertFalse(self.session_root.exists())
+                self.assertFalse(self.annotation_root.exists())
+                self.assertEqual(immutable_tree_snapshot(self.capture_root), capture_before)
+
+    def test_finalize_wrong_authorization_rejects_before_private_access(self):
+        self.initialize_operator_session()
+        before = immutable_tree_snapshot(self.session_root)
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses(
+                    "finalize",
+                    expected_state="FINALIZATION_ELIGIBLE",
+                    finalization_authorization="NOT_APPROVED",
+                )
+            )
+        self.assertEqual(raised.exception.reason, "finalization_incomplete")
+        self.assertEqual(immutable_tree_snapshot(self.session_root), before)
+
+    def test_duplicate_current_resume_records_block_resume_and_mark_indeterminate(self):
+        self.initialize_operator_session()
+        current = self.current_resume_path()
+        duplicate = self.session_root / (
+            SESSION.CURRENT_RESUME_PREFIX + "0000000000000001-" + SHA_B + ".json"
+        )
+        duplicate.write_bytes(current.read_bytes())
+        duplicate.chmod(0o400)
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses("primary_review"),
+                execute_authoring_side_effect=self.fake_action_execute("primary_review", []),
+            )
+        self.assertEqual(raised.exception.reason, "history_conflict")
+        self.assertTrue((self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists())
+
+    def test_duplicate_root_authorization_digest_blocks_resume(self):
+        self.initialize_operator_session()
+        authorization = next(
+            path
+            for path in self.session_root.iterdir()
+            if path.name.startswith("authorization-root-")
+        )
+        duplicate = self.session_root / "authorization-root-duplicate.json"
+        duplicate.write_bytes(authorization.read_bytes())
+        duplicate.chmod(0o400)
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses("primary_review"),
+                execute_authoring_side_effect=self.fake_action_execute("primary_review", []),
+            )
+        self.assertEqual(raised.exception.reason, "history_conflict")
+        self.assertTrue((self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists())
+
+    def test_stale_resume_procedure_identity_blocks_action_without_retiring_current(self):
+        self.initialize_operator_session()
+        current = self.current_resume_path()
+        resume = self.load_private_json(current)
+        resume["procedure_identity_sha256"] = SHA_A
+        current.chmod(0o600)
+        current.write_bytes(capture_contract.canonical_json_bytes(resume))
+        current.chmod(0o400)
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses("primary_review"),
+                execute_authoring_side_effect=self.fake_action_execute("primary_review", []),
+            )
+        self.assertEqual(raised.exception.reason, "binding_mismatch")
+        self.assertTrue(current.exists())
+        self.assertFalse(any(path.name.startswith(SESSION.RETIRED_RESUME_PREFIX) for path in self.session_root.iterdir()))
+        self.assertTrue((self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists())
+
+    def test_successor_publication_failure_leaves_predecessor_current_and_blocks_resume(self):
+        self.initialize_operator_session()
+        current = self.current_resume_path()
+        publish_calls = 0
+        real_publish = SESSION._publish_private_json_at
+
+        def planted_publish(root_fd, final_name, payload):
+            nonlocal publish_calls
+            publish_calls += 1
+            if publish_calls == 2:
+                raise SESSION.OperatorSessionError("publication_failed")
+            return real_publish(root_fd, final_name, payload)
+
+        with mock.patch.object(SESSION, "_publish_private_json_at", side_effect=planted_publish):
+            with self.assertRaises(SESSION.OperatorSessionError) as raised:
+                self.run_with_responses(
+                    self.action_responses("primary_review"),
+                    execute_authoring_side_effect=self.fake_action_execute("primary_review", []),
+                )
+        self.assertEqual(raised.exception.reason, "publication_failed")
+        self.assertTrue(current.exists())
+        self.assertFalse(any(path.name.startswith(SESSION.RETIRED_RESUME_PREFIX) for path in self.session_root.iterdir()))
+        self.assertTrue((self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists())
+
+    def test_failure_after_successor_publication_never_leaves_normal_dual_current_state(self):
+        self.initialize_operator_session()
+        current = self.current_resume_path()
+
+        def fake_execute(environment, _tty_fd, *, resume_recorder):
+            resume_recorder(
+                int(environment["TOC_AUTHOR_EXPECTED_HEAD_GENERATION"]) + 1,
+                SHA_A,
+                SHA_B,
+            )
+            raise SESSION.OperatorSessionError("tty_invalid")
+
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses("primary_review"),
+                execute_authoring_side_effect=fake_execute,
+            )
+        self.assertEqual(raised.exception.reason, "tty_invalid")
+        current_records = [
+            path for path in self.session_root.iterdir()
+            if path.name.startswith(SESSION.CURRENT_RESUME_PREFIX)
+        ]
+        self.assertEqual(len(current_records), 2)
+        self.assertTrue(current.exists())
+        self.assertFalse(any(path.name.startswith(SESSION.RETIRED_RESUME_PREFIX) for path in self.session_root.iterdir()))
+        self.assertTrue((self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists())
+
+    def test_action_ack_failure_leaves_blocking_state_without_retiring_resume(self):
+        self.initialize_operator_session()
+        current = self.current_resume_path()
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses("primary_review", action_ack="wrong"),
+                execute_authoring_side_effect=self.fake_action_execute("primary_review", []),
+            )
+        self.assertEqual(raised.exception.reason, "input_invalid")
+        self.assertTrue(current.exists())
+        self.assertTrue((self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists())
 
     def test_launcher_does_not_export_toc_author_binding_block(self):
         launcher = LAUNCHER.read_text(encoding="utf-8")
@@ -556,9 +960,11 @@ class TocOperatorSessionTest(unittest.TestCase):
 
     def test_tty_write_failure_before_authorization_creates_no_private_roots(self):
         capture_before = immutable_tree_snapshot(self.capture_root)
-        with mock.patch.object(SESSION, "_tty_write", side_effect=SESSION.OperatorSessionError("tty_invalid")):
-            with self.assertRaises(SESSION.OperatorSessionError) as raised:
-                SESSION.run_session(9, self.bootstrap)
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.responses(),
+                tty_write_side_effect=SESSION.OperatorSessionError("tty_invalid"),
+            )
         self.assertEqual(raised.exception.reason, "tty_invalid")
         self.assertFalse(self.session_root.exists())
         self.assertFalse(self.annotation_root.exists())
@@ -566,7 +972,7 @@ class TocOperatorSessionTest(unittest.TestCase):
 
     def test_malformed_count_input_rejects_before_private_roots_exist(self):
         responses = self.responses()
-        responses[12] = "not-a-count"
+        responses[13] = "not-a-count"
         capture_before = immutable_tree_snapshot(self.capture_root)
         with self.assertRaises(SESSION.OperatorSessionError) as raised:
             self.run_with_responses(responses)

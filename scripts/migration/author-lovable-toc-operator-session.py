@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Reviewed private operator-session wrapper for TOC annotation initialization.
+"""Reviewed private operator-session wrapper for TOC annotation authoring.
 
 This internal component is launched only by
 ``run-lovable-toc-annotation-operator-session.sh``.  It collects the approved
-authoring bindings from the verified local controlling TTY, publishes one
-immutable private authorization record, creates the empty annotation root, and
-runs exactly one generation-0 ``initialize`` operation.  It never classifies TOC
-entries, invokes validation, generates restore planning, connects to a database,
-or performs any network operation.
+authoring bindings from the verified local controlling TTY, publishes immutable
+private authorization records, creates the empty annotation root for the initial
+operation, and then consumes private resume records for one later reviewed
+authoring action per invocation.  It never invokes validation, generates restore
+planning, connects to a database, or performs any network operation.
 
 Ordinary stdout/stderr carry fixed diagnostics only.  Private values are read
 from and displayed only to the held TTY descriptor.
@@ -57,6 +57,7 @@ import json
 import os
 import re
 import resource
+import secrets
 import stat
 import subprocess
 import termios
@@ -312,8 +313,17 @@ else:
 
 STAGE = "annotation_operator_session"
 FORMAT_VERSION = 1
+ACTION_AUTHORIZATION_FORMAT_VERSION = 2
+RESUME_FORMAT_VERSION = 2
 AUTHORIZATION_KIND = "lovable_toc_operator_authorization"
+ACTION_AUTHORIZATION_KIND = "lovable_toc_operator_action_authorization"
 RESUME_KIND = "lovable_toc_operator_resume"
+TERMINAL_RESUME_KIND = "lovable_toc_operator_terminal"
+OPERATOR_SESSION_LOCK_NAME = "operator-session-lock"
+OPERATOR_SESSION_RELEASED_NAME = "operator-session-released"
+CURRENT_RESUME_PREFIX = "resume-current-g"
+RETIRED_RESUME_PREFIX = "resume-retired-g"
+TERMINAL_RESUME_PREFIX = "resume-terminal-g"
 TTY_ATTESTATION = "LOCAL_CONTROLLING_TTY_NO_RECORDING_NO_REMOTE_NO_CLIPBOARD"
 INITIAL_RELEASE_TOKEN = "0" * 64
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$", re.ASCII)
@@ -327,17 +337,37 @@ PYTHON_VERSION_RE = re.compile(
 )
 MAX_OPERATOR_INPUT_BYTES = 4096
 MAX_RECORD_BYTES = 1024 * 1024
+AUTHORING_STATES = frozenset(
+    {
+        "PRIMARY_REVIEW_REQUIRED",
+        "REVISIT_REQUIRED",
+        "RELATIONSHIP_REVIEW_REQUIRED",
+        "DATA_REFERENCE_REVIEW_REQUIRED",
+        "SEQUENCE_REVIEW_REQUIRED",
+        "MANAGED_GLOBAL_REVIEW_REQUIRED",
+        "MANUAL_CONFLICT_REVIEW_REQUIRED",
+        "PEER_REVIEW_REQUIRED",
+        "FINALIZATION_REVIEW_REQUIRED",
+        "FINALIZATION_ELIGIBLE",
+    }
+)
+AI_PEER_RE = re.compile(r"(?:^|[ ._@()+:-])(?:ai|codex|claude|chatgpt|gpt|openai|agent)(?:$|[ ._@()+:-])", re.ASCII | re.IGNORECASE)
 
 
 class OperatorSessionError(RuntimeError):
     ALLOWED = frozenset(
         {
             "binding_mismatch",
+            "checkpoint_invalid",
             "cleanup_indeterminate",
+            "finalization_incomplete",
             "history_conflict",
+            "history_invalid",
             "input_invalid",
             "input_mutated",
             "publication_failed",
+            "publication_exists",
+            "review_transition_invalid",
             "tty_invalid",
             "internal_failure",
         }
@@ -566,32 +596,77 @@ def _load_private_json_at(root_fd: int, name: str, *, maximum: int = MAX_RECORD_
     return value
 
 
-def validate_resume_record_at(
-    root_fd: int,
-    name: str,
+def _assert_no_indeterminate(root_fd: int, *, allow_lock: bool = False) -> None:
+    try:
+        names = set(os.listdir(root_fd))
+    except OSError as exc:
+        raise OperatorSessionError("history_conflict") from exc
+    if "OPERATOR_SESSION_INDETERMINATE" in names or (
+        not allow_lock and OPERATOR_SESSION_LOCK_NAME in names
+    ):
+        _fail("history_conflict")
+
+
+def _find_unique_name(root_fd: int, *, prefix: str, suffix: str = ".json") -> str:
+    try:
+        names = [
+            name
+            for name in os.listdir(root_fd)
+            if type(name) is str and name.startswith(prefix) and name.endswith(suffix)
+        ]
+    except OSError as exc:
+        raise OperatorSessionError("history_conflict") from exc
+    if len(names) != 1:
+        _fail("history_conflict")
+    return names[0]
+
+
+def _active_resume_name(root_fd: int, *, allow_lock: bool = False) -> str:
+    _assert_no_indeterminate(root_fd, allow_lock=allow_lock)
+    current = [
+        name
+        for name in os.listdir(root_fd)
+        if type(name) is str and name.startswith(CURRENT_RESUME_PREFIX) and name.endswith(".json")
+    ]
+    if len(current) == 1:
+        return current[0]
+    if current:
+        _fail("history_conflict")
+    # Synthetic backwards-compatibility only: PR #28 never initialized a real
+    # session, but older tests can still exercise one v1-style resume name.
+    legacy = [
+        name
+        for name in os.listdir(root_fd)
+        if type(name) is str and name.startswith("resume-g") and name.endswith(".json")
+    ]
+    if len(legacy) == 1:
+        return legacy[0]
+    _fail("history_conflict")
+
+
+def _load_authorization_by_sha(root_fd: int, authorization_sha256: str) -> Mapping[str, Any]:
+    _sha(authorization_sha256)
+    matches: list[Mapping[str, Any]] = []
+    for name in os.listdir(root_fd):
+        if type(name) is not str or not name.startswith("authorization-root-") or not name.endswith(".json"):
+            continue
+        record = _load_private_json_at(root_fd, name)
+        if sha256_bytes(canonical_json_bytes(record)) == authorization_sha256:
+            matches.append(record)
+    if len(matches) != 1:
+        _fail("history_conflict")
+    return matches[0]
+
+
+def _validate_loaded_resume_record(
+    record: Mapping[str, Any],
     *,
     authorization_sha256: str,
-    expected_generation: int,
-    expected_checkpoint_sha256: str,
-    expected_operator_identity: str,
-    expected_session_id: str,
-) -> str:
-    """Return the private release token for a future exact resume.
-
-    This helper is intentionally not wired to an executable review action in
-    this PR.  It documents and tests the safe consumption boundary for later
-    authoring phases: descriptor-relative single-link mode-0400 record, strict
-    duplicate-key-rejecting canonical JSON, exact authorization/head/operator
-    binding, and no diagnostic disclosure of the token.
-    """
-
-    if type(expected_generation) is not int or expected_generation <= 0:
-        _fail("input_invalid")
+    expected_operator_identity: str | None = None,
+) -> Mapping[str, Any]:
     _sha(authorization_sha256)
-    _sha(expected_checkpoint_sha256)
-    _safe_identity(expected_operator_identity)
-    _safe_session(expected_session_id)
-    record = _load_private_json_at(root_fd, name)
+    if expected_operator_identity is not None:
+        _safe_identity(expected_operator_identity)
     expected_keys = {
         "annotation_root",
         "artifact_kind",
@@ -600,7 +675,6 @@ def validate_resume_record_at(
         "capture",
         "execution_checkout_sha",
         "format_version",
-        "operator_identity",
         "operator_session_procedure_identity_sha256",
         "primary_operator_identity",
         "procedure_identity_sha256",
@@ -608,21 +682,209 @@ def validate_resume_record_at(
         "resume_checkpoint_sha256",
         "resume_generation",
         "resume_release_token",
-        "session_id",
     }
-    if set(record) != expected_keys or record["artifact_kind"] != RESUME_KIND or record["format_version"] != FORMAT_VERSION:
+    successor_keys = expected_keys | {"predecessor"}
+    legacy_keys = expected_keys | {"operator_identity", "session_id"}
+    record_keys = set(record)
+    if record_keys != expected_keys and record_keys != successor_keys and record_keys != legacy_keys:
         _fail("history_conflict")
+    if record["artifact_kind"] != RESUME_KIND or record["format_version"] not in {FORMAT_VERSION, RESUME_FORMAT_VERSION}:
+        _fail("history_conflict")
+    capture = record["capture"]
     if (
-        record["authorization_sha256"] != authorization_sha256
-        or record["resume_generation"] != expected_generation
-        or record["resume_checkpoint_sha256"] != expected_checkpoint_sha256
-        or record["operator_identity"] != expected_operator_identity
-        or record["session_id"] != expected_session_id
+        type(capture) is not dict
+        or set(capture)
+        != {"capture_manifest_sha256", "evidence_run_id", "opaque_index_sha256", "raw_toc_sha256"}
+        or record["authorization_sha256"] != authorization_sha256
+        or type(record["resume_generation"]) is not int
+        or record["resume_generation"] <= 0
+        or type(record["resume_checkpoint_sha256"]) is not str
+        or HEX64_RE.fullmatch(record["resume_checkpoint_sha256"]) is None
         or type(record["resume_release_token"]) is not str
         or HEX64_RE.fullmatch(record["resume_release_token"]) is None
+        or type(record["primary_operator_identity"]) is not str
+        or SAFE_IDENTITY_RE.fullmatch(record["primary_operator_identity"]) is None
+        or type(record["authoring_session_identity"]) is not str
+        or SAFE_SESSION_RE.fullmatch(record["authoring_session_identity"]) is None
+    ):
+        _fail("history_conflict")
+    for value in (
+        capture["capture_manifest_sha256"],
+        capture["opaque_index_sha256"],
+        capture["raw_toc_sha256"],
+        record["procedure_identity_sha256"],
+        record["operator_session_procedure_identity_sha256"],
+        record["python_identity_sha256"],
+    ):
+        _sha(value)
+    if "predecessor" in record:
+        predecessor = record["predecessor"]
+        if (
+            type(predecessor) is not dict
+            or set(predecessor) != {"action", "action_authorization_sha256", "resume_name", "resume_sha256"}
+            or predecessor["action"] not in (AUTHOR.ACTION_VALUES - {"initialize"})
+            or type(predecessor["resume_name"]) is not str
+            or SAFE_CAPTURE_NAME_RE.fullmatch(predecessor["resume_name"]) is None
+        ):
+            _fail("history_conflict")
+        _sha(predecessor["action_authorization_sha256"])
+        _sha(predecessor["resume_sha256"])
+    _safe_session(capture["evidence_run_id"])
+    _git_sha(record["execution_checkout_sha"])
+    if (
+        expected_operator_identity is not None
+        and record["primary_operator_identity"] != expected_operator_identity
+    ):
+        _fail("history_conflict")
+    return record
+
+
+def validate_resume_record_at(
+    root_fd: int,
+    name: str,
+    *,
+    authorization_sha256: str,
+    expected_generation: int,
+    expected_checkpoint_sha256: str,
+    expected_operator_identity: str,
+    expected_session_id: str | None = None,
+) -> str:
+    """Return the private release token for an exact descriptor-bound resume."""
+
+    if type(expected_generation) is not int or expected_generation <= 0:
+        _fail("input_invalid")
+    _sha(expected_checkpoint_sha256)
+    record = _validate_loaded_resume_record(
+        _load_private_json_at(root_fd, name),
+        authorization_sha256=authorization_sha256,
+        expected_operator_identity=expected_operator_identity,
+    )
+    if (
+        record["resume_generation"] != expected_generation
+        or record["resume_checkpoint_sha256"] != expected_checkpoint_sha256
+        or (
+            expected_session_id is not None
+            and record.get("session_id") != expected_session_id
+        )
     ):
         _fail("history_conflict")
     return record["resume_release_token"]
+
+
+def _acquire_session_lock(root_fd: int) -> str:
+    _assert_no_indeterminate(root_fd)
+    token = secrets.token_hex(32)
+    payload = b"OPERATOR_SESSION_LOCK_V1 " + token.encode("ascii") + b"\n"
+    descriptor = -1
+    try:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0)
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(OPERATOR_SESSION_LOCK_NAME, flags, 0o400, dir_fd=root_fd)
+        if os.write(descriptor, payload) != len(payload):
+            raise OSError("short operator lock write")
+        os.fsync(descriptor)
+        os.close(descriptor)
+        descriptor = -1
+        os.fsync(root_fd)
+    except FileExistsError as exc:
+        raise OperatorSessionError("history_conflict") from exc
+    except OSError as exc:
+        try:
+            if descriptor >= 0:
+                os.close(descriptor)
+        except OSError:
+            pass
+        _mark_session_indeterminate(root_fd)
+        raise OperatorSessionError("cleanup_indeterminate") from exc
+    return token
+
+
+def _release_session_lock(root_fd: int, token: str) -> None:
+    expected = b"OPERATOR_SESSION_LOCK_V1 " + token.encode("ascii") + b"\n"
+    descriptor = -1
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(OPERATOR_SESSION_LOCK_NAME, flags, dir_fd=root_fd)
+        before = os.fstat(descriptor)
+        content = os.read(descriptor, len(expected) + 1)
+        after = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_uid != os.geteuid()
+            or before.st_nlink != 1
+            or stat.S_IMODE(before.st_mode) != 0o400
+            or before.st_size != len(expected)
+            or content != expected
+            or (
+                before.st_dev,
+                before.st_ino,
+                before.st_mode,
+                before.st_nlink,
+                before.st_uid,
+                before.st_gid,
+                before.st_size,
+                before.st_mtime_ns,
+                before.st_ctime_ns,
+            )
+            != (
+                after.st_dev,
+                after.st_ino,
+                after.st_mode,
+                after.st_nlink,
+                after.st_uid,
+                after.st_gid,
+                after.st_size,
+                after.st_mtime_ns,
+                after.st_ctime_ns,
+            )
+        ):
+            raise OSError("operator session lock changed")
+        os.close(descriptor)
+        descriptor = -1
+        os.link(
+            OPERATOR_SESSION_LOCK_NAME,
+            OPERATOR_SESSION_RELEASED_NAME,
+            src_dir_fd=root_fd,
+            dst_dir_fd=root_fd,
+            follow_symlinks=False,
+        )
+        os.fsync(root_fd)
+        os.unlink(OPERATOR_SESSION_LOCK_NAME, dir_fd=root_fd)
+        os.fsync(root_fd)
+        os.unlink(OPERATOR_SESSION_RELEASED_NAME, dir_fd=root_fd)
+        os.fsync(root_fd)
+    except OSError as exc:
+        if descriptor >= 0:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        _mark_session_indeterminate(root_fd)
+        raise OperatorSessionError("cleanup_indeterminate") from exc
+
+
+def _retire_resume_record(root_fd: int, current_name: str, successor_sha256: str) -> None:
+    if not current_name.startswith((CURRENT_RESUME_PREFIX, "resume-g")):
+        _fail("history_conflict")
+    _sha(successor_sha256)
+    generation_match = re.search(r"g([0-9]{16})-", current_name)
+    if generation_match is None:
+        _fail("history_conflict")
+    retired = (
+        RETIRED_RESUME_PREFIX
+        + generation_match.group(1)
+        + "-"
+        + successor_sha256[:16]
+        + ".json"
+    )
+    try:
+        os.link(current_name, retired, src_dir_fd=root_fd, dst_dir_fd=root_fd, follow_symlinks=False)
+        os.fsync(root_fd)
+        os.unlink(current_name, dir_fd=root_fd)
+        os.fsync(root_fd)
+    except OSError as exc:
+        _mark_session_indeterminate(root_fd)
+        raise OperatorSessionError("cleanup_indeterminate") from exc
 
 
 def _mark_session_indeterminate(root_fd: int) -> None:
@@ -697,6 +959,8 @@ def _tty_write(tty_fd: int, payload: bytes) -> None:
 
 
 def _prompt_choice(tty_fd: int, prompt: bytes, allowed: frozenset[str]) -> str:
+    if not prompt.endswith(b": "):
+        prompt = prompt + b": "
     value = _read_line(tty_fd, prompt, echo=False)
     if value not in allowed:
         _fail("input_invalid")
@@ -746,10 +1010,15 @@ def _validated_python_identity(record: Mapping[str, Any]) -> dict[str, Any]:
     return identity
 
 
-def _prompt_authorization(tty_fd: int, bootstrap: Mapping[str, str]) -> dict[str, Any]:
+def _reject_ai_peer_identity(identity: str) -> None:
+    if AI_PEER_RE.search(identity) is not None:
+        _fail("binding_mismatch")
+
+
+def _prompt_initialize_authorization(tty_fd: int, bootstrap: Mapping[str, str]) -> dict[str, Any]:
     _tty_write(
         tty_fd,
-        b"toc_authoring_operator_session_initialize_only\n"
+        b"toc_authoring_operator_session\n"
         b"type_values_manually_no_clipboard_no_history_no_recording\n",
     )
     session_id = _safe_session(_read_line(tty_fd, b"operator_session_id: "))
@@ -818,13 +1087,27 @@ def _prompt_authorization(tty_fd: int, bootstrap: Mapping[str, str]) -> dict[str
     return authorization
 
 
-def _environment_from_authorization(authorization: Mapping[str, Any]) -> dict[str, str]:
-    capture = authorization["capture"]
+def _environment_from_authorization(
+    authorization: Mapping[str, Any],
+    *,
+    base_authorization: Mapping[str, Any] | None = None,
+    resume: Mapping[str, Any] | None = None,
+) -> dict[str, str]:
+    source = authorization if base_authorization is None else base_authorization
+    if resume is None:
+        initial = authorization["initial_head"]
+        expected_generation = str(initial["generation"])
+        expected_head = initial["checkpoint_sha256"]
+        expected_release = initial["release_token"]
+    else:
+        expected_generation = str(resume["resume_generation"])
+        expected_head = resume["resume_checkpoint_sha256"]
+        expected_release = resume["resume_release_token"]
+    capture = source["capture"]
     execution = authorization["execution"]
     python = execution["python"]
-    initial = authorization["initial_head"]
-    return {
-        "TOC_AUTHOR_ACTION": "initialize",
+    environment = {
+        "TOC_AUTHOR_ACTION": authorization["action"],
         "TOC_AUTHOR_EXECUTION_PYTHON": python["path"],
         "TOC_AUTHOR_APPROVED_EXECUTION_PYTHON_SHA256": python["sha256"],
         "TOC_AUTHOR_APPROVED_EXECUTION_PYTHON_VERSION": python["version"],
@@ -849,12 +1132,15 @@ def _environment_from_authorization(authorization: Mapping[str, Any]) -> dict[st
         "TOC_AUTHOR_PRIMARY_OPERATOR_IDENTITY": authorization["primary_operator_identity"],
         "TOC_AUTHOR_OPERATOR_IDENTITY": authorization["operator_identity"],
         "TOC_AUTHOR_SESSION_IDENTITY": authorization["authoring_session_identity"],
-        "TOC_AUTHOR_EXPECTED_HEAD_GENERATION": str(initial["generation"]),
-        "TOC_AUTHOR_EXPECTED_HEAD_SHA256": initial["checkpoint_sha256"],
-        "TOC_AUTHOR_EXPECTED_RELEASE_TOKEN": initial["release_token"],
+        "TOC_AUTHOR_EXPECTED_HEAD_GENERATION": expected_generation,
+        "TOC_AUTHOR_EXPECTED_HEAD_SHA256": expected_head,
+        "TOC_AUTHOR_EXPECTED_RELEASE_TOKEN": expected_release,
         "TOC_AUTHOR_LOCAL_TTY_ATTESTATION": authorization["tty_attestation"],
-        "TOC_AUTHOR_FINALIZATION_AUTHORIZATION": "",
+        "TOC_AUTHOR_FINALIZATION_AUTHORIZATION": authorization["finalization_authorization"],
     }
+    if "expected_authoring_state" in authorization:
+        environment["TOC_AUTHOR_EXPECTED_REVIEW_STATE"] = authorization["expected_authoring_state"]
+    return environment
 
 
 def _procedure_identity(approved_checkout: str) -> str:
@@ -928,26 +1214,154 @@ def _run_authorized_initialize(authorization: Mapping[str, Any], tty_fd: int, se
                 "raw_toc_sha256": authorization["capture"]["raw_toc_sha256"],
             },
             "execution_checkout_sha": authorization["execution"]["approved_checkout_sha"],
-            "format_version": FORMAT_VERSION,
+            "format_version": RESUME_FORMAT_VERSION,
             "operator_session_procedure_identity_sha256": observed_session_procedure,
-            "operator_identity": authorization["operator_identity"],
             "primary_operator_identity": authorization["primary_operator_identity"],
             "procedure_identity_sha256": observed_procedure,
             "python_identity_sha256": python_identity["identity_sha256"],
             "resume_checkpoint_sha256": checkpoint_sha256,
             "resume_generation": generation,
             "resume_release_token": release_token,
-            "session_id": authorization["session_id"],
         }
-        final_name = f"resume-g{generation:016d}-{checkpoint_sha256}.json"
+        final_name = f"{CURRENT_RESUME_PREFIX}{generation:016d}-{checkpoint_sha256}.json"
         _publish_private_json_at(session_root_fd, final_name, resume)
 
     return AUTHOR.execute_authoring(environment, tty_fd, resume_recorder=recorder)
 
 
+def _run_authorized_action(
+    action_authorization: Mapping[str, Any],
+    base_authorization: Mapping[str, Any],
+    resume: Mapping[str, Any],
+    resume_name: str,
+    resume_sha256: str,
+    tty_fd: int,
+    session_root_fd: int,
+    action_authorization_sha256: str,
+) -> tuple[int, bytes, str | None]:
+    expected_session_procedure = action_authorization["execution"][
+        "approved_operator_session_procedure_identity_sha256"
+    ]
+    observed_session_procedure = _operator_session_procedure_identity(
+        action_authorization["execution"]["approved_checkout_sha"]
+    )
+    if observed_session_procedure != expected_session_procedure:
+        _fail("binding_mismatch")
+    expected_procedure = action_authorization["execution"]["approved_procedure_identity_sha256"]
+    observed_procedure = _procedure_identity(
+        action_authorization["execution"]["approved_checkout_sha"]
+    )
+    if observed_procedure != expected_procedure:
+        _fail("binding_mismatch")
+    if (
+        resume["execution_checkout_sha"] != action_authorization["execution"]["approved_checkout_sha"]
+        or resume["procedure_identity_sha256"] != observed_procedure
+        or resume["operator_session_procedure_identity_sha256"] != observed_session_procedure
+        or resume["authorization_sha256"] != sha256_bytes(canonical_json_bytes(base_authorization))
+        or resume["annotation_root"] != base_authorization["annotation_root"]
+        or resume["primary_operator_identity"] != base_authorization["primary_operator_identity"]
+    ):
+        _fail("binding_mismatch")
+    if (
+        action_authorization["primary_operator_identity"]
+        != base_authorization["primary_operator_identity"]
+    ):
+        _fail("binding_mismatch")
+    python_identity = _validated_python_identity(action_authorization["execution"]["python"])
+    if resume["python_identity_sha256"] != python_identity["identity_sha256"]:
+        _fail("binding_mismatch")
+    environment = _environment_from_authorization(
+        action_authorization,
+        base_authorization=base_authorization,
+        resume=resume,
+    )
+    successor: RecordPublication | None = None
+
+    def recorder(generation: int, checkpoint_sha256: str, release_token: str) -> None:
+        nonlocal successor
+        if not (
+            type(generation) is int
+            and generation > 0
+            and type(checkpoint_sha256) is str
+            and HEX64_RE.fullmatch(checkpoint_sha256)
+            and type(release_token) is str
+            and HEX64_RE.fullmatch(release_token)
+        ):
+            _fail("internal_failure")
+        if generation < resume["resume_generation"]:
+            _fail("history_conflict")
+        successor_resume = {
+            "annotation_root": base_authorization["annotation_root"],
+            "artifact_kind": RESUME_KIND,
+            "authorization_sha256": resume["authorization_sha256"],
+            "authoring_session_identity": action_authorization["authoring_session_identity"],
+            "capture": dict(resume["capture"]),
+            "execution_checkout_sha": action_authorization["execution"]["approved_checkout_sha"],
+            "format_version": RESUME_FORMAT_VERSION,
+            "operator_session_procedure_identity_sha256": observed_session_procedure,
+            "predecessor": {
+                "action": action_authorization["action"],
+                "action_authorization_sha256": action_authorization_sha256,
+                "resume_name": resume_name,
+                "resume_sha256": resume_sha256,
+            },
+            "primary_operator_identity": base_authorization["primary_operator_identity"],
+            "procedure_identity_sha256": observed_procedure,
+            "python_identity_sha256": python_identity["identity_sha256"],
+            "resume_checkpoint_sha256": checkpoint_sha256,
+            "resume_generation": generation,
+            "resume_release_token": release_token,
+        }
+        successor_sha256 = sha256_bytes(canonical_json_bytes(successor_resume))
+        final_name = (
+            f"{CURRENT_RESUME_PREFIX}{generation:016d}-"
+            f"{checkpoint_sha256}-{successor_sha256[:16]}.json"
+        )
+        successor = _publish_private_json_at(session_root_fd, final_name, successor_resume)
+
+    try:
+        status, diagnostic = AUTHOR.execute_authoring(environment, tty_fd, resume_recorder=recorder)
+    except AUTHOR.AuthoringEntrypointError as exc:
+        raise OperatorSessionError(exc.reason) from exc
+    if action_authorization["action"] == "finalize":
+        terminal = {
+            "artifact_kind": TERMINAL_RESUME_KIND,
+            "finalization_authorization_sha256": sha256_bytes(
+                action_authorization["finalization_authorization"].encode("ascii")
+            ),
+            "format_version": RESUME_FORMAT_VERSION,
+            "predecessor": {
+                "action": action_authorization["action"],
+                "action_authorization_sha256": action_authorization_sha256,
+                "resume_name": resume_name,
+                "resume_sha256": resume_sha256,
+            },
+            "resume_checkpoint_sha256": resume["resume_checkpoint_sha256"],
+            "resume_generation": resume["resume_generation"],
+            "status": "final_candidate_published_unvalidated",
+        }
+        terminal_name = (
+            f"{TERMINAL_RESUME_PREFIX}{resume['resume_generation']:016d}-"
+            f"{resume['resume_checkpoint_sha256']}.json"
+        )
+        successor = _publish_private_json_at(session_root_fd, terminal_name, terminal)
+    if successor is None:
+        _fail("cleanup_indeterminate")
+    _retire_resume_record(session_root_fd, resume_name, successor.sha256)
+    return status, diagnostic, successor.name
+
+
 def run_session(tty_fd: int, bootstrap: Mapping[str, str]) -> tuple[int, bytes]:
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-    authorization = _prompt_authorization(tty_fd, bootstrap)
+    action = _prompt_choice(tty_fd, b"operator_action", AUTHOR.ACTION_VALUES)
+    if action == "initialize":
+        authorization = _prompt_initialize_authorization(tty_fd, bootstrap)
+        return _run_initialize_session(authorization, tty_fd)
+    action_authorization = _prompt_action_authorization_for_action(tty_fd, bootstrap, action)
+    return _run_resume_session(action_authorization, tty_fd)
+
+
+def _run_initialize_session(authorization: Mapping[str, Any], tty_fd: int) -> tuple[int, bytes]:
     session_root_path = _validate_absolute_path(authorization["session_root"], must_exist=False)
     annotation_root_path = _validate_absolute_path(authorization["annotation_root"], must_exist=False)
     capture_root_path = _validate_absolute_path_lexical(authorization["capture"]["capture_root"])
@@ -957,10 +1371,9 @@ def run_session(tty_fd: int, bootstrap: Mapping[str, str]) -> tuple[int, bytes]:
     session_root_fd, _session_metadata = _create_private_directory_no_replace(session_root_path)
     annotation_root_fd = -1
     try:
-        authorization_name_prefix = f"authorization-{authorization['session_id']}-"
         authorization_without_digest = dict(authorization)
         authorization_digest = sha256_bytes(canonical_json_bytes(authorization_without_digest))
-        final_name = authorization_name_prefix + authorization_digest[:16] + ".json"
+        final_name = "authorization-root-" + authorization_digest[:16] + ".json"
         _publish_private_json_at(session_root_fd, final_name, authorization_without_digest)
         _tty_write(
             tty_fd,
@@ -993,6 +1406,145 @@ def run_session(tty_fd: int, bootstrap: Mapping[str, str]) -> tuple[int, bytes]:
                 os.close(annotation_root_fd)
             except OSError:
                 pass
+        try:
+            os.close(session_root_fd)
+        except OSError:
+            pass
+
+
+def _prompt_action_authorization_for_action(
+    tty_fd: int, bootstrap: Mapping[str, str], action: str
+) -> dict[str, Any]:
+    if action not in (AUTHOR.ACTION_VALUES - {"initialize"}):
+        _fail("input_invalid")
+    _tty_write(
+        tty_fd,
+        b"toc_authoring_operator_session_resume\n"
+        b"type_values_manually_no_clipboard_no_history_no_recording\n",
+    )
+    session_id = _safe_session(_read_line(tty_fd, b"operator_session_id: "))
+    primary = _safe_identity(_read_line(tty_fd, b"primary_operator_identity: "))
+    operator = _safe_identity(_read_line(tty_fd, b"current_operator_identity: "))
+    if action == "peer_review":
+        if operator.casefold() == primary.casefold():
+            _fail("binding_mismatch")
+        _reject_ai_peer_identity(operator)
+    elif operator != primary:
+        _fail("binding_mismatch")
+    authoring_session = _safe_session(_read_line(tty_fd, b"authoring_session_identity: "))
+    expected_state = _prompt_choice(tty_fd, b"expected_authoring_state", AUTHORING_STATES)
+    finalization_authorization = ""
+    if action == "finalize":
+        finalization_authorization = _read_line(tty_fd, b"type_CREATE_UNVALIDATED_LEDGER: ")
+        if finalization_authorization != AUTHOR.FINALIZATION_AUTHORIZATION:
+            _fail("finalization_incomplete")
+    session_root = os.fspath(_validate_absolute_path(_read_line(tty_fd, b"operator_session_root: "), must_exist=True))
+    approved_checkout = _git_sha(bootstrap["approved_checkout"])
+    return {
+        "action": action,
+        "artifact_kind": ACTION_AUTHORIZATION_KIND,
+        "authoring_session_identity": authoring_session,
+        "execution": {
+            "approved_checkout_sha": approved_checkout,
+            "approved_operator_session_procedure_identity_sha256": _sha(
+                _read_line(tty_fd, b"operator_session_procedure_identity_sha256: ")
+            ),
+            "approved_procedure_identity_sha256": _sha(
+                _read_line(tty_fd, b"authoring_procedure_identity_sha256: ")
+            ),
+            "python": {
+                "path": bootstrap["python_path"],
+                "sha256": bootstrap["python_sha256"],
+                "version": bootstrap["python_version"],
+            },
+        },
+        "expected_authoring_state": expected_state,
+        "finalization_authorization": finalization_authorization,
+        "format_version": ACTION_AUTHORIZATION_FORMAT_VERSION,
+        "operator_identity": operator,
+        "primary_operator_identity": primary,
+        "session_id": session_id,
+        "session_root": session_root,
+        "tty_attestation": _prompt_choice(
+            tty_fd,
+            b"type_LOCAL_CONTROLLING_TTY_NO_RECORDING_NO_REMOTE_NO_CLIPBOARD: ",
+            frozenset({TTY_ATTESTATION}),
+        ),
+    }
+
+
+def _run_resume_session(action_authorization: Mapping[str, Any], tty_fd: int) -> tuple[int, bytes]:
+    session_root_path = _validate_absolute_path(action_authorization["session_root"], must_exist=True)
+    session_root_fd, _session_metadata = _open_existing_private_directory(session_root_path)
+    session_lock_token: str | None = None
+    try:
+        session_lock_token = _acquire_session_lock(session_root_fd)
+        root_authorization_sha256 = None
+        resume_name = _active_resume_name(session_root_fd, allow_lock=True)
+        resume_observed = stable_private_file_at(
+            session_root_fd, resume_name, max_bytes=MAX_RECORD_BYTES, exact_mode=0o400
+        )
+        resume_value = strict_json_loads(resume_observed.data, max_bytes=MAX_RECORD_BYTES)
+        if type(resume_value) is not dict:
+            _fail("history_conflict")
+        if type(resume_value.get("authorization_sha256")) is str:
+            root_authorization_sha256 = resume_value["authorization_sha256"]
+        if root_authorization_sha256 is None:
+            _fail("history_conflict")
+        root_authorization = _load_authorization_by_sha(session_root_fd, root_authorization_sha256)
+        resume = _validate_loaded_resume_record(
+            resume_value,
+            authorization_sha256=root_authorization_sha256,
+            expected_operator_identity=root_authorization["primary_operator_identity"],
+        )
+        action_authorization = dict(action_authorization)
+        action_authorization["annotation_root"] = root_authorization["annotation_root"]
+        action_authorization["capture_binding_sha256"] = sha256_bytes(
+            canonical_json_bytes(root_authorization["capture"])
+        )
+        action_authorization["root_authorization_sha256"] = root_authorization_sha256
+        action_authorization["resume"] = {
+            "name": resume_name,
+            "sha256": resume_observed.sha256,
+            "generation": resume["resume_generation"],
+            "checkpoint_sha256": resume["resume_checkpoint_sha256"],
+        }
+        action_digest = sha256_bytes(canonical_json_bytes(action_authorization))
+        action_name = f"authorization-action-{action_digest[:16]}.json"
+        _publish_private_json_at(session_root_fd, action_name, action_authorization)
+        _tty_write(
+            tty_fd,
+            b"action_authorization_digest="
+            + action_digest.encode("ascii")
+            + b"\ntype_action_authorization_digest_recorded_to_continue\n",
+        )
+        acknowledgement = _read_line(tty_fd, b"action_authorization_digest_acknowledgement: ")
+        if acknowledgement != "action_authorization_digest_recorded":
+            _fail("input_invalid")
+        status, diagnostic, _successor_name = _run_authorized_action(
+            action_authorization,
+            root_authorization,
+            resume,
+            resume_name,
+            resume_observed.sha256,
+            tty_fd,
+            session_root_fd,
+            action_digest,
+        )
+        if session_lock_token is None:
+            _fail("cleanup_indeterminate")
+        _release_session_lock(session_root_fd, session_lock_token)
+        session_lock_token = None
+        return status, diagnostic
+    except OperatorSessionError:
+        _mark_session_indeterminate(session_root_fd)
+        raise
+    except BaseException as exc:
+        _mark_session_indeterminate(session_root_fd)
+        raise OperatorSessionError("internal_failure") from exc
+    finally:
+        if session_lock_token is not None:
+            _mark_session_indeterminate(session_root_fd)
         try:
             os.close(session_root_fd)
         except OSError:

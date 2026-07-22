@@ -702,17 +702,17 @@ establish a terminal, package, manifest, provenance, or tool cause.
 
 #### Private annotation authoring and checkpoint gates
 
-Human review initialization occurs locally against that private capture through
-the zero-argument
+Human review occurs locally against that private capture through the
+zero-argument
 `scripts/migration/run-lovable-toc-annotation-operator-session.sh` launcher.
-It publishes a private authorization record, creates the empty annotation root,
-invokes only generation-0 initialization, and captures the generation-1 resume
-tuple directly into a private operator record. Later reviewed authoring actions
-still use the lower-level zero-argument
-`scripts/migration/run-lovable-toc-annotation-authoring.sh` launcher only after
-a reviewed private resume-record consumption path supplies the exact tuple in
-memory. Do not run either Python component directly. Before opening private
-input, the launcher
+For the first invocation it publishes a private root authorization record,
+creates the empty annotation root, invokes only generation-0 initialization,
+and captures the generation-1 resume tuple directly into a private operator
+record. For later invocations it consumes exactly one current private resume
+record, publishes one action authorization record, supplies the tuple to the
+lower authoring engine only in memory, durably publishes the successor resume
+record, and only then retires the predecessor current record. Do not run either
+Python component directly. Before opening private input, the launcher
 requires an explicitly approved canonical CPython path, SHA-256, exact version,
 safe ownership/mode/link count, a clean approved checkout, exact reviewed tool
 blobs, and no ordinary or ignored untracked migration-tool inputs. It rejects
@@ -755,23 +755,29 @@ its isolated Python child then rechecks the inherited private descriptor as a
 stable character-device controlling TTY in the current foreground process group
 with readable termios state.
 
-The wrapper invokes only generation-0 `initialize` and can publish only
-generation 1. It records the exact `resume_generation`,
+The wrapper records the exact `resume_generation`,
 `resume_checkpoint_sha256`, and `resume_release_token` directly into the
-private session record before the lower-level authoring engine displays the
-same tuple and requires `resume_values_recorded`. Every later resume must use
-the exact latest generation, full checkpoint SHA-256, and private release token
-from that approved operator record. A later action must consume the resume
-record descriptor-relatively and inject the tuple in memory, never through argv,
-ordinary environment, shell history, clipboard/browser transport, chat, CI, or
-diagnostics.
+private session record before the lower-level authoring engine completes its
+private release acknowledgement. With the wrapper active, the lower engine
+displays only `resume_record_private` and requires `resume_values_recorded`;
+the tuple itself is not exposed to ordinary output or an operator transcript.
+Every later resume must use the exact latest generation, full checkpoint
+SHA-256, and private release token from that approved operator record. A later
+action consumes the resume record descriptor-relatively and injects the tuple
+in memory, never through argv, ordinary environment, shell history,
+clipboard/browser transport, chat, CI, or diagnostics. Successor resume records
+bind the predecessor resume-record name/SHA and action-authorization SHA.
+If successor publication, lower-engine acknowledgement, predecessor retirement,
+cleanup, or fsync becomes ambiguous, the session and/or annotation root becomes
+blocking/indeterminate; the workflow must not leave two normal current records.
 
 The lower-level authoring launcher still has the mandatory `TOC_AUTHOR_*`
 contract in `scripts/migration/README.md`; there are no private path,
 artifact-identity, interpreter-identity, operator, session, or checkpoint-head
 defaults. Use it directly only after a separate reviewed private injection
-mechanism exists for the intended action. Generation `0` and the all-zero head
-remain valid only for one-time initialization.
+mechanism exists for the intended action; the operator-session wrapper is the
+reviewed practical mechanism. Generation `0` and the all-zero head remain valid
+only for one-time initialization.
 
 Before private or capture path access or mutation, the component validates the
 complete static action tuple: the one generation-0/all-zero/identical-operator

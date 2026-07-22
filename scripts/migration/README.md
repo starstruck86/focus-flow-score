@@ -626,17 +626,24 @@ authorization.
 ### Private annotation authoring and immutable checkpoints
 
 `run-lovable-toc-annotation-operator-session.sh` is the supported operator
-entrypoint for one practical initialization session when real `TOC_AUTHOR_*`
-bindings must not pass through argv, exported shell environment, shell history,
-chat, clipboard/browser transport, Git, CI, diagnostics, or ambient temporary
-files. It is zero-argument and startup-isolated. It prompts only through the
-verified local controlling TTY, feeds the approved Python/check-out bootstrap
-to the isolated child over stdin, writes one immutable private authorization
-record, creates the empty annotation root with no replacement, invokes the
-internal authoring engine in memory for `initialize`, and writes one immutable
-private resume record for generation 1. It does not classify entries, invoke
-the validator, create a final ledger, generate restore planning, connect to a
-database, or perform a network operation.
+entrypoint when real authoring bindings must not pass through argv, exported
+shell environment, shell history, chat, clipboard/browser transport, Git, CI,
+diagnostics, or ambient temporary files. It is zero-argument and
+startup-isolated. It prompts only through the verified local controlling TTY,
+feeds the approved Python/check-out bootstrap to the isolated child over stdin,
+and performs exactly one operator-selected action. For `initialize`, it writes
+one immutable private root authorization record, creates the empty annotation
+root with no replacement, invokes the internal authoring engine in memory, and
+writes one immutable private resume record for generation 1. For every later
+non-finalization action, it reads exactly one current private resume record,
+publishes one immutable action authorization record, injects the generation,
+checkpoint SHA, and release token to the lower authoring engine in memory,
+atomically publishes the successor resume record, and only then retires the
+predecessor record. `finalize` remains separately authorized and can publish
+only the existing unvalidated final-ledger candidate plus a terminal private
+operator record; it never validates a ledger or creates restore planning. The
+operator-session entrypoint does not invoke the validator, generate restore
+planning, connect to a database, or perform a network operation.
 
 `run-lovable-toc-annotation-authoring.sh` remains the lower-level checked-in
 authoring launcher. It takes no arguments. The requested operation is supplied
@@ -681,9 +688,9 @@ candidate makes the root terminal; no correction is allowed afterward.
 Finalization requires the conjunction of every phase predicate.
 `initialize` is the sole initializer; `status` and `finalize` are orchestration
 actions and do not silently create ordinary review transitions. `finalize` is
-separately authorized rather than a continuation of an ordinary review
-session. The operator-session wrapper intentionally exposes only initialization
-in this PR.
+separately authorized rather than a continuation of an ordinary review session.
+The operator-session wrapper supports the same committed action vocabulary but
+still performs exactly one selected action per invocation.
 
 #### Operator-session authorization and resume records
 
@@ -705,14 +712,19 @@ The authorization record schema is
 resume record schema is
 `verification/lovable-toc-operator-session-resume.schema.json`. Both are
 canonical JSON (`sort_keys`, compact separators, ASCII, one trailing LF) and are
-read with duplicate-key and nonfinite rejection. The authorization record binds
-action `initialize`; session root and annotation root; primary/current operator
-and authoring-session identity; execution checkout, approved CPython
+read with duplicate-key and nonfinite rejection. The root authorization record
+binds action `initialize`; session root and annotation root; primary/current
+operator and authoring-session identity; execution checkout, approved CPython
 path/SHA/version, operator-session procedure identity, and lower-level authoring
 procedure identity; capture package root/name and every approved capture, raw
 TOC, opaque-index, archive, inspection, count, and `pg_restore` identity;
 generation 0, all-zero checkpoint head, all-zero release token, empty
-finalization authorization, and the local controlling-TTY attestation.
+finalization authorization, and the local controlling-TTY attestation. Each
+later action authorization record binds the selected action, expected
+authoring state, root-authorization digest, capture-binding digest, current
+resume-record filename/SHA/generation/checkpoint, current operator, fresh
+operator session, checkout/procedure identities, and finalization approval
+only when the selected action is `finalize`.
 
 The authorization digest is the SHA-256 of the exact canonical authorization
 record. The wrapper displays that digest only on the private TTY and requires
@@ -721,19 +733,28 @@ annotation root or invokes authoring. That digest is an operator-session anchor:
 it does not self-approve any observed package metadata. External approval
 remains the trust anchor for every expected value supplied to the session.
 
-When the internal authoring engine publishes generation 1, the wrapper records
+When the internal authoring engine publishes generation 1 or any later
+non-finalization checkpoint boundary, the wrapper records
 `resume_generation`, `resume_checkpoint_sha256`, and `resume_release_token`
 directly into a private mode-`0400` resume record before the lower-level engine
-displays the same tuple and asks for `resume_values_recorded`. The lock is not
-released until the local-TTY acknowledgement succeeds. If resume-record
+finishes its private lock-release acknowledgement. The lower engine displays
+only `resume_record_private` when the wrapper has captured the tuple; the tuple
+itself is never echoed to ordinary output or an operator transcript. The lock
+is not released until the local-TTY acknowledgement succeeds. If resume-record
 publication, TTY display, acknowledgement, release, cleanup, or fsync becomes
 ambiguous, the annotation root and/or session root retain blocking lock or
-indeterminate state and no normal resumable-looking state is claimed. A future
-review action must consume the resume record descriptor-relatively, validate
-its authorization digest, generation, checkpoint SHA, operator, session, and
-token binding, and pass the token in memory to the lower-level authoring engine;
-it must not place the tuple in argv, exported environment, shell history, chat,
-CI, or diagnostics.
+indeterminate state and no normal resumable-looking state is claimed. The
+successor resume record binds the predecessor resume-record name/SHA and the
+action-authorization SHA. Only after the lower action and successor record are
+durably committed does the wrapper retire the predecessor current record to a
+non-current retained record. A crash or ambiguity between successor publication
+and predecessor retirement leaves a blocking indeterminate state rather than
+two apparently current usable records. Every later action consumes the one
+current resume record descriptor-relatively, validates its authorization digest,
+generation, checkpoint SHA, operator/procedure/check-out binding, predecessor
+chain where present, and token binding, and passes the token in memory to the
+lower-level authoring engine; it must not place the tuple in argv, exported
+environment, shell history, chat, CI, or diagnostics.
 
 The operator-session wrapper itself still has local trust ceilings. It cannot
 prove an unknown recorder is absent, prevent a human from using a clipboard
@@ -750,9 +771,10 @@ revalidates its private descriptor as a stable character-device controlling TTY
 in the current foreground process group with readable termios state before any
 private operator prompt is accepted.
 
-The launcher has no defaults for private inputs or approval identities. Supply
-the following environment contract out of band; do not place a real value in
-Git, shell history, CI, or chat:
+The lower-level authoring component has no defaults for private inputs or
+approval identities. The operator-session wrapper supplies this contract
+in-memory from private authorization and resume records. Do not hand-export
+real values unless a separate reviewed private injection mechanism exists:
 
 | Variable | Authoring contract |
 |---|---|
@@ -804,22 +826,23 @@ value is echoed. Package- and checkpoint-bound checks after private opening
 remain defense in depth.
 
 Initialization therefore binds generation `0` plus the all-zero expected head
-and publishes generation `1`. Every later invocation must be supplied the exact
-observed generation and full checkpoint SHA-256; the procedure does not infer
-or repair a head. Every successful non-finalization invocation displays its
-exact next-resume values only on the held private TTY as
-`resume_generation`, `resume_checkpoint_sha256`, and a fresh
-`resume_release_token`; they never enter ordinary
-stdout/stderr and are not part of the aggregate-only `status` result. Review
-batches are deterministic and capped at 100 entries by the operator workflow.
-The alternate screen remains visible while the durable lock is still held,
-until the operator types the exact `resume_values_recorded` acknowledgement.
-Only after that acknowledgement may the procedure durably convert the lock to
-the released marker, clear the screen, and exit. A write, EOF, wrong response,
-terminal attribute/read failure, or other incomplete handoff leaves a blocking
-lock and, where possible, an indeterminate marker; it never leaves a normal
-released state. This is a human recording checkpoint, not permission to pipe
-or record the terminal.
+and publishes generation `1`. Every later invocation consumes the exact
+current generation and full checkpoint SHA-256 from the private resume record;
+the procedure does not infer or repair a head. Every successful
+non-finalization invocation produces exact next-resume values while the
+lower-level durable lock is still held. When the operator-session wrapper is
+used, those values are captured directly into the next private resume record
+and the lower engine displays only `resume_record_private` before requiring the
+fixed `resume_values_recorded` acknowledgement. They never enter argv,
+ordinary environment, ordinary stdout/stderr, chat, Git, CI, or the
+aggregate-only `status` result. Review batches are deterministic and capped at
+100 entries by the operator workflow. Only after acknowledgement may the lower
+procedure durably convert the lock to the released marker, clear the screen,
+and exit; only after that and durable successor publication may the wrapper
+retire the predecessor resume record. A write, EOF, wrong response, terminal
+attribute/read failure, or other incomplete handoff leaves a blocking lock
+and, where possible, an indeterminate marker; it never leaves a normal
+released state. This is not permission to pipe or record the terminal.
 
 The launcher requires an explicitly approved absolute canonical CPython path,
 its externally approved SHA-256 and exact `cpython:MAJOR.MINOR.MICRO` version,
