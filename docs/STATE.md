@@ -37,9 +37,9 @@ Codex and Claude write this file through the repository. Claude drafts entries a
 
 The single source of truth for the entire app.
 
-**Updated:** July 21, 2026 (v21 — TOC annotation operator-session macOS CI,
-loader-eager/TTY, and DYLD portability corrections drafted; annotation
-initialization and migration/runtime baseline unchanged)
+**Updated:** July 22, 2026 (v21 — TOC annotation operator-session resume
+consumption lifecycle drafted; annotation initialization and migration/runtime
+baseline unchanged)
 
 **Supersedes:** v20 (`1PeTg6kZ71G1ZgqrCp9X5W-GSVD1bz8BZCfH0Fppv9E0`). v20 recorded the corpus/fluency scale-up and listed the STRATEGY six-layer rollout as PENDING. v21 records that several of those layers shipped to prod the night of Jul 11 and are verified live.
 
@@ -75,6 +75,10 @@ initialization and migration/runtime baseline unchanged)
 - Todoist roadmap (`6gwh7jGXpJRJXhpg`) has a completed entry plus S-R1, S-R2, and S-R3.
 
 ### §D. OPEN / NEXT
+
+#### New (Jul 22)
+
+- **TOC ANNOTATION RESUME SESSION LIFECYCLE — PR #29 OPEN/DRAFT/UNMERGED; INITIALIZATION AND AUTHORING STILL UNRUN/BLOCKED.** PR #28 merged at main `cd4bde3e88723b25cb3eb6b2a0f419c0d5d18613` before this work. Draft PR #29 latest substantive head `ab349d4a6ace0745db3bf7080ab5573a8efd8f98` extends the reviewed operator-session wrapper beyond generation-0 initialization to support every committed post-initialize authoring action through exactly one action per invocation. The wrapper now consumes exactly one current private resume record descriptor-relatively, publishes one per-action authorization record, injects the generation/checkpoint/release tuple into the lower authoring engine only in memory, publishes a successor private resume record or terminal finalization record, and retires the predecessor resume record only after the action and successor are durably committed. Successor records bind predecessor resume name/SHA and action-authorization SHA. Ambiguous publication, TTY handoff, cleanup, fsync, duplicate/forked current records, stale bindings, or predecessor-retirement failure leaves a blocking/indeterminate session rather than a normal resumable state. The lower engine now supports wrapper-captured resume tuples by displaying only `resume_record_private` before its existing private acknowledgement; resume tuple values never enter argv, ordinary environment, shell history, ordinary stdout/stderr, chat, Git, CI, or diagnostics. The wrapper enforces primary/current equality for every non-peer action, rejects same/case-only or AI-agent peer identities for `peer_review`, requires exact expected review state and separately authorized `CREATE_UNVALIDATED_LEDGER` finalization, and relays only fixed reviewed diagnostics. The operator-session authorization/resume schemas and docs now describe root authorization, per-action authorization, successor resume, predecessor retirement, and terminal finalization records. All previous checkout-specific initialization authorizations remain unconsumed and are superseded by this draft; no annotation root or other private path was accessed. Annotation initialization, authoring, validation, restore planning, restore commands, database access, and migration readiness remain `BLOCKED`/`RED`. This repository work used only synthetic fixtures and did not access any real export, capture/evidence package, annotation root, Lovable, Supabase, n8n, database, target, secret, deployment, or runtime.
 
 #### New (Jul 21)
 
@@ -146,6 +150,12 @@ Trust-but-verify held throughout the session: it caught an unmerged PR before a 
 # SESSION LOG
 
 > Append-only, newest first. Add each new immutable entry directly below this note; never rewrite prior entries.
+
+## 2026-07-22 — Codex — TOC authoring resume-session lifecycle drafted
+
+- **Who:** Codex, at Corey Hartin's direction.
+- **What:** Opened draft PR #29 from freshly verified main `cd4bde3e88723b25cb3eb6b2a0f419c0d5d18613` using repository code and synthetic fixtures only. The PR extends the reviewed TOC annotation operator-session wrapper from one-time initialization into the complete private resume-consumption lifecycle for every committed post-initialize action: `primary_review`, `revisit_unresolved`, `relationship_review`, `data_reference_review`, `sequence_review`, `managed_review`, `manual_conflict_review`, `peer_review`, `correction_review`, `status`, and `finalize`. Each invocation still performs exactly one selected action. Later actions now read the current generation/checkpoint/release token only from the private resume record, publish a per-action authorization record, inject the tuple into the lower authoring engine only in memory, publish a successor private resume record or terminal finalization record, and retire the predecessor current record only after the action and successor are durable. Forked/duplicate current records, stale checkout/procedure/operator bindings, wrong expected review state, wrong finalization authorization, same/case-only or AI-agent peer identity, publication failure, TTY acknowledgement failure, and post-successor failure all stop with fixed diagnostics and blocking/indeterminate state rather than a false normal resume. The lower engine preserves the existing acknowledgement boundary while showing only `resume_record_private` when the wrapper has captured the tuple. Authorization and resume schemas, README, runbook, and migration overview now describe root authorization, action authorization, successor resume, predecessor retirement, and terminal finalization records. Local validation passed the 35-test focused operator-session suite with one expected sandbox skip, the complete 442-test migration Python suite with four expected local skips, 70 repository-security tests plus zero-output current-tree scanning, 113 inspector checks, 26 migration target-safety checks, three cron target-safety checks, changed Python/JSON syntax checks, and `git diff --check`. Database-fixture integration scripts refused without explicit local fixture opt-in, and the local package runner attempted network dependency resolution and was stopped; application/typecheck/Deno/audit and full hosted matrix remain CI evidence. All prior checkout-specific initialization authorizations remain unconsumed and superseded. Annotation initialization, authoring, validation, restore planning, restore commands, database access, and migration readiness remain `BLOCKED`/`RED`. No real export, capture/evidence package, annotation root, Lovable, Supabase, n8n, database, target, secret, deployment, or runtime was accessed or changed.
+- **SHAs:** substantive draft PR #29 head `ab349d4a6ace0745db3bf7080ab5573a8efd8f98`; verified starting main and PR #28 merge `cd4bde3e88723b25cb3eb6b2a0f419c0d5d18613`.
 
 ## 2026-07-21 — Codex — TOC operator-session macOS DYLD non-JSON handling corrected
 

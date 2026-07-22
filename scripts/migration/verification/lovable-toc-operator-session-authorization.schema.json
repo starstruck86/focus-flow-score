@@ -1,11 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
-  "properties": {
-    "action": { "const": "initialize" },
-    "annotation_root": { "type": "string" },
-    "artifact_kind": { "const": "lovable_toc_operator_authorization" },
-    "authoring_session_identity": { "type": "string" },
+  "$defs": {
     "capture": {
       "additionalProperties": false,
       "properties": {
@@ -74,41 +69,141 @@
       ],
       "type": "object"
     },
-    "finalization_authorization": { "const": "" },
-    "format_version": { "const": 1 },
-    "initial_head": {
+    "resumeReference": {
       "additionalProperties": false,
       "properties": {
-        "checkpoint_sha256": { "pattern": "^0{64}$", "type": "string" },
-        "generation": { "const": 0 },
-        "release_token": { "pattern": "^0{64}$", "type": "string" }
+        "checkpoint_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "generation": { "minimum": 1, "type": "integer" },
+        "name": { "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$", "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
       },
-      "required": ["checkpoint_sha256", "generation", "release_token"],
+      "required": ["checkpoint_sha256", "generation", "name", "sha256"],
       "type": "object"
-    },
-    "operator_identity": { "type": "string" },
-    "primary_operator_identity": { "type": "string" },
-    "session_id": { "type": "string" },
-    "session_root": { "type": "string" },
-    "tty_attestation": {
-      "const": "LOCAL_CONTROLLING_TTY_NO_RECORDING_NO_REMOTE_NO_CLIPBOARD"
     }
   },
-  "required": [
-    "action",
-    "annotation_root",
-    "artifact_kind",
-    "authoring_session_identity",
-    "capture",
-    "execution",
-    "finalization_authorization",
-    "format_version",
-    "initial_head",
-    "operator_identity",
-    "primary_operator_identity",
-    "session_id",
-    "session_root",
-    "tty_attestation"
-  ],
-  "type": "object"
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "action": { "const": "initialize" },
+        "annotation_root": { "type": "string" },
+        "artifact_kind": { "const": "lovable_toc_operator_authorization" },
+        "authoring_session_identity": { "type": "string" },
+        "capture": { "$ref": "#/$defs/capture" },
+        "execution": { "$ref": "#/$defs/execution" },
+        "finalization_authorization": { "const": "" },
+        "format_version": { "const": 1 },
+        "initial_head": {
+          "additionalProperties": false,
+          "properties": {
+            "checkpoint_sha256": { "pattern": "^0{64}$", "type": "string" },
+            "generation": { "const": 0 },
+            "release_token": { "pattern": "^0{64}$", "type": "string" }
+          },
+          "required": ["checkpoint_sha256", "generation", "release_token"],
+          "type": "object"
+        },
+        "operator_identity": { "type": "string" },
+        "primary_operator_identity": { "type": "string" },
+        "session_id": { "type": "string" },
+        "session_root": { "type": "string" },
+        "tty_attestation": {
+          "const": "LOCAL_CONTROLLING_TTY_NO_RECORDING_NO_REMOTE_NO_CLIPBOARD"
+        }
+      },
+      "required": [
+        "action",
+        "annotation_root",
+        "artifact_kind",
+        "authoring_session_identity",
+        "capture",
+        "execution",
+        "finalization_authorization",
+        "format_version",
+        "initial_head",
+        "operator_identity",
+        "primary_operator_identity",
+        "session_id",
+        "session_root",
+        "tty_attestation"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "action": { "const": "finalize" } } },
+          "then": { "properties": { "finalization_authorization": { "const": "CREATE_UNVALIDATED_LEDGER" } } },
+          "else": { "properties": { "finalization_authorization": { "const": "" } } }
+        }
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "correction_review",
+            "data_reference_review",
+            "finalize",
+            "managed_review",
+            "manual_conflict_review",
+            "peer_review",
+            "primary_review",
+            "relationship_review",
+            "revisit_unresolved",
+            "sequence_review",
+            "status"
+          ]
+        },
+        "annotation_root": { "type": "string" },
+        "artifact_kind": { "const": "lovable_toc_operator_action_authorization" },
+        "authoring_session_identity": { "type": "string" },
+        "capture_binding_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "execution": { "$ref": "#/$defs/execution" },
+        "expected_authoring_state": {
+          "enum": [
+            "DATA_REFERENCE_REVIEW_REQUIRED",
+            "FINALIZATION_ELIGIBLE",
+            "FINALIZATION_REVIEW_REQUIRED",
+            "MANAGED_GLOBAL_REVIEW_REQUIRED",
+            "MANUAL_CONFLICT_REVIEW_REQUIRED",
+            "PEER_REVIEW_REQUIRED",
+            "PRIMARY_REVIEW_REQUIRED",
+            "RELATIONSHIP_REVIEW_REQUIRED",
+            "REVISIT_REQUIRED",
+            "SEQUENCE_REVIEW_REQUIRED"
+          ]
+        },
+        "finalization_authorization": { "type": "string" },
+        "format_version": { "const": 2 },
+        "operator_identity": { "type": "string" },
+        "primary_operator_identity": { "type": "string" },
+        "resume": { "$ref": "#/$defs/resumeReference" },
+        "root_authorization_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "session_id": { "type": "string" },
+        "session_root": { "type": "string" },
+        "tty_attestation": {
+          "const": "LOCAL_CONTROLLING_TTY_NO_RECORDING_NO_REMOTE_NO_CLIPBOARD"
+        }
+      },
+      "required": [
+        "action",
+        "annotation_root",
+        "artifact_kind",
+        "authoring_session_identity",
+        "capture_binding_sha256",
+        "execution",
+        "expected_authoring_state",
+        "finalization_authorization",
+        "format_version",
+        "operator_identity",
+        "primary_operator_identity",
+        "resume",
+        "root_authorization_sha256",
+        "session_id",
+        "session_root",
+        "tty_attestation"
+      ],
+      "type": "object"
+    }
+  ]
 }

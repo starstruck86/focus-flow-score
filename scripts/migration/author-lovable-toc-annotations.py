@@ -1862,6 +1862,9 @@ def execute_authoring(
             if checkpoint["primary_operator_identity"] != primary_operator:
                 raise AuthoringEntrypointError("binding_mismatch")
             current_state = aggregate_status(checkpoint, capture)["authoring_state"]
+            expected_state = environment.get("TOC_AUTHOR_EXPECTED_REVIEW_STATE")
+            if expected_state is not None and expected_state != current_state:
+                raise AuthoringEntrypointError("review_transition_invalid")
             required_action = {
                 "PRIMARY_REVIEW_REQUIRED": "primary_review",
                 "REVISIT_REQUIRED": "revisit_unresolved",
@@ -2177,15 +2180,17 @@ def execute_authoring(
                             expected_final_head,
                             active_lock_token,
                         )
-                    private_resume = (
-                        b"resume_generation="
-                        + str(expected_final_generation).encode("ascii")
-                        + b"\nresume_checkpoint_sha256="
-                        + expected_final_head.encode("ascii")
-                        + b"\nresume_release_token="
-                        + active_lock_token.encode("ascii")
-                        + b"\n"
-                    )
+                        private_resume = b"resume_record_private\n"
+                    else:
+                        private_resume = (
+                            b"resume_generation="
+                            + str(expected_final_generation).encode("ascii")
+                            + b"\nresume_checkpoint_sha256="
+                            + expected_final_head.encode("ascii")
+                            + b"\nresume_release_token="
+                            + active_lock_token.encode("ascii")
+                            + b"\n"
+                        )
                     try:
                         _write_tty(tty_fd, private_resume)
                         _require_resume_acknowledgement(tty_fd)
