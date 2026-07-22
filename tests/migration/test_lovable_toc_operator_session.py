@@ -115,6 +115,10 @@ LAUNCHER_POISON_VARIABLES = (
     "ENV",
     "BASH_ENV",
 )
+LOADER_EAGER_VARIABLES = {
+    "LD_TRACE_LOADED_OBJECTS",
+    "LD_SHOW_AUXV",
+}
 
 
 class TocOperatorSessionTest(unittest.TestCase):
@@ -651,15 +655,41 @@ class TocOperatorSessionTest(unittest.TestCase):
                         encoding="ascii",
                     )
                     environment[variable] = os.fspath(poison)
-                result = subprocess.run(
-                    [os.fspath(LAUNCHER)],
-                    env=environment,
-                    check=False,
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    timeout=10,
-                )
+                if variable in LOADER_EAGER_VARIABLES:
+                    # glibc can consume these before the script interpreter
+                    # starts.  Start a clean shell first, then export the
+                    # planted value before sourcing the launcher so this test
+                    # pins the launcher's pre-child rejection branch without
+                    # allowing the platform loader to short-circuit the script.
+                    result = subprocess.run(
+                        [
+                            "/bin/sh",
+                            "-c",
+                            f"{variable}=x; export {variable}; . \"$1\"",
+                            "sh",
+                            os.fspath(LAUNCHER),
+                        ],
+                        env={
+                            "LANG": "C",
+                            "LC_ALL": "C",
+                            "TERM": "xterm-256color",
+                        },
+                        check=False,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        timeout=10,
+                    )
+                else:
+                    result = subprocess.run(
+                        [os.fspath(LAUNCHER)],
+                        env=environment,
+                        check=False,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        timeout=10,
+                    )
                 self.assertEqual(result.returncode, 1)
                 self.assertEqual(result.stdout, b"")
                 diagnostic = json.loads(result.stderr)
