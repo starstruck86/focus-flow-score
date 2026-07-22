@@ -40,6 +40,7 @@ jobs:
             scripts/migration/run-lovable-toc-capture.sh \
             scripts/migration/run-lovable-toc-capture-metadata-reattestation.sh \
             scripts/migration/run-lovable-toc-annotation-authoring.sh \
+            scripts/migration/run-lovable-toc-annotation-operator-session.sh \
             scripts/migration/run-lovable-toc-ledger-validation.sh
           do
             sh -n "$launcher"
@@ -152,6 +153,7 @@ jobs:
             scripts/migration/run-lovable-toc-capture.sh \
             scripts/migration/run-lovable-toc-capture-metadata-reattestation.sh \
             scripts/migration/run-lovable-toc-annotation-authoring.sh \
+            scripts/migration/run-lovable-toc-annotation-operator-session.sh \
             scripts/migration/run-lovable-toc-ledger-validation.sh
           do
             sh -n "$launcher"
@@ -189,6 +191,7 @@ jobs:
 
           for path in (
               Path("scripts/migration/author-lovable-toc-annotations.py"),
+              Path("scripts/migration/author-lovable-toc-operator-session.py"),
               Path("scripts/migration/bounded-pg-restore.py"),
               Path("scripts/migration/capture-lovable-toc-envelope.py"),
               Path("scripts/migration/capture-lovable-toc.py"),
@@ -206,6 +209,8 @@ jobs:
             -s tests/migration -p 'test_lovable_toc_annotation_*.py' -v
           /usr/bin/python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_toc_metadata_reattestation*.py' -v
+          /usr/bin/python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_operator_session.py' -v
           bash scripts/migration/tests/inspect-lovable-dump.test.sh
           /usr/bin/python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_dump_report.py' -v

@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action": { "const": "initialize" },
+    "annotation_root": { "type": "string" },
+    "artifact_kind": { "const": "lovable_toc_operator_authorization" },
+    "authoring_session_identity": { "type": "string" },
+    "capture": {
+      "additionalProperties": false,
+      "properties": {
+        "approved_pg_restore_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "capture_execution_checkout_sha": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+        "capture_manifest_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "capture_name": { "type": "string" },
+        "capture_procedure_identity_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "capture_root": { "type": "string" },
+        "data_reference_count": { "minimum": 0, "type": "integer" },
+        "entry_count": { "minimum": 1, "type": "integer" },
+        "evidence_manifest_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "evidence_run_id": { "type": "string" },
+        "inner_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "inspection_checkout_sha": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+        "inspection_procedure_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "opaque_index_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "outer_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "raw_toc_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+      },
+      "required": [
+        "approved_pg_restore_sha256",
+        "capture_execution_checkout_sha",
+        "capture_manifest_sha256",
+        "capture_name",
+        "capture_procedure_identity_sha256",
+        "capture_root",
+        "data_reference_count",
+        "entry_count",
+        "evidence_manifest_sha256",
+        "evidence_run_id",
+        "inner_sha256",
+        "inspection_checkout_sha",
+        "inspection_procedure_sha256",
+        "opaque_index_sha256",
+        "outer_sha256",
+        "raw_toc_sha256"
+      ],
+      "type": "object"
+    },
+    "execution": {
+      "additionalProperties": false,
+      "properties": {
+        "approved_checkout_sha": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+        "approved_operator_session_procedure_identity_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "approved_procedure_identity_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "python": {
+          "additionalProperties": false,
+          "properties": {
+            "path": { "type": "string" },
+            "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+            "version": { "pattern": "^cpython:[0-9]+[.][0-9]+[.][0-9]+$", "type": "string" }
+          },
+          "required": ["path", "sha256", "version"],
+          "type": "object"
+        }
+      },
+      "required": [
+        "approved_checkout_sha",
+        "approved_operator_session_procedure_identity_sha256",
+        "approved_procedure_identity_sha256",
+        "python"
+      ],
+      "type": "object"
+    },
+    "finalization_authorization": { "const": "" },
+    "format_version": { "const": 1 },
+    "initial_head": {
+      "additionalProperties": false,
+      "properties": {
+        "checkpoint_sha256": { "pattern": "^0{64}$", "type": "string" },
+        "generation": { "const": 0 },
+        "release_token": { "pattern": "^0{64}$", "type": "string" }
+      },
+      "required": ["checkpoint_sha256", "generation", "release_token"],
+      "type": "object"
+    },
+    "operator_identity": { "type": "string" },
+    "primary_operator_identity": { "type": "string" },
+    "session_id": { "type": "string" },
+    "session_root": { "type": "string" },
+    "tty_attestation": {
+      "const": "LOCAL_CONTROLLING_TTY_NO_RECORDING_NO_REMOTE_NO_CLIPBOARD"
+    }
+  },
+  "required": [
+    "action",
+    "annotation_root",
+    "artifact_kind",
+    "authoring_session_identity",
+    "capture",
+    "execution",
+    "finalization_authorization",
+    "format_version",
+    "initial_head",
+    "operator_identity",
+    "primary_operator_identity",
+    "session_id",
+    "session_root",
+    "tty_attestation"
+  ],
+  "type": "object"
+}
