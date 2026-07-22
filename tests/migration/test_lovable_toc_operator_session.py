@@ -749,7 +749,16 @@ class TocOperatorSessionTest(unittest.TestCase):
                     # rejection loop; observable DYLD_* values must take the
                     # startup rejection branch below.
                     continue
-                diagnostic = json.loads(result.stderr)
+                try:
+                    diagnostic = json.loads(result.stderr)
+                except json.JSONDecodeError:
+                    if variable.startswith("DYLD_"):
+                        # Other macOS execution contexts let dyld consume the
+                        # value and emit non-JSON loader diagnostics before the
+                        # launcher can run.  This remains a platform-stripped
+                        # source-list pin rather than a launcher-runtime proof.
+                        continue
+                    raise
                 if variable.startswith("DYLD_") and diagnostic["reason"] == "tty_invalid":
                     # macOS SIP can strip DYLD_* variables before /bin/sh starts.
                     # The source-list assertion above still pins the reviewed
