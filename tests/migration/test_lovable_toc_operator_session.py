@@ -443,6 +443,34 @@ class TocOperatorSessionTest(unittest.TestCase):
                 SESSION._validate_tty_fd()
         self.assertEqual(raised.exception.reason, "tty_invalid")
 
+    def test_validate_tty_fd_rejects_controlling_terminal_device_mismatch(self):
+        fixture_before = immutable_tree_snapshot(self.root)
+        tty = self._char_stat()
+        controlling = self._char_stat(inode=21)
+        controlling.st_rdev = 31
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch.dict(SESSION.os.environ, {"TOC_OPERATOR_TTY_FD": "3"}))
+            stack.enter_context(
+                mock.patch.object(SESSION.os, "fstat", side_effect=[tty, controlling])
+            )
+            stack.enter_context(mock.patch.object(SESSION.os, "isatty", return_value=True))
+            stack.enter_context(mock.patch.object(SESSION.os, "open", return_value=4))
+            stack.enter_context(mock.patch.object(SESSION.os, "close", return_value=None))
+            tcgetpgrp_mock = stack.enter_context(mock.patch.object(SESSION.os, "tcgetpgrp"))
+            getpgrp_mock = stack.enter_context(mock.patch.object(SESSION.os, "getpgrp"))
+            termios_mock = stack.enter_context(mock.patch.object(SESSION.termios, "tcgetattr"))
+            tty_write_mock = stack.enter_context(mock.patch.object(SESSION, "_tty_write"))
+            read_line_mock = stack.enter_context(mock.patch.object(SESSION, "_read_line"))
+            with self.assertRaises(SESSION.OperatorSessionError) as raised:
+                SESSION._validate_tty_fd()
+        self.assertEqual(raised.exception.reason, "tty_invalid")
+        tcgetpgrp_mock.assert_not_called()
+        getpgrp_mock.assert_not_called()
+        termios_mock.assert_not_called()
+        tty_write_mock.assert_not_called()
+        read_line_mock.assert_not_called()
+        self.assertEqual(immutable_tree_snapshot(self.root), fixture_before)
+
     def test_validate_tty_fd_rejects_termios_failure(self):
         tty = self._char_stat()
         controlling = self._char_stat(inode=21)
@@ -657,15 +685,37 @@ class TocOperatorSessionTest(unittest.TestCase):
                     environment[variable] = os.fspath(poison)
                 if variable in LOADER_EAGER_VARIABLES:
                     # glibc can consume these before the script interpreter
-                    # starts.  Start a clean shell first, then export the
-                    # planted value before sourcing the launcher so this test
-                    # pins the launcher's pre-child rejection branch without
-                    # allowing the platform loader to short-circuit the script.
+                    # starts.  Start a clean shell first, clear positional
+                    # parameters, and prove the no-poison path reaches the TTY
+                    # guard while the poison path reaches the launcher's
+                    # pre-child rejection loop.
+                    baseline = subprocess.run(
+                        [
+                            "/bin/sh",
+                            "-c",
+                            "launcher_path=$1; set --; . \"$launcher_path\"",
+                            "sh",
+                            os.fspath(LAUNCHER),
+                        ],
+                        env={
+                            "LANG": "C",
+                            "LC_ALL": "C",
+                            "TERM": "xterm-256color",
+                        },
+                        check=False,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        timeout=10,
+                    )
+                    self.assertEqual(baseline.returncode, 1)
+                    self.assertEqual(baseline.stdout, b"")
+                    self.assertEqual(json.loads(baseline.stderr)["reason"], "tty_invalid")
                     result = subprocess.run(
                         [
                             "/bin/sh",
                             "-c",
-                            f"{variable}=x; export {variable}; . \"$1\"",
+                            f"launcher_path=$1; set --; {variable}=x; export {variable}; . \"$launcher_path\"",
                             "sh",
                             os.fspath(LAUNCHER),
                         ],
