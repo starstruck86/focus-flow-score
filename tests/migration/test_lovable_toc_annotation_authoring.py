@@ -929,6 +929,70 @@ class AuthoringContractTest(unittest.TestCase):
                     else:
                         reader(9)
 
+    def test_private_primary_review_eof_leaves_no_successor_or_release(self):
+        capture_root = self.root / "prompt-eof-capture"
+        package, expectations, _capture, _entries = make_capture_package(
+            capture_root, ["TABLE"], poison="PRIVATE_PROMPT_EOF_SENTINEL"
+        )
+        private_root = self.root / "prompt-eof-private"
+        private_root.mkdir(mode=0o700)
+        initialize = self.author_environment(
+            package,
+            expectations,
+            private_root,
+            action="initialize",
+            generation=0,
+            head_sha256="0" * 64,
+        )
+        with mock.patch.object(
+            AUTHOR, "_authoring_procedure_identity", return_value=SHA_C
+        ):
+            self.execute_with_private_ack(initialize)
+        checkpoints = private_root / AUTHOR.CHECKPOINTS_NAME
+        head = next(checkpoints.iterdir())
+        primary = self.author_environment(
+            package,
+            expectations,
+            private_root,
+            action="primary_review",
+            generation=1,
+            head_sha256=hashlib.sha256(head.read_bytes()).hexdigest(),
+        )
+        original_prompt = AUTHOR._prompt_choice
+
+        def eof_at_classification(descriptor: int, label: bytes, allowed) -> str:
+            self.assertEqual(label, b"classification")
+            with mock.patch.object(
+                AUTHOR.termios,
+                "tcgetattr",
+                return_value=[0, 0, 0, 0, 0, 0, []],
+            ), mock.patch.object(
+                AUTHOR.termios, "tcsetattr", return_value=None
+            ), mock.patch.object(
+                AUTHOR.os, "read", return_value=b""
+            ):
+                return original_prompt(descriptor, label, allowed)
+
+        with mock.patch.object(
+            AUTHOR, "_authoring_procedure_identity", return_value=SHA_C
+        ), mock.patch.object(
+            AUTHOR, "_write_tty", return_value=None
+        ), mock.patch.object(
+            AUTHOR, "_prompt_choice", side_effect=eof_at_classification
+        ):
+            with self.assertRaisesRegex(
+                AUTHOR.AuthoringEntrypointError, "tty_invalid"
+            ):
+                AUTHOR.execute_authoring(primary, 9)
+        self.assertEqual(len(list(checkpoints.iterdir())), 1)
+        self.assertTrue((private_root / AUTHOR.LOCK_NAME).is_file())
+        self.assertTrue((private_root / AUTHOR.INDETERMINATE_NAME).is_file())
+        self.assertFalse((private_root / AUTHOR.RELEASED_NAME).exists())
+        ordinary = AUTHOR._fixed_diagnostic(
+            status="failed", reason="tty_invalid"
+        )
+        self.assertNotIn(b"PRIVATE_PROMPT_EOF_SENTINEL", ordinary)
+
     def test_resume_handoff_failures_remain_persistently_blocked(self):
         original_ack = AUTHOR._require_resume_acknowledgement
 
@@ -1550,6 +1614,24 @@ class AuthoringContractTest(unittest.TestCase):
             checkpoint["entries"][2]["primary_decision"]["sequence_review_state"],
             "pending",
         )
+
+    def test_primary_review_batch_is_deterministic_and_never_exceeds_one_hundred(self):
+        capture, _package, _expectations = self.load_capture(
+            ["TABLE"] * 101
+        )
+        checkpoint = authoring.initialize_checkpoint(
+            capture, self.binding, "Primary Operator", "batch-session"
+        )
+        first = authoring.next_review_ordinals(
+            checkpoint, "primary_review", batch_size=100
+        )
+        repeated = authoring.next_review_ordinals(
+            checkpoint, "primary_review", batch_size=100
+        )
+        self.assertEqual(first, tuple(range(100)))
+        self.assertEqual(repeated, first)
+        self.assertEqual(len(first), 100)
+        self.assertNotIn(100, first)
 
     def test_primary_relationship_prompts_are_role_specific_and_role_exact(self):
         capture, _package, _expectations = self.load_capture(
@@ -3937,7 +4019,11 @@ class AuthoringContractTest(unittest.TestCase):
 
     def test_exact_generation_one_binding_bridge_is_single_and_self_closing(self):
         capture, _package, _expectations = self.load_capture(["TABLE"])
-        historical = authoring.AuthoringBinding(GIT_A, SHA_A, SHA_B)
+        historical = authoring.AuthoringBinding(
+            "b1986e4079b52edbb4ef5cd4c56ed4d20af07195",
+            "bc0b990d878db1e2c72bd4ac91314fe32261a454ac38505b7ea6df4af2b5f3d8",
+            "4b42b1a117605cafc8607b67b0892a609c2cd125012dd56288abeed8c89cdfb1",
+        )
         current = authoring.AuthoringBinding(GIT_B, SHA_C, SHA_D)
         initial = authoring.initialize_checkpoint(
             capture, historical, "Primary", "legacy-session"
@@ -4016,7 +4102,11 @@ class AuthoringContractTest(unittest.TestCase):
 
     def test_generation_one_bridge_rejects_wrong_action_and_old_bound_generation_two(self):
         capture, _package, _expectations = self.load_capture(["TABLE"])
-        historical = authoring.AuthoringBinding(GIT_A, SHA_A, SHA_B)
+        historical = authoring.AuthoringBinding(
+            "b1986e4079b52edbb4ef5cd4c56ed4d20af07195",
+            "bc0b990d878db1e2c72bd4ac91314fe32261a454ac38505b7ea6df4af2b5f3d8",
+            "4b42b1a117605cafc8607b67b0892a609c2cd125012dd56288abeed8c89cdfb1",
+        )
         current = authoring.AuthoringBinding(GIT_B, SHA_C, SHA_D)
         initial = authoring.initialize_checkpoint(
             capture, historical, "Primary", "legacy-session"
@@ -4077,6 +4167,20 @@ class AuthoringContractTest(unittest.TestCase):
                 )
         finally:
             os.close(descriptor)
+
+    def test_generation_one_policy_rejects_arbitrary_historical_binding(self):
+        with self.assertRaisesRegex(
+            authoring.AuthoringContractError, "history_invalid"
+        ):
+            authoring.GenerationOneBindingPolicy(
+                historical_binding=authoring.AuthoringBinding(
+                    GIT_A, SHA_A, SHA_B
+                ),
+                current_binding=authoring.AuthoringBinding(
+                    GIT_B, SHA_C, SHA_D
+                ),
+                allow_successor_transition=True,
+            )
 
     def test_missing_generation_and_hash_substitution_fail_closed(self):
         capture, _package, _expectations = self.load_capture()

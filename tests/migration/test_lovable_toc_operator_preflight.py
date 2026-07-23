@@ -33,6 +33,9 @@ APPROVAL_SCHEMA_PATH = (
     / "verification"
     / "lovable-toc-operator-execution-profile-approval.schema.json"
 )
+CANONICAL_TEMP_PARENT = Path(
+    os.path.realpath(tempfile.gettempdir())
+)
 
 
 def load_preflight():
@@ -49,6 +52,24 @@ def load_preflight():
 
 
 PREFLIGHT = load_preflight()
+
+
+def load_operator_session():
+    path = MIGRATION / "author-lovable-toc-operator-session.py"
+    if str(MIGRATION) not in sys.path:
+        sys.path.insert(0, str(MIGRATION))
+    spec = importlib.util.spec_from_file_location(
+        "lovable_toc_operator_session_preimport_test", path
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("operator session module load failed")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+SESSION = load_operator_session()
 
 
 def git(repository: Path, *arguments: str) -> str:
@@ -140,7 +161,9 @@ def approval_for(
 class SyntheticRepository:
     def __init__(self, owner: unittest.TestCase):
         self.owner = owner
-        self.temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temporary = tempfile.TemporaryDirectory(
+            dir=str(CANONICAL_TEMP_PARENT)
+        )
         owner.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.repository = self.base / "repository"
@@ -185,6 +208,7 @@ class SyntheticRepository:
             "0123456789abcdef.json"
         )
         self.write_approval(self.approval_name, self.approval)
+        self.initial_bootstrap_binding = self.bootstrap_binding()
         self.launcher = (
             self.repository
             / "scripts"
@@ -198,7 +222,18 @@ class SyntheticRepository:
         path.chmod(0o400)
         return path
 
-    def verify(self):
+    def bootstrap_binding(self):
+        path = self.approvals / self.approval_name
+        return PREFLIGHT.ApprovalBootstrapBinding(
+            approval_name=self.approval_name,
+            approval_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            file_identity=PREFLIGHT._approval_file_identity(os.lstat(path)),
+            parent_identity=PREFLIGHT._approval_parent_identity(
+                os.lstat(self.approvals)
+            ),
+        )
+
+    def verify(self, *, bootstrap_binding=None):
         environment = {
             "LANG": "C",
             "LC_ALL": "C",
@@ -212,6 +247,11 @@ class SyntheticRepository:
             mock.patch.object(PREFLIGHT, "verify_tty", return_value=None),
             mock.patch.object(
                 PREFLIGHT,
+                "verify_known_recording_ancestors",
+                return_value=None,
+            ),
+            mock.patch.object(
+                PREFLIGHT,
                 "_verify_python",
                 return_value=self.approval["python_identity"]["identity_sha256"],
             ),
@@ -219,6 +259,11 @@ class SyntheticRepository:
             return PREFLIGHT.verify_pre_private(
                 self.launcher,
                 3,
+                bootstrap_binding=(
+                    self.bootstrap_binding()
+                    if bootstrap_binding is None
+                    else bootstrap_binding
+                ),
                 approval_parent=self.approvals,
                 environment=environment,
             )
@@ -336,12 +381,165 @@ class ApprovalAndRepositoryTests(unittest.TestCase):
             any("synthetic/private/operator-session" in value for value in touched)
         )
 
+    def test_stdlib_only_bootstrap_authenticates_import_closure(self):
+        home = self.fixture.base / "home"
+        approval_parent = home / SESSION._APPROVAL_RELATIVE_PARENT
+        approval_parent.mkdir(parents=True, mode=0o700)
+        approval = approval_parent / self.fixture.approval_name
+        approval.write_bytes(PREFLIGHT.canonical_json_bytes(self.fixture.approval))
+        approval.chmod(0o400)
+        self.assertEqual(
+            SESSION._BOOTSTRAP_REVIEWED_FILES,
+            frozenset(self.fixture.profile["reviewed_files"]),
+        )
+        binding = SESSION._preimport_external_guard(
+            repository=self.fixture.repository,
+            account_home=home,
+        )
+        self.assertEqual(binding.approval_name, self.fixture.approval_name)
+        self.assertEqual(
+            binding.approval_sha256,
+            hashlib.sha256(
+                PREFLIGHT.canonical_json_bytes(self.fixture.approval)
+            ).hexdigest(),
+        )
+
+        marker = self.fixture.base / "unreviewed-import-side-effect"
+        planted = self.fixture.repository / (
+            "scripts/migration/lib/lovable_toc_operator_preflight.py"
+        )
+        planted.write_text(
+            "from pathlib import Path\n"
+            f"Path({str(marker)!r}).write_text('executed')\n",
+            encoding="ascii",
+        )
+        with self.assertRaises(SESSION._StartupFailure):
+            SESSION._preimport_external_guard(
+                repository=self.fixture.repository,
+                account_home=home,
+            )
+        self.assertFalse(marker.exists())
+
+    def test_bootstrap_and_shared_verifier_reject_approval_replacement(self):
+        home = self.fixture.base / "home"
+        approval_parent = home / SESSION._APPROVAL_RELATIVE_PARENT
+        approval_parent.mkdir(parents=True, mode=0o700)
+        approval_path = approval_parent / self.fixture.approval_name
+        original_data = PREFLIGHT.canonical_json_bytes(self.fixture.approval)
+        approval_path.write_bytes(original_data)
+        approval_path.chmod(0o400)
+        bootstrap = SESSION._preimport_external_guard(
+            repository=self.fixture.repository,
+            account_home=home,
+        )
+        shared_binding = PREFLIGHT.ApprovalBootstrapBinding(
+            approval_name=bootstrap.approval_name,
+            approval_sha256=bootstrap.approval_sha256,
+            file_identity=bootstrap.file_identity,
+            parent_identity=bootstrap.parent_identity,
+        )
+
+        replacements = []
+        changed = copy.deepcopy(self.fixture.approval)
+        changed["operator_session_root_path"] = (
+            "/synthetic/private/replaced-operator-session"
+        )
+        replacements.append(PREFLIGHT.canonical_json_bytes(changed))
+        replacements.append(original_data)
+        for replacement in replacements:
+            with self.subTest(same_bytes=replacement == original_data):
+                approval_path.unlink()
+                approval_path.write_bytes(replacement)
+                approval_path.chmod(0o400)
+                private_calls: list[str] = []
+                original_open = PREFLIGHT.os.open
+
+                def guarded_open(path, *args, **kwargs):
+                    value = os.fspath(path)
+                    if "synthetic/private" in value:
+                        private_calls.append(value)
+                        raise AssertionError("private root accessed")
+                    return original_open(path, *args, **kwargs)
+
+                with (
+                    mock.patch.object(
+                        PREFLIGHT, "verify_startup_environment", return_value=None
+                    ),
+                    mock.patch.object(PREFLIGHT, "verify_tty", return_value=None),
+                    mock.patch.object(
+                        PREFLIGHT,
+                        "verify_known_recording_ancestors",
+                        return_value=None,
+                    ),
+                    mock.patch.object(PREFLIGHT.os, "open", side_effect=guarded_open),
+                    self.assertRaises(PREFLIGHT.PreflightError) as caught,
+                ):
+                    PREFLIGHT.verify_pre_private(
+                        self.fixture.launcher,
+                        3,
+                        bootstrap_binding=shared_binding,
+                        approval_parent=approval_parent,
+                        environment={},
+                    )
+                self.assertEqual(
+                    caught.exception.reason, "approval_binding_mismatch"
+                )
+                self.assertEqual(private_calls, [])
+
+    def test_checkout_local_self_approval_candidate_is_not_discovered(self):
+        home = self.fixture.base / "home"
+        (home / SESSION._APPROVAL_RELATIVE_PARENT).mkdir(
+            parents=True, mode=0o700
+        )
+        local_candidate = (
+            self.fixture.repository
+            / f"lovable-toc-operator-approval-{self.fixture.checkout}-"
+            "0123456789abcdef.json"
+        )
+        local_candidate.write_bytes(
+            PREFLIGHT.canonical_json_bytes(self.fixture.approval)
+        )
+        local_candidate.chmod(0o400)
+        with self.assertRaises(SESSION._StartupFailure):
+            SESSION._preimport_external_guard(
+                repository=self.fixture.repository,
+                account_home=home,
+            )
+
+    def test_operator_direct_load_never_executes_underscore_alias(self):
+        shadow = self.fixture.base / "shadow"
+        shadow.mkdir(mode=0o700)
+        marker = self.fixture.base / "underscore-alias-executed"
+        (shadow / "author_lovable_toc_annotations.py").write_text(
+            "from pathlib import Path\n"
+            f"Path({str(marker)!r}).write_text('executed')\n",
+            encoding="ascii",
+        )
+        original_path = list(sys.path)
+        try:
+            sys.path.insert(0, os.fspath(shadow))
+            loaded = load_operator_session()
+        finally:
+            sys.path[:] = original_path
+        self.assertIsNotNone(loaded.AUTHOR)
+        self.assertFalse(marker.exists())
+        source = (
+            MIGRATION / "author-lovable-toc-operator-session.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn(
+            "import author_lovable_toc_annotations", source
+        )
+
     def test_missing_and_multiple_matching_approvals_fail(self):
         self.fixture.approval_path = self.fixture.approvals / self.fixture.approval_name
         self.fixture.approval_path.unlink()
         with self.assertRaises(PREFLIGHT.PreflightError) as missing:
-            self.fixture.verify()
-        self.assertEqual(missing.exception.reason, "approval_missing")
+            self.fixture.verify(
+                bootstrap_binding=self.fixture.initial_bootstrap_binding
+            )
+        self.assertEqual(
+            missing.exception.reason, "approval_binding_mismatch"
+        )
 
         self.fixture.write_approval(self.fixture.approval_name, self.fixture.approval)
         self.fixture.write_approval(
@@ -393,6 +591,51 @@ class ApprovalAndRepositoryTests(unittest.TestCase):
         with self.assertRaises(PREFLIGHT.PreflightError):
             self.fixture.verify()
 
+    def test_approval_mutation_during_read_fails(self):
+        path = self.fixture.approvals / self.fixture.approval_name
+        parent_fd = os.open(
+            self.fixture.approvals,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            before = path.stat()
+            after = types.SimpleNamespace(
+                **{
+                    name: (
+                        before.st_mtime_ns + 1
+                        if name == "st_mtime_ns"
+                        else getattr(before, name)
+                    )
+                    for name in (
+                        "st_mode",
+                        "st_ino",
+                        "st_dev",
+                        "st_nlink",
+                        "st_uid",
+                        "st_gid",
+                        "st_size",
+                        "st_mtime_ns",
+                        "st_ctime_ns",
+                    )
+                }
+            )
+            with mock.patch.object(
+                PREFLIGHT.os, "fstat", side_effect=[before, after]
+            ):
+                with self.assertRaises(
+                    PREFLIGHT.PreflightError
+                ) as caught:
+                    PREFLIGHT._stable_approval_file_at(
+                        parent_fd,
+                        os.stat(self.fixture.approvals),
+                        self.fixture.approval_name,
+                    )
+            self.assertEqual(caught.exception.reason, "approval_invalid")
+        finally:
+            os.close(parent_fd)
+
     def test_approval_parent_mode_and_symlink_fail(self):
         self.fixture.approvals.chmod(0o755)
         with self.assertRaises(PREFLIGHT.PreflightError):
@@ -408,9 +651,18 @@ class ApprovalAndRepositoryTests(unittest.TestCase):
                     PREFLIGHT, "verify_startup_environment", return_value=None
                 ),
                 mock.patch.object(PREFLIGHT, "verify_tty", return_value=None),
+                mock.patch.object(
+                    PREFLIGHT,
+                    "verify_known_recording_ancestors",
+                    return_value=None,
+                ),
             ):
                 PREFLIGHT.verify_pre_private(
-                    self.fixture.launcher, 3, approval_parent=alias, environment={}
+                    self.fixture.launcher,
+                    3,
+                    bootstrap_binding=self.fixture.bootstrap_binding(),
+                    approval_parent=alias,
+                    environment={},
                 )
 
     def test_profile_tampering_fails_against_external_digest(self):
@@ -511,11 +763,37 @@ class ApprovalAndRepositoryTests(unittest.TestCase):
 
         with mock.patch.object(PREFLIGHT.os, "open", side_effect=reject_create):
             with self.assertRaises(PREFLIGHT.PreflightError):
-                self.fixture.verify()
+                self.fixture.verify(
+                    bootstrap_binding=self.fixture.initial_bootstrap_binding
+                )
         self.assertEqual(list(self.fixture.approvals.iterdir()), [])
 
 
 class PythonAndStartupTests(unittest.TestCase):
+    @staticmethod
+    def changed_stat(metadata, **changes):
+        names = (
+            "st_mode",
+            "st_ino",
+            "st_dev",
+            "st_nlink",
+            "st_uid",
+            "st_gid",
+            "st_size",
+            "st_atime",
+            "st_mtime",
+            "st_ctime",
+            "st_atime_ns",
+            "st_mtime_ns",
+            "st_ctime_ns",
+        )
+        return types.SimpleNamespace(
+            **{
+                name: changes.get(name, getattr(metadata, name))
+                for name in names
+            }
+        )
+
     def make_python_contract(self, path: Path) -> tuple[dict, dict]:
         metadata = path.stat()
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -552,7 +830,9 @@ class PythonAndStartupTests(unittest.TestCase):
         return {"python_policy": policy}, {"python_identity": approval}
 
     def test_exact_python_identity_and_isolated_flags_succeed(self):
-        temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        temporary = tempfile.TemporaryDirectory(
+            dir=str(CANONICAL_TEMP_PARENT)
+        )
         self.addCleanup(temporary.cleanup)
         path = Path(temporary.name) / "python"
         path.write_bytes(b"synthetic python")
@@ -578,7 +858,9 @@ class PythonAndStartupTests(unittest.TestCase):
         self.assertEqual(observed, approval["python_identity"]["identity_sha256"])
 
     def test_missing_wrong_hash_version_mode_link_and_symlink_fail(self):
-        temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        temporary = tempfile.TemporaryDirectory(
+            dir=str(CANONICAL_TEMP_PARENT)
+        )
         self.addCleanup(temporary.cleanup)
         path = Path(temporary.name) / "python"
         path.write_bytes(b"synthetic python")
@@ -619,7 +901,9 @@ class PythonAndStartupTests(unittest.TestCase):
             PREFLIGHT._verify_python(profile, approval)
 
     def test_nonisolated_runtime_flags_fail(self):
-        temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        temporary = tempfile.TemporaryDirectory(
+            dir=str(CANONICAL_TEMP_PARENT)
+        )
         self.addCleanup(temporary.cleanup)
         path = Path(temporary.name) / "python"
         path.write_bytes(b"synthetic python")
@@ -640,6 +924,59 @@ class PythonAndStartupTests(unittest.TestCase):
             mock.patch.object(PREFLIGHT.sys, "implementation", fake_implementation),
             mock.patch.object(PREFLIGHT.sys, "flags", fake_flags),
             mock.patch.object(PREFLIGHT.sys, "dont_write_bytecode", False),
+        ):
+            with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+                PREFLIGHT._verify_python(profile, approval)
+        self.assertEqual(caught.exception.reason, "python_identity_mismatch")
+
+    def test_python_wrong_owner_nonregular_and_nonexecutable_fail(self):
+        temporary = tempfile.TemporaryDirectory(
+            dir=str(CANONICAL_TEMP_PARENT)
+        )
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        path = root / "python"
+        path.write_bytes(b"synthetic python")
+        path.chmod(0o755)
+        profile, approval = self.make_python_contract(path)
+        metadata = path.stat()
+        wrong_owner = self.changed_stat(
+            metadata, st_uid=metadata.st_uid + 1
+        )
+        with mock.patch.object(
+            PREFLIGHT.os, "fstat", return_value=wrong_owner
+        ):
+            with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+                PREFLIGHT._verify_python(profile, approval)
+        self.assertEqual(caught.exception.reason, "python_identity_mismatch")
+
+        directory_profile = copy.deepcopy(profile)
+        directory_approval = copy.deepcopy(approval)
+        directory_profile["python_policy"]["absolute_path"] = str(root)
+        directory_approval["python_identity"]["absolute_path"] = str(root)
+        with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+            PREFLIGHT._verify_python(directory_profile, directory_approval)
+        self.assertEqual(caught.exception.reason, "python_identity_mismatch")
+
+        path.chmod(0o644)
+        profile, approval = self.make_python_contract(path)
+        with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+            PREFLIGHT._verify_python(profile, approval)
+        self.assertEqual(caught.exception.reason, "python_identity_mismatch")
+
+    def test_python_identity_mutation_during_hash_fails(self):
+        temporary = tempfile.TemporaryDirectory(
+            dir=str(CANONICAL_TEMP_PARENT)
+        )
+        self.addCleanup(temporary.cleanup)
+        path = Path(temporary.name) / "python"
+        path.write_bytes(b"synthetic python")
+        path.chmod(0o755)
+        profile, approval = self.make_python_contract(path)
+        before = path.stat()
+        after = self.changed_stat(before, st_mtime_ns=before.st_mtime_ns + 1)
+        with mock.patch.object(
+            PREFLIGHT.os, "fstat", side_effect=[before, after]
         ):
             with self.assertRaises(PREFLIGHT.PreflightError) as caught:
                 PREFLIGHT._verify_python(profile, approval)
@@ -681,6 +1018,106 @@ class PythonAndStartupTests(unittest.TestCase):
             with self.assertRaises(PREFLIGHT.PreflightError) as caught:
                 PREFLIGHT.verify_startup_environment(valid)
         self.assertEqual(caught.exception.reason, "startup_environment_invalid")
+
+    def test_known_recording_ancestor_scan_accepts_reviewed_chain(self):
+        results = (
+            types.SimpleNamespace(returncode=0, stdout=b"7 /bin/zsh\n"),
+            types.SimpleNamespace(returncode=0, stdout=b"1 /usr/bin/login\n"),
+        )
+        with (
+            mock.patch.object(PREFLIGHT.os, "getppid", return_value=42),
+            mock.patch.object(
+                PREFLIGHT.subprocess, "run", side_effect=results
+            ) as run,
+        ):
+            PREFLIGHT.verify_known_recording_ancestors()
+        self.assertEqual(run.call_count, 2)
+        for call in run.call_args_list:
+            self.assertEqual(call.args[0][0], PREFLIGHT.REVIEWED_PS)
+            self.assertEqual(call.kwargs["stdin"], subprocess.DEVNULL)
+            self.assertEqual(call.kwargs["stdout"], subprocess.PIPE)
+            self.assertEqual(call.kwargs["stderr"], subprocess.DEVNULL)
+            self.assertEqual(
+                call.kwargs["env"], PREFLIGHT.REVIEWED_PS_ENVIRONMENT
+            )
+            self.assertTrue(call.kwargs["close_fds"])
+
+    def test_every_known_recording_ancestor_is_fixed_tty_rejection(self):
+        for recorder in sorted(PREFLIGHT.KNOWN_RECORDING_ANCESTOR_NAMES):
+            with (
+                self.subTest(recorder=recorder),
+                mock.patch.object(PREFLIGHT.os, "getppid", return_value=42),
+                mock.patch.object(
+                    PREFLIGHT.subprocess,
+                    "run",
+                    return_value=types.SimpleNamespace(
+                        returncode=0,
+                        stdout=f"1 /synthetic/{recorder}\n".encode("ascii"),
+                    ),
+                ),
+                self.assertRaises(PREFLIGHT.PreflightError) as caught,
+            ):
+                PREFLIGHT.verify_known_recording_ancestors()
+            self.assertEqual(caught.exception.reason, "tty_invalid")
+            self.assertEqual(
+                PREFLIGHT.fixed_diagnostic("failed", caught.exception.reason),
+                b'{"diagnostic_version":1,"reason":"tty_invalid",'
+                b'"stage":"annotation_operator_preflight","status":"failed"}\n',
+            )
+
+    def test_ancestor_scan_ambiguity_is_fail_closed(self):
+        cases = (
+            types.SimpleNamespace(returncode=1, stdout=b""),
+            types.SimpleNamespace(returncode=0, stdout=b""),
+            types.SimpleNamespace(returncode=0, stdout=b"not-a-parent shell\n"),
+            types.SimpleNamespace(
+                returncode=0,
+                stdout=b"1 " + b"x" * PREFLIGHT.MAX_PS_OUTPUT_BYTES,
+            ),
+        )
+        for result in cases:
+            with (
+                self.subTest(result=result),
+                mock.patch.object(PREFLIGHT.os, "getppid", return_value=42),
+                mock.patch.object(
+                    PREFLIGHT.subprocess, "run", return_value=result
+                ),
+                self.assertRaises(PREFLIGHT.PreflightError) as caught,
+            ):
+                PREFLIGHT.verify_known_recording_ancestors()
+            self.assertEqual(caught.exception.reason, "tty_invalid")
+
+    def test_shared_preflight_rejects_ancestor_before_approval_or_private_access(self):
+        fixture = SyntheticRepository(self)
+        environment = {
+            "LANG": "C",
+            "LC_ALL": "C",
+            "TERM": "xterm-256color",
+            "TOC_OPERATOR_TTY_FD": "3",
+        }
+        with (
+            mock.patch.object(
+                PREFLIGHT, "verify_startup_environment", return_value=None
+            ),
+            mock.patch.object(PREFLIGHT, "verify_tty", return_value=None),
+            mock.patch.object(
+                PREFLIGHT,
+                "verify_known_recording_ancestors",
+                side_effect=PREFLIGHT.PreflightError("tty_invalid"),
+            ) as ancestor_scan,
+            mock.patch.object(PREFLIGHT, "_load_unique_approval") as approval,
+            self.assertRaises(PREFLIGHT.PreflightError) as caught,
+        ):
+            PREFLIGHT.verify_pre_private(
+                fixture.launcher,
+                3,
+                bootstrap_binding=fixture.initial_bootstrap_binding,
+                approval_parent=fixture.approvals,
+                environment=environment,
+            )
+        self.assertEqual(caught.exception.reason, "tty_invalid")
+        ancestor_scan.assert_called_once_with()
+        approval.assert_not_called()
 
     def test_fixed_diagnostics_do_not_include_observed_values(self):
         sentinel = "PRIVATE-PATH-TOC-SQL-SECRET"

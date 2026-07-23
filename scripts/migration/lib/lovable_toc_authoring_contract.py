@@ -253,6 +253,25 @@ class GenerationOneBindingPolicy:
     current_binding: AuthoringBinding
     allow_successor_transition: bool = False
 
+    def __post_init__(self) -> None:
+        exact_historical = AuthoringBinding(
+            execution_checkout_sha=(
+                "b1986e4079b52edbb4ef5cd4c56ed4d20af07195"
+            ),
+            procedure_identity_sha256=(
+                "bc0b990d878db1e2c72bd4ac91314fe32261a454ac38505b7ea6df4af2b5f3d8"
+            ),
+            execution_python_identity_sha256=(
+                "4b42b1a117605cafc8607b67b0892a609c2cd125012dd56288abeed8c89cdfb1"
+            ),
+        )
+        if (
+            type(self.allow_successor_transition) is not bool
+            or self.historical_binding.as_dict() != exact_historical.as_dict()
+            or self.current_binding.as_dict() == exact_historical.as_dict()
+        ):
+            raise AuthoringContractError("history_invalid")
+
 
 @dataclass(frozen=True)
 class AuthoringEntry:

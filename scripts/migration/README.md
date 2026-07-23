@@ -630,20 +630,88 @@ entrypoint when real authoring bindings must not pass through argv, exported
 shell environment, shell history, chat, clipboard/browser transport, Git, CI,
 diagnostics, or ambient temporary files. It is zero-argument and
 startup-isolated. It prompts only through the verified local controlling TTY,
-feeds the approved Python/check-out bootstrap to the isolated child over stdin,
-and performs exactly one operator-selected action. For `initialize`, it writes
-one immutable private root authorization record, creates the empty annotation
-root with no replacement, invokes the internal authoring engine in memory, and
-writes one immutable private resume record for generation 1. For every later
+deterministically selects the one profile-approved CPython executable, and
+uses one shared pre-private verifier to bind the external approval, committed
+profile, exact checkout, reviewed blobs, procedure identities, clean
+repository, interpreter, startup isolation, and TTY. The operator does not type
+an interpreter path, interpreter hash/version, checkout SHA, procedure hash, or
+post-initialization capture/resume binding. The wrapper then performs at most
+one operator-selected action. For `initialize`, it writes one immutable private
+root authorization record, creates the empty annotation root with no
+replacement, invokes the internal authoring engine in memory, and writes one
+immutable private resume record for generation 1. For every later
 non-finalization action, it reads exactly one current private resume record,
-publishes one immutable action authorization record, injects the generation,
-checkpoint SHA, and release token to the lower authoring engine in memory,
-atomically publishes the successor resume record, and only then retires the
-predecessor record. `finalize` remains separately authorized and can publish
-only the existing unvalidated final-ledger candidate plus a terminal private
-operator record; it never validates a ledger or creates restore planning. The
-operator-session entrypoint does not invoke the validator, generate restore
-planning, connect to a database, or perform a network operation.
+derives the root/capture/generation/checkpoint/release bindings privately,
+publishes one immutable action authorization record, injects those bindings to
+the lower authoring engine in memory, atomically publishes the successor resume
+record, and only then retires the predecessor record. `finalize` remains
+separately authorized and can publish only the existing unvalidated
+final-ledger candidate plus a terminal private operator record; it never
+validates a ledger or creates restore planning. The operator-session entrypoint
+does not invoke the validator, generate restore planning, connect to a database,
+or perform a network operation.
+
+#### Public execution profile and external approval
+
+`verification/lovable-toc-operator-execution-profile.v1.json` is canonical
+public policy, not approval. It declares the exact-checkout policy,
+deterministic Python identity, reviewed-file set and procedure-identity
+formulas, supported record versions, closed action/state matrix, 100-entry
+maximum batch, prohibited effects, and the sole exact generation-1
+compatibility bridge. Its two JSON schemas define closed fixed-object shapes
+and reject unknown fields and unsupported versions. The reviewed
+canonical-JSON loader, not JSON Schema alone, rejects duplicate keys, nonfinite
+values, malformed UTF-8, and noncanonical encodings before either schema
+contract is accepted. Changing the profile or any reviewed file changes its Git
+blob and the computed procedure identities.
+
+Approval comes only from exactly one externally installed canonical
+`lovable_toc_operator_execution_approval` artifact whose filename matches the
+current checkout under the profile-declared private approval directory. The
+artifact binds that exact checkout, exact profile SHA-256, complete reviewed
+blob map, both procedure identities, exact Python file/canonical identity,
+repository owner/name declaration, one approved operator-session-root string,
+named authorizer, and review reference. The directory must be canonical,
+executor-owned, non-symlink, mode `0700`; the artifact must be a direct-child,
+executor-owned, single-link, non-symlink regular file at mode `0400`. Zero
+matching artifacts, multiple matching artifacts, a checkout/profile/blob/tool
+substitution, or an identity change during verification fails closed. The
+pre-import bootstrap authenticates the exact artifact name, whole-file digest,
+file identity, and parent identity; the shared verifier must observe those same
+values again. This prevents a different approval from being substituted between
+bootstrap and the reviewed verifier.
+
+The ordinary launcher has no code path to create, select, install, repair,
+replace, or update an approval artifact. Candidate generation and installation
+are separate review operations:
+
+1. derive one canonical, compact, sorted ASCII JSON candidate plus exactly one
+   trailing LF for an independently reviewed merged checkout;
+2. independently review its complete bytes, whole-file digest, profile/blob/
+   procedure/Python bindings, authorizer, review reference, and destination;
+3. authorize that exact candidate and destination separately;
+4. install it as a fresh mode-`0400`, single-link file through a
+   same-filesystem no-replace publication, fsync the file and mode-`0700`
+   parent, and stop on any collision or durability ambiguity.
+
+No checked-in installer is authorized by this workflow; execution remains
+blocked until that separate candidate/install procedure is itself reviewed and
+authorized. A repository-local candidate is never discovered. An old external
+approval cannot approve a changed checkout or profile. This is procedural
+external approval, not a signature or an OS immutable flag: a hostile same-user
+process capable of replacing the external file before launch remains an
+explicit local-machine trust ceiling. The in-invocation cross-pass identity
+binding does detect replacement after bootstrap. Git commit/blob/ref equality
+binds the reviewed repository content but does not separately attest remote-URL
+provenance.
+
+Normal execution and the `VERIFY_ONLY` launcher choice call the same
+`lib/lovable_toc_operator_preflight.py` semantic verifier. The shell and
+pre-import code perform only the minimum bootstrap checks needed to authenticate
+that verifier and its import closure. `VERIFY_ONLY` is not an authoring action:
+after the fixed categorical verification summary it exits without opening,
+stating, listing, locking, reading, or writing the approved operator-session
+root or capture/annotation state, and creates no record, marker, or resume.
 
 `run-lovable-toc-annotation-authoring.sh` remains the lower-level checked-in
 authoring launcher. It takes no arguments. The requested operation is supplied
@@ -726,12 +794,26 @@ resume-record filename/SHA/generation/checkpoint, current operator, fresh
 operator session, checkout/procedure identities, and finalization approval
 only when the selected action is `finalize`.
 
-The authorization digest is the SHA-256 of the exact canonical authorization
-record. The wrapper displays that digest only on the private TTY and requires
-the operator to type `authorization_digest_recorded` before it creates the
-annotation root or invokes authoring. That digest is an operator-session anchor:
-it does not self-approve any observed package metadata. External approval
-remains the trust anchor for every expected value supplied to the session.
+Initialization retains the existing root-authorization format and its private
+`authorization_digest_recorded` acknowledgement. Post-initialization actions
+do not display or ask the operator to copy an action-authorization digest.
+Instead, after public machine verification and human action/operator/state
+selection, the wrapper displays the full consequence summary before any
+operator-session-root access. The canonical transient consequence record binds
+the exact external-approval digest, profile digest, checkout, action, expected
+state, profile-capped batch, current operator claim, fresh invocation identity,
+one-action boundary, and fixed blocking failure boundary. A fresh nonsecret
+40-bit Base32 challenge is rendered `XXXX-XXXX`; the exact phrase is
+`AUTHORIZE <ACTION> <MAX> <CHALLENGE>`. A phrase from another action, state,
+batch, operator, profile, approval, or invocation fails before private access.
+Only after the phrase succeeds may the wrapper open and lock the approved
+operator-session root. It privately derives the immutable root/capture/resume
+bindings, publishes the existing action-authorization-v2 record, and requires
+the short fixed `action_authorization_recorded` acknowledgement before the
+engine performs the authorized action. The durable v2 record directly binds the
+checkout/procedures/root/capture/resume/action; the profile and external
+approval are bound by the preceding transient consequence gate, not by new
+fields in the unchanged v2 schema.
 
 When the internal authoring engine publishes generation 1 or any later
 non-finalization checkpoint boundary, the wrapper records
@@ -756,6 +838,53 @@ chain where present, and token binding, and passes the token in memory to the
 lower-level authoring engine; it must not place the tuple in argv, exported
 environment, shell history, chat, CI, or diagnostics.
 
+#### Exact self-closing generation-1 bridge
+
+The real initialization predates this execution-profile bootstrap. The
+committed bridge therefore recognizes exactly one historical shape without
+rewriting it: generation `1`, state `PRIMARY_REVIEW_REQUIRED`, action
+`primary_review`, checkout
+`b1986e4079b52edbb4ef5cd4c56ed4d20af07195`, authoring procedure
+`bc0b990d878db1e2c72bd4ac91314fe32261a454ac38505b7ea6df4af2b5f3d8`,
+operator-session procedure
+`ee0dbb3ecb9b469bef49c1fe0305ea60602bbbbaddd2f551a7774dad6cacdc23`,
+and the profile-pinned CPython identity. The root authorization must have the
+exact v1 shape, the resume must have the exact predecessor-free v2 shape and
+canonical generation-1 name, the checkpoint must validate as v1 under its
+historical execution binding, and the operator-session root must contain only
+the exact root/current-resume/allowed marker set. Duplicate or forked currents,
+a predecessor-bearing or altered generation 1, another action/state, old-bound
+generation 2 or later, a lock/indeterminate marker, stale history, or any
+binding mismatch fails closed.
+
+One successful bridge invocation consumes the untouched generation-1
+predecessor and publishes exactly one checkpoint-v1/resume-v2 generation-2
+successor under the current approved checkout/procedures/Python. The historical
+checkpoint and predecessor bytes remain unchanged and retained; only the
+profile-approved generation-1-to-2 binding transition validates. The new
+resume has a predecessor and current execution identity, so the bridge is no
+longer eligible and ordinary exact-current rules apply. It cannot be reused or
+generalized. From the current real generation-1 boundary, `status` is not a
+bridge action: the only non-private option is `VERIFY_ONLY`, and the only
+private bridge action is a separately authorized `primary_review`.
+
+The synthetic primary-review UX contract is measurable. Post-initialization
+manual machine-identity fields and typed hashes are both zero. Before private
+root access, the deterministic primary-review path has four human line entries
+(`primary_review`, the current human identity, the expected state when
+ambiguous, and the consequence phrase): the fixed synthetic fixture is 95
+keystrokes including Returns. One 30-keystroke fixed
+`action_authorization_recorded` acknowledgement follows private authorization
+but precedes the first TOC decision, for five prompts and 125 keystrokes total
+before the first private entry. Exactly one `resume_values_recorded`
+acknowledgement follows successor publication. The previous post-initialization
+path required 6+ manually transcribed public machine/binding fields, multiple
+40/64-hex values, and a copied action digest. The refactor removes that entire
+transcription surface; a conservative human estimate is 60–120 seconds saved
+per 100-entry batch. That time estimate is not runtime evidence. The synthetic
+code path itself completes below the focused test timeout; operator review time
+is deliberately dominated by the semantic TOC decisions, not bootstrap.
+
 The operator-session wrapper itself still has local trust ceilings. It cannot
 prove an unknown recorder is absent, prevent a human from using a clipboard
 despite the typed attestation, attest a hostile same-user process, or provide a
@@ -772,9 +901,12 @@ in the current foreground process group with readable termios state before any
 private operator prompt is accepted.
 
 The lower-level authoring component has no defaults for private inputs or
-approval identities. The operator-session wrapper supplies this contract
-in-memory from private authorization and resume records. Do not hand-export
-real values unless a separate reviewed private injection mechanism exists:
+approval identities. The following table is its internal interface, not a list
+for the human operator to transcribe. The operator-session wrapper supplies it
+in memory: public execution facts come from the verified profile/approval, and
+post-initialization capture/root/head/release facts come from the immutable root
+authorization and unique current resume after the consequence gate. Do not
+hand-export real values:
 
 | Variable | Authoring contract |
 |---|---|
@@ -844,9 +976,11 @@ attribute/read failure, or other incomplete handoff leaves a blocking lock
 and, where possible, an indeterminate marker; it never leaves a normal
 released state. This is not permission to pipe or record the terminal.
 
-The launcher requires an explicitly approved absolute canonical CPython path,
-its externally approved SHA-256 and exact `cpython:MAJOR.MINOR.MICRO` version,
-safe root-or-operator ownership, one link, and non-writable group/world mode.
+The launcher deterministically selects the profile's one approved absolute
+canonical CPython path; it never searches `PATH`, offers a fallback, or asks the
+operator to choose. The shared verifier requires the exact external approval,
+SHA-256, `cpython:MAJOR.MINOR.MICRO` version, UID/GID/mode, regular executable
+file type, one link, executable bit, and no symlink component.
 It lowers both soft and hard core-file limits to zero, and the isolated
 bootstrap verifies that limit before repository code or private input.
 Its shell code rejects native-loader and Python-startup variables before the
@@ -861,19 +995,28 @@ clean checkout, reviewed Git blobs, and absence of ordinary or ignored
 untracked migration-tool inputs. The internal `.py` file is not a supported
 operator entrypoint. The procedure performs no network operation and never
 invokes `pg_restore`, a database client, restore tooling, or the ledger
-validator. The launcher hashes the approved interpreter before and after its
-isolated version probe, but the kernel still executes a pathname rather than a
-held executable descriptor. It therefore cannot independently exclude a
-hostile same-user path-swap-and-restore race between the last check and `exec`;
-stop unless that local-machine trust ceiling is acceptable.
+validator. The operator-session shell first executes the deterministic
+approved Python pathname; the isolated child then hashes and verifies that
+fixed pathname, its runtime version, and its file identity. The kernel did not
+execute a held descriptor, so those post-exec checks cannot independently prove
+which bytes it consumed during a hostile same-user path-swap-and-restore race.
+The lower-level launcher retains its own hash/probe checks, but neither path
+closes that kernel pathname ceiling. Stop unless this local-machine trust
+ceiling is acceptable.
 
 Private review context is written only through the verified controlling TTY
 descriptor in a local alternate-screen session. Standard input, output, and
 error must each be the same foreground controlling terminal; pipes,
-redirection, and non-TTY execution are rejected. Known record-to-file ancestor
-processes and known SSH/Mosh/multiplexer/editor-terminal markers are rejected. The workflow
-provides no browser or clipboard transport. The named operator must also
-provide the exact local-TTY attestation
+redirection, and non-TTY execution are rejected. The single shared pre-private
+verifier follows at most 32 parent links with the reviewed absolute `/bin/ps`
+path and rejects the exact known recorder basenames `asciinema`, `script`,
+`scriptreplay`, `shelr`, `termrec`, `tlog-rec-session`, and `ttyrec`.
+Unreadable, malformed, cyclic, or over-depth process ancestry fails with only
+the fixed `tty_invalid` diagnostic before consequence authorization. Known
+SSH/Mosh/multiplexer/editor-terminal markers are also rejected. This bounded
+basename scan does not prove an unknown, renamed, or otherwise disguised
+recorder is absent. The workflow provides no browser or clipboard transport.
+The named operator must also provide the exact local-TTY attestation
 required by the launcher. Raw context is bounded and escaped before display;
 ordinary stdout and stderr receive only fixed allowlisted diagnostics and
 aggregate counts. The alternate screen is cleared on normal exit and on

@@ -39,6 +39,20 @@ APPROVAL_MAX_BYTES = 512 * 1024
 MAX_JSON_DEPTH = 24
 MAX_GIT_OUTPUT_BYTES = 2 * 1024 * 1024
 REVIEWED_GIT = "/usr/bin/git"
+REVIEWED_PS = "/bin/ps"
+MAX_PROCESS_ANCESTORS = 32
+MAX_PS_OUTPUT_BYTES = 1024
+KNOWN_RECORDING_ANCESTOR_NAMES = frozenset(
+    {
+        "asciinema",
+        "script",
+        "scriptreplay",
+        "shelr",
+        "termrec",
+        "tlog-rec-session",
+        "ttyrec",
+    }
+)
 REVIEWED_GIT_CONFIG = (
     "-c",
     "core.fsmonitor=false",
@@ -54,6 +68,11 @@ REVIEWED_GIT_ENVIRONMENT = {
     "GIT_NO_REPLACE_OBJECTS": "1",
     "GIT_OPTIONAL_LOCKS": "0",
     "GIT_TERMINAL_PROMPT": "0",
+    "LANG": "C",
+    "LC_ALL": "C",
+    "PATH": "/usr/bin:/bin",
+}
+REVIEWED_PS_ENVIRONMENT = {
     "LANG": "C",
     "LC_ALL": "C",
     "PATH": "/usr/bin:/bin",
@@ -257,6 +276,43 @@ class VerifiedPreflight:
     repository_root: str
     reviewed_file_blobs: Mapping[str, str]
     summary: Mapping[str, bool]
+
+
+@dataclass(frozen=True)
+class ApprovalBootstrapBinding:
+    """External approval identity authenticated before reviewed imports."""
+
+    approval_name: str
+    approval_sha256: str
+    file_identity: tuple[int, ...]
+    parent_identity: tuple[int, ...]
+
+
+def _approval_file_identity(metadata: os.stat_result) -> tuple[int, ...]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_nlink,
+        metadata.st_uid,
+        metadata.st_gid,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def _approval_parent_identity(metadata: os.stat_result) -> tuple[int, ...]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_nlink,
+        metadata.st_uid,
+        metadata.st_gid,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
 
 
 def fixed_diagnostic(status: str, reason: str) -> bytes:
@@ -918,6 +974,7 @@ def _stable_approval_file_at(
 def _load_unique_approval(
     parent: Path,
     *,
+    bootstrap_binding: ApprovalBootstrapBinding,
     checkout: str,
     profile: Mapping[str, Any],
     repository: Path,
@@ -945,20 +1002,15 @@ def _load_unique_approval(
         raise PreflightError("approval_invalid") from exc
     try:
         opened_parent = os.fstat(parent_fd)
-        if (
-            opened_parent.st_dev,
-            opened_parent.st_ino,
-            opened_parent.st_mode,
-            opened_parent.st_uid,
-            opened_parent.st_gid,
-        ) != (
-            parent_lstat.st_dev,
-            parent_lstat.st_ino,
-            parent_lstat.st_mode,
-            parent_lstat.st_uid,
-            parent_lstat.st_gid,
+        if _approval_parent_identity(opened_parent) != _approval_parent_identity(
+            parent_lstat
         ):
             raise PreflightError("approval_invalid")
+        if (
+            _approval_parent_identity(opened_parent)
+            != bootstrap_binding.parent_identity
+        ):
+            raise PreflightError("approval_binding_mismatch")
         expression = re.compile(
             profile["approval_discovery"]["filename_pattern"], re.ASCII
         )
@@ -975,20 +1027,19 @@ def _load_unique_approval(
         if len(matches) != 1:
             raise PreflightError("approval_ambiguous")
         name = matches[0]
-        data, _metadata = _stable_approval_file_at(parent_fd, opened_parent, name)
-        after_parent = os.fstat(parent_fd)
+        if name != bootstrap_binding.approval_name:
+            raise PreflightError("approval_binding_mismatch")
+        data, metadata = _stable_approval_file_at(
+            parent_fd, opened_parent, name
+        )
         if (
-            opened_parent.st_dev,
-            opened_parent.st_ino,
-            opened_parent.st_mode,
-            opened_parent.st_uid,
-            opened_parent.st_gid,
-        ) != (
-            after_parent.st_dev,
-            after_parent.st_ino,
-            after_parent.st_mode,
-            after_parent.st_uid,
-            after_parent.st_gid,
+            _approval_file_identity(metadata) != bootstrap_binding.file_identity
+            or sha256_bytes(data) != bootstrap_binding.approval_sha256
+        ):
+            raise PreflightError("approval_binding_mismatch")
+        after_parent = os.fstat(parent_fd)
+        if _approval_parent_identity(opened_parent) != _approval_parent_identity(
+            after_parent
         ):
             raise PreflightError("approval_invalid")
     finally:
@@ -1195,6 +1246,69 @@ def verify_startup_environment(
         raise PreflightError("startup_environment_invalid")
 
 
+def verify_known_recording_ancestors() -> None:
+    """Reject reviewed known record-to-file wrappers before private access.
+
+    The bounded scan follows parent links using the reviewed absolute
+    ``/bin/ps`` path and compares only case-folded command basenames. An
+    unreadable, malformed, cyclic, or over-depth chain is not treated as safe.
+    Observed process data is never included in the fixed public diagnostic.
+    """
+
+    try:
+        metadata = os.lstat(REVIEWED_PS)
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or not stat.S_ISREG(metadata.st_mode)
+            or not os.access(REVIEWED_PS, os.X_OK)
+        ):
+            raise OSError
+        process_id = os.getppid()
+        seen: set[int] = set()
+        for _ in range(MAX_PROCESS_ANCESTORS):
+            if process_id <= 1:
+                return
+            if process_id in seen:
+                raise OSError
+            seen.add(process_id)
+            result = subprocess.run(
+                [
+                    REVIEWED_PS,
+                    "-o",
+                    "ppid=",
+                    "-o",
+                    "comm=",
+                    "-p",
+                    str(process_id),
+                ],
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                env=dict(REVIEWED_PS_ENVIRONMENT),
+                timeout=5,
+                close_fds=True,
+            )
+            if (
+                result.returncode != 0
+                or not result.stdout
+                or len(result.stdout) > MAX_PS_OUTPUT_BYTES
+            ):
+                raise OSError
+            line = result.stdout.decode("ascii", errors="strict").strip()
+            pieces = line.split(None, 1)
+            if len(pieces) != 2 or not pieces[0].isdigit():
+                raise OSError
+            parent = int(pieces[0])
+            command = pieces[1].rsplit("/", 1)[-1].casefold()
+            if command in KNOWN_RECORDING_ANCESTOR_NAMES:
+                raise OSError
+            process_id = parent
+        raise OSError
+    except (OSError, UnicodeError, subprocess.SubprocessError) as exc:
+        raise PreflightError("tty_invalid") from exc
+
+
 def verify_tty(tty_fd: int, environment: Mapping[str, str] | None = None) -> None:
     values = os.environ if environment is None else environment
     if any(values.get(name) for name in TTY_REJECTION_NAMES):
@@ -1208,8 +1322,19 @@ def verify_tty(tty_fd: int, environment: Mapping[str, str] | None = None) -> Non
         raise PreflightError("tty_invalid")
     controlling_fd = -1
     try:
-        before = os.fstat(tty_fd)
-        if not stat.S_ISCHR(before.st_mode) or not os.isatty(tty_fd):
+        descriptors = (0, 1, 2, tty_fd)
+        before_by_fd = {}
+        for descriptor in descriptors:
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISCHR(metadata.st_mode) or not os.isatty(descriptor):
+                raise PreflightError("tty_invalid")
+            before_by_fd[descriptor] = metadata
+        before = before_by_fd[tty_fd]
+        terminal_identity = (before.st_dev, before.st_rdev)
+        if any(
+            (metadata.st_dev, metadata.st_rdev) != terminal_identity
+            for metadata in before_by_fd.values()
+        ):
             raise PreflightError("tty_invalid")
         controlling_fd = os.open(
             "/dev/tty",
@@ -1223,11 +1348,14 @@ def verify_tty(tty_fd: int, environment: Mapping[str, str] | None = None) -> Non
             or not os.isatty(controlling_fd)
             or (controlling.st_dev, controlling.st_rdev)
             != (before.st_dev, before.st_rdev)
-            or os.tcgetpgrp(tty_fd) != os.getpgrp()
         ):
             raise PreflightError("tty_invalid")
-        termios.tcgetattr(tty_fd)
-        after = os.fstat(tty_fd)
+        process_group = os.getpgrp()
+        for descriptor in descriptors:
+            if os.tcgetpgrp(descriptor) != process_group:
+                raise PreflightError("tty_invalid")
+            termios.tcgetattr(descriptor)
+        after_by_fd = {descriptor: os.fstat(descriptor) for descriptor in descriptors}
     except PreflightError:
         raise
     except (OSError, termios.error) as exc:
@@ -1238,28 +1366,32 @@ def verify_tty(tty_fd: int, environment: Mapping[str, str] | None = None) -> Non
                 os.close(controlling_fd)
             except OSError:
                 pass
-    if (
-        before.st_dev,
-        before.st_ino,
-        before.st_rdev,
-        before.st_mode,
-        before.st_uid,
-        before.st_gid,
-    ) != (
-        after.st_dev,
-        after.st_ino,
-        after.st_rdev,
-        after.st_mode,
-        after.st_uid,
-        after.st_gid,
-    ):
-        raise PreflightError("tty_invalid")
+    for descriptor in descriptors:
+        observed_before = before_by_fd[descriptor]
+        observed_after = after_by_fd[descriptor]
+        if (
+            observed_before.st_dev,
+            observed_before.st_ino,
+            observed_before.st_rdev,
+            observed_before.st_mode,
+            observed_before.st_uid,
+            observed_before.st_gid,
+        ) != (
+            observed_after.st_dev,
+            observed_after.st_ino,
+            observed_after.st_rdev,
+            observed_after.st_mode,
+            observed_after.st_uid,
+            observed_after.st_gid,
+        ):
+            raise PreflightError("tty_invalid")
 
 
 def verify_pre_private(
     launcher_path: os.PathLike[str] | str,
     tty_fd: int,
     *,
+    bootstrap_binding: ApprovalBootstrapBinding,
     approval_parent: os.PathLike[str] | str | None = None,
     account_home: os.PathLike[str] | str | None = None,
     environment: Mapping[str, str] | None = None,
@@ -1277,6 +1409,7 @@ def verify_pre_private(
     profile, profile_sha256 = _read_public_profile(repository)
     verify_startup_environment(environment)
     verify_tty(tty_fd, environment)
+    verify_known_recording_ancestors()
     checkout = _git_ascii(repository, ["rev-parse", "HEAD"])
     if GIT_SHA_RE.fullmatch(checkout) is None:
         raise PreflightError("repository_binding_mismatch")
@@ -1287,6 +1420,7 @@ def verify_pre_private(
     )
     approval, approval_name, approval_sha256 = _load_unique_approval(
         parent,
+        bootstrap_binding=bootstrap_binding,
         checkout=checkout,
         profile=profile,
         repository=repository,
@@ -1316,6 +1450,7 @@ def verify_pre_private(
 
 
 __all__ = [
+    "ApprovalBootstrapBinding",
     "APPROVAL_MAX_BYTES",
     "PROFILE_MAX_BYTES",
     "PROFILE_RELATIVE_PATH",
@@ -1329,6 +1464,7 @@ __all__ = [
     "strict_canonical_json_loads",
     "validate_approval",
     "validate_profile",
+    "verify_known_recording_ancestors",
     "verify_pre_private",
     "verify_startup_environment",
     "verify_tty",

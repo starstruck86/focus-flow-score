@@ -62,53 +62,13 @@ done
 exec 3<>/dev/tty || fail_tty
 [ -t 3 ] || fail_tty
 
-read_private() {
-  read_private_prompt=$1
-  read_private_value=
-  printf '%s: ' "$read_private_prompt" >&3 || fail_tty
-  stty -echo <&3 || fail_tty
-  IFS= read -r read_private_value <&3 || {
-    stty echo <&3 2>/dev/null || :
-    fail_tty
-  }
-  stty echo <&3 || fail_tty
-  printf '\n' >&3 || fail_tty
-  printf '%s' "$read_private_value"
-}
-
-execution_python=$(read_private 'execution_python_absolute_path')
-approved_python_sha256=$(read_private 'execution_python_sha256')
-approved_python_version=$(read_private 'execution_python_version')
-approved_checkout=$(read_private 'approved_execution_checkout_sha')
-
-case "$execution_python" in
-  /*) ;;
-  *) fail_startup ;;
-esac
-case "$approved_python_sha256" in
-  *[!0123456789abcdef]* | "") fail_startup ;;
-esac
-[ "${#approved_python_sha256}" -eq 64 ] || fail_startup
-case "$approved_checkout" in
-  *[!0123456789abcdef]* | "") fail_startup ;;
-esac
-[ "${#approved_checkout}" -eq 40 ] || fail_startup
-case "$approved_python_version" in
-  cpython:[0-9]*.[0-9]*.[0-9]*) ;;
-  *) fail_startup ;;
-esac
-
-readonly script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P) || fail_startup
+readonly script_dir=$(CDPATH= cd -- "$(/usr/bin/dirname -- "$0")" && pwd -P) || fail_startup
 readonly driver="$script_dir/author-lovable-toc-operator-session.py"
-[ -f "$driver" ] || fail_startup
+readonly execution_python='/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9'
+[ -f "$driver" ] && [ ! -L "$driver" ] || fail_startup
+[ -f "$execution_python" ] && [ ! -L "$execution_python" ] && [ -x "$execution_python" ] || fail_startup
 
-{
-  printf '%s\0%s\0%s\0%s\0' \
-    "$execution_python" \
-    "$approved_python_sha256" \
-    "$approved_python_version" \
-    "$approved_checkout"
-} | /usr/bin/env -i \
+exec /usr/bin/env -i \
   LANG=C \
   LC_ALL=C \
   TERM="${TERM:-xterm-256color}" \

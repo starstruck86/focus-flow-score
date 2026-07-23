@@ -69,6 +69,7 @@ jobs:
               Path("scripts/migration/inventory-edge-functions.py"),
               Path("scripts/migration/bounded-pg-restore.py"),
               Path("scripts/migration/author-lovable-toc-annotations.py"),
+              Path("scripts/migration/author-lovable-toc-operator-session.py"),
               Path("scripts/migration/capture-lovable-toc-envelope.py"),
               Path("scripts/migration/capture-lovable-toc.py"),
               Path("scripts/migration/inspect-lovable-export.py"),
@@ -77,6 +78,7 @@ jobs:
               Path("scripts/migration/lib/lovable_dump_report.py"),
               Path("scripts/migration/lib/lovable_toc_authoring_contract.py"),
               Path("scripts/migration/lib/lovable_toc_contract.py"),
+              Path("scripts/migration/lib/lovable_toc_operator_preflight.py"),
               Path("scripts/migration/validate-postgres-image-lock.py"),
               Path("scripts/migration/validate-lovable-toc-ledger.py"),
           ):
@@ -84,6 +86,10 @@ jobs:
           PY
           python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_toc_annotation_*.py' -v
+          python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_operator_preflight.py' -v
+          python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_operator_session.py' -v
           python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_toc_metadata_reattestation*.py' -v
           python3 -I -S -B -m unittest discover -s tests/migration -p 'test_*.py' -v
@@ -201,12 +207,15 @@ jobs:
               Path("scripts/migration/lib/lovable_dump_report.py"),
               Path("scripts/migration/lib/lovable_toc_authoring_contract.py"),
               Path("scripts/migration/lib/lovable_toc_contract.py"),
+              Path("scripts/migration/lib/lovable_toc_operator_preflight.py"),
               Path("scripts/migration/validate-lovable-toc-ledger.py"),
           ):
               compile(path.read_text(encoding="utf-8"), str(path), "exec")
           PY
           /usr/bin/python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_toc_annotation_*.py' -v
+          /usr/bin/python3 -I -S -B -m unittest discover \
+            -s tests/migration -p 'test_lovable_toc_operator_preflight.py' -v
           /usr/bin/python3 -I -S -B -m unittest discover \
             -s tests/migration -p 'test_lovable_toc_metadata_reattestation*.py' -v
           /usr/bin/python3 -I -S -B -m unittest discover \

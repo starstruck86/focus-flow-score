@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Internal, isolated TTY entrypoint for private TOC annotation authoring.
 
-Operators must use ``run-lovable-toc-annotation-operator-session.sh`` for the
-first real initialization session, then the reviewed zero-argument launcher
-``run-lovable-toc-annotation-authoring.sh`` for later authorized actions after
-private resume-record consumption.  This component
-never invokes the ledger validator, pg_restore, a database client, or a network
-operation.  Private review context is written only to the inherited controlling
-TTY descriptor; stdout and stderr carry fixed diagnostics only.
+Operators must use ``run-lovable-toc-annotation-operator-session.sh`` for every
+reviewed real initialization or later authoring action.  The lower-level
+``run-lovable-toc-annotation-authoring.sh`` launcher and this component are
+internal execution boundaries, not practical direct operator entrypoints.
+This component never invokes the ledger validator, pg_restore, a database
+client, or a network operation.  Private review context is written only to the
+inherited controlling TTY descriptor; stdout and stderr carry fixed diagnostics
+only.
 """
 
 from __future__ import annotations
@@ -1004,9 +1005,10 @@ def _authoring_procedure_identity(approved_checkout: str) -> str:
         "docs/migration/migration-runbook.md",
         "scripts/migration/README.md",
         "scripts/migration/author-lovable-toc-annotations.py",
-        "scripts/migration/run-lovable-toc-annotation-authoring.sh",
+        "scripts/migration/lib/lovable_dump_report.py",
         "scripts/migration/lib/lovable_toc_authoring_contract.py",
         "scripts/migration/lib/lovable_toc_contract.py",
+        "scripts/migration/run-lovable-toc-annotation-authoring.sh",
         "scripts/migration/verification/lovable-toc-annotation-checkpoint.schema.json",
         "scripts/migration/verification/lovable-toc-annotation-ledger.schema.json",
     )
