@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action_state_matrix": {
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z_]{0,63}$": {
+          "additionalProperties": false,
+          "properties": {
+            "allowed_expected_states": {
+              "items": { "pattern": "^[A-Z][A-Z_]{0,63}$", "type": "string" },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "max_entry_decisions": { "maximum": 100, "minimum": 0, "type": "integer" }
+          },
+          "required": ["allowed_expected_states", "max_entry_decisions"],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "approval_discovery": {
+      "additionalProperties": false,
+      "properties": {
+        "filename_pattern": { "type": "string" },
+        "home_resolution": { "const": "passwd_database_effective_uid" },
+        "relative_parent": { "type": "string" },
+        "required_file_mode": { "const": "0400" },
+        "required_file_nlink": { "const": 1 },
+        "required_parent_mode": { "const": "0700" },
+        "selection": { "const": "exactly_one_matching_current_checkout" }
+      },
+      "required": [
+        "filename_pattern",
+        "home_resolution",
+        "relative_parent",
+        "required_file_mode",
+        "required_file_nlink",
+        "required_parent_mode",
+        "selection"
+      ],
+      "type": "object"
+    },
+    "artifact_kind": { "const": "lovable_toc_operator_execution_profile" },
+    "batch_limits": {
+      "additionalProperties": false,
+      "properties": {
+        "maximum_entry_decisions": { "const": 100 },
+        "primary_review_default": { "const": 100 }
+      },
+      "required": ["maximum_entry_decisions", "primary_review_default"],
+      "type": "object"
+    },
+    "checkout_policy": {
+      "additionalProperties": false,
+      "properties": {
+        "approval_source": { "const": "external_immutable_artifact" },
+        "mode": { "const": "exact_checkout" },
+        "self_approval_forbidden": { "const": true }
+      },
+      "required": ["approval_source", "mode", "self_approval_forbidden"],
+      "type": "object"
+    },
+    "compatibility_bridges": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_action": { "const": "primary_review" },
+          "authoring_procedure_identity_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+          "execution_checkout_sha": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+          "generation": { "const": 1 },
+          "operator_session_procedure_identity_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+          "python": { "$ref": "#/$defs/pythonLegacy" },
+          "required_state": { "const": "PRIMARY_REVIEW_REQUIRED" },
+          "resume_predecessor": { "const": "absent" },
+          "self_closing": {
+            "additionalProperties": false,
+            "properties": {
+              "ordinary_exact_current_rules_after_success": { "const": true },
+              "reject_generation_at_or_above": { "const": 2 },
+              "single_use": { "const": true }
+            },
+            "required": [
+              "ordinary_exact_current_rules_after_success",
+              "reject_generation_at_or_above",
+              "single_use"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "allowed_action",
+          "authoring_procedure_identity_sha256",
+          "execution_checkout_sha",
+          "generation",
+          "operator_session_procedure_identity_sha256",
+          "python",
+          "required_state",
+          "resume_predecessor",
+          "self_closing"
+        ],
+        "type": "object"
+      },
+      "maxItems": 1,
+      "minItems": 1,
+      "type": "array"
+    },
+    "format_version": { "const": 1 },
+    "procedure_identity_formulas": {
+      "additionalProperties": false,
+      "properties": {
+        "authoring": { "$ref": "#/$defs/procedureFormula" },
+        "operator_session": { "$ref": "#/$defs/procedureFormula" }
+      },
+      "required": ["authoring", "operator_session"],
+      "type": "object"
+    },
+    "prohibited_effects": {
+      "items": { "type": "string" },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "python_policy": { "$ref": "#/$defs/pythonPolicy" },
+    "record_versions": {
+      "additionalProperties": false,
+      "properties": {
+        "action_authorization": { "const": [2] },
+        "checkpoint": { "const": [1] },
+        "resume": { "const": [2] },
+        "root_authorization": { "const": [1] }
+      },
+      "required": ["action_authorization", "checkpoint", "resume", "root_authorization"],
+      "type": "object"
+    },
+    "repository": { "$ref": "#/$defs/repository" },
+    "reviewed_files": {
+      "items": { "$ref": "#/$defs/relativePath" },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "verification_summary_labels": {
+      "items": {
+        "enum": [
+          "checkout_verified",
+          "procedure_identities_verified",
+          "python_verified",
+          "repository_verified",
+          "reviewed_files_verified",
+          "tty_verified"
+        ]
+      },
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "action_state_matrix",
+    "approval_discovery",
+    "artifact_kind",
+    "batch_limits",
+    "checkout_policy",
+    "compatibility_bridges",
+    "format_version",
+    "procedure_identity_formulas",
+    "prohibited_effects",
+    "python_policy",
+    "record_versions",
+    "repository",
+    "reviewed_files",
+    "verification_summary_labels"
+  ],
+  "type": "object",
+  "$defs": {
+    "absolutePath": { "pattern": "^/", "type": "string" },
+    "gitSha": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+    "pythonLegacy": {
+      "additionalProperties": false,
+      "properties": {
+        "absolute_path": { "$ref": "#/$defs/absolutePath" },
+        "reported_version": { "pattern": "^cpython:[0-9]+[.][0-9]+[.][0-9]+$", "type": "string" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["absolute_path", "reported_version", "sha256"],
+      "type": "object"
+    },
+    "pythonPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "absolute_path": { "$ref": "#/$defs/absolutePath" },
+        "exact_gid": { "minimum": 0, "type": "integer" },
+        "exact_mode": { "pattern": "^0[0-7]{3}$", "type": "string" },
+        "exact_nlink": { "const": 1 },
+        "exact_uid": { "minimum": 0, "type": "integer" },
+        "executable_required": { "const": true },
+        "isolated_flags": { "const": ["-I", "-S", "-B"] },
+        "reported_version": { "pattern": "^cpython:[0-9]+[.][0-9]+[.][0-9]+$", "type": "string" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "symlink_components_forbidden": { "const": true }
+      },
+      "required": [
+        "absolute_path",
+        "exact_gid",
+        "exact_mode",
+        "exact_nlink",
+        "exact_uid",
+        "executable_required",
+        "isolated_flags",
+        "reported_version",
+        "sha256",
+        "symlink_components_forbidden"
+      ],
+      "type": "object"
+    },
+    "procedureFormula": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": { "const": "sha256_canonical_json_lf" },
+        "files": {
+          "items": { "$ref": "#/$defs/relativePath" },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "include_execution_checkout_sha": { "const": true }
+      },
+      "required": ["algorithm", "files", "include_execution_checkout_sha"],
+      "type": "object"
+    },
+    "relativePath": {
+      "pattern": "^(?!/)(?!.*(?:^|/)[.][.]?(?:/|$))[A-Za-z0-9._/-]+$",
+      "type": "string"
+    },
+    "repository": {
+      "additionalProperties": false,
+      "properties": {
+        "name": { "const": "focus-flow-score" },
+        "owner": { "const": "starstruck86" }
+      },
+      "required": ["name", "owner"],
+      "type": "object"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+  }
+}

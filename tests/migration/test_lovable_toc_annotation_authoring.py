@@ -3935,6 +3935,149 @@ class AuthoringContractTest(unittest.TestCase):
         finally:
             os.close(descriptor)
 
+    def test_exact_generation_one_binding_bridge_is_single_and_self_closing(self):
+        capture, _package, _expectations = self.load_capture(["TABLE"])
+        historical = authoring.AuthoringBinding(GIT_A, SHA_A, SHA_B)
+        current = authoring.AuthoringBinding(GIT_B, SHA_C, SHA_D)
+        initial = authoring.initialize_checkpoint(
+            capture, historical, "Primary", "legacy-session"
+        )
+        original_bytes = authoring.checkpoint_bytes(initial)
+        decision = copy.deepcopy(initial["entries"][0]["primary_decision"])
+        decision["classification"] = "restore"
+        decision["classification_reviewed"] = True
+        decision["manual_conflict_review_state"] = "not_applicable"
+        bridge = authoring.GenerationOneBindingPolicy(
+            historical_binding=historical,
+            current_binding=current,
+            allow_successor_transition=True,
+        )
+        successor = authoring.apply_transition(
+            initial,
+            capture,
+            current,
+            action="primary_review",
+            operator_identity="Primary",
+            session_identity="current-session",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[{"ordinal": 0, "primary_decision": decision}],
+            binding_policy=bridge,
+        )
+        self.assertEqual(authoring.checkpoint_bytes(initial), original_bytes)
+        self.assertEqual(initial["authoring_binding"], historical.as_dict())
+        self.assertEqual(successor["generation"], 2)
+        self.assertEqual(successor["authoring_binding"], current.as_dict())
+        self.assertEqual(
+            successor["previous_checkpoint_sha256"],
+            authoring.checkpoint_sha256(initial),
+        )
+
+        checkpoints = self.root / "binding-bridge-checkpoints"
+        checkpoints.mkdir(mode=0o700)
+        descriptor = open_directory(checkpoints)
+        try:
+            authoring.publish_checkpoint_at(descriptor, initial)
+            authoring.publish_checkpoint_at(descriptor, successor)
+            validation_policy = authoring.GenerationOneBindingPolicy(
+                historical_binding=historical,
+                current_binding=current,
+                allow_successor_transition=False,
+            )
+            chain = authoring.load_checkpoint_chain(
+                descriptor,
+                capture,
+                current,
+                binding_policy=validation_policy,
+            )
+            self.assertEqual(len(chain.checkpoints), 2)
+            self.assertEqual(chain.checkpoints[0]["authoring_binding"], historical.as_dict())
+            self.assertEqual(chain.checkpoints[1]["authoring_binding"], current.as_dict())
+        finally:
+            os.close(descriptor)
+
+        with self.assertRaisesRegex(
+            authoring.AuthoringContractError, "history_invalid"
+        ):
+            authoring.apply_transition(
+                initial,
+                capture,
+                current,
+                action="primary_review",
+                operator_identity="Primary",
+                session_identity="replayed-session",
+                reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+                entry_updates=[{"ordinal": 0, "primary_decision": decision}],
+                binding_policy=authoring.GenerationOneBindingPolicy(
+                    historical_binding=historical,
+                    current_binding=current,
+                    allow_successor_transition=False,
+                ),
+            )
+
+    def test_generation_one_bridge_rejects_wrong_action_and_old_bound_generation_two(self):
+        capture, _package, _expectations = self.load_capture(["TABLE"])
+        historical = authoring.AuthoringBinding(GIT_A, SHA_A, SHA_B)
+        current = authoring.AuthoringBinding(GIT_B, SHA_C, SHA_D)
+        initial = authoring.initialize_checkpoint(
+            capture, historical, "Primary", "legacy-session"
+        )
+        policy = authoring.GenerationOneBindingPolicy(
+            historical_binding=historical,
+            current_binding=current,
+            allow_successor_transition=True,
+        )
+        with self.assertRaisesRegex(
+            authoring.AuthoringContractError, "history_invalid"
+        ):
+            authoring.apply_transition(
+                initial,
+                capture,
+                current,
+                action="status",
+                operator_identity="Primary",
+                session_identity="invalid-action",
+                reviewed_ordinal_ranges=[],
+                binding_policy=policy,
+            )
+
+        decision = copy.deepcopy(initial["entries"][0]["primary_decision"])
+        decision["classification"] = "restore"
+        decision["classification_reviewed"] = True
+        decision["manual_conflict_review_state"] = "not_applicable"
+        successor = authoring.apply_transition(
+            initial,
+            capture,
+            current,
+            action="primary_review",
+            operator_identity="Primary",
+            session_identity="current-session",
+            reviewed_ordinal_ranges=[{"start": 0, "end_exclusive": 1}],
+            entry_updates=[{"ordinal": 0, "primary_decision": decision}],
+            binding_policy=policy,
+        )
+        successor["authoring_binding"] = historical.as_dict()
+        checkpoints = self.root / "old-bound-generation-two"
+        checkpoints.mkdir(mode=0o700)
+        descriptor = open_directory(checkpoints)
+        try:
+            authoring.publish_checkpoint_at(descriptor, initial)
+            authoring.publish_checkpoint_at(descriptor, successor)
+            with self.assertRaisesRegex(
+                authoring.AuthoringContractError, "history_invalid"
+            ):
+                authoring.load_checkpoint_chain(
+                    descriptor,
+                    capture,
+                    current,
+                    binding_policy=authoring.GenerationOneBindingPolicy(
+                        historical_binding=historical,
+                        current_binding=current,
+                        allow_successor_transition=False,
+                    ),
+                )
+        finally:
+            os.close(descriptor)
+
     def test_missing_generation_and_hash_substitution_fail_closed(self):
         capture, _package, _expectations = self.load_capture()
         initial = authoring.initialize_checkpoint(

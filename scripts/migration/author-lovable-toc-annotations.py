@@ -324,6 +324,7 @@ try:
         AuthoringBinding,
         AuthoringContractError,
         CaptureExpectations,
+        GenerationOneBindingPolicy,
         PUBLIC_AUTHORING_STATES,
         aggregate_status,
         apply_transition,
@@ -1698,6 +1699,8 @@ def execute_authoring(
     tty_fd: int,
     *,
     resume_recorder: Callable[[int, str, str], None] | None = None,
+    action_authorizer: Callable[[], None] | None = None,
+    binding_policy: GenerationOneBindingPolicy | None = None,
 ) -> tuple[int, bytes]:
     """Run exactly one descriptor-bound authoring operation."""
 
@@ -1819,7 +1822,12 @@ def execute_authoring(
             private_root_fd, CHECKPOINTS_NAME
         )
         capture = load_capture_for_authoring(package_fd, expectations)
-        chain = load_checkpoint_chain(checkpoints_fd, capture, binding)
+        chain = load_checkpoint_chain(
+            checkpoints_fd,
+            capture,
+            binding,
+            binding_policy=binding_policy,
+        )
         observed_generation = 0 if chain.head is None else chain.head["generation"]
         observed_sha = "0" * 64 if chain.head_sha256 is None else chain.head_sha256
         if observed_generation != expected_generation or observed_sha != expected_head:
@@ -1848,7 +1856,12 @@ def execute_authoring(
             publication_performed = True
             expected_final_generation = checkpoint["generation"]
             expected_final_head = checkpoint_sha256(checkpoint)
-            published_chain = load_checkpoint_chain(checkpoints_fd, capture, binding)
+            published_chain = load_checkpoint_chain(
+                checkpoints_fd,
+                capture,
+                binding,
+                binding_policy=binding_policy,
+            )
             if (
                 len(published_chain.checkpoints) != 1
                 or published_chain.head_sha256 != checkpoint_sha256(checkpoint)
@@ -1877,11 +1890,46 @@ def execute_authoring(
                 "FINALIZATION_REVIEW_REQUIRED": "status",
                 "FINALIZATION_ELIGIBLE": "finalize",
             }[current_state]
+            semantic_correction = (
+                current_state
+                in {"FINALIZATION_REVIEW_REQUIRED", "FINALIZATION_ELIGIBLE"}
+                and action == "correction_review"
+            )
+            correcting_peer_rejection = (
+                current_state == "PEER_REVIEW_REQUIRED"
+                and action
+                in {
+                    "primary_review",
+                    "relationship_review",
+                    "data_reference_review",
+                    "sequence_review",
+                    "managed_review",
+                    "manual_conflict_review",
+                }
+            )
+            if action == "finalize" and required_action != "finalize":
+                raise AuthoringEntrypointError("finalization_incomplete")
+            if (
+                action not in {"status", "finalize"}
+                and action != required_action
+                and not correcting_peer_rejection
+                and not semantic_correction
+            ):
+                raise AuthoringEntrypointError("review_transition_invalid")
+            if binding_policy is not None and binding_policy.allow_successor_transition:
+                if (
+                    action != "primary_review"
+                    or current_state != "PRIMARY_REVIEW_REQUIRED"
+                    or checkpoint["generation"] != 1
+                    or checkpoint["authoring_binding"]
+                    != binding_policy.historical_binding.as_dict()
+                ):
+                    raise AuthoringEntrypointError("history_conflict")
+            if action_authorizer is not None:
+                action_authorizer()
             if action == "status":
                 status = aggregate_status(checkpoint, capture)
             elif action == "finalize":
-                if required_action != "finalize":
-                    raise AuthoringEntrypointError("finalization_incomplete")
                 if (
                     invocation.finalization_authorization
                     != FINALIZATION_AUTHORIZATION
@@ -1921,7 +1969,10 @@ def execute_authoring(
                     raise
                 publication_performed = True
                 unchanged_chain = load_checkpoint_chain(
-                    checkpoints_fd, capture, binding
+                    checkpoints_fd,
+                    capture,
+                    binding,
+                    binding_policy=binding_policy,
                 )
                 if (
                     len(unchanged_chain.checkpoints) != len(chain.checkpoints)
@@ -1930,29 +1981,6 @@ def execute_authoring(
                     raise AuthoringEntrypointError("history_conflict")
                 status = aggregate_status(checkpoint, capture)
             else:
-                semantic_correction = (
-                    current_state
-                    in {"FINALIZATION_REVIEW_REQUIRED", "FINALIZATION_ELIGIBLE"}
-                    and action == "correction_review"
-                )
-                correcting_peer_rejection = (
-                    current_state == "PEER_REVIEW_REQUIRED"
-                    and action
-                    in {
-                        "primary_review",
-                        "relationship_review",
-                        "data_reference_review",
-                        "sequence_review",
-                        "managed_review",
-                        "manual_conflict_review",
-                    }
-                )
-                if (
-                    action != required_action
-                    and not correcting_peer_rejection
-                    and not semantic_correction
-                ):
-                    raise AuthoringEntrypointError("review_transition_invalid")
                 transition_action = action
                 if semantic_correction:
                     transition_action = _prompt_choice(
@@ -2038,6 +2066,7 @@ def execute_authoring(
                         entry_updates=entry_updates,
                         global_updates=global_updates,
                         managed_updates=managed_updates,
+                        binding_policy=binding_policy,
                     )
                     refreshed = load_capture_for_authoring(package_fd, expectations)
                     if refreshed.capture_binding != capture.capture_binding:
@@ -2053,7 +2082,10 @@ def execute_authoring(
                     expected_final_generation = updated["generation"]
                     expected_final_head = checkpoint_sha256(updated)
                     published_chain = load_checkpoint_chain(
-                        checkpoints_fd, capture, binding
+                        checkpoints_fd,
+                        capture,
+                        binding,
+                        binding_policy=binding_policy,
                     )
                     if (
                         len(published_chain.checkpoints)
@@ -2100,7 +2132,12 @@ def execute_authoring(
         }
         if len(final_packages) > 1 or final_names != expected_names | final_packages:
             raise AuthoringEntrypointError("history_conflict")
-        final_chain = load_checkpoint_chain(checkpoints_fd, capture, binding)
+        final_chain = load_checkpoint_chain(
+            checkpoints_fd,
+            capture,
+            binding,
+            binding_policy=binding_policy,
+        )
         final_generation = (
             0 if final_chain.head is None else final_chain.head["generation"]
         )

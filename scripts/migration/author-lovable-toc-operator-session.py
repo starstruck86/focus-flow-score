@@ -244,8 +244,12 @@ def _preimport_guard() -> None:
         "scripts/migration/author-lovable-toc-annotations.py",
         "scripts/migration/lib/lovable_toc_authoring_contract.py",
         "scripts/migration/lib/lovable_toc_contract.py",
+        "scripts/migration/lib/lovable_toc_operator_preflight.py",
         "scripts/migration/verification/lovable-toc-operator-session-authorization.schema.json",
         "scripts/migration/verification/lovable-toc-operator-session-resume.schema.json",
+        "scripts/migration/verification/lovable-toc-operator-execution-profile.v1.json",
+        "scripts/migration/verification/lovable-toc-operator-execution-profile.schema.json",
+        "scripts/migration/verification/lovable-toc-operator-execution-profile-approval.schema.json",
     ):
         blob = _reviewed_git(repository, ["rev-parse", f"HEAD:{relative}"]).strip()
         working = _reviewed_git(repository, ["hash-object", "--", relative]).strip()
@@ -382,6 +386,12 @@ class OperatorSessionError(RuntimeError):
 class RecordPublication:
     name: str
     sha256: str
+
+
+@dataclass(frozen=True)
+class ResumeExecutionMode:
+    name: str
+    binding_policy: Any | None
 
 
 def _fail(reason: str) -> None:
@@ -1183,6 +1193,184 @@ def _operator_session_procedure_identity(approved_checkout: str) -> str:
     return sha256_bytes(canonical_json_bytes(records))
 
 
+def _legacy_root_matches(
+    base_authorization: Mapping[str, Any],
+    bridge: Mapping[str, Any],
+) -> bool:
+    try:
+        execution = base_authorization["execution"]
+        python = execution["python"]
+        return (
+            base_authorization["artifact_kind"] == AUTHORIZATION_KIND
+            and base_authorization["format_version"] == FORMAT_VERSION
+            and base_authorization["action"] == "initialize"
+            and execution["approved_checkout_sha"]
+            == bridge["execution_checkout_sha"]
+            and execution["approved_procedure_identity_sha256"]
+            == bridge["authoring_procedure_identity_sha256"]
+            and execution["approved_operator_session_procedure_identity_sha256"]
+            == bridge["operator_session_procedure_identity_sha256"]
+            and python["path"] == bridge["python"]["absolute_path"]
+            and python["sha256"] == bridge["python"]["sha256"]
+            and python["version"] == bridge["python"]["reported_version"]
+        )
+    except (KeyError, TypeError):
+        return False
+
+
+def _classify_resume_execution(
+    action_authorization: Mapping[str, Any],
+    base_authorization: Mapping[str, Any],
+    resume: Mapping[str, Any],
+    resume_name: str,
+    *,
+    observed_procedure: str,
+    observed_session_procedure: str,
+    python_identity: Mapping[str, Any],
+    execution_profile: Mapping[str, Any] | None,
+) -> ResumeExecutionMode:
+    """Classify one current resume as exact-current or the one-hop bridge."""
+
+    current_execution = action_authorization["execution"]
+    current_checkout = current_execution["approved_checkout_sha"]
+    current_python_sha = current_execution["python"]["sha256"]
+    current_binding = AUTHOR.AuthoringBinding(
+        execution_checkout_sha=current_checkout,
+        procedure_identity_sha256=observed_procedure,
+        execution_python_identity_sha256=current_python_sha,
+    )
+    resume_is_current = (
+        resume["execution_checkout_sha"] == current_checkout
+        and resume["procedure_identity_sha256"] == observed_procedure
+        and resume["operator_session_procedure_identity_sha256"]
+        == observed_session_procedure
+        and resume["python_identity_sha256"] == python_identity["identity_sha256"]
+    )
+    bridge: Mapping[str, Any] | None = None
+    if execution_profile is not None:
+        try:
+            candidates = execution_profile["compatibility_bridges"]
+            if type(candidates) is list and len(candidates) == 1:
+                candidate = candidates[0]
+                if type(candidate) is dict:
+                    bridge = candidate
+        except (KeyError, TypeError):
+            bridge = None
+
+    root_is_legacy = bridge is not None and _legacy_root_matches(
+        base_authorization, bridge
+    )
+    if resume_is_current:
+        if root_is_legacy:
+            if (
+                resume["resume_generation"] < 2
+                or "predecessor" not in resume
+            ):
+                _fail("history_conflict")
+            historical_binding = AUTHOR.AuthoringBinding(
+                execution_checkout_sha=bridge["execution_checkout_sha"],
+                procedure_identity_sha256=bridge[
+                    "authoring_procedure_identity_sha256"
+                ],
+                execution_python_identity_sha256=bridge["python"]["sha256"],
+            )
+            return ResumeExecutionMode(
+                "current_after_generation_one_bridge",
+                AUTHOR.GenerationOneBindingPolicy(
+                    historical_binding=historical_binding,
+                    current_binding=current_binding,
+                    allow_successor_transition=False,
+                ),
+            )
+        try:
+            root_execution = base_authorization["execution"]
+            root_python = root_execution["python"]
+            root_is_current = (
+                root_execution["approved_checkout_sha"] == current_checkout
+                and root_execution["approved_procedure_identity_sha256"]
+                == observed_procedure
+                and root_execution[
+                    "approved_operator_session_procedure_identity_sha256"
+                ]
+                == observed_session_procedure
+                and root_python["path"] == current_execution["python"]["path"]
+                and root_python["sha256"] == current_python_sha
+                and root_python["version"]
+                == current_execution["python"]["version"]
+            )
+        except (KeyError, TypeError):
+            root_is_current = False
+        if not root_is_current:
+            _fail("binding_mismatch")
+        return ResumeExecutionMode("current", None)
+
+    if bridge is None or not root_is_legacy:
+        _fail("binding_mismatch")
+    expected_name = (
+        CURRENT_RESUME_PREFIX
+        + "0000000000000001-"
+        + resume["resume_checkpoint_sha256"]
+        + ".json"
+    )
+    resume_capture = resume["capture"]
+    root_capture = base_authorization["capture"]
+    if (
+        action_authorization["action"] != bridge["allowed_action"]
+        or action_authorization.get("expected_authoring_state")
+        != bridge["required_state"]
+        or resume["resume_generation"] != bridge["generation"]
+        or "predecessor" in resume
+        or resume_name != expected_name
+        or resume["execution_checkout_sha"] != bridge["execution_checkout_sha"]
+        or resume["procedure_identity_sha256"]
+        != bridge["authoring_procedure_identity_sha256"]
+        or resume["operator_session_procedure_identity_sha256"]
+        != bridge["operator_session_procedure_identity_sha256"]
+        or resume["python_identity_sha256"] != python_identity["identity_sha256"]
+        or python_identity["sha256"] != bridge["python"]["sha256"]
+        or resume["authoring_session_identity"]
+        != base_authorization["authoring_session_identity"]
+        or resume_capture
+        != {
+            "capture_manifest_sha256": root_capture["capture_manifest_sha256"],
+            "evidence_run_id": root_capture["evidence_run_id"],
+            "opaque_index_sha256": root_capture["opaque_index_sha256"],
+            "raw_toc_sha256": root_capture["raw_toc_sha256"],
+        }
+        or set(resume)
+        != {
+            "annotation_root",
+            "artifact_kind",
+            "authorization_sha256",
+            "authoring_session_identity",
+            "capture",
+            "execution_checkout_sha",
+            "format_version",
+            "operator_session_procedure_identity_sha256",
+            "primary_operator_identity",
+            "procedure_identity_sha256",
+            "python_identity_sha256",
+            "resume_checkpoint_sha256",
+            "resume_generation",
+            "resume_release_token",
+        }
+    ):
+        _fail("history_conflict")
+    historical_binding = AUTHOR.AuthoringBinding(
+        execution_checkout_sha=bridge["execution_checkout_sha"],
+        procedure_identity_sha256=bridge["authoring_procedure_identity_sha256"],
+        execution_python_identity_sha256=bridge["python"]["sha256"],
+    )
+    return ResumeExecutionMode(
+        "legacy_generation_one",
+        AUTHOR.GenerationOneBindingPolicy(
+            historical_binding=historical_binding,
+            current_binding=current_binding,
+            allow_successor_transition=True,
+        ),
+    )
+
+
 def _run_authorized_initialize(authorization: Mapping[str, Any], tty_fd: int, session_root_fd: int, authorization_sha256: str) -> tuple[int, bytes]:
     expected_session_procedure = authorization["execution"][
         "approved_operator_session_procedure_identity_sha256"
@@ -1238,6 +1426,9 @@ def _run_authorized_action(
     tty_fd: int,
     session_root_fd: int,
     action_authorization_sha256: str,
+    *,
+    execution_profile: Mapping[str, Any] | None = None,
+    action_authorizer: Callable[[], None] | None = None,
 ) -> tuple[int, bytes, str | None]:
     expected_session_procedure = action_authorization["execution"][
         "approved_operator_session_procedure_identity_sha256"
@@ -1254,12 +1445,11 @@ def _run_authorized_action(
     if observed_procedure != expected_procedure:
         _fail("binding_mismatch")
     if (
-        resume["execution_checkout_sha"] != action_authorization["execution"]["approved_checkout_sha"]
-        or resume["procedure_identity_sha256"] != observed_procedure
-        or resume["operator_session_procedure_identity_sha256"] != observed_session_procedure
-        or resume["authorization_sha256"] != sha256_bytes(canonical_json_bytes(base_authorization))
+        resume["authorization_sha256"]
+        != sha256_bytes(canonical_json_bytes(base_authorization))
         or resume["annotation_root"] != base_authorization["annotation_root"]
-        or resume["primary_operator_identity"] != base_authorization["primary_operator_identity"]
+        or resume["primary_operator_identity"]
+        != base_authorization["primary_operator_identity"]
     ):
         _fail("binding_mismatch")
     if (
@@ -1268,8 +1458,16 @@ def _run_authorized_action(
     ):
         _fail("binding_mismatch")
     python_identity = _validated_python_identity(action_authorization["execution"]["python"])
-    if resume["python_identity_sha256"] != python_identity["identity_sha256"]:
-        _fail("binding_mismatch")
+    execution_mode = _classify_resume_execution(
+        action_authorization,
+        base_authorization,
+        resume,
+        resume_name,
+        observed_procedure=observed_procedure,
+        observed_session_procedure=observed_session_procedure,
+        python_identity=python_identity,
+        execution_profile=execution_profile,
+    )
     environment = _environment_from_authorization(
         action_authorization,
         base_authorization=base_authorization,
@@ -1288,6 +1486,11 @@ def _run_authorized_action(
             and HEX64_RE.fullmatch(release_token)
         ):
             _fail("internal_failure")
+        if (
+            execution_mode.name == "legacy_generation_one"
+            and generation != 2
+        ):
+            _fail("history_conflict")
         if generation < resume["resume_generation"]:
             _fail("history_conflict")
         successor_resume = {
@@ -1320,7 +1523,16 @@ def _run_authorized_action(
         successor = _publish_private_json_at(session_root_fd, final_name, successor_resume)
 
     try:
-        status, diagnostic = AUTHOR.execute_authoring(environment, tty_fd, resume_recorder=recorder)
+        authoring_options: dict[str, Any] = {"resume_recorder": recorder}
+        if action_authorizer is not None:
+            authoring_options["action_authorizer"] = action_authorizer
+        if execution_mode.binding_policy is not None:
+            authoring_options["binding_policy"] = execution_mode.binding_policy
+        status, diagnostic = AUTHOR.execute_authoring(
+            environment,
+            tty_fd,
+            **authoring_options,
+        )
     except AUTHOR.AuthoringEntrypointError as exc:
         raise OperatorSessionError(exc.reason) from exc
     if action_authorization["action"] == "finalize":

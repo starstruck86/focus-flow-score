@@ -26,6 +26,7 @@ sys.path.insert(0, str(MIGRATION))
 from lib import lovable_toc_contract as capture_contract  # noqa: E402
 from test_lovable_toc_annotation_authoring import (  # noqa: E402
     GIT_A,
+    GIT_B,
     SHA_A,
     SHA_B,
     SHA_C,
@@ -316,6 +317,207 @@ class TocOperatorSessionTest(unittest.TestCase):
             )
 
         return fake_execute
+
+    def legacy_bridge_records(self):
+        legacy_checkout = "b1986e4079b52edbb4ef5cd4c56ed4d20af07195"
+        legacy_authoring = (
+            "bc0b990d878db1e2c72bd4ac91314fe32261a454ac38505b7ea6df4af2b5f3d8"
+        )
+        legacy_session = (
+            "ee0dbb3ecb9b469bef49c1fe0305ea60602bbbbaddd2f551a7774dad6cacdc23"
+        )
+        legacy_python_sha = (
+            "4b42b1a117605cafc8607b67b0892a609c2cd125012dd56288abeed8c89cdfb1"
+        )
+        bridge = {
+            "allowed_action": "primary_review",
+            "authoring_procedure_identity_sha256": legacy_authoring,
+            "execution_checkout_sha": legacy_checkout,
+            "generation": 1,
+            "operator_session_procedure_identity_sha256": legacy_session,
+            "python": {
+                "absolute_path": (
+                    "/Library/Developer/CommandLineTools/Library/Frameworks/"
+                    "Python3.framework/Versions/3.9/bin/python3.9"
+                ),
+                "reported_version": "cpython:3.9.6",
+                "sha256": legacy_python_sha,
+            },
+            "required_state": "PRIMARY_REVIEW_REQUIRED",
+            "resume_predecessor": "absent",
+            "self_closing": {
+                "ordinary_exact_current_rules_after_success": True,
+                "reject_generation_at_or_above": 2,
+                "single_use": True,
+            },
+        }
+        root_capture = {
+            "approved_pg_restore_sha256": SHA_A,
+            "capture_execution_checkout_sha": GIT_A,
+            "capture_manifest_sha256": SHA_B,
+            "capture_name": "synthetic-capture",
+            "capture_procedure_identity_sha256": SHA_C,
+            "capture_root": "/synthetic/capture",
+            "data_reference_count": 1,
+            "entry_count": 2,
+            "evidence_manifest_sha256": SHA_D,
+            "evidence_run_id": "synthetic-run",
+            "inner_sha256": SHA_A,
+            "inspection_checkout_sha": GIT_A,
+            "inspection_procedure_sha256": SHA_B,
+            "opaque_index_sha256": SHA_C,
+            "outer_sha256": SHA_D,
+            "raw_toc_sha256": SHA_A,
+        }
+        root = {
+            "action": "initialize",
+            "annotation_root": "/synthetic/annotation",
+            "artifact_kind": SESSION.AUTHORIZATION_KIND,
+            "authoring_session_identity": "legacy-authoring-session",
+            "capture": root_capture,
+            "execution": {
+                "approved_checkout_sha": legacy_checkout,
+                "approved_operator_session_procedure_identity_sha256": legacy_session,
+                "approved_procedure_identity_sha256": legacy_authoring,
+                "python": {
+                    "path": bridge["python"]["absolute_path"],
+                    "sha256": legacy_python_sha,
+                    "version": bridge["python"]["reported_version"],
+                },
+            },
+            "finalization_authorization": "",
+            "format_version": SESSION.FORMAT_VERSION,
+            "initial_head": {
+                "checkpoint_sha256": ZERO64,
+                "generation": 0,
+                "release_token": ZERO64,
+            },
+            "operator_identity": "Primary Reviewer",
+            "primary_operator_identity": "Primary Reviewer",
+            "session_id": "legacy-operator-session",
+            "session_root": "/synthetic/operator-session",
+            "tty_attestation": SESSION.TTY_ATTESTATION,
+        }
+        root_sha = hashlib.sha256(
+            capture_contract.canonical_json_bytes(root)
+        ).hexdigest()
+        checkpoint_sha = self.digest_for("legacy-generation-one")
+        resume = {
+            "annotation_root": root["annotation_root"],
+            "artifact_kind": SESSION.RESUME_KIND,
+            "authorization_sha256": root_sha,
+            "authoring_session_identity": root["authoring_session_identity"],
+            "capture": {
+                "capture_manifest_sha256": root_capture["capture_manifest_sha256"],
+                "evidence_run_id": root_capture["evidence_run_id"],
+                "opaque_index_sha256": root_capture["opaque_index_sha256"],
+                "raw_toc_sha256": root_capture["raw_toc_sha256"],
+            },
+            "execution_checkout_sha": legacy_checkout,
+            "format_version": SESSION.RESUME_FORMAT_VERSION,
+            "operator_session_procedure_identity_sha256": legacy_session,
+            "primary_operator_identity": root["primary_operator_identity"],
+            "procedure_identity_sha256": legacy_authoring,
+            "python_identity_sha256": self.digest_for("full-python-identity"),
+            "resume_checkpoint_sha256": checkpoint_sha,
+            "resume_generation": 1,
+            "resume_release_token": self.digest_for("legacy-release"),
+        }
+        action = {
+            "action": "primary_review",
+            "execution": {
+                "approved_checkout_sha": GIT_B,
+                "approved_operator_session_procedure_identity_sha256": SHA_D,
+                "approved_procedure_identity_sha256": SHA_C,
+                "python": {
+                    "path": bridge["python"]["absolute_path"],
+                    "sha256": legacy_python_sha,
+                    "version": bridge["python"]["reported_version"],
+                },
+            },
+            "expected_authoring_state": "PRIMARY_REVIEW_REQUIRED",
+            "primary_operator_identity": "Primary Reviewer",
+        }
+        profile = {"compatibility_bridges": [bridge]}
+        resume_name = (
+            SESSION.CURRENT_RESUME_PREFIX
+            + "0000000000000001-"
+            + checkpoint_sha
+            + ".json"
+        )
+        python_identity = {
+            "identity_sha256": resume["python_identity_sha256"],
+            "sha256": legacy_python_sha,
+        }
+        return action, root, resume, resume_name, profile, python_identity
+
+    def test_exact_legacy_generation_one_resume_classifies_once(self):
+        action, root, resume, name, profile, python_identity = (
+            self.legacy_bridge_records()
+        )
+        mode = SESSION._classify_resume_execution(
+            action,
+            root,
+            resume,
+            name,
+            observed_procedure=SHA_C,
+            observed_session_procedure=SHA_D,
+            python_identity=python_identity,
+            execution_profile=profile,
+        )
+        self.assertEqual(mode.name, "legacy_generation_one")
+        self.assertTrue(mode.binding_policy.allow_successor_transition)
+        self.assertEqual(
+            mode.binding_policy.historical_binding.execution_checkout_sha,
+            "b1986e4079b52edbb4ef5cd4c56ed4d20af07195",
+        )
+        self.assertEqual(
+            mode.binding_policy.current_binding.execution_checkout_sha,
+            GIT_B,
+        )
+
+    def test_legacy_generation_one_bridge_rejects_every_reuse_shape(self):
+        action, root, resume, name, profile, python_identity = (
+            self.legacy_bridge_records()
+        )
+        cases = []
+        changed = dict(resume)
+        changed["resume_generation"] = 2
+        cases.append(("generation_two", action, root, changed, name))
+        changed = dict(resume)
+        changed["predecessor"] = {
+            "action": "primary_review",
+            "action_authorization_sha256": SHA_A,
+            "resume_name": name,
+            "resume_sha256": SHA_B,
+        }
+        cases.append(("predecessor_present", action, root, changed, name))
+        changed_action = dict(action)
+        changed_action["action"] = "status"
+        cases.append(("wrong_action", changed_action, root, resume, name))
+        changed_action = dict(action)
+        changed_action["expected_authoring_state"] = "REVISIT_REQUIRED"
+        cases.append(("wrong_state", changed_action, root, resume, name))
+        changed = dict(resume)
+        changed["procedure_identity_sha256"] = SHA_A
+        cases.append(("wrong_procedure", action, root, changed, name))
+        changed = dict(resume)
+        changed["python_identity_sha256"] = SHA_B
+        cases.append(("wrong_python", action, root, changed, name))
+        cases.append(("wrong_name", action, root, resume, "resume-current-wrong.json"))
+        for label, selected_action, selected_root, selected_resume, selected_name in cases:
+            with self.subTest(case=label):
+                with self.assertRaises(SESSION.OperatorSessionError):
+                    SESSION._classify_resume_execution(
+                        selected_action,
+                        selected_root,
+                        selected_resume,
+                        selected_name,
+                        observed_procedure=SHA_C,
+                        observed_session_procedure=SHA_D,
+                        python_identity=python_identity,
+                        execution_profile=profile,
+                    )
 
     def test_initialize_creates_private_authorization_and_resume_records(self):
         status, diagnostic = self.run_with_responses(self.responses())[0]
