@@ -122,27 +122,64 @@ gates `BLOCKED`. The low-level capture is not an operator procedure, and this
 step never creates or validates an annotation ledger.
 
 The practical local path uses the separate zero-argument operator-session
-launcher. It collects approved bindings through the private local TTY instead
-of argv, exported environment, shell history, clipboard, chat, CI, or temp
-files. Initialization publishes a private root authorization record, creates
-the empty annotation root with no replacement, invokes only generation-0
-initialization, and writes a private resume record for generation 1. Later
-reviewed actions consume the current private resume record descriptor-
-relatively, publish one action authorization record, inject the tuple to the
-lower authoring engine only in memory, durably publish the successor resume
-record, and retire the predecessor only after the action and successor are
-committed. The lower engine displays only `resume_record_private` when the
-wrapper has captured the tuple and still requires the fixed
-`resume_values_recorded` acknowledgement while the durable authoring lock is
-held. A TTY write, EOF, wrong acknowledgement, terminal attribute/read failure,
-private record-publication ambiguity, or predecessor-retirement ambiguity
-remains blocked by the lock and/or indeterminate state; piping, clipboard
-transfer, shell-history retention, chat retention, and terminal recording are
-still prohibited. The session and annotation roots, and their direct parents,
-must be approved owner-private mode-`0700` directories outside Git. The wrapper
-rejects known startup-loader, remote, multiplexer, and recorder markers before
-private input, and the isolated Python component revalidates its descriptor as
-the stable foreground controlling TTY.
+launcher. A committed canonical execution profile defines public policy but
+cannot approve itself; exactly one separately reviewed and no-replace installed
+owner-private procedural approval artifact binds the current checkout, profile,
+reviewed blobs, procedures, deterministic Python, repository, operator-session
+root, authorizer, and review reference. The launcher never creates, installs,
+repairs, or replaces that artifact. It deterministically requires the unique
+exact-current-checkout candidate; zero or multiple matches fail closed. This is
+not cryptographic authentication or an OS/privileged immutability boundary.
+The approval parent remains owner-writable, so malicious same-UID replacement
+of repository code or approval evidence before launch is an accepted local
+trust ceiling. Descriptor-stable verification detects replacement at its
+bootstrap and repository-binding checkpoints; it is not continuous monitoring,
+and a same-UID swap-and-restore entirely between those checkpoints remains
+within that accepted ceiling.
+Normal execution and `VERIFY_ONLY` share one semantic pre-private verifier.
+They automatically verify the public machine facts that the operator previously
+typed; that same verifier also performs the bounded known-recorder ancestor
+scan before consequence authorization. `VERIFY_ONLY` exits without any
+private-root operation.
+
+For an action, the operator chooses only the human action/operator/state claims
+that remain necessary and types one fresh consequence-specific
+`AUTHORIZE <ACTION> <MAX> <XXXX-XXXX>` phrase. Before that succeeds there is no
+operator-session/capture/annotation stat, open, list, lock, read, or write.
+Afterward the wrapper privately loads the unique current resume and immutable
+root authorization, derives capture/head/release bindings, publishes one
+action-authorization-v2 record, requires the fixed
+`action_authorization_recorded` acknowledgement, performs at most one action,
+publishes at most one successor, requires `resume_values_recorded`, and retires
+the predecessor only after durable successor publication. No action digest or
+resume tuple is transcribed. A TTY write, EOF, wrong acknowledgement, terminal
+attribute/read failure, private record-publication ambiguity, or predecessor-
+retirement ambiguity remains blocked by the lock and/or indeterminate state.
+
+Initialization retains root authorization v1, resume v2, checkpoint v1, and its
+historical private root-digest acknowledgement. The one exact compatibility
+bridge accepts only the existing old-bound generation-1
+`PRIMARY_REVIEW_REQUIRED` state for `primary_review`; it preserves those bytes,
+publishes one current-bound generation-2 checkpoint/resume, then closes
+permanently. Every later action walks the complete retained resume/action
+history back to predecessor-free generation 1, requires exactly one historical-
+to-current transition, and rejects altered/missing/orphaned links, cycles,
+generation skips, mixed execution identities, and mixed or duplicate active
+resume namespaces. A coherent newest link cannot conceal broken older evidence.
+It cross-binds each resume to the exact checkpoint generation/hash and each
+action to the predecessor state plus successor event/operator/session.
+`status` alone preserves a generation/checkpoint; other retained nonterminal
+actions advance one generation. Canonical release tokens must be unique, and
+the descriptor-stable history/checkpoint observations are revalidated before
+successor or terminal publication so mutation becomes a blocking/indeterminate
+result.
+It is not a generic compatibility path. The session and annotation roots, and
+their direct parents, remain approved owner-private mode-`0700` directories
+outside Git. Piping, clipboard transfer, shell-history retention, chat
+retention, and terminal recording remain prohibited. The wrapper rejects known
+startup-loader, remote, multiplexer, IDE, and recorder markers, including the
+Apple-Terminal SSH marker before the minimal child environment is created, and
+the isolated component revalidates the stable foreground controlling TTY.
 
 The lower-level zero-argument `run-lovable-toc-annotation-authoring.sh`
 launcher remains available only behind a reviewed private injection mechanism;

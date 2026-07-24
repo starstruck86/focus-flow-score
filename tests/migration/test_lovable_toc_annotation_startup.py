@@ -26,6 +26,7 @@ AUTHOR_LAUNCHER = MIGRATION / "run-lovable-toc-annotation-authoring.sh"
 VALIDATOR_LAUNCHER = MIGRATION / "run-lovable-toc-ledger-validation.sh"
 AUTHOR_COMPONENT = MIGRATION / "author-lovable-toc-annotations.py"
 VALIDATOR_COMPONENT = MIGRATION / "validate-lovable-toc-ledger.py"
+PREFLIGHT_COMPONENT = MIGRATION / "lib" / "lovable_toc_operator_preflight.py"
 LOCAL_COMPONENTS = (
     MIGRATION / "lib" / "lovable_dump_report.py",
     MIGRATION / "lib" / "lovable_toc_contract.py",
@@ -50,6 +51,9 @@ def load_script(name: str, path: Path):
 
 
 AUTHOR = load_script("lovable_toc_annotation_entrypoint", AUTHOR_COMPONENT)
+PREFLIGHT = load_script(
+    "lovable_toc_operator_preflight_startup_test", PREFLIGHT_COMPONENT
+)
 from test_lovable_toc_annotation_authoring import (  # noqa: E402
     immutable_tree_snapshot,
     make_capture_package,
@@ -673,6 +677,62 @@ class LovableTocAnnotationStartupTest(unittest.TestCase):
         combined = result.stdout + result.stderr
         if b'"reason":"tty_invalid"' not in combined:
             self.fail("known record-to-file wrapper reached the private-input boundary")
+
+    def test_shared_preflight_recorder_scan_accepts_safe_chain_and_rejects_recorder(
+        self,
+    ) -> None:
+        safe_chain = (
+            types.SimpleNamespace(returncode=0, stdout=b"7 /bin/zsh\n"),
+            types.SimpleNamespace(returncode=0, stdout=b"1 /usr/bin/login\n"),
+        )
+        with (
+            mock.patch.object(PREFLIGHT.os, "getppid", return_value=42),
+            mock.patch.object(
+                PREFLIGHT.subprocess, "run", side_effect=safe_chain
+            ),
+        ):
+            PREFLIGHT.verify_known_recording_ancestors()
+
+        sentinel = b"SYNTHETIC-PRIVATE-ANCESTOR-SENTINEL"
+        with (
+            mock.patch.object(PREFLIGHT.os, "getppid", return_value=42),
+            mock.patch.object(
+                PREFLIGHT.subprocess,
+                "run",
+                return_value=types.SimpleNamespace(
+                    returncode=0,
+                    stdout=b"1 /synthetic/script\n",
+                ),
+            ),
+            self.assertRaises(PREFLIGHT.PreflightError) as caught,
+        ):
+            PREFLIGHT.verify_known_recording_ancestors()
+        self.assertEqual(caught.exception.reason, "tty_invalid")
+        visible = PREFLIGHT.fixed_diagnostic("failed", caught.exception.reason)
+        self.assertEqual(
+            visible,
+            b'{"diagnostic_version":1,"reason":"tty_invalid",'
+            b'"stage":"annotation_operator_preflight","status":"failed"}\n',
+        )
+        self.assertNotIn(sentinel, visible)
+
+        with (
+            mock.patch.object(PREFLIGHT.os, "getppid", return_value=42),
+            mock.patch.object(
+                PREFLIGHT.subprocess,
+                "run",
+                return_value=types.SimpleNamespace(
+                    returncode=1,
+                    stdout=sentinel,
+                ),
+            ),
+            self.assertRaises(PREFLIGHT.PreflightError) as caught,
+        ):
+            PREFLIGHT.verify_known_recording_ancestors()
+        self.assertNotIn(
+            sentinel,
+            PREFLIGHT.fixed_diagnostic("failed", caught.exception.reason),
+        )
 
     def test_wrong_python_identity_and_unsafe_python_paths_fail_before_child(self) -> None:
         fake, digest, ledger = self._fake_python()

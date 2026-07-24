@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "This owner-private artifact records a human procedural approval. It is not cryptographically authenticated or OS-immutable, and same-UID replacement before launch remains an accepted ceiling.",
+  "additionalProperties": false,
+  "properties": {
+    "approved_checkout_sha": { "$ref": "#/$defs/gitSha" },
+    "artifact_kind": { "const": "lovable_toc_operator_execution_approval" },
+    "authorizer_identity": { "$ref": "#/$defs/identity" },
+    "execution_profile": {
+      "additionalProperties": false,
+      "properties": {
+        "format_version": { "const": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["format_version", "sha256"],
+      "type": "object"
+    },
+    "format_version": { "const": 1 },
+    "operator_session_root_path": { "$ref": "#/$defs/absolutePath" },
+    "procedure_identities": {
+      "additionalProperties": false,
+      "properties": {
+        "authoring_sha256": { "$ref": "#/$defs/sha256" },
+        "operator_session_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["authoring_sha256", "operator_session_sha256"],
+      "type": "object"
+    },
+    "python_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "absolute_path": { "$ref": "#/$defs/absolutePath" },
+        "exact_gid": { "minimum": 0, "type": "integer" },
+        "exact_mode": { "pattern": "^0[0-7]{3}$", "type": "string" },
+        "exact_nlink": { "const": 1 },
+        "exact_uid": { "minimum": 0, "type": "integer" },
+        "identity_sha256": { "$ref": "#/$defs/sha256" },
+        "reported_version": { "pattern": "^cpython:[0-9]+[.][0-9]+[.][0-9]+$", "type": "string" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": [
+        "absolute_path",
+        "exact_gid",
+        "exact_mode",
+        "exact_nlink",
+        "exact_uid",
+        "identity_sha256",
+        "reported_version",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "repository": {
+      "additionalProperties": false,
+      "properties": {
+        "name": { "const": "focus-flow-score" },
+        "owner": { "const": "starstruck86" }
+      },
+      "required": ["name", "owner"],
+      "type": "object"
+    },
+    "review_reference": { "$ref": "#/$defs/identity" },
+    "reviewed_file_blobs": {
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(?!/)(?!.*(?:^|/)[.][.]?(?:/|$))[A-Za-z0-9._/-]+$": { "$ref": "#/$defs/gitSha" }
+      },
+      "type": "object"
+    },
+    "trust_model_acknowledgement": {
+      "const": "PROCEDURAL_REVIEW_AND_SAME_UID_PRELAUNCH_REPLACEMENT_CEILING_ACCEPTED"
+    }
+  },
+  "required": [
+    "approved_checkout_sha",
+    "artifact_kind",
+    "authorizer_identity",
+    "execution_profile",
+    "format_version",
+    "operator_session_root_path",
+    "procedure_identities",
+    "python_identity",
+    "repository",
+    "review_reference",
+    "reviewed_file_blobs",
+    "trust_model_acknowledgement"
+  ],
+  "type": "object",
+  "$defs": {
+    "absolutePath": { "pattern": "^/", "type": "string" },
+    "gitSha": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+    "identity": {
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._@()+:-]*$",
+      "type": "string"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+  }
+}

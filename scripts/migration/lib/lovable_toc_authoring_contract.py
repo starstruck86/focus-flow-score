@@ -239,6 +239,41 @@ class AuthoringBinding:
 
 
 @dataclass(frozen=True)
+class GenerationOneBindingPolicy:
+    """Exact historical-to-current checkpoint binding boundary.
+
+    The policy is intentionally narrower than a general compatibility list.
+    It can validate one immutable generation-1 checkpoint under the reviewed
+    historical binding and later checkpoints under the current binding.  Only
+    a caller that sets ``allow_successor_transition`` may create the single
+    generation-1 to generation-2 boundary.
+    """
+
+    historical_binding: AuthoringBinding
+    current_binding: AuthoringBinding
+    allow_successor_transition: bool = False
+
+    def __post_init__(self) -> None:
+        exact_historical = AuthoringBinding(
+            execution_checkout_sha=(
+                "b1986e4079b52edbb4ef5cd4c56ed4d20af07195"
+            ),
+            procedure_identity_sha256=(
+                "bc0b990d878db1e2c72bd4ac91314fe32261a454ac38505b7ea6df4af2b5f3d8"
+            ),
+            execution_python_identity_sha256=(
+                "4b42b1a117605cafc8607b67b0892a609c2cd125012dd56288abeed8c89cdfb1"
+            ),
+        )
+        if (
+            type(self.allow_successor_transition) is not bool
+            or self.historical_binding.as_dict() != exact_historical.as_dict()
+            or self.current_binding.as_dict() == exact_historical.as_dict()
+        ):
+            raise AuthoringContractError("history_invalid")
+
+
+@dataclass(frozen=True)
 class AuthoringEntry:
     entry_id: str
     ordinal: int
@@ -1238,7 +1273,10 @@ def _validate_primary_classification_transition(
 
 
 def _validate_transition(
-    previous: Mapping[str, Any], current: Mapping[str, Any]
+    previous: Mapping[str, Any],
+    current: Mapping[str, Any],
+    *,
+    binding_policy: GenerationOneBindingPolicy | None = None,
 ) -> None:
     if current["generation"] != previous["generation"] + 1:
         _fail("history_invalid")
@@ -1246,12 +1284,22 @@ def _validate_transition(
         _fail("history_invalid")
     for invariant in (
         "artifact_kind",
-        "authoring_binding",
         "capture_binding",
         "format_version",
         "primary_operator_identity",
     ):
         if current[invariant] != previous[invariant]:
+            _fail("history_invalid")
+    if current["authoring_binding"] != previous["authoring_binding"]:
+        if (
+            binding_policy is None
+            or previous["generation"] != 1
+            or current["generation"] != 2
+            or previous["authoring_binding"]
+            != binding_policy.historical_binding.as_dict()
+            or current["authoring_binding"] != binding_policy.current_binding.as_dict()
+            or current["event"]["action"] != "primary_review"
+        ):
             _fail("history_invalid")
     action = current["event"]["action"]
     if action == "initialize":
@@ -1432,8 +1480,25 @@ def apply_transition(
     entry_updates: Sequence[Mapping[str, Any]] = (),
     global_updates: Optional[Mapping[str, str]] = None,
     managed_updates: Optional[Mapping[str, str]] = None,
+    binding_policy: GenerationOneBindingPolicy | None = None,
 ) -> dict[str, Any]:
-    previous = validate_checkpoint(previous, capture, binding)
+    previous_binding = binding
+    crossing_generation_one_boundary = False
+    if (
+        binding_policy is not None
+        and previous.get("generation") == 1
+        and previous.get("authoring_binding")
+        == binding_policy.historical_binding.as_dict()
+    ):
+        if (
+            not binding_policy.allow_successor_transition
+            or binding != binding_policy.current_binding
+            or action != "primary_review"
+        ):
+            _fail("history_invalid")
+        previous_binding = binding_policy.historical_binding
+        crossing_generation_one_boundary = True
+    previous = validate_checkpoint(previous, capture, previous_binding)
     if action not in CHECKPOINT_ACTIONS - {"initialize"}:
         _fail("review_transition_invalid")
     operator = _identity(operator_identity)
@@ -1442,6 +1507,8 @@ def apply_transition(
     current = _deep_copy(previous)
     current["generation"] += 1
     current["previous_checkpoint_sha256"] = checkpoint_sha256(previous)
+    if crossing_generation_one_boundary:
+        current["authoring_binding"] = binding.as_dict()
     role = "peer" if action == "peer_review" else "primary"
     if role == "primary" and operator != previous["primary_operator_identity"]:
         _fail("review_transition_invalid")
@@ -1541,7 +1608,7 @@ def apply_transition(
         _fail("review_transition_invalid")
 
     current = validate_checkpoint(current, capture, binding)
-    _validate_transition(previous, current)
+    _validate_transition(previous, current, binding_policy=binding_policy)
     return current
 
 
@@ -1549,6 +1616,8 @@ def load_checkpoint_chain(
     checkpoints_fd: int,
     capture: AuthoringCapture,
     binding: AuthoringBinding,
+    *,
+    binding_policy: GenerationOneBindingPolicy | None = None,
 ) -> CheckpointChain:
     _private_directory_metadata(checkpoints_fd)
     try:
@@ -1581,11 +1650,33 @@ def load_checkpoint_chain(
             _fail("history_invalid", exc)
         if file.sha256 != name_sha or file.data != canonical_json_bytes(checkpoint):
             _fail("history_invalid")
-        checkpoint = validate_checkpoint(checkpoint, capture, binding)
+        checkpoint_binding = binding
+        if binding_policy is not None:
+            if binding.as_dict() != binding_policy.current_binding.as_dict():
+                _fail("history_invalid")
+            if checkpoint.get("generation") == 1:
+                if (
+                    checkpoint.get("authoring_binding")
+                    != binding_policy.historical_binding.as_dict()
+                ):
+                    _fail("history_invalid")
+                checkpoint_binding = binding_policy.historical_binding
+            elif (
+                checkpoint.get("authoring_binding")
+                != binding_policy.current_binding.as_dict()
+            ):
+                _fail("history_invalid")
+            else:
+                checkpoint_binding = binding_policy.current_binding
+        checkpoint = validate_checkpoint(checkpoint, capture, checkpoint_binding)
         if checkpoint["generation"] != expected_generation:
             _fail("history_invalid")
         if checkpoints:
-            _validate_transition(checkpoints[-1], checkpoint)
+            _validate_transition(
+                checkpoints[-1],
+                checkpoint,
+                binding_policy=binding_policy,
+            )
         elif checkpoint["event"]["action"] != "initialize":
             _fail("history_invalid")
         checkpoints.append(checkpoint)
