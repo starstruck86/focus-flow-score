@@ -1212,6 +1212,11 @@ class PythonAndStartupTests(unittest.TestCase):
             "TOC_OPERATOR_OUTER_TTY_CONTEXT": "clear-v1",
             "TOC_OPERATOR_TTY_FD": "3",
         }
+        self.assertEqual(PREFLIGHT.ALLOWED_ENVIRONMENT_NAMES, frozenset(valid))
+        self.assertNotIn(
+            "__CF_USER_TEXT_ENCODING",
+            PREFLIGHT.ALLOWED_ENVIRONMENT_NAMES,
+        )
         with mock.patch.object(
             PREFLIGHT.resource, "getrlimit", return_value=(0, 0)
         ):
@@ -1225,8 +1230,22 @@ class PythonAndStartupTests(unittest.TestCase):
                     self.assertEqual(
                         caught.exception.reason, "startup_environment_invalid"
                     )
-            with self.assertRaises(PREFLIGHT.PreflightError):
-                PREFLIGHT.verify_startup_environment({**valid, "HOME": "/tmp"})
+            for extra_name in (
+                "HOME",
+                "PATH",
+                "SYNTHETIC_UNREVIEWED_NAME",
+                "__CF_USER_TEXT_ENCODING",
+                "__CF_USER_TEXT_ENCODING_ALT",
+            ):
+                with self.subTest(extra_name=extra_name):
+                    with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+                        PREFLIGHT.verify_startup_environment(
+                            {**valid, extra_name: "planted-private-sentinel"}
+                        )
+                    self.assertEqual(
+                        caught.exception.reason,
+                        "startup_environment_invalid",
+                    )
             for value in ("", "wrong", "CLEAR-V1"):
                 with self.subTest(outer_tty_context=value):
                     altered = dict(valid)

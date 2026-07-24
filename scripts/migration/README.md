@@ -717,10 +717,26 @@ Normal execution and the `VERIFY_ONLY` launcher choice call the same
 `lib/lovable_toc_operator_preflight.py` semantic verifier. The shell and
 pre-import code perform only the minimum bootstrap checks needed to bind that
 verifier and its import closure to the procedural approval evidence.
+On Darwin, CPython may add `__CF_USER_TEXT_ENCODING` after the launcher enters
+its reviewed `/usr/bin/env -i` environment. After the isolated/no-site/
+no-bytecode flags pass, but before the external-approval guard or any
+repository-local import, the internal driver removes exactly that one name
+through key-only handling without reading or emitting its value. The shell
+environment and exact five-name `ALLOWED_ENVIRONMENT_NAMES` contract are
+unchanged: failed or persistent removal, the name on a non-Darwin platform, or
+any second extra environment name remains the fixed
+`startup_environment_invalid` failure. This is not a new allowlist entry or
+general environment normalization.
 `VERIFY_ONLY` is not an authoring action:
 after the fixed categorical verification summary it exits without opening,
 stating, listing, locking, reading, or writing the approved operator-session
 root or capture/annotation state, and creates no record, marker, or resume.
+
+The operator-reported approval artifact for checkout
+`9fcfb66747cad4232a770d5ad79a1cc612fbb1ce` remains retained and is not read or
+changed by this correction. Its exact-checkout binding cannot approve a future
+merged checkout; that checkout requires a newly generated and independently
+reviewed candidate plus a separately authorized no-replace installation.
 
 `run-lovable-toc-annotation-authoring.sh` remains the lower-level checked-in
 authoring launcher. It takes no arguments. The requested operation is supplied

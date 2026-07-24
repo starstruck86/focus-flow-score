@@ -714,6 +714,14 @@ main/origin relation, complete reviewed blob map, computed authoring and
 operator-session identities, absence of ordinary and ignored migration-tool
 inputs, exact interpreter identity, isolated runtime, minimal environment, core
 limit, local foreground controlling TTY, and bounded known-recorder ancestry.
+Darwin CPython may add `__CF_USER_TEXT_ENCODING` after the reviewed
+`/usr/bin/env -i` launch. The internal driver removes exactly that name through
+key-only handling, without reading or emitting its value, after the isolation
+flags pass and before the external-approval guard or any repository-local
+import. The launcher and exact five-name environment allowlist do not change.
+Failed or persistent removal, the name on non-Darwin, or any second extra name
+still fails with fixed `startup_environment_invalid`; no broader normalization
+is permitted.
 The shared verifier follows at most 32 parents through the reviewed absolute
 `/bin/ps` path and rejects the exact basenames `asciinema`, `script`,
 `scriptreplay`, `shelr`, `termrec`, `tlog-rec-session`, and `ttyrec`; malformed,
@@ -723,6 +731,12 @@ absent. The shell and pre-import guards perform only the minimum bootstrap
 needed to bind that shared verifier and import closure to the procedural
 approval evidence; they are not a second semantic preflight or a
 cryptographic authentication layer.
+
+The retained operator-reported approval for exact checkout
+`9fcfb66747cad4232a770d5ad79a1cc612fbb1ce` is outside this repository change
+and is not accessed. It cannot approve a future merged checkout. Before that
+checkout can run, generate and independently review a new canonical candidate,
+then obtain separate authorization for its no-replace installation.
 
 The committed execution profile is policy and cannot approve itself. Before a
 real action, a separate procedure must:
