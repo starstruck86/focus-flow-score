@@ -991,7 +991,15 @@ managed, metadata-parent, or unrelated review fields.
 The interactive surface is one verified local foreground controlling TTY in an
 alternate screen. Raw context is bounded and escaped and goes only to the held
 TTY descriptor; ordinary stdout/stderr retain fixed diagnostics and aggregate
-counts. Refuse pipes, redirection, and non-TTY execution; reject known
+counts. Before opening the held descriptor, the launcher requires inherited
+stdout and stderr to be TTYs, opens the process's controlling `/dev/tty`
+read/write on stdin, and duplicates it onto stdout and stderr. A detached
+inherited stdin, including a pipe or `/dev/null`, is therefore discarded, not
+used as review input. Any missing controlling terminal, output
+pipe/redirection, failed rebinding, or non-TTY result stops before Python and
+private-path access. The shared verifier then
+requires descriptors 0, 1, 2, and 3 to be the same stable foreground
+controlling character device with readable termios state. Reject known
 record-to-file ancestor processes and known remote/multiplexer/editor-terminal
 markers. The workflow provides no
 browser or clipboard transport. The operator must attest that the session is

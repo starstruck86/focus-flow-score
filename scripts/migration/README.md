@@ -1051,12 +1051,19 @@ closes that kernel pathname ceiling. Stop unless this local-machine trust
 ceiling is acceptable.
 
 Private review context is written only through the verified controlling TTY
-descriptor in a local alternate-screen session. Standard input, output, and
-error must each be the same foreground controlling terminal; pipes,
-redirection, and non-TTY execution are rejected. The single shared pre-private
-verifier follows at most 32 parent links with the reviewed absolute `/bin/ps`
-path and rejects the exact known recorder basenames `asciinema`, `script`,
-`scriptreplay`, `shelr`, `termrec`, `tlog-rec-session`, and `ttyrec`.
+descriptor in a local alternate-screen session. The launcher first requires
+its inherited stdout and stderr to be TTYs. It then opens the process's
+controlling `/dev/tty` read/write on stdin, duplicates that terminal onto
+stdout and stderr, and only afterward opens the held descriptor 3. This repairs
+a detached inherited stdin, including a pipe or `/dev/null`, without treating
+that inherited channel as review input. Any missing or unopenable controlling
+terminal, output pipe/redirection, failed rebinding, or non-TTY result stops
+before Python or private-path access. The single shared pre-private verifier still requires
+descriptors 0, 1, 2, and 3 to be stable character devices for that same local
+foreground controlling terminal with readable termios state. It follows at
+most 32 parent links with the reviewed absolute `/bin/ps` path and rejects the
+exact known recorder basenames `asciinema`, `script`, `scriptreplay`, `shelr`,
+`termrec`, `tlog-rec-session`, and `ttyrec`.
 Unreadable, malformed, cyclic, or over-depth process ancestry fails with only
 the fixed `tty_invalid` diagnostic before consequence authorization. Known
 SSH/Mosh/multiplexer/editor-terminal markers are also rejected. This bounded

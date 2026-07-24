@@ -46,7 +46,6 @@ do
   [ "$poison_is_set" != x ] || fail_startup
 done
 
-[ -t 0 ] && [ -t 1 ] && [ -t 2 ] || fail_tty
 for tty_marker_name in \
   SSH_CONNECTION SSH_CLIENT SSH_TTY MOSH_IP MOSH_PORT TMUX STY INSIDE_EMACS \
   VSCODE_IPC_HOOK_CLI ASCIINEMA_REC
@@ -61,6 +60,10 @@ case "${TERM_PROGRAM-}" in
     ;;
 esac
 
+[ -t 1 ] && [ -t 2 ] || fail_tty
+{ command exec 0<>/dev/tty; } 2>/dev/null || fail_tty
+exec 1>&0 2>&0 || fail_tty
+[ -t 0 ] && [ -t 1 ] && [ -t 2 ] || fail_tty
 exec 3<>/dev/tty || fail_tty
 [ -t 3 ] || fail_tty
 
