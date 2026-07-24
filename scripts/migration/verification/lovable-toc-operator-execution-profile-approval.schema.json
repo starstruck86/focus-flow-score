@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "This owner-private artifact records a human procedural approval. It is not cryptographically authenticated or OS-immutable, and same-UID replacement before launch remains an accepted ceiling.",
   "additionalProperties": false,
   "properties": {
     "approved_checkout_sha": { "$ref": "#/$defs/gitSha" },
@@ -65,6 +66,9 @@
         "^(?!/)(?!.*(?:^|/)[.][.]?(?:/|$))[A-Za-z0-9._/-]+$": { "$ref": "#/$defs/gitSha" }
       },
       "type": "object"
+    },
+    "trust_model_acknowledgement": {
+      "const": "PROCEDURAL_REVIEW_AND_SAME_UID_PRELAUNCH_REPLACEMENT_CEILING_ACCEPTED"
     }
   },
   "required": [
@@ -78,7 +82,8 @@
     "python_identity",
     "repository",
     "review_reference",
-    "reviewed_file_blobs"
+    "reviewed_file_blobs",
+    "trust_model_acknowledgement"
   ],
   "type": "object",
   "$defs": {

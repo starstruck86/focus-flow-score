@@ -665,7 +665,8 @@ values, malformed UTF-8, and noncanonical encodings before either schema
 contract is accepted. Changing the profile or any reviewed file changes its Git
 blob and the computed procedure identities.
 
-Approval comes only from exactly one externally installed canonical
+Approval comes only from exactly one externally installed canonical,
+owner-private, no-replace procedural
 `lovable_toc_operator_execution_approval` artifact whose filename matches the
 current checkout under the profile-declared private approval directory. The
 artifact binds that exact checkout, exact profile SHA-256, complete reviewed
@@ -676,14 +677,17 @@ executor-owned, non-symlink, mode `0700`; the artifact must be a direct-child,
 executor-owned, single-link, non-symlink regular file at mode `0400`. Zero
 matching artifacts, multiple matching artifacts, a checkout/profile/blob/tool
 substitution, or an identity change during verification fails closed. The
-pre-import bootstrap authenticates the exact artifact name, whole-file digest,
-file identity, and parent identity; the shared verifier must observe those same
-values again. This prevents a different approval from being substituted between
-bootstrap and the reviewed verifier.
+launcher deterministically locates the single exact-current-checkout candidate;
+it does not choose among multiple candidates. The pre-import bootstrap binds
+the exact artifact name, whole-file digest, file identity, and parent identity;
+the shared verifier must observe those same values again. This detects a
+different approval being substituted during one invocation. It is not
+cryptographic authentication and cannot stop a hostile same-UID process from
+replacing owner-writable evidence before launch.
 
-The ordinary launcher has no code path to create, select, install, repair,
-replace, or update an approval artifact. Candidate generation and installation
-are separate review operations:
+The ordinary launcher has no code path to create, install, repair, replace, or
+update an approval artifact. Candidate generation and installation are
+separate review operations:
 
 1. derive one canonical, compact, sorted ASCII JSON candidate plus exactly one
    trailing LF for an independently reviewed merged checkout;
@@ -698,17 +702,22 @@ No checked-in installer is authorized by this workflow; execution remains
 blocked until that separate candidate/install procedure is itself reviewed and
 authorized. A repository-local candidate is never discovered. An old external
 approval cannot approve a changed checkout or profile. This is procedural
-external approval, not a signature or an OS immutable flag: a hostile same-user
-process capable of replacing the external file before launch remains an
-explicit local-machine trust ceiling. The in-invocation cross-pass identity
-binding does detect replacement after bootstrap. Git commit/blob/ref equality
-binds the reviewed repository content but does not separately attest remote-URL
-provenance.
+external approval, not a signature, reviewer-key proof, privileged trust
+store, or OS immutable flag: the owner-private mode-`0700` parent is still
+owner-writable, and a hostile same-UID process capable of replacing repository
+code or external evidence before launch remains an explicit accepted
+local-machine trust ceiling. The in-invocation descriptor/identity bindings
+detect replacement at the bootstrap and repository-binding checkpoints. They
+are not continuous monitoring; a hostile same-UID swap-and-restore entirely
+between those checkpoints remains within the accepted ceiling. Git
+commit/blob/ref equality binds the reviewed repository content but does not
+separately attest remote-URL provenance.
 
 Normal execution and the `VERIFY_ONLY` launcher choice call the same
 `lib/lovable_toc_operator_preflight.py` semantic verifier. The shell and
-pre-import code perform only the minimum bootstrap checks needed to authenticate
-that verifier and its import closure. `VERIFY_ONLY` is not an authoring action:
+pre-import code perform only the minimum bootstrap checks needed to bind that
+verifier and its import closure to the procedural approval evidence.
+`VERIFY_ONLY` is not an authoring action:
 after the fixed categorical verification summary it exits without opening,
 stating, listing, locking, reading, or writing the approved operator-session
 root or capture/annotation state, and creates no record, marker, or resume.
@@ -861,12 +870,33 @@ One successful bridge invocation consumes the untouched generation-1
 predecessor and publishes exactly one checkpoint-v1/resume-v2 generation-2
 successor under the current approved checkout/procedures/Python. The historical
 checkpoint and predecessor bytes remain unchanged and retained; only the
-profile-approved generation-1-to-2 binding transition validates. The new
-resume has a predecessor and current execution identity, so the bridge is no
-longer eligible and ordinary exact-current rules apply. It cannot be reused or
-generalized. From the current real generation-1 boundary, `status` is not a
-bridge action: the only non-private option is `VERIFY_ONLY`, and the only
-private bridge action is a separately authorized `primary_review`.
+profile-approved generation-1-to-2 binding transition validates. Every later
+invocation walks the complete retained resume/action-authorization chain to
+that predecessor-free generation 1, validates every name/hash/generation/
+checkpoint/action/root/capture/operator/session/execution/Python/release/state
+binding, rejects cycles, skips, missing or orphaned history, and requires
+exactly one historical-to-current execution transition. Generation 1 must
+remain wholly historical; generation 2 and every later record must be wholly
+current. A coherent immediate predecessor cannot hide older altered evidence.
+Each resume checkpoint reference must equal the corresponding immutable
+checkpoint generation and hash. Each historical action's expected state must
+equal the aggregate state of its predecessor checkpoint, and each
+checkpoint-producing action must equal the successor checkpoint event,
+operator, and authoring session. `status` alone keeps the same generation and
+checkpoint; every other retained nonterminal action advances exactly one
+generation. Release tokens are canonical and unique across the walked chain,
+and a successor must introduce a fresh token. The held history and checkpoint
+observations are revalidated at action-authorization and publication
+boundaries, including immediately before successor or terminal publication;
+identity, byte, name-set, or directory drift blocks the session as
+indeterminate rather than publishing over ambiguous history.
+Mixed or multiple active `resume-current-*` and `resume-g*` namespaces fail
+closed. The new resume has a predecessor and current execution identity, so
+the bridge is no longer eligible and ordinary exact-current rules apply. It
+cannot be reused or generalized. From the current real generation-1 boundary,
+`status` is not a bridge action: the only non-private option is `VERIFY_ONLY`,
+and the only private bridge action is a separately authorized
+`primary_review`.
 
 The synthetic primary-review UX contract is measurable. Post-initialization
 manual machine-identity fields and typed hashes are both zero. Before private

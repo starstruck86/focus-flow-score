@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 import copy
+import dataclasses
 import errno
 import hashlib
 import importlib.util
 import json
 import os
 import pty
+import re
 import select
 import shutil
 import socket
@@ -286,6 +288,13 @@ class TocOperatorSessionTest(unittest.TestCase):
                         side_effect=execute_authoring_side_effect,
                     )
                 )
+                stack.enter_context(
+                    mock.patch.object(
+                        SESSION,
+                        "_revalidate_checkpoint_evidence_from_path",
+                        return_value=None,
+                    )
+                )
             result = SESSION.run_session(9, self.verified)
         return result, seen_prompts, tty_writes
 
@@ -367,6 +376,17 @@ class TocOperatorSessionTest(unittest.TestCase):
         self.assertEqual(len(action_authorizations), 1)
         return current, retired[0], action_authorizations[0]
 
+    def multiple_predecessor_session(self, edge_count: int = 2) -> Path:
+        self.initialize_operator_session()
+        for _index in range(edge_count):
+            result, _prompts, _writes = self.run_with_responses(
+                self.action_responses(
+                    "status", expected_state="PRIMARY_REVIEW_REQUIRED"
+                )
+            )
+            self.assertEqual(result[0], 2)
+        return self.current_resume_path()
+
     def replace_current_resume(self, current: Path, resume: dict) -> Path:
         data = capture_contract.canonical_json_bytes(resume)
         digest = hashlib.sha256(data).hexdigest()
@@ -382,6 +402,44 @@ class TocOperatorSessionTest(unittest.TestCase):
         replacement.chmod(0o400)
         current.unlink()
         return replacement
+
+    def replace_immediate_action_evidence(
+        self,
+        current: Path,
+        retired: Path,
+        action: Path,
+        mutate,
+    ) -> Path:
+        resume = self.load_private_json(current)
+        action_record = self.load_private_json(action)
+        mutate(action_record)
+        action_data = capture_contract.canonical_json_bytes(action_record)
+        action_sha256 = hashlib.sha256(action_data).hexdigest()
+        replacement_action = self.session_root / (
+            "authorization-action-" + action_sha256[:16] + ".json"
+        )
+        replacement_action.write_bytes(action_data)
+        replacement_action.chmod(0o400)
+        action.unlink()
+        resume["predecessor"]["action"] = action_record["action"]
+        resume["predecessor"][
+            "action_authorization_sha256"
+        ] = action_sha256
+        replacement_data = capture_contract.canonical_json_bytes(resume)
+        replacement_sha256 = hashlib.sha256(replacement_data).hexdigest()
+        generation = int(
+            re.search(r"g([0-9]{16})-", resume["predecessor"]["resume_name"]).group(1)
+        )
+        retired.rename(
+            self.session_root
+            / (
+                SESSION.RETIRED_RESUME_PREFIX
+                + f"{generation:016d}-"
+                + replacement_sha256[:16]
+                + ".json"
+            )
+        )
+        return self.replace_current_resume(current, resume)
 
     def assert_predecessor_evidence_mutation_blocks(
         self, evidence_kind: str, mutation: str
@@ -444,6 +502,7 @@ class TocOperatorSessionTest(unittest.TestCase):
             *,
             resume_recorder,
             action_authorizer=None,
+            history_verifier=None,
             binding_policy=None,
         ):
             copied = dict(environment)
@@ -602,6 +661,258 @@ class TocOperatorSessionTest(unittest.TestCase):
         }
         return action, root, resume, resume_name, profile, python_identity
 
+    def build_legacy_history(
+        self,
+        label: str,
+        *,
+        insert_current_generation_one: bool = False,
+        generation_two_mutation=None,
+        extra_current_edge: bool = False,
+        final_generation: int = 3,
+        second_historical_transition: bool = False,
+    ):
+        action, root, legacy_resume, legacy_name, profile, python_identity = (
+            self.legacy_bridge_records()
+        )
+        history_root = self.root / label
+        history_root.mkdir(mode=0o700)
+        current_execution = copy.deepcopy(action["execution"])
+        root_sha256 = hashlib.sha256(
+            capture_contract.canonical_json_bytes(root)
+        ).hexdigest()
+        capture_binding_sha256 = hashlib.sha256(
+            capture_contract.canonical_json_bytes(root["capture"])
+        ).hexdigest()
+        written_edges = []
+
+        def add_edge(
+            predecessor,
+            predecessor_name,
+            *,
+            transition_action,
+            expected_state,
+            successor_generation,
+            successor_session,
+            successor_execution,
+            mutate_successor=None,
+        ):
+            predecessor_data = capture_contract.canonical_json_bytes(
+                predecessor
+            )
+            predecessor_sha256 = hashlib.sha256(predecessor_data).hexdigest()
+            action_record = {
+                "action": transition_action,
+                "annotation_root": root["annotation_root"],
+                "artifact_kind": SESSION.ACTION_AUTHORIZATION_KIND,
+                "authoring_session_identity": successor_session,
+                "capture_binding_sha256": capture_binding_sha256,
+                "execution": copy.deepcopy(current_execution),
+                "expected_authoring_state": expected_state,
+                "finalization_authorization": "",
+                "format_version": SESSION.ACTION_AUTHORIZATION_FORMAT_VERSION,
+                "operator_identity": "Primary Reviewer",
+                "primary_operator_identity": "Primary Reviewer",
+                "resume": {
+                    "checkpoint_sha256": predecessor[
+                        "resume_checkpoint_sha256"
+                    ],
+                    "generation": predecessor["resume_generation"],
+                    "name": predecessor_name,
+                    "sha256": predecessor_sha256,
+                },
+                "root_authorization_sha256": root_sha256,
+                "session_id": successor_session + "-operator",
+                "session_root": root["session_root"],
+                "tty_attestation": SESSION.TTY_ATTESTATION,
+            }
+            action_data = capture_contract.canonical_json_bytes(action_record)
+            action_sha256 = hashlib.sha256(action_data).hexdigest()
+            successor = {
+                "annotation_root": root["annotation_root"],
+                "artifact_kind": SESSION.RESUME_KIND,
+                "authorization_sha256": root_sha256,
+                "authoring_session_identity": successor_session,
+                "capture": copy.deepcopy(legacy_resume["capture"]),
+                "execution_checkout_sha": successor_execution[
+                    "approved_checkout_sha"
+                ],
+                "format_version": SESSION.RESUME_FORMAT_VERSION,
+                "operator_session_procedure_identity_sha256": (
+                    successor_execution[
+                        "approved_operator_session_procedure_identity_sha256"
+                    ]
+                ),
+                "predecessor": {
+                    "action": transition_action,
+                    "action_authorization_sha256": action_sha256,
+                    "resume_name": predecessor_name,
+                    "resume_sha256": predecessor_sha256,
+                },
+                "primary_operator_identity": "Primary Reviewer",
+                "procedure_identity_sha256": successor_execution[
+                    "approved_procedure_identity_sha256"
+                ],
+                "python_identity_sha256": python_identity["identity_sha256"],
+                "resume_checkpoint_sha256": (
+                    predecessor["resume_checkpoint_sha256"]
+                    if transition_action == "status"
+                    else self.digest_for(
+                        f"{label}-checkpoint-{successor_generation}"
+                    )
+                ),
+                "resume_generation": successor_generation,
+                "resume_release_token": self.digest_for(
+                    f"{label}-release-{successor_generation}-{successor_session}"
+                ),
+            }
+            if mutate_successor is not None:
+                mutate_successor(successor)
+            successor_data = capture_contract.canonical_json_bytes(successor)
+            successor_sha256 = hashlib.sha256(successor_data).hexdigest()
+            successor_name = (
+                SESSION.CURRENT_RESUME_PREFIX
+                + f"{successor['resume_generation']:016d}-"
+                + successor["resume_checkpoint_sha256"]
+                + "-"
+                + successor_sha256[:16]
+                + ".json"
+            )
+            generation_match = re.search(
+                r"g([0-9]{16})-", predecessor_name
+            )
+            self.assertIsNotNone(generation_match)
+            retired_path = history_root / (
+                SESSION.RETIRED_RESUME_PREFIX
+                + generation_match.group(1)
+                + "-"
+                + successor_sha256[:16]
+                + ".json"
+            )
+            retired_path.write_bytes(predecessor_data)
+            retired_path.chmod(0o400)
+            action_path = history_root / (
+                "authorization-action-" + action_sha256[:16] + ".json"
+            )
+            action_path.write_bytes(action_data)
+            action_path.chmod(0o400)
+            written_edges.append(
+                {
+                    "action": action_path,
+                    "retired": retired_path,
+                    "successor": successor,
+                    "successor_name": successor_name,
+                    "successor_sha256": successor_sha256,
+                }
+            )
+            return successor, successor_name
+
+        predecessor = legacy_resume
+        predecessor_name = legacy_name
+        if insert_current_generation_one:
+            predecessor, predecessor_name = add_edge(
+                predecessor,
+                predecessor_name,
+                transition_action="status",
+                expected_state="PRIMARY_REVIEW_REQUIRED",
+                successor_generation=1,
+                successor_session="current-status-generation-one",
+                successor_execution=current_execution,
+            )
+        predecessor, predecessor_name = add_edge(
+            predecessor,
+            predecessor_name,
+            transition_action="primary_review",
+            expected_state="PRIMARY_REVIEW_REQUIRED",
+            successor_generation=2,
+            successor_session="current-primary-generation-two",
+            successor_execution=current_execution,
+            mutate_successor=generation_two_mutation,
+        )
+        if second_historical_transition:
+            historical_execution = copy.deepcopy(root["execution"])
+            predecessor, predecessor_name = add_edge(
+                predecessor,
+                predecessor_name,
+                transition_action="primary_review",
+                expected_state="PRIMARY_REVIEW_REQUIRED",
+                successor_generation=3,
+                successor_session="historical-generation-three",
+                successor_execution=historical_execution,
+            )
+            final_generation = 4
+        elif extra_current_edge:
+            predecessor, predecessor_name = add_edge(
+                predecessor,
+                predecessor_name,
+                transition_action="primary_review",
+                expected_state="PRIMARY_REVIEW_REQUIRED",
+                successor_generation=3,
+                successor_session="current-primary-generation-three",
+                successor_execution=current_execution,
+            )
+            final_generation = 4
+        final_resume, final_name = add_edge(
+            predecessor,
+            predecessor_name,
+            transition_action="primary_review",
+            expected_state="PRIMARY_REVIEW_REQUIRED",
+            successor_generation=final_generation,
+            successor_session=f"current-primary-generation-{final_generation}",
+            successor_execution=current_execution,
+        )
+        root_data = capture_contract.canonical_json_bytes(root)
+        root_path = history_root / (
+            "authorization-root-"
+            + hashlib.sha256(root_data).hexdigest()[:16]
+            + ".json"
+        )
+        root_path.write_bytes(root_data)
+        root_path.chmod(0o400)
+        final_data = capture_contract.canonical_json_bytes(final_resume)
+        final_path = history_root / final_name
+        final_path.write_bytes(final_data)
+        final_path.chmod(0o400)
+        return {
+            "action": action,
+            "bridge": profile["compatibility_bridges"][0],
+            "edges": written_edges,
+            "final_name": final_name,
+            "final_resume": final_resume,
+            "final_sha256": hashlib.sha256(final_data).hexdigest(),
+            "history_root": history_root,
+            "python_identity": python_identity,
+            "root": root,
+        }
+
+    def verify_built_legacy_history(self, built) -> None:
+        descriptor = os.open(
+            built["history_root"],
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            SESSION._verify_predecessor_chain_at(
+                descriptor,
+                base_authorization=built["root"],
+                resume=built["final_resume"],
+                resume_name=built["final_name"],
+                resume_sha256=built["final_sha256"],
+                expected_execution=built["action"]["execution"],
+                expected_python_identity_sha256=built[
+                    "python_identity"
+                ]["identity_sha256"],
+                action_state_matrix=self.verified.profile[
+                    "action_state_matrix"
+                ],
+                execution_mode_name=(
+                    "current_after_generation_one_bridge"
+                ),
+                compatibility_bridge=built["bridge"],
+            )
+        finally:
+            os.close(descriptor)
+
     def test_exact_legacy_generation_one_resume_classifies_once(self):
         action, root, resume, name, profile, python_identity = (
             self.legacy_bridge_records()
@@ -626,6 +937,369 @@ class TocOperatorSessionTest(unittest.TestCase):
             mode.binding_policy.current_binding.execution_checkout_sha,
             GIT_B,
         )
+
+    def test_legacy_generation_one_rejects_partially_current_execution(self):
+        action, root, resume, name, profile, python_identity = (
+            self.legacy_bridge_records()
+        )
+        mutations = {
+            "checkout": (
+                "execution_checkout_sha",
+                action["execution"]["approved_checkout_sha"],
+            ),
+            "authoring_procedure": (
+                "procedure_identity_sha256",
+                action["execution"]["approved_procedure_identity_sha256"],
+            ),
+            "operator_session_procedure": (
+                "operator_session_procedure_identity_sha256",
+                action["execution"][
+                    "approved_operator_session_procedure_identity_sha256"
+                ],
+            ),
+        }
+        for label, (field, value) in mutations.items():
+            with self.subTest(field=label):
+                changed = copy.deepcopy(resume)
+                changed[field] = value
+                with self.assertRaises(SESSION.OperatorSessionError):
+                    SESSION._classify_resume_execution(
+                        action,
+                        root,
+                        changed,
+                        name,
+                        observed_procedure=SHA_C,
+                        observed_session_procedure=SHA_D,
+                        python_identity=python_identity,
+                        execution_profile=profile,
+                    )
+
+    def test_legacy_root_rejects_fully_current_generation_one_resume(self):
+        action, root, resume, _name, profile, python_identity = (
+            self.legacy_bridge_records()
+        )
+        changed = copy.deepcopy(resume)
+        changed["execution_checkout_sha"] = action["execution"][
+            "approved_checkout_sha"
+        ]
+        changed["procedure_identity_sha256"] = action["execution"][
+            "approved_procedure_identity_sha256"
+        ]
+        changed["operator_session_procedure_identity_sha256"] = action[
+            "execution"
+        ]["approved_operator_session_procedure_identity_sha256"]
+        changed["python_identity_sha256"] = python_identity["identity_sha256"]
+        canonical_name = (
+            SESSION.CURRENT_RESUME_PREFIX
+            + "0000000000000001-"
+            + changed["resume_checkpoint_sha256"]
+            + ".json"
+        )
+        with self.assertRaisesRegex(
+            SESSION.OperatorSessionError, "history_conflict"
+        ):
+            SESSION._classify_resume_execution(
+                action,
+                root,
+                changed,
+                canonical_name,
+                observed_procedure=action["execution"][
+                    "approved_procedure_identity_sha256"
+                ],
+                observed_session_procedure=action["execution"][
+                    "approved_operator_session_procedure_identity_sha256"
+                ],
+                python_identity=python_identity,
+                execution_profile=profile,
+            )
+
+    def test_legacy_root_rejects_canonical_historical_generation_two_resume(self):
+        action, root, resume, _name, profile, python_identity = (
+            self.legacy_bridge_records()
+        )
+        changed = copy.deepcopy(resume)
+        changed["resume_generation"] = 2
+        canonical_name = (
+            SESSION.CURRENT_RESUME_PREFIX
+            + "0000000000000002-"
+            + changed["resume_checkpoint_sha256"]
+            + ".json"
+        )
+        with self.assertRaisesRegex(
+            SESSION.OperatorSessionError, "history_conflict"
+        ):
+            SESSION._classify_resume_execution(
+                action,
+                root,
+                changed,
+                canonical_name,
+                observed_procedure=action["execution"][
+                    "approved_procedure_identity_sha256"
+                ],
+                observed_session_procedure=action["execution"][
+                    "approved_operator_session_procedure_identity_sha256"
+                ],
+                python_identity=python_identity,
+                execution_profile=profile,
+            )
+
+    def test_true_legacy_to_current_generation_two_and_three_chain_passes(self):
+        built = self.build_legacy_history("legacy-current-positive")
+        self.verify_built_legacy_history(built)
+        self.assertEqual(
+            [edge["successor"]["resume_generation"] for edge in built["edges"]],
+            [2, 3],
+        )
+        self.assertEqual(
+            built["edges"][0]["successor"]["predecessor"]["action"],
+            "primary_review",
+        )
+
+    def test_legacy_history_rejects_missing_generation_one_evidence(self):
+        built = self.build_legacy_history("legacy-missing-generation-one")
+        oldest = built["edges"][0]["retired"]
+        immediate = built["edges"][-1]["retired"]
+        oldest.unlink()
+        self.assertTrue(immediate.exists())
+        with self.assertRaisesRegex(
+            SESSION.OperatorSessionError, "history_conflict"
+        ):
+            self.verify_built_legacy_history(built)
+
+    def test_legacy_history_rejects_altered_generation_one_evidence(self):
+        built = self.build_legacy_history("legacy-altered-generation-one")
+        oldest = built["edges"][0]["retired"]
+        oldest.chmod(0o600)
+        oldest.write_bytes(b"{}\n")
+        oldest.chmod(0o400)
+        with self.assertRaisesRegex(
+            SESSION.OperatorSessionError, "history_conflict"
+        ):
+            self.verify_built_legacy_history(built)
+
+    def test_legacy_history_rejects_coherent_older_link_identity_drift(self):
+        mutations = {
+            "authoring_procedure": lambda resume: resume.__setitem__(
+                "procedure_identity_sha256", SHA_A
+            ),
+            "operator_session_procedure": lambda resume: resume.__setitem__(
+                "operator_session_procedure_identity_sha256", SHA_A
+            ),
+            "python": lambda resume: resume.__setitem__(
+                "python_identity_sha256", SHA_B
+            ),
+            "session": lambda resume: resume.__setitem__(
+                "authoring_session_identity", "substituted-older-session"
+            ),
+        }
+        for label, mutation in mutations.items():
+            with self.subTest(field=label):
+                built = self.build_legacy_history(
+                    "legacy-older-drift-" + label,
+                    generation_two_mutation=mutation,
+                    extra_current_edge=True,
+                )
+                self.assertEqual(
+                    [
+                        edge["successor"]["resume_generation"]
+                        for edge in built["edges"]
+                    ],
+                    [2, 3, 4],
+                )
+                with self.assertRaisesRegex(
+                    SESSION.OperatorSessionError, "history_conflict"
+                ):
+                    self.verify_built_legacy_history(built)
+
+    def test_legacy_history_rejects_generation_skip(self):
+        built = self.build_legacy_history(
+            "legacy-generation-skip", final_generation=4
+        )
+        with self.assertRaisesRegex(
+            SESSION.OperatorSessionError, "history_conflict"
+        ):
+            self.verify_built_legacy_history(built)
+
+    def test_legacy_history_rejects_more_than_one_execution_transition(self):
+        built = self.build_legacy_history(
+            "legacy-second-transition",
+            second_historical_transition=True,
+        )
+        with self.assertRaisesRegex(
+            SESSION.OperatorSessionError, "history_conflict"
+        ):
+            self.verify_built_legacy_history(built)
+
+    def test_bridge_rejects_old_to_current_generation_one_status_hop(self):
+        built = self.build_legacy_history(
+            "legacy-current-generation-one-hop",
+            insert_current_generation_one=True,
+        )
+        self.assertEqual(
+            [edge["successor"]["resume_generation"] for edge in built["edges"]],
+            [1, 2, 3],
+        )
+        with self.assertRaisesRegex(
+            SESSION.OperatorSessionError, "history_conflict"
+        ):
+            self.verify_built_legacy_history(built)
+
+    def test_predecessor_history_depth_is_bounded(self):
+        built = self.build_legacy_history("legacy-depth-bound")
+        with mock.patch.object(SESSION, "MAX_RESUME_HISTORY_DEPTH", 1):
+            with self.assertRaisesRegex(
+                SESSION.OperatorSessionError, "history_conflict"
+            ):
+                self.verify_built_legacy_history(built)
+
+    def test_predecessor_cycle_reaches_visited_hash_guard(self):
+        action, root, template, _name, _profile, python_identity = (
+            self.legacy_bridge_records()
+        )
+        root = copy.deepcopy(root)
+        root["execution"] = copy.deepcopy(action["execution"])
+        root_sha256 = hashlib.sha256(
+            capture_contract.canonical_json_bytes(root)
+        ).hexdigest()
+        checkpoint_sha256 = self.digest_for("cycle-checkpoint")
+        name_a = (
+            SESSION.CURRENT_RESUME_PREFIX
+            + "0000000000000001-"
+            + checkpoint_sha256
+            + "-"
+            + SHA_A[:16]
+            + ".json"
+        )
+        name_b = (
+            SESSION.CURRENT_RESUME_PREFIX
+            + "0000000000000001-"
+            + checkpoint_sha256
+            + "-"
+            + SHA_B[:16]
+            + ".json"
+        )
+
+        def cyclic_resume(name, resume_sha, action_sha):
+            record = copy.deepcopy(template)
+            record["authorization_sha256"] = root_sha256
+            record["execution_checkout_sha"] = action["execution"][
+                "approved_checkout_sha"
+            ]
+            record["procedure_identity_sha256"] = action["execution"][
+                "approved_procedure_identity_sha256"
+            ]
+            record[
+                "operator_session_procedure_identity_sha256"
+            ] = action["execution"][
+                "approved_operator_session_procedure_identity_sha256"
+            ]
+            record["resume_checkpoint_sha256"] = checkpoint_sha256
+            record["resume_generation"] = 1
+            record["resume_release_token"] = self.digest_for(
+                "cycle-release-" + name
+            )
+            record["predecessor"] = {
+                "action": "status",
+                "action_authorization_sha256": action_sha,
+                "resume_name": name,
+                "resume_sha256": resume_sha,
+            }
+            return record
+
+        resume_a = cyclic_resume(name_b, SHA_B, SHA_C)
+        resume_b = cyclic_resume(name_a, SHA_A, SHA_D)
+        retired_b_name = (
+            SESSION.RETIRED_RESUME_PREFIX
+            + "0000000000000001-"
+            + SHA_A[:16]
+            + ".json"
+        )
+        retired_a_name = (
+            SESSION.RETIRED_RESUME_PREFIX
+            + "0000000000000001-"
+            + SHA_B[:16]
+            + ".json"
+        )
+        action_c_name = "authorization-action-" + SHA_C[:16] + ".json"
+        action_d_name = "authorization-action-" + SHA_D[:16] + ".json"
+        root_name = "authorization-root-" + root_sha256[:16] + ".json"
+        records = {
+            root_name: (
+                root,
+                types.SimpleNamespace(sha256=root_sha256),
+            ),
+            name_a: (
+                resume_a,
+                types.SimpleNamespace(sha256=SHA_A),
+            ),
+            retired_b_name: (
+                resume_b,
+                types.SimpleNamespace(sha256=SHA_B),
+            ),
+            retired_a_name: (
+                resume_a,
+                types.SimpleNamespace(sha256=SHA_A),
+            ),
+            action_c_name: ({}, types.SimpleNamespace(sha256=SHA_C)),
+            action_d_name: ({}, types.SimpleNamespace(sha256=SHA_D)),
+        }
+        names = list(records)
+        root_bytes = capture_contract.canonical_json_bytes(root)
+        resume_a_bytes = capture_contract.canonical_json_bytes(resume_a)
+        resume_b_bytes = capture_contract.canonical_json_bytes(resume_b)
+
+        def synthetic_sha(data):
+            if data == root_bytes:
+                return root_sha256
+            if data == resume_a_bytes:
+                return SHA_A
+            if data == resume_b_bytes:
+                return SHA_B
+            return hashlib.sha256(data).hexdigest()
+
+        shape_check = mock.Mock(return_value=True)
+        evidence_check = mock.Mock(return_value=True)
+        with (
+            mock.patch.object(SESSION.os, "listdir", return_value=names),
+            mock.patch.object(
+                SESSION,
+                "_stable_canonical_private_json_at",
+                side_effect=lambda _fd, name: records[name],
+            ),
+            mock.patch.object(
+                SESSION,
+                "_validate_loaded_resume_record",
+                side_effect=lambda value, **_kwargs: value,
+            ),
+            mock.patch.object(
+                SESSION, "_current_resume_shape_matches", shape_check
+            ),
+            mock.patch.object(
+                SESSION, "_historical_evidence_matches", evidence_check
+            ),
+            mock.patch.object(SESSION, "sha256_bytes", side_effect=synthetic_sha),
+        ):
+            with self.assertRaisesRegex(
+                SESSION.OperatorSessionError, "history_conflict"
+            ):
+                SESSION._verify_predecessor_chain_at(
+                    9,
+                    base_authorization=root,
+                    resume=resume_a,
+                    resume_name=name_a,
+                    resume_sha256=SHA_A,
+                    expected_execution=action["execution"],
+                    expected_python_identity_sha256=python_identity[
+                        "identity_sha256"
+                    ],
+                    action_state_matrix=self.verified.profile[
+                        "action_state_matrix"
+                    ],
+                    execution_mode_name="current",
+                    compatibility_bridge=None,
+                )
+        self.assertEqual(shape_check.call_count, 4)
+        self.assertEqual(evidence_check.call_count, 2)
 
     def test_legacy_generation_one_bridge_rejects_every_reuse_shape(self):
         action, root, resume, name, profile, python_identity = (
@@ -1387,6 +2061,53 @@ class TocOperatorSessionTest(unittest.TestCase):
         finally:
             os.close(root_fd)
 
+    def test_mixed_current_and_legacy_active_resume_names_fail_closed(self):
+        self.initialize_operator_session()
+        current = self.current_resume_path()
+        legacy = self.session_root / (
+            "resume-g0000000000000001-" + SHA_A + ".json"
+        )
+        legacy.write_bytes(current.read_bytes())
+        legacy.chmod(0o400)
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses(
+                    "status", expected_state="PRIMARY_REVIEW_REQUIRED"
+                ),
+                execute_authoring_side_effect=AssertionError(
+                    "mixed active resume namespace dispatched"
+                ),
+            )
+        self.assertEqual(raised.exception.reason, "history_conflict")
+        self.assertTrue(current.exists())
+        self.assertTrue(legacy.exists())
+        self.assertTrue(
+            (self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists()
+        )
+
+    def test_multiple_legacy_active_resume_names_fail_closed(self):
+        legacy_root = self.root / "multiple-legacy-active-resumes"
+        legacy_root.mkdir(mode=0o700)
+        for suffix in (SHA_A, SHA_B):
+            path = legacy_root / (
+                "resume-g0000000000000001-" + suffix + ".json"
+            )
+            path.write_bytes(b"{}\n")
+            path.chmod(0o400)
+        descriptor = os.open(
+            legacy_root,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            with self.assertRaisesRegex(
+                SESSION.OperatorSessionError, "history_conflict"
+            ):
+                SESSION._active_resume_name(descriptor)
+        finally:
+            os.close(descriptor)
+
     def test_every_existing_post_initialize_action_consumes_resume_and_retires_predecessor(self):
         resume = self.initialize_operator_session()
         actions = [
@@ -1719,6 +2440,315 @@ class TocOperatorSessionTest(unittest.TestCase):
     def test_predecessor_chain_rejects_altered_action_authorization(self):
         self.assert_predecessor_evidence_mutation_blocks("action", "altered")
 
+    def test_complete_predecessor_walk_rejects_missing_older_resume(self):
+        current = self.multiple_predecessor_session(edge_count=2)
+        retired_records = [
+            (path, self.load_private_json(path))
+            for path in self.session_root.iterdir()
+            if path.name.startswith(SESSION.RETIRED_RESUME_PREFIX)
+        ]
+        oldest = [
+            path
+            for path, record in retired_records
+            if "predecessor" not in record
+        ]
+        self.assertEqual(len(oldest), 1)
+        oldest[0].unlink()
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses(
+                    "status", expected_state="PRIMARY_REVIEW_REQUIRED"
+                ),
+                execute_authoring_side_effect=AssertionError(
+                    "incomplete predecessor history dispatched"
+                ),
+            )
+        self.assertEqual(raised.exception.reason, "history_conflict")
+        self.assertTrue(current.exists())
+        self.assertTrue(
+            (self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists()
+        )
+
+    def test_predecessor_action_execution_substitution_is_rejected(self):
+        current, retired, action = self.predecessor_bearing_session()
+
+        def mutate(action_record):
+            action_record["execution"]["approved_checkout_sha"] = GIT_B
+
+        replacement = self.replace_immediate_action_evidence(
+            current, retired, action, mutate
+        )
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses(
+                    "status", expected_state="PRIMARY_REVIEW_REQUIRED"
+                ),
+                execute_authoring_side_effect=AssertionError(
+                    "execution-substituted history dispatched"
+                ),
+            )
+        self.assertEqual(raised.exception.reason, "history_conflict")
+        self.assertTrue(replacement.exists())
+
+    def test_predecessor_action_session_substitution_is_rejected(self):
+        current, retired, action = self.predecessor_bearing_session()
+
+        def mutate(action_record):
+            action_record["authoring_session_identity"] = (
+                "substituted-authoring-session"
+            )
+
+        replacement = self.replace_immediate_action_evidence(
+            current, retired, action, mutate
+        )
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses(
+                    "status", expected_state="PRIMARY_REVIEW_REQUIRED"
+                ),
+                execute_authoring_side_effect=AssertionError(
+                    "session-substituted history dispatched"
+                ),
+            )
+        self.assertEqual(raised.exception.reason, "history_conflict")
+        self.assertTrue(replacement.exists())
+
+    def test_predecessor_action_expected_state_must_match_checkpoint_state(self):
+        current, retired, action = self.predecessor_bearing_session()
+
+        def mutate(action_record):
+            action_record["expected_authoring_state"] = "REVISIT_REQUIRED"
+
+        replacement = self.replace_immediate_action_evidence(
+            current, retired, action, mutate
+        )
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses(
+                    "status", expected_state="PRIMARY_REVIEW_REQUIRED"
+                )
+            )
+        self.assertEqual(raised.exception.reason, "history_conflict")
+        self.assertTrue(replacement.exists())
+        self.assertTrue(
+            (self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists()
+        )
+
+    def test_resume_history_cross_binds_checkpoint_event_hash_operator_and_session(self):
+        root = {
+            "authoring_session_identity": "initial-authoring-session",
+            "primary_operator_identity": "Primary Reviewer",
+        }
+        retired = {
+            "resume_checkpoint_sha256": SHA_A,
+            "resume_generation": 1,
+        }
+        successor = {
+            "resume_checkpoint_sha256": SHA_B,
+            "resume_generation": 2,
+        }
+        action = {
+            "action": "primary_review",
+            "authoring_session_identity": "primary-review-session",
+            "expected_authoring_state": "PRIMARY_REVIEW_REQUIRED",
+            "operator_identity": "Primary Reviewer",
+        }
+        edge = SESSION.ResumeHistoryEdge(
+            successor=successor,
+            successor_name="resume-current-g2.json",
+            successor_sha256=SHA_C,
+            retired_resume=retired,
+            retired_name="resume-retired-g1.json",
+            retired_sha256=SHA_D,
+            action_authorization=action,
+            action_name="authorization-action.json",
+            action_sha256=self.digest_for("cross-bound-action"),
+        )
+        snapshot = SESSION.ResumeHistorySnapshot(
+            current_resume=successor,
+            current_name="resume-current-g2.json",
+            current_sha256=SHA_C,
+            root_authorization=root,
+            root_name="authorization-root.json",
+            root_sha256=self.digest_for("cross-bound-root"),
+            edges=(edge,),
+            record_observations={},
+            relevant_names=frozenset(),
+            pending_action_name="",
+            pending_action={},
+            pending_action_sha256="",
+            release_tokens=frozenset(
+                {
+                    self.digest_for("retired-release"),
+                    self.digest_for("successor-release"),
+                }
+            ),
+        )
+        checkpoint_one = {
+            "event": {
+                "action": "initialize",
+                "operator_identity": "Primary Reviewer",
+                "operator_session_identity": "initial-authoring-session",
+            },
+        }
+        checkpoint_two = {
+            "event": {
+                "action": "primary_review",
+                "operator_identity": "Primary Reviewer",
+                "operator_session_identity": "primary-review-session",
+            },
+        }
+
+        def check(second=checkpoint_two, first=checkpoint_one):
+            chain = types.SimpleNamespace(
+                checkpoints=(first, second),
+                hashes=(SHA_A, SHA_B),
+            )
+            with mock.patch.object(
+                AUTHOR,
+                "aggregate_status",
+                return_value={"authoring_state": "PRIMARY_REVIEW_REQUIRED"},
+            ):
+                SESSION._cross_bind_resume_checkpoint_history(
+                    snapshot, chain, object()
+                )
+
+        check()
+        mutations = {
+            "checkpoint_action": ("action", "relationship_review"),
+            "checkpoint_operator": ("operator_identity", "Other Reviewer"),
+            "checkpoint_session": (
+                "operator_session_identity",
+                "other-authoring-session",
+            ),
+        }
+        for label, (field, value) in mutations.items():
+            with self.subTest(case=label):
+                changed = copy.deepcopy(checkpoint_two)
+                changed["event"][field] = value
+                with self.assertRaisesRegex(
+                    SESSION.OperatorSessionError, "history_conflict"
+                ):
+                    check(second=changed)
+        changed_retired = dict(retired)
+        changed_retired["resume_checkpoint_sha256"] = SHA_D
+        changed_snapshot = copy.copy(snapshot)
+        changed_snapshot.edges = (
+            dataclasses.replace(edge, retired_resume=changed_retired),
+        )
+        with mock.patch.object(
+            AUTHOR,
+            "aggregate_status",
+            return_value={"authoring_state": "PRIMARY_REVIEW_REQUIRED"},
+        ), self.assertRaisesRegex(
+            SESSION.OperatorSessionError, "history_conflict"
+        ):
+            SESSION._cross_bind_resume_checkpoint_history(
+                changed_snapshot,
+                types.SimpleNamespace(
+                    checkpoints=(checkpoint_one, checkpoint_two),
+                    hashes=(SHA_A, SHA_B),
+                ),
+                object(),
+            )
+
+    def test_same_name_resume_replacement_mid_invocation_blocks_successor(self):
+        self.initialize_operator_session()
+        current = self.current_resume_path()
+        original = AUTHOR.aggregate_status
+        calls = 0
+
+        def replace_once(checkpoint, capture):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                replacement = self.session_root / ".planted-resume-replacement"
+                replacement.write_bytes(current.read_bytes())
+                replacement.chmod(0o400)
+                os.replace(replacement, current)
+            return original(checkpoint, capture)
+
+        with (
+            mock.patch.object(
+                AUTHOR, "aggregate_status", side_effect=replace_once
+            ),
+            self.assertRaises(SESSION.OperatorSessionError) as raised,
+        ):
+            self.run_with_responses(
+                self.action_responses(
+                    "status", expected_state="PRIMARY_REVIEW_REQUIRED"
+                )
+            )
+        self.assertEqual(raised.exception.reason, "history_conflict")
+        self.assertTrue(current.exists())
+        self.assertFalse(
+            any(
+                path.name.startswith(SESSION.RETIRED_RESUME_PREFIX)
+                for path in self.session_root.iterdir()
+            )
+        )
+        self.assertTrue(
+            (self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists()
+        )
+
+    def test_successor_release_token_must_be_fresh(self):
+        initial = self.initialize_operator_session()
+
+        def duplicate_token(
+            environment,
+            _tty_fd,
+            *,
+            resume_recorder,
+            action_authorizer=None,
+            history_verifier=None,
+            binding_policy=None,
+        ):
+            if action_authorizer is not None:
+                action_authorizer()
+            resume_recorder(
+                int(environment["TOC_AUTHOR_EXPECTED_HEAD_GENERATION"]),
+                environment["TOC_AUTHOR_EXPECTED_HEAD_SHA256"],
+                initial["resume_release_token"],
+            )
+            raise AssertionError("duplicate release token was accepted")
+
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses(
+                    "status", expected_state="PRIMARY_REVIEW_REQUIRED"
+                ),
+                execute_authoring_side_effect=duplicate_token,
+            )
+        self.assertEqual(raised.exception.reason, "history_conflict")
+        self.assertEqual(len(list(self.session_root.glob("resume-current-*"))), 1)
+        self.assertTrue(
+            (self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists()
+        )
+
+    def test_same_generation_non_status_history_edge_is_rejected(self):
+        current, retired, action = self.predecessor_bearing_session()
+
+        def mutate(action_record):
+            action_record["action"] = "primary_review"
+            action_record["expected_authoring_state"] = (
+                "PRIMARY_REVIEW_REQUIRED"
+            )
+
+        replacement = self.replace_immediate_action_evidence(
+            current, retired, action, mutate
+        )
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses(
+                    "status", expected_state="PRIMARY_REVIEW_REQUIRED"
+                ),
+                execute_authoring_side_effect=AssertionError(
+                    "same-generation primary review dispatched"
+                ),
+            )
+        self.assertEqual(raised.exception.reason, "history_conflict")
+        self.assertTrue(replacement.exists())
+
     def test_predecessor_chain_rejects_duplicate_retired_resume_bytes(self):
         self.assert_predecessor_evidence_mutation_blocks(
             "retired", "duplicate"
@@ -1872,6 +2902,51 @@ class TocOperatorSessionTest(unittest.TestCase):
         self.assertFalse(any(path.name.startswith(SESSION.RETIRED_RESUME_PREFIX) for path in self.session_root.iterdir()))
         self.assertTrue((self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists())
 
+    def test_action_recorder_rejects_wrong_successor_generation_before_publication(self):
+        self.initialize_operator_session()
+        predecessor = self.current_resume_path()
+
+        def wrong_generation(
+            environment,
+            _tty_fd,
+            *,
+            resume_recorder,
+            action_authorizer=None,
+            history_verifier=None,
+            binding_policy=None,
+        ):
+            if action_authorizer is not None:
+                action_authorizer()
+            resume_recorder(
+                int(environment["TOC_AUTHOR_EXPECTED_HEAD_GENERATION"]) + 2,
+                SHA_A,
+                SHA_B,
+            )
+            return 2, b"{}"
+
+        with self.assertRaisesRegex(
+            SESSION.OperatorSessionError, "history_conflict"
+        ):
+            self.run_with_responses(
+                self.action_responses("primary_review"),
+                execute_authoring_side_effect=wrong_generation,
+            )
+        current = [
+            path
+            for path in self.session_root.iterdir()
+            if path.name.startswith(SESSION.CURRENT_RESUME_PREFIX)
+        ]
+        self.assertEqual(current, [predecessor])
+        self.assertFalse(
+            any(
+                path.name.startswith(SESSION.RETIRED_RESUME_PREFIX)
+                for path in self.session_root.iterdir()
+            )
+        )
+        self.assertTrue(
+            (self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists()
+        )
+
     def test_failure_after_successor_publication_never_leaves_normal_dual_current_state(self):
         self.initialize_operator_session()
         current = self.current_resume_path()
@@ -1882,6 +2957,7 @@ class TocOperatorSessionTest(unittest.TestCase):
             *,
             resume_recorder,
             action_authorizer=None,
+            history_verifier=None,
             binding_policy=None,
         ):
             if action_authorizer is not None:
@@ -2646,6 +3722,7 @@ class TocOperatorSessionTest(unittest.TestCase):
             *,
             resume_recorder,
             action_authorizer=None,
+            history_verifier=None,
             binding_policy=None,
         ):
             seen.append(dict(environment))
@@ -2713,6 +3790,11 @@ class TocOperatorSessionTest(unittest.TestCase):
                 "execute_authoring",
                 side_effect=execute_primary,
             ) as dispatch,
+            mock.patch.object(
+                SESSION,
+                "_revalidate_checkpoint_evidence_from_path",
+                return_value=None,
+            ),
         ):
             status, _diagnostic = SESSION.run_session(9, self.verified)
         self.assertEqual(status, 2)
@@ -2786,6 +3868,7 @@ class TocOperatorSessionTest(unittest.TestCase):
             *,
             resume_recorder,
             action_authorizer=None,
+            history_verifier=None,
             binding_policy=None,
         ):
             self.assertIsNotNone(action_authorizer)

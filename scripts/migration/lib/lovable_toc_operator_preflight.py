@@ -1,15 +1,18 @@
 """Shared public pre-private verifier for Lovable TOC operator sessions.
 
 This module is deliberately read-only.  It verifies the committed execution
-profile, one externally installed immutable approval artifact, the reviewed Git
-checkout, the deterministic CPython executable, startup isolation, and the
-local controlling TTY.  It never opens the approved operator-session root and
-contains no authoring, validation, restore, database, or network mode.
+profile, one externally installed owner-private procedural approval artifact,
+the reviewed Git checkout, the deterministic CPython executable, startup
+isolation, and the local controlling TTY.  It never opens the approved
+operator-session root and contains no authoring, validation, restore, database,
+or network mode.
 
 The execution profile is policy, not approval.  A checkout is approved only
-when exactly one immutable external artifact binds that exact checkout, profile
-digest, reviewed blob map, procedure identities, Python identity, repository,
-operator-session-root string, authorizer, and review reference.
+when exactly one external owner-private artifact binds that exact checkout,
+profile digest, reviewed blob map, procedure identities, Python identity,
+repository, operator-session-root string, authorizer, review reference, and an
+explicit acknowledgement of the procedural-review and same-UID replacement
+ceiling.  The artifact is not cryptographically authenticated or OS-immutable.
 """
 
 from __future__ import annotations
@@ -42,6 +45,11 @@ REVIEWED_GIT = "/usr/bin/git"
 REVIEWED_PS = "/bin/ps"
 MAX_PROCESS_ANCESTORS = 32
 MAX_PS_OUTPUT_BYTES = 1024
+DESCRIPTOR_RELATIVE_PROFILE_SUPPORTED = (
+    hasattr(os, "O_NOFOLLOW")
+    and os.open in os.supports_dir_fd
+    and os.stat in os.supports_dir_fd
+)
 KNOWN_RECORDING_ANCESTOR_NAMES = frozenset(
     {
         "asciinema",
@@ -150,8 +158,15 @@ EXPECTED_SUMMARY_LABELS = frozenset(
     }
 )
 ALLOWED_ENVIRONMENT_NAMES = frozenset(
-    {"LANG", "LC_ALL", "TERM", "TOC_OPERATOR_TTY_FD"}
+    {
+        "LANG",
+        "LC_ALL",
+        "TERM",
+        "TOC_OPERATOR_OUTER_TTY_CONTEXT",
+        "TOC_OPERATOR_TTY_FD",
+    }
 )
+OUTER_TTY_CONTEXT_VALUE = "clear-v1"
 POISON_ENVIRONMENT_NAMES = frozenset(
     {
         "BASH_ENV",
@@ -279,8 +294,18 @@ class VerifiedPreflight:
 
 
 @dataclass(frozen=True)
+class PublicProfileSnapshot:
+    """One descriptor-stable public profile snapshot and its Git blob ID."""
+
+    profile: Mapping[str, Any]
+    profile_sha256: str
+    git_blob_id: str
+    file_identity: tuple[int, ...]
+
+
+@dataclass(frozen=True)
 class ApprovalBootstrapBinding:
-    """External approval identity authenticated before reviewed imports."""
+    """External approval snapshot bound before reviewed imports."""
 
     approval_name: str
     approval_sha256: str
@@ -303,6 +328,35 @@ def _approval_file_identity(metadata: os.stat_result) -> tuple[int, ...]:
 
 
 def _approval_parent_identity(metadata: os.stat_result) -> tuple[int, ...]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_nlink,
+        metadata.st_uid,
+        metadata.st_gid,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def _public_profile_file_identity(metadata: os.stat_result) -> tuple[int, ...]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_nlink,
+        metadata.st_uid,
+        metadata.st_gid,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def _public_profile_directory_identity(
+    metadata: os.stat_result,
+) -> tuple[int, ...]:
     return (
         metadata.st_dev,
         metadata.st_ino,
@@ -493,13 +547,21 @@ def validate_profile(value: Any) -> dict[str, Any]:
 
     checkout = _exact_dict(
         profile["checkout_policy"],
-        {"approval_source", "mode", "self_approval_forbidden"},
+        {
+            "approval_source",
+            "independent_review_enforcement",
+            "launcher_mutation",
+            "mode",
+            "same_uid_prelaunch_replacement_ceiling",
+        },
         reason,
     )
     if checkout != {
-        "approval_source": "external_immutable_artifact",
+        "approval_source": "external_owner_private_procedural_artifact",
+        "independent_review_enforcement": "human_procedural_not_cryptographic",
+        "launcher_mutation": "forbidden",
         "mode": "exact_checkout",
-        "self_approval_forbidden": True,
+        "same_uid_prelaunch_replacement_ceiling": True,
     }:
         raise PreflightError(reason)
 
@@ -763,6 +825,7 @@ def validate_approval(
             "repository",
             "review_reference",
             "reviewed_file_blobs",
+            "trust_model_acknowledgement",
         },
         reason,
     )
@@ -782,6 +845,11 @@ def validate_approval(
     _require_string(
         approval["review_reference"], reason=reason, pattern=SAFE_IDENTITY_RE
     )
+    if (
+        approval["trust_model_acknowledgement"]
+        != "PROCEDURAL_REVIEW_AND_SAME_UID_PRELAUNCH_REPLACEMENT_CEILING_ACCEPTED"
+    ):
+        raise PreflightError(reason)
     _validate_absolute_path_lexically(
         approval["operator_session_root_path"], repository_root
     )
@@ -867,25 +935,322 @@ def _git_ascii(repository: Path, arguments: Sequence[str]) -> str:
         raise PreflightError("repository_binding_mismatch") from exc
 
 
-def _read_public_profile(repository: Path) -> tuple[dict[str, Any], str]:
-    path = repository / PROFILE_RELATIVE_PATH
+def _git_hash_object_bytes(repository: Path, data: bytes) -> str:
+    """Return the Git blob ID for the exact already-held public bytes."""
+
     try:
-        supplied = os.lstat(path)
-        resolved = path.resolve(strict=True)
+        executable = os.lstat(REVIEWED_GIT)
         if (
-            stat.S_ISLNK(supplied.st_mode)
-            or not stat.S_ISREG(supplied.st_mode)
-            or resolved != path
+            stat.S_ISLNK(executable.st_mode)
+            or not stat.S_ISREG(executable.st_mode)
+            or not os.access(REVIEWED_GIT, os.X_OK)
         ):
             raise OSError
-        with path.open("rb") as handle:
-            data = handle.read(PROFILE_MAX_BYTES + 1)
-    except (OSError, RuntimeError) as exc:
+        result = subprocess.run(
+            [
+                REVIEWED_GIT,
+                *REVIEWED_GIT_CONFIG,
+                "hash-object",
+                "--stdin",
+            ],
+            cwd=repository,
+            check=False,
+            input=data,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            env=dict(REVIEWED_GIT_ENVIRONMENT),
+            timeout=20,
+            close_fds=True,
+        )
+    except BaseException as exc:
+        raise PreflightError("repository_binding_mismatch") from exc
+    try:
+        value = result.stdout.decode("ascii", errors="strict").strip()
+    except UnicodeError as exc:
+        raise PreflightError("repository_binding_mismatch") from exc
+    if result.returncode != 0 or result.stderr or GIT_SHA_RE.fullmatch(value) is None:
+        raise PreflightError("repository_binding_mismatch")
+    return value
+
+
+def _read_public_profile(repository: Path) -> PublicProfileSnapshot:
+    """Read the profile once through a held descriptor-relative path.
+
+    The returned SHA-256, parsed policy, and Git blob ID all derive from the
+    same bounded byte snapshot.  Every path component and the final file are
+    revalidated while their descriptors remain held.  The file descriptor is
+    not held for the entire preflight; repository verification separately
+    reopens the named file descriptor-relatively and requires this recorded
+    identity before and after Git binding.  A same-UID actor able to substitute
+    and restore paths between those checkpoints remains a documented ceiling.
+    """
+
+    opened_descriptors: list[int] = []
+    walked_components: list[tuple[int, str, tuple[int, ...]]] = []
+    profile_descriptor = -1
+    try:
+        if not DESCRIPTOR_RELATIVE_PROFILE_SUPPORTED:
+            raise OSError
+        root_lstat = os.lstat(repository)
+        if (
+            stat.S_ISLNK(root_lstat.st_mode)
+            or not stat.S_ISDIR(root_lstat.st_mode)
+            or os.path.realpath(repository) != os.fspath(repository)
+        ):
+            raise OSError
+        directory_flags = (
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | os.O_NOFOLLOW
+        )
+        root_descriptor = os.open(repository, directory_flags)
+        opened_descriptors.append(root_descriptor)
+        root_opened = os.fstat(root_descriptor)
+        root_identity = _public_profile_directory_identity(root_opened)
+        if (
+            not stat.S_ISDIR(root_opened.st_mode)
+            or root_identity
+            != _public_profile_directory_identity(root_lstat)
+        ):
+            raise OSError
+
+        current_descriptor = root_descriptor
+        for component in PurePosixPath(PROFILE_RELATIVE_PATH).parts[:-1]:
+            before = os.stat(
+                component,
+                dir_fd=current_descriptor,
+                follow_symlinks=False,
+            )
+            child_descriptor = os.open(
+                component,
+                directory_flags,
+                dir_fd=current_descriptor,
+            )
+            opened_descriptors.append(child_descriptor)
+            opened = os.fstat(child_descriptor)
+            after = os.stat(
+                component,
+                dir_fd=current_descriptor,
+                follow_symlinks=False,
+            )
+            child_identity = _public_profile_directory_identity(opened)
+            if (
+                not stat.S_ISDIR(before.st_mode)
+                or not stat.S_ISDIR(opened.st_mode)
+                or opened.st_dev != root_opened.st_dev
+                or child_identity
+                != _public_profile_directory_identity(before)
+                or child_identity
+                != _public_profile_directory_identity(after)
+            ):
+                raise OSError
+            walked_components.append(
+                (current_descriptor, component, child_identity)
+            )
+            current_descriptor = child_descriptor
+
+        filename = PurePosixPath(PROFILE_RELATIVE_PATH).name
+        pathname_before = os.stat(
+            filename,
+            dir_fd=current_descriptor,
+            follow_symlinks=False,
+        )
+        profile_descriptor = os.open(
+            filename,
+            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | os.O_NOFOLLOW,
+            dir_fd=current_descriptor,
+        )
+        opened_descriptors.append(profile_descriptor)
+        before = os.fstat(profile_descriptor)
+        file_identity = _public_profile_file_identity(before)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_uid != os.geteuid()
+            or stat.S_IMODE(before.st_mode) != 0o644
+            or before.st_nlink != 1
+            or before.st_dev != root_opened.st_dev
+            or before.st_size <= 0
+            or before.st_size > PROFILE_MAX_BYTES
+            or file_identity
+            != _public_profile_file_identity(pathname_before)
+        ):
+            raise OSError
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(
+                profile_descriptor,
+                min(65536, PROFILE_MAX_BYTES + 1 - total),
+            )
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > PROFILE_MAX_BYTES:
+                raise OSError
+        data = b"".join(chunks)
+        after = os.fstat(profile_descriptor)
+        pathname_after = os.stat(
+            filename,
+            dir_fd=current_descriptor,
+            follow_symlinks=False,
+        )
+        if (
+            file_identity != _public_profile_file_identity(after)
+            or file_identity != _public_profile_file_identity(pathname_after)
+        ):
+            raise OSError
+        for parent_descriptor, component, child_identity in walked_components:
+            observed = os.stat(
+                component,
+                dir_fd=parent_descriptor,
+                follow_symlinks=False,
+            )
+            if child_identity != _public_profile_directory_identity(observed):
+                raise OSError
+        if (
+            root_identity
+            != _public_profile_directory_identity(os.fstat(root_descriptor))
+            or root_identity
+            != _public_profile_directory_identity(os.lstat(repository))
+        ):
+            raise OSError
+    except (OSError, RuntimeError, ValueError) as exc:
         raise PreflightError("execution_profile_invalid") from exc
+    finally:
+        for descriptor in reversed(opened_descriptors):
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
     value = strict_canonical_json_loads(
         data, maximum_bytes=PROFILE_MAX_BYTES, reason="execution_profile_invalid"
     )
-    return validate_profile(value), sha256_bytes(data)
+    profile = validate_profile(value)
+    return PublicProfileSnapshot(
+        profile=profile,
+        profile_sha256=sha256_bytes(data),
+        git_blob_id=_git_hash_object_bytes(repository, data),
+        file_identity=file_identity,
+    )
+
+
+def _revalidate_public_profile_path_identity(
+    repository: Path, snapshot: PublicProfileSnapshot
+) -> None:
+    """Require the named profile to remain the descriptor-consumed inode."""
+
+    opened_descriptors: list[int] = []
+    walked_components: list[tuple[int, str, tuple[int, ...]]] = []
+    try:
+        if not DESCRIPTOR_RELATIVE_PROFILE_SUPPORTED:
+            raise OSError
+        root_lstat = os.lstat(repository)
+        if (
+            stat.S_ISLNK(root_lstat.st_mode)
+            or not stat.S_ISDIR(root_lstat.st_mode)
+            or os.path.realpath(repository) != os.fspath(repository)
+        ):
+            raise OSError
+        directory_flags = (
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | os.O_NOFOLLOW
+        )
+        root_descriptor = os.open(repository, directory_flags)
+        opened_descriptors.append(root_descriptor)
+        root_opened = os.fstat(root_descriptor)
+        root_identity = _public_profile_directory_identity(root_opened)
+        if (
+            not stat.S_ISDIR(root_opened.st_mode)
+            or root_identity != _public_profile_directory_identity(root_lstat)
+        ):
+            raise OSError
+        current_descriptor = root_descriptor
+        for component in PurePosixPath(PROFILE_RELATIVE_PATH).parts[:-1]:
+            pathname_before = os.stat(
+                component,
+                dir_fd=current_descriptor,
+                follow_symlinks=False,
+            )
+            child_descriptor = os.open(
+                component,
+                directory_flags,
+                dir_fd=current_descriptor,
+            )
+            opened_descriptors.append(child_descriptor)
+            opened = os.fstat(child_descriptor)
+            pathname_after = os.stat(
+                component,
+                dir_fd=current_descriptor,
+                follow_symlinks=False,
+            )
+            child_identity = _public_profile_directory_identity(opened)
+            if (
+                not stat.S_ISDIR(pathname_before.st_mode)
+                or not stat.S_ISDIR(opened.st_mode)
+                or opened.st_dev != root_opened.st_dev
+                or child_identity
+                != _public_profile_directory_identity(pathname_before)
+                or child_identity
+                != _public_profile_directory_identity(pathname_after)
+            ):
+                raise OSError
+            walked_components.append(
+                (current_descriptor, component, child_identity)
+            )
+            current_descriptor = child_descriptor
+        filename = PurePosixPath(PROFILE_RELATIVE_PATH).name
+        pathname_before = os.stat(
+            filename,
+            dir_fd=current_descriptor,
+            follow_symlinks=False,
+        )
+        profile_descriptor = os.open(
+            filename,
+            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | os.O_NOFOLLOW,
+            dir_fd=current_descriptor,
+        )
+        opened_descriptors.append(profile_descriptor)
+        opened = os.fstat(profile_descriptor)
+        pathname_after = os.stat(
+            filename,
+            dir_fd=current_descriptor,
+            follow_symlinks=False,
+        )
+        if (
+            snapshot.file_identity
+            != _public_profile_file_identity(pathname_before)
+            or snapshot.file_identity != _public_profile_file_identity(opened)
+            or snapshot.file_identity
+            != _public_profile_file_identity(pathname_after)
+        ):
+            raise OSError
+        for parent_descriptor, component, child_identity in walked_components:
+            observed = os.stat(
+                component,
+                dir_fd=parent_descriptor,
+                follow_symlinks=False,
+            )
+            if child_identity != _public_profile_directory_identity(observed):
+                raise OSError
+        if (
+            root_identity
+            != _public_profile_directory_identity(os.fstat(root_descriptor))
+            or root_identity
+            != _public_profile_directory_identity(os.lstat(repository))
+        ):
+            raise OSError
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise PreflightError("repository_binding_mismatch") from exc
+    finally:
+        for descriptor in reversed(opened_descriptors):
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
 
 
 def default_approval_parent(
@@ -1072,9 +1437,10 @@ def _verify_repository(
     repository: Path,
     *,
     approval: Mapping[str, Any],
-    profile: Mapping[str, Any],
-    profile_sha256: str,
+    profile_snapshot: PublicProfileSnapshot,
 ) -> tuple[str, dict[str, str], str, str]:
+    profile = profile_snapshot.profile
+    _revalidate_public_profile_path_identity(repository, profile_snapshot)
     checkout = approval["approved_checkout_sha"]
     if not GIT_SHA_RE.fullmatch(checkout):
         raise PreflightError("approval_invalid")
@@ -1095,7 +1461,8 @@ def _verify_repository(
     if (
         approval["execution_profile"]["format_version"]
         != profile["format_version"]
-        or approval["execution_profile"]["sha256"] != profile_sha256
+        or approval["execution_profile"]["sha256"]
+        != profile_snapshot.profile_sha256
     ):
         raise PreflightError("approval_binding_mismatch")
     blobs = dict(approval["reviewed_file_blobs"])
@@ -1104,7 +1471,11 @@ def _verify_repository(
     for path in profile["reviewed_files"]:
         expected = blobs[path]
         committed = _git_ascii(repository, ["rev-parse", f"{checkout}:{path}"])
-        working = _git_ascii(repository, ["hash-object", "--", path])
+        working = (
+            profile_snapshot.git_blob_id
+            if path == PROFILE_RELATIVE_PATH
+            else _git_ascii(repository, ["hash-object", "--", path])
+        )
         if committed != expected or working != expected:
             raise PreflightError("repository_binding_mismatch")
 
@@ -1116,6 +1487,7 @@ def _verify_repository(
         "operator_session_sha256": operator,
     }:
         raise PreflightError("approval_binding_mismatch")
+    _revalidate_public_profile_path_identity(repository, profile_snapshot)
     return checkout, blobs, authoring, operator
 
 
@@ -1235,6 +1607,8 @@ def verify_startup_environment(
         or not values["TERM"].isascii()
         or type(values.get("TOC_OPERATOR_TTY_FD")) is not str
         or not values["TOC_OPERATOR_TTY_FD"].isdigit()
+        or values.get("TOC_OPERATOR_OUTER_TTY_CONTEXT")
+        != OUTER_TTY_CONTEXT_VALUE
         or POISON_ENVIRONMENT_NAMES.intersection(values)
     ):
         raise PreflightError("startup_environment_invalid")
@@ -1310,14 +1684,7 @@ def verify_known_recording_ancestors() -> None:
 
 
 def verify_tty(tty_fd: int, environment: Mapping[str, str] | None = None) -> None:
-    values = os.environ if environment is None else environment
-    if any(values.get(name) for name in TTY_REJECTION_NAMES):
-        raise PreflightError("tty_invalid")
-    if values.get("TERM_PROGRAM", "").lower() in {
-        "vscode",
-        "apple_terminal_ssh",
-    }:
-        raise PreflightError("tty_invalid")
+    del environment
     if type(tty_fd) is not int or tty_fd < 3:
         raise PreflightError("tty_invalid")
     controlling_fd = -1
@@ -1406,7 +1773,8 @@ def verify_pre_private(
     """
 
     repository = repository_root_from_launcher(launcher_path)
-    profile, profile_sha256 = _read_public_profile(repository)
+    profile_snapshot = _read_public_profile(repository)
+    profile = profile_snapshot.profile
     verify_startup_environment(environment)
     verify_tty(tty_fd, environment)
     verify_known_recording_ancestors()
@@ -1428,8 +1796,7 @@ def verify_pre_private(
     checkout, blobs, authoring, operator = _verify_repository(
         repository,
         approval=approval,
-        profile=profile,
-        profile_sha256=profile_sha256,
+        profile_snapshot=profile_snapshot,
     )
     python_identity = _verify_python(profile, approval)
     return VerifiedPreflight(
@@ -1441,7 +1808,7 @@ def verify_pre_private(
         operator_session_procedure_identity_sha256=operator,
         operator_session_root_path=approval["operator_session_root_path"],
         profile=profile,
-        profile_sha256=profile_sha256,
+        profile_sha256=profile_snapshot.profile_sha256,
         python_identity_sha256=python_identity,
         repository_root=os.fspath(repository),
         reviewed_file_blobs=blobs,
@@ -1455,6 +1822,7 @@ __all__ = [
     "PROFILE_MAX_BYTES",
     "PROFILE_RELATIVE_PATH",
     "PreflightError",
+    "PublicProfileSnapshot",
     "VerifiedPreflight",
     "canonical_json_bytes",
     "default_approval_parent",

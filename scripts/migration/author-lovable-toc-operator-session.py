@@ -134,7 +134,7 @@ class _StartupFailure(RuntimeError):
 
 @dataclass(frozen=True)
 class _BootstrapApprovalBinding:
-    """Immutable approval identity authenticated before repo-local imports."""
+    """Owner-private procedural approval snapshot bound before local imports."""
 
     approval_name: str
     approval_sha256: str
@@ -318,12 +318,14 @@ def _preimport_external_guard(
     repository: Path | None = None,
     account_home: Path | None = None,
 ) -> _BootstrapApprovalBinding:
-    """Authenticate every reviewed startup input before repo-local imports.
+    """Bind every reviewed startup input before repo-local imports.
 
     This is intentionally a narrow trust bootstrap, not a second public
-    preflight.  It authenticates the shared verifier and its complete reviewed
-    import closure against the one external approval artifact.  The imported
-    shared verifier then performs the full, authoritative pre-private check.
+    preflight or a cryptographic authentication layer. It binds the shared
+    verifier and its complete reviewed import closure to the one owner-private
+    procedural approval artifact. The imported shared verifier then performs
+    the full, authoritative pre-private check. Malicious same-UID replacement
+    before launch remains an accepted local trust ceiling.
     """
 
     try:
@@ -593,6 +595,7 @@ PYTHON_VERSION_RE = re.compile(
 )
 MAX_OPERATOR_INPUT_BYTES = 4096
 MAX_RECORD_BYTES = 1024 * 1024
+MAX_RESUME_HISTORY_DEPTH = 4096
 AUTHORING_STATES = frozenset(
     {
         "PRIMARY_REVIEW_REQUIRED",
@@ -644,6 +647,41 @@ class RecordPublication:
 class ResumeExecutionMode:
     name: str
     binding_policy: Any | None
+
+
+@dataclass(frozen=True)
+class ResumeHistoryEdge:
+    successor: Mapping[str, Any]
+    successor_name: str
+    successor_sha256: str
+    retired_resume: Mapping[str, Any]
+    retired_name: str
+    retired_sha256: str
+    action_authorization: Mapping[str, Any]
+    action_name: str
+    action_sha256: str
+
+
+@dataclass
+class ResumeHistorySnapshot:
+    """Private immutable-history observations retained for one invocation."""
+
+    current_resume: Mapping[str, Any]
+    current_name: str
+    current_sha256: str
+    root_authorization: Mapping[str, Any]
+    root_name: str
+    root_sha256: str
+    edges: tuple[ResumeHistoryEdge, ...]
+    record_observations: dict[str, Any]
+    relevant_names: frozenset[str]
+    pending_action_name: str
+    pending_action: Mapping[str, Any]
+    pending_action_sha256: str
+    release_tokens: frozenset[str]
+    checkpoint_observations: dict[str, Any] | None = None
+    annotation_root_identity: tuple[int, int] | None = None
+    checkpoints_identity: tuple[int, int] | None = None
 
 
 @dataclass
@@ -890,24 +928,27 @@ def _find_unique_name(root_fd: int, *, prefix: str, suffix: str = ".json") -> st
 
 def _active_resume_name(root_fd: int, *, allow_lock: bool = False) -> str:
     _assert_no_indeterminate(root_fd, allow_lock=allow_lock)
+    try:
+        names = os.listdir(root_fd)
+    except OSError as exc:
+        raise OperatorSessionError("history_conflict") from exc
+    if any(type(name) is not str for name in names):
+        _fail("history_conflict")
     current = [
         name
-        for name in os.listdir(root_fd)
-        if type(name) is str and name.startswith(CURRENT_RESUME_PREFIX) and name.endswith(".json")
+        for name in names
+        if name.startswith(CURRENT_RESUME_PREFIX) and name.endswith(".json")
     ]
-    if len(current) == 1:
-        return current[0]
-    if current:
-        _fail("history_conflict")
     # Synthetic backwards-compatibility only: PR #28 never initialized a real
     # session, but older tests can still exercise one v1-style resume name.
     legacy = [
         name
-        for name in os.listdir(root_fd)
-        if type(name) is str and name.startswith("resume-g") and name.endswith(".json")
+        for name in names
+        if name.startswith("resume-g") and name.endswith(".json")
     ]
-    if len(legacy) == 1:
-        return legacy[0]
+    active = current + legacy
+    if len(active) == 1:
+        return active[0]
     _fail("history_conflict")
 
 
@@ -1891,12 +1932,126 @@ def _stable_canonical_private_json_at(
     return value, observed
 
 
+def _stable_observation_identity(observed: Any) -> tuple[Any, ...]:
+    return (
+        observed.sha256,
+        observed.size,
+        observed.device,
+        observed.inode,
+        observed.owner_uid,
+        observed.owner_gid,
+        observed.mode,
+        observed.data,
+    )
+
+
+def _revalidate_observed_private_json_at(
+    root_fd: int,
+    name: str,
+    expected_value: Mapping[str, Any],
+    expected_observed: Any,
+) -> None:
+    value, observed = _stable_canonical_private_json_at(root_fd, name)
+    if (
+        value != expected_value
+        or _stable_observation_identity(observed)
+        != _stable_observation_identity(expected_observed)
+    ):
+        _fail("history_conflict")
+
+
+def _relevant_history_names(names: list[str]) -> frozenset[str]:
+    return frozenset(
+        name
+        for name in names
+        if name.startswith(
+            (
+                "authorization-root-",
+                "authorization-action-",
+                CURRENT_RESUME_PREFIX,
+                "resume-g",
+                RETIRED_RESUME_PREFIX,
+                TERMINAL_RESUME_PREFIX,
+            )
+        )
+        and name.endswith(".json")
+    )
+
+
+def _revalidate_resume_history_at(
+    root_fd: int,
+    snapshot: ResumeHistorySnapshot,
+    *,
+    require_pending_action: bool,
+) -> None:
+    """Re-read every consumed history record before durable publication."""
+
+    try:
+        names = os.listdir(root_fd)
+    except OSError as exc:
+        raise OperatorSessionError("history_conflict") from exc
+    if any(type(name) is not str for name in names):
+        _fail("history_conflict")
+    relevant = _relevant_history_names(names)
+    allowed = set(snapshot.relevant_names)
+    pending_present = snapshot.pending_action_name in relevant
+    if pending_present:
+        allowed.add(snapshot.pending_action_name)
+    if relevant != frozenset(allowed) or (
+        require_pending_action and not pending_present
+    ):
+        _fail("history_conflict")
+    for name, expected_observed in snapshot.record_observations.items():
+        if name == snapshot.root_name:
+            expected_value = snapshot.root_authorization
+        elif name == snapshot.current_name:
+            expected_value = snapshot.current_resume
+        elif name == snapshot.pending_action_name:
+            expected_value = snapshot.pending_action
+        else:
+            matching = [
+                edge.retired_resume
+                for edge in snapshot.edges
+                if edge.retired_name == name
+            ] + [
+                edge.action_authorization
+                for edge in snapshot.edges
+                if edge.action_name == name
+            ]
+            if len(matching) != 1:
+                _fail("history_conflict")
+            expected_value = matching[0]
+        _revalidate_observed_private_json_at(
+            root_fd, name, expected_value, expected_observed
+        )
+    if pending_present:
+        value, observed = _stable_canonical_private_json_at(
+            root_fd, snapshot.pending_action_name
+        )
+        if (
+            value != snapshot.pending_action
+            or observed.sha256 != snapshot.pending_action_sha256
+        ):
+            _fail("history_conflict")
+        existing = snapshot.record_observations.get(snapshot.pending_action_name)
+        if existing is None:
+            snapshot.record_observations[snapshot.pending_action_name] = observed
+        elif _stable_observation_identity(existing) != _stable_observation_identity(
+            observed
+        ):
+            _fail("history_conflict")
+
+
 def _historical_evidence_matches(
     *,
     action_authorization: Mapping[str, Any],
     retired_resume: Mapping[str, Any],
     predecessor: Mapping[str, Any],
+    successor_resume: Mapping[str, Any],
     base_authorization: Mapping[str, Any],
+    expected_execution: Mapping[str, Any],
+    expected_python_identity_sha256: str,
+    action_state_matrix: Mapping[str, Any],
 ) -> bool:
     try:
         execution = action_authorization["execution"]
@@ -1921,22 +2076,31 @@ def _historical_evidence_matches(
             "tty_attestation",
         }
         finalization = action_authorization["finalization_authorization"]
+        action = action_authorization["action"]
+        operator = action_authorization["operator_identity"]
+        primary_operator = base_authorization["primary_operator_identity"]
+        action_policy = action_state_matrix[action]
+        operator_is_valid = (
+            operator.casefold() != primary_operator.casefold()
+            and AI_PEER_RE.search(operator) is None
+            if action == "peer_review"
+            else operator == primary_operator
+        )
         return (
             set(action_authorization) == expected_action_keys
             and action_authorization["artifact_kind"]
             == ACTION_AUTHORIZATION_KIND
             and action_authorization["format_version"]
             == ACTION_AUTHORIZATION_FORMAT_VERSION
-            and action_authorization["action"] == predecessor["action"]
-            and action_authorization["action"]
-            in (AUTHOR.ACTION_VALUES - {"initialize"})
-            and (
-                finalization == AUTHOR.FINALIZATION_AUTHORIZATION
-                if action_authorization["action"] == "finalize"
-                else finalization == ""
-            )
+            and action == predecessor["action"]
+            and action in (AUTHOR.ACTION_VALUES - {"initialize", "finalize"})
+            and finalization == ""
+            and type(action_policy) is dict
+            and set(action_policy)
+            == {"allowed_expected_states", "max_entry_decisions"}
+            and type(action_policy["allowed_expected_states"]) is list
             and action_authorization["expected_authoring_state"]
-            in AUTHORING_STATES
+            in action_policy["allowed_expected_states"]
             and action_authorization["tty_attestation"] == TTY_ATTESTATION
             and action_authorization["annotation_root"]
             == base_authorization["annotation_root"]
@@ -1946,6 +2110,8 @@ def _historical_evidence_matches(
             == base_authorization["primary_operator_identity"]
             and action_authorization["root_authorization_sha256"]
             == retired_resume["authorization_sha256"]
+            and retired_resume["authorization_sha256"]
+            == sha256_bytes(canonical_json_bytes(base_authorization))
             and action_authorization["capture_binding_sha256"]
             == sha256_bytes(canonical_json_bytes(base_authorization["capture"]))
             and set(resume_reference)
@@ -1959,6 +2125,7 @@ def _historical_evidence_matches(
                 "name": predecessor["resume_name"],
                 "sha256": predecessor["resume_sha256"],
             }
+            and execution == expected_execution
             and set(execution)
             == {
                 "approved_checkout_sha",
@@ -1967,29 +2134,23 @@ def _historical_evidence_matches(
                 "python",
             }
             and set(python) == {"path", "sha256", "version"}
-            and type(execution["approved_checkout_sha"]) is str
-            and GIT_SHA_RE.fullmatch(execution["approved_checkout_sha"])
-            is not None
-            and all(
-                type(execution[key]) is str
-                and HEX64_RE.fullmatch(execution[key]) is not None
-                for key in (
-                    "approved_operator_session_procedure_identity_sha256",
-                    "approved_procedure_identity_sha256",
-                )
-            )
-            and type(python["path"]) is str
-            and os.fspath(_validate_absolute_path_lexical(python["path"]))
-            == python["path"]
-            and type(python["sha256"]) is str
-            and HEX64_RE.fullmatch(python["sha256"]) is not None
-            and type(python["version"]) is str
-            and PYTHON_VERSION_RE.fullmatch(python["version"]) is not None
-            and type(action_authorization["operator_identity"]) is str
-            and SAFE_IDENTITY_RE.fullmatch(
-                action_authorization["operator_identity"]
-            )
-            is not None
+            and successor_resume["execution_checkout_sha"]
+            == execution["approved_checkout_sha"]
+            and successor_resume["procedure_identity_sha256"]
+            == execution["approved_procedure_identity_sha256"]
+            and successor_resume[
+                "operator_session_procedure_identity_sha256"
+            ]
+            == execution[
+                "approved_operator_session_procedure_identity_sha256"
+            ]
+            and successor_resume["python_identity_sha256"]
+            == expected_python_identity_sha256
+            and successor_resume["authoring_session_identity"]
+            == action_authorization["authoring_session_identity"]
+            and type(operator) is str
+            and SAFE_IDENTITY_RE.fullmatch(operator) is not None
+            and operator_is_valid
             and type(action_authorization["authoring_session_identity"]) is str
             and SAFE_SESSION_RE.fullmatch(
                 action_authorization["authoring_session_identity"]
@@ -2010,94 +2171,644 @@ def _verify_predecessor_chain_at(
     resume: Mapping[str, Any],
     resume_name: str,
     resume_sha256: str,
-) -> None:
-    """Descriptor-bind one predecessor-bearing current resume to its history."""
+    expected_execution: Mapping[str, Any],
+    expected_python_identity_sha256: str,
+    action_state_matrix: Mapping[str, Any],
+    execution_mode_name: str,
+    compatibility_bridge: Mapping[str, Any] | None,
+    pending_action_name: str = "",
+    pending_action: Mapping[str, Any] | None = None,
+    pending_action_sha256: str = "",
+) -> ResumeHistorySnapshot:
+    """Descriptor-bind the complete current-to-root immutable resume history."""
 
     expected_capture = _root_resume_capture_binding(base_authorization)
-    if resume.get("capture") != expected_capture:
+    _sha(expected_python_identity_sha256)
+    if (
+        pending_action_name == ""
+        and pending_action is None
+        and pending_action_sha256 == ""
+    ):
+        pending_action = {}
+    elif (
+        type(pending_action_name) is not str
+        or not pending_action_name.startswith("authorization-action-")
+        or not pending_action_name.endswith(".json")
+        or type(pending_action) is not dict
+        or _sha(pending_action_sha256)
+        != sha256_bytes(canonical_json_bytes(pending_action))
+        or pending_action_name
+        != "authorization-action-" + pending_action_sha256[:16] + ".json"
+    ):
         _fail("history_conflict")
-    if "predecessor" not in resume:
-        return
-    if not _current_resume_shape_matches(resume, resume_name):
-        _fail("history_conflict")
-    if resume_sha256 != sha256_bytes(canonical_json_bytes(resume)):
-        _fail("history_conflict")
-    predecessor = resume["predecessor"]
-    generation_match = re.search(
-        r"g([0-9]{16})-", predecessor["resume_name"]
-    )
-    if generation_match is None:
-        _fail("history_conflict")
-    expected_retired_name = (
-        RETIRED_RESUME_PREFIX
-        + generation_match.group(1)
-        + "-"
-        + resume_sha256[:16]
-        + ".json"
-    )
-    expected_action_name = (
-        "authorization-action-"
-        + predecessor["action_authorization_sha256"][:16]
-        + ".json"
-    )
     try:
         names = os.listdir(root_fd)
     except OSError as exc:
         raise OperatorSessionError("history_conflict") from exc
     if any(type(name) is not str for name in names):
         _fail("history_conflict")
-
-    retired_matches: list[tuple[str, Mapping[str, Any], Any]] = []
-    action_matches: list[tuple[str, Mapping[str, Any], Any]] = []
+    expected_root_sha256 = sha256_bytes(canonical_json_bytes(base_authorization))
+    root_name = "authorization-root-" + expected_root_sha256[:16] + ".json"
+    retired_names = {
+        name for name in names if name.startswith(RETIRED_RESUME_PREFIX)
+    }
+    action_names = {
+        name for name in names if name.startswith("authorization-action-")
+    }
+    retired_records: dict[str, tuple[Mapping[str, Any], Any]] = {}
+    action_records: dict[str, tuple[Mapping[str, Any], Any]] = {}
     for name in names:
         if name.startswith(RETIRED_RESUME_PREFIX):
-            value, observed = _stable_canonical_private_json_at(root_fd, name)
-            if observed.sha256 == predecessor["resume_sha256"]:
-                retired_matches.append((name, value, observed))
+            retired_records[name] = _stable_canonical_private_json_at(
+                root_fd, name
+            )
         elif name.startswith("authorization-action-"):
-            value, observed = _stable_canonical_private_json_at(root_fd, name)
-            if observed.sha256 == predecessor["action_authorization_sha256"]:
-                action_matches.append((name, value, observed))
+            action_records[name] = _stable_canonical_private_json_at(
+                root_fd, name
+            )
+    root_value, root_observed = _stable_canonical_private_json_at(
+        root_fd, root_name
+    )
+    current_value, current_observed = _stable_canonical_private_json_at(
+        root_fd, resume_name
+    )
     if (
-        len(retired_matches) != 1
-        or retired_matches[0][0] != expected_retired_name
-        or len(action_matches) != 1
-        or action_matches[0][0] != expected_action_name
+        root_value != base_authorization
+        or root_observed.sha256 != expected_root_sha256
+        or current_value != resume
+        or current_observed.sha256 != resume_sha256
     ):
         _fail("history_conflict")
-    retired_resume, retired_observed = (
-        retired_matches[0][1],
-        retired_matches[0][2],
+    relevant_names = _relevant_history_names(names)
+    expected_relevant_names = frozenset(
+        {root_name, resume_name, *retired_names, *action_names}
     )
-    historical_action, action_observed = (
-        action_matches[0][1],
-        action_matches[0][2],
-    )
-    if (
-        retired_observed.sha256 != predecessor["resume_sha256"]
-        or action_observed.sha256
-        != predecessor["action_authorization_sha256"]
-    ):
+    if relevant_names != expected_relevant_names:
         _fail("history_conflict")
-    validated_retired = _validate_loaded_resume_record(
-        retired_resume,
-        authorization_sha256=resume["authorization_sha256"],
-        expected_operator_identity=base_authorization[
-            "primary_operator_identity"
-        ],
-    )
-    if (
-        not _current_resume_shape_matches(
-            validated_retired, predecessor["resume_name"]
+
+    used_retired: set[str] = set()
+    used_actions: set[str] = set()
+    visited_resume_names: set[str] = set()
+    visited_resume_hashes: set[str] = set()
+    visited_release_tokens: set[str] = set()
+    edges: list[ResumeHistoryEdge] = []
+    successor = resume
+    successor_name = resume_name
+    successor_sha256 = resume_sha256
+    edge_count = 0
+    bridge_edge_seen = False
+
+    while True:
+        if (
+            successor_name in visited_resume_names
+            or successor_sha256 in visited_resume_hashes
+            or not _current_resume_shape_matches(successor, successor_name)
+            or successor_sha256
+            != sha256_bytes(canonical_json_bytes(successor))
+            or successor.get("capture") != expected_capture
+            or successor.get("authorization_sha256") != expected_root_sha256
+            or successor.get("annotation_root")
+            != base_authorization["annotation_root"]
+            or successor.get("primary_operator_identity")
+            != base_authorization["primary_operator_identity"]
+            or type(successor.get("resume_release_token")) is not str
+            or HEX64_RE.fullmatch(successor["resume_release_token"]) is None
+            or successor["resume_release_token"] in visited_release_tokens
+        ):
+            _fail("history_conflict")
+        visited_resume_names.add(successor_name)
+        visited_resume_hashes.add(successor_sha256)
+        visited_release_tokens.add(successor["resume_release_token"])
+
+        if "predecessor" not in successor:
+            break
+        edge_count += 1
+        if (
+            edge_count > MAX_RESUME_HISTORY_DEPTH
+            or edge_count > len(retired_records)
+            or edge_count > len(action_records)
+        ):
+            _fail("history_conflict")
+        predecessor = successor["predecessor"]
+        generation_match = re.search(
+            r"g([0-9]{16})-", predecessor["resume_name"]
         )
-        or not _historical_evidence_matches(
-            action_authorization=historical_action,
-            retired_resume=validated_retired,
-            predecessor=predecessor,
-            base_authorization=base_authorization,
+        if generation_match is None:
+            _fail("history_conflict")
+        expected_retired_name = (
+            RETIRED_RESUME_PREFIX
+            + generation_match.group(1)
+            + "-"
+            + successor_sha256[:16]
+            + ".json"
         )
+        expected_action_name = (
+            "authorization-action-"
+            + predecessor["action_authorization_sha256"][:16]
+            + ".json"
+        )
+        if (
+            expected_retired_name not in retired_records
+            or expected_action_name not in action_records
+            or expected_retired_name in used_retired
+            or expected_action_name in used_actions
+        ):
+            _fail("history_conflict")
+        retired_resume, retired_observed = retired_records[
+            expected_retired_name
+        ]
+        historical_action, action_observed = action_records[
+            expected_action_name
+        ]
+        if (
+            retired_observed.sha256 != predecessor["resume_sha256"]
+            or action_observed.sha256
+            != predecessor["action_authorization_sha256"]
+        ):
+            _fail("history_conflict")
+        validated_retired = _validate_loaded_resume_record(
+            retired_resume,
+            authorization_sha256=expected_root_sha256,
+            expected_operator_identity=base_authorization[
+                "primary_operator_identity"
+            ],
+        )
+        generation_delta = (
+            successor["resume_generation"]
+            - validated_retired["resume_generation"]
+        )
+        is_bridge_boundary = (
+            execution_mode_name
+            == "current_after_generation_one_bridge"
+            and validated_retired["resume_generation"] == 1
+            and "predecessor" not in validated_retired
+        )
+        if is_bridge_boundary:
+            try:
+                bridge_is_exact = (
+                    compatibility_bridge is not None
+                    and bridge_edge_seen is False
+                    and successor["resume_generation"] == 2
+                    and predecessor["action"]
+                    == compatibility_bridge["allowed_action"]
+                    and historical_action["expected_authoring_state"]
+                    == compatibility_bridge["required_state"]
+                )
+            except (KeyError, TypeError):
+                bridge_is_exact = False
+            if not bridge_is_exact:
+                _fail("history_conflict")
+            bridge_edge_seen = True
+        if (
+            (
+                predecessor["action"] == "status"
+                and generation_delta != 0
+            )
+            or (
+                predecessor["action"] != "status"
+                and generation_delta != 1
+            )
+            or (
+                generation_delta == 0
+                and successor["resume_checkpoint_sha256"]
+                != validated_retired["resume_checkpoint_sha256"]
+            )
+            or not _current_resume_shape_matches(
+                validated_retired, predecessor["resume_name"]
+            )
+            or not _historical_evidence_matches(
+                action_authorization=historical_action,
+                retired_resume=validated_retired,
+                predecessor=predecessor,
+                successor_resume=successor,
+                base_authorization=base_authorization,
+                expected_execution=expected_execution,
+                expected_python_identity_sha256=(
+                    expected_python_identity_sha256
+                ),
+                action_state_matrix=action_state_matrix,
+            )
+        ):
+            _fail("history_conflict")
+        used_retired.add(expected_retired_name)
+        used_actions.add(expected_action_name)
+        edges.append(
+            ResumeHistoryEdge(
+                successor=successor,
+                successor_name=successor_name,
+                successor_sha256=successor_sha256,
+                retired_resume=validated_retired,
+                retired_name=expected_retired_name,
+                retired_sha256=retired_observed.sha256,
+                action_authorization=historical_action,
+                action_name=expected_action_name,
+                action_sha256=action_observed.sha256,
+            )
+        )
+        successor = validated_retired
+        successor_name = predecessor["resume_name"]
+        successor_sha256 = predecessor["resume_sha256"]
+
+    try:
+        root_execution = base_authorization["execution"]
+        root_python = root_execution["python"]
+        terminal_is_exact = (
+            successor["resume_generation"] == 1
+            and successor["authoring_session_identity"]
+            == base_authorization["authoring_session_identity"]
+            and successor["execution_checkout_sha"]
+            == root_execution["approved_checkout_sha"]
+            and successor["procedure_identity_sha256"]
+            == root_execution["approved_procedure_identity_sha256"]
+            and successor["operator_session_procedure_identity_sha256"]
+            == root_execution[
+                "approved_operator_session_procedure_identity_sha256"
+            ]
+            and successor["python_identity_sha256"]
+            == expected_python_identity_sha256
+            and set(root_execution)
+            == {
+                "approved_checkout_sha",
+                "approved_operator_session_procedure_identity_sha256",
+                "approved_procedure_identity_sha256",
+                "python",
+            }
+            and set(root_python) == {"path", "sha256", "version"}
+        )
+    except (KeyError, TypeError):
+        terminal_is_exact = False
+    if (
+        not terminal_is_exact
+        or (
+            execution_mode_name == "legacy_generation_one"
+            and edge_count != 0
+        )
+        or (
+            execution_mode_name
+            == "current_after_generation_one_bridge"
+            and not bridge_edge_seen
+        )
+        or used_retired != retired_names
+        or used_actions != action_names
     ):
         _fail("history_conflict")
+
+    observations = {
+        root_name: root_observed,
+        resume_name: current_observed,
+    }
+    observations.update(
+        {name: observed for name, (_value, observed) in retired_records.items()}
+    )
+    observations.update(
+        {name: observed for name, (_value, observed) in action_records.items()}
+    )
+    snapshot = ResumeHistorySnapshot(
+        current_resume=resume,
+        current_name=resume_name,
+        current_sha256=resume_sha256,
+        root_authorization=base_authorization,
+        root_name=root_name,
+        root_sha256=expected_root_sha256,
+        edges=tuple(edges),
+        record_observations=observations,
+        relevant_names=expected_relevant_names,
+        pending_action_name=pending_action_name,
+        pending_action=pending_action,
+        pending_action_sha256=pending_action_sha256,
+        release_tokens=frozenset(visited_release_tokens),
+    )
+    _revalidate_resume_history_at(
+        root_fd, snapshot, require_pending_action=False
+    )
+    return snapshot
+
+
+def _checkpoint_name(generation: int, checkpoint_sha256: str) -> str:
+    return (
+        f"checkpoint-g{generation:016d}-{checkpoint_sha256}.json"
+    )
+
+
+def _stable_canonical_checkpoint_at(
+    checkpoints_fd: int, name: str
+) -> tuple[Mapping[str, Any], Any]:
+    try:
+        observed = stable_private_file_at(
+            checkpoints_fd,
+            name,
+            max_bytes=AUTHOR.MAX_CHECKPOINT_BYTES,
+            exact_mode=0o400,
+        )
+        value = strict_json_loads(
+            observed.data, max_bytes=AUTHOR.MAX_CHECKPOINT_BYTES
+        )
+    except ContractError as exc:
+        raise OperatorSessionError("history_conflict") from exc
+    if type(value) is not dict or observed.data != canonical_json_bytes(value):
+        _fail("history_conflict")
+    return value, observed
+
+
+def _cross_bind_resume_checkpoint_history(
+    snapshot: ResumeHistorySnapshot,
+    chain: Any,
+    capture: Any,
+) -> None:
+    """Require the resume/action walk and checkpoint/state walk to be identical."""
+
+    checkpoints = chain.checkpoints
+    hashes = chain.hashes
+    if (
+        type(checkpoints) is not tuple
+        or type(hashes) is not tuple
+        or not checkpoints
+        or len(checkpoints) != len(hashes)
+    ):
+        _fail("history_conflict")
+
+    def checkpoint_for_resume(record: Mapping[str, Any]) -> Mapping[str, Any]:
+        generation = record["resume_generation"]
+        if (
+            type(generation) is not int
+            or generation < 1
+            or generation > len(checkpoints)
+            or record["resume_checkpoint_sha256"] != hashes[generation - 1]
+        ):
+            _fail("history_conflict")
+        return checkpoints[generation - 1]
+
+    current_generation = snapshot.current_resume["resume_generation"]
+    if (
+        current_generation not in {len(checkpoints), len(checkpoints) - 1}
+        or snapshot.current_resume["resume_checkpoint_sha256"]
+        != hashes[current_generation - 1]
+    ):
+        _fail("history_conflict")
+    terminal = (
+        snapshot.edges[-1].retired_resume
+        if snapshot.edges
+        else snapshot.current_resume
+    )
+    terminal_checkpoint = checkpoint_for_resume(terminal)
+    try:
+        terminal_event = terminal_checkpoint["event"]
+        if (
+            terminal["resume_generation"] != 1
+            or terminal_event["action"] != "initialize"
+            or terminal_event["operator_identity"]
+            != snapshot.root_authorization["primary_operator_identity"]
+            or terminal_event["operator_session_identity"]
+            != snapshot.root_authorization["authoring_session_identity"]
+        ):
+            _fail("history_conflict")
+    except (KeyError, TypeError, IndexError):
+        _fail("history_conflict")
+
+    event_actions = {
+        "correction_review": frozenset(
+            {
+                "primary_review",
+                "relationship_correction",
+                "data_reference_review",
+                "sequence_review",
+                "managed_review",
+                "manual_conflict_review",
+            }
+        ),
+    }
+    accounted_generations: set[int] = set()
+    for edge in snapshot.edges:
+        predecessor_checkpoint = checkpoint_for_resume(edge.retired_resume)
+        successor_checkpoint = checkpoint_for_resume(edge.successor)
+        action_record = edge.action_authorization
+        action = action_record["action"]
+        try:
+            observed_state = AUTHOR.aggregate_status(
+                predecessor_checkpoint, capture
+            )["authoring_state"]
+        except BaseException as exc:
+            raise OperatorSessionError("history_conflict") from exc
+        if action_record["expected_authoring_state"] != observed_state:
+            _fail("history_conflict")
+        if action == "status":
+            if (
+                edge.successor["resume_generation"]
+                != edge.retired_resume["resume_generation"]
+                or edge.successor["resume_checkpoint_sha256"]
+                != edge.retired_resume["resume_checkpoint_sha256"]
+            ):
+                _fail("history_conflict")
+            continue
+        generation = edge.successor["resume_generation"]
+        if (
+            generation != edge.retired_resume["resume_generation"] + 1
+            or generation in accounted_generations
+        ):
+            _fail("history_conflict")
+        event = successor_checkpoint["event"]
+        allowed_event_actions = event_actions.get(action, frozenset({action}))
+        if (
+            event["action"] not in allowed_event_actions
+            or event["operator_identity"]
+            != action_record["operator_identity"]
+            or event["operator_session_identity"]
+            != action_record["authoring_session_identity"]
+        ):
+            _fail("history_conflict")
+        accounted_generations.add(generation)
+    if len(checkpoints) == current_generation + 1:
+        action_record = snapshot.pending_action
+        action = action_record.get("action")
+        if action in {"status", "finalize", None}:
+            _fail("history_conflict")
+        try:
+            observed_state = AUTHOR.aggregate_status(
+                checkpoints[current_generation - 1], capture
+            )["authoring_state"]
+            event = checkpoints[current_generation]["event"]
+        except BaseException as exc:
+            raise OperatorSessionError("history_conflict") from exc
+        allowed_event_actions = event_actions.get(
+            action, frozenset({action})
+        )
+        if (
+            action_record.get("expected_authoring_state") != observed_state
+            or event["action"] not in allowed_event_actions
+            or event["operator_identity"]
+            != action_record.get("operator_identity")
+            or event["operator_session_identity"]
+            != action_record.get("authoring_session_identity")
+        ):
+            _fail("history_conflict")
+        accounted_generations.add(current_generation + 1)
+    if accounted_generations != set(range(2, len(checkpoints) + 1)):
+        _fail("history_conflict")
+
+
+def _verify_checkpoint_evidence_at(
+    snapshot: ResumeHistorySnapshot,
+    chain: Any,
+    capture: Any,
+    private_root_fd: int,
+    checkpoints_fd: int,
+) -> None:
+    _cross_bind_resume_checkpoint_history(snapshot, chain, capture)
+    root_metadata = os.fstat(private_root_fd)
+    checkpoints_metadata = os.fstat(checkpoints_fd)
+    root_identity = (root_metadata.st_dev, root_metadata.st_ino)
+    checkpoints_identity = (
+        checkpoints_metadata.st_dev,
+        checkpoints_metadata.st_ino,
+    )
+    if snapshot.annotation_root_identity is None:
+        snapshot.annotation_root_identity = root_identity
+        snapshot.checkpoints_identity = checkpoints_identity
+        snapshot.checkpoint_observations = {}
+    elif (
+        snapshot.annotation_root_identity != root_identity
+        or snapshot.checkpoints_identity != checkpoints_identity
+    ):
+        _fail("history_conflict")
+    if snapshot.checkpoint_observations is None:
+        _fail("history_conflict")
+    expected_names = {
+        _checkpoint_name(checkpoint["generation"], checkpoint_sha256)
+        for checkpoint, checkpoint_sha256 in zip(
+            chain.checkpoints, chain.hashes
+        )
+    }
+    try:
+        observed_names = os.listdir(checkpoints_fd)
+    except OSError as exc:
+        raise OperatorSessionError("history_conflict") from exc
+    if (
+        any(type(name) is not str for name in observed_names)
+        or set(observed_names) != expected_names
+    ):
+        _fail("history_conflict")
+    previous_names = set(snapshot.checkpoint_observations)
+    new_names = expected_names - previous_names
+    if not previous_names:
+        pass
+    elif not previous_names.issubset(expected_names) or len(new_names) > 1:
+        _fail("history_conflict")
+    for checkpoint, checkpoint_sha256 in zip(
+        chain.checkpoints, chain.hashes
+    ):
+        name = _checkpoint_name(checkpoint["generation"], checkpoint_sha256)
+        value, observed = _stable_canonical_checkpoint_at(
+            checkpoints_fd, name
+        )
+        if value != checkpoint or observed.sha256 != checkpoint_sha256:
+            _fail("history_conflict")
+        previous = snapshot.checkpoint_observations.get(name)
+        if previous is None:
+            snapshot.checkpoint_observations[name] = observed
+        elif _stable_observation_identity(previous) != _stable_observation_identity(
+            observed
+        ):
+            _fail("history_conflict")
+
+
+def _open_private_child_directory_at(
+    parent_fd: int, name: str
+) -> tuple[int, os.stat_result]:
+    if type(name) is not str or SAFE_CAPTURE_NAME_RE.fullmatch(name) is None:
+        _fail("history_conflict")
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = -1
+    try:
+        descriptor = os.open(name, flags, dir_fd=parent_fd)
+        held = os.fstat(descriptor)
+        named = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except OSError as exc:
+        if descriptor >= 0:
+            os.close(descriptor)
+        raise OperatorSessionError("history_conflict") from exc
+    if (
+        not stat.S_ISDIR(held.st_mode)
+        or stat.S_ISLNK(named.st_mode)
+        or (held.st_dev, held.st_ino) != (named.st_dev, named.st_ino)
+        or held.st_uid != os.geteuid()
+        or stat.S_IMODE(held.st_mode) != 0o700
+    ):
+        os.close(descriptor)
+        _fail("history_conflict")
+    return descriptor, held
+
+
+def _revalidate_checkpoint_evidence_from_path(
+    snapshot: ResumeHistorySnapshot,
+    *,
+    expected_generation: int,
+    expected_checkpoint_sha256: str,
+) -> None:
+    if (
+        snapshot.annotation_root_identity is None
+        or snapshot.checkpoints_identity is None
+        or snapshot.checkpoint_observations is None
+        or type(expected_generation) is not int
+        or expected_generation < 1
+        or type(expected_checkpoint_sha256) is not str
+        or HEX64_RE.fullmatch(expected_checkpoint_sha256) is None
+        or _checkpoint_name(
+            expected_generation, expected_checkpoint_sha256
+        )
+        not in snapshot.checkpoint_observations
+    ):
+        _fail("history_conflict")
+    annotation_fd = checkpoints_fd = -1
+    try:
+        annotation_fd, metadata = _open_existing_private_directory(
+            _validate_absolute_path(
+                snapshot.root_authorization["annotation_root"],
+                must_exist=True,
+            )
+        )
+        if (
+            metadata.st_dev,
+            metadata.st_ino,
+        ) != snapshot.annotation_root_identity:
+            _fail("history_conflict")
+        checkpoints_fd, checkpoints_metadata = _open_private_child_directory_at(
+            annotation_fd, AUTHOR.CHECKPOINTS_NAME
+        )
+        if (
+            checkpoints_metadata.st_dev,
+            checkpoints_metadata.st_ino,
+        ) != snapshot.checkpoints_identity:
+            _fail("history_conflict")
+        names = os.listdir(checkpoints_fd)
+        if (
+            any(type(name) is not str for name in names)
+            or set(names) != set(snapshot.checkpoint_observations)
+        ):
+            _fail("history_conflict")
+        for name, expected_observed in snapshot.checkpoint_observations.items():
+            value, observed = _stable_canonical_checkpoint_at(
+                checkpoints_fd, name
+            )
+            if (
+                observed.data != expected_observed.data
+                or value != strict_json_loads(
+                    expected_observed.data,
+                    max_bytes=AUTHOR.MAX_CHECKPOINT_BYTES,
+                )
+                or _stable_observation_identity(observed)
+                != _stable_observation_identity(expected_observed)
+            ):
+                _fail("history_conflict")
+    except (OSError, ContractError, OperatorSessionError) as exc:
+        raise OperatorSessionError("history_conflict") from exc
+    finally:
+        for descriptor in (checkpoints_fd, annotation_fd):
+            if descriptor >= 0:
+                try:
+                    os.close(descriptor)
+                except OSError as exc:
+                    raise OperatorSessionError("history_conflict") from exc
 
 
 def _classify_resume_execution(
@@ -2343,13 +3054,6 @@ def _run_authorized_action(
         != base_authorization["primary_operator_identity"]
     ):
         _fail("binding_mismatch")
-    _verify_predecessor_chain_at(
-        session_root_fd,
-        base_authorization=base_authorization,
-        resume=resume,
-        resume_name=resume_name,
-        resume_sha256=resume_sha256,
-    )
     python_identity = _validated_python_identity(action_authorization["execution"]["python"])
     execution_mode = _classify_resume_execution(
         action_authorization,
@@ -2367,12 +3071,57 @@ def _run_authorized_action(
             root_authorization_sha256=resume["authorization_sha256"],
             resume_name=resume_name,
         )
+    history_snapshot = _verify_predecessor_chain_at(
+        session_root_fd,
+        base_authorization=base_authorization,
+        resume=resume,
+        resume_name=resume_name,
+        resume_sha256=resume_sha256,
+        expected_execution=action_authorization["execution"],
+        expected_python_identity_sha256=python_identity["identity_sha256"],
+        action_state_matrix=execution_profile["action_state_matrix"],
+        execution_mode_name=execution_mode.name,
+        compatibility_bridge=(
+            execution_profile["compatibility_bridges"][0]
+            if (
+                type(execution_profile.get("compatibility_bridges")) is list
+                and len(execution_profile["compatibility_bridges"]) == 1
+            )
+            else None
+        ),
+        pending_action_name=(
+            "authorization-action-"
+            + action_authorization_sha256[:16]
+            + ".json"
+        ),
+        pending_action=action_authorization,
+        pending_action_sha256=action_authorization_sha256,
+    )
     environment = _environment_from_authorization(
         action_authorization,
         base_authorization=base_authorization,
         resume=resume,
     )
     successor: RecordPublication | None = None
+
+    def verify_history(
+        chain: Any,
+        capture: Any,
+        private_root_fd: int,
+        checkpoints_fd: int,
+    ) -> None:
+        _revalidate_resume_history_at(
+            session_root_fd,
+            history_snapshot,
+            require_pending_action=False,
+        )
+        _verify_checkpoint_evidence_at(
+            history_snapshot,
+            chain,
+            capture,
+            private_root_fd,
+            checkpoints_fd,
+        )
 
     def recorder(generation: int, checkpoint_sha256: str, release_token: str) -> None:
         nonlocal successor
@@ -2385,13 +3134,40 @@ def _run_authorized_action(
             and HEX64_RE.fullmatch(release_token)
         ):
             _fail("internal_failure")
+        if release_token in history_snapshot.release_tokens:
+            _fail("history_conflict")
         if (
             execution_mode.name == "legacy_generation_one"
             and generation != 2
         ):
             _fail("history_conflict")
-        if generation < resume["resume_generation"]:
+        action = action_authorization["action"]
+        if (
+            action == "finalize"
+            or (
+                action == "status"
+                and (
+                    generation != resume["resume_generation"]
+                    or checkpoint_sha256
+                    != resume["resume_checkpoint_sha256"]
+                )
+            )
+            or (
+                action != "status"
+                and generation != resume["resume_generation"] + 1
+            )
+        ):
             _fail("history_conflict")
+        _revalidate_resume_history_at(
+            session_root_fd,
+            history_snapshot,
+            require_pending_action=True,
+        )
+        _revalidate_checkpoint_evidence_from_path(
+            history_snapshot,
+            expected_generation=generation,
+            expected_checkpoint_sha256=checkpoint_sha256,
+        )
         successor_resume = {
             "annotation_root": base_authorization["annotation_root"],
             "artifact_kind": RESUME_KIND,
@@ -2422,7 +3198,10 @@ def _run_authorized_action(
         successor = _publish_private_json_at(session_root_fd, final_name, successor_resume)
 
     try:
-        authoring_options: dict[str, Any] = {"resume_recorder": recorder}
+        authoring_options: dict[str, Any] = {
+            "history_verifier": verify_history,
+            "resume_recorder": recorder,
+        }
         if action_authorizer is not None:
             authoring_options["action_authorizer"] = action_authorizer
         if execution_mode.binding_policy is not None:
@@ -2435,6 +3214,16 @@ def _run_authorized_action(
     except AUTHOR.AuthoringEntrypointError as exc:
         raise OperatorSessionError(exc.reason) from exc
     if action_authorization["action"] == "finalize":
+        _revalidate_resume_history_at(
+            session_root_fd,
+            history_snapshot,
+            require_pending_action=True,
+        )
+        _revalidate_checkpoint_evidence_from_path(
+            history_snapshot,
+            expected_generation=resume["resume_generation"],
+            expected_checkpoint_sha256=resume["resume_checkpoint_sha256"],
+        )
         terminal = {
             "artifact_kind": TERMINAL_RESUME_KIND,
             "finalization_authorization_sha256": sha256_bytes(

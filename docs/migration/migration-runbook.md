@@ -720,8 +720,9 @@ The shared verifier follows at most 32 parents through the reviewed absolute
 cyclic, unreadable, or over-depth ancestry fails with the fixed `tty_invalid`
 diagnostic. This exact-name scan cannot prove an unknown or renamed recorder is
 absent. The shell and pre-import guards perform only the minimum bootstrap
-needed to authenticate that shared verifier and import closure; they are not a
-second semantic preflight.
+needed to bind that shared verifier and import closure to the procedural
+approval evidence; they are not a second semantic preflight or a
+cryptographic authentication layer.
 
 The committed execution profile is policy and cannot approve itself. Before a
 real action, a separate procedure must:
@@ -738,16 +739,23 @@ real action, a separate procedure must:
    executor-owned mode-`0700` directory, using same-filesystem atomic
    publication plus file and directory fsync.
 
-The ordinary launcher never generates, installs, chooses, repairs, replaces, or
-updates this artifact. Zero or multiple current-checkout matches, a collision,
-or durability ambiguity is a hard stop. No checked-in installer is authorized
-by this PR, so execution remains blocked until that separate generation/install
-procedure is reviewed and authorized. The artifact is immutable by reviewed
-contract, not cryptographically signed or protected by an OS immutable flag;
-a hostile same-user pre-launch replacement remains a local trust ceiling.
-Bootstrap/shared-verifier identity cross-binding detects an in-invocation
-replacement. Exact Git commit/blob/ref equality does not independently attest
-the remote URL.
+The ordinary launcher never generates, installs, repairs, replaces, or updates
+this artifact. It deterministically locates the unique filename bound to the
+exact current checkout and refuses zero or multiple matches; it does not
+choose among alternatives. A collision or durability ambiguity is a hard stop.
+No checked-in installer is authorized by this PR, so execution remains blocked
+until that separate generation/install procedure is reviewed and authorized.
+The artifact is owner-private, mode `0400`, and no-replace-installed by
+reviewed procedure; it is not cryptographically authenticated, protected by an
+OS immutable flag, or backed by a privileged trust store. Its mode-`0700`
+parent remains owner-writable. A hostile same-UID process that replaces
+repository code or approval evidence before launch remains an accepted local
+trust ceiling. Bootstrap/shared-verifier descriptor and identity cross-binding
+detects replacement at the reviewed bootstrap and repository-binding
+checkpoints. It is not continuous monitoring; a hostile same-UID
+swap-and-restore entirely between those checkpoints remains within the
+accepted ceiling. Exact Git commit/blob/ref equality does not independently
+attest the remote URL.
 
 The operator sequence is:
 
@@ -788,14 +796,32 @@ operator-session procedure
 and the exact profile-pinned Python. The v1 root authorization, predecessor-free
 v2 generation-1 resume, v1 checkpoint, capture/operator bindings, canonical
 name, unique-current/pristine-root shape, and absent lock/indeterminate state
-must all match. Generation 1 is never rewritten. One successful batch publishes
-generation 2 under the current execution binding and retains the historical
-bytes; the bridge then closes permanently and ordinary exact-current rules
-resume. Another action or state, an old-bound generation 2+, duplicate/fork,
-predecessor-bearing generation 1, lock, indeterminate state, altered history,
-or a second bridge use fails closed. At this real boundary, `status` is not
-bridge-authorized; use only non-private `VERIFY_ONLY` or a separately authorized
-`primary_review`.
+must all match. Generation 1 is never rewritten. One successful batch
+publishes generation 2 under the current execution binding and retains the
+historical bytes; the bridge then closes permanently and ordinary exact-current
+rules resume. Every later action walks the complete retained resume/action-
+authorization chain back to predecessor-free generation 1 and validates each
+link's exact name/hash/generation/checkpoint/action/root/capture/operator/
+session/execution/Python/release/state binding. It rejects missing or orphaned
+history, cycles, generation skips, multiple historical-to-current transitions,
+a partially current generation 1, or any historical-bound generation 2+. A
+coherent immediate predecessor cannot hide a broken older link. Mixed or
+multiple active `resume-current-*` and `resume-g*` records also fail closed.
+The walk cross-binds every resume checkpoint reference to the exact checkpoint
+generation/hash, every historical action's expected state to its predecessor
+checkpoint's derived aggregate state, and every checkpoint-producing action to
+the successor checkpoint event/operator/authoring session. `status` is the
+only canonical same-generation/same-checkpoint edge; other retained
+nonterminal actions advance one generation. Release tokens must be canonical
+and unique, including a fresh successor token. Session-history and checkpoint
+files are descriptor-stably observed and revalidated at the action and
+publication boundaries and immediately before successor or terminal
+publication. Any name-set, directory, inode, byte, or hash drift blocks the
+session/marks it indeterminate instead of publishing over ambiguous history.
+Another action or state, a duplicate/fork, predecessor-bearing generation 1,
+lock, indeterminate state, altered history, or a second bridge use fails
+closed. At this real boundary, `status` is not bridge-authorized; use only
+non-private `VERIFY_ONLY` or a separately authorized `primary_review`.
 
 For the first invocation, the wrapper still publishes the existing v1 root
 authorization, creates the empty annotation root, initializes generation 0,

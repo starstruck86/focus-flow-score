@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "This committed profile is public policy, not approval. Approval is a separately installed owner-private human procedural record, not a cryptographic signature or OS-immutable trust anchor.",
   "additionalProperties": false,
   "properties": {
     "action_state_matrix": {
@@ -56,11 +57,19 @@
     "checkout_policy": {
       "additionalProperties": false,
       "properties": {
-        "approval_source": { "const": "external_immutable_artifact" },
+        "approval_source": { "const": "external_owner_private_procedural_artifact" },
+        "independent_review_enforcement": { "const": "human_procedural_not_cryptographic" },
+        "launcher_mutation": { "const": "forbidden" },
         "mode": { "const": "exact_checkout" },
-        "self_approval_forbidden": { "const": true }
+        "same_uid_prelaunch_replacement_ceiling": { "const": true }
       },
-      "required": ["approval_source", "mode", "self_approval_forbidden"],
+      "required": [
+        "approval_source",
+        "independent_review_enforcement",
+        "launcher_mutation",
+        "mode",
+        "same_uid_prelaunch_replacement_ceiling"
+      ],
       "type": "object"
     },
     "compatibility_bridges": {

@@ -4168,6 +4168,40 @@ class AuthoringContractTest(unittest.TestCase):
         finally:
             os.close(descriptor)
 
+    def test_generation_one_policy_requires_the_exact_historical_binding(self):
+        capture, _package, _expectations = self.load_capture(["TABLE"])
+        historical = authoring.AuthoringBinding(
+            "b1986e4079b52edbb4ef5cd4c56ed4d20af07195",
+            "bc0b990d878db1e2c72bd4ac91314fe32261a454ac38505b7ea6df4af2b5f3d8",
+            "4b42b1a117605cafc8607b67b0892a609c2cd125012dd56288abeed8c89cdfb1",
+        )
+        current = authoring.AuthoringBinding(GIT_B, SHA_C, SHA_D)
+        current_bound_generation_one = authoring.initialize_checkpoint(
+            capture, current, "Primary", "current-session"
+        )
+        checkpoints = self.root / "current-bound-generation-one"
+        checkpoints.mkdir(mode=0o700)
+        descriptor = open_directory(checkpoints)
+        try:
+            authoring.publish_checkpoint_at(
+                descriptor, current_bound_generation_one
+            )
+            with self.assertRaisesRegex(
+                authoring.AuthoringContractError, "history_invalid"
+            ):
+                authoring.load_checkpoint_chain(
+                    descriptor,
+                    capture,
+                    current,
+                    binding_policy=authoring.GenerationOneBindingPolicy(
+                        historical_binding=historical,
+                        current_binding=current,
+                        allow_successor_transition=False,
+                    ),
+                )
+        finally:
+            os.close(descriptor)
+
     def test_generation_one_policy_rejects_arbitrary_historical_binding(self):
         with self.assertRaisesRegex(
             authoring.AuthoringContractError, "history_invalid"

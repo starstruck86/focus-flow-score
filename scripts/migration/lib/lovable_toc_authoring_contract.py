@@ -1651,19 +1651,23 @@ def load_checkpoint_chain(
         if file.sha256 != name_sha or file.data != canonical_json_bytes(checkpoint):
             _fail("history_invalid")
         checkpoint_binding = binding
-        if (
-            binding_policy is not None
-            and checkpoint.get("generation") == 1
-            and checkpoint.get("authoring_binding")
-            == binding_policy.historical_binding.as_dict()
-        ):
-            checkpoint_binding = binding_policy.historical_binding
-        elif (
-            binding_policy is not None
-            and checkpoint.get("generation") != 1
-            and checkpoint.get("authoring_binding") != binding.as_dict()
-        ):
-            _fail("history_invalid")
+        if binding_policy is not None:
+            if binding.as_dict() != binding_policy.current_binding.as_dict():
+                _fail("history_invalid")
+            if checkpoint.get("generation") == 1:
+                if (
+                    checkpoint.get("authoring_binding")
+                    != binding_policy.historical_binding.as_dict()
+                ):
+                    _fail("history_invalid")
+                checkpoint_binding = binding_policy.historical_binding
+            elif (
+                checkpoint.get("authoring_binding")
+                != binding_policy.current_binding.as_dict()
+            ):
+                _fail("history_invalid")
+            else:
+                checkpoint_binding = binding_policy.current_binding
         checkpoint = validate_checkpoint(checkpoint, capture, checkpoint_binding)
         if checkpoint["generation"] != expected_generation:
             _fail("history_invalid")

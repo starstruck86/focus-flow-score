@@ -47,17 +47,19 @@ do
 done
 
 [ -t 0 ] && [ -t 1 ] && [ -t 2 ] || fail_tty
-[ -z "${SSH_CONNECTION-}" ] || fail_tty
-[ -z "${SSH_CLIENT-}" ] || fail_tty
-[ -z "${SSH_TTY-}" ] || fail_tty
-[ -z "${MOSH_IP-}" ] || fail_tty
-[ -z "${MOSH_PORT-}" ] || fail_tty
-[ -z "${TMUX-}" ] || fail_tty
-[ -z "${STY-}" ] || fail_tty
-[ -z "${INSIDE_EMACS-}" ] || fail_tty
-[ -z "${VSCODE_IPC_HOOK_CLI-}" ] || fail_tty
-[ -z "${ASCIINEMA_REC-}" ] || fail_tty
-[ "${TERM_PROGRAM-}" != "vscode" ] || fail_tty
+for tty_marker_name in \
+  SSH_CONNECTION SSH_CLIENT SSH_TTY MOSH_IP MOSH_PORT TMUX STY INSIDE_EMACS \
+  VSCODE_IPC_HOOK_CLI ASCIINEMA_REC
+do
+  eval "tty_marker_is_set=\${${tty_marker_name}+x}"
+  [ "$tty_marker_is_set" != x ] || fail_tty
+done
+case "${TERM_PROGRAM-}" in
+  [Vv][Ss][Cc][Oo][Dd][Ee]|\
+  [Aa][Pp][Pp][Ll][Ee]_[Tt][Ee][Rr][Mm][Ii][Nn][Aa][Ll]_[Ss][Ss][Hh])
+    fail_tty
+    ;;
+esac
 
 exec 3<>/dev/tty || fail_tty
 [ -t 3 ] || fail_tty
@@ -72,5 +74,6 @@ exec /usr/bin/env -i \
   LANG=C \
   LC_ALL=C \
   TERM="${TERM:-xterm-256color}" \
+  TOC_OPERATOR_OUTER_TTY_CONTEXT=clear-v1 \
   TOC_OPERATOR_TTY_FD=3 \
   "$execution_python" -I -S -B "$driver"

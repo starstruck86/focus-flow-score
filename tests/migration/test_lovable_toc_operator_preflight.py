@@ -5,11 +5,14 @@ import hashlib
 import importlib.util
 import json
 import os
+import pty
+import select
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
@@ -155,6 +158,9 @@ def approval_for(
         "repository": {"name": "focus-flow-score", "owner": "starstruck86"},
         "review_reference": "synthetic-independent-review",
         "reviewed_file_blobs": blobs,
+        "trust_model_acknowledgement": (
+            "PROCEDURAL_REVIEW_AND_SAME_UID_PRELAUNCH_REPLACEMENT_CEILING_ACCEPTED"
+        ),
     }
 
 
@@ -238,6 +244,7 @@ class SyntheticRepository:
             "LANG": "C",
             "LC_ALL": "C",
             "TERM": "xterm-256color",
+            "TOC_OPERATOR_OUTER_TTY_CONTEXT": "clear-v1",
             "TOC_OPERATOR_TTY_FD": "3",
         }
         with (
@@ -284,12 +291,33 @@ class ProfileContractTests(unittest.TestCase):
             bridge["execution_checkout_sha"],
             "b1986e4079b52edbb4ef5cd4c56ed4d20af07195",
         )
+        self.assertEqual(
+            profile["checkout_policy"],
+            {
+                "approval_source": (
+                    "external_owner_private_procedural_artifact"
+                ),
+                "independent_review_enforcement": (
+                    "human_procedural_not_cryptographic"
+                ),
+                "launcher_mutation": "forbidden",
+                "mode": "exact_checkout",
+                "same_uid_prelaunch_replacement_ceiling": True,
+            },
+        )
 
     def test_schema_documents_are_valid_json(self):
         for path in (PROFILE_SCHEMA_PATH, APPROVAL_SCHEMA_PATH):
             value = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(value["$schema"], "https://json-schema.org/draft/2020-12/schema")
             self.assertFalse(value["additionalProperties"])
+        approval_schema = json.loads(
+            APPROVAL_SCHEMA_PATH.read_text(encoding="utf-8")
+        )
+        self.assertIn("not cryptographically authenticated", approval_schema["$comment"])
+        self.assertIn(
+            "trust_model_acknowledgement", approval_schema["required"]
+        )
 
     def test_duplicate_key_nonfinite_noncanonical_and_malformed_fail(self):
         cases = (
@@ -381,7 +409,106 @@ class ApprovalAndRepositoryTests(unittest.TestCase):
             any("synthetic/private/operator-session" in value for value in touched)
         )
 
-    def test_stdlib_only_bootstrap_authenticates_import_closure(self):
+    def test_profile_snapshot_rejects_same_byte_path_replacement_during_read(self):
+        profile_path = self.fixture.repository / PREFLIGHT.PROFILE_RELATIVE_PATH
+        replacement_source = profile_path.with_name("profile-original")
+        original_read = PREFLIGHT.os.read
+        replaced = False
+
+        def replace_after_first_read(descriptor, count):
+            nonlocal replaced
+            data = original_read(descriptor, count)
+            if data and not replaced:
+                profile_path.rename(replacement_source)
+                profile_path.write_bytes(replacement_source.read_bytes())
+                replaced = True
+            return data
+
+        with (
+            mock.patch.object(
+                PREFLIGHT.os, "read", side_effect=replace_after_first_read
+            ),
+            self.assertRaises(PREFLIGHT.PreflightError) as caught,
+        ):
+            PREFLIGHT._read_public_profile(self.fixture.repository)
+        self.assertTrue(replaced)
+        self.assertEqual(caught.exception.reason, "execution_profile_invalid")
+
+    def test_profile_snapshot_rejects_wrong_owner_and_unsafe_mode(self):
+        profile_path = self.fixture.repository / PREFLIGHT.PROFILE_RELATIVE_PATH
+        with (
+            mock.patch.object(
+                PREFLIGHT.os,
+                "geteuid",
+                return_value=os.geteuid() + 1,
+            ),
+            self.assertRaises(PREFLIGHT.PreflightError) as caught,
+        ):
+            PREFLIGHT._read_public_profile(self.fixture.repository)
+        self.assertEqual(caught.exception.reason, "execution_profile_invalid")
+
+        profile_path.chmod(0o664)
+        with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+            PREFLIGHT._read_public_profile(self.fixture.repository)
+        self.assertEqual(caught.exception.reason, "execution_profile_invalid")
+
+    def test_profile_snapshot_git_blob_is_derived_from_held_bytes(self):
+        snapshot = PREFLIGHT._read_public_profile(self.fixture.repository)
+        expected = git(
+            self.fixture.repository,
+            "rev-parse",
+            f"{self.fixture.checkout}:{PREFLIGHT.PROFILE_RELATIVE_PATH}",
+        )
+        self.assertEqual(snapshot.git_blob_id, expected)
+        self.assertEqual(
+            snapshot.profile_sha256,
+            hashlib.sha256(PROFILE_PATH.read_bytes()).hexdigest(),
+        )
+
+    def test_consumed_profile_inode_must_remain_the_git_bound_named_file(self):
+        profile_path = self.fixture.repository / PREFLIGHT.PROFILE_RELATIVE_PATH
+        snapshot = PREFLIGHT._read_public_profile(self.fixture.repository)
+        original_bytes = profile_path.read_bytes()
+        original_inode = snapshot.file_identity[1]
+        profile_path.unlink()
+        profile_path.write_bytes(original_bytes)
+        profile_path.chmod(0o644)
+        self.assertNotEqual(os.lstat(profile_path).st_ino, original_inode)
+        self.assertEqual(
+            git(self.fixture.repository, "status", "--porcelain=v1"), ""
+        )
+
+        with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+            PREFLIGHT._verify_repository(
+                self.fixture.repository,
+                approval=self.fixture.approval,
+                profile_snapshot=snapshot,
+            )
+        self.assertEqual(
+            caught.exception.reason, "repository_binding_mismatch"
+        )
+
+    def test_approval_requires_explicit_procedural_trust_acknowledgement(self):
+        path = self.fixture.approvals / self.fixture.approval_name
+        cases = []
+        missing = copy.deepcopy(self.fixture.approval)
+        missing.pop("trust_model_acknowledgement")
+        cases.append(missing)
+        wrong = copy.deepcopy(self.fixture.approval)
+        wrong["trust_model_acknowledgement"] = (
+            "PLANTED-UNREVIEWED-TRUST-MODEL"
+        )
+        cases.append(wrong)
+        for value in cases:
+            with self.subTest(keys=set(value)):
+                path.chmod(0o600)
+                path.write_bytes(PREFLIGHT.canonical_json_bytes(value))
+                path.chmod(0o400)
+                with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+                    self.fixture.verify()
+                self.assertEqual(caught.exception.reason, "approval_invalid")
+
+    def test_stdlib_only_bootstrap_binds_import_closure(self):
         home = self.fixture.base / "home"
         approval_parent = home / SESSION._APPROVAL_RELATIVE_PARENT
         approval_parent.mkdir(parents=True, mode=0o700)
@@ -770,6 +897,95 @@ class ApprovalAndRepositoryTests(unittest.TestCase):
 
 
 class PythonAndStartupTests(unittest.TestCase):
+    def run_launcher_prefix_under_pty(
+        self, environment: dict[str, str]
+    ) -> tuple[int, bytes]:
+        source = (
+            MIGRATION / "run-lovable-toc-annotation-operator-session.sh"
+        ).read_text(encoding="ascii")
+        boundary = "\nexec 3<>/dev/tty || fail_tty\n"
+        self.assertEqual(source.count(boundary), 1)
+        prefix, _ = source.split(boundary, 1)
+        temporary = tempfile.TemporaryDirectory(
+            dir=str(CANONICAL_TEMP_PARENT)
+        )
+        self.addCleanup(temporary.cleanup)
+        launcher = Path(temporary.name) / "launcher"
+        launcher.write_text(
+            prefix
+            + "\nprintf '%s\\n' 'POST_MARKER_BOUNDARY_REACHED'\nexit 99\n",
+            encoding="ascii",
+        )
+        launcher.chmod(0o700)
+        master, slave = pty.openpty()
+        try:
+            process = subprocess.Popen(
+                [os.fspath(launcher)],
+                stdin=slave,
+                stdout=slave,
+                stderr=slave,
+                env=environment,
+                close_fds=True,
+            )
+            returncode = process.wait(timeout=10)
+            chunks = []
+            while select.select([master], [], [], 0.1)[0]:
+                chunk = os.read(master, 4096)
+                chunks.append(chunk)
+            return returncode, b"".join(chunks)
+        finally:
+            if slave >= 0:
+                os.close(slave)
+            os.close(master)
+
+    def run_checked_in_launcher_trace_under_pty(
+        self, environment: dict[str, str]
+    ) -> tuple[int, bytes]:
+        """Trace the real launcher without giving it a controlling TTY.
+
+        File descriptors 0/1/2 are a synthetic PTY, so the outer TTY checks run.
+        The process deliberately has no controlling terminal: if the reviewed
+        marker guard regresses, ``/dev/tty`` fails before the child or any
+        private path can be reached. The bounded trace proves which branch ran.
+        """
+
+        launcher = (
+            MIGRATION / "run-lovable-toc-annotation-operator-session.sh"
+        )
+        master, slave = pty.openpty()
+        process = None
+        output = bytearray()
+        try:
+            process = subprocess.Popen(
+                ["/bin/sh", "-x", os.fspath(launcher)],
+                stdin=slave,
+                stdout=slave,
+                stderr=slave,
+                env=environment,
+                close_fds=True,
+            )
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                readable, _, _ = select.select([master], [], [], 0.05)
+                if readable:
+                    chunk = os.read(master, 65536)
+                    output.extend(chunk)
+                    if len(output) > 256 * 1024:
+                        process.kill()
+                        self.fail("launcher trace exceeded fixed cap")
+                if process.poll() is not None and not readable:
+                    break
+            else:
+                process.kill()
+                self.fail("launcher trace timed out")
+            return process.wait(timeout=5), bytes(output)
+        finally:
+            if process is not None and process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+            os.close(slave)
+            os.close(master)
+
     @staticmethod
     def changed_stat(metadata, **changes):
         names = (
@@ -987,6 +1203,7 @@ class PythonAndStartupTests(unittest.TestCase):
             "LANG": "C",
             "LC_ALL": "C",
             "TERM": "xterm-256color",
+            "TOC_OPERATOR_OUTER_TTY_CONTEXT": "clear-v1",
             "TOC_OPERATOR_TTY_FD": "3",
         }
         with mock.patch.object(
@@ -1004,12 +1221,101 @@ class PythonAndStartupTests(unittest.TestCase):
                     )
             with self.assertRaises(PREFLIGHT.PreflightError):
                 PREFLIGHT.verify_startup_environment({**valid, "HOME": "/tmp"})
+            for value in ("", "wrong", "CLEAR-V1"):
+                with self.subTest(outer_tty_context=value):
+                    altered = dict(valid)
+                    altered["TOC_OPERATOR_OUTER_TTY_CONTEXT"] = value
+                    with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+                        PREFLIGHT.verify_startup_environment(altered)
+                    self.assertEqual(
+                        caught.exception.reason, "startup_environment_invalid"
+                    )
+            missing = dict(valid)
+            missing.pop("TOC_OPERATOR_OUTER_TTY_CONTEXT")
+            with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+                PREFLIGHT.verify_startup_environment(missing)
+            self.assertEqual(
+                caught.exception.reason, "startup_environment_invalid"
+            )
+
+    def test_launcher_rejects_remote_apple_terminal_and_empty_markers(self):
+        base = {
+            "LANG": "C",
+            "LC_ALL": "C",
+            "PATH": "/usr/bin:/bin",
+            "TERM": "xterm-256color",
+        }
+        cases = (
+            {"TERM_PROGRAM": "apple_terminal_ssh"},
+            {"TERM_PROGRAM": "ApPlE_TeRmInAl_SsH"},
+            {"TERM_PROGRAM": "VsCoDe"},
+            {"ASCIINEMA_REC": ""},
+            {"SSH_CONNECTION": ""},
+        )
+        for extra in cases:
+            with self.subTest(extra=extra):
+                returncode, output = self.run_launcher_prefix_under_pty(
+                    {**base, **extra}
+                )
+                self.assertEqual(returncode, 1)
+                self.assertIn(
+                    b'{"diagnostic_version":1,"reason":"tty_invalid",',
+                    output,
+                )
+                self.assertNotIn(b"POST_MARKER_BOUNDARY_REACHED", output)
+                self.assertNotIn(b"Traceback", output)
+
+    def test_checked_in_zero_argument_launcher_rejects_apple_terminal_ssh(self):
+        base = {
+            "LANG": "C",
+            "LC_ALL": "C",
+            "PATH": "/usr/bin:/bin",
+            "TERM": "xterm-256color",
+        }
+        fixed_diagnostic = (
+            b'{"diagnostic_version":1,"reason":"tty_invalid",'
+            b'"stage":"annotation_operator_session_launcher",'
+            b'"status":"failed"}'
+        )
+        for term_program in (
+            "apple_terminal_ssh",
+            "ApPlE_TeRmInAl_SsH",
+        ):
+            with self.subTest(term_program=term_program):
+                returncode, trace = (
+                    self.run_checked_in_launcher_trace_under_pty(
+                        {**base, "TERM_PROGRAM": term_program}
+                    )
+                )
+                self.assertEqual(returncode, 1)
+                emitted_lines = trace.replace(b"\r\n", b"\n").splitlines()
+                self.assertEqual(
+                    sum(line == fixed_diagnostic for line in emitted_lines), 1
+                )
+                self.assertTrue(b'+ case "${TERM_PROGRAM-}" in' in trace)
+                self.assertTrue(b"+ fail_tty" in trace)
+                self.assertFalse(b"+ exec" in trace)
+                self.assertFalse(b"/usr/bin/env -i" in trace)
+                self.assertFalse(
+                    b"author-lovable-toc-operator-session.py" in trace
+                )
+                self.assertFalse(b"Traceback" in trace)
+
+    def test_launcher_passes_only_fixed_outer_tty_attestation(self):
+        source = (
+            MIGRATION / "run-lovable-toc-annotation-operator-session.sh"
+        ).read_text(encoding="ascii")
+        self.assertIn(
+            "TOC_OPERATOR_OUTER_TTY_CONTEXT=clear-v1", source
+        )
+        self.assertNotIn('TERM_PROGRAM="${TERM_PROGRAM', source)
 
     def test_core_dump_limit_is_required(self):
         valid = {
             "LANG": "C",
             "LC_ALL": "C",
             "TERM": "xterm-256color",
+            "TOC_OPERATOR_OUTER_TTY_CONTEXT": "clear-v1",
             "TOC_OPERATOR_TTY_FD": "3",
         }
         with mock.patch.object(
@@ -1093,6 +1399,7 @@ class PythonAndStartupTests(unittest.TestCase):
             "LANG": "C",
             "LC_ALL": "C",
             "TERM": "xterm-256color",
+            "TOC_OPERATOR_OUTER_TTY_CONTEXT": "clear-v1",
             "TOC_OPERATOR_TTY_FD": "3",
         }
         with (

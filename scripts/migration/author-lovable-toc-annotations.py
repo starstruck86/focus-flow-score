@@ -326,6 +326,7 @@ try:
         AuthoringContractError,
         CaptureExpectations,
         GenerationOneBindingPolicy,
+        MAX_CHECKPOINT_BYTES,
         PUBLIC_AUTHORING_STATES,
         aggregate_status,
         apply_transition,
@@ -1702,6 +1703,10 @@ def execute_authoring(
     *,
     resume_recorder: Callable[[int, str, str], None] | None = None,
     action_authorizer: Callable[[], None] | None = None,
+    history_verifier: Callable[
+        [CheckpointChain, AuthoringCapture, int, int], None
+    ]
+    | None = None,
     binding_policy: GenerationOneBindingPolicy | None = None,
 ) -> tuple[int, bytes]:
     """Run exactly one descriptor-bound authoring operation."""
@@ -1836,6 +1841,10 @@ def execute_authoring(
             raise AuthoringEntrypointError("history_conflict")
         expected_final_generation = observed_generation
         expected_final_head = observed_sha
+        if history_verifier is not None:
+            history_verifier(
+                chain, capture, private_root_fd, checkpoints_fd
+            )
 
         if action == "initialize":
             if chain.head is not None:
@@ -1929,6 +1938,10 @@ def execute_authoring(
                     raise AuthoringEntrypointError("history_conflict")
             if action_authorizer is not None:
                 action_authorizer()
+            if history_verifier is not None:
+                history_verifier(
+                    chain, capture, private_root_fd, checkpoints_fd
+                )
             if action == "status":
                 status = aggregate_status(checkpoint, capture)
             elif action == "finalize":
@@ -1960,6 +1973,10 @@ def execute_authoring(
                 refreshed = load_capture_for_authoring(package_fd, expectations)
                 if refreshed.capture_binding != capture.capture_binding:
                     raise AuthoringEntrypointError("input_mutated")
+                if history_verifier is not None:
+                    history_verifier(
+                        chain, capture, private_root_fd, checkpoints_fd
+                    )
                 publication_attempted = True
                 try:
                     publish_final_candidate_at(
@@ -1981,6 +1998,13 @@ def execute_authoring(
                     or unchanged_chain.head_sha256 != chain.head_sha256
                 ):
                     raise AuthoringEntrypointError("history_conflict")
+                if history_verifier is not None:
+                    history_verifier(
+                        unchanged_chain,
+                        capture,
+                        private_root_fd,
+                        checkpoints_fd,
+                    )
                 status = aggregate_status(checkpoint, capture)
             else:
                 transition_action = action
@@ -2073,6 +2097,13 @@ def execute_authoring(
                     refreshed = load_capture_for_authoring(package_fd, expectations)
                     if refreshed.capture_binding != capture.capture_binding:
                         raise AuthoringEntrypointError("input_mutated")
+                    if history_verifier is not None:
+                        history_verifier(
+                            chain,
+                            capture,
+                            private_root_fd,
+                            checkpoints_fd,
+                        )
                     publication_attempted = True
                     try:
                         publish_checkpoint_at(checkpoints_fd, updated)
@@ -2096,6 +2127,13 @@ def execute_authoring(
                         != checkpoint_sha256(updated)
                     ):
                         raise AuthoringEntrypointError("history_conflict")
+                    if history_verifier is not None:
+                        history_verifier(
+                            published_chain,
+                            capture,
+                            private_root_fd,
+                            checkpoints_fd,
+                        )
                     status = aggregate_status(updated, capture)
 
         _revalidate_named_directory(capture_root, capture_root_metadata)
@@ -2153,6 +2191,10 @@ def execute_authoring(
             or final_head != expected_final_head
         ):
             raise AuthoringEntrypointError("history_conflict")
+        if history_verifier is not None:
+            history_verifier(
+                final_chain, capture, private_root_fd, checkpoints_fd
+            )
         operation_succeeded = True
         return 2, _fixed_diagnostic(
             status="review_required",
