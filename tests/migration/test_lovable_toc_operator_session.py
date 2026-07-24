@@ -127,6 +127,235 @@ LOADER_EAGER_VARIABLES = {
     "LD_TRACE_LOADED_OBJECTS",
     "LD_SHOW_AUXV",
 }
+DARWIN_RUNTIME_ADDED_ENVIRONMENT_NAME = "__CF_USER_TEXT_ENCODING"
+MINIMAL_OPERATOR_ENVIRONMENT = {
+    "LANG": "C",
+    "LC_ALL": "C",
+    "TERM": "xterm-256color",
+    "TOC_OPERATOR_OUTER_TTY_CONTEXT": "clear-v1",
+    "TOC_OPERATOR_TTY_FD": "3",
+}
+
+
+class KeyOnlyEnvironment:
+    def __init__(
+        self,
+        names: set[str],
+        *,
+        deletion_failure: bool = False,
+        deletion_persists: bool = False,
+    ) -> None:
+        self.names = set(names)
+        self.deletion_failure = deletion_failure
+        self.deletion_persists = deletion_persists
+        self.value_reads = 0
+
+    def __iter__(self):
+        return iter(self.names)
+
+    def __getitem__(self, name: str):
+        self.value_reads += 1
+        raise AssertionError(f"value read attempted for {name}")
+
+    def __delitem__(self, name: str) -> None:
+        if self.deletion_failure:
+            raise OSError("planted-private-delete-sentinel")
+        if not self.deletion_persists:
+            self.names.remove(name)
+
+
+class DarwinRuntimeEnvironmentNormalizationTest(unittest.TestCase):
+    def test_darwin_removes_exact_name_without_reading_its_value(self):
+        environment = KeyOnlyEnvironment(
+            set(MINIMAL_OPERATOR_ENVIRONMENT)
+            | {DARWIN_RUNTIME_ADDED_ENVIRONMENT_NAME}
+        )
+        with mock.patch.object(SESSION.sys, "platform", "darwin"):
+            SESSION._normalize_darwin_runtime_environment(environment)
+        self.assertEqual(
+            environment.names,
+            set(MINIMAL_OPERATOR_ENVIRONMENT),
+        )
+        self.assertEqual(environment.value_reads, 0)
+
+    def test_darwin_removes_only_reviewed_name_and_leaves_second_extra_to_fail(self):
+        environment = {
+            **MINIMAL_OPERATOR_ENVIRONMENT,
+            DARWIN_RUNTIME_ADDED_ENVIRONMENT_NAME: "planted-runtime-value",
+            "SYNTHETIC_SECOND_EXTRA": "planted-second-value",
+        }
+        with mock.patch.object(SESSION.sys, "platform", "darwin"):
+            SESSION._normalize_darwin_runtime_environment(environment)
+        if DARWIN_RUNTIME_ADDED_ENVIRONMENT_NAME in environment:
+            self.fail("reviewed Darwin runtime name remained")
+        if "SYNTHETIC_SECOND_EXTRA" not in environment:
+            self.fail("unreviewed second environment name was removed")
+        with mock.patch.object(
+            SESSION.PREFLIGHT.resource, "getrlimit", return_value=(0, 0)
+        ):
+            with self.assertRaises(SESSION.PREFLIGHT.PreflightError) as raised:
+                SESSION.PREFLIGHT.verify_startup_environment(environment)
+        self.assertEqual(raised.exception.reason, "startup_environment_invalid")
+
+    def test_non_darwin_retains_reviewed_name_and_shared_allowlist_rejects(self):
+        environment = {
+            **MINIMAL_OPERATOR_ENVIRONMENT,
+            DARWIN_RUNTIME_ADDED_ENVIRONMENT_NAME: "planted-runtime-value",
+        }
+        with mock.patch.object(SESSION.sys, "platform", "linux"):
+            SESSION._normalize_darwin_runtime_environment(environment)
+        self.assertIn(DARWIN_RUNTIME_ADDED_ENVIRONMENT_NAME, environment)
+        with mock.patch.object(
+            SESSION.PREFLIGHT.resource, "getrlimit", return_value=(0, 0)
+        ):
+            with self.assertRaises(SESSION.PREFLIGHT.PreflightError) as raised:
+                SESSION.PREFLIGHT.verify_startup_environment(environment)
+        self.assertEqual(raised.exception.reason, "startup_environment_invalid")
+
+    def test_removal_failure_and_persistence_emit_only_fixed_diagnostic(self):
+        for environment in (
+            KeyOnlyEnvironment(
+                {DARWIN_RUNTIME_ADDED_ENVIRONMENT_NAME},
+                deletion_failure=True,
+            ),
+            KeyOnlyEnvironment(
+                {DARWIN_RUNTIME_ADDED_ENVIRONMENT_NAME},
+                deletion_persists=True,
+            ),
+        ):
+            with self.subTest(deletion_mode=environment.deletion_failure):
+                with mock.patch.object(
+                    SESSION.sys, "platform", "darwin"
+                ), mock.patch.object(SESSION, "_startup_write") as startup_write:
+                    with self.assertRaises(SystemExit) as raised:
+                        SESSION._normalize_darwin_runtime_environment_or_exit(
+                            environment
+                        )
+                self.assertEqual(raised.exception.code, 1)
+                startup_write.assert_called_once_with(
+                    SESSION._STARTUP_FAILURE_DIAGNOSTIC
+                )
+                if b"planted-private-delete-sentinel" in (
+                    SESSION._STARTUP_FAILURE_DIAGNOSTIC
+                ):
+                    self.fail("private removal failure escaped")
+                if b"Traceback" in SESSION._STARTUP_FAILURE_DIAGNOSTIC:
+                    self.fail("traceback escaped")
+                self.assertEqual(environment.value_reads, 0)
+
+    def test_normalization_precedes_preimport_guard_and_repository_imports(self):
+        source = (
+            MIGRATION / "author-lovable-toc-operator-session.py"
+        ).read_text(encoding="utf-8")
+        isolation = source.index("if not _runtime_isolation_enabled():")
+        import_os = source.index("\nimport os\n", isolation)
+        normalization = source.index(
+            "\n_normalize_darwin_runtime_environment_or_exit()\n",
+            import_os,
+        )
+        preimport_guard = source.index(
+            "_BOOTSTRAP_APPROVAL_BINDING = _preimport_external_guard()",
+            normalization,
+        )
+        repository_import = source.index(
+            "from lib import lovable_toc_operator_preflight",
+            preimport_guard,
+        )
+        self.assertLess(isolation, import_os)
+        self.assertLess(import_os, normalization)
+        self.assertLess(normalization, preimport_guard)
+        self.assertLess(preimport_guard, repository_import)
+        self.assertEqual(source.count("\nimport os\n"), 1)
+
+    @unittest.skipUnless(
+        sys.platform == "darwin",
+        "real Darwin runtime injection is exercised by the macOS CI lane",
+    )
+    def test_real_darwin_isolated_component_startup_reaches_verify_only(self):
+        program = f"""
+import importlib.util
+import os
+import sys
+path = {os.fspath(MIGRATION / "author-lovable-toc-operator-session.py")!r}
+spec = importlib.util.spec_from_file_location("darwin_runtime_startup_test", path)
+if spec is None or spec.loader is None:
+    raise SystemExit(90)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+if not module._runtime_isolation_enabled():
+    raise SystemExit(89)
+if set(os.environ) != {set(MINIMAL_OPERATOR_ENVIRONMENT)!r}:
+    raise SystemExit(91)
+module.resource.setrlimit(module.resource.RLIMIT_CORE, (0, 0))
+module.PREFLIGHT.verify_startup_environment()
+def forbidden(*args, **kwargs):
+    raise SystemExit(92)
+for name in (
+    "_open_existing_private_directory",
+    "_create_private_directory_no_replace",
+    "_load_private_json_at",
+    "_load_authorization_by_sha",
+    "_active_resume_name",
+    "_acquire_session_lock",
+    "_release_session_lock",
+    "_publish_private_json_at",
+    "_retire_resume_record",
+    "_mark_session_indeterminate",
+    "_open_private_child_directory_at",
+    "_revalidate_resume_history_at",
+    "_revalidate_checkpoint_evidence_from_path",
+    "_run_initialize_session",
+    "_run_resume_session",
+):
+    setattr(module, name, forbidden)
+module._tty_write = lambda *args, **kwargs: None
+module._read_line = lambda *args, **kwargs: module.VERIFY_ONLY
+for name in (
+    "open", "stat", "lstat", "fstat", "listdir", "mkdir", "rename",
+    "replace", "link", "unlink", "read", "write", "fsync",
+):
+    setattr(module.os, name, forbidden)
+verified = type("Verified", (), {{
+    "summary": {{
+        "repository_verified": True,
+        "python_verified": True,
+        "procedure_identities_verified": True,
+        "checkout_verified": True,
+        "reviewed_files_verified": True,
+        "tty_verified": True,
+    }}
+}})()
+status, diagnostic = module.run_session(3, verified)
+if status != 0:
+    raise SystemExit(93)
+sys.stdout.buffer.write(diagnostic)
+"""
+        result = subprocess.run(
+            [sys.executable, "-I", "-S", "-B", "-c", program],
+            env={
+                **MINIMAL_OPERATOR_ENVIRONMENT,
+                DARWIN_RUNTIME_ADDED_ENVIRONMENT_NAME: "planted-private-runtime-value",
+            },
+            check=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=20,
+        )
+        self.assertEqual(result.returncode, 0)
+        expected_output = (
+            b'{"diagnostic_version":1,"reason":"verified",'
+            b'"stage":"annotation_operator_preflight","status":"pass"}\n'
+        )
+        if result.stdout != expected_output:
+            self.fail("isolated Darwin component output was not fixed")
+        if result.stderr:
+            self.fail("isolated Darwin component emitted stderr")
+        if b"planted-private-runtime-value" in result.stdout:
+            self.fail("private runtime value escaped through stdout")
+        if b"planted-private-runtime-value" in result.stderr:
+            self.fail("private runtime value escaped through stderr")
 
 
 class TocOperatorSessionTest(unittest.TestCase):
@@ -3634,6 +3863,89 @@ class TocOperatorSessionTest(unittest.TestCase):
             },
         )
         private_open.assert_not_called()
+
+    def test_darwin_normalized_verify_only_has_zero_private_operations(self):
+        environment = {
+            **MINIMAL_OPERATOR_ENVIRONMENT,
+            DARWIN_RUNTIME_ADDED_ENVIRONMENT_NAME: "planted-private-runtime-value",
+        }
+        before = immutable_tree_snapshot(self.root)
+        private_operation_names = (
+            "_open_existing_private_directory",
+            "_create_private_directory_no_replace",
+            "_load_private_json_at",
+            "_load_authorization_by_sha",
+            "_active_resume_name",
+            "_acquire_session_lock",
+            "_release_session_lock",
+            "_publish_private_json_at",
+            "_retire_resume_record",
+            "_mark_session_indeterminate",
+            "_open_private_child_directory_at",
+            "_revalidate_resume_history_at",
+            "_revalidate_checkpoint_evidence_from_path",
+            "_run_initialize_session",
+            "_run_resume_session",
+        )
+        raw_filesystem_operation_names = (
+            "open",
+            "stat",
+            "lstat",
+            "fstat",
+            "listdir",
+            "mkdir",
+            "rename",
+            "replace",
+            "link",
+            "unlink",
+            "read",
+            "write",
+            "fsync",
+        )
+        with ExitStack() as stack:
+            private_operations = [
+                stack.enter_context(mock.patch.object(SESSION, name))
+                for name in private_operation_names
+            ]
+            raw_filesystem_operations = [
+                stack.enter_context(mock.patch.object(SESSION.os, name))
+                for name in raw_filesystem_operation_names
+            ]
+            stack.enter_context(
+                mock.patch.object(SESSION.sys, "platform", "darwin")
+            )
+            stack.enter_context(
+                mock.patch.object(
+                    SESSION.PREFLIGHT.resource,
+                    "getrlimit",
+                    return_value=(0, 0),
+                )
+            )
+            stack.enter_context(
+                mock.patch.object(
+                    SESSION, "_read_line", return_value=SESSION.VERIFY_ONLY
+                )
+            )
+            stack.enter_context(mock.patch.object(SESSION, "_tty_write"))
+            SESSION._normalize_darwin_runtime_environment(environment)
+            SESSION.PREFLIGHT.verify_startup_environment(environment)
+            status, diagnostic = SESSION.run_session(9, self.verified)
+        self.assertEqual(status, 0)
+        self.assertEqual(
+            json.loads(diagnostic),
+            {
+                "diagnostic_version": 1,
+                "reason": "verified",
+                "stage": "annotation_operator_preflight",
+                "status": "pass",
+            },
+        )
+        self.assertEqual(set(environment), set(MINIMAL_OPERATOR_ENVIRONMENT))
+        for operation in private_operations:
+            operation.assert_not_called()
+        for operation in raw_filesystem_operations:
+            operation.assert_not_called()
+        self.assertEqual(immutable_tree_snapshot(self.root), before)
 
     def test_main_uses_the_same_shared_preflight_once_for_each_mode(self):
         bootstrap = SESSION._BootstrapApprovalBinding(

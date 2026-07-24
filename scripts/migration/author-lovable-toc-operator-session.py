@@ -52,6 +52,47 @@ if not _runtime_isolation_enabled():
     _startup_write(_STARTUP_FAILURE_DIAGNOSTIC)
     raise SystemExit(1)
 
+import os
+
+
+_DARWIN_RUNTIME_ADDED_ENVIRONMENT_NAME = "__CF_USER_TEXT_ENCODING"
+
+
+class _DarwinRuntimeEnvironmentNormalizationError(RuntimeError):
+    pass
+
+
+def _darwin_runtime_environment_name_present(environment) -> bool:
+    return any(
+        name == _DARWIN_RUNTIME_ADDED_ENVIRONMENT_NAME for name in environment
+    )
+
+
+def _normalize_darwin_runtime_environment(environment=None) -> None:
+    """Remove only the reviewed Darwin runtime-added environment name."""
+
+    if sys.platform != "darwin":
+        return
+    selected_environment = os.environ if environment is None else environment
+    try:
+        if _darwin_runtime_environment_name_present(selected_environment):
+            del selected_environment[_DARWIN_RUNTIME_ADDED_ENVIRONMENT_NAME]
+        if _darwin_runtime_environment_name_present(selected_environment):
+            raise _DarwinRuntimeEnvironmentNormalizationError
+    except BaseException:
+        raise _DarwinRuntimeEnvironmentNormalizationError from None
+
+
+def _normalize_darwin_runtime_environment_or_exit(environment=None) -> None:
+    try:
+        _normalize_darwin_runtime_environment(environment)
+    except BaseException:
+        _startup_write(_STARTUP_FAILURE_DIAGNOSTIC)
+        raise SystemExit(1) from None
+
+
+_normalize_darwin_runtime_environment_or_exit()
+
 import argparse
 import base64
 import ctypes
@@ -60,7 +101,6 @@ import hashlib
 import hmac
 import importlib.util
 import json
-import os
 import pwd
 import re
 import resource
