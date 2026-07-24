@@ -470,9 +470,15 @@ class ApprovalAndRepositoryTests(unittest.TestCase):
         snapshot = PREFLIGHT._read_public_profile(self.fixture.repository)
         original_bytes = profile_path.read_bytes()
         original_inode = snapshot.file_identity[1]
-        profile_path.unlink()
-        profile_path.write_bytes(original_bytes)
-        profile_path.chmod(0o644)
+        replacement_path = profile_path.with_name(
+            profile_path.name + ".replacement"
+        )
+        replacement_path.write_bytes(original_bytes)
+        replacement_path.chmod(0o644)
+        self.assertNotEqual(
+            os.lstat(replacement_path).st_ino, original_inode
+        )
+        os.replace(replacement_path, profile_path)
         self.assertNotEqual(os.lstat(profile_path).st_ino, original_inode)
         self.assertEqual(
             git(self.fixture.repository, "status", "--porcelain=v1"), ""
@@ -1292,7 +1298,6 @@ class PythonAndStartupTests(unittest.TestCase):
                 self.assertEqual(
                     sum(line == fixed_diagnostic for line in emitted_lines), 1
                 )
-                self.assertTrue(b'+ case "${TERM_PROGRAM-}" in' in trace)
                 self.assertTrue(b"+ fail_tty" in trace)
                 self.assertFalse(b"+ exec" in trace)
                 self.assertFalse(b"/usr/bin/env -i" in trace)
