@@ -160,7 +160,7 @@
     "tty_binding": {
       "additionalProperties": false,
       "properties": {
-        "device": { "minimum": 0, "type": "integer" },
+        "device": { "type": "integer" },
         "inode": { "minimum": 1, "type": "integer" }
       },
       "required": ["device", "inode"],

@@ -30,6 +30,9 @@ AUTHOR = SESSION.AUTHOR
 make_capture_package = OPERATOR_TESTS.make_capture_package
 immutable_tree_snapshot = OPERATOR_TESTS.immutable_tree_snapshot
 ZERO64 = "0" * 64
+SIGNED_TTY_DEVICE = -1872095033
+UNSIGNED_TTY_DEVICE_REINTERPRETATION = 2422872263
+SIGNED_TTY_INODE = 41
 PRIVATE_IDENTITY = "Private Primary Sentinel"
 PRIVATE_SENTINELS = (
     PRIVATE_IDENTITY.encode("ascii"),
@@ -388,6 +391,336 @@ class RecoveryTestCase(unittest.TestCase):
             callback()
         self.assertEqual(raised.exception.reason, reason)
         return raised.exception
+
+    def ordinary_binding(self, approval=None):
+        selected = approval or self.fixture.approval
+        return types.SimpleNamespace(
+            approved_checkout_sha=selected["approved_checkout_sha"],
+            approval_name=selected["ordinary_execution_approval"]["filename"],
+            approval_sha256=selected["ordinary_execution_approval"]["sha256"],
+            approval={"python_identity": selected["python_identity"]},
+            operator_session_root_path=os.fspath(self.fixture.operator_root),
+        )
+
+    def validate_approval_with_tty(
+        self,
+        approval,
+        *,
+        live_device,
+        live_inode,
+    ):
+        with mock.patch.object(
+            RECOVERY.os,
+            "fstat",
+            return_value=types.SimpleNamespace(
+                st_dev=live_device,
+                st_ino=live_inode,
+            ),
+        ):
+            return RECOVERY._validate_approval(
+                approval,
+                checkout=approval["approved_checkout_sha"],
+                profile=self.fixture.profile,
+                profile_sha256=approval["recovery_profile"]["sha256"],
+                procedure_identity=approval[
+                    "recovery_procedure_identity_sha256"
+                ],
+                blobs={},
+                ordinary=self.ordinary_binding(approval),
+                tty_fd=9,
+            )
+
+
+class SignedTtyCompatibilityTest(RecoveryTestCase):
+    def test_recovery_approval_schema_and_canonical_json_accept_signed_device(self):
+        approval = copy.deepcopy(self.fixture.approval)
+        approval["tty_binding"] = {
+            "device": SIGNED_TTY_DEVICE,
+            "inode": SIGNED_TTY_INODE,
+        }
+        encoded = canonical(approval)
+        decoded = json.loads(encoded.decode("ascii"))
+        self.assertEqual(
+            decoded["tty_binding"],
+            {
+                "device": SIGNED_TTY_DEVICE,
+                "inode": SIGNED_TTY_INODE,
+            },
+        )
+        self.assertEqual(encoded, canonical(decoded))
+
+        schema = json.loads(
+            (
+                MIGRATION
+                / "verification"
+                / "lovable-toc-operator-identity-recovery-approval.schema.json"
+            ).read_text(encoding="ascii")
+        )
+        tty_properties = schema["properties"]["tty_binding"]["properties"]
+        self.assertEqual(tty_properties["device"], {"type": "integer"})
+        self.assertEqual(
+            tty_properties["inode"],
+            {"minimum": 1, "type": "integer"},
+        )
+
+    def test_validate_approval_accepts_exact_raw_signed_tty_device(self):
+        approval = copy.deepcopy(self.fixture.approval)
+        approval["tty_binding"] = {
+            "device": SIGNED_TTY_DEVICE,
+            "inode": SIGNED_TTY_INODE,
+        }
+        private_open = mock.Mock(
+            side_effect=AssertionError("private access during public validation")
+        )
+        with mock.patch.object(
+            RECOVERY,
+            "_open_private_directory",
+            private_open,
+        ):
+            validated = self.validate_approval_with_tty(
+                approval,
+                live_device=SIGNED_TTY_DEVICE,
+                live_inode=SIGNED_TTY_INODE,
+            )
+        self.assertIs(validated, approval)
+        private_open.assert_not_called()
+
+    def test_validate_approval_rejects_signed_device_mismatches_and_nonintegers(self):
+        invalid_devices = (
+            ("different_negative", SIGNED_TTY_DEVICE - 1),
+            (
+                "positive_unsigned_reinterpretation",
+                UNSIGNED_TTY_DEVICE_REINTERPRETATION,
+            ),
+            ("string", str(SIGNED_TTY_DEVICE)),
+            ("float", float(SIGNED_TTY_DEVICE)),
+            ("boolean", True),
+            ("null", None),
+            ("array", [SIGNED_TTY_DEVICE]),
+            ("object", {"device": SIGNED_TTY_DEVICE}),
+        )
+        for label, invalid_device in invalid_devices:
+            with self.subTest(label=label):
+                approval = copy.deepcopy(self.fixture.approval)
+                approval["tty_binding"] = {
+                    "device": invalid_device,
+                    "inode": SIGNED_TTY_INODE,
+                }
+                self.assert_fixed_failure(
+                    lambda: self.validate_approval_with_tty(
+                        approval,
+                        live_device=SIGNED_TTY_DEVICE,
+                        live_inode=SIGNED_TTY_INODE,
+                    ),
+                    "tty_invalid",
+                )
+
+    def test_validate_approval_keeps_positive_inode_requirement(self):
+        for invalid_inode in (0, -1):
+            with self.subTest(invalid_inode=invalid_inode):
+                approval = copy.deepcopy(self.fixture.approval)
+                approval["tty_binding"] = {
+                    "device": SIGNED_TTY_DEVICE,
+                    "inode": invalid_inode,
+                }
+                self.assert_fixed_failure(
+                    lambda: self.validate_approval_with_tty(
+                        approval,
+                        live_device=SIGNED_TTY_DEVICE,
+                        live_inode=invalid_inode,
+                    ),
+                    "tty_invalid",
+                )
+
+    def test_verify_approved_tty_accepts_raw_signed_device_and_rejects_drift(self):
+        exact = types.SimpleNamespace(
+            st_dev=SIGNED_TTY_DEVICE,
+            st_ino=SIGNED_TTY_INODE,
+        )
+        binding = {
+            "device": SIGNED_TTY_DEVICE,
+            "inode": SIGNED_TTY_INODE,
+        }
+        verify_tty = mock.Mock(return_value=None)
+        with mock.patch.object(
+            RECOVERY,
+            "_verify_tty",
+            verify_tty,
+        ), mock.patch.object(
+            RECOVERY.os,
+            "fstat",
+            side_effect=[exact, exact],
+        ) as fstat:
+            RECOVERY._verify_approved_tty(
+                9,
+                binding,
+                private_access_started=False,
+            )
+        self.assertEqual(verify_tty.call_count, 2)
+        self.assertEqual(fstat.call_count, 2)
+
+        drift_cases = (
+            (
+                "device_before",
+                [
+                    types.SimpleNamespace(
+                        st_dev=SIGNED_TTY_DEVICE - 1,
+                        st_ino=SIGNED_TTY_INODE,
+                    )
+                ],
+            ),
+            (
+                "device_after",
+                [
+                    exact,
+                    types.SimpleNamespace(
+                        st_dev=SIGNED_TTY_DEVICE - 1,
+                        st_ino=SIGNED_TTY_INODE,
+                    ),
+                ],
+            ),
+            (
+                "inode_before",
+                [
+                    types.SimpleNamespace(
+                        st_dev=SIGNED_TTY_DEVICE,
+                        st_ino=SIGNED_TTY_INODE + 1,
+                    )
+                ],
+            ),
+            (
+                "inode_after",
+                [
+                    exact,
+                    types.SimpleNamespace(
+                        st_dev=SIGNED_TTY_DEVICE,
+                        st_ino=SIGNED_TTY_INODE + 1,
+                    ),
+                ],
+            ),
+        )
+        for label, observations in drift_cases:
+            with self.subTest(label=label), mock.patch.object(
+                RECOVERY,
+                "_verify_tty",
+                return_value=None,
+            ), mock.patch.object(
+                RECOVERY.os,
+                "fstat",
+                side_effect=observations,
+            ):
+                self.assert_fixed_failure(
+                    lambda: RECOVERY._verify_approved_tty(
+                        9,
+                        binding,
+                        private_access_started=False,
+                    ),
+                    "tty_invalid",
+                )
+
+    def test_verify_approved_tty_rejects_noninteger_device_and_invalid_inode(self):
+        invalid_bindings = (
+            ("string", str(SIGNED_TTY_DEVICE), SIGNED_TTY_INODE),
+            ("float", float(SIGNED_TTY_DEVICE), SIGNED_TTY_INODE),
+            ("boolean", True, SIGNED_TTY_INODE),
+            ("null", None, SIGNED_TTY_INODE),
+            ("array", [SIGNED_TTY_DEVICE], SIGNED_TTY_INODE),
+            ("object", {"device": SIGNED_TTY_DEVICE}, SIGNED_TTY_INODE),
+            ("zero_inode", SIGNED_TTY_DEVICE, 0),
+            ("negative_inode", SIGNED_TTY_DEVICE, -1),
+        )
+        for label, device, inode in invalid_bindings:
+            with self.subTest(label=label), mock.patch.object(
+                RECOVERY,
+                "_verify_tty",
+                return_value=None,
+            ), mock.patch.object(
+                RECOVERY.os,
+                "fstat",
+                side_effect=AssertionError(
+                    "invalid binding reached descriptor comparison"
+                ),
+            ):
+                self.assert_fixed_failure(
+                    lambda: RECOVERY._verify_approved_tty(
+                        9,
+                        {"device": device, "inode": inode},
+                        private_access_started=False,
+                    ),
+                    "tty_invalid",
+                )
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS controlling-TTY test")
+    def test_macos_real_controlling_tty_uses_raw_signed_capable_device(self):
+        flags = (
+            os.O_RDWR
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+        )
+        try:
+            tty_fd = os.open("/dev/tty", flags)
+        except OSError:
+            self.skipTest("PTY_UNAVAILABLE: no controlling /dev/tty")
+        try:
+            try:
+                RECOVERY.PREFLIGHT.verify_tty(tty_fd)
+            except RECOVERY.PREFLIGHT.PreflightError:
+                self.skipTest(
+                    "PTY_UNAVAILABLE: controlling TTY contract unavailable"
+                )
+            metadata = os.fstat(tty_fd)
+            if metadata.st_ino <= 0:
+                self.skipTest("PTY_UNAVAILABLE: controlling TTY inode invalid")
+
+            approval = copy.deepcopy(self.fixture.approval)
+            approval["tty_binding"] = {
+                "device": metadata.st_dev,
+                "inode": metadata.st_ino,
+            }
+            private_open = mock.Mock(
+                side_effect=AssertionError(
+                    "private access during public TTY validation"
+                )
+            )
+            with mock.patch.object(
+                RECOVERY,
+                "_open_private_directory",
+                private_open,
+            ):
+                validated = RECOVERY._validate_approval(
+                    approval,
+                    checkout=approval["approved_checkout_sha"],
+                    profile=self.fixture.profile,
+                    profile_sha256=approval["recovery_profile"]["sha256"],
+                    procedure_identity=approval[
+                        "recovery_procedure_identity_sha256"
+                    ],
+                    blobs={},
+                    ordinary=self.ordinary_binding(approval),
+                    tty_fd=tty_fd,
+                )
+                RECOVERY._verify_approved_tty(
+                    tty_fd,
+                    approval["tty_binding"],
+                    private_access_started=False,
+                )
+            self.assertIs(validated, approval)
+            private_open.assert_not_called()
+
+            changed = {
+                "device": metadata.st_dev + 1,
+                "inode": metadata.st_ino,
+            }
+            self.assert_fixed_failure(
+                lambda: RECOVERY._verify_approved_tty(
+                    tty_fd,
+                    changed,
+                    private_access_started=False,
+                ),
+                "tty_invalid",
+            )
+        finally:
+            os.close(tty_fd)
 
 
 class SuccessfulRecoveryTest(RecoveryTestCase):

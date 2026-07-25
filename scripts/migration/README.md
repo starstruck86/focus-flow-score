@@ -935,6 +935,16 @@ launcher cannot create, install, repair, replace, delete, or choose among
 multiple approvals. The committed recovery profile is policy and cannot
 approve its own checkout.
 
+The recovery approval records `tty_binding.device` as the raw signed-capable
+Python integer returned by `os.fstat(tty_fd).st_dev`; it must not be masked or
+converted to an unsigned representation. Together with the positive inode,
+the pair describes the `/dev/tty` node for the approved machine/boot context.
+It is not a cryptographic identity or a globally unique identifier for one
+Terminal window. Live locality comes from `verify_tty`: character-device and
+`isatty` checks, matching `st_dev`/`st_rdev` across descriptors, controlling
+`/dev/tty` comparison, foreground-process-group checks, readable termios
+state, and descriptor-stability revalidation.
+
 Before any private pathname operation, the held local controlling TTY shows
 the bounded consequences and requires
 `AUTHORIZE RECOVER_OPERATOR_IDENTITY XXXX-XXXX`. The challenge binds the

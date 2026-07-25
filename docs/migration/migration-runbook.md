@@ -877,6 +877,15 @@ re-attestation invocation; it is never an ordinary authoring action:
    A fresh per-process nonce makes a phrase from an abandoned pre-private
    launch invalid in any later launch. The approved expiry and exact
    approval-bound TTY device/inode are rechecked after this pause.
+   `tty_binding.device` is the exact raw signed-capable Python
+   `os.fstat(tty_fd).st_dev` integer and must never be converted to an unsigned
+   representation. The device/inode pair describes the `/dev/tty` node for
+   the approved machine/boot context; it is neither cryptographic nor globally
+   unique to a Terminal window. Terminal locality is instead enforced live by
+   `verify_tty` through character-device and `isatty` checks, matching
+   `st_dev`/`st_rdev` across descriptors, controlling-`/dev/tty` comparison,
+   foreground-process-group checks, termios readability, and descriptor
+   stability.
 7. After the phrase, the authorization is consumed on the first private-access
    attempt. The procedure publishes `attempt_started`, temporarily locks the
    operator-session root, and validates only a pristine predecessor-free

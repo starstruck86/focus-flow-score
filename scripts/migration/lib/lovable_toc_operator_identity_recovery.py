@@ -277,7 +277,6 @@ def _verify_approved_tty(
         or set(tty_binding) != {"device", "inode"}
         or type(tty_binding.get("device")) is not int
         or type(tty_binding.get("inode")) is not int
-        or tty_binding["device"] < 0
         or tty_binding["inode"] <= 0
     ):
         _fail(reason)
@@ -904,7 +903,6 @@ def _validate_approval(
     if (
         type(tty["device"]) is not int
         or type(tty["inode"]) is not int
-        or tty["device"] < 0
         or tty["inode"] <= 0
         or (tty_metadata.st_dev, tty_metadata.st_ino)
         != (tty["device"], tty["inode"])

@@ -194,6 +194,14 @@ capture root literals, an empty pairwise-disjoint recovery-evidence root, exact
 private-record digests and versions, named non-AI human roles, session expiry,
 TTY, no-retry rule, and accepted ceilings.
 
+For that recovery approval, `tty_binding.device` is the raw signed-capable
+Python `os.fstat(tty_fd).st_dev` integer, never an unsigned reinterpretation.
+The device/positive-inode pair describes the approved machine/boot
+`/dev/tty` node but is not cryptographic or globally unique to a Terminal
+window. Live `verify_tty` checks establish locality using character-device,
+`isatty`, descriptor `st_dev`/`st_rdev`, controlling-terminal,
+foreground-process-group, termios, and descriptor-stability evidence.
+
 The consequence phrase uses a fresh per-process invocation nonce, so an exact
 phrase from an abandoned pre-private launch cannot authorize a later launch.
 The phrase
