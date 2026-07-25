@@ -181,6 +181,34 @@ startup-loader, remote, multiplexer, IDE, and recorder markers, including the
 Apple-Terminal SSH marker before the minimal child environment is created, and
 the isolated component revalidates the stable foreground controlling TTY.
 
+If the original human-selected generation-one primary operator label is lost,
+the ordinary launcher remains blocked; guessing, fallback derivation, identity
+rotation, and reinitialization are unsupported. The separate zero-argument
+`run-lovable-toc-operator-identity-recovery.sh` procedure can only
+re-attest the exact label already stored consistently in a pristine
+root-v1/resume-v2/checkpoint-v1 generation-one chain. It first performs the
+same public repository/Python/approval/TTY protections and also requires a
+separate immutable recovery approval. That approval binds the exact recovery
+profile/procedure/blob map, ordinary-approval digest, operator/annotation/
+capture root literals, an empty pairwise-disjoint recovery-evidence root, exact
+private-record digests and versions, named non-AI human roles, session expiry,
+TTY, no-retry rule, and accepted ceilings.
+
+The consequence phrase
+`AUTHORIZE RECOVER_OPERATOR_IDENTITY XXXX-XXXX` succeeds before any private
+path operation. Only afterward does the procedure publish `attempt_started`,
+temporarily lock the operator-session root, validate the exact historical
+chain without opening capture/raw-TOC/index/key bytes, display the proven label
+only on the held TTY, require hidden exact re-entry plus
+`operator_identity_recorded`, release the lock, and publish separate
+identity-free audit completion. It does not change a root, resume, checkpoint,
+decision, or capture byte and never invokes `primary_review`. Failure evidence
+stays in the separate recovery-evidence root; no recovery marker is written in
+the operator root. Any TTY, audit, cleanup, or lock-release ambiguity is
+blocking/indeterminate, and no retry is permitted after private access.
+Successful re-attestation is not authoring authorization and leaves validation,
+restore planning, restore commands, and migration readiness blocked.
+
 The lower-level zero-argument `run-lovable-toc-annotation-authoring.sh`
 launcher remains available only behind a reviewed private injection mechanism;
 the operator-session wrapper is the reviewed practical mechanism.
