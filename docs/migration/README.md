@@ -194,12 +194,15 @@ capture root literals, an empty pairwise-disjoint recovery-evidence root, exact
 private-record digests and versions, named non-AI human roles, session expiry,
 TTY, no-retry rule, and accepted ceilings.
 
-The consequence phrase
+The consequence phrase uses a fresh per-process invocation nonce, so an exact
+phrase from an abandoned pre-private launch cannot authorize a later launch.
+The phrase
 `AUTHORIZE RECOVER_OPERATOR_IDENTITY XXXX-XXXX` succeeds before any private
 path operation. Only afterward does the procedure publish `attempt_started`,
 temporarily lock the operator-session root, validate the exact historical
 chain without opening capture/raw-TOC/index/key bytes, display the proven label
-only on the held TTY, require hidden exact re-entry plus
+only after rechecking the held TTY against the exact approval-bound
+device/inode, require hidden exact re-entry plus
 `operator_identity_recorded`, release the lock, and publish separate
 identity-free audit completion. It does not change a root, resume, checkpoint,
 decision, or capture byte and never invokes `primary_review`. Failure evidence

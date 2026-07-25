@@ -237,7 +237,7 @@ class SyntheticGenerationOne:
             "recovery_profile": {"format_version": 1, "sha256": "2" * 64},
             "recovery_procedure_identity_sha256": "3" * 64,
             "recovery_session": {
-                "expires_at_utc": "2999-01-01T00:00:00Z",
+                "expires_at_utc": "2099-01-01T00:00:00Z",
                 "metadata_session_id": "synthetic-recovery-session",
                 "nonce": "4" * 64,
             },
@@ -359,7 +359,9 @@ class RecoveryTestCase(unittest.TestCase):
 
         with ExitStack() as stack:
             stack.enter_context(
-                mock.patch.object(RECOVERY.PREFLIGHT, "verify_tty", return_value=None)
+                mock.patch.object(
+                    RECOVERY, "_verify_approved_tty", return_value=None
+                )
             )
             stack.enter_context(
                 mock.patch.object(
@@ -573,7 +575,7 @@ class SuccessfulRecoveryTest(RecoveryTestCase):
                 return original_open(path, *args, **kwargs)
 
             with mock.patch.object(
-                RECOVERY.PREFLIGHT, "verify_tty", return_value=None
+                RECOVERY, "_verify_approved_tty", return_value=None
             ), mock.patch.object(
                 RECOVERY, "_tty_write", side_effect=lambda _fd, data: writes.append(data)
             ), mock.patch.object(
@@ -637,7 +639,7 @@ class ChainMismatchTest(RecoveryTestCase):
                     fixture.rewrite()
                     before = fixture.ordinary_snapshot()
                     with mock.patch.object(
-                        RECOVERY.PREFLIGHT, "verify_tty", return_value=None
+                        RECOVERY, "_verify_approved_tty", return_value=None
                     ):
                         self.assert_fixed_failure(
                             lambda: RECOVERY.run_recovery(
@@ -696,7 +698,7 @@ class ChainMismatchTest(RecoveryTestCase):
                     fixture.rewrite()
                     before = fixture.ordinary_snapshot()
                     with mock.patch.object(
-                        RECOVERY.PREFLIGHT, "verify_tty", return_value=None
+                        RECOVERY, "_verify_approved_tty", return_value=None
                     ):
                         self.assert_fixed_failure(
                             lambda: RECOVERY.run_recovery(
@@ -714,7 +716,7 @@ class ChainMismatchTest(RecoveryTestCase):
             "aggregate_status",
             return_value={"authoring_state": "RELATIONSHIP_REVIEW_REQUIRED"},
         ), mock.patch.object(
-            RECOVERY.PREFLIGHT, "verify_tty", return_value=None
+            RECOVERY, "_verify_approved_tty", return_value=None
         ):
             self.assert_fixed_failure(
                 lambda: RECOVERY.run_recovery(
@@ -769,7 +771,7 @@ class ChainMismatchTest(RecoveryTestCase):
                             path.chmod(0o400)
                     before = fixture.ordinary_snapshot()
                     with mock.patch.object(
-                        RECOVERY.PREFLIGHT, "verify_tty", return_value=None
+                        RECOVERY, "_verify_approved_tty", return_value=None
                     ):
                         self.assert_fixed_failure(
                             lambda: RECOVERY.run_recovery(
@@ -789,7 +791,7 @@ class ChainMismatchTest(RecoveryTestCase):
         resume.symlink_to(target)
         before = self.fixture.ordinary_snapshot()
         with mock.patch.object(
-            RECOVERY.PREFLIGHT, "verify_tty", return_value=None
+            RECOVERY, "_verify_approved_tty", return_value=None
         ):
             self.assert_fixed_failure(
                 lambda: RECOVERY.run_recovery(
@@ -811,7 +813,7 @@ class ChainMismatchTest(RecoveryTestCase):
             return snapshot
 
         with mock.patch.object(
-            RECOVERY.PREFLIGHT, "verify_tty", return_value=None
+            RECOVERY, "_verify_approved_tty", return_value=None
         ), mock.patch.object(
             RECOVERY, "_load_generation_one", side_effect=replace_after_load
         ):
@@ -834,7 +836,7 @@ class ChainMismatchTest(RecoveryTestCase):
             return snapshot
 
         with mock.patch.object(
-            RECOVERY.PREFLIGHT, "verify_tty", return_value=None
+            RECOVERY, "_verify_approved_tty", return_value=None
         ), mock.patch.object(
             RECOVERY, "_load_generation_one", side_effect=replace_named_checkpoints
         ), mock.patch.object(
@@ -878,7 +880,7 @@ class ChainMismatchTest(RecoveryTestCase):
                         ).chmod(0o600)
                     before = fixture.ordinary_snapshot()
                     with mock.patch.object(
-                        RECOVERY.PREFLIGHT, "verify_tty", return_value=None
+                        RECOVERY, "_verify_approved_tty", return_value=None
                     ), mock.patch.object(
                         RECOVERY,
                         "_tty_write",
@@ -899,7 +901,17 @@ class ChainMismatchTest(RecoveryTestCase):
 
 class AuthorizationAndApprovalTest(RecoveryTestCase):
     def test_challenge_and_exact_phrase_are_invocation_bound(self):
-        base_challenge = RECOVERY._challenge(self.fixture.verified)
+        first_invocation_nonce = b"A" * RECOVERY.INVOCATION_NONCE_BYTES
+        second_invocation_nonce = b"B" * RECOVERY.INVOCATION_NONCE_BYTES
+        base_challenge = RECOVERY._challenge(
+            self.fixture.verified, first_invocation_nonce
+        )
+        self.assertNotEqual(
+            base_challenge,
+            RECOVERY._challenge(
+                self.fixture.verified, second_invocation_nonce
+            ),
+        )
         variants = []
         for field in ("approval", "nonce", "session"):
             approval = copy.deepcopy(self.fixture.approval)
@@ -924,7 +936,8 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
                         procedure_identity_sha256=self.fixture.verified.procedure_identity_sha256,
                         repository_root=self.fixture.verified.repository_root,
                         historical_python_identity_sha256=self.fixture.verified.historical_python_identity_sha256,
-                    )
+                    ),
+                    first_invocation_nonce,
                 )
             )
         self.assertTrue(all(item != base_challenge for item in variants))
@@ -939,32 +952,89 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
         ), mock.patch.object(
             RECOVERY, "_read_hidden", return_value=phrase
         ):
-            RECOVERY.authorize_consequence(9, self.fixture.verified)
+            RECOVERY.authorize_consequence(
+                9,
+                self.fixture.verified,
+                invocation_nonce=first_invocation_nonce,
+            )
         self.assertIn(phrase.encode("ascii"), b"".join(writes))
         self.assertEqual(os.listdir(self.fixture.audit_root), [])
 
-    def test_wrong_consequence_phrase_performs_zero_private_operations(self):
+    def test_stale_or_wrong_consequence_phrase_performs_zero_private_operations(self):
         calls: list[str] = []
-        challenge = RECOVERY._challenge(self.fixture.verified)
-        with mock.patch.object(
-            RECOVERY.PREFLIGHT, "verify_tty", return_value=None
-        ), mock.patch.object(
-            RECOVERY, "_tty_write", return_value=None
-        ), mock.patch.object(
-            RECOVERY, "_read_hidden", return_value=challenge
-        ), mock.patch.object(
-            RECOVERY,
-            "_open_private_directory",
-            side_effect=lambda *_args, **_kwargs: calls.append("private"),
-        ):
+        first_invocation_nonce = b"A" * RECOVERY.INVOCATION_NONCE_BYTES
+        second_invocation_nonce = b"B" * RECOVERY.INVOCATION_NONCE_BYTES
+        stale_phrase = (
+            "AUTHORIZE RECOVER_OPERATOR_IDENTITY "
+            + RECOVERY._challenge(
+                self.fixture.verified, first_invocation_nonce
+            )
+        )
+        before = self.fixture.ordinary_snapshot()
+        audit_before = immutable_tree_snapshot(self.fixture.audit_root)
+
+        def private_operation(label):
+            def planted(*_args, **_kwargs):
+                calls.append(label)
+                raise AssertionError("private operation attempted")
+
+            return planted
+
+        private_patches = [
+            mock.patch.object(
+                RECOVERY,
+                "_open_private_directory",
+                side_effect=private_operation("open_private_directory"),
+            ),
+            *[
+                mock.patch.object(
+                    RECOVERY.os,
+                    name,
+                    side_effect=private_operation(name),
+                )
+                for name in (
+                    "open",
+                    "stat",
+                    "lstat",
+                    "listdir",
+                    "read",
+                    "write",
+                    "rename",
+                    "fsync",
+                    "mkdir",
+                    "unlink",
+                )
+            ],
+        ]
+        with ExitStack() as stack:
+            stack.enter_context(
+                mock.patch.object(
+                    RECOVERY.PREFLIGHT, "verify_tty", return_value=None
+                )
+            )
+            stack.enter_context(
+                mock.patch.object(RECOVERY, "_tty_write", return_value=None)
+            )
+            stack.enter_context(
+                mock.patch.object(
+                    RECOVERY, "_read_hidden", return_value=stale_phrase
+                )
+            )
+            for patcher in private_patches:
+                stack.enter_context(patcher)
             self.assert_fixed_failure(
                 lambda: RECOVERY.authorize_consequence(
-                    9, self.fixture.verified
+                    9,
+                    self.fixture.verified,
+                    invocation_nonce=second_invocation_nonce,
                 ),
                 "authorization_failed",
             )
         self.assertEqual(calls, [])
-        self.assertEqual(os.listdir(self.fixture.audit_root), [])
+        self.assertEqual(self.fixture.ordinary_snapshot(), before)
+        self.assertEqual(
+            immutable_tree_snapshot(self.fixture.audit_root), audit_before
+        )
 
     def test_ordinary_approval_alone_cannot_pass_recovery_preflight(self):
         launcher = MIGRATION / "run-lovable-toc-operator-identity-recovery.sh"
@@ -1005,6 +1075,10 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
             RECOVERY,
             "_load_recovery_approval",
             load_recovery,
+        ), mock.patch.object(
+            RECOVERY.PREFLIGHT,
+            "_git_ascii",
+            return_value=checkout,
         ):
             # Recovery still requires its own bootstrap binding and profile
             # chain; the ordinary approval is never treated as sufficient.
@@ -1192,6 +1266,84 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
             )
         run_recovery.assert_not_called()
 
+    def test_exact_approved_tty_is_rechecked_after_authorization(self):
+        verified = self.fixture.verified
+        run_recovery = mock.Mock(
+            side_effect=AssertionError("private recovery reached after TTY drift")
+        )
+
+        def drift_after_authorization(_tty_fd, selected):
+            selected.approval["tty_binding"]["inode"] = 2
+
+        with mock.patch.object(
+            RECOVERY, "verify_pre_private", return_value=verified
+        ), mock.patch.object(
+            RECOVERY, "_tty_write", return_value=None
+        ), mock.patch.object(
+            RECOVERY,
+            "authorize_consequence",
+            side_effect=drift_after_authorization,
+        ), mock.patch.object(
+            RECOVERY.PREFLIGHT, "verify_tty", return_value=None
+        ), mock.patch.object(
+            RECOVERY.os,
+            "fstat",
+            return_value=types.SimpleNamespace(st_dev=1, st_ino=1),
+        ), mock.patch.object(
+            RECOVERY, "run_recovery", run_recovery
+        ):
+            self.assert_fixed_failure(
+                lambda: RECOVERY.execute(
+                    launcher=MIGRATION
+                    / "run-lovable-toc-operator-identity-recovery.sh",
+                    ordinary_launcher=MIGRATION
+                    / "run-lovable-toc-annotation-operator-session.sh",
+                    ordinary_module=SESSION,
+                    tty_fd=9,
+                    recovery_bootstrap=types.SimpleNamespace(),
+                    ordinary_bootstrap=types.SimpleNamespace(),
+                ),
+                "tty_invalid",
+            )
+        run_recovery.assert_not_called()
+        self.assertEqual(os.listdir(self.fixture.audit_root), [])
+
+    def test_exact_approved_tty_is_rechecked_before_identity_disclosure(self):
+        before = self.fixture.ordinary_snapshot()
+        writes: list[bytes] = []
+        exact_checks: list[bool] = []
+
+        def reject_drift(
+            _tty_fd,
+            _tty_binding,
+            *,
+            private_access_started,
+        ):
+            exact_checks.append(private_access_started)
+            raise RECOVERY.RecoveryError("indeterminate")
+
+        with mock.patch.object(
+            RECOVERY,
+            "_verify_approved_tty",
+            side_effect=reject_drift,
+        ), mock.patch.object(
+            RECOVERY,
+            "_tty_write",
+            side_effect=lambda _fd, payload: writes.append(payload),
+        ):
+            self.assert_fixed_failure(
+                lambda: RECOVERY.run_recovery(
+                    9, self.fixture.verified, SESSION
+                ),
+                "indeterminate",
+            )
+        self.assertEqual(exact_checks, [True])
+        self.assertNotIn(PRIVATE_IDENTITY.encode("ascii"), b"".join(writes))
+        self.assertEqual(self.fixture.ordinary_snapshot(), before)
+        self.assertNotIn(
+            PRIVATE_IDENTITY.encode("ascii"), self.fixture.audit_bytes()
+        )
+
 
 class FailureAndAmbiguityTest(RecoveryTestCase):
     def test_wrong_reentry_records_failure_without_identity(self):
@@ -1217,8 +1369,8 @@ class FailureAndAmbiguityTest(RecoveryTestCase):
                     if label == "eof":
                         answers = [PRIVATE_IDENTITY]
                         with mock.patch.object(
-                            RECOVERY.PREFLIGHT,
-                            "verify_tty",
+                            RECOVERY,
+                            "_verify_approved_tty",
                             return_value=None,
                         ), mock.patch.object(
                             RECOVERY, "_tty_write", return_value=None
@@ -1246,8 +1398,8 @@ class FailureAndAmbiguityTest(RecoveryTestCase):
                             return 1 if tty_write_calls["count"] == 1 else 0
 
                         with mock.patch.object(
-                            RECOVERY.PREFLIGHT,
-                            "verify_tty",
+                            RECOVERY,
+                            "_verify_approved_tty",
                             return_value=None,
                         ), mock.patch.object(
                             RECOVERY.os, "write", side_effect=partial_then_zero
@@ -1561,6 +1713,43 @@ class FailureAndAmbiguityTest(RecoveryTestCase):
                     PRIVATE_IDENTITY.encode("ascii"), fixture.audit_bytes()
                 )
                 fixture.close()
+
+        fixture = SyntheticGenerationOne()
+        final = fixture.audit_root / final_name
+        final.write_bytes(canonical(record))
+        final.chmod(0o400)
+        original = final.read_bytes()
+        root_fd = os.open(
+            fixture.audit_root,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            self.assert_fixed_failure(
+                lambda: RECOVERY._publish_audit(
+                    root_fd,
+                    final_name,
+                    record,
+                ),
+                "audit_failed",
+            )
+        finally:
+            os.close(root_fd)
+        self.assertEqual(final.read_bytes(), original)
+        self.assertEqual(
+            [
+                name
+                for name in os.listdir(fixture.audit_root)
+                if name.startswith(".pending-recovery-")
+            ],
+            [],
+        )
+        self.assertNotIn(
+            PRIVATE_IDENTITY.encode("ascii"), fixture.audit_bytes()
+        )
+        fixture.close()
 
 
 class ContractAndScopeTest(unittest.TestCase):

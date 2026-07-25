@@ -874,7 +874,9 @@ re-attestation invocation; it is never an ordinary authoring action:
    consequences, and type the invocation-bound phrase
    `AUTHORIZE RECOVER_OPERATOR_IDENTITY XXXX-XXXX`. Until it succeeds, there
    must be zero recovery-evidence/operator/annotation/capture-root operations.
-   The approved expiry and TTY are rechecked after this pause.
+   A fresh per-process nonce makes a phrase from an abandoned pre-private
+   launch invalid in any later launch. The approved expiry and exact
+   approval-bound TTY device/inode are rechecked after this pause.
 7. After the phrase, the authorization is consumed on the first private-access
    attempt. The procedure publishes `attempt_started`, temporarily locks the
    operator-session root, and validates only a pristine predecessor-free
@@ -884,8 +886,9 @@ re-attestation invocation; it is never an ordinary authoring action:
    identity equality across root, resume, checkpoint, and initialization
    event. It does not open the capture package, raw TOC, opaque index, or
    opaque key.
-8. If validation succeeds, privately read the displayed stored label from the
-   held TTY, re-enter it exactly with echo disabled, record it only in the
+8. If validation succeeds, require another exact approval-bound TTY
+   device/inode check, privately read the displayed stored label from the held
+   TTY, re-enter it exactly with echo disabled, record it only in the
    separately approved local operator record, and type
    `operator_identity_recorded`. Never paste it into chat, clipboard, shell
    history, a terminal recorder, Git, CI, stdout/stderr, or a log.

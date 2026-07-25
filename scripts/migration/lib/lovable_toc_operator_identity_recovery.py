@@ -82,6 +82,7 @@ MAX_RECORD_BYTES = 1024 * 1024
 MAX_PROFILE_BYTES = 512 * 1024
 MAX_OPERATOR_INPUT_BYTES = 4096
 CONSEQUENCE_CHALLENGE_BYTES = 5
+INVOCATION_NONCE_BYTES = 16
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$", re.ASCII)
 GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$", re.ASCII)
 SAFE_IDENTITY_RE = re.compile(
@@ -261,6 +262,39 @@ def _verify_tty(tty_fd: int, *, private_access_started: bool) -> None:
         raise RecoveryError(
             "indeterminate" if private_access_started else "tty_invalid"
         ) from exc
+
+
+def _verify_approved_tty(
+    tty_fd: int,
+    tty_binding: Mapping[str, Any],
+    *,
+    private_access_started: bool,
+) -> None:
+    reason = "indeterminate" if private_access_started else "tty_invalid"
+    _verify_tty(tty_fd, private_access_started=private_access_started)
+    if (
+        type(tty_binding) is not dict
+        or set(tty_binding) != {"device", "inode"}
+        or type(tty_binding.get("device")) is not int
+        or type(tty_binding.get("inode")) is not int
+        or tty_binding["device"] < 0
+        or tty_binding["inode"] <= 0
+    ):
+        _fail(reason)
+    try:
+        before = os.fstat(tty_fd)
+    except OSError as exc:
+        raise RecoveryError(reason) from exc
+    expected = (tty_binding["device"], tty_binding["inode"])
+    if (before.st_dev, before.st_ino) != expected:
+        _fail(reason)
+    _verify_tty(tty_fd, private_access_started=private_access_started)
+    try:
+        after = os.fstat(tty_fd)
+    except OSError as exc:
+        raise RecoveryError(reason) from exc
+    if (after.st_dev, after.st_ino) != expected:
+        _fail(reason)
 
 
 def _sha(value: Any) -> str:
@@ -1093,7 +1127,14 @@ def _read_hidden(
     return value
 
 
-def _challenge(verified: RecoveryVerified) -> str:
+def _challenge(
+    verified: RecoveryVerified, invocation_nonce: bytes
+) -> str:
+    if (
+        type(invocation_nonce) is not bytes
+        or len(invocation_nonce) != INVOCATION_NONCE_BYTES
+    ):
+        _fail("internal_failure")
     consequence = {
         "allowed_disclosure": ALLOWED_DISCLOSURE,
         "approved_checkout_sha": verified.ordinary.approved_checkout_sha,
@@ -1108,19 +1149,34 @@ def _challenge(verified: RecoveryVerified) -> str:
         ],
         "separate_audit_evidence": True,
     }
-    nonce = bytes.fromhex(verified.approval["recovery_session"]["nonce"])
+    approval_nonce = bytes.fromhex(
+        verified.approval["recovery_session"]["nonce"]
+    )
     encoded = base64.b32encode(
-        hashlib.sha256(nonce + canonical_json_bytes(consequence)).digest()[
-            :CONSEQUENCE_CHALLENGE_BYTES
-        ]
+        hashlib.sha256(
+            b"toc-operator-identity-recovery-invocation-v1\x00"
+            + approval_nonce
+            + invocation_nonce
+            + canonical_json_bytes(consequence)
+        ).digest()[:CONSEQUENCE_CHALLENGE_BYTES]
     ).decode("ascii").rstrip("=")
     if len(encoded) != 8:
         _fail("internal_failure")
     return encoded[:4] + "-" + encoded[4:]
 
 
-def authorize_consequence(tty_fd: int, verified: RecoveryVerified) -> None:
-    challenge = _challenge(verified)
+def authorize_consequence(
+    tty_fd: int,
+    verified: RecoveryVerified,
+    *,
+    invocation_nonce: bytes | None = None,
+) -> None:
+    if invocation_nonce is None:
+        try:
+            invocation_nonce = secrets.token_bytes(INVOCATION_NONCE_BYTES)
+        except BaseException as exc:
+            raise RecoveryError("internal_failure") from exc
+    challenge = _challenge(verified, invocation_nonce)
     phrase = "AUTHORIZE RECOVER_OPERATOR_IDENTITY " + challenge
     summary = (
         "ACTION: RECOVER_OPERATOR_IDENTITY\n"
@@ -2261,7 +2317,11 @@ def run_recovery(
             verified, repository, ordinary_module
         )
         _revalidate_snapshot(snapshot, verified)
-        _verify_tty(tty_fd, private_access_started=True)
+        _verify_approved_tty(
+            tty_fd,
+            verified.approval["tty_binding"],
+            private_access_started=True,
+        )
         identity_disclosed = True
         _tty_write(
             tty_fd,
@@ -2286,7 +2346,11 @@ def run_recovery(
         if acknowledgement != "operator_identity_recorded":
             raise RecoveryError("indeterminate")
         _clear_private_tty(tty_fd)
-        _verify_tty(tty_fd, private_access_started=True)
+        _verify_approved_tty(
+            tty_fd,
+            verified.approval["tty_binding"],
+            private_access_started=True,
+        )
         _revalidate_snapshot(snapshot, verified)
         _revalidate_audit_publications(audit_fd, (attempt,))
         acknowledged = _publish_audit(
@@ -2451,7 +2515,11 @@ def execute(
     _parse_expiry(
         verified.approval["recovery_session"]["expires_at_utc"]
     )
-    _verify_tty(tty_fd, private_access_started=False)
+    _verify_approved_tty(
+        tty_fd,
+        verified.approval["tty_binding"],
+        private_access_started=False,
+    )
     status, diagnostic = run_recovery(
         tty_fd, verified, ordinary_module
     )

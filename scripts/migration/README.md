@@ -939,7 +939,9 @@ Before any private pathname operation, the held local controlling TTY shows
 the bounded consequences and requires
 `AUTHORIZE RECOVER_OPERATOR_IDENTITY XXXX-XXXX`. The challenge binds the
 recovery approval/profile, checkout, session, generation/state, disclosure,
-audit boundary, and no-retry consequence. Expiry and TTY binding are checked
+audit boundary, no-retry consequence, and a fresh per-process invocation
+nonce, so a phrase from an abandoned pre-private launch cannot authorize a
+later launch. Expiry and the exact approval-bound TTY device/inode are checked
 again after that human pause. A wrong phrase performs no recovery-evidence or
 operator/annotation/capture-root operation.
 
@@ -954,8 +956,9 @@ realistic checkpoint uses the existing 64 MiB checkpoint bound; root, resume,
 approval, and audit records retain tighter bounds. The procedure never opens
 the capture package, raw TOC, opaque index, or opaque key.
 
-Only then is the stored label displayed through the held TTY. The operator
-must re-enter it with terminal echo disabled and type exactly
+Only after another exact approval-bound TTY device/inode check is the stored
+label displayed through the held TTY. The operator must re-enter it with
+terminal echo disabled and type exactly
 `operator_identity_recorded`; the screen is cleared where practical. Recovery
 audit records are immutable, no-replace mode-`0400` records chained as
 `attempt_started`, `identity_acknowledged`, then `recovery_completed`, with
