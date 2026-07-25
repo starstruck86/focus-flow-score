@@ -185,10 +185,15 @@ The lower-level zero-argument `run-lovable-toc-annotation-authoring.sh`
 launcher remains available only behind a reviewed private injection mechanism;
 the operator-session wrapper is the reviewed practical mechanism.
 Private raw TOC context remains confined to the bounded local alternate-screen
-view; stdout/stderr stay fixed and aggregate. Redirected, piped, non-TTY,
-known recorder, remote, and multiplexer contexts are rejected. Clearing the
-alternate screen does not attest the absence of an unknown recorder, screen
-capture, photography, a hostile terminal, or a hostile same-user process.
+view; stdout/stderr stay fixed and aggregate. The launcher rejects inherited
+output pipes/redirection, replaces a detached inherited stdin with the
+process's controlling `/dev/tty` (discarding an input pipe or `/dev/null`), and
+then requires stdin, stdout, stderr, and the held private descriptor to verify
+as the same stable local foreground terminal. A process without that
+controlling terminal remains rejected before private access. Known recorder,
+remote, and multiplexer contexts are also rejected. Clearing the alternate
+screen does not attest the absence of an unknown recorder, screen capture,
+photography, a hostile terminal, or a hostile same-user process.
 
 Authoring never opens `opaque-id.key` bytes: it only validates the key file's
 safe metadata. It uses the already private raw TOC and opaque structural index,

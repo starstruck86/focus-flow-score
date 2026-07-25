@@ -135,6 +135,7 @@ MINIMAL_OPERATOR_ENVIRONMENT = {
     "TOC_OPERATOR_OUTER_TTY_CONTEXT": "clear-v1",
     "TOC_OPERATOR_TTY_FD": "3",
 }
+SYNTHETIC_PTY_UNAVAILABLE = b"SYNTHETIC_PTY_CONTROLLING_TTY_UNAVAILABLE"
 
 
 class KeyOnlyEnvironment:
@@ -4259,6 +4260,30 @@ class TocOperatorSessionTest(unittest.TestCase):
                 SESSION._validate_tty_fd()
         self.assertEqual(raised.exception.reason, "tty_invalid")
 
+    def test_validate_tty_fd_rejects_detached_stdin_before_private_access(self):
+        fixture_before = immutable_tree_snapshot(self.root)
+        tty = self._char_stat()
+        with ExitStack() as stack:
+            stack.enter_context(
+                mock.patch.dict(
+                    SESSION.os.environ, {"TOC_OPERATOR_TTY_FD": "3"}
+                )
+            )
+            stack.enter_context(
+                mock.patch.object(SESSION.os, "fstat", return_value=tty)
+            )
+            stack.enter_context(
+                mock.patch.object(SESSION.os, "isatty", return_value=False)
+            )
+            private_open = stack.enter_context(
+                mock.patch.object(SESSION, "_open_existing_private_directory")
+            )
+            with self.assertRaises(SESSION.OperatorSessionError) as raised:
+                SESSION._validate_tty_fd()
+        self.assertEqual(raised.exception.reason, "tty_invalid")
+        private_open.assert_not_called()
+        self.assertEqual(immutable_tree_snapshot(self.root), fixture_before)
+
     def test_validate_tty_fd_rejects_differing_standard_descriptor_tty(self):
         fixture_before = immutable_tree_snapshot(self.root)
         tty = self._char_stat()
@@ -4488,7 +4513,7 @@ class TocOperatorSessionTest(unittest.TestCase):
             self.run_with_responses(self.responses())
         self.assertIn(raised.exception.reason, {"history_conflict", "input_invalid"})
 
-    def test_operator_launcher_uses_private_prompts_and_minimal_child_environment(self):
+    def test_operator_launcher_rebinds_apple_terminal_and_uses_minimal_environment(self):
         fake = self.root / "fake-python"
         poison_bin = self.root / "poison-bin"
         poison_bin.mkdir(mode=0o700)
@@ -4503,12 +4528,14 @@ class TocOperatorSessionTest(unittest.TestCase):
         fake_dirname.chmod(0o500)
         argument_ledger = self.root / "arguments.json"
         environment_ledger = self.root / "environment.json"
+        tty_ledger = self.root / "tty.json"
         stdin_ledger = self.root / "stdin.bin"
         fake.write_text(
             "#!/usr/bin/python3\n"
             "import json, os, sys\n"
             f"open({str(argument_ledger)!r}, 'w', encoding='ascii').write(json.dumps(sys.argv))\n"
             f"open({str(environment_ledger)!r}, 'w', encoding='ascii').write(json.dumps(dict(os.environ), sort_keys=True))\n"
+            f"open({str(tty_ledger)!r}, 'w', encoding='ascii').write(json.dumps({{'isatty': [os.isatty(fd) for fd in range(4)], 'terminal_identities': [[os.fstat(fd).st_dev, os.fstat(fd).st_rdev] for fd in range(4)]}}, sort_keys=True))\n"
             f"open({str(stdin_ledger)!r}, 'wb').write(b'')\n"
             "sys.stderr.write('{\"diagnostic_version\":1,\"reason\":\"internal_failure\",\"stage\":\"annotation_operator_session\",\"status\":\"failed\"}\\n')\n"
             "raise SystemExit(1)\n",
@@ -4529,42 +4556,144 @@ class TocOperatorSessionTest(unittest.TestCase):
             encoding="utf-8",
         )
         launcher_copy.chmod(0o500)
-        exit_status, transcript = run_pty_command(
+        for detach_stdin in (False, True):
+            with self.subTest(detach_stdin=detach_stdin):
+                for ledger in (
+                    argument_ledger,
+                    environment_ledger,
+                    tty_ledger,
+                    stdin_ledger,
+                ):
+                    ledger.unlink(missing_ok=True)
+                exit_status, transcript = run_pty_command(
+                    launcher_copy,
+                    [],
+                    environment={
+                        "LANG": "C",
+                        "LC_ALL": "C",
+                        "PATH": os.fspath(poison_bin),
+                        "TERM": "xterm-256color",
+                        "TERM_PROGRAM": "Apple_Terminal",
+                        "TOC_AUTHOR_CAPTURE_ROOT": os.fspath(self.capture_root),
+                        "TOC_AUTHOR_EXPECTED_OPAQUE_INDEX_SHA256": self.expectations.opaque_index_sha256,
+                    },
+                    detach_stdin=detach_stdin,
+                    require_controlling_tty=True,
+                )
+                if (
+                    exit_status == 126
+                    and SYNTHETIC_PTY_UNAVAILABLE in transcript
+                ):
+                    self.skipTest(
+                        "local sandbox denies /dev/tty for PTY launcher regression"
+                    )
+                self.assertEqual(exit_status, 1)
+                self.assertNotIn(b"execution_python_absolute_path", transcript)
+                arguments = json.loads(
+                    argument_ledger.read_text(encoding="ascii")
+                )
+                child_environment = json.loads(
+                    environment_ledger.read_text(encoding="ascii")
+                )
+                tty_observation = json.loads(
+                    tty_ledger.read_text(encoding="ascii")
+                )
+                self.assertEqual(stdin_ledger.read_bytes(), b"")
+                self.assertEqual(arguments[1:4], ["-I", "-S", "-B"])
+                self.assertEqual(arguments[4], os.fspath(driver_copy))
+                self.assertEqual(
+                    tty_observation["isatty"], [True, True, True, True]
+                )
+                self.assertEqual(
+                    tty_observation["terminal_identities"],
+                    [tty_observation["terminal_identities"][0]] * 4,
+                )
+                self.assertFalse(dirname_marker.exists())
+                self.assertNotIn("PATH", child_environment)
+                for name in child_environment:
+                    self.assertFalse(name.startswith("TOC_AUTHOR_"), name)
+                self.assertNotIn("PYTHONPATH", child_environment)
+                self.assertNotIn("PYTHONSTARTUP", child_environment)
+                for value in (
+                    os.fspath(self.capture_root),
+                    self.expectations.opaque_index_sha256,
+                    "synthetic-private-object",
+                ):
+                    self.assertNotIn(value, json.dumps(arguments))
+                    self.assertNotIn(value, json.dumps(child_environment))
+                    self.assertNotIn(value.encode(), transcript)
+
+    def test_launcher_without_controlling_tty_fails_before_child_or_private_access(self):
+        marker = self.root / "detached-child-executed"
+        fake = self.root / "detached-python"
+        fake.write_text(
+            "#!/bin/sh\n"
+            f"/usr/bin/touch {str(marker)!r}\n"
+            "exit 1\n",
+            encoding="ascii",
+        )
+        fake.chmod(0o500)
+        launcher_copy = self.root / "detached-launcher"
+        driver_copy = self.root / "author-lovable-toc-operator-session.py"
+        driver_copy.write_text("# synthetic reviewed driver path\n", encoding="ascii")
+        launcher_copy.write_text(
+            LAUNCHER.read_text(encoding="utf-8").replace(
+                (
+                    "/Library/Developer/CommandLineTools/Library/Frameworks/"
+                    "Python3.framework/Versions/3.9/bin/python3.9"
+                ),
+                os.fspath(fake),
+            ),
+            encoding="utf-8",
+        )
+        launcher_copy.chmod(0o500)
+        before = immutable_tree_snapshot(self.root)
+        exit_status, transcript = run_detached_tty_command(
             launcher_copy,
-            [],
             environment={
                 "LANG": "C",
                 "LC_ALL": "C",
-                "PATH": os.fspath(poison_bin),
                 "TERM": "xterm-256color",
-                "TOC_AUTHOR_CAPTURE_ROOT": os.fspath(self.capture_root),
-                "TOC_AUTHOR_EXPECTED_OPAQUE_INDEX_SHA256": self.expectations.opaque_index_sha256,
+                "TERM_PROGRAM": "Apple_Terminal",
             },
         )
-        if b"/dev/tty: Operation not permitted" in transcript:
-            self.skipTest("local sandbox denies /dev/tty for PTY launcher regression")
         self.assertEqual(exit_status, 1)
-        self.assertNotIn(b"execution_python_absolute_path", transcript)
-        arguments = json.loads(argument_ledger.read_text(encoding="ascii"))
-        child_environment = json.loads(environment_ledger.read_text(encoding="ascii"))
-        bootstrap = stdin_ledger.read_bytes()
-        self.assertEqual(arguments[1:4], ["-I", "-S", "-B"])
-        self.assertEqual(arguments[4], os.fspath(driver_copy))
-        self.assertEqual(bootstrap, b"")
-        self.assertFalse(dirname_marker.exists())
-        self.assertNotIn("PATH", child_environment)
-        for name in child_environment:
-            self.assertFalse(name.startswith("TOC_AUTHOR_"), name)
-        self.assertNotIn("PYTHONPATH", child_environment)
-        self.assertNotIn("PYTHONSTARTUP", child_environment)
-        for value in (
-            os.fspath(self.capture_root),
-            self.expectations.opaque_index_sha256,
-            "synthetic-private-object",
-        ):
-            self.assertNotIn(value, json.dumps(arguments))
-            self.assertNotIn(value, json.dumps(child_environment))
-            self.assertNotIn(value.encode(), transcript)
+        self.assertFalse(marker.exists())
+        self.assertEqual(immutable_tree_snapshot(self.root), before)
+        self.assertIn(b'"reason":"tty_invalid"', transcript)
+        self.assertNotIn(b"Traceback", transcript)
+        self.assertNotIn(b"synthetic reviewed driver path", transcript)
+
+    def test_launcher_rebinds_standard_descriptors_before_opening_fd3(self):
+        source = LAUNCHER.read_text(encoding="ascii")
+        marker_guard = "for tty_marker_name in"
+        terminal_program_guard = 'case "${TERM_PROGRAM-}" in'
+        inherited_output_check = "[ -t 1 ] && [ -t 2 ] || fail_tty"
+        controlling_tty = (
+            "{ command exec 0<>/dev/tty; } 2>/dev/null || fail_tty"
+        )
+        rebind = "exec 1>&0 2>&0 || fail_tty"
+        standard_check = "[ -t 0 ] && [ -t 1 ] && [ -t 2 ] || fail_tty"
+        private_tty = "exec 3<>/dev/tty || fail_tty"
+        child = "exec /usr/bin/env -i"
+        lines = source.splitlines()
+        self.assertEqual(lines.count(inherited_output_check), 1)
+        self.assertEqual(source.count(controlling_tty), 1)
+        self.assertEqual(source.count(rebind), 1)
+        self.assertEqual(source.count(standard_check), 1)
+        self.assertEqual(source.count(private_tty), 1)
+        self.assertLess(source.index(marker_guard), source.index(terminal_program_guard))
+        self.assertLess(
+            source.index(terminal_program_guard),
+            source.index(inherited_output_check),
+        )
+        self.assertLess(
+            source.index(inherited_output_check), source.index(controlling_tty)
+        )
+        self.assertLess(source.index(controlling_tty), source.index(rebind))
+        self.assertLess(source.index(rebind), source.index(standard_check))
+        self.assertLess(source.index(standard_check), source.index(private_tty))
+        self.assertLess(source.index(private_tty), source.index(child))
 
     def test_launcher_rejects_symlinked_driver_or_fixed_python_before_exec(self):
         launcher_source = LAUNCHER.read_text(encoding="utf-8")
@@ -4619,8 +4748,9 @@ class TocOperatorSessionTest(unittest.TestCase):
                         "LC_ALL": "C",
                         "TERM": "xterm-256color",
                     },
+                    require_controlling_tty=True,
                 )
-                if b"/dev/tty: Operation not permitted" in transcript:
+                if exit_status == 126 and SYNTHETIC_PTY_UNAVAILABLE in transcript:
                     self.skipTest(
                         "local sandbox denies /dev/tty for PTY launcher regression"
                     )
@@ -4802,12 +4932,79 @@ def _wait_status(status: int) -> int:
     return 255
 
 
+def run_detached_tty_command(
+    executable: Path, *, environment: dict[str, str]
+) -> tuple[int, bytes]:
+    master_fd, slave_fd = pty.openpty()
+    process = None
+    transcript = bytearray()
+    try:
+        process = subprocess.Popen(
+            [os.fspath(executable)],
+            stdin=subprocess.DEVNULL,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            env=environment,
+            close_fds=True,
+            start_new_session=True,
+        )
+        os.close(slave_fd)
+        slave_fd = -1
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            readable, _, _ = select.select([master_fd], [], [], 0.05)
+            if readable:
+                try:
+                    chunk = os.read(master_fd, 8192)
+                except OSError as exc:
+                    if exc.errno == errno.EIO:
+                        chunk = b""
+                    else:
+                        raise
+                if chunk:
+                    transcript.extend(chunk)
+                elif process.poll() is not None:
+                    break
+            if process.poll() is not None and not readable:
+                break
+        else:
+            process.kill()
+            raise AssertionError("detached launcher synthetic PTY timed out")
+        return process.wait(timeout=5), bytes(transcript)
+    finally:
+        if process is not None and process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+        if slave_fd >= 0:
+            os.close(slave_fd)
+        os.close(master_fd)
+
+
 def run_pty_command(
-    executable: Path, replies: list[str], *, environment: dict[str, str]
+    executable: Path,
+    replies: list[str],
+    *,
+    environment: dict[str, str],
+    detach_stdin: bool = False,
+    require_controlling_tty: bool = False,
 ) -> tuple[int, bytes]:
     pid, master_fd = pty.fork()
     if pid == 0:
         try:
+            if require_controlling_tty:
+                try:
+                    probe_fd = os.open("/dev/tty", os.O_RDWR)
+                except OSError:
+                    os.write(2, SYNTHETIC_PTY_UNAVAILABLE + b"\n")
+                    os._exit(126)
+                else:
+                    os.close(probe_fd)
+            if detach_stdin:
+                detached_fd = os.open(os.devnull, os.O_RDONLY)
+                try:
+                    os.dup2(detached_fd, 0)
+                finally:
+                    os.close(detached_fd)
             os.execve(os.fspath(executable), [os.fspath(executable)], environment)
         except BaseException:
             os._exit(127)
