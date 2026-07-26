@@ -837,6 +837,94 @@ lock, indeterminate state, altered history, or a second bridge use fails
 closed. At this real boundary, `status` is not bridge-authorized; use only
 non-private `VERIFY_ONLY` or a separately authorized `primary_review`.
 
+If the exact current primary-operator claim is no longer available, do not
+guess it, derive it from an OS/Git/GitHub identity, retry `primary_review`, or
+run `initialize` against existing roots. The supported recovery is a separate
+re-attestation invocation; it is never an ordinary authoring action:
+
+1. From an independently reviewed merged checkout, derive the canonical
+   `lovable_toc_operator_identity_recovery_profile` procedure identity and
+   complete reviewed blob map. Do not access private state during development
+   or profile review.
+2. In a separately authorized metadata-only step, obtain only the exact
+   immutable generation-one root/resume/checkpoint digests and already known
+   root literals needed by the closed recovery-approval schema. That step must
+   not disclose the stored operator label, TOC content, opaque IDs, SQL, or
+   payloads.
+3. Independently review and no-replace install exactly one canonical recovery
+   approval for the current checkout. It must bind the ordinary execution
+   approval digest, recovery profile/procedure/blob map, exact approved Python,
+   operator/annotation/capture root literals, pairwise-disjoint empty
+   recovery-evidence root, expected generation/state/record versions and
+   digests, named non-AI human authorizer/executor/distinct reviewer,
+   session/nonce/expiry, exact TTY, no-retry acknowledgement, and accepted
+   same-UID/terminal ceilings. Ordinary execution approval alone is
+   insufficient. The recovery launcher never creates or installs this file.
+4. Precreate the separately approved recovery-evidence root only under its own
+   explicit authorization. It must be canonical, empty, executor-owned,
+   non-symlink, mode `0700`, outside Git, and nonoverlapping with the
+   operator-session, annotation, and capture roots. Do not place recovery
+   evidence inside any existing migration-state root.
+5. Run the zero-argument
+   `scripts/migration/run-lovable-toc-operator-identity-recovery.sh` directly
+   in the same approved local foreground controlling TTY. It preserves the
+   ordinary poison/remote/multiplexer/IDE/recorder exclusions, minimal
+   `env -i`, disabled core dumps, deterministic Python, and `-I -S -B`.
+6. Require the categorical public verifications, review the bounded
+   consequences, and type the invocation-bound phrase
+   `AUTHORIZE RECOVER_OPERATOR_IDENTITY XXXX-XXXX`. Until it succeeds, there
+   must be zero recovery-evidence/operator/annotation/capture-root operations.
+   A fresh per-process nonce makes a phrase from an abandoned pre-private
+   launch invalid in any later launch. The approved expiry and exact
+   approval-bound TTY device/inode are rechecked after this pause.
+   `tty_binding.device` is the exact raw signed-capable Python
+   `os.fstat(tty_fd).st_dev` integer and must never be converted to an unsigned
+   representation. The device/inode pair describes the `/dev/tty` node for
+   the approved machine/boot context; it is neither cryptographic nor globally
+   unique to a Terminal window. Terminal locality is instead enforced live by
+   `verify_tty` through character-device and `isatty` checks, matching
+   `st_dev`/`st_rdev` across descriptors, controlling-`/dev/tty` comparison,
+   foreground-process-group checks, termios readability, and descriptor
+   stability.
+7. After the phrase, the authorization is consumed on the first private-access
+   attempt. The procedure publishes `attempt_started`, temporarily locks the
+   operator-session root, and validates only a pristine predecessor-free
+   generation `1` / `PRIMARY_REVIEW_REQUIRED` chain. It validates exact
+   root-v1/resume-v2/checkpoint-v1 bytes, names, hashes, historical
+   execution/Python/capture bindings, release marker, child allowlists, and
+   identity equality across root, resume, checkpoint, and initialization
+   event. It does not open the capture package, raw TOC, opaque index, or
+   opaque key.
+8. If validation succeeds, require another exact approval-bound TTY
+   device/inode check, privately read the displayed stored label from the held
+   TTY, re-enter it exactly with echo disabled, record it only in the
+   separately approved local operator record, and type
+   `operator_identity_recorded`. Never paste it into chat, clipboard, shell
+   history, a terminal recorder, Git, CI, stdout/stderr, or a log.
+9. Require screen clearing where practical, durable temporary-lock release,
+   and the identity-free `identity_acknowledged` then `recovery_completed`
+   audit chain. Stop. Do not continue into `primary_review`; that requires a
+   later independent ordinary one-action authorization using the recovered
+   human claim.
+
+Any chain mismatch discloses nothing. Wrong hidden re-entry produces fixed
+failure evidence when safe. EOF, partial TTY output, acknowledgement failure,
+audit publication/fsync/close ambiguity, cleanup ambiguity, or lock-release
+ambiguity is `indeterminate`; do not retry. Recovery never writes a receipt or
+indeterminate marker inside the operator-session root. A blocking temporary
+lock/hardlink or no-replace recovery-audit child may remain when cleanup cannot
+be proven. The held evidence-root descriptor is revalidated against its
+approved pathname before operator-root access and around terminal/completion
+publication; pathname replacement or drift in any prior audit record is
+indeterminate and cannot produce a success result. The immutable root, resume,
+checkpoint, annotation decisions, and capture bytes are never rewritten. A
+failure before durable
+`attempt_started` publication is not intrinsically machine-distinguishable
+from an unused approval, so the approved no-retry rule remains necessary.
+Successful recovery proves only that the human recorded the already-stored
+label; it is not identity rotation, authoring, validation, restore planning,
+or migration readiness.
+
 For the first invocation, the wrapper still publishes the existing v1 root
 authorization, creates the empty annotation root, initializes generation 0,
 and captures the generation-1 resume privately. Later invocations use the flow

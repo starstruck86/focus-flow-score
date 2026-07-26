@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Private append-only recovery audit records never contain the recovered identity. Every record carries the approval-pinned generation-one chain. identity_sources_agree is false before validation and true only after all three immutable records agree.",
+  "additionalProperties": false,
+  "properties": {
+    "approved_checkout_sha": { "$ref": "#/$defs/gitSha" },
+    "artifact_kind": {
+      "const": "lovable_toc_operator_identity_recovery_audit"
+    },
+    "audit_event": {
+      "enum": [
+        "attempt_started",
+        "identity_acknowledged",
+        "recovery_completed",
+        "recovery_failed",
+        "recovery_indeterminate"
+      ]
+    },
+    "format_version": { "const": 1 },
+    "human_roles": {
+      "additionalProperties": false,
+      "properties": {
+        "authorizer": { "const": "bound_by_recovery_approval" },
+        "executing_operator": { "const": "bound_by_recovery_approval" },
+        "independent_reviewer": { "const": "bound_by_recovery_approval" },
+        "independent_reviewer_distinct": { "const": true }
+      },
+      "required": [
+        "authorizer",
+        "executing_operator",
+        "independent_reviewer",
+        "independent_reviewer_distinct"
+      ],
+      "type": "object"
+    },
+    "identity_disclosure": {
+      "const": "stored_primary_operator_identity_only"
+    },
+    "identity_sources_agree": { "type": "boolean" },
+    "previous_recovery_record_sha256": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/sha256" }
+      ]
+    },
+    "reason": {
+      "enum": [
+        "operator_identity_recorded",
+        "private_access_started",
+        "recovery_completed",
+        "recovery_failed",
+        "recovery_indeterminate"
+      ]
+    },
+    "recorded_at_utc": { "$ref": "#/$defs/timestamp" },
+    "recovery_approval_sha256": { "$ref": "#/$defs/sha256" },
+    "recovery_profile_sha256": { "$ref": "#/$defs/sha256" },
+    "recovery_procedure_identity_sha256": { "$ref": "#/$defs/sha256" },
+    "recovery_session": {
+      "additionalProperties": false,
+      "properties": {
+        "expires_at_utc": { "$ref": "#/$defs/timestamp" },
+        "metadata_session_id": { "$ref": "#/$defs/session" },
+        "nonce": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["expires_at_utc", "metadata_session_id", "nonce"],
+      "type": "object"
+    },
+    "repository": {
+      "const": {
+        "name": "focus-flow-score",
+        "owner": "starstruck86"
+      }
+    },
+    "source_binding": {
+      "additionalProperties": false,
+      "properties": {
+        "checkpoint": {
+          "additionalProperties": false,
+          "properties": {
+            "format_version": { "const": 1 },
+            "sha256": { "$ref": "#/$defs/sha256" }
+          },
+          "required": ["format_version", "sha256"],
+          "type": "object"
+        },
+        "generation": { "const": 1 },
+        "resume": {
+          "additionalProperties": false,
+          "properties": {
+            "format_version": { "const": 2 },
+            "predecessor": { "const": "absent" },
+            "sha256": { "$ref": "#/$defs/sha256" }
+          },
+          "required": ["format_version", "predecessor", "sha256"],
+          "type": "object"
+        },
+        "root_authorization": {
+          "additionalProperties": false,
+          "properties": {
+            "format_version": { "const": 1 },
+            "sha256": { "$ref": "#/$defs/sha256" }
+          },
+          "required": ["format_version", "sha256"],
+          "type": "object"
+        },
+        "state": { "const": "PRIMARY_REVIEW_REQUIRED" }
+      },
+      "required": [
+        "checkpoint",
+        "generation",
+        "resume",
+        "root_authorization",
+        "state"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "approved_checkout_sha",
+    "artifact_kind",
+    "audit_event",
+    "format_version",
+    "human_roles",
+    "identity_disclosure",
+    "identity_sources_agree",
+    "previous_recovery_record_sha256",
+    "reason",
+    "recorded_at_utc",
+    "recovery_approval_sha256",
+    "recovery_profile_sha256",
+    "recovery_procedure_identity_sha256",
+    "recovery_session",
+    "repository",
+    "source_binding"
+  ],
+  "oneOf": [
+    {
+      "properties": {
+        "audit_event": { "const": "attempt_started" },
+        "identity_sources_agree": { "const": false },
+        "previous_recovery_record_sha256": { "type": "null" },
+        "reason": { "const": "private_access_started" }
+      },
+      "required": [
+        "audit_event",
+        "identity_sources_agree",
+        "previous_recovery_record_sha256",
+        "reason"
+      ]
+    },
+    {
+      "properties": {
+        "audit_event": { "const": "identity_acknowledged" },
+        "identity_sources_agree": { "const": true },
+        "previous_recovery_record_sha256": { "$ref": "#/$defs/sha256" },
+        "reason": { "const": "operator_identity_recorded" }
+      },
+      "required": [
+        "audit_event",
+        "identity_sources_agree",
+        "previous_recovery_record_sha256",
+        "reason"
+      ]
+    },
+    {
+      "properties": {
+        "audit_event": { "const": "recovery_completed" },
+        "identity_sources_agree": { "const": true },
+        "previous_recovery_record_sha256": { "$ref": "#/$defs/sha256" },
+        "reason": { "const": "recovery_completed" }
+      },
+      "required": [
+        "audit_event",
+        "identity_sources_agree",
+        "previous_recovery_record_sha256",
+        "reason"
+      ]
+    },
+    {
+      "properties": {
+        "audit_event": { "const": "recovery_failed" },
+        "previous_recovery_record_sha256": { "$ref": "#/$defs/sha256" },
+        "reason": { "const": "recovery_failed" }
+      },
+      "required": [
+        "audit_event",
+        "identity_sources_agree",
+        "previous_recovery_record_sha256",
+        "reason"
+      ]
+    },
+    {
+      "properties": {
+        "audit_event": { "const": "recovery_indeterminate" },
+        "previous_recovery_record_sha256": { "$ref": "#/$defs/sha256" },
+        "reason": { "const": "recovery_indeterminate" }
+      },
+      "required": [
+        "audit_event",
+        "identity_sources_agree",
+        "previous_recovery_record_sha256",
+        "reason"
+      ]
+    }
+  ],
+  "type": "object",
+  "$defs": {
+    "gitSha": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+    "identity": {
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._@()+:-]*$",
+      "type": "string"
+    },
+    "session": {
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "type": "string"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "timestamp": {
+      "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$",
+      "type": "string"
+    }
+  }
+}

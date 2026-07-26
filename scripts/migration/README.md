@@ -914,6 +914,96 @@ cannot be reused or generalized. From the current real generation-1 boundary,
 and the only private bridge action is a separately authorized
 `primary_review`.
 
+#### Separate generation-one operator-identity re-attestation
+
+`run-lovable-toc-operator-identity-recovery.sh` is the only supported
+entrypoint for the narrow case where the human-selected primary operator label
+in the pristine generation-one chain was not retained in an approved external
+operator record. It is a separate zero-argument, `env -i`/`-I -S -B`
+procedure; it does not add a recovery action to the ordinary authoring
+vocabulary and never dispatches `primary_review`.
+
+The ordinary shared public verifier and exact execution approval are
+necessary but insufficient. A second no-replace recovery approval binds the
+exact checkout, canonical recovery profile, complete reviewed blob map,
+recovery procedure, approved Python, ordinary-approval digest,
+operator/annotation/capture root literals, pairwise-disjoint empty
+recovery-evidence root, exact generation-one root/resume/checkpoint digests
+and versions, named non-AI human roles, recovery session/nonce/expiry, exact
+TTY, no-retry acknowledgement, and accepted terminal/same-UID ceilings. The
+launcher cannot create, install, repair, replace, delete, or choose among
+multiple approvals. The committed recovery profile is policy and cannot
+approve its own checkout.
+
+The recovery approval records `tty_binding.device` as the raw signed-capable
+Python integer returned by `os.fstat(tty_fd).st_dev`; it must not be masked or
+converted to an unsigned representation. Together with the positive inode,
+the pair describes the `/dev/tty` node for the approved machine/boot context.
+It is not a cryptographic identity or a globally unique identifier for one
+Terminal window. Live locality comes from `verify_tty`: character-device and
+`isatty` checks, matching `st_dev`/`st_rdev` across descriptors, controlling
+`/dev/tty` comparison, foreground-process-group checks, readable termios
+state, and descriptor-stability revalidation.
+
+Before any private pathname operation, the held local controlling TTY shows
+the bounded consequences and requires
+`AUTHORIZE RECOVER_OPERATOR_IDENTITY XXXX-XXXX`. The challenge binds the
+recovery approval/profile, checkout, session, generation/state, disclosure,
+audit boundary, no-retry consequence, and a fresh per-process invocation
+nonce, so a phrase from an abandoned pre-private launch cannot authorize a
+later launch. Expiry and the exact approval-bound TTY device/inode are checked
+again after that human pause. A wrong phrase performs no recovery-evidence or
+operator/annotation/capture-root operation.
+
+After authorization, the procedure first publishes immutable
+`attempt_started` evidence in the separate approved evidence root, then opens
+and temporarily locks the operator-session root. It accepts only a pristine,
+predecessor-free generation `1` at `PRIMARY_REVIEW_REQUIRED`, validates exact
+root-v1/resume-v2/checkpoint-v1 hashes, historical execution/Python and capture
+bindings, release marker, exact child allowlists, and equality of the stored
+operator label across root, resume, checkpoint, and initialization event. A
+realistic checkpoint uses the existing 64 MiB checkpoint bound; root, resume,
+approval, and audit records retain tighter bounds. The procedure never opens
+the capture package, raw TOC, opaque index, or opaque key.
+
+Only after another exact approval-bound TTY device/inode check is the stored
+label displayed through the held TTY. The operator must re-enter it with
+terminal echo disabled and type exactly
+`operator_identity_recorded`; the screen is cleared where practical. Recovery
+audit records are immutable, no-replace mode-`0400` records chained as
+`attempt_started`, `identity_acknowledged`, then `recovery_completed`, with
+fixed `recovery_failed` or `recovery_indeterminate` evidence when safely
+possible. The held audit-root descriptor and its approved canonical pathname
+are revalidated before operator-root access, around terminal failure evidence,
+and around completion; pathname replacement, prior-record mutation, or any
+private descriptor-close ambiguity is `indeterminate`. The records bind the
+recovery approval and exact source chain but contain
+neither the recovered label nor any hash/fingerprint of it. Human role values
+remain in the separately approved artifact; audits contain only fixed
+approval-bound role slots. `recovery_completed` is published only after
+durable temporary-lock release.
+
+Root authorization, resume, checkpoint, annotation decisions, and capture
+bytes remain unchanged. A lock-release, audit-fsync/publication/close, TTY, or
+cleanup ambiguity is fixed `indeterminate`; no recovery receipt or
+indeterminate marker is written inside the operator-session root. A blocking
+lock/hardlink or no-replace audit child is retained when necessary. The
+recovery-evidence root must preexist empty as a canonical, executor-owned,
+non-symlink mode-`0700` directory outside Git. Because the recovery approval
+pins private record digests, its generation and review require a later,
+separately authorized metadata-only procedure. Ordinary approval alone is
+insufficient. No automatic retry is permitted after the first private-access
+attempt. A failure before durable `attempt_started` publication cannot be
+made intrinsically distinguishable from an unconsumed approval, so no-retry is
+also a procedural control. The procedure cannot attest an unknown terminal
+recorder or a hostile same-UID process inside the documented path-swap window.
+
+Successful re-attestation only lets the human retain the already-recorded
+label locally. It never rotates, replaces, derives, hashes, or automatically
+reuses the label and does not authorize or continue into authoring,
+validation, restore planning, a restore command, database access, or runtime
+action.
+
 The synthetic primary-review UX contract is measurable. Post-initialization
 manual machine-identity fields and typed hashes are both zero. Before private
 root access, the deterministic primary-review path has four human line entries

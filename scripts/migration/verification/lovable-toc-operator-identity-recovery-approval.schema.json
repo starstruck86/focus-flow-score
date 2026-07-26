@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "This one-shot owner-private artifact records a human procedural authorization to disclose only the immutable stored primary operator identity. It binds the expected generation-one chain before private access. It does not authorize identity rotation or an authoring action.",
+  "additionalProperties": false,
+  "properties": {
+    "accepted_ceilings": {
+      "const": [
+        "HOSTILE_SAME_UID_PRELAUNCH_PATH_REPLACEMENT",
+        "LOCAL_TERMINAL_PARTIAL_WRITE_OR_RECORDING_NOT_INDEPENDENTLY_ATTESTABLE"
+      ]
+    },
+    "approved_checkout_sha": { "$ref": "#/$defs/gitSha" },
+    "artifact_kind": {
+      "const": "lovable_toc_operator_identity_recovery_approval"
+    },
+    "annotation_root_path": { "$ref": "#/$defs/absolutePath" },
+    "authorizer_identity": { "$ref": "#/$defs/identity" },
+    "allowed_disclosure": {
+      "const": "stored_primary_operator_identity_only"
+    },
+    "executing_operator_identity": { "$ref": "#/$defs/identity" },
+    "capture_root_path": { "$ref": "#/$defs/absolutePath" },
+    "expected_chain": {
+      "additionalProperties": false,
+      "properties": {
+        "checkpoint": {
+          "additionalProperties": false,
+          "properties": {
+            "format_version": { "const": 1 },
+            "sha256": { "$ref": "#/$defs/sha256" }
+          },
+          "required": ["format_version", "sha256"],
+          "type": "object"
+        },
+        "generation": { "const": 1 },
+        "resume": {
+          "additionalProperties": false,
+          "properties": {
+            "format_version": { "const": 2 },
+            "predecessor": { "const": "absent" },
+            "sha256": { "$ref": "#/$defs/sha256" }
+          },
+          "required": ["format_version", "predecessor", "sha256"],
+          "type": "object"
+        },
+        "root_authorization": {
+          "additionalProperties": false,
+          "properties": {
+            "format_version": { "const": 1 },
+            "sha256": { "$ref": "#/$defs/sha256" }
+          },
+          "required": ["format_version", "sha256"],
+          "type": "object"
+        },
+        "state": { "const": "PRIMARY_REVIEW_REQUIRED" }
+      },
+      "required": [
+        "checkpoint",
+        "generation",
+        "resume",
+        "root_authorization",
+        "state"
+      ],
+      "type": "object"
+    },
+    "format_version": { "const": 1 },
+    "independent_reviewer_identity": { "$ref": "#/$defs/identity" },
+    "no_retry_acknowledgement": {
+      "const": "NO_RETRY_AFTER_PRIVATE_ACCESS"
+    },
+    "local_tty_attestation": {
+      "const": "LOCAL_CONTROLLING_TTY_NO_RECORDING_NO_REMOTE_NO_CLIPBOARD"
+    },
+    "operator_session_root_path": { "$ref": "#/$defs/absolutePath" },
+    "ordinary_execution_approval": {
+      "additionalProperties": false,
+      "properties": {
+        "approved_checkout_sha": { "$ref": "#/$defs/gitSha" },
+        "filename": {
+          "pattern": "^lovable-toc-operator-approval-[0-9a-f]{40}-[0-9a-f]{16}[.]json$",
+          "type": "string"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["approved_checkout_sha", "filename", "sha256"],
+      "type": "object"
+    },
+    "python_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "absolute_path": { "$ref": "#/$defs/absolutePath" },
+        "exact_gid": { "minimum": 0, "type": "integer" },
+        "exact_mode": { "pattern": "^0[0-7]{3}$", "type": "string" },
+        "exact_nlink": { "const": 1 },
+        "exact_uid": { "minimum": 0, "type": "integer" },
+        "identity_sha256": { "$ref": "#/$defs/sha256" },
+        "reported_version": {
+          "pattern": "^cpython:[0-9]+[.][0-9]+[.][0-9]+$",
+          "type": "string"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": [
+        "absolute_path",
+        "exact_gid",
+        "exact_mode",
+        "exact_nlink",
+        "exact_uid",
+        "identity_sha256",
+        "reported_version",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "recovery_evidence_root_path": { "$ref": "#/$defs/absolutePath" },
+    "recovery_profile": {
+      "additionalProperties": false,
+      "properties": {
+        "format_version": { "const": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["format_version", "sha256"],
+      "type": "object"
+    },
+    "recovery_procedure_identity_sha256": { "$ref": "#/$defs/sha256" },
+    "recovery_session": {
+      "additionalProperties": false,
+      "properties": {
+        "expires_at_utc": { "$ref": "#/$defs/timestamp" },
+        "metadata_session_id": { "$ref": "#/$defs/session" },
+        "nonce": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["expires_at_utc", "metadata_session_id", "nonce"],
+      "type": "object"
+    },
+    "repository": {
+      "additionalProperties": false,
+      "properties": {
+        "name": { "const": "focus-flow-score" },
+        "owner": { "const": "starstruck86" }
+      },
+      "required": ["name", "owner"],
+      "type": "object"
+    },
+    "review_reference": { "$ref": "#/$defs/identity" },
+    "reviewed_file_blobs": {
+      "additionalProperties": false,
+      "maxProperties": 20,
+      "minProperties": 20,
+      "patternProperties": {
+        "^(?!/)(?!.*(?:^|/)[.][.]?(?:/|$))[A-Za-z0-9._/-]+$": {
+          "$ref": "#/$defs/gitSha"
+        }
+      },
+      "type": "object"
+    },
+    "trust_model_acknowledgement": {
+      "const": "PROCEDURAL_RECOVERY_REVIEW_AND_SAME_UID_PRELAUNCH_REPLACEMENT_CEILING_ACCEPTED"
+    },
+    "tty_binding": {
+      "additionalProperties": false,
+      "properties": {
+        "device": { "type": "integer" },
+        "inode": { "minimum": 1, "type": "integer" }
+      },
+      "required": ["device", "inode"],
+      "type": "object"
+    }
+  },
+  "required": [
+    "accepted_ceilings",
+    "annotation_root_path",
+    "approved_checkout_sha",
+    "artifact_kind",
+    "authorizer_identity",
+    "capture_root_path",
+    "allowed_disclosure",
+    "executing_operator_identity",
+    "expected_chain",
+    "format_version",
+    "independent_reviewer_identity",
+    "local_tty_attestation",
+    "no_retry_acknowledgement",
+    "operator_session_root_path",
+    "ordinary_execution_approval",
+    "python_identity",
+    "recovery_evidence_root_path",
+    "recovery_profile",
+    "recovery_procedure_identity_sha256",
+    "recovery_session",
+    "repository",
+    "review_reference",
+    "reviewed_file_blobs",
+    "trust_model_acknowledgement",
+    "tty_binding"
+  ],
+  "type": "object",
+  "$defs": {
+    "absolutePath": {
+      "maxLength": 4096,
+      "minLength": 2,
+      "pattern": "^/(?!.*(?:^|/)[.][.]?(?:/|$)).+$",
+      "type": "string"
+    },
+    "gitSha": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+    "identity": {
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._@()+:-]*$",
+      "type": "string"
+    },
+    "session": {
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "type": "string"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "timestamp": {
+      "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$",
+      "type": "string"
+    }
+  }
+}
