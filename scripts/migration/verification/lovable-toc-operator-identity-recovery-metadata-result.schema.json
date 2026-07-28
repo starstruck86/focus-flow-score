@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Closed owner-private success result for the read-only generation-one recovery-metadata probe. Whole-record hashes are private integrity metadata because the records contain the stored operator identity among other fields.",
+  "additionalProperties": false,
+  "properties": {
+    "approved_checkout_sha": { "$ref": "#/$defs/gitSha" },
+    "artifact_kind": {
+      "const": "lovable_toc_operator_identity_recovery_metadata"
+    },
+    "expected_chain": {
+      "additionalProperties": false,
+      "properties": {
+        "checkpoint": {
+          "additionalProperties": false,
+          "properties": {
+            "format_version": { "const": 1 },
+            "sha256": { "$ref": "#/$defs/sha256" }
+          },
+          "required": ["format_version", "sha256"],
+          "type": "object"
+        },
+        "generation": { "const": 1 },
+        "resume": {
+          "additionalProperties": false,
+          "properties": {
+            "format_version": { "const": 2 },
+            "predecessor": { "const": "absent" },
+            "sha256": { "$ref": "#/$defs/sha256" }
+          },
+          "required": ["format_version", "predecessor", "sha256"],
+          "type": "object"
+        },
+        "root_authorization": {
+          "additionalProperties": false,
+          "properties": {
+            "format_version": { "const": 1 },
+            "sha256": { "$ref": "#/$defs/sha256" }
+          },
+          "required": ["format_version", "sha256"],
+          "type": "object"
+        },
+        "state": { "const": "PRIMARY_REVIEW_REQUIRED" }
+      },
+      "required": [
+        "checkpoint",
+        "generation",
+        "resume",
+        "root_authorization",
+        "state"
+      ],
+      "type": "object"
+    },
+    "format_version": { "const": 1 },
+    "metadata_probe": {
+      "additionalProperties": false,
+      "properties": {
+        "procedure_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "profile_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["procedure_identity_sha256", "profile_sha256"],
+      "type": "object"
+    },
+    "metadata_session_id": { "$ref": "#/$defs/session" },
+    "ordinary_execution_approval": {
+      "additionalProperties": false,
+      "properties": {
+        "approved_checkout_sha": { "$ref": "#/$defs/gitSha" },
+        "filename": {
+          "pattern": "^lovable-toc-operator-approval-[0-9a-f]{40}-[0-9a-f]{16}[.]json$",
+          "type": "string"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["approved_checkout_sha", "filename", "sha256"],
+      "type": "object"
+    },
+    "paths": {
+      "additionalProperties": false,
+      "properties": {
+        "annotation_root_path": { "$ref": "#/$defs/absolutePath" },
+        "capture_root_path": { "$ref": "#/$defs/absolutePath" },
+        "operator_session_root_path": { "$ref": "#/$defs/absolutePath" }
+      },
+      "required": [
+        "annotation_root_path",
+        "capture_root_path",
+        "operator_session_root_path"
+      ],
+      "type": "object"
+    },
+    "status": { "const": "pass" }
+  },
+  "required": [
+    "approved_checkout_sha",
+    "artifact_kind",
+    "expected_chain",
+    "format_version",
+    "metadata_probe",
+    "metadata_session_id",
+    "ordinary_execution_approval",
+    "paths",
+    "status"
+  ],
+  "type": "object",
+  "$defs": {
+    "absolutePath": {
+      "maxLength": 4096,
+      "minLength": 2,
+      "pattern": "^/(?!.*(?:^|/)[.][.]?(?:/|$)).+$",
+      "type": "string"
+    },
+    "gitSha": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+    "session": {
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "type": "string"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+  }
+}

@@ -914,6 +914,49 @@ cannot be reused or generalized. From the current real generation-1 boundary,
 and the only private bridge action is a separately authorized
 `primary_review`.
 
+#### Read-only generation-one recovery-metadata probe
+
+`run-lovable-toc-operator-identity-recovery-metadata-probe.sh` is the
+zero-argument entrypoint for obtaining the exact immutable generation-one
+record bindings needed to prepare a later recovery approval. It requires the
+installed ordinary execution approval plus its own immutable metadata-probe
+approval, exact checkout/profile/procedure/blob/Python bindings, an approved
+local controlling TTY, and a single-use session whose expiry is no more than
+24 hours after the live public preflight. Before the invocation-bound
+consequence phrase succeeds, it performs no operator-session, annotation,
+capture, or recovery-evidence pathname operation.
+
+After authorization, the probe is read-only. Using descriptor-relative,
+no-follow operations, it accepts only the exact pristine root-v1/current
+resume-v2/checkpoint-v1 generation-one chain and `AUTHORING_RELEASED` marker.
+It validates `PRIMARY_REVIEW_REQUIRED`, a predecessor-free unique current
+resume, exact historical/capture bindings, and agreement of the privately
+stored operator claim without displaying or deriving an identity oracle. It
+does not acquire the authoring lock, create a marker or audit record, open a
+capture/evidence root, or write, rename, remove, or fsync private state.
+
+Only after all private descriptors are closed may success emit one bounded,
+canonical JSON line to the revalidated private TTY. That result contains only
+the approved session/procedure bindings, whole-record hashes and versions,
+generation/state/predecessor facts, and approved root literals. It never
+contains the operator claim or a fingerprint of
+it, a release token, checkpoint decisions, record JSON, entry metadata, TOC
+content, capture content, or object names. A deterministic private-chain
+failure after first private access is the generic fixed
+`private_chain_invalid`; pathname, mutation, descriptor, TTY, output, or close
+ambiguity is fixed `indeterminate`. No retry is permitted after any private
+pathname access.
+
+This boundary cannot independently exclude a hostile same-UID
+swap-and-restore race, terminal recording or partial output, or prove Python
+process-memory zeroization. Permitted reads may update filesystem access-time
+metadata even though content and namespace bytes are never changed. The probe
+has synthetic-fixture coverage only and has not been run against real
+migration state. It generates or installs no recovery approval, creates no
+recovery-evidence root, and performs no identity recovery. Operator-identity
+recovery and `primary_review` remain **BLOCKED**; validation, restore planning,
+restore commands, and migration readiness remain **BLOCKED / RED**.
+
 #### Separate generation-one operator-identity re-attestation
 
 `run-lovable-toc-operator-identity-recovery.sh` is the only supported
@@ -991,12 +1034,14 @@ lock/hardlink or no-replace audit child is retained when necessary. The
 recovery-evidence root must preexist empty as a canonical, executor-owned,
 non-symlink mode-`0700` directory outside Git. Because the recovery approval
 pins private record digests, its generation and review require a later,
-separately authorized metadata-only procedure. Ordinary approval alone is
-insufficient. No automatic retry is permitted after the first private-access
-attempt. A failure before durable `attempt_started` publication cannot be
-made intrinsically distinguishable from an unconsumed approval, so no-retry is
-also a procedural control. The procedure cannot attest an unknown terminal
-recorder or a hostile same-UID process inside the documented path-swap window.
+separately authorized run of the read-only metadata probe above. Ordinary
+approval alone is insufficient, and the synthetic-only probe status does not
+authorize that run. No automatic retry is permitted after the first
+private-access attempt. A failure before durable `attempt_started` publication
+cannot be made intrinsically distinguishable from an unconsumed approval, so
+no-retry is also a procedural control. The procedure cannot attest an unknown
+terminal recorder or a hostile same-UID process inside the documented
+path-swap window.
 
 Successful re-attestation only lets the human retain the already-recorded
 label locally. It never rotates, replaces, derives, hashes, or automatically

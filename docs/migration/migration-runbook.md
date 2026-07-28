@@ -846,11 +846,41 @@ re-attestation invocation; it is never an ordinary authoring action:
    `lovable_toc_operator_identity_recovery_profile` procedure identity and
    complete reviewed blob map. Do not access private state during development
    or profile review.
-2. In a separately authorized metadata-only step, obtain only the exact
-   immutable generation-one root/resume/checkpoint digests and already known
-   root literals needed by the closed recovery-approval schema. That step must
-   not disclose the stored operator label, TOC content, opaque IDs, SQL, or
-   payloads.
+2. In a separately authorized metadata-only step, use only the zero-argument
+   `scripts/migration/run-lovable-toc-operator-identity-recovery-metadata-probe.sh`
+   to obtain the exact immutable generation-one root/resume/checkpoint
+   whole-record digests, versions, and already approved root literals needed
+   by the closed recovery-approval schema. It requires the installed ordinary
+   approval plus a separate immutable metadata-probe approval and exact
+   checkout/profile/procedure/blob/Python/TTY/session bindings; the session
+   expiry must be live and no more than 24 hours ahead. The
+   invocation-bound consequence phrase must succeed before any
+   operator-session, annotation, capture, or recovery-evidence pathname
+   operation.
+
+   After authorization, the probe is descriptor-relative, no-follow, and
+   read-only. It accepts only the pristine root-v1/current
+   resume-v2/checkpoint-v1 generation-one chain with `AUTHORING_RELEASED`,
+   `PRIMARY_REVIEW_REQUIRED`, a unique predecessor-free current resume, exact
+   historical/capture bindings, and internally consistent operator claims.
+   It does not open a capture/evidence root, acquire a lock, create a marker or
+   audit record, or mutate private content or namespace. It closes every
+   private descriptor before emitting one bounded canonical result on the
+   revalidated private TTY. The result must not disclose the operator claim or
+   a fingerprint of it, release token, record JSON, checkpoint decisions, TOC
+   content, opaque IDs, SQL, object metadata, capture content, or payloads.
+
+   Once the first private pathname is accessed, the authorization is consumed
+   and no retry is allowed. A deterministic invalid chain returns only fixed
+   `private_chain_invalid`; pathname, mutation, descriptor, TTY, output, or
+   close ambiguity returns fixed `indeterminate`. The boundary cannot
+   independently exclude a hostile same-UID swap-and-restore race, terminal
+   recording/partial output, or prove Python process-memory zeroization;
+   permitted reads may update access-time metadata while leaving content and
+   namespace bytes unchanged. This procedure currently has synthetic-fixture
+   coverage only and has not been run against real migration state. It creates
+   no recovery approval or recovery-evidence root and performs no identity
+   recovery.
 3. Independently review and no-replace install exactly one canonical recovery
    approval for the current checkout. It must bind the ordinary execution
    approval digest, recovery profile/procedure/blob map, exact approved Python,
@@ -924,6 +954,12 @@ from an unused approval, so the approved no-retry rule remains necessary.
 Successful recovery proves only that the human recorded the already-stored
 label; it is not identity rotation, authoring, validation, restore planning,
 or migration readiness.
+
+Until the metadata probe, its separately reviewed approval, the recovery
+approval, and the recovery invocation are each independently authorized and
+completed, operator-identity recovery and `primary_review` remain **BLOCKED**.
+Ledger validation, restore planning, restore commands, and migration readiness
+remain **BLOCKED / RED** throughout this procedure.
 
 For the first invocation, the wrapper still publishes the existing v1 root
 authorization, creates the empty annotation root, initializes generation 0,
