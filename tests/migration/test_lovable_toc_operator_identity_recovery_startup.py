@@ -54,6 +54,26 @@ import sys
 driver_path = Path(sys.argv[1]).resolve(strict=True)
 fixture_root = Path(sys.argv[2]).resolve(strict=True)
 isolated_baseline = tuple(sys.path)
+
+
+def require_nonrepository_origin(module_file, spec_origin, case_root):
+    if not isinstance(spec_origin, str):
+        raise RuntimeError("stdlib origin unavailable")
+    if (
+        spec_origin not in {"built-in", "frozen"}
+        and not isinstance(module_file, str)
+    ):
+        raise RuntimeError("stdlib origin unavailable")
+    for raw_origin in (module_file, spec_origin):
+        if raw_origin is None or raw_origin in {"built-in", "frozen"}:
+            continue
+        if not isinstance(raw_origin, str):
+            raise RuntimeError("stdlib origin unavailable")
+        origin = Path(raw_origin).resolve(strict=True)
+        if origin == case_root or case_root in origin.parents:
+            raise RuntimeError("repository shadow selected")
+
+
 spec = importlib.util.spec_from_file_location(
     "recovery_transitive_shadow_driver", driver_path
 )
@@ -71,7 +91,11 @@ finally:
 if tuple(sys.path) != isolated_baseline:
     raise RuntimeError("driver retained its reviewed import root")
 baseline = isolated_baseline
-for module_name in ("binascii", "random", "gettext", "_sha512"):
+sentinel_root = fixture_root / "synthetic-origin-sentinels"
+sentinel_root.mkdir()
+require_nonrepository_origin(None, "built-in", sentinel_root)
+require_nonrepository_origin(None, "frozen", sentinel_root)
+for module_name in ("errno", "binascii", "random", "gettext"):
     for shadow_kind in ("module", "package"):
         case_root = fixture_root / (module_name + "-" + shadow_kind)
         case_root.mkdir()
@@ -102,21 +126,9 @@ for module_name in ("binascii", "random", "gettext", "_sha512"):
             spec_origin = getattr(
                 getattr(loaded, "__spec__", None), "origin", None
             )
-            if not isinstance(spec_origin, str):
-                raise RuntimeError("stdlib origin unavailable")
-            if (
-                spec_origin not in {"built-in", "frozen"}
-                and not isinstance(module_file, str)
-            ):
-                raise RuntimeError("stdlib origin unavailable")
-            for raw_origin in (module_file, spec_origin):
-                if raw_origin is None or raw_origin in {"built-in", "frozen"}:
-                    continue
-                if not isinstance(raw_origin, str):
-                    raise RuntimeError("stdlib origin unavailable")
-                origin = Path(raw_origin).resolve(strict=True)
-                if origin == case_root or case_root in origin.parents:
-                    raise RuntimeError("repository shadow selected")
+            require_nonrepository_origin(
+                module_file, spec_origin, case_root
+            )
         finally:
             driver._remove_reviewed_import_root(token)
             sys.modules.pop(module_name, None)

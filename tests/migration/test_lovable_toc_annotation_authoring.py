@@ -4630,6 +4630,81 @@ class AuthoringContractTest(unittest.TestCase):
             os.close(child_fd)
             os.close(root_fd)
 
+    def test_checkpoint_capture_binding_rejects_genuine_boolean_integer_aliases(self):
+        capture, _package, _expectations = self.load_capture()
+        checkpoint = authoring.initialize_checkpoint(
+            capture, self.binding, "Primary", "session-1"
+        )
+        for field, alias in (
+            ("data_reference_count", False),
+            ("entry_count", True),
+            ("opaque_key_nlink", True),
+        ):
+            with self.subTest(field=field):
+                forged = copy.deepcopy(checkpoint)
+                forged["capture_binding"][field] = alias
+                self.assertEqual(
+                    forged["capture_binding"],
+                    dict(capture.capture_binding),
+                    "the regression must exercise Python's bool/int equality alias",
+                )
+                with self.assertRaisesRegex(
+                    authoring.AuthoringContractError, "checkpoint_invalid"
+                ):
+                    authoring.validate_checkpoint(forged, capture, self.binding)
+
+    def test_all_checkpoint_capture_binding_integers_require_exact_int_type(self):
+        capture, _package, _expectations = self.load_capture()
+        checkpoint = authoring.initialize_checkpoint(
+            capture, self.binding, "Primary", "session-1"
+        )
+        canonical_values = {
+            "data_reference_count": 0,
+            "entry_count": 1,
+            "opaque_key_ctime_ns": 0,
+            "opaque_key_device": 0,
+            "opaque_key_gid": 0,
+            "opaque_key_inode": 1,
+            "opaque_key_mode": 0o400,
+            "opaque_key_mtime_ns": 0,
+            "opaque_key_nlink": 1,
+            "opaque_key_size_bytes": 32,
+            "opaque_key_uid": 0,
+            "package_device": 0,
+            "package_inode": 1,
+            "raw_toc_size_bytes": 1,
+        }
+        self.assertEqual(len(canonical_values), 14)
+        for field, canonical_value in canonical_values.items():
+            with self.subTest(field=field):
+                expected_binding = dict(capture.capture_binding)
+                expected_binding[field] = canonical_value
+                expected_capture = authoring.AuthoringCapture(
+                    capture_binding=expected_binding,
+                    entries_by_ordinal=capture.entries_by_ordinal,
+                    package_device=capture.package_device,
+                    package_inode=capture.package_inode,
+                )
+                forged = copy.deepcopy(checkpoint)
+                alias = (
+                    bool(canonical_value)
+                    if canonical_value in {0, 1}
+                    else float(canonical_value)
+                )
+                forged["capture_binding"][field] = alias
+                self.assertEqual(
+                    forged["capture_binding"],
+                    dict(expected_capture.capture_binding),
+                    "the regression must isolate exact numeric type validation",
+                )
+                self.assertIsNot(type(alias), int)
+                with self.assertRaisesRegex(
+                    authoring.AuthoringContractError, "checkpoint_invalid"
+                ):
+                    authoring.validate_checkpoint(
+                        forged, expected_capture, self.binding
+                    )
+
     def test_strict_checkpoint_json_rejects_duplicate_and_nonfinite_values(self):
         checkpoint_schema = capture_contract.strict_json_loads(
             (
@@ -4654,6 +4729,12 @@ class AuthoringContractTest(unittest.TestCase):
             checkpoint_schema["properties"]["event"]["properties"]["action"][
                 "enum"
             ],
+        )
+        self.assertEqual(
+            set(
+                checkpoint_schema["properties"]["capture_binding"]["required"]
+            ),
+            set(authoring.CAPTURE_BINDING_KEYS),
         )
         for raw in (
             b'{"generation":1,"generation":2}\n',

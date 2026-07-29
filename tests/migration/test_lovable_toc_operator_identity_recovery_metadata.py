@@ -4194,7 +4194,15 @@ class PublicContractAndApprovalTest(unittest.TestCase):
                         ordinary,
                     ) = public_approval_fixture()
                     approval["python_identity"][field] = replacement
-                    ordinary.approval["python_identity"][field] = replacement
+                    profile["python_policy"][field] = int(replacement)
+                    unsigned_identity = dict(approval["python_identity"])
+                    del unsigned_identity["identity_sha256"]
+                    approval["python_identity"]["identity_sha256"] = digest(
+                        canonical(unsigned_identity)
+                    )
+                    ordinary.approval["python_identity"] = copy.deepcopy(
+                        approval["python_identity"]
+                    )
                     with mock.patch.object(
                         METADATA,
                         "_verify_approved_tty",
@@ -4244,6 +4252,58 @@ class PublicContractAndApprovalTest(unittest.TestCase):
                 ) = public_approval_fixture()
                 mutate(approval["python_identity"])
                 mutate(ordinary.approval["python_identity"])
+                with mock.patch.object(
+                    METADATA,
+                    "_verify_approved_tty",
+                    side_effect=AssertionError(
+                        "invalid Python identity reached TTY validation"
+                    ),
+                ):
+                    with self.assertRaises(
+                        METADATA.MetadataProbeError
+                    ) as raised:
+                        METADATA._validate_approval(
+                            approval,
+                            checkout=checkout,
+                            profile=profile,
+                            profile_sha256=profile_sha256,
+                            procedure_identity=procedure_identity,
+                            blobs=blobs,
+                            ordinary=ordinary,
+                            tty_fd=91,
+                            repository=ROOT,
+                        )
+                self.assertEqual(
+                    raised.exception.reason,
+                    "binding_mismatch",
+                )
+
+    def test_public_approval_rejects_python_identity_hash_and_policy_substitutions(
+        self,
+    ):
+        for label in ("canonical_hash", "policy_binding"):
+            with self.subTest(label=label):
+                (
+                    approval,
+                    checkout,
+                    profile,
+                    profile_sha256,
+                    procedure_identity,
+                    blobs,
+                    ordinary,
+                ) = public_approval_fixture()
+                if label == "canonical_hash":
+                    approval["python_identity"]["identity_sha256"] = "0" * 64
+                else:
+                    approval["python_identity"]["absolute_path"] += "-substituted"
+                    unsigned_identity = dict(approval["python_identity"])
+                    del unsigned_identity["identity_sha256"]
+                    approval["python_identity"]["identity_sha256"] = digest(
+                        canonical(unsigned_identity)
+                    )
+                ordinary.approval["python_identity"] = copy.deepcopy(
+                    approval["python_identity"]
+                )
                 with mock.patch.object(
                     METADATA,
                     "_verify_approved_tty",
