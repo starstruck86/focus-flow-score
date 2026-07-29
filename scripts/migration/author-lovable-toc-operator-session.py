@@ -458,6 +458,7 @@ def _preimport_external_guard(
         if (
             approval.get("artifact_kind")
             != "lovable_toc_operator_execution_approval"
+            or type(approval.get("format_version")) is not int
             or approval.get("format_version") != 1
             or approval.get("approved_checkout_sha") != checkout
             or approval.get("repository")
@@ -1037,7 +1038,11 @@ def _validate_loaded_resume_record(
     record_keys = set(record)
     if record_keys != expected_keys and record_keys != successor_keys and record_keys != legacy_keys:
         _fail("history_conflict")
-    if record["artifact_kind"] != RESUME_KIND or record["format_version"] not in {FORMAT_VERSION, RESUME_FORMAT_VERSION}:
+    if (
+        record["artifact_kind"] != RESUME_KIND
+        or type(record["format_version"]) is not int
+        or record["format_version"] not in {FORMAT_VERSION, RESUME_FORMAT_VERSION}
+    ):
         _fail("history_conflict")
     capture = record["capture"]
     if (
@@ -1758,12 +1763,15 @@ def _legacy_root_matches(
         return (
             set(base_authorization) == exact_root_keys
             and base_authorization["artifact_kind"] == AUTHORIZATION_KIND
+            and type(base_authorization["format_version"]) is int
             and base_authorization["format_version"] == FORMAT_VERSION
             and base_authorization["action"] == "initialize"
             and base_authorization["finalization_authorization"] == ""
             and base_authorization["operator_identity"]
             == base_authorization["primary_operator_identity"]
             and base_authorization["tty_attestation"] == TTY_ATTESTATION
+            and type(base_authorization["initial_head"]) is dict
+            and type(base_authorization["initial_head"].get("generation")) is int
             and base_authorization["initial_head"]
             == {
                 "checkpoint_sha256": INITIAL_RELEASE_TOKEN,
@@ -1894,7 +1902,8 @@ def _current_resume_shape_matches(
     }
     successor_keys = base_keys | {"predecessor"}
     if (
-        resume.get("format_version") != RESUME_FORMAT_VERSION
+        type(resume.get("format_version")) is not int
+        or resume.get("format_version") != RESUME_FORMAT_VERSION
         or type(resume.get("resume_generation")) is not int
         or type(resume.get("resume_checkpoint_sha256")) is not str
         or HEX64_RE.fullmatch(resume["resume_checkpoint_sha256"]) is None
@@ -2131,6 +2140,7 @@ def _historical_evidence_matches(
             set(action_authorization) == expected_action_keys
             and action_authorization["artifact_kind"]
             == ACTION_AUTHORIZATION_KIND
+            and type(action_authorization["format_version"]) is int
             and action_authorization["format_version"]
             == ACTION_AUTHORIZATION_FORMAT_VERSION
             and action == predecessor["action"]
@@ -2157,6 +2167,7 @@ def _historical_evidence_matches(
             == sha256_bytes(canonical_json_bytes(base_authorization["capture"]))
             and set(resume_reference)
             == {"checkpoint_sha256", "generation", "name", "sha256"}
+            and type(resume_reference["generation"]) is int
             and resume_reference
             == {
                 "checkpoint_sha256": retired_resume[
@@ -2953,7 +2964,9 @@ def _classify_resume_execution(
         action_authorization["action"] != bridge["allowed_action"]
         or action_authorization.get("expected_authoring_state")
         != bridge["required_state"]
+        or type(resume["format_version"]) is not int
         or resume["format_version"] != RESUME_FORMAT_VERSION
+        or type(resume["resume_generation"]) is not int
         or resume["resume_generation"] != bridge["generation"]
         or "predecessor" in resume
         or resume_name != expected_name

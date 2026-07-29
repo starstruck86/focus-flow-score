@@ -3870,6 +3870,53 @@ class PublicContractAndApprovalTest(unittest.TestCase):
             METADATA.REVIEW_ATTESTATION_DISCOVERY,
         )
 
+    def test_metadata_profile_rejects_wrong_json_primitive_types(self):
+        profile = load_metadata_profile()
+        mutations = (
+            lambda value: value["record_versions"].__setitem__(
+                "checkpoint", [True]
+            ),
+            lambda value: value["checkout_policy"].__setitem__(
+                "same_uid_prelaunch_replacement_ceiling", 1
+            ),
+            lambda value: value["python_policy"].__setitem__(
+                "exact_nlink", True
+            ),
+            lambda value: value["approval_discovery"].__setitem__(
+                "required_file_nlink", True
+            ),
+            lambda value: value[
+                "review_attestation_discovery"
+            ].__setitem__("required_file_nlink", True),
+            lambda value: value[
+                "ordinary_execution_approval_dependency"
+            ].__setitem__("exact_current_checkout", 1),
+            lambda value: value[
+                "ordinary_execution_approval_dependency"
+            ].__setitem__("required", 1),
+            lambda value: value["recovery_metadata_contract"].__setitem__(
+                "expected_generation", True
+            ),
+            lambda value: value["output_contract"].__setitem__(
+                "format_version", True
+            ),
+            lambda value: value["output_contract"].__setitem__(
+                "metadata_results_per_invocation", True
+            ),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=repr(mutate)):
+                changed = copy.deepcopy(profile)
+                mutate(changed)
+                with self.assertRaises(
+                    METADATA.MetadataProbeError
+                ) as raised:
+                    METADATA._validate_profile(changed)
+                self.assertEqual(
+                    raised.exception.reason,
+                    "binding_mismatch",
+                )
+
     def test_reviewed_python_closure_contains_every_local_ast_import(self):
         profile = load_metadata_profile()
         reviewed = set(profile["reviewed_files"])
@@ -5014,6 +5061,22 @@ class PublicContractAndApprovalTest(unittest.TestCase):
                 ),
             )
 
+        def report_prior_conclusion_integer_false(value) -> None:
+            coherently_mutate_review_report_object(
+                value,
+                lambda report: report["prior_conclusions"].__setitem__(
+                    "received", 0
+                ),
+            )
+
+        def report_independence_integer_false(value) -> None:
+            coherently_mutate_review_report_object(
+                value,
+                lambda report: report["independence"].__setitem__(
+                    "source_mutated", 0
+                ),
+            )
+
         def report_other_approval_binding(value) -> None:
             coherently_mutate_review_report_object(
                 value,
@@ -5062,6 +5125,17 @@ class PublicContractAndApprovalTest(unittest.TestCase):
         def altered_settings(value) -> None:
             settings = json.loads(value["audit_settings_json"])
             settings["disableAllHooks"] = False
+            replace_review_json(
+                value,
+                "audit_settings_json",
+                "settings_sha256",
+                settings,
+            )
+            refresh_review_bundle(value)
+
+        def integer_settings_boolean(value) -> None:
+            settings = json.loads(value["audit_settings_json"])
+            settings["disableAllHooks"] = 1
             replace_review_json(
                 value,
                 "audit_settings_json",
@@ -5239,6 +5313,12 @@ class PublicContractAndApprovalTest(unittest.TestCase):
                 report_noncanonical_equivalent
             ),
             "report_prior_conclusion_claim": report_prior_conclusion_claim,
+            "report_prior_conclusion_integer_false": (
+                report_prior_conclusion_integer_false
+            ),
+            "report_independence_integer_false": (
+                report_independence_integer_false
+            ),
             "report_other_approval_binding": report_other_approval_binding,
             "report_missing_approval_binding": report_missing_approval_binding,
             "report_extra_approval_binding_key": (
@@ -5257,6 +5337,7 @@ class PublicContractAndApprovalTest(unittest.TestCase):
                 value, "0"
             ),
             "altered_settings": altered_settings,
+            "integer_settings_boolean": integer_settings_boolean,
             "nonempty_stderr": nonempty_stderr,
             "artifact_unchanged": lambda value: value[
                 "invariants"
@@ -6660,6 +6741,65 @@ class PrivateChainFailureTest(MetadataProbeTestCase):
                 mutate()
                 error = self.assert_private_failure()
                 self.assertNotIn(PRIVATE_IDENTITY, str(error))
+
+    def test_historical_integer_fields_reject_json_booleans(self):
+        cases = (
+            (
+                "root_format_version",
+                lambda f: f.root.__setitem__("format_version", True),
+            ),
+            (
+                "root_initial_generation",
+                lambda f: f.root["initial_head"].__setitem__(
+                    "generation", False
+                ),
+            ),
+            (
+                "resume_format_version",
+                lambda f: f.resume.__setitem__("format_version", True),
+            ),
+            (
+                "resume_generation",
+                lambda f: f.resume.__setitem__("resume_generation", True),
+            ),
+            (
+                "checkpoint_format_version",
+                lambda f: f.checkpoint.__setitem__(
+                    "format_version", True
+                ),
+            ),
+            (
+                "checkpoint_generation",
+                lambda f: f.checkpoint.__setitem__("generation", True),
+            ),
+            (
+                "first_entry_ordinal",
+                lambda f: f.checkpoint["entries"][0].__setitem__(
+                    "ordinal", False
+                ),
+            ),
+            (
+                "second_entry_ordinal",
+                lambda f: f.checkpoint["entries"][1].__setitem__(
+                    "ordinal", True
+                ),
+            ),
+            (
+                "mechanical_proposal_version",
+                lambda f: f.checkpoint["entries"][0][
+                    "mechanical_proposal"
+                ].__setitem__("proposal_version", True),
+            ),
+        )
+        for label, mutate in cases:
+            with self.subTest(label=label):
+                self.fixture.close()
+                self.fixture = SyntheticGenerationOne()
+                self.verified = synthetic_verified(self.fixture)
+                mutate(self.fixture)
+                self.fixture.rewrite()
+                self.verified = synthetic_verified(self.fixture)
+                self.assert_private_failure()
 
     def test_every_operator_identity_source_must_match_but_is_never_disclosed(self):
         self.fixture.checkpoint["event"][

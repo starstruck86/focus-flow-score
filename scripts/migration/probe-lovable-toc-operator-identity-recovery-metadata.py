@@ -881,6 +881,19 @@ def _review_report_preimport(
         or not text_list(
             report["accepted_ceilings_and_operational_gaps"], nonempty=True
         )
+        or type(report["independence"]) is not dict
+        or set(report["independence"])
+        != {
+            "codex_reasoning_received",
+            "network_accessed",
+            "prior_audit_conclusion_received",
+            "private_state_accessed",
+            "source_mutated",
+        }
+        or any(
+            type(value) is not bool
+            for value in report["independence"].values()
+        )
         or report["independence"]
         != {
             "codex_reasoning_received": False,
@@ -889,6 +902,11 @@ def _review_report_preimport(
             "private_state_accessed": False,
             "source_mutated": False,
         }
+        or type(report["prior_conclusions"]) is not dict
+        or set(report["prior_conclusions"])
+        != {"applicability", "received", "relied_upon"}
+        or type(report["prior_conclusions"]["received"]) is not bool
+        or type(report["prior_conclusions"]["relied_upon"]) is not bool
         or report["prior_conclusions"]
         != {
             "applicability": "not_supplied",
@@ -2272,6 +2290,7 @@ def _validate_review_attestation_preimport(
     if (
         type(settings) is not dict
         or _canonical_json(settings) != settings_data
+        or type(settings.get("disableAllHooks")) is not bool
         or settings != _REVIEW_SETTINGS
         or stderr_data != b""
     ):
@@ -2667,6 +2686,7 @@ def _preimport_metadata_guard(
             or _canonical_json(approval) != data
             or approval.get("artifact_kind")
             != "lovable_toc_operator_identity_recovery_metadata_approval"
+            or type(approval.get("format_version")) is not int
             or approval.get("format_version") != 2
             or approval.get("approved_checkout_sha") != checkout
             or approval.get("repository")

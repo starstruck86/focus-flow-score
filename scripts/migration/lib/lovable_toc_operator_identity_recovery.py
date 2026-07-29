@@ -706,6 +706,7 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
     _exact(profile, expected)
     if (
         profile["artifact_kind"] != RECOVERY_PROFILE_KIND
+        or type(profile["format_version"]) is not int
         or profile["format_version"] != 2
         or profile["repository"]
         != {"name": "focus-flow-score", "owner": "starstruck86"}
@@ -721,6 +722,11 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
             "resume": [2],
             "root_authorization": [1],
         }
+        or any(
+            type(version) is not int
+            for versions in profile["record_versions"].values()
+            for version in versions
+        )
         or profile["audit_storage"]
         != {
             "initially_empty": True,
@@ -763,6 +769,21 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
         ]
     ):
         _fail("binding_mismatch")
+    if type(
+        profile["checkout_policy"]["same_uid_prelaunch_replacement_ceiling"]
+    ) is not bool:
+        _fail("binding_mismatch")
+    if (
+        type(profile["audit_storage"]["initially_empty"]) is not bool
+        or type(profile["audit_storage"]["no_replace"]) is not bool
+        or type(profile["audit_storage"]["required_file_nlink"]) is not int
+        or type(profile["audit_storage"]["root_supplied_by_approval"]) is not bool
+        or type(
+            profile["audit_storage"]["sync_files_and_directories"]
+        )
+        is not bool
+    ):
+        _fail("binding_mismatch")
     python_policy = _exact(
         profile["python_policy"],
         {
@@ -784,6 +805,7 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
         or type(python_policy["exact_uid"]) is not int
         or type(python_policy["exact_gid"]) is not int
         or type(python_policy["exact_mode"]) is not str
+        or type(python_policy["exact_nlink"]) is not int
         or python_policy["exact_nlink"] != 1
         or python_policy["executable_required"] is not True
         or python_policy["isolated_flags"] != ["-I", "-S", "-B"]
@@ -820,6 +842,7 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
         or discovery["home_resolution"] != "passwd_database_effective_uid"
         or discovery["relative_parent"] != RECOVERY_APPROVAL_RELATIVE_PARENT
         or discovery["required_file_mode"] != "0400"
+        or type(discovery["required_file_nlink"]) is not int
         or discovery["required_file_nlink"] != 1
         or discovery["required_parent_mode"] != "0700"
         or discovery["selection"] != "exactly_one_matching_current_checkout"
@@ -845,6 +868,7 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
         or review_discovery["relative_parent"]
         != RECOVERY_APPROVAL_RELATIVE_PARENT
         or review_discovery["required_file_mode"] != "0400"
+        or type(review_discovery["required_file_nlink"]) is not int
         or review_discovery["required_file_nlink"] != 1
         or review_discovery["required_parent_mode"] != "0700"
         or review_discovery["schema_relative_path"]
@@ -894,6 +918,7 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
         ]
         or recovery["challenge_phrase_prefix"]
         != "AUTHORIZE RECOVER_OPERATOR_IDENTITY"
+        or type(recovery["expected_generation"]) is not int
         or recovery["expected_generation"] != EXPECTED_GENERATION
         or recovery["expected_state"] != EXPECTED_STATE
         or recovery["no_retry_acknowledgement"] != NO_RETRY_ACKNOWLEDGEMENT
@@ -1329,6 +1354,19 @@ def _review_report(
         or not text_list(
             report["accepted_ceilings_and_operational_gaps"], nonempty=True
         )
+        or type(report["independence"]) is not dict
+        or set(report["independence"])
+        != {
+            "codex_reasoning_received",
+            "network_accessed",
+            "prior_audit_conclusion_received",
+            "private_state_accessed",
+            "source_mutated",
+        }
+        or any(
+            type(value) is not bool
+            for value in report["independence"].values()
+        )
         or report["independence"]
         != {
             "codex_reasoning_received": False,
@@ -1337,6 +1375,11 @@ def _review_report(
             "private_state_accessed": False,
             "source_mutated": False,
         }
+        or type(report["prior_conclusions"]) is not dict
+        or set(report["prior_conclusions"])
+        != {"applicability", "received", "relied_upon"}
+        or type(report["prior_conclusions"]["received"]) is not bool
+        or type(report["prior_conclusions"]["relied_upon"]) is not bool
         or report["prior_conclusions"]
         != {
             "applicability": "not_supplied",
@@ -2767,6 +2810,7 @@ def _validate_embedded_audit_bundle(
         or spec.count(APPROVAL_BYTES_END) != 1
         or spec.count(SUBJECT_END) != 1
         or sha256_bytes(wrapper_data) != REQUIRED_AUDIT_WRAPPER_SHA256
+        or type(settings.get("disableAllHooks")) is not bool
         or settings != REQUIRED_AUDIT_SETTINGS
         or stderr != ""
     ):
@@ -3138,13 +3182,21 @@ def _validate_review_attestation(
         "sha256:" + sha256_bytes(canonical_json_bytes(dict(evidence)))
     ):
         _fail("binding_mismatch")
-    if attestation["invariants"] != {
-        "artifact_unchanged": True,
-        "clone_tree_unchanged": True,
-        "private_paths_accessed": False,
-        "raw_output_preserved_unchanged": True,
-        "source_mutated": False,
-    }:
+    if (
+        type(attestation["invariants"]) is not dict
+        or any(
+            type(value) is not bool
+            for value in attestation["invariants"].values()
+        )
+        or attestation["invariants"]
+        != {
+            "artifact_unchanged": True,
+            "clone_tree_unchanged": True,
+            "private_paths_accessed": False,
+            "raw_output_preserved_unchanged": True,
+            "source_mutated": False,
+        }
+    ):
         _fail("binding_mismatch")
     repository_binding = _exact(
         attestation["repository"],
@@ -3197,17 +3249,22 @@ def _validate_review_attestation(
             "session_id",
         },
     )
-    if reviewer != {
-        "audit_wrapper_sha256": REQUIRED_AUDIT_WRAPPER_SHA256,
-        "client": "claude_code",
-        "effective_model": REQUIRED_CLAUDE_MODEL,
-        "fallback_observed": False,
-        "fresh_session": True,
-        "model_usage": [REQUIRED_CLAUDE_MODEL],
-        "requested_model": REQUESTED_CLAUDE_MODEL,
-        "requested_reasoning_effort": REQUIRED_REASONING_EFFORT,
-        "session_id": reviewer["session_id"],
-    }:
+    if (
+        type(reviewer["fallback_observed"]) is not bool
+        or type(reviewer["fresh_session"]) is not bool
+        or reviewer
+        != {
+            "audit_wrapper_sha256": REQUIRED_AUDIT_WRAPPER_SHA256,
+            "client": "claude_code",
+            "effective_model": REQUIRED_CLAUDE_MODEL,
+            "fallback_observed": False,
+            "fresh_session": True,
+            "model_usage": [REQUIRED_CLAUDE_MODEL],
+            "requested_model": REQUESTED_CLAUDE_MODEL,
+            "requested_reasoning_effort": REQUIRED_REASONING_EFFORT,
+            "session_id": reviewer["session_id"],
+        }
+    ):
         _fail("binding_mismatch")
     _safe_review_token(reviewer["session_id"])
     _validate_embedded_audit_bundle(
@@ -3269,6 +3326,7 @@ def _validate_approval(
     _exact(approval, expected_keys)
     if (
         approval["artifact_kind"] != RECOVERY_APPROVAL_KIND
+        or type(approval["format_version"]) is not int
         or approval["format_version"] != 2
         or approval["approved_checkout_sha"] != checkout
         or approval["repository"]
@@ -3278,6 +3336,8 @@ def _validate_approval(
         or approval["no_retry_acknowledgement"] != NO_RETRY_ACKNOWLEDGEMENT
         or approval["trust_model_acknowledgement"] != TRUST_ACKNOWLEDGEMENT
         or approval["accepted_ceilings"] != list(ACCEPTED_CEILINGS)
+        or type(approval["recovery_profile"]) is not dict
+        or type(approval["recovery_profile"].get("format_version")) is not int
         or approval["recovery_profile"]
         != {"format_version": 2, "sha256": profile_sha256}
         or approval["recovery_procedure_identity_sha256"]
@@ -4176,7 +4236,9 @@ def _validate_checkpoint(
             "primary_operator_identity",
         }
         or checkpoint["artifact_kind"] != AUTHORING.CHECKPOINT_ARTIFACT_KIND
+        or type(checkpoint["format_version"]) is not int
         or checkpoint["format_version"] != 1
+        or type(checkpoint["generation"]) is not int
         or checkpoint["generation"] != 1
         or checkpoint["previous_checkpoint_sha256"] is not None
         or checkpoint["peer_operator_identity"] is not None
@@ -4266,6 +4328,7 @@ def _validate_checkpoint(
             type(item) is not dict
             or type(item.get("entry_id")) is not str
             or TOC.OPAQUE_ID_RE.fullmatch(item["entry_id"]) is None
+            or type(item.get("ordinal")) is not int
             or item.get("ordinal") != ordinal
             or type(item.get("object_class")) is not str
             or item["object_class"] not in TOC.KNOWN_TOC_CLASSES
@@ -4454,12 +4517,15 @@ def _load_generation_one(
             set(root_value) != root_keys
             or root_value["artifact_kind"]
             != "lovable_toc_operator_authorization"
+            or type(root_value["format_version"]) is not int
             or root_value["format_version"] != 1
             or root_value["action"] != "initialize"
             or root_value["finalization_authorization"] != ""
             or root_value["operator_identity"]
             != root_value["primary_operator_identity"]
             or root_value["tty_attestation"] != TTY_ATTESTATION
+            or type(root_value["initial_head"]) is not dict
+            or type(root_value["initial_head"].get("generation")) is not int
             or root_value["initial_head"]
             != {
                 "checkpoint_sha256": "0" * 64,
@@ -4543,7 +4609,9 @@ def _load_generation_one(
         if (
             set(resume_value) != resume_keys
             or resume_value["artifact_kind"] != "lovable_toc_operator_resume"
+            or type(resume_value["format_version"]) is not int
             or resume_value["format_version"] != 2
+            or type(resume_value["resume_generation"]) is not int
             or resume_value["resume_generation"] != 1
             or resume_value["authorization_sha256"] != root.sha256
             or resume_value["annotation_root"] != root_value["annotation_root"]

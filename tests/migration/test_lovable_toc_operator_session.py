@@ -2753,6 +2753,30 @@ class TocOperatorSessionTest(unittest.TestCase):
                 ),
             )
         self.assertEqual(raised.exception.reason, "history_conflict")
+
+    def test_predecessor_action_resume_generation_rejects_boolean_alias(self):
+        current, retired, action = self.predecessor_bearing_session()
+
+        def mutate(action_record):
+            action_record["resume"]["generation"] = True
+
+        replacement = self.replace_immediate_action_evidence(
+            current, retired, action, mutate
+        )
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses(
+                    "status", expected_state="PRIMARY_REVIEW_REQUIRED"
+                ),
+                execute_authoring_side_effect=AssertionError(
+                    "boolean-generation history dispatched"
+                ),
+            )
+        self.assertEqual(raised.exception.reason, "history_conflict")
+        self.assertTrue(replacement.exists())
+        self.assertTrue(
+            (self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists()
+        )
         self.assertTrue(replacement.exists())
 
     def test_predecessor_action_session_substitution_is_rejected(self):

@@ -637,6 +637,19 @@ def _review_report(
         or not text_list(
             report["accepted_ceilings_and_operational_gaps"], nonempty=True
         )
+        or type(report["independence"]) is not dict
+        or set(report["independence"])
+        != {
+            "codex_reasoning_received",
+            "network_accessed",
+            "prior_audit_conclusion_received",
+            "private_state_accessed",
+            "source_mutated",
+        }
+        or any(
+            type(value) is not bool
+            for value in report["independence"].values()
+        )
         or report["independence"]
         != {
             "codex_reasoning_received": False,
@@ -645,6 +658,11 @@ def _review_report(
             "private_state_accessed": False,
             "source_mutated": False,
         }
+        or type(report["prior_conclusions"]) is not dict
+        or set(report["prior_conclusions"])
+        != {"applicability", "received", "relied_upon"}
+        or type(report["prior_conclusions"]["received"]) is not bool
+        or type(report["prior_conclusions"]["relied_upon"]) is not bool
         or report["prior_conclusions"]
         != {
             "applicability": "not_supplied",
@@ -2053,6 +2071,7 @@ def _validate_bootstrap_embedded_audit(
         or spec.count(_SUBJECT_END) != 1
         or hashlib.sha256(wrapper_data).hexdigest()
         != _REQUIRED_AUDIT_WRAPPER_SHA256
+        or type(settings.get("disableAllHooks")) is not bool
         or settings != _REQUIRED_AUDIT_SETTINGS
         or stderr != ""
     ):
@@ -2448,6 +2467,11 @@ def _validate_bootstrap_review(
             "sha256:"
             + hashlib.sha256(_canonical_json(evidence)).hexdigest()
         )
+        or type(review.get("invariants")) is not dict
+        or any(
+            type(value) is not bool
+            for value in review["invariants"].values()
+        )
         or review.get("invariants")
         != {
             "artifact_unchanged": True,
@@ -2490,6 +2514,8 @@ def _validate_bootstrap_review(
                 "session_id",
             },
         )
+        or type(reviewer.get("fallback_observed")) is not bool
+        or type(reviewer.get("fresh_session")) is not bool
         or reviewer
         != {
             "audit_wrapper_sha256": _REQUIRED_AUDIT_WRAPPER_SHA256,
@@ -2727,6 +2753,7 @@ def _preimport_recovery_guard(
             or _canonical_json(approval) != data
             or approval.get("artifact_kind")
             != "lovable_toc_operator_identity_recovery_approval"
+            or type(approval.get("format_version")) is not int
             or approval.get("format_version") != 2
             or approval.get("approved_checkout_sha") != checkout
             or approval.get("repository")
@@ -2737,6 +2764,10 @@ def _preimport_recovery_guard(
                 approval.get("recovery_profile"),
                 {"format_version", "sha256"},
             )
+            or type(
+                approval["recovery_profile"].get("format_version")
+            )
+            is not int
             or approval["recovery_profile"]["format_version"] != 2
             or not _is_sha256(approval["recovery_profile"]["sha256"])
             or type(approval.get("reviewed_file_blobs")) is not dict

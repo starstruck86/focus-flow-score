@@ -1504,6 +1504,38 @@ class AuthoringContractTest(unittest.TestCase):
         self.assertEqual(len(loaded.entries_by_ordinal), 2)
         self.assertNotIn("opaque-id.key", opened)
 
+    def test_capture_json_versions_reject_boolean_integer_aliases(self):
+        package, _expectations, capture, _entries = make_capture_package(
+            self.root, ["TABLE"]
+        )
+        raw_toc = (package / "raw-pg-restore-list.toc").read_bytes()
+        structures = capture_contract.parse_raw_toc_structure(raw_toc)
+
+        index = json.loads((package / "opaque-index.json").read_bytes())
+        index["format_version"] = True
+        index_data = capture_contract.canonical_json_bytes(index)
+        with self.assertRaisesRegex(
+            authoring.AuthoringContractError, "capture_invalid"
+        ):
+            authoring._parse_opaque_index(index_data, structures)
+
+        evidence = json.loads((package / "evidence-files.json").read_bytes())
+        evidence["format_version"] = True
+        evidence_data = capture_contract.canonical_json_bytes(evidence)
+        with self.assertRaisesRegex(
+            authoring.AuthoringContractError, "capture_invalid"
+        ):
+            authoring._validate_capture_evidence_manifest(
+                evidence_data,
+                expected_manifest_sha256=(
+                    capture_contract.sha256_bytes(evidence_data)
+                ),
+                capture_bytes=(package / "capture.json").read_bytes(),
+                raw_toc=raw_toc,
+                index_bytes=(package / "opaque-index.json").read_bytes(),
+                capture=capture,
+            )
+
     def test_opaque_key_replacement_changes_binding_without_opening_key(self):
         package, expectations, _capture, _entries = make_capture_package(
             self.root, ["TABLE"]

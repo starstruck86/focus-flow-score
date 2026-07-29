@@ -379,6 +379,44 @@ class ProfileContractTests(unittest.TestCase):
         with self.assertRaises(PREFLIGHT.PreflightError):
             PREFLIGHT.validate_profile(profile)
 
+    def test_profile_rejects_boolean_integer_aliases_and_integer_booleans(self):
+        mutations = (
+            lambda value: value.__setitem__("format_version", True),
+            lambda value: value["record_versions"].__setitem__(
+                "checkpoint", [True]
+            ),
+            lambda value: value["checkout_policy"].__setitem__(
+                "same_uid_prelaunch_replacement_ceiling", 1
+            ),
+            lambda value: value["approval_discovery"].__setitem__(
+                "required_file_nlink", True
+            ),
+            lambda value: value["python_policy"].__setitem__(
+                "exact_nlink", True
+            ),
+            lambda value: value["compatibility_bridges"][0].__setitem__(
+                "generation", True
+            ),
+            lambda value: value["compatibility_bridges"][0][
+                "self_closing"
+            ].__setitem__(
+                "ordinary_exact_current_rules_after_success", 1
+            ),
+            lambda value: value["compatibility_bridges"][0][
+                "self_closing"
+            ].__setitem__("single_use", 1),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=repr(mutate)):
+                profile = copy.deepcopy(load_profile())
+                mutate(profile)
+                with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+                    PREFLIGHT.validate_profile(profile)
+                self.assertEqual(
+                    caught.exception.reason,
+                    "execution_profile_invalid",
+                )
+
     def test_profile_rejects_reviewed_file_omission_or_addition(self):
         for mutation in ("omit", "add"):
             profile = load_profile()
@@ -416,6 +454,41 @@ class ApprovalAndRepositoryTests(unittest.TestCase):
         self.assertFalse(
             any("synthetic/private/operator-session" in value for value in touched)
         )
+
+    def test_approval_rejects_boolean_format_versions(self):
+        for path in (
+            ("format_version",),
+            ("execution_profile", "format_version"),
+        ):
+            with self.subTest(path=path):
+                approval = copy.deepcopy(self.fixture.approval)
+                selected = approval
+                for component in path[:-1]:
+                    selected = selected[component]
+                selected[path[-1]] = True
+                with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+                    PREFLIGHT.validate_approval(
+                        approval,
+                        profile=self.fixture.profile,
+                        repository_root=self.fixture.repository,
+                    )
+                self.assertEqual(caught.exception.reason, "approval_invalid")
+
+        approval = copy.deepcopy(self.fixture.approval)
+        python_identity = approval["python_identity"]
+        python_identity["exact_nlink"] = True
+        unsigned = dict(python_identity)
+        unsigned.pop("identity_sha256")
+        python_identity["identity_sha256"] = PREFLIGHT.sha256_bytes(
+            PREFLIGHT.canonical_json_bytes(unsigned)
+        )
+        with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+            PREFLIGHT.validate_approval(
+                approval,
+                profile=self.fixture.profile,
+                repository_root=self.fixture.repository,
+            )
+        self.assertEqual(caught.exception.reason, "approval_invalid")
 
     def test_profile_snapshot_rejects_same_byte_path_replacement_during_read(self):
         profile_path = self.fixture.repository / PREFLIGHT.PROFILE_RELATIVE_PATH

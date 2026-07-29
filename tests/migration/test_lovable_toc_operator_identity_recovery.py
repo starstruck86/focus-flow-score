@@ -1863,6 +1863,79 @@ class ChainMismatchTest(RecoveryTestCase):
                 finally:
                     fixture.close()
 
+    def test_historical_integer_fields_reject_json_booleans(self):
+        cases = (
+            (
+                "root_format_version",
+                lambda f: f.root.__setitem__("format_version", True),
+            ),
+            (
+                "root_initial_generation",
+                lambda f: f.root["initial_head"].__setitem__(
+                    "generation", False
+                ),
+            ),
+            (
+                "resume_format_version",
+                lambda f: f.resume.__setitem__("format_version", True),
+            ),
+            (
+                "resume_generation",
+                lambda f: f.resume.__setitem__("resume_generation", True),
+            ),
+            (
+                "checkpoint_format_version",
+                lambda f: f.checkpoint.__setitem__("format_version", True),
+            ),
+            (
+                "checkpoint_generation",
+                lambda f: f.checkpoint.__setitem__("generation", True),
+            ),
+            (
+                "first_entry_ordinal",
+                lambda f: f.checkpoint["entries"][0].__setitem__(
+                    "ordinal", False
+                ),
+            ),
+            (
+                "second_entry_ordinal",
+                lambda f: f.checkpoint["entries"][1].__setitem__(
+                    "ordinal", True
+                ),
+            ),
+            (
+                "mechanical_proposal_version",
+                lambda f: f.checkpoint["entries"][0][
+                    "mechanical_proposal"
+                ].__setitem__("proposal_version", True),
+            ),
+        )
+        for label, mutate in cases:
+            with self.subTest(label=label):
+                fixture = SyntheticGenerationOne()
+                try:
+                    mutate(fixture)
+                    fixture.rewrite()
+                    before = fixture.ordinary_snapshot()
+                    with mock.patch.object(
+                        RECOVERY, "_verify_approved_tty", return_value=None
+                    ):
+                        self.assert_fixed_failure(
+                            lambda: RECOVERY.run_recovery(
+                                9, fixture.verified, SESSION
+                            )
+                        )
+                    self.assertEqual(fixture.ordinary_snapshot(), before)
+                    self.assertNotIn(
+                        b"recovery_completed", fixture.audit_bytes()
+                    )
+                    self.assertNotIn(
+                        PRIVATE_IDENTITY.encode("ascii"),
+                        fixture.audit_bytes(),
+                    )
+                finally:
+                    fixture.close()
+
     def test_wrong_authoring_state_is_rejected(self):
         before = self.fixture.ordinary_snapshot()
         with mock.patch.object(
@@ -2197,6 +2270,25 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
         self.assertEqual(raised.exception.reason, "binding_mismatch")
         self.assertEqual(private_calls, [])
 
+    def _assert_bootstrap_review_rejected(
+        self, attestation, *, approval=None
+    ) -> None:
+        selected_approval = approval or self.fixture.approval
+        selected_data = canonical(selected_approval)
+        with self.assertRaises(DRIVER._StartupFailure):
+            DRIVER._validate_bootstrap_embedded_audit(
+                attestation,
+                repository=self.fixture.base,
+                approval=selected_approval,
+                approval_name=self.fixture.verified.approval_name,
+                approval_sha256=sha(selected_data),
+                approval_size_bytes=len(selected_data),
+                checkout=selected_approval["approved_checkout_sha"],
+                head_tree_sha=attestation["repository"]["head_tree_sha"],
+                evidence=attestation["evidence"],
+                reviewer=attestation["reviewer"],
+            )
+
     def test_one_human_may_be_both_authorizer_and_executor(self):
         approval = copy.deepcopy(self.fixture.approval)
         self.assertEqual(
@@ -2429,10 +2521,22 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
                 True,
             ),
             (
+                "review_fallback_integer_false",
+                "attestation",
+                ("reviewer", "fallback_observed"),
+                0,
+            ),
+            (
                 "review_not_fresh",
                 "attestation",
                 ("reviewer", "fresh_session"),
                 False,
+            ),
+            (
+                "review_fresh_integer_true",
+                "attestation",
+                ("reviewer", "fresh_session"),
+                1,
             ),
             (
                 "review_session_unsafe",
@@ -2524,6 +2628,12 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
                 ("invariants", "raw_output_preserved_unchanged"),
                 False,
             ),
+            (
+                "review_invariant_integer_true",
+                "attestation",
+                ("invariants", "raw_output_preserved_unchanged"),
+                1,
+            ),
         )
         private_calls: list[str] = []
         for label, target, path, replacement in cases:
@@ -2553,6 +2663,11 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
                     raised.exception.reason,
                     {"approval_invalid", "binding_mismatch"},
                 )
+                if "integer" in label:
+                    self._assert_bootstrap_review_rejected(
+                        attestation,
+                        approval=approval,
+                    )
         with self.assertRaises(RECOVERY.RecoveryError) as raised:
             self.validate_review_attestation(
                 attestation_name="wrong-review-name.json"
@@ -3253,9 +3368,21 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
                 ),
             ),
             (
+                "prior_conclusion_integer_false",
+                lambda record: record["prior_conclusions"].__setitem__(
+                    "received", 0
+                ),
+            ),
+            (
                 "source_mutated",
                 lambda record: record["independence"].__setitem__(
                     "source_mutated", True
+                ),
+            ),
+            (
+                "source_mutated_integer_false",
+                lambda record: record["independence"].__setitem__(
+                    "source_mutated", 0
                 ),
             ),
             (
@@ -4661,6 +4788,7 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
         )
         self._reseal_embedded_review(attestation)
         self._assert_review_rejected_pre_private(attestation)
+        self._assert_bootstrap_review_rejected(attestation)
 
         attestation = fresh()
         settings = json.loads(attestation["audit_settings_json"])
@@ -4670,6 +4798,16 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
         )
         self._reseal_embedded_review(attestation)
         self._assert_review_rejected_pre_private(attestation)
+
+        attestation = fresh()
+        settings = json.loads(attestation["audit_settings_json"])
+        settings["disableAllHooks"] = 1
+        attestation["audit_settings_json"] = canonical(settings).decode(
+            "ascii"
+        )
+        self._reseal_embedded_review(attestation)
+        self._assert_review_rejected_pre_private(attestation)
+        self._assert_bootstrap_review_rejected(attestation)
 
         attestation = fresh()
         settings = json.loads(attestation["audit_settings_json"])
@@ -6656,6 +6794,51 @@ class ContractAndScopeTest(unittest.TestCase):
                 for component in path[:-1]:
                     selected = selected[component]
                 selected[path[-1]] = replacement
+                with self.assertRaises(RECOVERY.RecoveryError) as raised:
+                    RECOVERY._validate_profile(changed)
+                self.assertEqual(
+                    raised.exception.reason,
+                    "binding_mismatch",
+                )
+
+    def test_recovery_profile_rejects_wrong_json_primitive_types(self):
+        profile = json.loads(
+            (
+                MIGRATION
+                / "verification"
+                / "lovable-toc-operator-identity-recovery-profile.v2.json"
+            ).read_text(encoding="ascii")
+        )
+        mutations = (
+            lambda value: value["record_versions"].__setitem__(
+                "checkpoint", [True]
+            ),
+            lambda value: value["checkout_policy"].__setitem__(
+                "same_uid_prelaunch_replacement_ceiling", 1
+            ),
+            lambda value: value["audit_storage"].__setitem__(
+                "initially_empty", 1
+            ),
+            lambda value: value["audit_storage"].__setitem__(
+                "required_file_nlink", True
+            ),
+            lambda value: value["python_policy"].__setitem__(
+                "exact_nlink", True
+            ),
+            lambda value: value["approval_discovery"].__setitem__(
+                "required_file_nlink", True
+            ),
+            lambda value: value[
+                "review_attestation_discovery"
+            ].__setitem__("required_file_nlink", True),
+            lambda value: value["recovery_contract"].__setitem__(
+                "expected_generation", True
+            ),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=repr(mutate)):
+                changed = copy.deepcopy(profile)
+                mutate(changed)
                 with self.assertRaises(RECOVERY.RecoveryError) as raised:
                     RECOVERY._validate_profile(changed)
                 self.assertEqual(

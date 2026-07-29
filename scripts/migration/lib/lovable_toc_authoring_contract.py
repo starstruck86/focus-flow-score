@@ -409,7 +409,11 @@ def _parse_opaque_index(raw: bytes, structures: Sequence[RawTocEntry]) -> list[d
     except ContractError as exc:
         _fail("capture_invalid", exc)
     root = _exact_dict(value, ("artifact_kind", "entries", "format_version"), "capture_invalid")
-    if root["artifact_kind"] != "lovable_toc_opaque_index" or root["format_version"] != 1:
+    if (
+        root["artifact_kind"] != "lovable_toc_opaque_index"
+        or type(root["format_version"]) is not int
+        or root["format_version"] != 1
+    ):
         _fail("capture_invalid")
     if type(root["entries"]) is not list or len(root["entries"]) != len(structures):
         _fail("capture_invalid")
@@ -471,7 +475,11 @@ def _validate_capture_evidence_manifest(
     except ContractError as exc:
         _fail("capture_invalid", exc)
     root = _exact_dict(root, ("artifact_kind", "files", "format_version"), "capture_invalid")
-    if root["artifact_kind"] != "lovable_toc_capture_evidence" or root["format_version"] != 1:
+    if (
+        root["artifact_kind"] != "lovable_toc_capture_evidence"
+        or type(root["format_version"]) is not int
+        or root["format_version"] != 1
+    ):
         _fail("capture_invalid")
     if type(root["files"]) is not list or len(root["files"]) != 4:
         _fail("capture_invalid")
@@ -1028,7 +1036,11 @@ def validate_checkpoint(
         ),
         "checkpoint_invalid",
     )
-    if root["artifact_kind"] != CHECKPOINT_ARTIFACT_KIND or root["format_version"] != 1:
+    if (
+        root["artifact_kind"] != CHECKPOINT_ARTIFACT_KIND
+        or type(root["format_version"]) is not int
+        or root["format_version"] != 1
+    ):
         _fail("checkpoint_invalid")
     if root["authoring_binding"] != binding.as_dict():
         _fail("binding_mismatch")
@@ -1104,6 +1116,7 @@ def validate_checkpoint(
         if (
             entry["dependency_review_complete"] is not False
             or entry["entry_id"] != captured.entry_id
+            or type(entry["ordinal"]) is not int
             or entry["ordinal"] != ordinal
             or entry["object_class"] != captured.object_class
             or entry["is_data_reference"] is not captured.is_data_reference
@@ -1119,7 +1132,7 @@ def validate_checkpoint(
             ),
             "checkpoint_invalid",
         )
-        if proposal != {
+        if type(proposal["proposal_version"]) is not int or proposal != {
             "classification": "unresolved",
             "forced_managed_domain": CLASS_MANAGED_DOMAINS.get(captured.object_class),
             "proposal_version": 1,

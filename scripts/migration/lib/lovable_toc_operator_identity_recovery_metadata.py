@@ -716,6 +716,7 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
     )
     if (
         profile["artifact_kind"] != PROFILE_KIND
+        or type(profile["format_version"]) is not int
         or profile["format_version"] != 2
         or profile["repository"]
         != {"name": "focus-flow-score", "owner": "starstruck86"}
@@ -727,6 +728,11 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
         }
         or profile["record_versions"]
         != {"checkpoint": [1], "resume": [2], "root_authorization": [1]}
+        or any(
+            type(version) is not int
+            for versions in profile["record_versions"].values()
+            for version in versions
+        )
         or tuple(profile["accepted_ceilings"]) != ACCEPTED_CEILINGS
         or tuple(profile["prohibited_effects"]) != PROHIBITED_EFFECTS
         or profile["verification_labels"]
@@ -743,6 +749,10 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
             "tty_verified",
         ]
     ):
+        _fail("binding_mismatch")
+    if type(
+        profile["checkout_policy"]["same_uid_prelaunch_replacement_ceiling"]
+    ) is not bool:
         _fail("binding_mismatch")
     python_policy = _exact(
         profile["python_policy"],
@@ -765,6 +775,7 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
         or type(python_policy["exact_uid"]) is not int
         or type(python_policy["exact_gid"]) is not int
         or type(python_policy["exact_mode"]) is not str
+        or type(python_policy["exact_nlink"]) is not int
         or python_policy["exact_nlink"] != 1
         or python_policy["executable_required"] is not True
         or python_policy["isolated_flags"] != ["-I", "-S", "-B"]
@@ -801,6 +812,7 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
         or discovery["home_resolution"] != "passwd_database_effective_uid"
         or discovery["relative_parent"] != APPROVAL_RELATIVE_PARENT
         or discovery["required_file_mode"] != "0400"
+        or type(discovery["required_file_nlink"]) is not int
         or discovery["required_file_nlink"] != 1
         or discovery["required_parent_mode"] != "0700"
         or discovery["selection"] != "exactly_one_matching_current_checkout"
@@ -811,6 +823,10 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
     if (
         profile["review_attestation_discovery"]
         != REVIEW_ATTESTATION_DISCOVERY
+        or type(
+            profile["review_attestation_discovery"]["required_file_nlink"]
+        )
+        is not int
     ):
         _fail("binding_mismatch")
     ordinary = _exact(
@@ -846,9 +862,12 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
             "required": True,
             "selection": "exactly_one_matching_current_checkout",
         }
+        or type(ordinary["exact_current_checkout"]) is not bool
+        or type(ordinary["required"]) is not bool
         or tuple(profile["permitted_private_reads"]) != ALLOWED_READS
         or contract["challenge_phrase_prefix"]
         != "AUTHORIZE PROBE_RECOVERY_METADATA"
+        or type(contract["expected_generation"]) is not int
         or contract["expected_generation"] != EXPECTED_GENERATION
         or contract["expected_predecessor"] != "absent"
         or contract["expected_state"] != EXPECTED_STATE
@@ -879,8 +898,11 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
         output["artifact_kind"] != RESULT_KIND
         or output["destination"] != "held_verified_tty_only"
         or output["encoding"] != "canonical_compact_sorted_ascii_json_lf"
+        or type(output["format_version"]) is not int
         or output["format_version"] != 1
+        or type(output["maximum_bytes"]) is not int
         or output["maximum_bytes"] != MAX_RESULT_BYTES
+        or type(output["metadata_results_per_invocation"]) is not int
         or output["metadata_results_per_invocation"] != 1
         or output["ordinary_diagnostics"] != "fixed_categorical_only"
         or output["prohibited_fields"]
@@ -1191,6 +1213,7 @@ def _validate_approval(
     )
     if (
         approval["artifact_kind"] != APPROVAL_KIND
+        or type(approval["format_version"]) is not int
         or approval["format_version"] != 2
         or approval["approved_checkout_sha"] != checkout
         or approval["repository"]
@@ -1201,6 +1224,11 @@ def _validate_approval(
         or approval["local_tty_attestation"] != TTY_ATTESTATION
         or approval["no_retry_acknowledgement"] != NO_RETRY_ACKNOWLEDGEMENT
         or approval["trust_model_acknowledgement"] != TRUST_ACKNOWLEDGEMENT
+        or type(approval["metadata_probe_profile"]) is not dict
+        or type(
+            approval["metadata_probe_profile"].get("format_version")
+        )
+        is not int
         or approval["metadata_probe_profile"]
         != {"format_version": 2, "sha256": profile_sha256}
         or approval["metadata_probe_procedure_identity_sha256"]
@@ -1627,6 +1655,19 @@ def _review_report(audit_report: str, *, require_approval: bool) -> Mapping[str,
         or not text_list(
             report["accepted_ceilings_and_operational_gaps"], nonempty=True
         )
+        or type(report["independence"]) is not dict
+        or set(report["independence"])
+        != {
+            "codex_reasoning_received",
+            "network_accessed",
+            "prior_audit_conclusion_received",
+            "private_state_accessed",
+            "source_mutated",
+        }
+        or any(
+            type(value) is not bool
+            for value in report["independence"].values()
+        )
         or report["independence"]
         != {
             "codex_reasoning_received": False,
@@ -1635,6 +1676,11 @@ def _review_report(audit_report: str, *, require_approval: bool) -> Mapping[str,
             "private_state_accessed": False,
             "source_mutated": False,
         }
+        or type(report["prior_conclusions"]) is not dict
+        or set(report["prior_conclusions"])
+        != {"applicability", "received", "relied_upon"}
+        or type(report["prior_conclusions"]["received"]) is not bool
+        or type(report["prior_conclusions"]["relied_upon"]) is not bool
         or report["prior_conclusions"]
         != {
             "applicability": "not_supplied",
@@ -3031,6 +3077,7 @@ def _validate_review_attestation(
     if (
         type(settings) is not dict
         or settings_data != _canonical(settings)
+        or type(settings.get("disableAllHooks")) is not bool
         or settings != REVIEW_SETTINGS
         or stderr_data != b""
     ):
@@ -3319,9 +3366,22 @@ def _historical_bridge(ordinary_profile: Mapping[str, Any]) -> Mapping[str, Any]
     )
     if (
         bridge["allowed_action"] != "primary_review"
+        or type(bridge["generation"]) is not int
         or bridge["generation"] != EXPECTED_GENERATION
         or bridge["required_state"] != EXPECTED_STATE
         or bridge["resume_predecessor"] != "absent"
+        or type(bridge["self_closing"]) is not dict
+        or type(
+            bridge["self_closing"].get(
+                "ordinary_exact_current_rules_after_success"
+            )
+        )
+        is not bool
+        or type(
+            bridge["self_closing"].get("reject_generation_at_or_above")
+        )
+        is not int
+        or type(bridge["self_closing"].get("single_use")) is not bool
         or bridge["self_closing"]
         != {
             "ordinary_exact_current_rules_after_success": True,
@@ -3950,11 +4010,14 @@ def _load_snapshot(
         if (
             set(root_value) != root_keys
             or root_value["artifact_kind"] != "lovable_toc_operator_authorization"
+            or type(root_value["format_version"]) is not int
             or root_value["format_version"] != 1
             or root_value["action"] != "initialize"
             or root_value["finalization_authorization"] != ""
             or root_value["operator_identity"] != root_value["primary_operator_identity"]
             or root_value["tty_attestation"] != TTY_ATTESTATION
+            or type(root_value["initial_head"]) is not dict
+            or type(root_value["initial_head"].get("generation")) is not int
             or root_value["initial_head"]
             != {
                 "checkpoint_sha256": "0" * 64,
@@ -4011,7 +4074,9 @@ def _load_snapshot(
         if (
             set(resume_value) != resume_keys
             or resume_value["artifact_kind"] != "lovable_toc_operator_resume"
+            or type(resume_value["format_version"]) is not int
             or resume_value["format_version"] != 2
+            or type(resume_value["resume_generation"]) is not int
             or resume_value["resume_generation"] != 1
             or resume_value["authorization_sha256"] != root.sha256
             or resume_value["annotation_root"] != root_value["annotation_root"]
