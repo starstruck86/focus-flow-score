@@ -105,6 +105,14 @@ def load_profile() -> dict:
     return PREFLIGHT.validate_profile(value)
 
 
+class ReviewedGitEnvironmentTest(unittest.TestCase):
+    def test_reviewed_git_disables_lazy_fetch(self) -> None:
+        self.assertEqual(
+            PREFLIGHT.REVIEWED_GIT_ENVIRONMENT["GIT_NO_LAZY_FETCH"],
+            "1",
+        )
+
+
 def procedure_identity(
     profile: dict, name: str, checkout: str, blobs: dict[str, str]
 ) -> str:

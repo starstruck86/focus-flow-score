@@ -45,6 +45,42 @@ GIT_A = "a" * 40
 GIT_B = "b" * 40
 
 
+class ReviewedGitEnvironmentTest(unittest.TestCase):
+    def test_every_git_helper_call_disables_lazy_fetch(self):
+        calls: list[tuple[list[str], dict[str, object]]] = []
+
+        def reviewed_run(command, **kwargs):
+            calls.append((command, kwargs))
+            return mock.Mock(returncode=0, stdout=(GIT_A + "\n").encode("ascii"))
+
+        executable = mock.Mock(st_mode=stat.S_IFREG | 0o755)
+        with mock.patch.object(
+            AUTHOR.os, "lstat", return_value=executable
+        ), mock.patch.object(
+            AUTHOR.os, "access", return_value=True
+        ), mock.patch.object(
+            AUTHOR._startup_subprocess, "run", side_effect=reviewed_run
+        ):
+            AUTHOR._reviewed_git_bytes(
+                os.fspath(ROOT),
+                ["rev-parse", "HEAD"],
+                timeout_seconds=20,
+            )
+            AUTHOR._authoring_procedure_identity(GIT_A)
+
+        self.assertGreater(len(calls), 1)
+        for command, kwargs in calls:
+            self.assertEqual(command[0], AUTHOR._REVIEWED_GIT)
+            self.assertEqual(
+                kwargs["env"]["GIT_NO_LAZY_FETCH"],
+                "1",
+            )
+            self.assertEqual(
+                kwargs["env"],
+                AUTHOR._REVIEWED_GIT_ENVIRONMENT,
+            )
+
+
 def raw_toc(classes: list[str], poison: str = "synthetic-private-object") -> bytes:
     lines = [
         b"; Dumped from database version: 17.6",

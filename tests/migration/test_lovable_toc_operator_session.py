@@ -138,6 +138,41 @@ MINIMAL_OPERATOR_ENVIRONMENT = {
 SYNTHETIC_PTY_UNAVAILABLE = b"SYNTHETIC_PTY_CONTROLLING_TTY_UNAVAILABLE"
 
 
+class ReviewedGitEnvironmentTest(unittest.TestCase):
+    def test_every_operator_git_call_path_disables_lazy_fetch(self):
+        calls: list[tuple[list[str], dict[str, object]]] = []
+
+        def reviewed_run(command, **kwargs):
+            calls.append((command, kwargs))
+            return mock.Mock(returncode=0, stdout=(GIT_A + "\n").encode("ascii"))
+
+        executable = mock.Mock(st_mode=stat.S_IFREG | 0o755)
+        with mock.patch.object(
+            SESSION.os, "lstat", return_value=executable
+        ), mock.patch.object(
+            SESSION.os, "access", return_value=True
+        ), mock.patch.object(
+            SESSION.subprocess, "run", side_effect=reviewed_run
+        ):
+            SESSION._reviewed_git(
+                os.fspath(ROOT),
+                ["rev-parse", "HEAD"],
+            )
+            SESSION._operator_session_procedure_identity(GIT_A)
+
+        self.assertGreater(len(calls), 1)
+        for command, kwargs in calls:
+            self.assertEqual(command[0], SESSION._REVIEWED_GIT)
+            self.assertEqual(
+                kwargs["env"]["GIT_NO_LAZY_FETCH"],
+                "1",
+            )
+            self.assertEqual(
+                kwargs["env"],
+                SESSION._REVIEWED_GIT_ENVIRONMENT,
+            )
+
+
 class KeyOnlyEnvironment:
     def __init__(
         self,

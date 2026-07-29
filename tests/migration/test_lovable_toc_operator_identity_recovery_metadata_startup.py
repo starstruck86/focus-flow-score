@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 
 
@@ -44,6 +45,83 @@ def _load_preflight():
 
 
 PREFLIGHT = _load_preflight()
+
+
+_STDLIB_SHADOW_PROBE = r"""
+import importlib
+import importlib.util
+from pathlib import Path
+import sys
+
+driver_path = Path(sys.argv[1]).resolve(strict=True)
+fixture_root = Path(sys.argv[2]).resolve(strict=True)
+isolated_baseline = tuple(sys.path)
+spec = importlib.util.spec_from_file_location(
+    "metadata_transitive_shadow_driver", driver_path
+)
+if spec is None or spec.loader is None:
+    raise RuntimeError("driver spec unavailable")
+driver = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = driver
+saved_argv = sys.argv
+sys.argv = [str(driver_path)]
+try:
+    spec.loader.exec_module(driver)
+finally:
+    sys.argv = saved_argv
+
+if tuple(sys.path) != isolated_baseline:
+    raise RuntimeError("driver retained its reviewed import root")
+baseline = isolated_baseline
+for module_name in ("binascii", "random", "gettext", "_sha512"):
+    for shadow_kind in ("module", "package"):
+        case_root = fixture_root / (module_name + "-" + shadow_kind)
+        case_root.mkdir()
+        marker = case_root / "planted-code-executed"
+        planted_source = (
+            "with open("
+            + repr(str(marker))
+            + ", 'wb') as stream:\n"
+            + "    stream.write(b'executed')\n"
+            + "raise RuntimeError('planted repository shadow executed')\n"
+        )
+        if shadow_kind == "module":
+            shadow_path = case_root / (module_name + ".py")
+        else:
+            package = case_root / module_name
+            package.mkdir()
+            shadow_path = package / "__init__.py"
+        shadow_path.write_text(planted_source, encoding="ascii")
+
+        sys.modules.pop(module_name, None)
+        importlib.invalidate_caches()
+        token = driver._append_reviewed_import_root(
+            case_root, require_isolated=True
+        )
+        try:
+            loaded = importlib.import_module(module_name)
+            module_file = getattr(loaded, "__file__", None)
+            spec_origin = getattr(
+                getattr(loaded, "__spec__", None), "origin", None
+            )
+            if not isinstance(module_file, str) or not isinstance(
+                spec_origin, str
+            ):
+                raise RuntimeError("stdlib origin unavailable")
+            for raw_origin in (module_file, spec_origin):
+                origin = Path(raw_origin).resolve(strict=True)
+                if origin == case_root or case_root in origin.parents:
+                    raise RuntimeError("repository shadow selected")
+        finally:
+            driver._remove_reviewed_import_root(token)
+            sys.modules.pop(module_name, None)
+        if marker.exists():
+            raise RuntimeError("planted repository code executed")
+        if tuple(sys.path) != baseline:
+            raise RuntimeError("reviewed import root was not removed")
+
+sys.stdout.write("transitive_stdlib_shadow_resolution_verified\n")
+"""
 
 
 def _shell_loop_names(source: str, loop_name: str) -> tuple[str, ...]:
@@ -83,6 +161,7 @@ class RecoveryMetadataStartupContractTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.recovery = RECOVERY_LAUNCHER.read_text(encoding="utf-8")
         cls.metadata = METADATA_LAUNCHER.read_text(encoding="utf-8")
+        cls.driver = METADATA_DRIVER.read_text(encoding="utf-8")
 
     def test_launcher_security_flow_is_exact_recovery_launcher_parity(self):
         normalized = self.recovery.replace(
@@ -205,6 +284,99 @@ class RecoveryMetadataStartupContractTests(unittest.TestCase):
             b'"status":"failed"}\n',
         )
         self.assertNotIn(b"Traceback", result.stderr)
+
+    def test_driver_binds_v2_approval_and_exact_claude_review_before_import(self):
+        guard_call = (
+            "_METADATA_BOOTSTRAP_BINDING = _preimport_metadata_guard()"
+        )
+        local_import = (
+            "from lib import (  # noqa: E402\n"
+            "            lovable_toc_operator_identity_recovery_metadata as METADATA,"
+        )
+        import_root_append = (
+            "_reviewed_import_token = _append_reviewed_import_root(\n"
+            "        SCRIPT.parent,"
+        )
+        self.assertLess(
+            self.driver.index(guard_call),
+            self.driver.index(import_root_append),
+        )
+        self.assertLess(
+            self.driver.index(import_root_append),
+            self.driver.index(local_import),
+        )
+        for required in (
+            "lovable-toc-operator-identity-recovery-metadata-review-",
+            "lovable-toc-independent-claude-review-attestation.schema.json",
+            "lovable-toc-operator-identity-recovery-metadata-approval.v2.schema.json",
+            "lovable-toc-operator-identity-recovery-metadata-profile.v2.json",
+            "lovable-toc-operator-identity-recovery-metadata-profile.v2.schema.json",
+            "scripts/migration/lib/lovable_dump_report.py",
+            "f3dcb6d874ae9511b0bb01dfd6f87899bb064030",
+            "6a4d3ea4ad2dfeb440efbe9b62c7ae543dc3af428941e85363bc77cf8e49de66",
+            '["ls-tree", "-r", "HEAD"]',
+            'fields[0] == "120000"',
+            'name + "/__init__.py"',
+            '"enforced_git_environment",',
+            'invocation["enforced_git_environment"]',
+            '_REVIEW_GIT_ENVIRONMENT = {"GIT_NO_LAZY_FETCH": "1"}',
+            '"required_requested_model": "fable"',
+            '"required_effective_model": "claude-fable-5"',
+            '"required_reasoning_effort": "max"',
+            '"required_audit_wrapper_sha256"',
+            '"required_decision": "APPROVE FOR MERGE"',
+            '"fallback_policy": "forbidden"',
+            '"session_policy": "fresh_no_resume_no_continuation"',
+            "baseline != _ISOLATED_STDLIB_PATH",
+            "resolved_entry.relative_to(base_prefix)",
+            "sys.path.append(root_text)",
+            "_require_reviewed_lib_namespace(",
+            "_require_reviewed_module_origin(",
+            "_remove_reviewed_import_root(_reviewed_import_token)",
+            "sys.path_importer_cache.pop(root_text, None)",
+            "metadata_review_bootstrap=METADATA.MetadataReviewBootstrapBinding(",
+        ):
+            self.assertIn(required, self.driver)
+        self.assertNotIn("sys.path.insert(0", self.driver)
+        for inactive in (
+            "lovable-toc-operator-identity-recovery-metadata-approval.schema.json",
+            "lovable-toc-operator-identity-recovery-metadata-profile.schema.json",
+            "lovable-toc-operator-identity-recovery-metadata-profile.v1.json",
+        ):
+            self.assertNotIn(inactive, self.driver)
+
+    def test_transitive_stdlib_module_and_package_shadows_never_execute(self):
+        with tempfile.TemporaryDirectory(
+            prefix="metadata-transitive-shadows."
+        ) as temporary:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-c",
+                    _STDLIB_SHADOW_PROBE,
+                    os.fspath(METADATA_DRIVER),
+                    temporary,
+                ],
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env={
+                    "LANG": "C",
+                    "LC_ALL": "C",
+                    "PATH": "/usr/bin:/bin",
+                },
+                timeout=30,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout,
+            b"transitive_stdlib_shadow_resolution_verified\n",
+        )
+        self.assertEqual(result.stderr, b"")
 
     def test_launcher_has_no_private_path_or_authoring_action_surface(self):
         self.assertIn(
