@@ -1118,6 +1118,9 @@ checkpoint, annotation decisions, and capture bytes are never rewritten. A
 failure before durable
 `attempt_started` publication is not intrinsically machine-distinguishable
 from an unused approval, so the approved no-retry rule remains necessary.
+Every owned snapshot, audit-root, lock, and publication descriptor is
+relinquished before its first close attempt, so neither exception cleanup nor
+final cleanup retries a close-ambiguous descriptor.
 Successful recovery proves only that the human recorded the already-stored
 label; it is not identity rotation, authoring, validation, restore planning,
 or migration readiness.

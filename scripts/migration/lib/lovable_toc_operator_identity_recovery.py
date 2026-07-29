@@ -3852,10 +3852,12 @@ def _open_private_directory(path: Path) -> tuple[int, tuple[Any, ...]]:
         return descriptor, identity
     except (OSError, RuntimeError) as exc:
         if descriptor >= 0:
+            closing_descriptor = descriptor
+            descriptor = -1
             try:
-                os.close(descriptor)
-            except OSError:
-                pass
+                os.close(closing_descriptor)
+            except OSError as close_exc:
+                raise RecoveryError("indeterminate") from close_exc
         raise RecoveryError("history_conflict") from exc
 
 
@@ -3885,10 +3887,12 @@ def _open_repository_directory(path: Path) -> tuple[int, tuple[Any, ...]]:
         return descriptor, identity
     except (OSError, RuntimeError) as exc:
         if descriptor >= 0:
+            closing_descriptor = descriptor
+            descriptor = -1
             try:
-                os.close(descriptor)
-            except OSError:
-                pass
+                os.close(closing_descriptor)
+            except OSError as close_exc:
+                raise RecoveryError("indeterminate") from close_exc
         raise RecoveryError("history_conflict") from exc
 
 
@@ -4076,18 +4080,15 @@ def _publish_audit(
                 raise OSError
             offset += written
         os.fsync(descriptor)
+        closing_descriptor = descriptor
+        descriptor = -1
         try:
-            os.close(descriptor)
+            os.close(closing_descriptor)
         except OSError as exc:
             # A failed close cannot prove whether buffered state or the held
             # descriptor is clean.  Retain the pending child as blocking
             # evidence and never downgrade this to an ordinary clean failure.
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
             raise RecoveryError("indeterminate") from exc
-        descriptor = -1
         _rename_no_replace(audit_fd, pending, final_name)
         renamed = True
         observed = stable_private_file_at(
@@ -4103,11 +4104,12 @@ def _publish_audit(
             # foreign state, not a safely classified final-name collision.
             raise RecoveryError("indeterminate") from exc
         if descriptor >= 0:
+            closing_descriptor = descriptor
+            descriptor = -1
             try:
-                os.close(descriptor)
+                os.close(closing_descriptor)
             except OSError as close_exc:
                 raise RecoveryError("indeterminate") from close_exc
-            descriptor = -1
         try:
             os.unlink(pending, dir_fd=audit_fd)
             os.fsync(audit_fd)
@@ -4116,10 +4118,12 @@ def _publish_audit(
         raise RecoveryError("publication_exists") from exc
     except (OSError, ContractError) as exc:
         if descriptor >= 0:
+            closing_descriptor = descriptor
+            descriptor = -1
             try:
-                os.close(descriptor)
-            except OSError:
-                pass
+                os.close(closing_descriptor)
+            except OSError as close_exc:
+                raise RecoveryError("indeterminate") from close_exc
         if renamed:
             raise RecoveryError("indeterminate") from exc
         try:
@@ -4244,18 +4248,21 @@ def _acquire_recovery_lock(root_fd: int) -> str:
         if os.write(descriptor, payload) != len(payload):
             raise OSError
         os.fsync(descriptor)
-        os.close(descriptor)
+        closing_descriptor = descriptor
         descriptor = -1
+        os.close(closing_descriptor)
         os.fsync(root_fd)
         return token
     except FileExistsError as exc:
         raise RecoveryError("history_conflict") from exc
     except OSError as exc:
         if descriptor >= 0:
+            closing_descriptor = descriptor
+            descriptor = -1
             try:
-                os.close(descriptor)
-            except OSError:
-                pass
+                os.close(closing_descriptor)
+            except OSError as close_exc:
+                raise RecoveryError("indeterminate") from close_exc
         # Deliberately leave any possibly durable lock as the blocking state.
         # Recovery never writes OPERATOR_SESSION_INDETERMINATE.
         raise RecoveryError("indeterminate" if created else "history_conflict") from exc
@@ -4306,8 +4313,9 @@ def _release_recovery_lock(root_fd: int, token: str) -> None:
             )
         ):
             raise OSError
-        os.close(descriptor)
+        closing_descriptor = descriptor
         descriptor = -1
+        os.close(closing_descriptor)
         os.link(
             LOCK_NAME,
             LOCK_RELEASED_NAME,
@@ -4322,10 +4330,12 @@ def _release_recovery_lock(root_fd: int, token: str) -> None:
         os.fsync(root_fd)
     except OSError as exc:
         if descriptor >= 0:
+            closing_descriptor = descriptor
+            descriptor = -1
             try:
-                os.close(descriptor)
-            except OSError:
-                pass
+                os.close(closing_descriptor)
+            except OSError as close_exc:
+                raise RecoveryError("indeterminate") from close_exc
         # Leave the existing lock/hardlink state intact.  It is the blocking
         # evidence; no recovery-specific marker is written in this root.
         raise RecoveryError("indeterminate") from exc
@@ -4975,11 +4985,11 @@ def _revalidate_snapshot(
 
 def _close_snapshot(snapshot: GenerationOneSnapshot) -> None:
     close_failed = False
-    for descriptor in (
-        snapshot.checkpoints_fd,
-        snapshot.annotation_fd,
-        snapshot.root_fd,
-    ):
+    for attribute in ("checkpoints_fd", "annotation_fd", "root_fd"):
+        descriptor = getattr(snapshot, attribute)
+        if descriptor < 0:
+            continue
+        setattr(snapshot, attribute, -1)
         try:
             os.close(descriptor)
         except OSError:
@@ -5120,8 +5130,9 @@ def run_recovery(
         )
         _revalidate_snapshot(snapshot, verified)
         _release_recovery_lock(snapshot.root_fd, snapshot.lock_token)
-        _close_snapshot(snapshot)
+        closing_snapshot = snapshot
         snapshot = None
+        _close_snapshot(closing_snapshot)
         _revalidate_directory(audit_path, audit_fd, audit_identity)
         _revalidate_audit_publications(
             audit_fd,
@@ -5143,11 +5154,12 @@ def run_recovery(
             audit_fd,
             (attempt, acknowledged, completed),
         )
+        closing_audit_fd = audit_fd
+        audit_fd = -1
         try:
-            os.close(audit_fd)
+            os.close(closing_audit_fd)
         except OSError as exc:
             raise RecoveryError("indeterminate") from exc
-        audit_fd = -1
         return 0, _fixed("pass", "recovery_completed")
     except BaseException as caught:
         exc = (
@@ -5164,8 +5176,9 @@ def run_recovery(
                 _revalidate_snapshot(snapshot, verified)
                 _release_recovery_lock(snapshot.root_fd, snapshot.lock_token)
                 release_succeeded = True
-                _close_snapshot(snapshot)
+                closing_snapshot = snapshot
                 snapshot = None
+                _close_snapshot(closing_snapshot)
             except RecoveryError:
                 exc = RecoveryError("indeterminate")
             if not release_succeeded:
@@ -5207,28 +5220,28 @@ def run_recovery(
                 _revalidate_directory(audit_path, audit_fd, audit_identity)
             except RecoveryError:
                 exc = RecoveryError("indeterminate")
+            closing_audit_fd = audit_fd
+            audit_fd = -1
             try:
-                os.close(audit_fd)
+                os.close(closing_audit_fd)
             except OSError:
                 exc = RecoveryError("indeterminate")
-            audit_fd = -1
         raise exc
     finally:
         if snapshot is not None:
             # An unproven release is intentionally left blocking.  Close only
             # held descriptors; never add a marker to the operator root.
-            for descriptor in (
-                snapshot.checkpoints_fd,
-                snapshot.annotation_fd,
-                snapshot.root_fd,
-            ):
-                try:
-                    os.close(descriptor)
-                except OSError:
-                    pass
-        if audit_fd >= 0:
+            closing_snapshot = snapshot
+            snapshot = None
             try:
-                os.close(audit_fd)
+                _close_snapshot(closing_snapshot)
+            except RecoveryError:
+                pass
+        if audit_fd >= 0:
+            closing_audit_fd = audit_fd
+            audit_fd = -1
+            try:
+                os.close(closing_audit_fd)
             except OSError:
                 pass
 

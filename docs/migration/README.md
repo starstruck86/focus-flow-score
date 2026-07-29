@@ -241,7 +241,9 @@ root-v1/resume-v2/checkpoint-v1 generation-one chain and release marker with
 descriptor-relative no-follow operations; it does not lock, create an audit or
 marker, write private state, or open capture/evidence roots. All private
 descriptors are closed before one bounded canonical result is written to the
-revalidated private TTY. The result contains only whole-record
+revalidated private TTY. Descriptor ownership is relinquished before each
+first close attempt, so an ambiguous close is not retried by error cleanup and
+returns only `indeterminate`. The result contains only whole-record
 hashes/versions and approved fixed bindings, never the operator claim or a
 fingerprint of it, release token, checkpoint decisions, record JSON, TOC or
 capture content, opaque IDs, SQL, or object metadata.

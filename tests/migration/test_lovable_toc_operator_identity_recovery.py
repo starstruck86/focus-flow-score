@@ -6583,6 +6583,51 @@ class FailureAndAmbiguityTest(RecoveryTestCase):
             if annotation_descriptor["value"] >= 0:
                 real_close(annotation_descriptor["value"])
 
+    def test_open_helper_close_ambiguity_is_indeterminate_and_not_retried(self):
+        real_close = os.close
+        cases = (
+            (
+                "private",
+                RECOVERY._open_private_directory,
+                self.fixture.annotation_root,
+            ),
+            (
+                "repository",
+                RECOVERY._open_repository_directory,
+                ROOT,
+            ),
+        )
+        for label, opener, path in cases:
+            with self.subTest(label=label):
+                leaked_descriptor = {"value": -1}
+                close_calls: list[int] = []
+
+                def ambiguous_close(descriptor):
+                    leaked_descriptor["value"] = descriptor
+                    close_calls.append(descriptor)
+                    raise OSError("planted ambiguous close")
+
+                try:
+                    with mock.patch.object(
+                        RECOVERY.os,
+                        "fstat",
+                        side_effect=OSError("planted post-open failure"),
+                    ), mock.patch.object(
+                        RECOVERY.os,
+                        "close",
+                        side_effect=ambiguous_close,
+                    ):
+                        self.assert_fixed_failure(
+                            lambda: opener(path),
+                            "indeterminate",
+                        )
+                    self.assertEqual(
+                        close_calls.count(leaked_descriptor["value"]), 1
+                    )
+                finally:
+                    if leaked_descriptor["value"] >= 0:
+                        real_close(leaked_descriptor["value"])
+
     def test_wrong_reentry_records_failure_without_identity(self):
         before = self.fixture.ordinary_snapshot()
         self.assert_fixed_failure(
@@ -6764,10 +6809,50 @@ class FailureAndAmbiguityTest(RecoveryTestCase):
         self.assertIn(b'"audit_event":"attempt_started"', detached_audit)
         self.assertNotIn(PRIVATE_IDENTITY.encode("ascii"), detached_audit)
 
-    def test_failure_path_audit_descriptor_close_ambiguity_is_indeterminate(self):
+    def test_snapshot_close_ambiguity_is_indeterminate_and_not_retried(self):
+        real_load = RECOVERY._load_generation_one
+        real_close = os.close
+        snapshot_descriptor = {"value": -1}
+        snapshot_close_attempts: list[int] = []
+
+        def remember_snapshot(*args, **kwargs):
+            snapshot = real_load(*args, **kwargs)
+            snapshot_descriptor["value"] = snapshot.checkpoints_fd
+            return snapshot
+
+        def fail_snapshot_close(descriptor):
+            if (
+                snapshot_descriptor["value"] >= 0
+                and descriptor == snapshot_descriptor["value"]
+            ):
+                snapshot_close_attempts.append(descriptor)
+                raise OSError("planted-private-snapshot-close-sentinel")
+            return real_close(descriptor)
+
+        try:
+            with mock.patch.object(
+                RECOVERY,
+                "_load_generation_one",
+                side_effect=remember_snapshot,
+            ), mock.patch.object(
+                RECOVERY.os,
+                "close",
+                side_effect=fail_snapshot_close,
+            ):
+                self.assert_fixed_failure(
+                    lambda: self.run_recovery(),
+                    "indeterminate",
+                )
+            self.assertEqual(len(snapshot_close_attempts), 1)
+        finally:
+            if snapshot_descriptor["value"] >= 0:
+                real_close(snapshot_descriptor["value"])
+
+    def test_success_path_audit_close_ambiguity_is_not_retried(self):
         real_open = RECOVERY._open_private_directory
         real_close = os.close
         audit_descriptor = {"value": -1}
+        audit_close_attempts: list[int] = []
 
         def remember_audit_descriptor(path):
             descriptor, identity = real_open(path)
@@ -6776,21 +6861,72 @@ class FailureAndAmbiguityTest(RecoveryTestCase):
             return descriptor, identity
 
         def fail_audit_close(descriptor):
-            if descriptor == audit_descriptor["value"]:
+            if (
+                audit_descriptor["value"] >= 0
+                and descriptor == audit_descriptor["value"]
+            ):
+                audit_close_attempts.append(descriptor)
                 raise OSError("planted-private-audit-close-sentinel")
             return real_close(descriptor)
 
-        with mock.patch.object(
-            RECOVERY,
-            "_open_private_directory",
-            side_effect=remember_audit_descriptor,
-        ), mock.patch.object(
-            RECOVERY.os, "close", side_effect=fail_audit_close
-        ):
-            self.assert_fixed_failure(
-                lambda: self.run_recovery(hidden=["Wrong Private Identity"]),
-                "indeterminate",
-            )
+        try:
+            with mock.patch.object(
+                RECOVERY,
+                "_open_private_directory",
+                side_effect=remember_audit_descriptor,
+            ), mock.patch.object(
+                RECOVERY.os,
+                "close",
+                side_effect=fail_audit_close,
+            ):
+                self.assert_fixed_failure(
+                    lambda: self.run_recovery(),
+                    "indeterminate",
+                )
+            self.assertEqual(len(audit_close_attempts), 1)
+        finally:
+            if audit_descriptor["value"] >= 0:
+                real_close(audit_descriptor["value"])
+
+    def test_failure_path_audit_descriptor_close_ambiguity_is_indeterminate(self):
+        real_open = RECOVERY._open_private_directory
+        real_close = os.close
+        audit_descriptor = {"value": -1}
+        audit_close_attempts: list[int] = []
+
+        def remember_audit_descriptor(path):
+            descriptor, identity = real_open(path)
+            if Path(path) == self.fixture.audit_root:
+                audit_descriptor["value"] = descriptor
+            return descriptor, identity
+
+        def fail_audit_close(descriptor):
+            if (
+                audit_descriptor["value"] >= 0
+                and descriptor == audit_descriptor["value"]
+            ):
+                audit_close_attempts.append(descriptor)
+                raise OSError("planted-private-audit-close-sentinel")
+            return real_close(descriptor)
+
+        try:
+            with mock.patch.object(
+                RECOVERY,
+                "_open_private_directory",
+                side_effect=remember_audit_descriptor,
+            ), mock.patch.object(
+                RECOVERY.os, "close", side_effect=fail_audit_close
+            ):
+                self.assert_fixed_failure(
+                    lambda: self.run_recovery(
+                        hidden=["Wrong Private Identity"]
+                    ),
+                    "indeterminate",
+                )
+            self.assertEqual(len(audit_close_attempts), 1)
+        finally:
+            if audit_descriptor["value"] >= 0:
+                real_close(audit_descriptor["value"])
 
         audit = self.fixture.audit_bytes()
         self.assertNotIn(PRIVATE_IDENTITY.encode("ascii"), audit)
@@ -6822,6 +6958,137 @@ class FailureAndAmbiguityTest(RecoveryTestCase):
         audit = self.fixture.audit_bytes()
         self.assertIn(b'"audit_event":"recovery_indeterminate"', audit)
         self.assertNotIn(PRIVATE_IDENTITY.encode("ascii"), audit)
+
+    def test_lock_acquire_close_ambiguity_is_not_retried(self):
+        real_close = os.close
+        root_fd = os.open(
+            self.fixture.operator_root,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        leaked_descriptor = {"value": -1}
+        close_attempts: list[int] = []
+
+        def ambiguous_close(descriptor):
+            leaked_descriptor["value"] = descriptor
+            close_attempts.append(descriptor)
+            raise OSError("planted-lock-close-sentinel")
+
+        try:
+            with mock.patch.object(
+                RECOVERY.os,
+                "close",
+                side_effect=ambiguous_close,
+            ):
+                self.assert_fixed_failure(
+                    lambda: RECOVERY._acquire_recovery_lock(root_fd),
+                    "indeterminate",
+                )
+            self.assertEqual(len(close_attempts), 1)
+            self.assertIn(
+                RECOVERY.LOCK_NAME,
+                os.listdir(self.fixture.operator_root),
+            )
+        finally:
+            if leaked_descriptor["value"] >= 0:
+                real_close(leaked_descriptor["value"])
+            real_close(root_fd)
+
+    def test_lock_release_close_ambiguity_is_not_retried(self):
+        real_close = os.close
+        root_fd = os.open(
+            self.fixture.operator_root,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        token = RECOVERY._acquire_recovery_lock(root_fd)
+        leaked_descriptor = {"value": -1}
+        close_attempts: list[int] = []
+
+        def ambiguous_close(descriptor):
+            leaked_descriptor["value"] = descriptor
+            close_attempts.append(descriptor)
+            raise OSError("planted-lock-close-sentinel")
+
+        try:
+            with mock.patch.object(
+                RECOVERY.os,
+                "close",
+                side_effect=ambiguous_close,
+            ):
+                self.assert_fixed_failure(
+                    lambda: RECOVERY._release_recovery_lock(
+                        root_fd, token
+                    ),
+                    "indeterminate",
+                )
+            self.assertEqual(len(close_attempts), 1)
+            self.assertIn(
+                RECOVERY.LOCK_NAME,
+                os.listdir(self.fixture.operator_root),
+            )
+        finally:
+            if leaked_descriptor["value"] >= 0:
+                real_close(leaked_descriptor["value"])
+            real_close(root_fd)
+
+    def test_audit_publication_close_ambiguity_is_not_retried(self):
+        real_close = os.close
+        audit_fd = os.open(
+            self.fixture.audit_root,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        leaked_descriptor = {"value": -1}
+        close_attempts: list[int] = []
+        record = RECOVERY._audit_record(
+            self.fixture.verified,
+            event="attempt_started",
+            previous=None,
+            identity_sources_agree=False,
+            reason="private_access_started",
+        )
+
+        def ambiguous_close(descriptor):
+            leaked_descriptor["value"] = descriptor
+            close_attempts.append(descriptor)
+            raise OSError("planted-audit-publication-close-sentinel")
+
+        try:
+            with mock.patch.object(
+                RECOVERY.os,
+                "close",
+                side_effect=ambiguous_close,
+            ):
+                self.assert_fixed_failure(
+                    lambda: RECOVERY._publish_audit(
+                        audit_fd,
+                        RECOVERY._audit_name(
+                            1,
+                            "attempt_started",
+                            "synthetic-recovery-session",
+                        ),
+                        record,
+                    ),
+                    "indeterminate",
+                )
+            self.assertEqual(len(close_attempts), 1)
+            self.assertTrue(
+                any(
+                    name.startswith(".pending-recovery-")
+                    for name in os.listdir(self.fixture.audit_root)
+                )
+            )
+        finally:
+            if leaked_descriptor["value"] >= 0:
+                real_close(leaked_descriptor["value"])
+            real_close(audit_fd)
 
     def test_low_level_audit_fsync_failure_cleans_pending_or_is_indeterminate(self):
         root_fd = os.open(

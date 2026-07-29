@@ -797,10 +797,15 @@ executor-owned, non-symlink, mode-`0700` private directory on that same approved
 filesystem; a permissive or ambiguous parent is outside the operator contract.
 Case aliases and canonically equivalent Unicode spellings are treated as the
 same path for both repository-containment and private-root separation checks.
-The session wrapper creates the session root and annotation root with no
-replacement; an existing path stops fail-closed. All session files are
-single-link regular files at mode `0400`, published by no-replace atomic rename
-with file and directory fsync.
+Before either private root is created or an authorization record is published,
+the wrapper compares the complete session-root, annotation-root, and
+capture-root triple. Direct containment, a case alias, or a canonically
+equivalent Unicode alias stops with zero root or capture mutation; this
+separation check treats the capture root as a lexical value and does not open,
+list, stat, or resolve it. The session wrapper creates the session root and
+annotation root with no replacement; an existing path stops fail-closed. All
+session files are single-link regular files at mode `0400`, published by
+no-replace atomic rename with file and directory fsync.
 
 The authorization record schema is
 `verification/lovable-toc-operator-session-authorization.schema.json`. The
@@ -1210,6 +1215,11 @@ neither the recovered label nor any hash/fingerprint of it. Human role values
 remain in the separately approved artifact; audits contain only fixed
 approval-bound role slots. `recovery_completed` is published only after
 durable temporary-lock release.
+
+Every recovery-owned descriptor, including the private-chain snapshot, audit
+root, temporary lock, and publication file, is relinquished before its first
+close attempt. A close error is therefore never retried by an exception or
+final cleanup path; it remains `indeterminate`.
 
 Root authorization, resume, checkpoint, annotation decisions, and capture
 bytes remain unchanged. A lock-release, audit-fsync/publication/close, TTY, or

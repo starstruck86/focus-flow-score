@@ -7250,8 +7250,10 @@ class TtyAndOutputFailureTest(MetadataProbeTestCase):
         before = private_snapshot(self.fixture)
         real_close = os.close
         failed_descriptor: list[int] = []
+        close_calls: list[int] = []
 
         def close(descriptor: int) -> None:
+            close_calls.append(descriptor)
             if not failed_descriptor:
                 failed_descriptor.append(descriptor)
                 raise OSError("planted-close-failure-sentinel")
@@ -7272,12 +7274,61 @@ class TtyAndOutputFailureTest(MetadataProbeTestCase):
             self.assertEqual(raised.exception.reason, "indeterminate")
             self.assertEqual(private_snapshot(self.fixture), before)
             self.assertNotIn("planted-close-failure-sentinel", str(raised.exception))
+            self.assertEqual(close_calls.count(failed_descriptor[0]), 1)
         finally:
             if failed_descriptor:
                 try:
                     real_close(failed_descriptor[0])
                 except OSError:
                     pass
+
+    def test_returned_snapshot_close_ambiguity_is_not_retried(self):
+        before = private_snapshot(self.fixture)
+        real_load = METADATA._load_snapshot
+        real_close = os.close
+        snapshot_descriptor = {"value": -1}
+        close_attempts: list[int] = []
+
+        def remember_snapshot(*args, **kwargs):
+            snapshot = real_load(*args, **kwargs)
+            snapshot_descriptor["value"] = snapshot.checkpoints_fd
+            return snapshot
+
+        def ambiguous_close(descriptor: int) -> None:
+            if (
+                snapshot_descriptor["value"] >= 0
+                and descriptor == snapshot_descriptor["value"]
+            ):
+                close_attempts.append(descriptor)
+                raise OSError("planted-snapshot-close-sentinel")
+            real_close(descriptor)
+
+        try:
+            with mock.patch.object(
+                METADATA,
+                "_load_snapshot",
+                side_effect=remember_snapshot,
+            ), mock.patch.object(
+                METADATA, "_verify_approved_tty", return_value=None
+            ), mock.patch.object(
+                METADATA, "_tty_write", return_value=None
+            ), mock.patch.object(
+                METADATA.os,
+                "close",
+                side_effect=ambiguous_close,
+            ):
+                with self.assertRaises(
+                    METADATA.MetadataProbeError
+                ) as raised:
+                    METADATA.run_probe(
+                        91, self.verified, ordinary_module=SESSION
+                    )
+            self.assertEqual(raised.exception.reason, "indeterminate")
+            self.assertEqual(len(close_attempts), 1)
+            self.assertEqual(private_snapshot(self.fixture), before)
+        finally:
+            if snapshot_descriptor["value"] >= 0:
+                real_close(snapshot_descriptor["value"])
 
 
 if __name__ == "__main__":

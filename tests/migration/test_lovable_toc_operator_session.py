@@ -2285,6 +2285,67 @@ class TocOperatorSessionTest(unittest.TestCase):
         self.assertFalse(self.annotation_root.exists())
         self.assertEqual(immutable_tree_snapshot(self.capture_root), capture_before)
 
+    def test_capture_overlap_rejects_before_private_roots_exist(self):
+        self.session_root = self.capture_root / "nested-session-root"
+        self.annotation_root = self.capture_root / "nested-annotation-root"
+        self.verified.operator_session_root_path = os.fspath(
+            self.session_root
+        )
+        capture_before = immutable_tree_snapshot(self.capture_root)
+
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(self.responses())
+
+        self.assertEqual(raised.exception.reason, "input_invalid")
+        self.assertFalse(self.session_root.exists())
+        self.assertFalse(self.annotation_root.exists())
+        self.assertEqual(
+            immutable_tree_snapshot(self.capture_root), capture_before
+        )
+
+    def test_case_aliased_capture_overlap_has_zero_side_effects(self):
+        actual_capture_root = self.capture_root
+        self.session_root = actual_capture_root / "nested-session-root"
+        self.annotation_root = actual_capture_root / "nested-annotation-root"
+        self.capture_root = Path(os.fspath(actual_capture_root).swapcase())
+        self.verified.operator_session_root_path = os.fspath(
+            self.session_root
+        )
+        capture_before = immutable_tree_snapshot(actual_capture_root)
+
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(self.responses())
+
+        self.assertEqual(raised.exception.reason, "input_invalid")
+        self.assertFalse(self.session_root.exists())
+        self.assertFalse(self.annotation_root.exists())
+        self.assertEqual(
+            immutable_tree_snapshot(actual_capture_root), capture_before
+        )
+
+    def test_unicode_aliased_capture_overlap_has_zero_side_effects(self):
+        actual_capture_root = self.root / "capture-caf\u00e9"
+        self.capture_root.rename(actual_capture_root)
+        self.session_root = actual_capture_root / "nested-session-root"
+        self.annotation_root = actual_capture_root / "nested-annotation-root"
+        self.capture_root = Path(
+            unicodedata.normalize("NFD", os.fspath(actual_capture_root))
+        )
+        self.verified.operator_session_root_path = os.fspath(
+            self.session_root
+        )
+        capture_before = immutable_tree_snapshot(actual_capture_root)
+
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(self.responses())
+
+        self.assertEqual(raised.exception.reason, "input_invalid")
+        self.assertFalse(self.session_root.exists())
+        self.assertFalse(self.annotation_root.exists())
+        self.assertEqual(
+            immutable_tree_snapshot(actual_capture_root), capture_before
+        )
+
     def test_ack_failure_marks_session_indeterminate_and_never_initializes(self):
         with self.assertRaises(SESSION.OperatorSessionError) as raised:
             self.run_with_responses(self.responses(authorization_ack="wrong"))

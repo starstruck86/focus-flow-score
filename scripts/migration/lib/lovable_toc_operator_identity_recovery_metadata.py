@@ -4296,11 +4296,11 @@ def _revalidate_snapshot(snapshot: MetadataSnapshot) -> None:
 
 def _close_snapshot(snapshot: MetadataSnapshot) -> None:
     failed = False
-    for descriptor in (
-        snapshot.checkpoints_fd,
-        snapshot.annotation_fd,
-        snapshot.root_fd,
-    ):
+    for attribute in ("checkpoints_fd", "annotation_fd", "root_fd"):
+        descriptor = getattr(snapshot, attribute)
+        if descriptor < 0:
+            continue
+        setattr(snapshot, attribute, -1)
         try:
             os.close(descriptor)
         except OSError:
@@ -4372,8 +4372,9 @@ def run_probe(
         snapshot = _load_snapshot(verified, repository, ordinary_module)
         _revalidate_snapshot(snapshot)
         result = _result(verified, snapshot)
-        _close_snapshot(snapshot)
+        closing_snapshot = snapshot
         snapshot = None
+        _close_snapshot(closing_snapshot)
         _verify_approved_tty(
             tty_fd,
             verified.approval["tty_binding"],
@@ -4388,8 +4389,10 @@ def run_probe(
         )
     except BaseException as exc:
         if snapshot is not None:
+            closing_snapshot = snapshot
+            snapshot = None
             try:
-                _close_snapshot(snapshot)
+                _close_snapshot(closing_snapshot)
             except BaseException:
                 raise MetadataProbeError("indeterminate") from None
         if isinstance(exc, MetadataProbeError):

@@ -3375,7 +3375,9 @@ def _run_initialize_session(authorization: Mapping[str, Any], tty_fd: int) -> tu
     session_root_path = _validate_absolute_path(authorization["session_root"], must_exist=False)
     annotation_root_path = _validate_absolute_path(authorization["annotation_root"], must_exist=False)
     capture_root_path = _validate_absolute_path_lexical(authorization["capture"]["capture_root"])
-    _assert_outside_repository((session_root_path, annotation_root_path))
+    _assert_outside_repository(
+        (session_root_path, annotation_root_path, capture_root_path)
+    )
     if session_root_path == annotation_root_path:
         _fail("input_invalid")
     session_root_fd, _session_metadata = _create_private_directory_no_replace(session_root_path)
@@ -3397,7 +3399,6 @@ def _run_initialize_session(authorization: Mapping[str, Any], tty_fd: int) -> tu
         annotation_root_fd, _annotation_metadata = _create_private_directory_no_replace(annotation_root_path)
         os.close(annotation_root_fd)
         annotation_root_fd = -1
-        _assert_outside_repository((session_root_path, annotation_root_path, capture_root_path))
         return _run_authorized_initialize(
             authorization_without_digest,
             tty_fd,
