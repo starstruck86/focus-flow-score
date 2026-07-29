@@ -194,6 +194,32 @@ capture root literals, an empty pairwise-disjoint recovery-evidence root, exact
 private-record digests and versions, named non-AI human roles, session expiry,
 TTY, no-retry rule, and accepted ceilings.
 
+Those private record bindings may be obtained only through a separately
+authorized run of the zero-argument
+`run-lovable-toc-operator-identity-recovery-metadata-probe.sh`. The probe
+requires the installed ordinary approval plus its own immutable approval and
+an exact checkout/profile/procedure/blob/Python/TTY/session binding. Its
+invocation-specific consequence phrase must succeed before any private
+pathname operation. Afterward it reads only the pristine
+root-v1/resume-v2/checkpoint-v1 generation-one chain and release marker with
+descriptor-relative no-follow operations; it does not lock, create an audit or
+marker, write private state, or open capture/evidence roots. All private
+descriptors are closed before one bounded canonical result is written to the
+revalidated private TTY. The result contains only whole-record
+hashes/versions and approved fixed bindings, never the operator claim or a
+fingerprint of it, release token, checkpoint decisions, record JSON, TOC or
+capture content, opaque IDs, SQL, or object metadata.
+
+After first private access, a deterministic chain failure is only
+`private_chain_invalid`, ambiguity is `indeterminate`, and no retry is
+permitted. Same-UID swap-and-restore, terminal recording/partial-output,
+Python-memory-zeroization, and permitted-read access-time behavior remain
+documented ceilings. The probe has synthetic-fixture coverage only and has not
+been run against real migration state; it does not generate/install a recovery
+approval or perform recovery. Operator-identity recovery and `primary_review`
+remain **BLOCKED**, and validation, restore planning, restore commands, and
+migration readiness remain **BLOCKED / RED**.
+
 For that recovery approval, `tty_binding.device` is the raw signed-capable
 Python `os.fstat(tty_fd).st_dev` integer, never an unsigned reinterpretation.
 The device/positive-inode pair describes the approved machine/boot
