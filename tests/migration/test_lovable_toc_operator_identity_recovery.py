@@ -7504,6 +7504,21 @@ class ContractAndScopeTest(unittest.TestCase):
                     "binding_mismatch",
                 )
 
+    def test_recovery_profile_rejects_double_slash_python_path(self):
+        profile = json.loads(
+            (
+                MIGRATION
+                / "verification"
+                / "lovable-toc-operator-identity-recovery-profile.v2.json"
+            ).read_text(encoding="ascii")
+        )
+        profile["python_policy"]["absolute_path"] = (
+            "/" + profile["python_policy"]["absolute_path"]
+        )
+        with self.assertRaises(RECOVERY.RecoveryError) as raised:
+            RECOVERY._validate_profile(profile)
+        self.assertEqual(raised.exception.reason, "binding_mismatch")
+
     def test_public_diagnostics_are_fixed_and_never_contain_private_values(self):
         for reason in RECOVERY.RecoveryError.ALLOWED:
             payload = RECOVERY._fixed("failed", reason)

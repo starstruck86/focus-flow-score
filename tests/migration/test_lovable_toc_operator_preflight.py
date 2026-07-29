@@ -373,6 +373,17 @@ class ProfileContractTests(unittest.TestCase):
                 PREFLIGHT.validate_profile(altered)
             self.assertEqual(caught.exception.reason, "execution_profile_invalid")
 
+    def test_profile_rejects_double_slash_python_path(self):
+        profile = load_profile()
+        profile["python_policy"]["absolute_path"] = (
+            "/" + profile["python_policy"]["absolute_path"]
+        )
+        with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+            PREFLIGHT.validate_profile(profile)
+        self.assertEqual(
+            caught.exception.reason, "execution_profile_invalid"
+        )
+
     def test_profile_rejects_non_self_closing_legacy_bridge(self):
         profile = load_profile()
         profile["compatibility_bridges"][0]["self_closing"]["single_use"] = False

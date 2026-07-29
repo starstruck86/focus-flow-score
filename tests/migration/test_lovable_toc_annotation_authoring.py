@@ -76,6 +76,12 @@ class ReviewedGitEnvironmentTest(unittest.TestCase):
             private_root = Path(temporary).resolve()
             double_slash = "/" + os.fspath(private_root)
             with mock.patch.object(
+                Path,
+                "resolve",
+                side_effect=AssertionError(
+                    "double-slash private root was resolved"
+                ),
+            ) as resolve, mock.patch.object(
                 AUTHOR.os,
                 "open",
                 side_effect=AssertionError(
@@ -86,6 +92,7 @@ class ReviewedGitEnvironmentTest(unittest.TestCase):
                     AUTHOR.AuthoringEntrypointError, "input_invalid"
                 ):
                     AUTHOR._open_private_directory_path(double_slash)
+            resolve.assert_not_called()
 
     @unittest.skipUnless(
         sys.platform == "darwin",

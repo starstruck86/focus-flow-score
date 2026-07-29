@@ -3960,6 +3960,15 @@ class PublicContractAndApprovalTest(unittest.TestCase):
                     "binding_mismatch",
                 )
 
+    def test_metadata_profile_rejects_double_slash_python_path(self):
+        profile = load_metadata_profile()
+        profile["python_policy"]["absolute_path"] = (
+            "/" + profile["python_policy"]["absolute_path"]
+        )
+        with self.assertRaises(METADATA.MetadataProbeError) as raised:
+            METADATA._validate_profile(profile)
+        self.assertEqual(raised.exception.reason, "binding_mismatch")
+
     def test_reviewed_python_closure_contains_every_local_ast_import(self):
         profile = load_metadata_profile()
         reviewed = set(profile["reviewed_files"])

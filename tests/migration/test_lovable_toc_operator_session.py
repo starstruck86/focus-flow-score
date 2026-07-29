@@ -162,6 +162,24 @@ class ReviewedGitEnvironmentTest(unittest.TestCase):
             SESSION._portable_private_path_key(composed),
         )
 
+    def test_double_slash_existing_and_future_paths_reject_before_resolve(self):
+        for must_exist in (False, True):
+            with self.subTest(must_exist=must_exist), mock.patch.object(
+                Path,
+                "resolve",
+                side_effect=AssertionError(
+                    "double-slash operator path was resolved"
+                ),
+            ) as resolve:
+                with self.assertRaisesRegex(
+                    SESSION.OperatorSessionError, "input_invalid"
+                ):
+                    SESSION._validate_absolute_path(
+                        "//private/tmp/operator-private-root",
+                        must_exist=must_exist,
+                    )
+                resolve.assert_not_called()
+
     @unittest.skipUnless(
         sys.platform == "darwin",
         "requires a Unicode-normalization-insensitive macOS fixture volume",
