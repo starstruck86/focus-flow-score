@@ -102,11 +102,18 @@ for module_name in ("binascii", "random", "gettext", "_sha512"):
             spec_origin = getattr(
                 getattr(loaded, "__spec__", None), "origin", None
             )
-            if not isinstance(module_file, str) or not isinstance(
-                spec_origin, str
+            if not isinstance(spec_origin, str):
+                raise RuntimeError("stdlib origin unavailable")
+            if (
+                spec_origin not in {"built-in", "frozen"}
+                and not isinstance(module_file, str)
             ):
                 raise RuntimeError("stdlib origin unavailable")
             for raw_origin in (module_file, spec_origin):
+                if raw_origin is None or raw_origin in {"built-in", "frozen"}:
+                    continue
+                if not isinstance(raw_origin, str):
+                    raise RuntimeError("stdlib origin unavailable")
                 origin = Path(raw_origin).resolve(strict=True)
                 if origin == case_root or case_root in origin.parents:
                     raise RuntimeError("repository shadow selected")

@@ -3324,6 +3324,13 @@ def _validate_approval(
         "tty_binding",
     }
     _exact(approval, expected_keys)
+    try:
+        python_identity = PREFLIGHT._validate_python_approval(
+            approval["python_identity"],
+            profile["python_policy"],
+        )
+    except PREFLIGHT.PreflightError as exc:
+        raise RecoveryError("binding_mismatch") from exc
     if (
         approval["artifact_kind"] != RECOVERY_APPROVAL_KIND
         or type(approval["format_version"]) is not int
@@ -3390,7 +3397,7 @@ def _validate_approval(
         "sha256": ordinary.approval_sha256,
     }:
         _fail("binding_mismatch")
-    if approval["python_identity"] != ordinary.approval["python_identity"]:
+    if python_identity != ordinary.approval["python_identity"]:
         _fail("binding_mismatch")
     roles = (
         _safe_identity(approval["authorizer_identity"]),

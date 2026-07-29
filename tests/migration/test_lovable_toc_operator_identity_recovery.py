@@ -249,6 +249,20 @@ class SyntheticGenerationOne:
         self.bridge = self.profile["recovery_contract"]["historical_binding"]
         self.historical_python_identity = "9" * 64
         self.release_token = "8" * 64
+        python_policy = self.profile["python_policy"]
+        unsigned_python_identity = {
+            "absolute_path": python_policy["absolute_path"],
+            "exact_gid": python_policy["exact_gid"],
+            "exact_mode": python_policy["exact_mode"],
+            "exact_nlink": python_policy["exact_nlink"],
+            "exact_uid": python_policy["exact_uid"],
+            "reported_version": python_policy["reported_version"],
+            "sha256": python_policy["sha256"],
+        }
+        python_identity = {
+            **unsigned_python_identity,
+            "identity_sha256": sha(canonical(unsigned_python_identity)),
+        }
 
         package_fd = os.open(
             self.package,
@@ -373,7 +387,7 @@ class SyntheticGenerationOne:
                 "filename": "synthetic-ordinary-approval.json",
                 "sha256": "1" * 64,
             },
-            "python_identity": {},
+            "python_identity": python_identity,
             "recovery_evidence_root_path": os.fspath(self.audit_root),
             "recovery_profile": {"format_version": 2, "sha256": "2" * 64},
             "recovery_procedure_identity_sha256": "3" * 64,
@@ -1286,6 +1300,76 @@ class SignedTtyCompatibilityTest(RecoveryTestCase):
             )
         self.assertIs(validated, approval)
         private_open.assert_not_called()
+
+    def test_validate_approval_rejects_python_identity_boolean_integer_aliases(self):
+        for field in ("exact_nlink", "exact_uid", "exact_gid"):
+            for replacement in (True, False):
+                with self.subTest(field=field, replacement=replacement):
+                    approval = copy.deepcopy(self.fixture.approval)
+                    approval["python_identity"][field] = replacement
+                    with mock.patch.object(
+                        RECOVERY.os,
+                        "fstat",
+                        side_effect=AssertionError(
+                            "invalid Python identity reached TTY validation"
+                        ),
+                    ):
+                        self.assert_fixed_failure(
+                            lambda: RECOVERY._validate_approval(
+                                approval,
+                                checkout=approval["approved_checkout_sha"],
+                                profile=self.fixture.profile,
+                                profile_sha256=approval["recovery_profile"][
+                                    "sha256"
+                                ],
+                                procedure_identity=approval[
+                                    "recovery_procedure_identity_sha256"
+                                ],
+                                blobs={},
+                                ordinary=self.ordinary_binding(approval),
+                                tty_fd=9,
+                            ),
+                            "binding_mismatch",
+                        )
+
+    def test_validate_approval_requires_exact_python_identity_keys(self):
+        for label, mutate in (
+            (
+                "missing",
+                lambda identity: identity.pop("identity_sha256"),
+            ),
+            (
+                "unexpected",
+                lambda identity: identity.__setitem__("unexpected", 1),
+            ),
+        ):
+            with self.subTest(label=label):
+                approval = copy.deepcopy(self.fixture.approval)
+                mutate(approval["python_identity"])
+                with mock.patch.object(
+                    RECOVERY.os,
+                    "fstat",
+                    side_effect=AssertionError(
+                        "invalid Python identity reached TTY validation"
+                    ),
+                ):
+                    self.assert_fixed_failure(
+                        lambda: RECOVERY._validate_approval(
+                            approval,
+                            checkout=approval["approved_checkout_sha"],
+                            profile=self.fixture.profile,
+                            profile_sha256=approval["recovery_profile"][
+                                "sha256"
+                            ],
+                            procedure_identity=approval[
+                                "recovery_procedure_identity_sha256"
+                            ],
+                            blobs={},
+                            ordinary=self.ordinary_binding(approval),
+                            tty_fd=9,
+                        ),
+                        "binding_mismatch",
+                    )
 
     def test_validate_approval_rejects_signed_device_mismatches_and_nonintegers(self):
         invalid_devices = (

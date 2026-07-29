@@ -1211,6 +1211,13 @@ def _validate_approval(
             "tty_binding",
         },
     )
+    try:
+        python_identity = PREFLIGHT._validate_python_approval(
+            approval["python_identity"],
+            profile["python_policy"],
+        )
+    except PREFLIGHT.PreflightError as exc:
+        raise MetadataProbeError("binding_mismatch") from exc
     if (
         approval["artifact_kind"] != APPROVAL_KIND
         or type(approval["format_version"]) is not int
@@ -1236,7 +1243,7 @@ def _validate_approval(
         or approval["reviewed_file_blobs"] != dict(blobs)
         or approval["operator_session_root_path"]
         != ordinary.operator_session_root_path
-        or approval["python_identity"] != ordinary.approval["python_identity"]
+        or python_identity != ordinary.approval["python_identity"]
     ):
         _fail("binding_mismatch")
     _validate_absolute_literal(approval["operator_session_root_path"], repository)

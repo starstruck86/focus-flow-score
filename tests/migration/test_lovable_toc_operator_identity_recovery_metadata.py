@@ -822,10 +822,10 @@ def public_approval_fixture():
         "exact_mode": python_policy["exact_mode"],
         "exact_nlink": python_policy["exact_nlink"],
         "exact_uid": python_policy["exact_uid"],
-        "identity_sha256": "6" * 64,
         "reported_version": python_policy["reported_version"],
         "sha256": python_policy["sha256"],
     }
+    python_identity["identity_sha256"] = digest(canonical(python_identity))
     checkout = "5" * 40
     ordinary = types.SimpleNamespace(
         approved_checkout_sha=checkout,
@@ -4179,6 +4179,96 @@ class PublicContractAndApprovalTest(unittest.TestCase):
             approval["executing_operator_identity"],
         )
         private_open.assert_not_called()
+
+    def test_public_approval_rejects_python_identity_boolean_integer_aliases(self):
+        for field in ("exact_nlink", "exact_uid", "exact_gid"):
+            for replacement in (True, False):
+                with self.subTest(field=field, replacement=replacement):
+                    (
+                        approval,
+                        checkout,
+                        profile,
+                        profile_sha256,
+                        procedure_identity,
+                        blobs,
+                        ordinary,
+                    ) = public_approval_fixture()
+                    approval["python_identity"][field] = replacement
+                    ordinary.approval["python_identity"][field] = replacement
+                    with mock.patch.object(
+                        METADATA,
+                        "_verify_approved_tty",
+                        side_effect=AssertionError(
+                            "invalid Python identity reached TTY validation"
+                        ),
+                    ):
+                        with self.assertRaises(
+                            METADATA.MetadataProbeError
+                        ) as raised:
+                            METADATA._validate_approval(
+                                approval,
+                                checkout=checkout,
+                                profile=profile,
+                                profile_sha256=profile_sha256,
+                                procedure_identity=procedure_identity,
+                                blobs=blobs,
+                                ordinary=ordinary,
+                                tty_fd=91,
+                                repository=ROOT,
+                            )
+                    self.assertEqual(
+                        raised.exception.reason,
+                        "binding_mismatch",
+                    )
+
+    def test_public_approval_requires_exact_python_identity_keys(self):
+        for label, mutate in (
+            (
+                "missing",
+                lambda identity: identity.pop("identity_sha256"),
+            ),
+            (
+                "unexpected",
+                lambda identity: identity.__setitem__("unexpected", 1),
+            ),
+        ):
+            with self.subTest(label=label):
+                (
+                    approval,
+                    checkout,
+                    profile,
+                    profile_sha256,
+                    procedure_identity,
+                    blobs,
+                    ordinary,
+                ) = public_approval_fixture()
+                mutate(approval["python_identity"])
+                mutate(ordinary.approval["python_identity"])
+                with mock.patch.object(
+                    METADATA,
+                    "_verify_approved_tty",
+                    side_effect=AssertionError(
+                        "invalid Python identity reached TTY validation"
+                    ),
+                ):
+                    with self.assertRaises(
+                        METADATA.MetadataProbeError
+                    ) as raised:
+                        METADATA._validate_approval(
+                            approval,
+                            checkout=checkout,
+                            profile=profile,
+                            profile_sha256=profile_sha256,
+                            procedure_identity=procedure_identity,
+                            blobs=blobs,
+                            ordinary=ordinary,
+                            tty_fd=91,
+                            repository=ROOT,
+                        )
+                self.assertEqual(
+                    raised.exception.reason,
+                    "binding_mismatch",
+                )
 
     def test_instruction_like_legal_path_is_only_untrusted_subject_data(self):
         approval, checkout, *_rest = public_approval_fixture()
