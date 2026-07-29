@@ -155,6 +155,12 @@ class ReviewedGitEnvironmentTest(unittest.TestCase):
                 Path(os.fspath(composed).swapcase())
             ),
         )
+        self.assertEqual(
+            SESSION._portable_private_path_key(
+                Path("//private/tmp/Operator-Caf\u00e9")
+            ),
+            SESSION._portable_private_path_key(composed),
+        )
 
     @unittest.skipUnless(
         sys.platform == "darwin",
@@ -2331,6 +2337,26 @@ class TocOperatorSessionTest(unittest.TestCase):
         self.capture_root = Path(
             unicodedata.normalize("NFD", os.fspath(actual_capture_root))
         )
+        self.verified.operator_session_root_path = os.fspath(
+            self.session_root
+        )
+        capture_before = immutable_tree_snapshot(actual_capture_root)
+
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(self.responses())
+
+        self.assertEqual(raised.exception.reason, "input_invalid")
+        self.assertFalse(self.session_root.exists())
+        self.assertFalse(self.annotation_root.exists())
+        self.assertEqual(
+            immutable_tree_snapshot(actual_capture_root), capture_before
+        )
+
+    def test_double_slash_capture_overlap_has_zero_side_effects(self):
+        actual_capture_root = self.capture_root
+        self.session_root = actual_capture_root / "nested-session-root"
+        self.annotation_root = actual_capture_root / "nested-annotation-root"
+        self.capture_root = Path("/" + os.fspath(actual_capture_root))
         self.verified.operator_session_root_path = os.fspath(
             self.session_root
         )

@@ -240,7 +240,9 @@ pathname operation. Afterward it reads only the pristine
 root-v1/resume-v2/checkpoint-v1 generation-one chain and release marker with
 descriptor-relative no-follow operations; it does not lock, create an audit or
 marker, write private state, or open capture/evidence roots. All private
-descriptors are closed before one bounded canonical result is written to the
+path literals must use exactly one leading slash, so a POSIX `//...` alias is
+rejected before private access. Every private descriptor is closed before one
+bounded canonical result is written to the
 revalidated private TTY. Descriptor ownership is relinquished before each
 first close attempt, so an ambiguous close is not retried by error cleanup and
 returns only `indeterminate`. The result contains only whole-record

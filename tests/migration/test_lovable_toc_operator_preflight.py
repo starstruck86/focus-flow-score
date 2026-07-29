@@ -504,6 +504,19 @@ class ApprovalAndRepositoryTests(unittest.TestCase):
             )
         self.assertEqual(caught.exception.reason, "approval_invalid")
 
+    def test_approval_rejects_double_slash_private_root(self):
+        approval = copy.deepcopy(self.fixture.approval)
+        approval["operator_session_root_path"] = (
+            "//synthetic/private/operator-session"
+        )
+        with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+            PREFLIGHT.validate_approval(
+                approval,
+                profile=self.fixture.profile,
+                repository_root=self.fixture.repository,
+            )
+        self.assertEqual(caught.exception.reason, "approval_invalid")
+
     def test_profile_snapshot_rejects_same_byte_path_replacement_during_read(self):
         profile_path = self.fixture.repository / PREFLIGHT.PROFILE_RELATIVE_PATH
         replacement_source = profile_path.with_name("profile-original")

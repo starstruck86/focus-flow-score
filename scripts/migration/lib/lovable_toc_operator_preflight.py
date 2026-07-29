@@ -498,15 +498,23 @@ def _validate_relative_path(value: Any, reason: str) -> str:
 
 
 def _portable_path_key(value: str | os.PathLike[str]) -> str:
+    raw = os.fspath(value)
+    if raw.startswith("//"):
+        raw = "/" + raw.lstrip("/")
     normalized = unicodedata.normalize(
-        "NFC", os.path.normpath(os.fspath(value))
+        "NFC", os.path.normpath(raw)
     )
     return unicodedata.normalize("NFC", normalized.casefold())
 
 
 def _validate_absolute_path_lexically(value: Any, repository: Path) -> str:
     path = _require_string(value, reason="approval_invalid")
-    if "\x00" in path or not path.startswith("/") or os.path.normpath(path) != path:
+    if (
+        "\x00" in path
+        or not path.startswith("/")
+        or path.startswith("//")
+        or os.path.normpath(path) != path
+    ):
         raise PreflightError("approval_invalid")
     candidate = Path(path)
     try:
@@ -648,6 +656,7 @@ def validate_profile(value: Any) -> dict[str, Any]:
         or python["isolated_flags"] != ["-I", "-S", "-B"]
         or python["symlink_components_forbidden"] is not True
         or not python["absolute_path"].startswith("/")
+        or python["absolute_path"].startswith("//")
         or os.path.normpath(python["absolute_path"]) != python["absolute_path"]
     ):
         raise PreflightError(reason)

@@ -558,6 +558,8 @@ def _directory_identity(metadata: os.stat_result) -> tuple[Any, ...]:
 def _portable_private_path_key(value: str) -> str:
     """Fail closed for case and canonically equivalent Unicode aliases."""
 
+    if value.startswith("//"):
+        value = "/" + value.lstrip("/")
     normalized = unicodedata.normalize("NFC", os.path.normpath(value))
     return unicodedata.normalize("NFC", normalized.casefold())
 
@@ -810,6 +812,7 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
     if (
         type(python_policy["absolute_path"]) is not str
         or not python_policy["absolute_path"].startswith("/")
+        or python_policy["absolute_path"].startswith("//")
         or type(python_policy["exact_uid"]) is not int
         or type(python_policy["exact_gid"]) is not int
         or type(python_policy["exact_mode"]) is not str
@@ -3373,6 +3376,7 @@ def _validate_approval(
             type(value) is not str
             or len(value) > 4096
             or not value.startswith("/")
+            or value.startswith("//")
             or "\x00" in value
             or os.path.abspath(value) != value
             or any(part in {"", ".", ".."} for part in Path(value).parts)
@@ -3811,6 +3815,7 @@ def _absolute_private_path(value: Any, repository: Path) -> Path:
         type(value) is not str
         or len(value) > 4096
         or not value.startswith("/")
+        or value.startswith("//")
         or "\x00" in value
         or os.path.abspath(value) != value
     ):

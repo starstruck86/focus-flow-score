@@ -62,6 +62,30 @@ class ReviewedGitEnvironmentTest(unittest.TestCase):
                 Path(os.fspath(composed).swapcase())
             ),
         )
+        self.assertEqual(
+            AUTHOR._portable_private_path_key(
+                Path("//private/tmp/Authoring-Caf\u00e9")
+            ),
+            AUTHOR._portable_private_path_key(composed),
+        )
+
+    def test_double_slash_private_root_is_rejected_before_open(self):
+        with tempfile.TemporaryDirectory(
+            prefix="authoring-double-slash."
+        ) as temporary:
+            private_root = Path(temporary).resolve()
+            double_slash = "/" + os.fspath(private_root)
+            with mock.patch.object(
+                AUTHOR.os,
+                "open",
+                side_effect=AssertionError(
+                    "double-slash private root was opened"
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    AUTHOR.AuthoringEntrypointError, "input_invalid"
+                ):
+                    AUTHOR._open_private_directory_path(double_slash)
 
     @unittest.skipUnless(
         sys.platform == "darwin",

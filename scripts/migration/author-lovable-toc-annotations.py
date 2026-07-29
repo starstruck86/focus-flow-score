@@ -881,7 +881,12 @@ def _validate_action_invocation(
 
 
 def _open_private_directory_path(raw: str) -> tuple[int, Path, os.stat_result]:
-    if type(raw) is not str or not raw or "\x00" in raw:
+    if (
+        type(raw) is not str
+        or not raw
+        or raw.startswith("//")
+        or "\x00" in raw
+    ):
         raise AuthoringEntrypointError("input_invalid")
     path = Path(raw)
     try:
@@ -985,8 +990,11 @@ def _revalidate_child_directory(
 
 
 def _portable_private_path_key(path: Path) -> str:
+    raw = os.fspath(path)
+    if raw.startswith("//"):
+        raw = "/" + raw.lstrip("/")
     normalized = unicodedata.normalize(
-        "NFC", os.path.normpath(os.fspath(path))
+        "NFC", os.path.normpath(raw)
     )
     return unicodedata.normalize("NFC", normalized.casefold())
 

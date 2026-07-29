@@ -772,6 +772,7 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
     if (
         type(python_policy["absolute_path"]) is not str
         or not python_policy["absolute_path"].startswith("/")
+        or python_policy["absolute_path"].startswith("//")
         or type(python_policy["exact_uid"]) is not int
         or type(python_policy["exact_gid"]) is not int
         or type(python_policy["exact_mode"]) is not str
@@ -1159,6 +1160,7 @@ def _validate_absolute_literal(value: Any, repository: Path) -> str:
     if (
         type(value) is not str
         or not value.startswith("/")
+        or value.startswith("//")
         or len(value) > MAX_PRIVATE_PATH_CHARACTERS
         or "\x00" in value
         or os.path.abspath(value) != value
@@ -3677,6 +3679,7 @@ def _private_path(value: Any, repository: Path) -> Path:
     if (
         type(value) is not str
         or not value.startswith("/")
+        or value.startswith("//")
         or len(value) > MAX_PRIVATE_PATH_CHARACTERS
         or "\x00" in value
     ):

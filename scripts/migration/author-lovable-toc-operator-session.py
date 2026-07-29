@@ -777,7 +777,12 @@ def _count(value: str, *, allow_zero: bool = False) -> int:
 
 
 def _validate_absolute_path(value: str, *, must_exist: bool) -> Path:
-    if type(value) is not str or not value or "\x00" in value:
+    if (
+        type(value) is not str
+        or not value
+        or value.startswith("//")
+        or "\x00" in value
+    ):
         _fail("input_invalid")
     path = Path(value)
     if not path.is_absolute() or value != os.path.abspath(value):
@@ -799,7 +804,12 @@ def _validate_absolute_path(value: str, *, must_exist: bool) -> Path:
 
 
 def _validate_absolute_path_lexical(value: str) -> Path:
-    if type(value) is not str or not value or "\x00" in value:
+    if (
+        type(value) is not str
+        or not value
+        or value.startswith("//")
+        or "\x00" in value
+    ):
         _fail("input_invalid")
     path = Path(value)
     if (
@@ -812,8 +822,11 @@ def _validate_absolute_path_lexical(value: str) -> Path:
 
 
 def _portable_private_path_key(path: Path) -> str:
+    raw = os.fspath(path)
+    if raw.startswith("//"):
+        raw = "/" + raw.lstrip("/")
     normalized = unicodedata.normalize(
-        "NFC", os.path.normpath(os.fspath(path))
+        "NFC", os.path.normpath(raw)
     )
     return unicodedata.normalize("NFC", normalized.casefold())
 

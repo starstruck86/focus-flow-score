@@ -1204,6 +1204,31 @@ class PublicContractAndApprovalTest(unittest.TestCase):
                     METADATA._validate_absolute_literal(alias, repository)
                 self.assertEqual(raised.exception.reason, "approval_invalid")
 
+    def test_double_slash_private_literals_fail_before_access(self):
+        value = "//private/tmp/metadata-private-root"
+        for function, reason in (
+            (
+                lambda: METADATA._validate_absolute_literal(value, ROOT),
+                "approval_invalid",
+            ),
+            (
+                lambda: METADATA._private_path(value, ROOT),
+                "private_chain_invalid",
+            ),
+        ):
+            with self.subTest(reason=reason), mock.patch.object(
+                METADATA.os,
+                "lstat",
+                side_effect=AssertionError(
+                    "double-slash private path was accessed"
+                ),
+            ):
+                with self.assertRaises(
+                    METADATA.MetadataProbeError
+                ) as raised:
+                    function()
+                self.assertEqual(raised.exception.reason, reason)
+
     def test_preimport_guard_exact_one_discovery_succeeds_end_to_end(self):
         fixture = SyntheticPreimportEnvironment()
         try:

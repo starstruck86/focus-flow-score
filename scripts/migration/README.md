@@ -797,6 +797,9 @@ executor-owned, non-symlink, mode-`0700` private directory on that same approved
 filesystem; a permissive or ambiguous parent is outside the operator contract.
 Case aliases and canonically equivalent Unicode spellings are treated as the
 same path for both repository-containment and private-root separation checks.
+Every absolute private path has exactly one leading slash; the POSIX
+double-leading `//...` spelling is rejected before access or mutation and is
+also collapsed by the comparison key as defense in depth.
 Before either private root is created or an authorization record is published,
 the wrapper compares the complete session-root, annotation-root, and
 capture-root triple. Direct containment, a case alias, or a canonically
@@ -1186,7 +1189,9 @@ After authorization, the procedure holds the already verified repository plus
 the approved recovery-evidence, operator-session, and annotation directories
 only long enough to prove stable inode/ancestry separation. It also repeats
 case-folded, Unicode-normalized lexical separation across those roots and the
-capture root without opening, listing, or statting the capture root. It closes
+capture root without opening, listing, or statting the capture root. All
+approved private literals must use exactly one leading slash, and a `//...`
+alias stops before audit publication. It closes
 the validation-only descriptors without retrying a close-ambiguous descriptor,
 then publishes immutable `attempt_started` evidence in the separate approved
 evidence root and opens and temporarily locks the operator-session root. It

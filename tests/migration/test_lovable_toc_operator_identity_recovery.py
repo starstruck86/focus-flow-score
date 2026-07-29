@@ -6201,6 +6201,13 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
             ),
             ("unicode_aliased_overlap", unicode_aliased_overlap),
             (
+                "double_slash_capture",
+                lambda approval: approval.__setitem__(
+                    "capture_root_path",
+                    "/" + os.fspath(self.fixture.capture_root),
+                ),
+            ),
+            (
                 "overlong_private_path",
                 lambda approval: approval.__setitem__(
                     "annotation_root_path", "/" + ("a" * 4096)
@@ -6316,6 +6323,12 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
             RECOVERY._portable_private_path_key(
                 unicodedata.normalize("NFD", os.fspath(repository))
             ),
+        )
+        self.assertEqual(
+            RECOVERY._portable_private_path_key(
+                "/" + os.fspath(repository)
+            ),
+            RECOVERY._portable_private_path_key(os.fspath(repository)),
         )
         for alias in aliases:
             with self.subTest(alias=os.fspath(alias)):
@@ -6443,9 +6456,7 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
 
 
 class FailureAndAmbiguityTest(RecoveryTestCase):
-    def test_nested_audit_root_is_rejected_by_inode_ancestry_before_publication(
-        self,
-    ):
+    def test_nested_audit_root_is_rejected_before_publication(self):
         nested_audit = self.fixture.operator_root / "nested-audit-root"
         nested_audit.mkdir(mode=0o700)
         self.fixture.approval["recovery_evidence_root_path"] = os.fspath(
@@ -6467,6 +6478,40 @@ class FailureAndAmbiguityTest(RecoveryTestCase):
             )
         publish.assert_not_called()
         self.assertEqual(os.listdir(nested_audit), [])
+
+    def test_double_slash_capture_alias_has_zero_publications(self):
+        nested_audit = self.fixture.capture_root / "nested-audit-root"
+        nested_audit.mkdir(mode=0o700)
+        self.fixture.approval["capture_root_path"] = (
+            "/" + os.fspath(self.fixture.capture_root)
+        )
+        self.fixture.approval["recovery_evidence_root_path"] = os.fspath(
+            nested_audit
+        )
+        capture_before = immutable_tree_snapshot(
+            self.fixture.capture_root
+        )
+        publish = mock.Mock(
+            side_effect=AssertionError(
+                "audit publication reached double-slash capture alias"
+            )
+        )
+
+        with mock.patch.object(
+            RECOVERY, "_publish_audit", side_effect=publish
+        ):
+            self.assert_fixed_failure(
+                lambda: RECOVERY.run_recovery(
+                    9, self.fixture.verified, SESSION
+                ),
+                "binding_mismatch",
+            )
+
+        publish.assert_not_called()
+        self.assertEqual(
+            immutable_tree_snapshot(self.fixture.capture_root),
+            capture_before,
+        )
 
     @unittest.skipUnless(
         sys.platform == "darwin",

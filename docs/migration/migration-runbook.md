@@ -1062,6 +1062,8 @@ green CI run.
    evidence inside any existing migration-state root. Alternate case and
    canonically equivalent composed/decomposed Unicode spellings are the same
    path for repository-containment and private-root-separation decisions.
+   Every private literal must use exactly one leading slash; reject the POSIX
+   double-leading `//...` alias before access or publication.
 5. Run the zero-argument
    `scripts/migration/run-lovable-toc-operator-identity-recovery.sh` directly
    in the same approved local foreground controlling TTY. It preserves the
