@@ -27,6 +27,7 @@ import stat
 import subprocess
 import sys
 import termios
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
@@ -496,14 +497,24 @@ def _validate_relative_path(value: Any, reason: str) -> str:
     return path
 
 
+def _portable_path_key(value: str | os.PathLike[str]) -> str:
+    normalized = unicodedata.normalize(
+        "NFC", os.path.normpath(os.fspath(value))
+    )
+    return unicodedata.normalize("NFC", normalized.casefold())
+
+
 def _validate_absolute_path_lexically(value: Any, repository: Path) -> str:
     path = _require_string(value, reason="approval_invalid")
     if "\x00" in path or not path.startswith("/") or os.path.normpath(path) != path:
         raise PreflightError("approval_invalid")
     candidate = Path(path)
     try:
-        if os.path.commonpath((os.fspath(repository), path)) == os.fspath(
-            repository
+        repository_key = _portable_path_key(repository)
+        candidate_key = _portable_path_key(path)
+        if (
+            os.path.commonpath((repository_key, candidate_key))
+            == repository_key
         ):
             raise PreflightError("approval_invalid")
     except ValueError as exc:

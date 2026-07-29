@@ -20,6 +20,7 @@ import tempfile
 import termios
 import time
 import types
+import unicodedata
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -139,6 +140,49 @@ SYNTHETIC_PTY_UNAVAILABLE = b"SYNTHETIC_PTY_CONTROLLING_TTY_UNAVAILABLE"
 
 
 class ReviewedGitEnvironmentTest(unittest.TestCase):
+    def test_private_path_key_normalizes_case_and_unicode(self):
+        composed = Path("/private/tmp/Operator-Caf\u00e9")
+        decomposed = Path(
+            unicodedata.normalize("NFD", os.fspath(composed))
+        )
+        self.assertEqual(
+            SESSION._portable_private_path_key(composed),
+            SESSION._portable_private_path_key(decomposed),
+        )
+        self.assertEqual(
+            SESSION._portable_private_path_key(composed),
+            SESSION._portable_private_path_key(
+                Path(os.fspath(composed).swapcase())
+            ),
+        )
+
+    @unittest.skipUnless(
+        sys.platform == "darwin",
+        "requires a Unicode-normalization-insensitive macOS fixture volume",
+    )
+    def test_macos_repository_unicode_alias_is_rejected(self):
+        with tempfile.TemporaryDirectory(
+            prefix="operator-repository-alias."
+        ) as temporary:
+            repository = Path(temporary) / "Repository-Caf\u00e9"
+            repository.mkdir(mode=0o700)
+            private_root = repository / "private-root"
+            private_root.mkdir(mode=0o700)
+            alias = Path(
+                unicodedata.normalize("NFD", os.fspath(private_root))
+            )
+            if not alias.exists() or not os.path.samefile(
+                alias, private_root
+            ):
+                self.skipTest(
+                    "fixture volume is not Unicode-normalization-insensitive"
+                )
+            with mock.patch.object(SESSION, "REPO", repository):
+                with self.assertRaisesRegex(
+                    SESSION.OperatorSessionError, "input_invalid"
+                ):
+                    SESSION._assert_outside_repository((alias,))
+
     def test_every_operator_git_call_path_disables_lazy_fetch(self):
         calls: list[tuple[list[str], dict[str, object]]] = []
 

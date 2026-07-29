@@ -109,6 +109,7 @@ import stat
 import subprocess
 import struct
 import termios
+import unicodedata
 from collections import Counter
 from collections.abc import Mapping as AbcMapping
 from dataclasses import dataclass
@@ -546,6 +547,7 @@ def _preimport_external_guard(
             "subprocess.py",
             "termios.py",
             "typing.py",
+            "unicodedata.py",
         ):
             try:
                 os.lstat(migration_directory / relative)
@@ -809,17 +811,38 @@ def _validate_absolute_path_lexical(value: str) -> Path:
     return path
 
 
+def _portable_private_path_key(path: Path) -> str:
+    normalized = unicodedata.normalize(
+        "NFC", os.path.normpath(os.fspath(path))
+    )
+    return unicodedata.normalize("NFC", normalized.casefold())
+
+
 def _assert_outside_repository(paths: tuple[Path, ...]) -> None:
     repository = REPO.resolve(strict=True)
-    for path in paths:
-        try:
-            path.resolve(strict=path.exists()).relative_to(repository)
-        except ValueError:
-            continue
-        _fail("input_invalid")
-    normalized = [os.path.normcase(os.fspath(path)) for path in paths]
-    if len(set(normalized)) != len(normalized):
-        _fail("input_invalid")
+    repository_keys = {
+        _portable_private_path_key(REPO),
+        _portable_private_path_key(repository),
+    }
+    path_keys = [_portable_private_path_key(path) for path in paths]
+    for path_key in path_keys:
+        for repository_key in repository_keys:
+            try:
+                if (
+                    os.path.commonpath((repository_key, path_key))
+                    == repository_key
+                ):
+                    _fail("input_invalid")
+            except ValueError as exc:
+                raise OperatorSessionError("input_invalid") from exc
+    for index, left in enumerate(path_keys):
+        for right in path_keys[index + 1 :]:
+            try:
+                common = os.path.commonpath((left, right))
+            except ValueError as exc:
+                raise OperatorSessionError("input_invalid") from exc
+            if common in {left, right}:
+                _fail("input_invalid")
 
 
 def _open_existing_private_directory(path: Path) -> tuple[int, os.stat_result]:

@@ -11,6 +11,7 @@ import stat
 import sys
 import tempfile
 import threading
+import unicodedata
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -46,6 +47,49 @@ GIT_B = "b" * 40
 
 
 class ReviewedGitEnvironmentTest(unittest.TestCase):
+    def test_private_path_key_normalizes_case_and_unicode(self):
+        composed = Path("/private/tmp/Authoring-Caf\u00e9")
+        decomposed = Path(
+            unicodedata.normalize("NFD", os.fspath(composed))
+        )
+        self.assertEqual(
+            AUTHOR._portable_private_path_key(composed),
+            AUTHOR._portable_private_path_key(decomposed),
+        )
+        self.assertEqual(
+            AUTHOR._portable_private_path_key(composed),
+            AUTHOR._portable_private_path_key(
+                Path(os.fspath(composed).swapcase())
+            ),
+        )
+
+    @unittest.skipUnless(
+        sys.platform == "darwin",
+        "requires a Unicode-normalization-insensitive macOS fixture volume",
+    )
+    def test_macos_repository_unicode_alias_is_rejected(self):
+        with tempfile.TemporaryDirectory(
+            prefix="authoring-repository-alias."
+        ) as temporary:
+            repository = Path(temporary) / "Repository-Caf\u00e9"
+            repository.mkdir(mode=0o700)
+            private_root = repository / "private-root"
+            private_root.mkdir(mode=0o700)
+            alias = Path(
+                unicodedata.normalize("NFD", os.fspath(private_root))
+            )
+            if not alias.exists() or not os.path.samefile(
+                alias, private_root
+            ):
+                self.skipTest(
+                    "fixture volume is not Unicode-normalization-insensitive"
+                )
+            with mock.patch.object(AUTHOR, "REPO", repository):
+                with self.assertRaisesRegex(
+                    AUTHOR.AuthoringEntrypointError, "input_invalid"
+                ):
+                    AUTHOR._assert_disjoint_outside_repository((alias,))
+
     def test_every_git_helper_call_disables_lazy_fetch(self):
         calls: list[tuple[list[str], dict[str, object]]] = []
 

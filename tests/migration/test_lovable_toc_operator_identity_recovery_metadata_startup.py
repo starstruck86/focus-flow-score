@@ -346,6 +346,7 @@ class RecoveryMetadataStartupContractTests(unittest.TestCase):
             '"required_decision": "APPROVE FOR MERGE"',
             '"fallback_policy": "forbidden"',
             '"session_policy": "fresh_no_resume_no_continuation"',
+            '"unicodedata",',
             "baseline != _ISOLATED_STDLIB_PATH",
             "resolved_entry.relative_to(base_prefix)",
             "sys.path.append(root_text)",

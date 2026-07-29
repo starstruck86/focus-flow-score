@@ -795,6 +795,8 @@ non-symlink directories outside Git, mode `0700`, and on the approved private
 filesystem. The direct parent of each root must already be an approved
 executor-owned, non-symlink, mode-`0700` private directory on that same approved
 filesystem; a permissive or ambiguous parent is outside the operator contract.
+Case aliases and canonically equivalent Unicode spellings are treated as the
+same path for both repository-containment and private-root separation checks.
 The session wrapper creates the session root and annotation root with no
 replacement; an existing path stops fail-closed. All session files are
 single-link regular files at mode `0400`, published by no-replace atomic rename
@@ -1175,9 +1177,15 @@ later launch. Expiry and the exact approval-bound TTY device/inode are checked
 again after that human pause. A wrong phrase performs no recovery-evidence or
 operator/annotation/capture-root operation.
 
-After authorization, the procedure first publishes immutable
-`attempt_started` evidence in the separate approved evidence root, then opens
-and temporarily locks the operator-session root. It accepts only a pristine,
+After authorization, the procedure holds the already verified repository plus
+the approved recovery-evidence, operator-session, and annotation directories
+only long enough to prove stable inode/ancestry separation. It also repeats
+case-folded, Unicode-normalized lexical separation across those roots and the
+capture root without opening, listing, or statting the capture root. It closes
+the validation-only descriptors without retrying a close-ambiguous descriptor,
+then publishes immutable `attempt_started` evidence in the separate approved
+evidence root and opens and temporarily locks the operator-session root. It
+accepts only a pristine,
 predecessor-free generation `1` at `PRIMARY_REVIEW_REQUIRED`, validates exact
 root-v1/resume-v2/checkpoint-v1 hashes, historical execution/Python and capture
 bindings, release marker, exact child allowlists, and equality of the stored

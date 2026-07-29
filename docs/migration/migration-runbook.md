@@ -1059,7 +1059,9 @@ green CI run.
    explicit authorization. It must be canonical, empty, executor-owned,
    non-symlink, mode `0700`, outside Git, and nonoverlapping with the
    operator-session, annotation, and capture roots. Do not place recovery
-   evidence inside any existing migration-state root.
+   evidence inside any existing migration-state root. Alternate case and
+   canonically equivalent composed/decomposed Unicode spellings are the same
+   path for repository-containment and private-root-separation decisions.
 5. Run the zero-argument
    `scripts/migration/run-lovable-toc-operator-identity-recovery.sh` directly
    in the same approved local foreground controlling TTY. It preserves the
@@ -1156,7 +1158,9 @@ wrapper rather than hand-exporting `TOC_AUTHOR_*` values. The operator-session
 root is separate from the annotation root; both must be approved owner-private
 mode-`0700` roots outside Git, and each direct parent must already be an
 approved owner-private, non-symlink, mode-`0700` directory on the approved
-filesystem. Authorization and resume records are canonical JSON, single-link
+filesystem. Case aliases and canonically equivalent Unicode spellings are
+treated as the same path when enforcing repository containment and root
+separation. Authorization and resume records are canonical JSON, single-link
 mode-`0400`, no-replace, fsynced files. Historical initialization retains its
 private root-authorization-digest acknowledgement. Post-initialization actions
 replace action-digest transcription with the consequence phrase and fixed

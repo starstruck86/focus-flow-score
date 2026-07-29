@@ -383,9 +383,18 @@ class DocumentedExportEvidenceWorkflowTest(unittest.TestCase):
         if syntax.returncode != 0:
             raise AssertionError(syntax.stderr)
 
-        cls.class_directory = tempfile.TemporaryDirectory(
-            prefix="documented-export-evidence-workflow."
-        )
+        for _attempt in range(128):
+            selected = tempfile.TemporaryDirectory(
+                prefix="documented-export-evidence-workflow."
+            )
+            if DRIVER.PLACEHOLDER.search(selected.name) is None:
+                cls.class_directory = selected
+                break
+            selected.cleanup()
+        else:
+            raise AssertionError(
+                "could not allocate a placeholder-free synthetic root"
+            )
         cls.class_root = Path(cls.class_directory.name)
         cls.base_checkout = cls.class_root / "reviewed base checkout"
         clone = subprocess.run(

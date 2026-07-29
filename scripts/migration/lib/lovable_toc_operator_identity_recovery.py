@@ -23,6 +23,7 @@ import re
 import secrets
 import stat
 import sys
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -555,9 +556,10 @@ def _directory_identity(metadata: os.stat_result) -> tuple[Any, ...]:
 
 
 def _portable_private_path_key(value: str) -> str:
-    """Fail closed for case aliases even when POSIX ``normcase`` is a no-op."""
+    """Fail closed for case and canonically equivalent Unicode aliases."""
 
-    return os.path.normpath(value).casefold()
+    normalized = unicodedata.normalize("NFC", os.path.normpath(value))
+    return unicodedata.normalize("NFC", normalized.casefold())
 
 
 def _file_observation_identity(observed: Any) -> tuple[Any, ...]:
@@ -3595,6 +3597,13 @@ def verify_pre_private(
         ordinary=ordinary,
         tty_fd=tty_fd,
     )
+    for path_name in (
+        "annotation_root_path",
+        "capture_root_path",
+        "operator_session_root_path",
+        "recovery_evidence_root_path",
+    ):
+        _absolute_private_path(approval[path_name], repository)
     try:
         head_tree_sha = PREFLIGHT._git_ascii(
             repository, ["rev-parse", f"{checkout}^{{tree}}"]
@@ -3808,10 +3817,13 @@ def _absolute_private_path(value: Any, repository: Path) -> Path:
         _fail("binding_mismatch")
     path = Path(value)
     try:
-        path.relative_to(repository)
-    except ValueError:
-        return path
-    _fail("binding_mismatch")
+        repository_key = _portable_private_path_key(repository.as_posix())
+        path_key = _portable_private_path_key(path.as_posix())
+        if os.path.commonpath((repository_key, path_key)) == repository_key:
+            _fail("binding_mismatch")
+    except ValueError as exc:
+        raise RecoveryError("binding_mismatch") from exc
+    return path
 
 
 def _open_private_directory(path: Path) -> tuple[int, tuple[Any, ...]]:
@@ -3847,6 +3859,39 @@ def _open_private_directory(path: Path) -> tuple[int, tuple[Any, ...]]:
         raise RecoveryError("history_conflict") from exc
 
 
+def _open_repository_directory(path: Path) -> tuple[int, tuple[Any, ...]]:
+    """Hold the already verified repository without private-root mode rules."""
+
+    descriptor = -1
+    try:
+        named = os.lstat(path)
+        if (
+            stat.S_ISLNK(named.st_mode)
+            or not stat.S_ISDIR(named.st_mode)
+            or path.resolve(strict=True) != path
+        ):
+            raise OSError
+        descriptor = os.open(
+            path,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        held = os.fstat(descriptor)
+        identity = _directory_identity(held)
+        if identity != _directory_identity(named):
+            raise OSError
+        return descriptor, identity
+    except (OSError, RuntimeError) as exc:
+        if descriptor >= 0:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        raise RecoveryError("history_conflict") from exc
+
+
 def _open_separated_audit_directory(
     audit_path: Path,
     approval: Mapping[str, Any],
@@ -3854,17 +3899,48 @@ def _open_separated_audit_directory(
 ) -> tuple[int, tuple[Any, ...]]:
     """Hold the audit root only after inode-aware protected-root separation."""
 
-    paths = {
+    private_paths = {
         "annotation": _absolute_private_path(
             approval["annotation_root_path"], repository
         ),
         "audit": audit_path,
+        "capture": _absolute_private_path(
+            approval["capture_root_path"], repository
+        ),
         "operator": _absolute_private_path(
             approval["operator_session_root_path"], repository
         ),
     }
+    path_keys = {
+        name: _portable_private_path_key(path.as_posix())
+        for name, path in private_paths.items()
+    }
+    path_keys["repository"] = _portable_private_path_key(
+        repository.as_posix()
+    )
+    ordered_path_keys = tuple(path_keys.values())
+    try:
+        for index, left in enumerate(ordered_path_keys):
+            for right in ordered_path_keys[index + 1 :]:
+                if os.path.commonpath((left, right)) in {left, right}:
+                    _fail("history_conflict")
+    except ValueError as exc:
+        raise RecoveryError("history_conflict") from exc
+    paths = {
+        name: path
+        for name, path in private_paths.items()
+        if name != "capture"
+    }
     opened: dict[str, tuple[Path, int, tuple[Any, ...]]] = {}
     try:
+        repository_descriptor, repository_identity = (
+            _open_repository_directory(repository)
+        )
+        opened["repository"] = (
+            repository,
+            repository_descriptor,
+            repository_identity,
+        )
         for name, path in paths.items():
             descriptor, identity = _open_private_directory(path)
             opened[name] = (path, descriptor, identity)
@@ -3886,13 +3962,12 @@ def _open_separated_audit_directory(
                     _fail("history_conflict")
         for path, descriptor, identity in opened.values():
             _revalidate_directory(path, descriptor, identity)
-        for name in ("annotation", "operator"):
-            _path, descriptor, _identity = opened[name]
+        for name in ("annotation", "operator", "repository"):
+            _path, descriptor, _identity = opened.pop(name)
             try:
                 os.close(descriptor)
             except OSError as exc:
                 raise RecoveryError("indeterminate") from exc
-            del opened[name]
         _path, audit_fd, audit_identity = opened.pop("audit")
         return audit_fd, audit_identity
     except BaseException as caught:

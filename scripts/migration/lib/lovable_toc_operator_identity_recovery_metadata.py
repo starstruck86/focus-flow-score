@@ -1166,10 +1166,15 @@ def _validate_absolute_literal(value: Any, repository: Path) -> str:
     ):
         _fail("approval_invalid")
     try:
-        Path(value).relative_to(repository)
-    except ValueError:
-        return value
-    _fail("approval_invalid")
+        repository_key = RECOVERY._portable_private_path_key(
+            repository.as_posix()
+        )
+        value_key = RECOVERY._portable_private_path_key(value)
+        if os.path.commonpath((repository_key, value_key)) == repository_key:
+            _fail("approval_invalid")
+    except ValueError as exc:
+        raise MetadataProbeError("approval_invalid") from exc
+    return value
 
 
 def _validate_approval(
@@ -3680,10 +3685,15 @@ def _private_path(value: Any, repository: Path) -> Path:
         _fail("private_chain_invalid")
     path = Path(value)
     try:
-        path.relative_to(repository)
-    except ValueError:
-        return path
-    _fail("private_chain_invalid")
+        repository_key = RECOVERY._portable_private_path_key(
+            repository.as_posix()
+        )
+        path_key = RECOVERY._portable_private_path_key(path.as_posix())
+        if os.path.commonpath((repository_key, path_key)) == repository_key:
+            _fail("private_chain_invalid")
+    except ValueError as exc:
+        raise MetadataProbeError("private_chain_invalid") from exc
+    return path
 
 
 def _open_private_directory(path: Path) -> tuple[int, tuple[Any, ...]]:

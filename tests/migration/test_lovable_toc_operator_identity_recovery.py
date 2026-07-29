@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import types
+import unicodedata
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -832,6 +833,10 @@ class SyntheticRecoveryPreimportEnvironment:
         self.repository.mkdir(mode=0o700)
         self.home.mkdir(mode=0o700)
         self._git("init", "-q")
+        self._git("config", "gc.auto", "0")
+        self._git("config", "gc.autoDetach", "false")
+        self._git("config", "maintenance.auto", "false")
+        self._git("config", "maintenance.autoDetach", "false")
         self._git("config", "user.name", "Synthetic Recovery Test")
         self._git("config", "user.email", "synthetic@example.invalid")
         self._git(
@@ -6164,6 +6169,14 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
             operator_session_root_path=os.fspath(self.fixture.operator_root),
         )
         private_calls: list[str] = []
+
+        def unicode_aliased_overlap(approval):
+            anchor = os.fspath(self.fixture.base / "private-caf\u00e9")
+            approval["annotation_root_path"] = anchor
+            approval["recovery_evidence_root_path"] = (
+                unicodedata.normalize("NFD", anchor) + "/nested"
+            )
+
         for label, mutate in (
             (
                 "legacy_v1",
@@ -6186,6 +6199,7 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
                     + "/nested",
                 ),
             ),
+            ("unicode_aliased_overlap", unicode_aliased_overlap),
             (
                 "overlong_private_path",
                 lambda approval: approval.__setitem__(
@@ -6285,6 +6299,32 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
                         {"approval_invalid", "binding_mismatch"},
                     )
         self.assertEqual(private_calls, [])
+
+    def test_private_path_keys_reject_repository_case_and_unicode_aliases(self):
+        repository = Path("/private/tmp/Repository-Caf\u00e9")
+        aliases = (
+            Path(os.fspath(repository).swapcase()) / "private-root",
+            Path(
+                unicodedata.normalize("NFD", os.fspath(repository))
+            )
+            / "private-root",
+        )
+        self.assertEqual(
+            RECOVERY._portable_private_path_key(
+                os.fspath(repository)
+            ),
+            RECOVERY._portable_private_path_key(
+                unicodedata.normalize("NFD", os.fspath(repository))
+            ),
+        )
+        for alias in aliases:
+            with self.subTest(alias=os.fspath(alias)):
+                self.assert_fixed_failure(
+                    lambda alias=alias: RECOVERY._absolute_private_path(
+                        os.fspath(alias), repository
+                    ),
+                    "binding_mismatch",
+                )
 
     def test_expiry_is_rechecked_after_consequence_gate_before_private_access(self):
         verified = self.fixture.verified
@@ -6457,6 +6497,91 @@ class FailureAndAmbiguityTest(RecoveryTestCase):
             )
         publish.assert_not_called()
         self.assertEqual(os.listdir(nested_audit), [])
+
+    @unittest.skipUnless(
+        sys.platform == "darwin",
+        "requires a Unicode-normalization-insensitive macOS fixture volume",
+    )
+    def test_macos_unicode_aliased_capture_root_has_zero_publications(self):
+        unicode_capture = self.fixture.base / "capture-caf\u00e9"
+        self.fixture.capture_root.rename(unicode_capture)
+        self.fixture.capture_root = unicode_capture
+        nested_audit = unicode_capture / "unicode-alias-audit-root"
+        nested_audit.mkdir(mode=0o700)
+        aliased_capture = Path(
+            unicodedata.normalize("NFD", os.fspath(unicode_capture))
+        )
+        aliased_audit = aliased_capture / nested_audit.name
+        if (
+            not aliased_audit.exists()
+            or not os.path.samefile(aliased_audit, nested_audit)
+        ):
+            self.skipTest(
+                "fixture volume is not Unicode-normalization-insensitive"
+            )
+        self.fixture.approval["capture_root_path"] = os.fspath(
+            unicode_capture
+        )
+        self.fixture.approval["recovery_evidence_root_path"] = os.fspath(
+            aliased_audit
+        )
+        publish = mock.Mock(
+            side_effect=AssertionError(
+                "audit publication reached Unicode-aliased capture root"
+            )
+        )
+        with mock.patch.object(
+            RECOVERY, "_publish_audit", side_effect=publish
+        ):
+            self.assert_fixed_failure(
+                lambda: RECOVERY.run_recovery(
+                    9, self.fixture.verified, SESSION
+                ),
+                "history_conflict",
+            )
+        publish.assert_not_called()
+        self.assertEqual(os.listdir(nested_audit), [])
+
+    def test_separation_close_ambiguity_never_retries_descriptor(self):
+        real_open = RECOVERY._open_private_directory
+        real_close = os.close
+        annotation_descriptor = {"value": -1}
+        close_calls: list[int] = []
+
+        def remember_private_descriptor(path):
+            descriptor, identity = real_open(path)
+            if Path(path) == self.fixture.annotation_root:
+                annotation_descriptor["value"] = descriptor
+            return descriptor, identity
+
+        def ambiguous_close(descriptor):
+            close_calls.append(descriptor)
+            if descriptor == annotation_descriptor["value"]:
+                raise OSError("planted ambiguous close")
+            return real_close(descriptor)
+
+        try:
+            with mock.patch.object(
+                RECOVERY,
+                "_open_private_directory",
+                side_effect=remember_private_descriptor,
+            ), mock.patch.object(
+                RECOVERY.os, "close", side_effect=ambiguous_close
+            ):
+                self.assert_fixed_failure(
+                    lambda: RECOVERY._open_separated_audit_directory(
+                        self.fixture.audit_root,
+                        self.fixture.approval,
+                        ROOT,
+                    ),
+                    "indeterminate",
+                )
+            self.assertEqual(
+                close_calls.count(annotation_descriptor["value"]), 1
+            )
+        finally:
+            if annotation_descriptor["value"] >= 0:
+                real_close(annotation_descriptor["value"])
 
     def test_wrong_reentry_records_failure_without_identity(self):
         before = self.fixture.ordinary_snapshot()

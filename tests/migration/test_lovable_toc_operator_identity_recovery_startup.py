@@ -336,6 +336,7 @@ class RecoveryStartupContractTests(unittest.TestCase):
             "review_sha256=hashlib.sha256(review_data).hexdigest()",
             "review_file_identity=_file_identity(review_metadata)",
             'for relative in (name + ".py", name + "/__init__.py")',
+            '"unicodedata",',
             "baseline != _ISOLATED_STDLIB_PATH",
             "resolved_entry.relative_to(base_prefix)",
             "sys.path.append(root_text)",

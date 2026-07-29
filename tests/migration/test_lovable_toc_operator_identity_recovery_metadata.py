@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import types
+import unicodedata
 import unittest
 from unittest import mock
 
@@ -968,6 +969,10 @@ class SyntheticPreimportEnvironment:
         self.repository.mkdir(mode=0o700)
         self.home.mkdir(mode=0o700)
         self._git("init", "-q")
+        self._git("config", "gc.auto", "0")
+        self._git("config", "gc.autoDetach", "false")
+        self._git("config", "maintenance.auto", "false")
+        self._git("config", "maintenance.autoDetach", "false")
         alternates = (
             self.repository / ".git" / "objects" / "info" / "alternates"
         )
@@ -1186,6 +1191,19 @@ class MetadataProbeTestCase(unittest.TestCase):
 
 
 class PublicContractAndApprovalTest(unittest.TestCase):
+    def test_private_literals_reject_repository_case_and_unicode_aliases(self):
+        repository = Path("/private/tmp/Metadata-Repository-Caf\u00e9")
+        aliases = (
+            os.fspath(repository).swapcase() + "/private-root",
+            unicodedata.normalize("NFD", os.fspath(repository))
+            + "/private-root",
+        )
+        for alias in aliases:
+            with self.subTest(alias=alias):
+                with self.assertRaises(METADATA.MetadataProbeError) as raised:
+                    METADATA._validate_absolute_literal(alias, repository)
+                self.assertEqual(raised.exception.reason, "approval_invalid")
+
     def test_preimport_guard_exact_one_discovery_succeeds_end_to_end(self):
         fixture = SyntheticPreimportEnvironment()
         try:
@@ -6769,6 +6787,61 @@ class PrivateChainFailureTest(MetadataProbeTestCase):
         self.fixture.rewrite()
         self.verified = synthetic_verified(self.fixture)
         self.assert_private_failure()
+
+    @unittest.skipUnless(
+        sys.platform == "darwin",
+        "requires a Unicode-normalization-insensitive macOS fixture volume",
+    )
+    def test_unicode_aliased_capture_annotation_is_never_opened(self):
+        old_capture = self.fixture.capture_root
+        unicode_capture = self.fixture.base / "capture-caf\u00e9"
+        old_capture.rename(unicode_capture)
+        self.fixture.capture_root = unicode_capture
+        self.fixture.package = unicode_capture / self.fixture.package.name
+
+        nested_annotation = unicode_capture / "annotation-root"
+        self.fixture.annotation_root.rename(nested_annotation)
+        self.fixture.annotation_root = nested_annotation
+        self.fixture.checkpoints = (
+            nested_annotation / RECOVERY_TESTS.AUTHOR.CHECKPOINTS_NAME
+        )
+        aliased_annotation = Path(
+            unicodedata.normalize("NFD", os.fspath(nested_annotation))
+        )
+        if (
+            not aliased_annotation.exists()
+            or not os.path.samefile(aliased_annotation, nested_annotation)
+        ):
+            self.skipTest(
+                "fixture volume is not Unicode-normalization-insensitive"
+            )
+
+        self.fixture.root["capture"]["capture_root"] = os.fspath(
+            unicode_capture
+        )
+        self.fixture.root["annotation_root"] = os.fspath(
+            aliased_annotation
+        )
+        self.fixture.resume["annotation_root"] = os.fspath(
+            aliased_annotation
+        )
+        self.fixture.rewrite()
+        self.verified = synthetic_verified(self.fixture)
+
+        real_open = METADATA._open_private_directory
+        opened: list[str] = []
+
+        def record_open(path):
+            opened.append(os.fspath(path))
+            return real_open(path)
+
+        with mock.patch.object(
+            METADATA,
+            "_open_private_directory",
+            side_effect=record_open,
+        ):
+            self.assert_private_failure()
+        self.assertNotIn(os.fspath(aliased_annotation), opened)
 
     def test_duplicate_fork_stale_and_locked_operator_namespaces_are_generic(self):
         def duplicate_current():

@@ -347,6 +347,7 @@ _PREIMPORT_STDLIB_NAMES = (
     "subprocess",
     "termios",
     "typing",
+    "unicodedata",
 )
 
 

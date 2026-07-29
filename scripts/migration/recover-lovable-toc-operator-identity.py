@@ -2869,6 +2869,7 @@ def _preimport_recovery_guard(
             "subprocess",
             "termios",
             "typing",
+            "unicodedata",
         )
         shadow_candidates = [
             relative
