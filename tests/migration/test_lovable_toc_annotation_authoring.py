@@ -4705,6 +4705,74 @@ class AuthoringContractTest(unittest.TestCase):
                         forged, expected_capture, self.binding
                     )
 
+    def test_legacy_checkpoint_capture_binding_remains_closed_and_string_exact(self):
+        legacy_binding = {
+            "capture_manifest_sha256": "a" * 64,
+            "evidence_run_id": "synthetic-run",
+            "opaque_index_sha256": "b" * 64,
+            "raw_toc_sha256": "c" * 64,
+        }
+        capture = authoring.AuthoringCapture(
+            capture_binding=legacy_binding,
+            entries_by_ordinal=(
+                authoring.AuthoringEntry(
+                    entry_id="d" * 64,
+                    ordinal=0,
+                    object_class="TABLE",
+                    is_data_reference=False,
+                    raw_line=b"SYNTHETIC",
+                ),
+            ),
+            package_device=1,
+            package_inode=2,
+        )
+        checkpoint = authoring.initialize_checkpoint(
+            capture, self.binding, "Primary", "session-1"
+        )
+        self.assertEqual(
+            set(checkpoint["capture_binding"]),
+            set(authoring.LEGACY_CAPTURE_BINDING_KEYS),
+        )
+        for label, mutate in (
+            (
+                "missing",
+                lambda binding: binding.pop("raw_toc_sha256"),
+            ),
+            (
+                "unexpected",
+                lambda binding: binding.__setitem__("unexpected", "value"),
+            ),
+            (
+                "sha_type",
+                lambda binding: binding.__setitem__(
+                    "capture_manifest_sha256", True
+                ),
+            ),
+            (
+                "run_id_type",
+                lambda binding: binding.__setitem__("evidence_run_id", True),
+            ),
+        ):
+            with self.subTest(label=label):
+                forged = copy.deepcopy(checkpoint)
+                mutate(forged["capture_binding"])
+                expected_capture = authoring.AuthoringCapture(
+                    capture_binding=copy.deepcopy(forged["capture_binding"]),
+                    entries_by_ordinal=capture.entries_by_ordinal,
+                    package_device=capture.package_device,
+                    package_inode=capture.package_inode,
+                )
+                self.assertEqual(
+                    forged["capture_binding"],
+                    dict(expected_capture.capture_binding),
+                )
+                with self.assertRaisesRegex(
+                    authoring.AuthoringContractError, "checkpoint_invalid"
+                ):
+                    authoring.validate_checkpoint(
+                        forged, expected_capture, self.binding
+                    )
+
     def test_strict_checkpoint_json_rejects_duplicate_and_nonfinite_values(self):
         checkpoint_schema = capture_contract.strict_json_loads(
             (

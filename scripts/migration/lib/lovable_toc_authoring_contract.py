@@ -119,6 +119,12 @@ CAPTURE_BINDING_POSITIVE_INTEGER_KEYS = (
     "opaque_key_inode",
     "package_inode",
 )
+LEGACY_CAPTURE_BINDING_KEYS = (
+    "capture_manifest_sha256",
+    "evidence_run_id",
+    "opaque_index_sha256",
+    "raw_toc_sha256",
+)
 CHECKPOINT_ACTIONS = frozenset(
     {
         "initialize",
@@ -394,12 +400,29 @@ def _exact_dict(value: Any, keys: Sequence[str], code: str) -> dict[str, Any]:
 
 
 def _validate_checkpoint_capture_binding(value: Any) -> dict[str, Any]:
-    binding = _exact_dict(value, CAPTURE_BINDING_KEYS, "checkpoint_invalid")
+    if type(value) is not dict:
+        _fail("checkpoint_invalid")
+    keys = set(value)
+    if keys == set(LEGACY_CAPTURE_BINDING_KEYS):
+        binding = value
+        sha256_keys = (
+            "capture_manifest_sha256",
+            "opaque_index_sha256",
+            "raw_toc_sha256",
+        )
+        legacy = True
+    elif keys == set(CAPTURE_BINDING_KEYS):
+        binding = value
+        sha256_keys = CAPTURE_BINDING_SHA256_KEYS
+        legacy = False
+    else:
+        _fail("checkpoint_invalid")
     try:
-        for key in CAPTURE_BINDING_SHA256_KEYS:
+        for key in sha256_keys:
             validate_sha(binding[key])
-        validate_git_sha(binding["capture_execution_checkout_sha"])
-        validate_git_sha(binding["inspection_checkout_sha"])
+        if not legacy:
+            validate_git_sha(binding["capture_execution_checkout_sha"])
+            validate_git_sha(binding["inspection_checkout_sha"])
     except ContractError as exc:
         _fail("checkpoint_invalid", exc)
     run_id = binding["evidence_run_id"]
@@ -415,6 +438,8 @@ def _validate_checkpoint_capture_binding(value: Any) -> dict[str, Any]:
         )
     ):
         _fail("checkpoint_invalid")
+    if legacy:
+        return binding
     for key in CAPTURE_BINDING_NONNEGATIVE_INTEGER_KEYS:
         if type(binding[key]) is not int or binding[key] < 0:
             _fail("checkpoint_invalid")

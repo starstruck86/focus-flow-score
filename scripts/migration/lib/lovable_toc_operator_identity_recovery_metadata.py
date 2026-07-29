@@ -4133,7 +4133,7 @@ def _load_snapshot(
             _fail("private_chain_invalid")
         annotation_path = _private_path(root_value["annotation_root"], repository)
         private_literals = tuple(
-            os.path.normcase(value)
+            RECOVERY._portable_private_path_key(value)
             for value in (
                 root_path.as_posix(),
                 annotation_path.as_posix(),
@@ -4148,6 +4148,8 @@ def _load_snapshot(
         except ValueError as exc:
             raise MetadataProbeError("private_chain_invalid") from exc
         annotation_fd, annotation_identity = _open_private_directory(annotation_path)
+        if annotation_identity[:2] == root_identity[:2]:
+            _fail("private_chain_invalid")
         _list_exact(
             annotation_fd,
             {RECOVERY.CHECKPOINTS_NAME, RECOVERY.AUTHORING_RELEASED_NAME},

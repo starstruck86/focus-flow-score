@@ -6179,6 +6179,14 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
                 ),
             ),
             (
+                "case_aliased_overlap",
+                lambda approval: approval.__setitem__(
+                    "recovery_evidence_root_path",
+                    os.fspath(self.fixture.operator_root).swapcase()
+                    + "/nested",
+                ),
+            ),
+            (
                 "overlong_private_path",
                 lambda approval: approval.__setitem__(
                     "annotation_root_path", "/" + ("a" * 4096)
@@ -6395,6 +6403,61 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
 
 
 class FailureAndAmbiguityTest(RecoveryTestCase):
+    def test_nested_audit_root_is_rejected_by_inode_ancestry_before_publication(
+        self,
+    ):
+        nested_audit = self.fixture.operator_root / "nested-audit-root"
+        nested_audit.mkdir(mode=0o700)
+        self.fixture.approval["recovery_evidence_root_path"] = os.fspath(
+            nested_audit
+        )
+        publish = mock.Mock(
+            side_effect=AssertionError(
+                "audit publication reached overlapping protected root"
+            )
+        )
+        with mock.patch.object(
+            RECOVERY, "_publish_audit", side_effect=publish
+        ):
+            self.assert_fixed_failure(
+                lambda: RECOVERY.run_recovery(
+                    9, self.fixture.verified, SESSION
+                ),
+                "history_conflict",
+            )
+        publish.assert_not_called()
+        self.assertEqual(os.listdir(nested_audit), [])
+
+    @unittest.skipUnless(
+        sys.platform == "darwin",
+        "requires a case-insensitive macOS fixture volume",
+    )
+    def test_macos_case_aliased_nested_audit_root_has_zero_publications(self):
+        nested_audit = self.fixture.operator_root / "case-alias-audit-root"
+        nested_audit.mkdir(mode=0o700)
+        aliased = Path(os.fspath(nested_audit).swapcase())
+        if not aliased.exists() or not os.path.samefile(aliased, nested_audit):
+            self.skipTest("fixture volume is case-sensitive")
+        self.fixture.approval["recovery_evidence_root_path"] = os.fspath(
+            aliased
+        )
+        publish = mock.Mock(
+            side_effect=AssertionError(
+                "audit publication reached case-aliased protected root"
+            )
+        )
+        with mock.patch.object(
+            RECOVERY, "_publish_audit", side_effect=publish
+        ):
+            self.assert_fixed_failure(
+                lambda: RECOVERY.run_recovery(
+                    9, self.fixture.verified, SESSION
+                ),
+                "history_conflict",
+            )
+        publish.assert_not_called()
+        self.assertEqual(os.listdir(nested_audit), [])
+
     def test_wrong_reentry_records_failure_without_identity(self):
         before = self.fixture.ordinary_snapshot()
         self.assert_fixed_failure(

@@ -6760,6 +6760,16 @@ class PreAuthorizationBoundaryTest(MetadataProbeTestCase):
 
 
 class PrivateChainFailureTest(MetadataProbeTestCase):
+    def test_case_aliased_nested_annotation_path_is_rejected(self):
+        aliased_nested = (
+            os.fspath(self.fixture.operator_root).swapcase() + "/nested"
+        )
+        self.fixture.root["annotation_root"] = aliased_nested
+        self.fixture.resume["annotation_root"] = aliased_nested
+        self.fixture.rewrite()
+        self.verified = synthetic_verified(self.fixture)
+        self.assert_private_failure()
+
     def test_duplicate_fork_stale_and_locked_operator_namespaces_are_generic(self):
         def duplicate_current():
             RECOVERY_TESTS.write_private_json(

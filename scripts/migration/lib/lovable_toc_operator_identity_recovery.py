@@ -554,6 +554,12 @@ def _directory_identity(metadata: os.stat_result) -> tuple[Any, ...]:
     )
 
 
+def _portable_private_path_key(value: str) -> str:
+    """Fail closed for case aliases even when POSIX ``normcase`` is a no-op."""
+
+    return os.path.normpath(value).casefold()
+
+
 def _file_observation_identity(observed: Any) -> tuple[Any, ...]:
     return (
         observed.device,
@@ -3371,7 +3377,7 @@ def _validate_approval(
         ):
             _fail("approval_invalid")
     private_paths = [
-        os.path.normcase(approval[name])
+        _portable_private_path_key(approval[name])
         for name in (
             "annotation_root_path",
             "capture_root_path",
@@ -3839,6 +3845,68 @@ def _open_private_directory(path: Path) -> tuple[int, tuple[Any, ...]]:
             except OSError:
                 pass
         raise RecoveryError("history_conflict") from exc
+
+
+def _open_separated_audit_directory(
+    audit_path: Path,
+    approval: Mapping[str, Any],
+    repository: Path,
+) -> tuple[int, tuple[Any, ...]]:
+    """Hold the audit root only after inode-aware protected-root separation."""
+
+    paths = {
+        "annotation": _absolute_private_path(
+            approval["annotation_root_path"], repository
+        ),
+        "audit": audit_path,
+        "operator": _absolute_private_path(
+            approval["operator_session_root_path"], repository
+        ),
+    }
+    opened: dict[str, tuple[Path, int, tuple[Any, ...]]] = {}
+    try:
+        for name, path in paths.items():
+            descriptor, identity = _open_private_directory(path)
+            opened[name] = (path, descriptor, identity)
+        object_identities = {
+            name: (identity[0], identity[1])
+            for name, (_path, _descriptor, identity) in opened.items()
+        }
+        if len(set(object_identities.values())) != len(object_identities):
+            _fail("history_conflict")
+        for name, (path, _descriptor, _identity) in opened.items():
+            other_identities = {
+                identity
+                for other_name, identity in object_identities.items()
+                if other_name != name
+            }
+            for candidate in (path, *path.parents):
+                observed = os.stat(candidate, follow_symlinks=False)
+                if (observed.st_dev, observed.st_ino) in other_identities:
+                    _fail("history_conflict")
+        for path, descriptor, identity in opened.values():
+            _revalidate_directory(path, descriptor, identity)
+        for name in ("annotation", "operator"):
+            _path, descriptor, _identity = opened[name]
+            try:
+                os.close(descriptor)
+            except OSError as exc:
+                raise RecoveryError("indeterminate") from exc
+            del opened[name]
+        _path, audit_fd, audit_identity = opened.pop("audit")
+        return audit_fd, audit_identity
+    except BaseException as caught:
+        close_failed = False
+        for _path, descriptor, _identity in opened.values():
+            try:
+                os.close(descriptor)
+            except OSError:
+                close_failed = True
+        if close_failed:
+            raise RecoveryError("indeterminate") from None
+        if isinstance(caught, RecoveryError):
+            raise
+        raise RecoveryError("history_conflict") from caught
 
 
 def _revalidate_directory(path: Path, descriptor: int, identity: tuple[Any, ...]) -> None:
@@ -4668,9 +4736,9 @@ def _load_generation_one(
         annotation_path = _absolute_private_path(
             root_value["annotation_root"], repository
         )
-        if os.path.normcase(annotation_path.as_posix()) in {
-            os.path.normcase(root_path.as_posix()),
-            os.path.normcase(
+        if _portable_private_path_key(annotation_path.as_posix()) in {
+            _portable_private_path_key(root_path.as_posix()),
+            _portable_private_path_key(
                 approval["recovery_evidence_root_path"]
             ),
         }:
@@ -4900,7 +4968,11 @@ def run_recovery(
     session_id = verified.approval["recovery_session"]["metadata_session_id"]
     identity_disclosed = False
     try:
-        audit_fd, audit_identity = _open_private_directory(audit_path)
+        audit_fd, audit_identity = _open_separated_audit_directory(
+            audit_path,
+            verified.approval,
+            repository,
+        )
         if os.listdir(audit_fd):
             _fail("publication_exists")
         attempt = _publish_audit(
