@@ -100,6 +100,7 @@ TRUST_ACKNOWLEDGEMENT = (
     "PROCEDURAL_METADATA_PROBE_REVIEW_AND_DOCUMENTED_CEILINGS_ACCEPTED"
 )
 REQUIRED_CLAUDE_CLIENT_VERSION = "2.1.219 (Claude Code)"
+REQUIRED_RAW_CLAUDE_CODE_VERSION = "2.1.219"
 REQUIRED_AUDIT_BASE_SHA = "f3dcb6d874ae9511b0bb01dfd6f87899bb064030"
 ACCEPTED_CEILINGS = (
     "HOSTILE_SAME_UID_PRELAUNCH_PATH_REPLACEMENT",
@@ -343,6 +344,7 @@ REVIEW_REPORT_FIELDS = frozenset(
         "material_findings",
         "nonmaterial_observations",
         "prior_conclusions",
+        "reviewed_artifact_binding",
     }
 )
 REVIEW_DISPOSABLE_CLONE_RE = re.compile(
@@ -1254,6 +1256,14 @@ def _validate_approval(
         {"checkpoint", "generation", "resume", "root_authorization", "state"},
     )
     if (
+        type(chain.get("generation")) is not int
+        or type(chain.get("checkpoint")) is not dict
+        or type(chain["checkpoint"].get("format_version")) is not int
+        or type(chain.get("resume")) is not dict
+        or type(chain["resume"].get("format_version")) is not int
+        or type(chain.get("root_authorization")) is not dict
+        or type(chain["root_authorization"].get("format_version")) is not int
+        or
         chain
         != {
             "checkpoint": {"format_version": 1},
@@ -1582,6 +1592,20 @@ def _review_report(audit_report: str, *, require_approval: bool) -> Mapping[str,
             _fail("approval_invalid")
     if not text_list(report["nonmaterial_observations"], nonempty=False):
         _fail("approval_invalid")
+    reviewed_binding = report["reviewed_artifact_binding"]
+    if (
+        type(reviewed_binding) is not dict
+        or set(reviewed_binding)
+        != {"approval_sha256", "approved_checkout_sha", "audit_nonce"}
+        or type(reviewed_binding.get("approval_sha256")) is not str
+        or HEX64_RE.fullmatch(reviewed_binding["approval_sha256"]) is None
+        or type(reviewed_binding.get("approved_checkout_sha")) is not str
+        or GIT_SHA_RE.fullmatch(reviewed_binding["approved_checkout_sha"])
+        is None
+        or type(reviewed_binding.get("audit_nonce")) is not str
+        or HEX64_RE.fullmatch(reviewed_binding["audit_nonce"]) is None
+    ):
+        _fail("approval_invalid")
 
     separation = report["evidence_separation"]
     if (
@@ -1733,6 +1757,12 @@ def _review_raw_stream(
         or result.get("session_id") != session_id
         or init.get("model") != "claude-fable-5"
         or init.get("permissionMode") != "plan"
+        or init.get("claude_code_version")
+        != REQUIRED_RAW_CLAUDE_CODE_VERSION
+        or init.get("cwd") != facts["disposable_clone"]
+        or init.get("plugins") != []
+        or init.get("skills") != []
+        or init.get("slash_commands") != []
         or type(init_tools) is not list
         or not init_tools
         or any(type(name) is not str for name in init_tools)
@@ -2364,7 +2394,9 @@ def _review_raw_stream(
                         _fail("approval_invalid")
                     continue
                 if (
-                    set(item) != {"id", "input", "name", "type"}
+                    set(item) != {"caller", "id", "input", "name", "type"}
+                    or type(item.get("caller")) is not dict
+                    or item["caller"] != {"type": "direct"}
                     or tool_marker_present(
                         {
                             key: nested
@@ -2642,9 +2674,10 @@ REQUIRED OUTPUT
   END_INDEPENDENT_APPROVAL_AUDIT_RESULT_V1
   <one independently chosen terminal decision>
 - The terminal decision must be exactly APPROVE FOR MERGE, REQUEST CHANGES, or REJECT. The JSON decision and terminal decision must match.
-- The JSON object must have exactly these keys: accepted_ceilings_and_operational_gaps, artifact_kind, decision, evidence_separation, format_version, independence, invariants, material_findings, nonmaterial_observations, prior_conclusions.
-- Because keys are sorted recursively, every invariant object key order must be `evidence,name,status`; every material-finding object key order must be `exploitability,file,line,minimum_correction,reasoning,severity`; evidence_separation key order must be `directly_inspected_ci,inferred_ci,production_source,test_source`; independence key order must be `codex_reasoning_received,network_accessed,prior_audit_conclusion_received,private_state_accessed,source_mutated`; and prior_conclusions key order must be `applicability,received,relied_upon`. Use compact separators with no spaces and ensure_ascii escaping.
+- The JSON object must have exactly these keys: accepted_ceilings_and_operational_gaps, artifact_kind, decision, evidence_separation, format_version, independence, invariants, material_findings, nonmaterial_observations, prior_conclusions, reviewed_artifact_binding.
+- Because keys are sorted recursively, every invariant object key order must be `evidence,name,status`; every material-finding object key order must be `exploitability,file,line,minimum_correction,reasoning,severity`; evidence_separation key order must be `directly_inspected_ci,inferred_ci,production_source,test_source`; independence key order must be `codex_reasoning_received,network_accessed,prior_audit_conclusion_received,private_state_accessed,source_mutated`; prior_conclusions key order must be `applicability,received,relied_upon`; and reviewed_artifact_binding key order must be `approval_sha256,approved_checkout_sha,audit_nonce`. Use compact separators with no spaces and ensure_ascii escaping.
 - artifact_kind must be independent_approval_audit_result and format_version must be integer 1.
+- reviewed_artifact_binding must contain exactly approval_sha256, approved_checkout_sha, and audit_nonce copied byte-for-byte from the canonical identity line at the start of the delimited audit-subject block.
 - invariants must be an ordered list containing exactly these names, once each and in this order:
   1. approval_artifact_exact_scope_and_schema
   2. base_head_graph_and_complete_changed_scope
@@ -2932,6 +2965,15 @@ def _validate_review_attestation(
         evidence_field="report_sha256",
         maximum_bytes=131072,
     )
+    parsed_report = _review_report(
+        attestation["audit_report"], require_approval=True
+    )
+    if parsed_report["reviewed_artifact_binding"] != {
+        "approval_sha256": approval_sha256,
+        "approved_checkout_sha": checkout,
+        "audit_nonce": approval["review_authority"]["audit_nonce"],
+    }:
+        _fail("approval_invalid")
     spec_data = _review_embedded_bytes(
         attestation,
         field="audit_spec",
@@ -3188,7 +3230,6 @@ def _validate_review_attestation(
         )
     ):
         _fail("approval_invalid")
-    _review_report(attestation["audit_report"], require_approval=True)
     if (
         not report_data
         or _digest(prompt_data) != record["prompt_sha256"]

@@ -134,6 +134,7 @@ _RECOVERY_REVIEW_NAME_RE = re.compile(
 _REQUESTED_CLAUDE_MODEL = "fable"
 _REQUIRED_CLAUDE_MODEL = "claude-fable-5"
 _REQUIRED_CLAUDE_VERSION = "2.1.219 (Claude Code)"
+_REQUIRED_RAW_CLAUDE_CODE_VERSION = "2.1.219"
 _REQUIRED_REASONING_EFFORT = "max"
 _REQUIRED_AUDIT_REPOSITORY_NAME = "focus-flow-score"
 _REQUIRED_AUDIT_BASE_SHA = "f3dcb6d874ae9511b0bb01dfd6f87899bb064030"
@@ -229,6 +230,7 @@ _REVIEW_REPORT_FIELDS = frozenset(
         "material_findings",
         "nonmaterial_observations",
         "prior_conclusions",
+        "reviewed_artifact_binding",
     }
 )
 _SUBJECT_BEGIN = "BEGIN_INDEPENDENT_APPROVAL_AUDIT_SUBJECT_V1"
@@ -601,6 +603,16 @@ def _review_report(
         ):
             raise _StartupFailure
     if not text_list(report["nonmaterial_observations"], nonempty=False):
+        raise _StartupFailure
+    reviewed_binding = report["reviewed_artifact_binding"]
+    if (
+        type(reviewed_binding) is not dict
+        or set(reviewed_binding)
+        != {"approval_sha256", "approved_checkout_sha", "audit_nonce"}
+        or not _is_sha256(reviewed_binding.get("approval_sha256"))
+        or not _is_git_sha(reviewed_binding.get("approved_checkout_sha"))
+        or not _is_sha256(reviewed_binding.get("audit_nonce"))
+    ):
         raise _StartupFailure
 
     separation = report["evidence_separation"]
@@ -1053,7 +1065,9 @@ def _validate_audit_tool_input(
         or type(tool_id) is not str
         or _SAFE_REVIEW_TOKEN_RE.fullmatch(tool_id) is None
         or type(tool_use.get("input")) is not dict
-        or set(tool_use) != {"id", "input", "name", "type"}
+        or set(tool_use) != {"caller", "id", "input", "name", "type"}
+        or type(tool_use.get("caller")) is not dict
+        or tool_use["caller"] != {"type": "direct"}
     ):
         raise _StartupFailure
     tool_input = tool_use["input"]
@@ -1692,6 +1706,12 @@ def _validate_audit_raw_stream(
                 or model != _REQUIRED_CLAUDE_MODEL
                 or event_session_id != record["session_id"]
                 or event.get("permissionMode") != "plan"
+                or event.get("claude_code_version")
+                != _REQUIRED_RAW_CLAUDE_CODE_VERSION
+                or event.get("cwd") != facts["disposable_clone"]
+                or event.get("plugins") != []
+                or event.get("skills") != []
+                or event.get("slash_commands") != []
                 or type(init_tools) is not list
                 or not init_tools
                 or any(type(name) is not str for name in init_tools)
@@ -1892,9 +1912,10 @@ REQUIRED OUTPUT
   END_INDEPENDENT_APPROVAL_AUDIT_RESULT_V1
   <one independently chosen terminal decision>
 - The terminal decision must be exactly APPROVE FOR MERGE, REQUEST CHANGES, or REJECT. The JSON decision and terminal decision must match.
-- The JSON object must have exactly these keys: accepted_ceilings_and_operational_gaps, artifact_kind, decision, evidence_separation, format_version, independence, invariants, material_findings, nonmaterial_observations, prior_conclusions.
-- Because keys are sorted recursively, every invariant object key order must be `evidence,name,status`; every material-finding object key order must be `exploitability,file,line,minimum_correction,reasoning,severity`; evidence_separation key order must be `directly_inspected_ci,inferred_ci,production_source,test_source`; independence key order must be `codex_reasoning_received,network_accessed,prior_audit_conclusion_received,private_state_accessed,source_mutated`; and prior_conclusions key order must be `applicability,received,relied_upon`. Use compact separators with no spaces and ensure_ascii escaping.
+- The JSON object must have exactly these keys: accepted_ceilings_and_operational_gaps, artifact_kind, decision, evidence_separation, format_version, independence, invariants, material_findings, nonmaterial_observations, prior_conclusions, reviewed_artifact_binding.
+- Because keys are sorted recursively, every invariant object key order must be `evidence,name,status`; every material-finding object key order must be `exploitability,file,line,minimum_correction,reasoning,severity`; evidence_separation key order must be `directly_inspected_ci,inferred_ci,production_source,test_source`; independence key order must be `codex_reasoning_received,network_accessed,prior_audit_conclusion_received,private_state_accessed,source_mutated`; prior_conclusions key order must be `applicability,received,relied_upon`; and reviewed_artifact_binding key order must be `approval_sha256,approved_checkout_sha,audit_nonce`. Use compact separators with no spaces and ensure_ascii escaping.
 - artifact_kind must be independent_approval_audit_result and format_version must be integer 1.
+- reviewed_artifact_binding must contain exactly approval_sha256, approved_checkout_sha, and audit_nonce copied byte-for-byte from the canonical identity line at the start of the delimited audit-subject block.
 - invariants must be an ordered list containing exactly these names, once each and in this order:
   1. approval_artifact_exact_scope_and_schema
   2. base_head_graph_and_complete_changed_scope
@@ -1967,7 +1988,13 @@ def _validate_bootstrap_embedded_audit(
     report, report_data = _audit_text(
         review["audit_report"], maximum_bytes=131072
     )
-    _review_report(report, require_approval=True)
+    parsed_report = _review_report(report, require_approval=True)
+    if parsed_report["reviewed_artifact_binding"] != {
+        "approval_sha256": approval_sha256,
+        "approved_checkout_sha": checkout,
+        "audit_nonce": approval["review_authority"]["audit_nonce"],
+    }:
+        raise _StartupFailure
     raw_stream, raw_stream_data = _audit_text(
         review["audit_raw_stream"],
         maximum_bytes=_MAX_AUDIT_RAW_STREAM_BYTES,
@@ -2260,7 +2287,8 @@ def _validate_bootstrap_embedded_audit(
         raise _StartupFailure
     model_usage = record["model_usage"]
     if (
-        record["audit_format_version"] != 1
+        type(record["audit_format_version"]) is not int
+        or record["audit_format_version"] != 1
         or record["base"] != facts["base"]
         or record["base"] != _REQUIRED_AUDIT_BASE_SHA
         or record["head"] != facts["head"]
@@ -2390,6 +2418,7 @@ def _validate_bootstrap_review(
         or review_name != expected_name
         or review.get("artifact_kind")
         != "lovable_toc_independent_claude_review_attestation"
+        or type(review.get("format_version")) is not int
         or review.get("format_version") != 1
         or review.get("decision") != "APPROVE FOR MERGE"
         or review.get("audit_nonce") != authority["audit_nonce"]

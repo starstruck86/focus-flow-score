@@ -74,6 +74,7 @@ REQUIRED_AUDIT_REPOSITORY_NAME = "focus-flow-score"
 REQUESTED_CLAUDE_MODEL = "fable"
 REQUIRED_CLAUDE_MODEL = "claude-fable-5"
 REQUIRED_CLAUDE_VERSION = "2.1.219 (Claude Code)"
+REQUIRED_RAW_CLAUDE_CODE_VERSION = "2.1.219"
 REQUIRED_REASONING_EFFORT = "max"
 REQUIRED_REVIEW_DECISION = "APPROVE FOR MERGE"
 REQUIRED_AUDIT_BASE_SHA = "f3dcb6d874ae9511b0bb01dfd6f87899bb064030"
@@ -239,6 +240,7 @@ REVIEW_REPORT_FIELDS = frozenset(
         "material_findings",
         "nonmaterial_observations",
         "prior_conclusions",
+        "reviewed_artifact_binding",
     }
 )
 SUBJECT_BEGIN = "BEGIN_INDEPENDENT_APPROVAL_AUDIT_SUBJECT_V1"
@@ -1290,6 +1292,20 @@ def _review_report(
             _fail("binding_mismatch")
     if not text_list(report["nonmaterial_observations"], nonempty=False):
         _fail("binding_mismatch")
+    reviewed_binding = report["reviewed_artifact_binding"]
+    if (
+        type(reviewed_binding) is not dict
+        or set(reviewed_binding)
+        != {"approval_sha256", "approved_checkout_sha", "audit_nonce"}
+        or type(reviewed_binding.get("approval_sha256")) is not str
+        or HEX64_RE.fullmatch(reviewed_binding["approval_sha256"]) is None
+        or type(reviewed_binding.get("approved_checkout_sha")) is not str
+        or GIT_SHA_RE.fullmatch(reviewed_binding["approved_checkout_sha"])
+        is None
+        or type(reviewed_binding.get("audit_nonce")) is not str
+        or HEX64_RE.fullmatch(reviewed_binding["audit_nonce"]) is None
+    ):
+        _fail("binding_mismatch")
 
     separation = report["evidence_separation"]
     if (
@@ -1760,7 +1776,9 @@ def _validate_audit_tool_input(
         or type(tool_id) is not str
         or SAFE_REVIEW_TOKEN_RE.fullmatch(tool_id) is None
         or type(tool_use.get("input")) is not dict
-        or set(tool_use) != {"id", "input", "name", "type"}
+        or set(tool_use) != {"caller", "id", "input", "name", "type"}
+        or type(tool_use.get("caller")) is not dict
+        or tool_use["caller"] != {"type": "direct"}
     ):
         _fail("binding_mismatch")
     tool_input = tool_use["input"]
@@ -2399,6 +2417,12 @@ def _validate_audit_raw_stream(
                 or model != REQUIRED_CLAUDE_MODEL
                 or event_session_id != record["session_id"]
                 or event.get("permissionMode") != "plan"
+                or event.get("claude_code_version")
+                != REQUIRED_RAW_CLAUDE_CODE_VERSION
+                or event.get("cwd") != facts["disposable_clone"]
+                or event.get("plugins") != []
+                or event.get("skills") != []
+                or event.get("slash_commands") != []
                 or type(init_tools) is not list
                 or not init_tools
                 or any(type(name) is not str for name in init_tools)
@@ -2599,9 +2623,10 @@ REQUIRED OUTPUT
   END_INDEPENDENT_APPROVAL_AUDIT_RESULT_V1
   <one independently chosen terminal decision>
 - The terminal decision must be exactly APPROVE FOR MERGE, REQUEST CHANGES, or REJECT. The JSON decision and terminal decision must match.
-- The JSON object must have exactly these keys: accepted_ceilings_and_operational_gaps, artifact_kind, decision, evidence_separation, format_version, independence, invariants, material_findings, nonmaterial_observations, prior_conclusions.
-- Because keys are sorted recursively, every invariant object key order must be `evidence,name,status`; every material-finding object key order must be `exploitability,file,line,minimum_correction,reasoning,severity`; evidence_separation key order must be `directly_inspected_ci,inferred_ci,production_source,test_source`; independence key order must be `codex_reasoning_received,network_accessed,prior_audit_conclusion_received,private_state_accessed,source_mutated`; and prior_conclusions key order must be `applicability,received,relied_upon`. Use compact separators with no spaces and ensure_ascii escaping.
+- The JSON object must have exactly these keys: accepted_ceilings_and_operational_gaps, artifact_kind, decision, evidence_separation, format_version, independence, invariants, material_findings, nonmaterial_observations, prior_conclusions, reviewed_artifact_binding.
+- Because keys are sorted recursively, every invariant object key order must be `evidence,name,status`; every material-finding object key order must be `exploitability,file,line,minimum_correction,reasoning,severity`; evidence_separation key order must be `directly_inspected_ci,inferred_ci,production_source,test_source`; independence key order must be `codex_reasoning_received,network_accessed,prior_audit_conclusion_received,private_state_accessed,source_mutated`; prior_conclusions key order must be `applicability,received,relied_upon`; and reviewed_artifact_binding key order must be `approval_sha256,approved_checkout_sha,audit_nonce`. Use compact separators with no spaces and ensure_ascii escaping.
 - artifact_kind must be independent_approval_audit_result and format_version must be integer 1.
+- reviewed_artifact_binding must contain exactly approval_sha256, approved_checkout_sha, and audit_nonce copied byte-for-byte from the canonical identity line at the start of the delimited audit-subject block.
 - invariants must be an ordered list containing exactly these names, once each and in this order:
   1. approval_artifact_exact_scope_and_schema
   2. base_head_graph_and_complete_changed_scope
@@ -2676,7 +2701,13 @@ def _validate_embedded_audit_bundle(
         attestation["audit_report"],
         maximum_bytes=MAX_AUDIT_REPORT_BYTES,
     )
-    _review_report(report, require_approval=True)
+    parsed_report = _review_report(report, require_approval=True)
+    if parsed_report["reviewed_artifact_binding"] != {
+        "approval_sha256": approval_sha256,
+        "approved_checkout_sha": checkout,
+        "audit_nonce": approval["review_authority"]["audit_nonce"],
+    }:
+        _fail("binding_mismatch")
     raw_stream, raw_stream_data = _audit_text(
         attestation["audit_raw_stream"],
         maximum_bytes=MAX_AUDIT_RAW_STREAM_BYTES,
@@ -2956,7 +2987,8 @@ def _validate_embedded_audit_bundle(
     )
     model_usage = record["model_usage"]
     if (
-        record["audit_format_version"] != 1
+        type(record["audit_format_version"]) is not int
+        or record["audit_format_version"] != 1
         or record["base"] != facts["base"]
         or record["base"] != REQUIRED_AUDIT_BASE_SHA
         or record["head"] != facts["head"]
@@ -3076,6 +3108,7 @@ def _validate_review_attestation(
         or matched_name.group(2) != approval_sha256
         or attestation_name != expected_name
         or attestation["artifact_kind"] != REVIEW_ATTESTATION_KIND
+        or type(attestation["format_version"]) is not int
         or attestation["format_version"] != 1
         or attestation["decision"] != REQUIRED_REVIEW_DECISION
         or attestation["audit_nonce"]
@@ -3263,6 +3296,7 @@ def _validate_approval(
         value = approval[path_name]
         if (
             type(value) is not str
+            or len(value) > 4096
             or not value.startswith("/")
             or "\x00" in value
             or os.path.abspath(value) != value
@@ -3336,7 +3370,8 @@ def _validate_approval(
         {"checkpoint", "generation", "resume", "root_authorization", "state"},
     )
     if (
-        chain["generation"] != EXPECTED_GENERATION
+        type(chain["generation"]) is not int
+        or chain["generation"] != EXPECTED_GENERATION
         or chain["state"] != EXPECTED_STATE
     ):
         _fail("binding_mismatch")
@@ -3352,7 +3387,10 @@ def _validate_approval(
             else {"format_version", "sha256"}
         )
         item = _exact(chain[key], item_keys)
-        if item["format_version"] not in expected_versions[version_key]:
+        if (
+            type(item["format_version"]) is not int
+            or item["format_version"] not in expected_versions[version_key]
+        ):
             _fail("binding_mismatch")
         if key == "resume" and item["predecessor"] != "absent":
             _fail("binding_mismatch")
@@ -3689,6 +3727,7 @@ def authorize_consequence(
 def _absolute_private_path(value: Any, repository: Path) -> Path:
     if (
         type(value) is not str
+        or len(value) > 4096
         or not value.startswith("/")
         or "\x00" in value
         or os.path.abspath(value) != value

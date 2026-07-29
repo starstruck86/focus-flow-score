@@ -162,6 +162,7 @@ def synthetic_tool_interaction(
     completion: dict,
     result_content: str,
 ):
+    tool_use = {"caller": {"type": "direct"}, **tool_use}
     return (
         {
             "message": {
@@ -517,6 +518,15 @@ class SyntheticGenerationOne:
                 "received": False,
                 "relied_upon": False,
             },
+            "reviewed_artifact_binding": {
+                "approval_sha256": approval_sha256,
+                "approved_checkout_sha": self.approval[
+                    "approved_checkout_sha"
+                ],
+                "audit_nonce": self.approval["review_authority"][
+                    "audit_nonce"
+                ],
+            },
         }
         report = (
             RECOVERY.REVIEW_REPORT_BEGIN
@@ -536,10 +546,15 @@ class SyntheticGenerationOne:
             canonical(event)
             for event in (
                 {
+                    "claude_code_version": "2.1.219",
+                    "cwd": facts["disposable_clone"],
                     "mcp_servers": [],
                     "model": RECOVERY.REQUIRED_CLAUDE_MODEL,
                     "permissionMode": "plan",
+                    "plugins": [],
                     "session_id": session_id,
+                    "skills": [],
+                    "slash_commands": [],
                     "subtype": "init",
                     "tools": ["Bash", "Read"],
                     "type": "system",
@@ -552,6 +567,7 @@ class SyntheticGenerationOne:
                                 "type": "text",
                             },
                             {
+                                "caller": {"type": "direct"},
                                 "id": "synthetic-tool-use",
                                 "input": {
                                     "file_path": (
@@ -3247,6 +3263,22 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
                 lambda record: record.__setitem__("unknown", []),
             ),
             (
+                "missing_reviewed_artifact_binding",
+                lambda record: record.pop("reviewed_artifact_binding"),
+            ),
+            (
+                "invalid_reviewed_approval_sha",
+                lambda record: record["reviewed_artifact_binding"].__setitem__(
+                    "approval_sha256", "not-a-sha"
+                ),
+            ),
+            (
+                "extra_reviewed_artifact_binding_key",
+                lambda record: record["reviewed_artifact_binding"].__setitem__(
+                    "extra", "synthetic"
+                ),
+            ),
+            (
                 "control_character",
                 lambda record: record["invariants"][0].__setitem__(
                     "evidence", "unsafe\nstatement"
@@ -4134,6 +4166,56 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
                 ),
             ),
             (
+                "missing_init_client_version",
+                lambda events: events[0].pop("claude_code_version"),
+            ),
+            (
+                "wrong_init_client_version",
+                lambda events: events[0].__setitem__(
+                    "claude_code_version", "2.1.218"
+                ),
+            ),
+            (
+                "missing_init_cwd",
+                lambda events: events[0].pop("cwd"),
+            ),
+            (
+                "wrong_init_cwd",
+                lambda events: events[0].__setitem__(
+                    "cwd", "/private/tmp/unrelated-audit-cwd"
+                ),
+            ),
+            (
+                "missing_init_plugins",
+                lambda events: events[0].pop("plugins"),
+            ),
+            (
+                "nonempty_init_plugins",
+                lambda events: events[0].__setitem__(
+                    "plugins", [{"name": "synthetic"}]
+                ),
+            ),
+            (
+                "missing_init_skills",
+                lambda events: events[0].pop("skills"),
+            ),
+            (
+                "nonempty_init_skills",
+                lambda events: events[0].__setitem__(
+                    "skills", ["synthetic"]
+                ),
+            ),
+            (
+                "missing_init_slash_commands",
+                lambda events: events[0].pop("slash_commands"),
+            ),
+            (
+                "nonempty_init_slash_commands",
+                lambda events: events[0].__setitem__(
+                    "slash_commands", ["synthetic"]
+                ),
+            ),
+            (
                 "wrong_init_tools",
                 lambda events: events[0].__setitem__(
                     "tools", ["Read", "Write"]
@@ -4273,6 +4355,24 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
                         "type": "tool_use",
                     }
                 ),
+            ),
+            (
+                "missing_tool_caller",
+                lambda events: events[1]["message"]["content"][1].pop(
+                    "caller"
+                ),
+            ),
+            (
+                "wrong_tool_caller",
+                lambda events: events[1]["message"]["content"][1].__setitem__(
+                    "caller", {"type": "indirect"}
+                ),
+            ),
+            (
+                "extra_tool_caller_field",
+                lambda events: events[1]["message"]["content"][1][
+                    "caller"
+                ].__setitem__("source", "synthetic"),
             ),
             (
                 "empty_tool_name",
@@ -4686,6 +4786,91 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
         spliced["audit_raw_stream"] = alternate["audit_raw_stream"]
         self._reseal_embedded_review(spliced)
         self._assert_review_rejected_pre_private(spliced)
+
+    def test_unchanged_raw_stream_cannot_be_rebound_to_other_approval(self):
+        original = self.fixture.review_attestation
+        original_raw_stream = original["audit_raw_stream"]
+        alternate_approval = copy.deepcopy(self.fixture.approval)
+        alternate_approval["recovery_session"]["nonce"] = "b" * 64
+        alternate_approval_data = canonical(alternate_approval)
+        alternate_approval_sha256 = sha(alternate_approval_data)
+        alternate_approval_name = (
+            "lovable-toc-operator-identity-recovery-approval-"
+            + alternate_approval["approved_checkout_sha"]
+            + "-"
+            + alternate_approval_sha256[:16]
+            + ".json"
+        )
+
+        alternate = copy.deepcopy(original)
+        alternate["reviewed_artifact"].update(
+            {
+                "filename": alternate_approval_name,
+                "sha256": alternate_approval_sha256,
+                "size_bytes": len(alternate_approval_data),
+            }
+        )
+        subject = RECOVERY._approval_audit_subject(
+            alternate_approval,
+            approval_name=alternate_approval_name,
+            approval_sha256=alternate_approval_sha256,
+            approval_size_bytes=len(alternate_approval_data),
+        )
+        alternate["audit_spec"] = RECOVERY._expected_audit_spec(subject)
+        facts = json.loads(alternate["audit_immutable_facts_json"])
+        alternate["audit_prompt"] = RECOVERY._expected_audit_prompt(
+            facts,
+            alternate["audit_spec"],
+            alternate["repository"]["name"],
+        )
+        self._reseal_embedded_review(alternate)
+
+        self.assertEqual(alternate["audit_raw_stream"], original_raw_stream)
+        self.assertNotEqual(
+            alternate_approval_sha256,
+            self.fixture.verified.approval_sha256,
+        )
+        with self.assertRaises(RECOVERY.RecoveryError) as raised:
+            self.validate_review_attestation(
+                alternate,
+                approval=alternate_approval,
+                attestation_name=(
+                    "lovable-toc-operator-identity-recovery-review-"
+                    + alternate_approval["approved_checkout_sha"]
+                    + "-"
+                    + alternate_approval_sha256
+                    + ".json"
+                ),
+                approval_name=alternate_approval_name,
+                approval_sha256=alternate_approval_sha256,
+                approval_size_bytes=len(alternate_approval_data),
+            )
+        self.assertEqual(raised.exception.reason, "binding_mismatch")
+        with self.assertRaises(DRIVER._StartupFailure):
+            DRIVER._validate_bootstrap_embedded_audit(
+                alternate,
+                repository=self.fixture.base,
+                approval=alternate_approval,
+                approval_name=alternate_approval_name,
+                approval_sha256=alternate_approval_sha256,
+                approval_size_bytes=len(alternate_approval_data),
+                checkout=alternate_approval["approved_checkout_sha"],
+                head_tree_sha=alternate["repository"]["head_tree_sha"],
+                evidence=alternate["evidence"],
+                reviewer=alternate["reviewer"],
+            )
+
+    def test_boolean_review_versions_are_rejected(self):
+        outer = copy.deepcopy(self.fixture.review_attestation)
+        outer["format_version"] = True
+        self._assert_review_rejected_pre_private(outer)
+
+        embedded = copy.deepcopy(self.fixture.review_attestation)
+        record = json.loads(embedded["audit_record_json"])
+        record["audit_format_version"] = True
+        embedded["audit_record_json"] = canonical(record).decode("ascii")
+        self._reseal_embedded_review(embedded)
+        self._assert_review_rejected_pre_private(embedded)
 
     def test_embedded_audit_canonical_and_size_limits_fail_pre_private(self):
         attestation = copy.deepcopy(self.fixture.review_attestation)
@@ -5715,6 +5900,34 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
                     "annotation_root_path",
                     os.fspath(self.fixture.operator_root / "nested"),
                 ),
+            ),
+            (
+                "overlong_private_path",
+                lambda approval: approval.__setitem__(
+                    "annotation_root_path", "/" + ("a" * 4096)
+                ),
+            ),
+            (
+                "boolean_generation",
+                lambda approval: approval["expected_chain"].__setitem__(
+                    "generation", True
+                ),
+            ),
+            (
+                "boolean_checkpoint_format_version",
+                lambda approval: approval["expected_chain"]["checkpoint"]
+                .__setitem__("format_version", True),
+            ),
+            (
+                "boolean_resume_format_version",
+                lambda approval: approval["expected_chain"]["resume"]
+                .__setitem__("format_version", True),
+            ),
+            (
+                "boolean_root_format_version",
+                lambda approval: approval["expected_chain"][
+                    "root_authorization"
+                ].__setitem__("format_version", True),
             ),
             (
                 "ai_authorizer",

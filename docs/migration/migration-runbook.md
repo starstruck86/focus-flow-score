@@ -940,9 +940,13 @@ exact `BEGIN_INDEPENDENT_APPROVAL_AUDIT_RESULT_V1` /
 `END_INDEPENDENT_APPROVAL_AUDIT_RESULT_V1` framing, followed by one matching
 terminal decision. It contains the complete ordered invariant matrix,
 material and nonmaterial findings, evidence separation, independence and prior
-conclusion status, and accepted ceilings. `APPROVE FOR MERGE` is accepted only
-when every invariant is `PASS` and material findings are empty; a bare
-decision line is not review evidence.
+conclusion status, accepted ceilings, and an exact
+`reviewed_artifact_binding` containing the approval SHA-256, approved
+checkout, and audit nonce from the delimited subject identity. `APPROVE FOR
+MERGE` is accepted only when every invariant is `PASS`, material findings are
+empty, and that raw report binding matches the approval under review; a bare
+decision line or a rewritten sidecar around another approval's raw stream is
+not review evidence.
 
 Only after a complete approving audit decision may a separate canonical
 review-attestation sidecar be prepared. The detached sidecar binds the exact
@@ -953,10 +957,13 @@ immutable Git facts, canonical settings, and empty stderr; a
 content-addressed bundle ID covers that exact ten-file evidence manifest. The
 raw stream must independently contain exactly one initialization event and one
 terminal result with one consistent session, the exact singleton
-`claude-fable-5` model identity, no fallback, complete successful read
-coverage in both byte-exact result representations, no prohibited tool or
-private-path access, and result text identical to the embedded structured
-report. The authoritative base, merge base, ordered commit range,
+`claude-fable-5` model identity, raw client version `2.1.219`, exact
+disposable-clone working directory, empty plugin/skill/slash-command
+declarations, no fallback, exact `caller={"type":"direct"}` provenance on
+every tool call, complete successful read coverage in both byte-exact result
+representations, no prohibited tool or private-path access, and result text
+identical to the embedded structured report. The authoritative base, merge
+base, ordered commit range,
 changed-name/status list, and complete head tree are recomputed directly from
 the bound checkout using the reviewed no-lazy-fetch Git environment; reported
 facts are not trusted on their own. It is detached because embedding the

@@ -120,7 +120,12 @@ def synthetic_review_git_bytes(_repository, arguments) -> bytes:
     raise AssertionError(arguments)
 
 
-def synthetic_review_report_object():
+def synthetic_review_report_object(
+    *,
+    approval_sha256: str,
+    approved_checkout_sha: str,
+    audit_nonce: str,
+):
     return {
         "accepted_ceilings_and_operational_gaps": [
             "Synthetic operational ceiling was identified directly."
@@ -157,6 +162,11 @@ def synthetic_review_report_object():
             "applicability": "not_supplied",
             "received": False,
             "relied_upon": False,
+        },
+        "reviewed_artifact_binding": {
+            "approval_sha256": approval_sha256,
+            "approved_checkout_sha": approved_checkout_sha,
+            "audit_nonce": audit_nonce,
         },
     }
 
@@ -257,7 +267,13 @@ def review_attestation(
         "pr": "",
     }
     prompt = METADATA._review_expected_prompt(facts, audit_spec)
-    report = review_report_text(synthetic_review_report_object())
+    report = review_report_text(
+        synthetic_review_report_object(
+            approval_sha256=digest(approval_data),
+            approved_checkout_sha=checkout,
+            audit_nonce=approval["review_authority"]["audit_nonce"],
+        )
+    )
     wrapper_bytes = SYNTHETIC_WRAPPER_SOURCE.encode("utf-8")
     spec_sha256 = digest(audit_spec.encode("utf-8"))
     wrapper_sha256 = digest(wrapper_bytes)
@@ -341,6 +357,7 @@ def review_attestation(
             )
         )
         tool_use = {
+            "caller": {"type": "direct"},
             "id": f"synthetic-tool-use-{index}",
             "input": {
                 "file_path": facts["disposable_clone"] + "/" + path
@@ -390,10 +407,15 @@ def review_attestation(
         canonical(event).decode("ascii")
         for event in (
             {
+                "claude_code_version": "2.1.219",
+                "cwd": facts["disposable_clone"],
                 "mcp_servers": [],
                 "model": "claude-fable-5",
                 "permissionMode": "plan",
+                "plugins": [],
                 "session_id": session_id,
+                "skills": [],
+                "slash_commands": [],
                 "subtype": "init",
                 "tools": ["Bash", "Glob", "Grep", "Read"],
                 "type": "system",
@@ -2175,6 +2197,7 @@ class PublicContractAndApprovalTest(unittest.TestCase):
                 "message": {
                     "content": [
                         {
+                            "caller": {"type": "direct"},
                             "id": tool_id,
                             "input": tool_input,
                             "name": name,
@@ -2401,6 +2424,7 @@ class PublicContractAndApprovalTest(unittest.TestCase):
             )
             first_assistant["message"]["content"].append(
                 {
+                    "caller": {"type": "direct"},
                     "id": grouped_id,
                     "input": grouped_input,
                     "name": "Read",
@@ -2560,6 +2584,58 @@ class PublicContractAndApprovalTest(unittest.TestCase):
         for label, mutation in (
             ("event_before_init", before_init),
             ("event_after_result", after_result),
+            (
+                "missing_init_client_version",
+                lambda events, _record: events[0].pop(
+                    "claude_code_version"
+                ),
+            ),
+            (
+                "wrong_init_client_version",
+                lambda events, _record: events[0].__setitem__(
+                    "claude_code_version", "2.1.218"
+                ),
+            ),
+            (
+                "missing_init_cwd",
+                lambda events, _record: events[0].pop("cwd"),
+            ),
+            (
+                "wrong_init_cwd",
+                lambda events, _record: events[0].__setitem__(
+                    "cwd", "/private/tmp/unrelated-audit-cwd"
+                ),
+            ),
+            (
+                "missing_init_plugins",
+                lambda events, _record: events[0].pop("plugins"),
+            ),
+            (
+                "nonempty_init_plugins",
+                lambda events, _record: events[0].__setitem__(
+                    "plugins", [{"name": "synthetic"}]
+                ),
+            ),
+            (
+                "missing_init_skills",
+                lambda events, _record: events[0].pop("skills"),
+            ),
+            (
+                "nonempty_init_skills",
+                lambda events, _record: events[0].__setitem__(
+                    "skills", ["synthetic"]
+                ),
+            ),
+            (
+                "missing_init_slash_commands",
+                lambda events, _record: events[0].pop("slash_commands"),
+            ),
+            (
+                "nonempty_init_slash_commands",
+                lambda events, _record: events[0].__setitem__(
+                    "slash_commands", ["synthetic"]
+                ),
+            ),
             ("assistant_missing_session", assistant_missing_session),
             ("user_missing_session", user_missing_session),
             ("result_missing_session", result_missing_session),
@@ -2573,6 +2649,24 @@ class PublicContractAndApprovalTest(unittest.TestCase):
             ("user_metadata_tool_result", user_metadata_result),
             ("server_tool_use", other_tool_use_type("server_tool_use")),
             ("mcp_tool_use", other_tool_use_type("mcp_tool_use")),
+            (
+                "missing_tool_caller",
+                lambda events, _record: assistant(events)["message"][
+                    "content"
+                ][0].pop("caller"),
+            ),
+            (
+                "wrong_tool_caller",
+                lambda events, _record: assistant(events)["message"][
+                    "content"
+                ][0].__setitem__("caller", {"type": "indirect"}),
+            ),
+            (
+                "extra_tool_caller_field",
+                lambda events, _record: assistant(events)["message"][
+                    "content"
+                ][0]["caller"].__setitem__("source", "synthetic"),
+            ),
             ("undeclared_tool", undeclared_tool),
             ("nonallowlisted_tool", nonallowlisted_tool),
             ("missing_tool_result", missing_tool_result),
@@ -4920,6 +5014,39 @@ class PublicContractAndApprovalTest(unittest.TestCase):
                 ),
             )
 
+        def report_other_approval_binding(value) -> None:
+            coherently_mutate_review_report_object(
+                value,
+                lambda report: report["reviewed_artifact_binding"].__setitem__(
+                    "approval_sha256", "1" * 64
+                ),
+            )
+
+        def report_missing_approval_binding(value) -> None:
+            coherently_mutate_review_report_object(
+                value,
+                lambda report: report.pop("reviewed_artifact_binding"),
+            )
+
+        def report_extra_approval_binding_key(value) -> None:
+            coherently_mutate_review_report_object(
+                value,
+                lambda report: report["reviewed_artifact_binding"].__setitem__(
+                    "extra", "synthetic"
+                ),
+            )
+
+        def boolean_audit_record_format(value) -> None:
+            record = json.loads(value["audit_record_json"])
+            record["audit_format_version"] = True
+            replace_review_json(
+                value,
+                "audit_record_json",
+                "audit_record_sha256",
+                record,
+            )
+            refresh_review_bundle(value)
+
         def usage_with_web_search(value, web_search_value, *, omit=False):
             model_usage = copy.deepcopy(
                 json.loads(value["audit_record_json"])["model_usage"]
@@ -4958,6 +5085,9 @@ class PublicContractAndApprovalTest(unittest.TestCase):
             ),
             "format_version": lambda value: value.__setitem__(
                 "format_version", 2
+            ),
+            "boolean_format_version": lambda value: value.__setitem__(
+                "format_version", True
             ),
             "decision": lambda value: value.__setitem__(
                 "decision", "REQUEST CHANGES"
@@ -5032,6 +5162,7 @@ class PublicContractAndApprovalTest(unittest.TestCase):
             "unrelated_prompt": unrelated_prompt,
             "oversized_prompt": oversized_prompt,
             "altered_record": altered_record,
+            "boolean_audit_record_format": boolean_audit_record_format,
             "altered_invocation": altered_invocation,
             "missing_enforced_git_environment": missing_git_environment,
             "wrong_enforced_git_environment": wrong_git_environment,
@@ -5108,6 +5239,11 @@ class PublicContractAndApprovalTest(unittest.TestCase):
                 report_noncanonical_equivalent
             ),
             "report_prior_conclusion_claim": report_prior_conclusion_claim,
+            "report_other_approval_binding": report_other_approval_binding,
+            "report_missing_approval_binding": report_missing_approval_binding,
+            "report_extra_approval_binding_key": (
+                report_extra_approval_binding_key
+            ),
             "usage_positive_web_search": lambda value: usage_with_web_search(
                 value, 1
             ),
@@ -5249,6 +5385,102 @@ class PublicContractAndApprovalTest(unittest.TestCase):
             )
         self.assertEqual(raised.exception.reason, "approval_invalid")
 
+    def test_unchanged_raw_stream_cannot_be_rebound_to_other_approval(self):
+        approval, checkout, *_rest = public_approval_fixture()
+        pin_synthetic_review_wrapper(approval)
+        approval_data = canonical(approval)
+        approval_name = (
+            "lovable-toc-operator-identity-recovery-metadata-approval-"
+            + checkout
+            + "-"
+            + digest(approval_data)[:16]
+            + ".json"
+        )
+        head_tree = "2" * 40
+        attestation = review_attestation(
+            checkout=checkout,
+            head_tree_sha=head_tree,
+            approval_name=approval_name,
+            approval_data=approval_data,
+        )
+        original_raw_stream = attestation["audit_raw_stream"]
+
+        alternate_approval = copy.deepcopy(approval)
+        alternate_approval["metadata_session"]["nonce"] = "b" * 64
+        alternate_data = canonical(alternate_approval)
+        alternate_sha256 = digest(alternate_data)
+        alternate_name = (
+            "lovable-toc-operator-identity-recovery-metadata-approval-"
+            + checkout
+            + "-"
+            + alternate_sha256[:16]
+            + ".json"
+        )
+        attestation["reviewed_artifact"].update(
+            {
+                "filename": alternate_name,
+                "sha256": alternate_sha256,
+                "size_bytes": len(alternate_data),
+            }
+        )
+        subject = METADATA._review_subject_block(
+            approval=alternate_approval,
+            approval_name=alternate_name,
+            approval_sha256=alternate_sha256,
+            approval_size=len(alternate_data),
+            checkout=checkout,
+        )
+        coherently_replace_review_spec(
+            attestation,
+            METADATA._review_expected_spec(subject),
+        )
+
+        self.assertEqual(attestation["audit_raw_stream"], original_raw_stream)
+        self.assertNotEqual(alternate_sha256, digest(approval_data))
+        with mock.patch.object(
+            METADATA.PREFLIGHT,
+            "_git_ascii",
+            side_effect=lambda _repository, arguments: (
+                synthetic_review_git_ascii(
+                    checkout, head_tree, arguments
+                )
+            ),
+        ), mock.patch.object(
+            METADATA.PREFLIGHT,
+            "_git",
+            side_effect=synthetic_review_git_bytes,
+        ), self.assertRaises(METADATA.MetadataProbeError) as raised:
+            METADATA._validate_review_attestation(
+                attestation,
+                approval=alternate_approval,
+                approval_name=alternate_name,
+                approval_sha256=alternate_sha256,
+                approval_size=len(alternate_data),
+                checkout=checkout,
+                repository=ROOT,
+                review_name=(
+                    "lovable-toc-operator-identity-recovery-metadata-review-"
+                    + checkout
+                    + "-"
+                    + alternate_sha256
+                    + ".json"
+                ),
+                required_audit_wrapper_sha256=SYNTHETIC_WRAPPER_SHA,
+            )
+        self.assertEqual(raised.exception.reason, "approval_invalid")
+        with self.assertRaises(DRIVER._StartupFailure):
+            DRIVER._validate_review_attestation_preimport(
+                attestation,
+                approval=alternate_approval,
+                approval_name=alternate_name,
+                approval_sha256=alternate_sha256,
+                approval_size=len(alternate_data),
+                checkout=checkout,
+                head_tree_sha=head_tree,
+                repository_path=os.fspath(ROOT),
+                required_audit_wrapper_sha256=SYNTHETIC_WRAPPER_SHA,
+            )
+
     def test_every_public_approval_substitution_fails_before_private_access(self):
         def wrong_checkout(value, _ordinary):
             value["approved_checkout_sha"] = "1" * 40
@@ -5293,6 +5525,20 @@ class PublicContractAndApprovalTest(unittest.TestCase):
 
         def v1(value, _ordinary):
             value["format_version"] = 1
+
+        def boolean_generation(value, _ordinary):
+            value["expected_chain"]["generation"] = True
+
+        def boolean_checkpoint_format_version(value, _ordinary):
+            value["expected_chain"]["checkpoint"]["format_version"] = True
+
+        def boolean_resume_format_version(value, _ordinary):
+            value["expected_chain"]["resume"]["format_version"] = True
+
+        def boolean_root_format_version(value, _ordinary):
+            value["expected_chain"]["root_authorization"][
+                "format_version"
+            ] = True
 
         def wrong_review_kind(value, _ordinary):
             value["review_authority"]["kind"] = "human_review_v1"
@@ -5370,6 +5616,19 @@ class PublicContractAndApprovalTest(unittest.TestCase):
             ("other_human_executor", other_human_executor),
             ("other_matching_human", other_matching_human),
             ("v1", v1),
+            ("boolean_generation", boolean_generation),
+            (
+                "boolean_checkpoint_format_version",
+                boolean_checkpoint_format_version,
+            ),
+            (
+                "boolean_resume_format_version",
+                boolean_resume_format_version,
+            ),
+            (
+                "boolean_root_format_version",
+                boolean_root_format_version,
+            ),
             ("review_kind", wrong_review_kind),
             ("requested_model", wrong_requested_model),
             ("effective_model", wrong_effective_model),

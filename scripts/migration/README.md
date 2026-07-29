@@ -1061,10 +1061,14 @@ object between the exact
 `END_INDEPENDENT_APPROVAL_AUDIT_RESULT_V1` lines, followed by one matching
 terminal decision. Its ordered invariant matrix, material findings,
 nonmaterial observations, evidence separation, independence statement, prior
-conclusion status, and accepted ceilings are closed and bounded. Approval is
-accepted only when every required invariant is `PASS`, material findings are
-empty, and the terminal decision is exactly `APPROVE FOR MERGE`; a bare
-terminal decision is insufficient.
+conclusion status, accepted ceilings, and `reviewed_artifact_binding` are
+closed and bounded. That binding must echo the exact approval SHA-256,
+approved checkout, and audit nonce from the delimited subject identity.
+Approval is accepted only when every required invariant is `PASS`, material
+findings are empty, the raw report binding matches the approval under review,
+and the terminal decision is exactly `APPROVE FOR MERGE`; a bare terminal
+decision or a coherently rewritten sidecar around another approval's raw
+stream is insufficient.
 
 After that review completes, prepare a separate canonical
 `lovable_toc_independent_claude_review_attestation` sidecar. It binds the exact
@@ -1075,10 +1079,13 @@ invocation, immutable Git facts, canonical settings, and empty stderr. Its
 content-addressed bundle ID covers that exact ten-file evidence manifest. The
 raw stream must independently contain exactly one initialization event and one
 terminal result with one consistent session, the exact singleton
-`claude-fable-5` model identity, no fallback, the complete successful
-clone-bound byte-exact read coverage described above in both result
-representations, no prohibited tool or private-path access, and result text
-identical to the embedded structured report. The sidecar's
+`claude-fable-5` model identity, exact raw client version `2.1.219`, the exact
+disposable-clone working directory, empty plugin/skill/slash-command
+declarations, no fallback, exact `caller={"type":"direct"}` provenance on
+every tool call, the complete successful clone-bound byte-exact read coverage
+described above in both result representations, no prohibited tool or
+private-path access, and result text identical to the embedded structured
+report. The sidecar's
 `repository.base_sha` binds the authoritative base that was frozen before the
 audit. The merge base, ordered commit range, changed-name/status list, and full
 head tree are recomputed directly from that bound base/head pair with the
