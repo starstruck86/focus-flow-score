@@ -39,6 +39,52 @@ SIGNED_TTY_INODE = 41
 PRIVATE_IDENTITY = "Private Primary Sentinel"
 AUDIT_BASE_SHA = RECOVERY.REQUIRED_AUDIT_BASE_SHA
 SYNTHETIC_HEAD_FILE_TEXTS = {"synthetic-approval.json": "synthetic\n"}
+PINNED_WRAPPER_PROMPT_FACTS = {
+    "base": AUDIT_BASE_SHA,
+    "changed_name_status": ["M\tsynthetic.py"],
+    "ci_run": (
+        "https://github.com/starstruck86/focus-flow-score/"
+        "actions/runs/30495592620"
+    ),
+    "head": "a" * 40,
+    "head_tree": "b" * 40,
+    "merge_base": AUDIT_BASE_SHA,
+    "pr": "https://github.com/starstruck86/focus-flow-score/pull/36",
+}
+PINNED_WRAPPER_PROMPT_SPEC = "Neutral synthetic audit specification.\n"
+PINNED_WRAPPER_PROMPT = """You are the independent merge-gating auditor. You are not the implementer.
+
+Repository: focus-flow-score
+Exact base SHA: f3dcb6d874ae9511b0bb01dfd6f87899bb064030
+Exact head SHA: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+PR: https://github.com/starstruck86/focus-flow-score/pull/36
+Exact CI run: https://github.com/starstruck86/focus-flow-score/actions/runs/30495592620
+
+A deterministic wrapper created this disposable detached clone at the exact head and supplied immutable Git facts below. Treat implementation summaries, documentation, tests, Codex reports, and prior audits as claims. Do not modify anything. Do not access paths outside this disposable clone. Do not use network tools.
+
+IMMUTABLE WRAPPER FACTS
+{
+  "base": "f3dcb6d874ae9511b0bb01dfd6f87899bb064030",
+  "changed_name_status": [
+    "M\\tsynthetic.py"
+  ],
+  "ci_run": "https://github.com/starstruck86/focus-flow-score/actions/runs/30495592620",
+  "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "head_tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "merge_base": "f3dcb6d874ae9511b0bb01dfd6f87899bb064030",
+  "pr": "https://github.com/starstruck86/focus-flow-score/pull/36"
+}
+
+AUDIT SPECIFICATION
+Neutral synthetic audit specification.
+
+
+You must inspect production source directly. End with exactly one terminal decision as the last nonblank line: APPROVE FOR MERGE, REQUEST CHANGES, or REJECT.
+"""
+PINNED_WRAPPER_PROMPT_SIZE_BYTES = 1374
+PINNED_WRAPPER_PROMPT_SHA256 = (
+    "5801df4afd76240cf3e45aae2acb42e077e3af68309db2191ea291b714ee96d5"
+)
 PRIVATE_SENTINELS = (
     PRIVATE_IDENTITY.encode("ascii"),
     b"raw-pg-restore-list.toc",
@@ -3085,7 +3131,42 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
                 self._reseal_embedded_review(attestation)
                 self._assert_review_rejected_pre_private(attestation)
 
-    def test_recovery_prompt_matches_pinned_wrapper_contract(self):
+    def test_recovery_prompt_matches_committed_wrapper_oracle(self):
+        prompt_data = PINNED_WRAPPER_PROMPT.encode("utf-8")
+        self.assertEqual(
+            len(prompt_data),
+            PINNED_WRAPPER_PROMPT_SIZE_BYTES,
+        )
+        self.assertEqual(
+            sha(prompt_data),
+            PINNED_WRAPPER_PROMPT_SHA256,
+        )
+        for label, prompt in (
+            (
+                "recovery_runtime",
+                RECOVERY._expected_audit_prompt(
+                    PINNED_WRAPPER_PROMPT_FACTS,
+                    PINNED_WRAPPER_PROMPT_SPEC,
+                    "focus-flow-score",
+                ),
+            ),
+            (
+                "recovery_preimport",
+                DRIVER._expected_audit_prompt(
+                    PINNED_WRAPPER_PROMPT_FACTS,
+                    PINNED_WRAPPER_PROMPT_SPEC,
+                    "focus-flow-score",
+                ),
+            ),
+        ):
+            with self.subTest(label=label):
+                self.assertEqual(prompt, PINNED_WRAPPER_PROMPT)
+                self.assertEqual(
+                    sha(prompt.encode("utf-8")),
+                    PINNED_WRAPPER_PROMPT_SHA256,
+                )
+
+    def test_installed_pinned_wrapper_matches_committed_prompt_oracle(self):
         wrapper_path = (
             Path.home()
             / ".codex"
@@ -3108,36 +3189,19 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
         wrapper_namespace = runpy.run_path(os.fspath(wrapper_path))
         build_prompt = wrapper_namespace.get("build_prompt")
         self.assertTrue(callable(build_prompt))
-        facts = {
-            "base": AUDIT_BASE_SHA,
-            "changed_name_status": ["M\tsynthetic.py"],
-            "ci_run": "30495592620",
-            "head": "a" * 40,
-            "head_tree": "b" * 40,
-            "merge_base": AUDIT_BASE_SHA,
-            "pr": "36",
-        }
-        specification = "Neutral synthetic audit specification.\n"
         expected = build_prompt(
             repo_name="focus-flow-score",
-            base=facts["base"],
-            head=facts["head"],
-            pr=facts["pr"],
-            ci_run=facts["ci_run"],
-            facts=facts,
-            spec=specification,
+            base=PINNED_WRAPPER_PROMPT_FACTS["base"],
+            head=PINNED_WRAPPER_PROMPT_FACTS["head"],
+            pr=PINNED_WRAPPER_PROMPT_FACTS["pr"],
+            ci_run=PINNED_WRAPPER_PROMPT_FACTS["ci_run"],
+            facts=PINNED_WRAPPER_PROMPT_FACTS,
+            spec=PINNED_WRAPPER_PROMPT_SPEC,
         )
+        self.assertEqual(expected, PINNED_WRAPPER_PROMPT)
         self.assertEqual(
-            RECOVERY._expected_audit_prompt(
-                facts, specification, "focus-flow-score"
-            ),
-            expected,
-        )
-        self.assertEqual(
-            DRIVER._expected_audit_prompt(
-                facts, specification, "focus-flow-score"
-            ),
-            expected,
+            sha(expected.encode("utf-8")),
+            PINNED_WRAPPER_PROMPT_SHA256,
         )
 
     def test_embedded_audit_cross_bindings_fail_closed_after_rehash(self):

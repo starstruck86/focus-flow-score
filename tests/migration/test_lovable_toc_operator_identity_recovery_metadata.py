@@ -1192,6 +1192,38 @@ class MetadataProbeTestCase(unittest.TestCase):
 
 
 class PublicContractAndApprovalTest(unittest.TestCase):
+    def test_metadata_prompts_match_committed_wrapper_oracle(self):
+        for label, prompt in (
+            (
+                "metadata_runtime",
+                METADATA._review_expected_prompt(
+                    RECOVERY_TESTS.PINNED_WRAPPER_PROMPT_FACTS,
+                    RECOVERY_TESTS.PINNED_WRAPPER_PROMPT_SPEC,
+                ),
+            ),
+            (
+                "metadata_preimport",
+                DRIVER._expected_review_prompt_preimport(
+                    RECOVERY_TESTS.PINNED_WRAPPER_PROMPT_FACTS,
+                    RECOVERY_TESTS.PINNED_WRAPPER_PROMPT_SPEC,
+                ),
+            ),
+        ):
+            with self.subTest(label=label):
+                self.assertEqual(
+                    prompt,
+                    RECOVERY_TESTS.PINNED_WRAPPER_PROMPT,
+                )
+                prompt_data = prompt.encode("utf-8")
+                self.assertEqual(
+                    len(prompt_data),
+                    RECOVERY_TESTS.PINNED_WRAPPER_PROMPT_SIZE_BYTES,
+                )
+                self.assertEqual(
+                    digest(prompt_data),
+                    RECOVERY_TESTS.PINNED_WRAPPER_PROMPT_SHA256,
+                )
+
     def test_consumed_absolute_path_schemas_exclude_unusable_lexemes(self):
         ordinary_schema_names = (
             "lovable-toc-operator-execution-profile-approval.schema.json",
