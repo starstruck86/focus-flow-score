@@ -27,6 +27,7 @@ import stat
 import subprocess
 import sys
 import termios
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
@@ -73,6 +74,7 @@ REVIEWED_GIT_ENVIRONMENT = {
     "GIT_CONFIG_GLOBAL": "/dev/null",
     "GIT_CONFIG_NOSYSTEM": "1",
     "GIT_CONFIG_SYSTEM": "/dev/null",
+    "GIT_NO_LAZY_FETCH": "1",
     "GIT_NO_REPLACE_OBJECTS": "1",
     "GIT_OPTIONAL_LOCKS": "0",
     "GIT_TERMINAL_PROMPT": "0",
@@ -495,14 +497,34 @@ def _validate_relative_path(value: Any, reason: str) -> str:
     return path
 
 
+def _portable_path_key(value: str | os.PathLike[str]) -> str:
+    raw = os.fspath(value)
+    if raw.startswith("//"):
+        raw = "/" + raw.lstrip("/")
+    normalized = unicodedata.normalize(
+        "NFC", os.path.normpath(raw)
+    )
+    return unicodedata.normalize("NFC", normalized.casefold())
+
+
 def _validate_absolute_path_lexically(value: Any, repository: Path) -> str:
     path = _require_string(value, reason="approval_invalid")
-    if "\x00" in path or not path.startswith("/") or os.path.normpath(path) != path:
+    if (
+        len(path) > 4096
+        or path == "/"
+        or "\x00" in path
+        or not path.startswith("/")
+        or path.startswith("//")
+        or os.path.normpath(path) != path
+    ):
         raise PreflightError("approval_invalid")
     candidate = Path(path)
     try:
-        if os.path.commonpath((os.fspath(repository), path)) == os.fspath(
-            repository
+        repository_key = _portable_path_key(repository)
+        candidate_key = _portable_path_key(path)
+        if (
+            os.path.commonpath((repository_key, candidate_key))
+            == repository_key
         ):
             raise PreflightError("approval_invalid")
     except ValueError as exc:
@@ -536,8 +558,14 @@ def validate_profile(value: Any) -> dict[str, Any]:
     )
     if (
         profile["artifact_kind"] != "lovable_toc_operator_execution_profile"
+        or type(profile["format_version"]) is not int
         or profile["format_version"] != 1
         or profile["record_versions"] != EXPECTED_RECORD_VERSIONS
+        or any(
+            type(version) is not int
+            for versions in profile["record_versions"].values()
+            for version in versions
+        )
     ):
         raise PreflightError(reason)
 
@@ -564,6 +592,8 @@ def validate_profile(value: Any) -> dict[str, Any]:
         "same_uid_prelaunch_replacement_ceiling": True,
     }:
         raise PreflightError(reason)
+    if type(checkout["same_uid_prelaunch_replacement_ceiling"]) is not bool:
+        raise PreflightError(reason)
 
     discovery = _exact_dict(
         profile["approval_discovery"],
@@ -581,6 +611,7 @@ def validate_profile(value: Any) -> dict[str, Any]:
     if (
         discovery["home_resolution"] != "passwd_database_effective_uid"
         or discovery["required_file_mode"] != "0400"
+        or type(discovery["required_file_nlink"]) is not int
         or discovery["required_file_nlink"] != 1
         or discovery["required_parent_mode"] != "0700"
         or discovery["selection"] != "exactly_one_matching_current_checkout"
@@ -620,12 +651,17 @@ def validate_profile(value: Any) -> dict[str, Any]:
     _require_int(python["exact_uid"], reason=reason)
     _require_int(python["exact_gid"], reason=reason)
     if (
-        python["exact_mode"] != "0755"
+        len(python["absolute_path"]) > 4096
+        or python["absolute_path"] == "/"
+        or "\x00" in python["absolute_path"]
+        or python["exact_mode"] != "0755"
+        or type(python["exact_nlink"]) is not int
         or python["exact_nlink"] != 1
         or python["executable_required"] is not True
         or python["isolated_flags"] != ["-I", "-S", "-B"]
         or python["symlink_components_forbidden"] is not True
         or not python["absolute_path"].startswith("/")
+        or python["absolute_path"].startswith("//")
         or os.path.normpath(python["absolute_path"]) != python["absolute_path"]
     ):
         raise PreflightError(reason)
@@ -690,10 +726,18 @@ def validate_profile(value: Any) -> dict[str, Any]:
         if action == "primary_review" and record["max_entry_decisions"] != 100:
             raise PreflightError(reason)
 
-    if profile["batch_limits"] != {
-        "maximum_entry_decisions": 100,
-        "primary_review_default": 100,
-    }:
+    if (
+        type(profile["batch_limits"]) is not dict
+        or any(
+            type(value) is not int
+            for value in profile["batch_limits"].values()
+        )
+        or profile["batch_limits"]
+        != {
+            "maximum_entry_decisions": 100,
+            "primary_review_default": 100,
+        }
+    ):
         raise PreflightError(reason)
     if (
         type(profile["prohibited_effects"]) is not list
@@ -739,6 +783,7 @@ def validate_profile(value: Any) -> dict[str, Any]:
     )
     if (
         bridge["allowed_action"] != "primary_review"
+        or type(bridge["generation"]) is not int
         or bridge["generation"] != 1
         or bridge["required_state"] != "PRIMARY_REVIEW_REQUIRED"
         or bridge["resume_predecessor"] != "absent"
@@ -765,6 +810,12 @@ def validate_profile(value: Any) -> dict[str, Any]:
             "reject_generation_at_or_above": 2,
             "single_use": True,
         }
+        or type(
+            self_closing["ordinary_exact_current_rules_after_success"]
+        )
+        is not bool
+        or type(self_closing["reject_generation_at_or_above"]) is not int
+        or type(self_closing["single_use"]) is not bool
     ):
         raise PreflightError(reason)
     return profile
@@ -797,6 +848,8 @@ def _validate_python_approval(value: Any, profile_python: Mapping[str, Any]) -> 
     ):
         if identity[key] != profile_python[key]:
             raise PreflightError("approval_binding_mismatch")
+    for key in ("exact_uid", "exact_gid", "exact_nlink"):
+        _require_int(identity[key], reason=reason)
     _require_string(
         identity["identity_sha256"], reason=reason, pattern=SHA256_RE
     )
@@ -832,6 +885,7 @@ def validate_approval(
     if (
         approval["artifact_kind"]
         != "lovable_toc_operator_execution_approval"
+        or type(approval["format_version"]) is not int
         or approval["format_version"] != 1
         or approval["repository"] != profile["repository"]
     ):
@@ -856,7 +910,10 @@ def validate_approval(
     profile_binding = _exact_dict(
         approval["execution_profile"], {"format_version", "sha256"}, reason
     )
-    if profile_binding["format_version"] != 1:
+    if (
+        type(profile_binding["format_version"]) is not int
+        or profile_binding["format_version"] != 1
+    ):
         raise PreflightError(reason)
     _require_string(profile_binding["sha256"], reason=reason, pattern=SHA256_RE)
     procedures = _exact_dict(

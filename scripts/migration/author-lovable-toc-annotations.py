@@ -42,6 +42,7 @@ _REVIEWED_GIT_ENVIRONMENT = {
     "GIT_CONFIG_GLOBAL": "/dev/null",
     "GIT_CONFIG_NOSYSTEM": "1",
     "GIT_CONFIG_SYSTEM": "/dev/null",
+    "GIT_NO_LAZY_FETCH": "1",
     "GIT_NO_REPLACE_OBJECTS": "1",
     "GIT_OPTIONAL_LOCKS": "0",
     "GIT_TERMINAL_PROMPT": "0",
@@ -244,6 +245,7 @@ def _preimport_repository_guard() -> None:
         "curses.py",
         "termios.py",
         "tty.py",
+        "unicodedata.py",
     ):
         try:
             os.lstat(os.path.join(migration_directory, relative))
@@ -296,6 +298,7 @@ import re
 import secrets
 import struct
 import termios
+import unicodedata
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -878,7 +881,12 @@ def _validate_action_invocation(
 
 
 def _open_private_directory_path(raw: str) -> tuple[int, Path, os.stat_result]:
-    if type(raw) is not str or not raw or "\x00" in raw:
+    if (
+        type(raw) is not str
+        or not raw
+        or raw.startswith("//")
+        or "\x00" in raw
+    ):
         raise AuthoringEntrypointError("input_invalid")
     path = Path(raw)
     try:
@@ -981,19 +989,34 @@ def _revalidate_child_directory(
         raise AuthoringEntrypointError("input_mutated")
 
 
+def _portable_private_path_key(path: Path) -> str:
+    raw = os.fspath(path)
+    if raw.startswith("//"):
+        raw = "/" + raw.lstrip("/")
+    normalized = unicodedata.normalize(
+        "NFC", os.path.normpath(raw)
+    )
+    return unicodedata.normalize("NFC", normalized.casefold())
+
+
 def _assert_disjoint_outside_repository(paths: tuple[Path, ...]) -> None:
     repository = REPO.resolve(strict=True)
     normalized = [path.resolve(strict=True) for path in paths]
-    for path in normalized:
+    repository_key = _portable_private_path_key(repository)
+    path_keys = [_portable_private_path_key(path) for path in normalized]
+    for path_key in path_keys:
         try:
-            if os.path.commonpath((os.fspath(repository), os.fspath(path))) == os.fspath(repository):
+            if (
+                os.path.commonpath((repository_key, path_key))
+                == repository_key
+            ):
                 raise AuthoringEntrypointError("input_invalid")
         except ValueError as exc:
             raise AuthoringEntrypointError("input_invalid") from exc
-    for index, left in enumerate(normalized):
-        for right in normalized[index + 1 :]:
+    for index, left in enumerate(path_keys):
+        for right in path_keys[index + 1 :]:
             try:
-                common = Path(os.path.commonpath((os.fspath(left), os.fspath(right))))
+                common = os.path.commonpath((left, right))
             except ValueError as exc:
                 raise AuthoringEntrypointError("input_invalid") from exc
             if common in {left, right}:

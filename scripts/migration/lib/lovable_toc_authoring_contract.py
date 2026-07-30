@@ -64,6 +64,67 @@ CHECKPOINT_NAME_RE = re.compile(
 )
 SAFE_IDENTITY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._@()+:-]{0,127}$", re.ASCII)
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$", re.ASCII)
+CAPTURE_BINDING_KEYS = (
+    "capture_execution_checkout_sha",
+    "capture_json_sha256",
+    "capture_manifest_sha256",
+    "capture_procedure_identity_sha256",
+    "data_reference_count",
+    "entry_count",
+    "evidence_manifest_sha256",
+    "evidence_run_id",
+    "inner_archive_sha256",
+    "inspection_checkout_sha",
+    "inspection_procedure_sha256",
+    "opaque_key_ctime_ns",
+    "opaque_key_device",
+    "opaque_key_gid",
+    "opaque_key_inode",
+    "opaque_key_mode",
+    "opaque_key_mtime_ns",
+    "opaque_key_nlink",
+    "opaque_key_size_bytes",
+    "opaque_key_uid",
+    "opaque_index_sha256",
+    "outer_archive_sha256",
+    "package_device",
+    "package_inode",
+    "pg_restore_identity_sha256",
+    "raw_toc_sha256",
+    "raw_toc_size_bytes",
+)
+CAPTURE_BINDING_SHA256_KEYS = (
+    "capture_json_sha256",
+    "capture_manifest_sha256",
+    "capture_procedure_identity_sha256",
+    "evidence_manifest_sha256",
+    "inner_archive_sha256",
+    "inspection_procedure_sha256",
+    "opaque_index_sha256",
+    "outer_archive_sha256",
+    "pg_restore_identity_sha256",
+    "raw_toc_sha256",
+)
+CAPTURE_BINDING_NONNEGATIVE_INTEGER_KEYS = (
+    "data_reference_count",
+    "opaque_key_ctime_ns",
+    "opaque_key_device",
+    "opaque_key_gid",
+    "opaque_key_mtime_ns",
+    "opaque_key_uid",
+    "package_device",
+)
+CAPTURE_BINDING_POSITIVE_INTEGER_KEYS = (
+    "entry_count",
+    "opaque_key_inode",
+    "package_inode",
+)
+LEGACY_CAPTURE_BINDING_KEYS = (
+    "capture_manifest_sha256",
+    "evidence_run_id",
+    "opaque_index_sha256",
+    "raw_toc_sha256",
+)
 CHECKPOINT_ACTIONS = frozenset(
     {
         "initialize",
@@ -338,6 +399,70 @@ def _exact_dict(value: Any, keys: Sequence[str], code: str) -> dict[str, Any]:
     return value
 
 
+def _validate_checkpoint_capture_binding(value: Any) -> dict[str, Any]:
+    if type(value) is not dict:
+        _fail("checkpoint_invalid")
+    keys = set(value)
+    if keys == set(LEGACY_CAPTURE_BINDING_KEYS):
+        binding = value
+        sha256_keys = (
+            "capture_manifest_sha256",
+            "opaque_index_sha256",
+            "raw_toc_sha256",
+        )
+        legacy = True
+    elif keys == set(CAPTURE_BINDING_KEYS):
+        binding = value
+        sha256_keys = CAPTURE_BINDING_SHA256_KEYS
+        legacy = False
+    else:
+        _fail("checkpoint_invalid")
+    try:
+        for key in sha256_keys:
+            validate_sha(binding[key])
+        if not legacy:
+            validate_git_sha(binding["capture_execution_checkout_sha"])
+            validate_git_sha(binding["inspection_checkout_sha"])
+    except ContractError as exc:
+        _fail("checkpoint_invalid", exc)
+    run_id = binding["evidence_run_id"]
+    if (
+        type(run_id) is not str
+        or not run_id
+        or not run_id.isascii()
+        or len(run_id) > 160
+        or any(
+            character
+            not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-"
+            for character in run_id
+        )
+    ):
+        _fail("checkpoint_invalid")
+    if legacy:
+        return binding
+    for key in CAPTURE_BINDING_NONNEGATIVE_INTEGER_KEYS:
+        if type(binding[key]) is not int or binding[key] < 0:
+            _fail("checkpoint_invalid")
+    for key in CAPTURE_BINDING_POSITIVE_INTEGER_KEYS:
+        if type(binding[key]) is not int or binding[key] < 1:
+            _fail("checkpoint_invalid")
+    if (
+        type(binding["opaque_key_mode"]) is not int
+        or binding["opaque_key_mode"] != 0o400
+        or type(binding["opaque_key_nlink"]) is not int
+        or binding["opaque_key_nlink"] != 1
+        or type(binding["opaque_key_size_bytes"]) is not int
+        or binding["opaque_key_size_bytes"] != 32
+        or type(binding["raw_toc_size_bytes"]) is not int
+        or binding["raw_toc_size_bytes"] < 1
+        or binding["raw_toc_size_bytes"] > MAX_RAW_TOC_BYTES
+        or binding["entry_count"] > MAX_ENTRY_COUNT
+        or binding["data_reference_count"] > binding["entry_count"]
+    ):
+        _fail("checkpoint_invalid")
+    return binding
+
+
 def _private_directory_metadata(directory_fd: int) -> os.stat_result:
     try:
         metadata = os.fstat(directory_fd)
@@ -409,7 +534,11 @@ def _parse_opaque_index(raw: bytes, structures: Sequence[RawTocEntry]) -> list[d
     except ContractError as exc:
         _fail("capture_invalid", exc)
     root = _exact_dict(value, ("artifact_kind", "entries", "format_version"), "capture_invalid")
-    if root["artifact_kind"] != "lovable_toc_opaque_index" or root["format_version"] != 1:
+    if (
+        root["artifact_kind"] != "lovable_toc_opaque_index"
+        or type(root["format_version"]) is not int
+        or root["format_version"] != 1
+    ):
         _fail("capture_invalid")
     if type(root["entries"]) is not list or len(root["entries"]) != len(structures):
         _fail("capture_invalid")
@@ -471,7 +600,11 @@ def _validate_capture_evidence_manifest(
     except ContractError as exc:
         _fail("capture_invalid", exc)
     root = _exact_dict(root, ("artifact_kind", "files", "format_version"), "capture_invalid")
-    if root["artifact_kind"] != "lovable_toc_capture_evidence" or root["format_version"] != 1:
+    if (
+        root["artifact_kind"] != "lovable_toc_capture_evidence"
+        or type(root["format_version"]) is not int
+        or root["format_version"] != 1
+    ):
         _fail("capture_invalid")
     if type(root["files"]) is not list or len(root["files"]) != 4:
         _fail("capture_invalid")
@@ -1028,11 +1161,18 @@ def validate_checkpoint(
         ),
         "checkpoint_invalid",
     )
-    if root["artifact_kind"] != CHECKPOINT_ARTIFACT_KIND or root["format_version"] != 1:
+    if (
+        root["artifact_kind"] != CHECKPOINT_ARTIFACT_KIND
+        or type(root["format_version"]) is not int
+        or root["format_version"] != 1
+    ):
         _fail("checkpoint_invalid")
     if root["authoring_binding"] != binding.as_dict():
         _fail("binding_mismatch")
-    if root["capture_binding"] != dict(capture.capture_binding):
+    checkpoint_capture_binding = _validate_checkpoint_capture_binding(
+        root["capture_binding"]
+    )
+    if checkpoint_capture_binding != dict(capture.capture_binding):
         _fail("binding_mismatch")
     generation = root["generation"]
     if type(generation) is not int or generation < 1:
@@ -1104,6 +1244,7 @@ def validate_checkpoint(
         if (
             entry["dependency_review_complete"] is not False
             or entry["entry_id"] != captured.entry_id
+            or type(entry["ordinal"]) is not int
             or entry["ordinal"] != ordinal
             or entry["object_class"] != captured.object_class
             or entry["is_data_reference"] is not captured.is_data_reference
@@ -1119,7 +1260,7 @@ def validate_checkpoint(
             ),
             "checkpoint_invalid",
         )
-        if proposal != {
+        if type(proposal["proposal_version"]) is not int or proposal != {
             "classification": "unresolved",
             "forced_managed_domain": CLASS_MANAGED_DOMAINS.get(captured.object_class),
             "proposal_version": 1,

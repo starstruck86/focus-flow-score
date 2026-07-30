@@ -194,6 +194,42 @@ capture root literals, an empty pairwise-disjoint recovery-evidence root, exact
 private-record digests and versions, named non-AI human roles, session expiry,
 TTY, no-retry rule, and accepted ceilings.
 
+For a checkout using the sole-owner v2 contract, neither the metadata approval
+nor the recovery approval is usable by itself. This proposed boundary remains
+**DRAFT / UNMERGED / UNRUN**. Corey is the sole human authorizer and executing
+operator; there is no second human. Claude/Fable is identified as the
+independent machine reviewer. Codex must freeze the canonical approval bytes
+and the authoritative lowercase-40 base SHA, directly obtain a fresh Claude
+Code review using exact client version `2.1.219 (Claude Code)`, requested alias
+`fable`, effective/canonical model `claude-fable-5`, reasoning effort `max`,
+exactly `--max-turns 200`, and no fallback, and prepare the one matching
+detached canonical `lovable_toc_independent_claude_review_attestation`
+sidecar. The independently approved wrapper SHA-256 is
+`6a4d3ea4ad2dfeb440efbe9b62c7ae543dc3af428941e85363bc77cf8e49de66`.
+Every earlier wrapper revision is superseded and inert for new v2 evidence.
+The preserved invocation separately binds exactly
+`"enforced_git_environment":{"GIT_NO_LAZY_FETCH":"1"}`, not as part of its
+model environment; missing, wrong, or extra entries fail closed. Its
+`repository.base_sha` and every audit range must match the frozen base; raw
+audit facts cannot choose it. The reviewed/procedure identity closure must
+include every executable dependency, including
+`scripts/migration/lib/lovable_dump_report.py`, and any symlink anywhere in the
+complete head tree fails closed. Required source coverage is content-bound:
+both each byte-bound structured `Read` slice and its line-number-prefixed
+message must match the exact Git source window, including terminal empty-line
+semantics; counts alone are insufficient. Approval reads remain capped at
+512 KiB; the embedded raw stream is capped at 8 MiB and the
+descriptor-read/canonical sidecar at 16 MiB. The former 3/4 MiB limits could
+not carry the mandatory full changed-file `Read` evidence because the
+preserved stream duplicates and JSON-escapes tool-result content. The approval
+and sidecar must validate as one exact checkout/base-bound pair before any
+private pathname operation. Missing, duplicate, stale, substituted,
+symlink-bearing, downgraded, or incomplete evidence fails closed. The v1
+distinct-human-reviewer path remains historical and inert for a v2 checkout.
+The complete evidence and validation contract is in
+`../../scripts/migration/README.md` under “Sole-owner approval review
+attestation (v2)” and in `migration-runbook.md`.
+
 Those private record bindings may be obtained only through a separately
 authorized run of the zero-argument
 `run-lovable-toc-operator-identity-recovery-metadata-probe.sh`. The probe
@@ -204,8 +240,12 @@ pathname operation. Afterward it reads only the pristine
 root-v1/resume-v2/checkpoint-v1 generation-one chain and release marker with
 descriptor-relative no-follow operations; it does not lock, create an audit or
 marker, write private state, or open capture/evidence roots. All private
-descriptors are closed before one bounded canonical result is written to the
-revalidated private TTY. The result contains only whole-record
+path literals must use exactly one leading slash, so a POSIX `//...` alias is
+rejected before private access. Every private descriptor is closed before one
+bounded canonical result is written to the
+revalidated private TTY. Descriptor ownership is relinquished before each
+first close attempt, so an ambiguous close is not retried by error cleanup and
+returns only `indeterminate`. The result contains only whole-record
 hashes/versions and approved fixed bindings, never the operator claim or a
 fingerprint of it, release token, checkpoint decisions, record JSON, TOC or
 capture content, opaque IDs, SQL, or object metadata.

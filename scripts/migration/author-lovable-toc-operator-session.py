@@ -109,6 +109,7 @@ import stat
 import subprocess
 import struct
 import termios
+import unicodedata
 from collections import Counter
 from collections.abc import Mapping as AbcMapping
 from dataclasses import dataclass
@@ -129,6 +130,7 @@ _REVIEWED_GIT_ENVIRONMENT = {
     "GIT_CONFIG_GLOBAL": "/dev/null",
     "GIT_CONFIG_NOSYSTEM": "1",
     "GIT_CONFIG_SYSTEM": "/dev/null",
+    "GIT_NO_LAZY_FETCH": "1",
     "GIT_NO_REPLACE_OBJECTS": "1",
     "GIT_OPTIONAL_LOCKS": "0",
     "GIT_TERMINAL_PROMPT": "0",
@@ -457,6 +459,7 @@ def _preimport_external_guard(
         if (
             approval.get("artifact_kind")
             != "lovable_toc_operator_execution_approval"
+            or type(approval.get("format_version")) is not int
             or approval.get("format_version") != 1
             or approval.get("approved_checkout_sha") != checkout
             or approval.get("repository")
@@ -544,6 +547,7 @@ def _preimport_external_guard(
             "subprocess.py",
             "termios.py",
             "typing.py",
+            "unicodedata.py",
         ):
             try:
                 os.lstat(migration_directory / relative)
@@ -773,7 +777,12 @@ def _count(value: str, *, allow_zero: bool = False) -> int:
 
 
 def _validate_absolute_path(value: str, *, must_exist: bool) -> Path:
-    if type(value) is not str or not value or "\x00" in value:
+    if (
+        type(value) is not str
+        or not value
+        or value.startswith("//")
+        or "\x00" in value
+    ):
         _fail("input_invalid")
     path = Path(value)
     if not path.is_absolute() or value != os.path.abspath(value):
@@ -795,7 +804,12 @@ def _validate_absolute_path(value: str, *, must_exist: bool) -> Path:
 
 
 def _validate_absolute_path_lexical(value: str) -> Path:
-    if type(value) is not str or not value or "\x00" in value:
+    if (
+        type(value) is not str
+        or not value
+        or value.startswith("//")
+        or "\x00" in value
+    ):
         _fail("input_invalid")
     path = Path(value)
     if (
@@ -807,17 +821,41 @@ def _validate_absolute_path_lexical(value: str) -> Path:
     return path
 
 
+def _portable_private_path_key(path: Path) -> str:
+    raw = os.fspath(path)
+    if raw.startswith("//"):
+        raw = "/" + raw.lstrip("/")
+    normalized = unicodedata.normalize(
+        "NFC", os.path.normpath(raw)
+    )
+    return unicodedata.normalize("NFC", normalized.casefold())
+
+
 def _assert_outside_repository(paths: tuple[Path, ...]) -> None:
     repository = REPO.resolve(strict=True)
-    for path in paths:
-        try:
-            path.resolve(strict=path.exists()).relative_to(repository)
-        except ValueError:
-            continue
-        _fail("input_invalid")
-    normalized = [os.path.normcase(os.fspath(path)) for path in paths]
-    if len(set(normalized)) != len(normalized):
-        _fail("input_invalid")
+    repository_keys = {
+        _portable_private_path_key(REPO),
+        _portable_private_path_key(repository),
+    }
+    path_keys = [_portable_private_path_key(path) for path in paths]
+    for path_key in path_keys:
+        for repository_key in repository_keys:
+            try:
+                if (
+                    os.path.commonpath((repository_key, path_key))
+                    == repository_key
+                ):
+                    _fail("input_invalid")
+            except ValueError as exc:
+                raise OperatorSessionError("input_invalid") from exc
+    for index, left in enumerate(path_keys):
+        for right in path_keys[index + 1 :]:
+            try:
+                common = os.path.commonpath((left, right))
+            except ValueError as exc:
+                raise OperatorSessionError("input_invalid") from exc
+            if common in {left, right}:
+                _fail("input_invalid")
 
 
 def _open_existing_private_directory(path: Path) -> tuple[int, os.stat_result]:
@@ -1036,7 +1074,11 @@ def _validate_loaded_resume_record(
     record_keys = set(record)
     if record_keys != expected_keys and record_keys != successor_keys and record_keys != legacy_keys:
         _fail("history_conflict")
-    if record["artifact_kind"] != RESUME_KIND or record["format_version"] not in {FORMAT_VERSION, RESUME_FORMAT_VERSION}:
+    if (
+        record["artifact_kind"] != RESUME_KIND
+        or type(record["format_version"]) is not int
+        or record["format_version"] not in {FORMAT_VERSION, RESUME_FORMAT_VERSION}
+    ):
         _fail("history_conflict")
     capture = record["capture"]
     if (
@@ -1757,12 +1799,15 @@ def _legacy_root_matches(
         return (
             set(base_authorization) == exact_root_keys
             and base_authorization["artifact_kind"] == AUTHORIZATION_KIND
+            and type(base_authorization["format_version"]) is int
             and base_authorization["format_version"] == FORMAT_VERSION
             and base_authorization["action"] == "initialize"
             and base_authorization["finalization_authorization"] == ""
             and base_authorization["operator_identity"]
             == base_authorization["primary_operator_identity"]
             and base_authorization["tty_attestation"] == TTY_ATTESTATION
+            and type(base_authorization["initial_head"]) is dict
+            and type(base_authorization["initial_head"].get("generation")) is int
             and base_authorization["initial_head"]
             == {
                 "checkpoint_sha256": INITIAL_RELEASE_TOKEN,
@@ -1893,7 +1938,8 @@ def _current_resume_shape_matches(
     }
     successor_keys = base_keys | {"predecessor"}
     if (
-        resume.get("format_version") != RESUME_FORMAT_VERSION
+        type(resume.get("format_version")) is not int
+        or resume.get("format_version") != RESUME_FORMAT_VERSION
         or type(resume.get("resume_generation")) is not int
         or type(resume.get("resume_checkpoint_sha256")) is not str
         or HEX64_RE.fullmatch(resume["resume_checkpoint_sha256"]) is None
@@ -2130,6 +2176,7 @@ def _historical_evidence_matches(
             set(action_authorization) == expected_action_keys
             and action_authorization["artifact_kind"]
             == ACTION_AUTHORIZATION_KIND
+            and type(action_authorization["format_version"]) is int
             and action_authorization["format_version"]
             == ACTION_AUTHORIZATION_FORMAT_VERSION
             and action == predecessor["action"]
@@ -2156,6 +2203,7 @@ def _historical_evidence_matches(
             == sha256_bytes(canonical_json_bytes(base_authorization["capture"]))
             and set(resume_reference)
             == {"checkpoint_sha256", "generation", "name", "sha256"}
+            and type(resume_reference["generation"]) is int
             and resume_reference
             == {
                 "checkpoint_sha256": retired_resume[
@@ -2952,7 +3000,9 @@ def _classify_resume_execution(
         action_authorization["action"] != bridge["allowed_action"]
         or action_authorization.get("expected_authoring_state")
         != bridge["required_state"]
+        or type(resume["format_version"]) is not int
         or resume["format_version"] != RESUME_FORMAT_VERSION
+        or type(resume["resume_generation"]) is not int
         or resume["resume_generation"] != bridge["generation"]
         or "predecessor" in resume
         or resume_name != expected_name
@@ -3338,7 +3388,9 @@ def _run_initialize_session(authorization: Mapping[str, Any], tty_fd: int) -> tu
     session_root_path = _validate_absolute_path(authorization["session_root"], must_exist=False)
     annotation_root_path = _validate_absolute_path(authorization["annotation_root"], must_exist=False)
     capture_root_path = _validate_absolute_path_lexical(authorization["capture"]["capture_root"])
-    _assert_outside_repository((session_root_path, annotation_root_path))
+    _assert_outside_repository(
+        (session_root_path, annotation_root_path, capture_root_path)
+    )
     if session_root_path == annotation_root_path:
         _fail("input_invalid")
     session_root_fd, _session_metadata = _create_private_directory_no_replace(session_root_path)
@@ -3360,7 +3412,6 @@ def _run_initialize_session(authorization: Mapping[str, Any], tty_fd: int) -> tu
         annotation_root_fd, _annotation_metadata = _create_private_directory_no_replace(annotation_root_path)
         os.close(annotation_root_fd)
         annotation_root_fd = -1
-        _assert_outside_repository((session_root_path, annotation_root_path, capture_root_path))
         return _run_authorized_initialize(
             authorization_without_digest,
             tty_fd,

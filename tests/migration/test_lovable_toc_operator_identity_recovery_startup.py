@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 
 
@@ -42,6 +43,102 @@ def _load_preflight():
 
 
 PREFLIGHT = _load_preflight()
+
+
+_STDLIB_SHADOW_PROBE = r"""
+import importlib
+import importlib.util
+from pathlib import Path
+import sys
+
+driver_path = Path(sys.argv[1]).resolve(strict=True)
+fixture_root = Path(sys.argv[2]).resolve(strict=True)
+isolated_baseline = tuple(sys.path)
+
+
+def require_nonrepository_origin(module_file, spec_origin, case_root):
+    if not isinstance(spec_origin, str):
+        raise RuntimeError("stdlib origin unavailable")
+    if (
+        spec_origin not in {"built-in", "frozen"}
+        and not isinstance(module_file, str)
+    ):
+        raise RuntimeError("stdlib origin unavailable")
+    for raw_origin in (module_file, spec_origin):
+        if raw_origin is None or raw_origin in {"built-in", "frozen"}:
+            continue
+        if not isinstance(raw_origin, str):
+            raise RuntimeError("stdlib origin unavailable")
+        origin = Path(raw_origin).resolve(strict=True)
+        if origin == case_root or case_root in origin.parents:
+            raise RuntimeError("repository shadow selected")
+
+
+spec = importlib.util.spec_from_file_location(
+    "recovery_transitive_shadow_driver", driver_path
+)
+if spec is None or spec.loader is None:
+    raise RuntimeError("driver spec unavailable")
+driver = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = driver
+saved_argv = sys.argv
+sys.argv = [str(driver_path)]
+try:
+    spec.loader.exec_module(driver)
+finally:
+    sys.argv = saved_argv
+
+if tuple(sys.path) != isolated_baseline:
+    raise RuntimeError("driver retained its reviewed import root")
+baseline = isolated_baseline
+sentinel_root = fixture_root / "synthetic-origin-sentinels"
+sentinel_root.mkdir()
+require_nonrepository_origin(None, "built-in", sentinel_root)
+require_nonrepository_origin(None, "frozen", sentinel_root)
+for module_name in ("errno", "binascii", "random", "gettext"):
+    for shadow_kind in ("module", "package"):
+        case_root = fixture_root / (module_name + "-" + shadow_kind)
+        case_root.mkdir()
+        marker = case_root / "planted-code-executed"
+        planted_source = (
+            "with open("
+            + repr(str(marker))
+            + ", 'wb') as stream:\n"
+            + "    stream.write(b'executed')\n"
+            + "raise RuntimeError('planted repository shadow executed')\n"
+        )
+        if shadow_kind == "module":
+            shadow_path = case_root / (module_name + ".py")
+        else:
+            package = case_root / module_name
+            package.mkdir()
+            shadow_path = package / "__init__.py"
+        shadow_path.write_text(planted_source, encoding="ascii")
+
+        sys.modules.pop(module_name, None)
+        importlib.invalidate_caches()
+        token = driver._append_reviewed_import_root(
+            case_root, require_isolated=True
+        )
+        try:
+            loaded = importlib.import_module(module_name)
+            module_file = getattr(loaded, "__file__", None)
+            spec_origin = getattr(
+                getattr(loaded, "__spec__", None), "origin", None
+            )
+            require_nonrepository_origin(
+                module_file, spec_origin, case_root
+            )
+        finally:
+            driver._remove_reviewed_import_root(token)
+            sys.modules.pop(module_name, None)
+        if marker.exists():
+            raise RuntimeError("planted repository code executed")
+        if tuple(sys.path) != baseline:
+            raise RuntimeError("reviewed import root was not removed")
+
+sys.stdout.write("transitive_stdlib_shadow_resolution_verified\n")
+"""
 
 
 def _shell_loop_names(source: str, loop_name: str) -> tuple[str, ...]:
@@ -189,6 +286,225 @@ class RecoveryStartupContractTests(unittest.TestCase):
             b'"stage":"toc_operator_identity_recovery","status":"failed"}\n',
         )
         self.assertNotIn(b"Traceback", result.stderr)
+
+    def test_driver_binds_exact_claude_review_before_repository_import(self):
+        guard = (
+            "_RECOVERY_BOOTSTRAP_BINDING = "
+            "_preimport_recovery_guard()"
+        )
+        repository_import = (
+            "from lib import (  # noqa: E402\n"
+            "            lovable_toc_operator_identity_recovery as RECOVERY,"
+        )
+        import_root_append = (
+            "_reviewed_import_token = _append_reviewed_import_root(\n"
+            "        SCRIPT.parent,"
+        )
+        self.assertLess(
+            self.driver.index(guard),
+            self.driver.index(import_root_append),
+        )
+        self.assertLess(
+            self.driver.index(import_root_append),
+            self.driver.index(repository_import),
+        )
+        for required in (
+            "_RECOVERY_REVIEW_NAME_RE.fullmatch(name)",
+            "review_matches != [expected_review_name]",
+            "_stable_approval(",
+            "_validate_bootstrap_review(",
+            "_validate_bootstrap_embedded_audit(",
+            "_reject_tracked_symlinks(selected_repository)",
+            'approval.get("format_version") != 2',
+            '_REQUESTED_CLAUDE_MODEL = "fable"',
+            '_REQUIRED_CLAUDE_MODEL = "claude-fable-5"',
+            '"6a4d3ea4ad2dfeb440efbe9b62c7ae543dc3af428941e85363bc77cf8e49de66"',
+            '"required_requested_model": _REQUESTED_CLAUDE_MODEL',
+            '"required_effective_model": _REQUIRED_CLAUDE_MODEL',
+            '"enforced_git_environment",',
+            'invocation["enforced_git_environment"]',
+            '_REQUIRED_GIT_ENVIRONMENT = {"GIT_NO_LAZY_FETCH": "1"}',
+            '"requested_reasoning_effort": _REQUIRED_REASONING_EFFORT',
+            '"model_usage": [_REQUIRED_CLAUDE_MODEL]',
+            '"fallback_observed": False',
+            '"fresh_session": True',
+            'review.get("decision") != "APPROVE FOR MERGE"',
+            "spec.count(subject) != 1",
+            "prompt\n        != _expected_audit_prompt(",
+            '_validate_exact_audit_command(invocation["command"])',
+            '"sha256:"',
+            "review_sha256=hashlib.sha256(review_data).hexdigest()",
+            "review_file_identity=_file_identity(review_metadata)",
+            'for relative in (name + ".py", name + "/__init__.py")',
+            '"unicodedata",',
+            "baseline != _ISOLATED_STDLIB_PATH",
+            "resolved_entry.relative_to(base_prefix)",
+            "sys.path.append(root_text)",
+            "_require_reviewed_lib_namespace(",
+            "_require_reviewed_module_origin(",
+            "_remove_reviewed_import_root(_reviewed_import_token)",
+            "sys.path_importer_cache.pop(root_text, None)",
+            "recovery_review_bootstrap="
+            "PREFLIGHT.ApprovalBootstrapBinding(",
+        ):
+            self.assertIn(required, self.driver)
+        self.assertNotIn("sys.path.insert(0", self.driver)
+        self.assertLess(
+            self.driver.index(
+                "_reject_tracked_symlinks(selected_repository)"
+            ),
+            self.driver.index("matches: list[str] = []"),
+        )
+
+    def test_transitive_stdlib_module_and_package_shadows_never_execute(self):
+        with tempfile.TemporaryDirectory(
+            prefix="recovery-transitive-shadows."
+        ) as temporary:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-c",
+                    _STDLIB_SHADOW_PROBE,
+                    os.fspath(RECOVERY_DRIVER),
+                    temporary,
+                ],
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env={
+                    "LANG": "C",
+                    "LC_ALL": "C",
+                    "PATH": "/usr/bin:/bin",
+                },
+                timeout=30,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout,
+            b"transitive_stdlib_shadow_resolution_verified\n",
+        )
+        self.assertEqual(result.stderr, b"")
+
+    def test_driver_bootstrap_closure_contains_shared_and_v2_contracts(self):
+        tree = ast.parse(self.driver)
+        reviewed = None
+        for node in tree.body:
+            if not isinstance(node, ast.Assign):
+                continue
+            if not any(
+                isinstance(target, ast.Name)
+                and target.id == "_BOOTSTRAP_REVIEWED_FILES"
+                for target in node.targets
+            ):
+                continue
+            self.assertIsInstance(node.value, ast.Call)
+            reviewed = frozenset(ast.literal_eval(node.value.args[0]))
+            break
+        self.assertIsNotNone(reviewed)
+        self.assertEqual(len(reviewed), 26)
+        self.assertTrue(
+            {
+                "scripts/migration/lib/lovable_dump_report.py",
+                "scripts/migration/verification/"
+                "lovable-toc-independent-claude-review-attestation.schema.json",
+                "scripts/migration/verification/"
+                "lovable-toc-operator-identity-recovery-approval.v2.schema.json",
+                "scripts/migration/verification/"
+                "lovable-toc-operator-identity-recovery-audit-record.v2.schema.json",
+                "scripts/migration/verification/"
+                "lovable-toc-operator-identity-recovery-profile.v2.json",
+                "scripts/migration/verification/"
+                "lovable-toc-operator-identity-recovery-profile.v2.schema.json",
+            }.issubset(reviewed)
+        )
+        # Version 1 remains in the immutable closure for historical
+        # reproducibility, but the bootstrap selector above accepts only v2.
+        self.assertTrue(
+            {
+                "scripts/migration/verification/"
+                "lovable-toc-operator-identity-recovery-approval.schema.json",
+                "scripts/migration/verification/"
+                "lovable-toc-operator-identity-recovery-audit-record.schema.json",
+                "scripts/migration/verification/"
+                "lovable-toc-operator-identity-recovery-profile.v1.json",
+                "scripts/migration/verification/"
+                "lovable-toc-operator-identity-recovery-profile.schema.json",
+            }.issubset(reviewed)
+        )
+
+    def test_driver_bootstrap_closure_covers_every_local_python_import(self):
+        tree = ast.parse(self.driver)
+        assignment = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name)
+                and target.id == "_BOOTSTRAP_REVIEWED_FILES"
+                for target in node.targets
+            )
+        )
+        reviewed = frozenset(ast.literal_eval(assignment.value.args[0]))
+        migration_root = ROOT / "scripts" / "migration"
+        discovered: set[str] = set()
+
+        def record_candidate(candidate: Path) -> None:
+            if candidate.is_file():
+                discovered.add(candidate.relative_to(ROOT).as_posix())
+
+        for relative in sorted(reviewed):
+            if not relative.endswith(".py"):
+                continue
+            source_path = ROOT / relative
+            source_tree = ast.parse(
+                source_path.read_text(encoding="utf-8"),
+                filename=relative,
+            )
+            for node in ast.walk(source_tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name == "lib" or alias.name.startswith(
+                            "lib."
+                        ):
+                            record_candidate(
+                                migration_root
+                                / (alias.name.replace(".", "/") + ".py")
+                            )
+                    continue
+                if not isinstance(node, ast.ImportFrom):
+                    continue
+                if node.level:
+                    parent = source_path.parent
+                    for _index in range(node.level - 1):
+                        parent = parent.parent
+                    module_base = parent
+                    if node.module:
+                        module_base /= node.module.replace(".", "/")
+                elif node.module == "lib" or (
+                    node.module and node.module.startswith("lib.")
+                ):
+                    module_base = migration_root / node.module.replace(
+                        ".", "/"
+                    )
+                else:
+                    continue
+                record_candidate(module_base.with_suffix(".py"))
+                if module_base.is_dir() or node.module in {None, "lib"}:
+                    for alias in node.names:
+                        record_candidate(module_base / (alias.name + ".py"))
+
+        self.assertIn(
+            "scripts/migration/lib/lovable_dump_report.py",
+            discovered,
+        )
+        self.assertTrue(
+            discovered.issubset(reviewed),
+            sorted(discovered - reviewed),
+        )
 
     def test_recovery_entrypoints_do_not_add_or_dispatch_an_authoring_action(self):
         self.assertIn(

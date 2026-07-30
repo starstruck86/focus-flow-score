@@ -1,0 +1,328 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "This committed recovery profile is public policy, not approval. Version 2 requires a sole-owner authorization plus a detached exact-artifact Claude Code review and does not authorize an authoring action.",
+  "additionalProperties": false,
+  "properties": {
+    "approval_discovery": {
+      "additionalProperties": false,
+      "properties": {
+        "filename_pattern": {
+          "const": "^lovable-toc-operator-identity-recovery-approval-([0-9a-f]{40})-[0-9a-f]{16}[.]json$"
+        },
+        "home_resolution": { "const": "passwd_database_effective_uid" },
+        "relative_parent": {
+          "const": "Library/Application Support/focus-flow-score/migration-approvals/toc-operator-identity-recovery"
+        },
+        "required_file_mode": { "const": "0400" },
+        "required_file_nlink": { "const": 1 },
+        "required_parent_mode": { "const": "0700" },
+        "selection": { "const": "exactly_one_matching_current_checkout" }
+      },
+      "required": [
+        "filename_pattern",
+        "home_resolution",
+        "relative_parent",
+        "required_file_mode",
+        "required_file_nlink",
+        "required_parent_mode",
+        "selection"
+      ],
+      "type": "object"
+    },
+    "artifact_kind": {
+      "const": "lovable_toc_operator_identity_recovery_profile"
+    },
+    "audit_storage": {
+      "additionalProperties": false,
+      "properties": {
+        "initially_empty": { "const": true },
+        "no_replace": { "const": true },
+        "required_file_mode": { "const": "0400" },
+        "required_file_nlink": { "const": 1 },
+        "required_root_mode": { "const": "0700" },
+        "root_supplied_by_approval": { "const": true },
+        "sync_files_and_directories": { "const": true }
+      },
+      "required": [
+        "initially_empty",
+        "no_replace",
+        "required_file_mode",
+        "required_file_nlink",
+        "required_root_mode",
+        "root_supplied_by_approval",
+        "sync_files_and_directories"
+      ],
+      "type": "object"
+    },
+    "checkout_policy": {
+      "const": {
+        "approval_source": "separate_external_owner_private_artifact",
+        "mode": "exact_checkout",
+        "same_uid_prelaunch_replacement_ceiling": true
+      }
+    },
+    "format_version": { "const": 2 },
+    "independent_review_policy": {
+      "const": {
+        "fallback_policy": "forbidden",
+        "kind": "claude_code_external_audit_v1",
+        "raw_output_preservation": "required_unchanged",
+        "required_audit_base_sha": "f3dcb6d874ae9511b0bb01dfd6f87899bb064030",
+        "required_audit_wrapper_sha256": "6a4d3ea4ad2dfeb440efbe9b62c7ae543dc3af428941e85363bc77cf8e49de66",
+        "required_audit_repository_name": "focus-flow-score",
+        "required_client_version": "2.1.219 (Claude Code)",
+        "required_decision": "APPROVE FOR MERGE",
+        "required_effective_model": "claude-fable-5",
+        "required_reasoning_effort": "max",
+        "required_requested_model": "fable",
+        "session_policy": "fresh_no_resume_no_continuation"
+      }
+    },
+    "procedure_identity_formula": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": { "const": "sha256_canonical_json_lf" },
+        "files": { "$ref": "#/$defs/reviewedFiles" },
+        "include_execution_checkout_sha": { "const": true }
+      },
+      "required": ["algorithm", "files", "include_execution_checkout_sha"],
+      "type": "object"
+    },
+    "prohibited_effects": {
+      "const": [
+        "annotation_decision_mutation",
+        "authoring_action_dispatch",
+        "automatic_identity_derivation",
+        "capture_package_access",
+        "checkpoint_mutation",
+        "database_access",
+        "identity_rotation",
+        "network_access",
+        "private_access_before_recovery_authorization",
+        "raw_toc_access",
+        "restore_command_generation",
+        "resume_mutation",
+        "root_authorization_mutation",
+        "runtime_access",
+        "validator_invocation"
+      ]
+    },
+    "python_policy": {
+      "additionalProperties": false,
+      "properties": {
+        "absolute_path": {
+          "const": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9"
+        },
+        "exact_gid": { "const": 0 },
+        "exact_mode": { "const": "0755" },
+        "exact_nlink": { "const": 1 },
+        "exact_uid": { "const": 0 },
+        "executable_required": { "const": true },
+        "isolated_flags": { "const": ["-I", "-S", "-B"] },
+        "reported_version": { "const": "cpython:3.9.6" },
+        "sha256": {
+          "const": "4b42b1a117605cafc8607b67b0892a609c2cd125012dd56288abeed8c89cdfb1"
+        },
+        "symlink_components_forbidden": { "const": true }
+      },
+      "required": [
+        "absolute_path",
+        "exact_gid",
+        "exact_mode",
+        "exact_nlink",
+        "exact_uid",
+        "executable_required",
+        "isolated_flags",
+        "reported_version",
+        "sha256",
+        "symlink_components_forbidden"
+      ],
+      "type": "object"
+    },
+    "record_versions": {
+      "const": {
+        "checkpoint": [1],
+        "resume": [2],
+        "root_authorization": [1]
+      }
+    },
+    "recovery_contract": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_disclosure": {
+          "const": "stored_primary_operator_identity_only"
+        },
+        "audit_events": {
+          "const": [
+            "attempt_started",
+            "identity_acknowledged",
+            "recovery_completed",
+            "recovery_failed",
+            "recovery_indeterminate"
+          ]
+        },
+        "challenge_phrase_prefix": {
+          "const": "AUTHORIZE RECOVER_OPERATOR_IDENTITY"
+        },
+        "expected_generation": { "const": 1 },
+        "expected_state": { "const": "PRIMARY_REVIEW_REQUIRED" },
+        "historical_binding": {
+          "additionalProperties": false,
+          "properties": {
+            "authoring_procedure_identity_sha256": {
+              "const": "bc0b990d878db1e2c72bd4ac91314fe32261a454ac38505b7ea6df4af2b5f3d8"
+            },
+            "execution_checkout_sha": {
+              "const": "b1986e4079b52edbb4ef5cd4c56ed4d20af07195"
+            },
+            "operator_session_procedure_identity_sha256": {
+              "const": "ee0dbb3ecb9b469bef49c1fe0305ea60602bbbbaddd2f551a7774dad6cacdc23"
+            },
+            "python": {
+              "additionalProperties": false,
+              "properties": {
+                "absolute_path": {
+                  "const": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9"
+                },
+                "reported_version": { "const": "cpython:3.9.6" },
+                "sha256": {
+                  "const": "4b42b1a117605cafc8607b67b0892a609c2cd125012dd56288abeed8c89cdfb1"
+                }
+              },
+              "required": ["absolute_path", "reported_version", "sha256"],
+              "type": "object"
+            }
+          },
+          "required": [
+            "authoring_procedure_identity_sha256",
+            "execution_checkout_sha",
+            "operator_session_procedure_identity_sha256",
+            "python"
+          ],
+          "type": "object"
+        },
+        "no_retry_acknowledgement": {
+          "const": "NO_RETRY_AFTER_PRIVATE_ACCESS"
+        },
+        "operator_root_mutation": {
+          "const": "temporary_lock_lifecycle_only"
+        },
+        "ordinary_action_dispatched": { "const": false }
+      },
+      "required": [
+        "allowed_disclosure",
+        "audit_events",
+        "challenge_phrase_prefix",
+        "expected_generation",
+        "expected_state",
+        "historical_binding",
+        "no_retry_acknowledgement",
+        "operator_root_mutation",
+        "ordinary_action_dispatched"
+      ],
+      "type": "object"
+    },
+    "repository": {
+      "const": {
+        "name": "focus-flow-score",
+        "owner": "starstruck86"
+      }
+    },
+    "review_attestation_discovery": {
+      "additionalProperties": false,
+      "properties": {
+        "filename_pattern": {
+          "const": "^lovable-toc-operator-identity-recovery-review-([0-9a-f]{40})-([0-9a-f]{64})[.]json$"
+        },
+        "home_resolution": { "const": "passwd_database_effective_uid" },
+        "relative_parent": {
+          "const": "Library/Application Support/focus-flow-score/migration-approvals/toc-operator-identity-recovery"
+        },
+        "required_file_mode": { "const": "0400" },
+        "required_file_nlink": { "const": 1 },
+        "required_parent_mode": { "const": "0700" },
+        "schema_relative_path": {
+          "const": "scripts/migration/verification/lovable-toc-independent-claude-review-attestation.schema.json"
+        },
+        "selection": {
+          "const": "exactly_one_matching_current_checkout_and_approval_sha256"
+        }
+      },
+      "required": [
+        "filename_pattern",
+        "home_resolution",
+        "relative_parent",
+        "required_file_mode",
+        "required_file_nlink",
+        "required_parent_mode",
+        "schema_relative_path",
+        "selection"
+      ],
+      "type": "object"
+    },
+    "reviewed_files": { "$ref": "#/$defs/reviewedFiles" },
+    "verification_labels": {
+      "const": [
+        "checkout_verified",
+        "external_review_verified",
+        "operator_execution_approval_verified",
+        "python_verified",
+        "recovery_approval_verified",
+        "recovery_procedure_verified",
+        "repository_verified",
+        "reviewed_files_verified",
+        "tty_verified"
+      ]
+    }
+  },
+  "required": [
+    "approval_discovery",
+    "artifact_kind",
+    "audit_storage",
+    "checkout_policy",
+    "format_version",
+    "independent_review_policy",
+    "procedure_identity_formula",
+    "prohibited_effects",
+    "python_policy",
+    "record_versions",
+    "recovery_contract",
+    "repository",
+    "review_attestation_discovery",
+    "reviewed_files",
+    "verification_labels"
+  ],
+  "type": "object",
+  "$defs": {
+    "reviewedFiles": {
+      "const": [
+        "scripts/migration/author-lovable-toc-annotations.py",
+        "scripts/migration/author-lovable-toc-operator-session.py",
+        "scripts/migration/lib/lovable_dump_report.py",
+        "scripts/migration/lib/lovable_toc_authoring_contract.py",
+        "scripts/migration/lib/lovable_toc_contract.py",
+        "scripts/migration/lib/lovable_toc_operator_identity_recovery.py",
+        "scripts/migration/lib/lovable_toc_operator_preflight.py",
+        "scripts/migration/recover-lovable-toc-operator-identity.py",
+        "scripts/migration/run-lovable-toc-annotation-authoring.sh",
+        "scripts/migration/run-lovable-toc-annotation-operator-session.sh",
+        "scripts/migration/run-lovable-toc-operator-identity-recovery.sh",
+        "scripts/migration/verification/lovable-toc-annotation-checkpoint.schema.json",
+        "scripts/migration/verification/lovable-toc-independent-claude-review-attestation.schema.json",
+        "scripts/migration/verification/lovable-toc-operator-execution-profile-approval.schema.json",
+        "scripts/migration/verification/lovable-toc-operator-execution-profile.schema.json",
+        "scripts/migration/verification/lovable-toc-operator-execution-profile.v1.json",
+        "scripts/migration/verification/lovable-toc-operator-identity-recovery-approval.schema.json",
+        "scripts/migration/verification/lovable-toc-operator-identity-recovery-approval.v2.schema.json",
+        "scripts/migration/verification/lovable-toc-operator-identity-recovery-audit-record.schema.json",
+        "scripts/migration/verification/lovable-toc-operator-identity-recovery-audit-record.v2.schema.json",
+        "scripts/migration/verification/lovable-toc-operator-identity-recovery-profile.schema.json",
+        "scripts/migration/verification/lovable-toc-operator-identity-recovery-profile.v1.json",
+        "scripts/migration/verification/lovable-toc-operator-identity-recovery-profile.v2.json",
+        "scripts/migration/verification/lovable-toc-operator-identity-recovery-profile.v2.schema.json",
+        "scripts/migration/verification/lovable-toc-operator-session-authorization.schema.json",
+        "scripts/migration/verification/lovable-toc-operator-session-resume.schema.json"
+      ]
+    }
+  }
+}

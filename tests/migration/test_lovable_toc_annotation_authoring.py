@@ -11,6 +11,7 @@ import stat
 import sys
 import tempfile
 import threading
+import unicodedata
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -43,6 +44,116 @@ SHA_C = "c" * 64
 SHA_D = "d" * 64
 GIT_A = "a" * 40
 GIT_B = "b" * 40
+
+
+class ReviewedGitEnvironmentTest(unittest.TestCase):
+    def test_private_path_key_normalizes_case_and_unicode(self):
+        composed = Path("/private/tmp/Authoring-Caf\u00e9")
+        decomposed = Path(
+            unicodedata.normalize("NFD", os.fspath(composed))
+        )
+        self.assertEqual(
+            AUTHOR._portable_private_path_key(composed),
+            AUTHOR._portable_private_path_key(decomposed),
+        )
+        self.assertEqual(
+            AUTHOR._portable_private_path_key(composed),
+            AUTHOR._portable_private_path_key(
+                Path(os.fspath(composed).swapcase())
+            ),
+        )
+        self.assertEqual(
+            AUTHOR._portable_private_path_key(
+                Path("//private/tmp/Authoring-Caf\u00e9")
+            ),
+            AUTHOR._portable_private_path_key(composed),
+        )
+
+    def test_double_slash_private_root_is_rejected_before_open(self):
+        with tempfile.TemporaryDirectory(
+            prefix="authoring-double-slash."
+        ) as temporary:
+            private_root = Path(temporary).resolve()
+            double_slash = "/" + os.fspath(private_root)
+            with mock.patch.object(
+                Path,
+                "resolve",
+                side_effect=AssertionError(
+                    "double-slash private root was resolved"
+                ),
+            ) as resolve, mock.patch.object(
+                AUTHOR.os,
+                "open",
+                side_effect=AssertionError(
+                    "double-slash private root was opened"
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    AUTHOR.AuthoringEntrypointError, "input_invalid"
+                ):
+                    AUTHOR._open_private_directory_path(double_slash)
+            resolve.assert_not_called()
+
+    @unittest.skipUnless(
+        sys.platform == "darwin",
+        "requires a Unicode-normalization-insensitive macOS fixture volume",
+    )
+    def test_macos_repository_unicode_alias_is_rejected(self):
+        with tempfile.TemporaryDirectory(
+            prefix="authoring-repository-alias."
+        ) as temporary:
+            repository = Path(temporary) / "Repository-Caf\u00e9"
+            repository.mkdir(mode=0o700)
+            private_root = repository / "private-root"
+            private_root.mkdir(mode=0o700)
+            alias = Path(
+                unicodedata.normalize("NFD", os.fspath(private_root))
+            )
+            if not alias.exists() or not os.path.samefile(
+                alias, private_root
+            ):
+                self.skipTest(
+                    "fixture volume is not Unicode-normalization-insensitive"
+                )
+            with mock.patch.object(AUTHOR, "REPO", repository):
+                with self.assertRaisesRegex(
+                    AUTHOR.AuthoringEntrypointError, "input_invalid"
+                ):
+                    AUTHOR._assert_disjoint_outside_repository((alias,))
+
+    def test_every_git_helper_call_disables_lazy_fetch(self):
+        calls: list[tuple[list[str], dict[str, object]]] = []
+
+        def reviewed_run(command, **kwargs):
+            calls.append((command, kwargs))
+            return mock.Mock(returncode=0, stdout=(GIT_A + "\n").encode("ascii"))
+
+        executable = mock.Mock(st_mode=stat.S_IFREG | 0o755)
+        with mock.patch.object(
+            AUTHOR.os, "lstat", return_value=executable
+        ), mock.patch.object(
+            AUTHOR.os, "access", return_value=True
+        ), mock.patch.object(
+            AUTHOR._startup_subprocess, "run", side_effect=reviewed_run
+        ):
+            AUTHOR._reviewed_git_bytes(
+                os.fspath(ROOT),
+                ["rev-parse", "HEAD"],
+                timeout_seconds=20,
+            )
+            AUTHOR._authoring_procedure_identity(GIT_A)
+
+        self.assertGreater(len(calls), 1)
+        for command, kwargs in calls:
+            self.assertEqual(command[0], AUTHOR._REVIEWED_GIT)
+            self.assertEqual(
+                kwargs["env"]["GIT_NO_LAZY_FETCH"],
+                "1",
+            )
+            self.assertEqual(
+                kwargs["env"],
+                AUTHOR._REVIEWED_GIT_ENVIRONMENT,
+            )
 
 
 def raw_toc(classes: list[str], poison: str = "synthetic-private-object") -> bytes:
@@ -1467,6 +1578,38 @@ class AuthoringContractTest(unittest.TestCase):
             os.close(descriptor)
         self.assertEqual(len(loaded.entries_by_ordinal), 2)
         self.assertNotIn("opaque-id.key", opened)
+
+    def test_capture_json_versions_reject_boolean_integer_aliases(self):
+        package, _expectations, capture, _entries = make_capture_package(
+            self.root, ["TABLE"]
+        )
+        raw_toc = (package / "raw-pg-restore-list.toc").read_bytes()
+        structures = capture_contract.parse_raw_toc_structure(raw_toc)
+
+        index = json.loads((package / "opaque-index.json").read_bytes())
+        index["format_version"] = True
+        index_data = capture_contract.canonical_json_bytes(index)
+        with self.assertRaisesRegex(
+            authoring.AuthoringContractError, "capture_invalid"
+        ):
+            authoring._parse_opaque_index(index_data, structures)
+
+        evidence = json.loads((package / "evidence-files.json").read_bytes())
+        evidence["format_version"] = True
+        evidence_data = capture_contract.canonical_json_bytes(evidence)
+        with self.assertRaisesRegex(
+            authoring.AuthoringContractError, "capture_invalid"
+        ):
+            authoring._validate_capture_evidence_manifest(
+                evidence_data,
+                expected_manifest_sha256=(
+                    capture_contract.sha256_bytes(evidence_data)
+                ),
+                capture_bytes=(package / "capture.json").read_bytes(),
+                raw_toc=raw_toc,
+                index_bytes=(package / "opaque-index.json").read_bytes(),
+                capture=capture,
+            )
 
     def test_opaque_key_replacement_changes_binding_without_opening_key(self):
         package, expectations, _capture, _entries = make_capture_package(
@@ -4562,6 +4705,149 @@ class AuthoringContractTest(unittest.TestCase):
             os.close(child_fd)
             os.close(root_fd)
 
+    def test_checkpoint_capture_binding_rejects_genuine_boolean_integer_aliases(self):
+        capture, _package, _expectations = self.load_capture()
+        checkpoint = authoring.initialize_checkpoint(
+            capture, self.binding, "Primary", "session-1"
+        )
+        for field, alias in (
+            ("data_reference_count", False),
+            ("entry_count", True),
+            ("opaque_key_nlink", True),
+        ):
+            with self.subTest(field=field):
+                forged = copy.deepcopy(checkpoint)
+                forged["capture_binding"][field] = alias
+                self.assertEqual(
+                    forged["capture_binding"],
+                    dict(capture.capture_binding),
+                    "the regression must exercise Python's bool/int equality alias",
+                )
+                with self.assertRaisesRegex(
+                    authoring.AuthoringContractError, "checkpoint_invalid"
+                ):
+                    authoring.validate_checkpoint(forged, capture, self.binding)
+
+    def test_all_checkpoint_capture_binding_integers_require_exact_int_type(self):
+        capture, _package, _expectations = self.load_capture()
+        checkpoint = authoring.initialize_checkpoint(
+            capture, self.binding, "Primary", "session-1"
+        )
+        canonical_values = {
+            "data_reference_count": 0,
+            "entry_count": 1,
+            "opaque_key_ctime_ns": 0,
+            "opaque_key_device": 0,
+            "opaque_key_gid": 0,
+            "opaque_key_inode": 1,
+            "opaque_key_mode": 0o400,
+            "opaque_key_mtime_ns": 0,
+            "opaque_key_nlink": 1,
+            "opaque_key_size_bytes": 32,
+            "opaque_key_uid": 0,
+            "package_device": 0,
+            "package_inode": 1,
+            "raw_toc_size_bytes": 1,
+        }
+        self.assertEqual(len(canonical_values), 14)
+        for field, canonical_value in canonical_values.items():
+            with self.subTest(field=field):
+                expected_binding = dict(capture.capture_binding)
+                expected_binding[field] = canonical_value
+                expected_capture = authoring.AuthoringCapture(
+                    capture_binding=expected_binding,
+                    entries_by_ordinal=capture.entries_by_ordinal,
+                    package_device=capture.package_device,
+                    package_inode=capture.package_inode,
+                )
+                forged = copy.deepcopy(checkpoint)
+                alias = (
+                    bool(canonical_value)
+                    if canonical_value in {0, 1}
+                    else float(canonical_value)
+                )
+                forged["capture_binding"][field] = alias
+                self.assertEqual(
+                    forged["capture_binding"],
+                    dict(expected_capture.capture_binding),
+                    "the regression must isolate exact numeric type validation",
+                )
+                self.assertIsNot(type(alias), int)
+                with self.assertRaisesRegex(
+                    authoring.AuthoringContractError, "checkpoint_invalid"
+                ):
+                    authoring.validate_checkpoint(
+                        forged, expected_capture, self.binding
+                    )
+
+    def test_legacy_checkpoint_capture_binding_remains_closed_and_string_exact(self):
+        legacy_binding = {
+            "capture_manifest_sha256": "a" * 64,
+            "evidence_run_id": "synthetic-run",
+            "opaque_index_sha256": "b" * 64,
+            "raw_toc_sha256": "c" * 64,
+        }
+        capture = authoring.AuthoringCapture(
+            capture_binding=legacy_binding,
+            entries_by_ordinal=(
+                authoring.AuthoringEntry(
+                    entry_id="d" * 64,
+                    ordinal=0,
+                    object_class="TABLE",
+                    is_data_reference=False,
+                    raw_line=b"SYNTHETIC",
+                ),
+            ),
+            package_device=1,
+            package_inode=2,
+        )
+        checkpoint = authoring.initialize_checkpoint(
+            capture, self.binding, "Primary", "session-1"
+        )
+        self.assertEqual(
+            set(checkpoint["capture_binding"]),
+            set(authoring.LEGACY_CAPTURE_BINDING_KEYS),
+        )
+        for label, mutate in (
+            (
+                "missing",
+                lambda binding: binding.pop("raw_toc_sha256"),
+            ),
+            (
+                "unexpected",
+                lambda binding: binding.__setitem__("unexpected", "value"),
+            ),
+            (
+                "sha_type",
+                lambda binding: binding.__setitem__(
+                    "capture_manifest_sha256", True
+                ),
+            ),
+            (
+                "run_id_type",
+                lambda binding: binding.__setitem__("evidence_run_id", True),
+            ),
+        ):
+            with self.subTest(label=label):
+                forged = copy.deepcopy(checkpoint)
+                mutate(forged["capture_binding"])
+                expected_capture = authoring.AuthoringCapture(
+                    capture_binding=copy.deepcopy(forged["capture_binding"]),
+                    entries_by_ordinal=capture.entries_by_ordinal,
+                    package_device=capture.package_device,
+                    package_inode=capture.package_inode,
+                )
+                self.assertEqual(
+                    forged["capture_binding"],
+                    dict(expected_capture.capture_binding),
+                )
+                with self.assertRaisesRegex(
+                    authoring.AuthoringContractError, "checkpoint_invalid"
+                ):
+                    authoring.validate_checkpoint(
+                        forged, expected_capture, self.binding
+                    )
+
     def test_strict_checkpoint_json_rejects_duplicate_and_nonfinite_values(self):
         checkpoint_schema = capture_contract.strict_json_loads(
             (
@@ -4586,6 +4872,12 @@ class AuthoringContractTest(unittest.TestCase):
             checkpoint_schema["properties"]["event"]["properties"]["action"][
                 "enum"
             ],
+        )
+        self.assertEqual(
+            set(
+                checkpoint_schema["properties"]["capture_binding"]["required"]
+            ),
+            set(authoring.CAPTURE_BINDING_KEYS),
         )
         for raw in (
             b'{"generation":1,"generation":2}\n',

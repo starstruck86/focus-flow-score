@@ -20,6 +20,7 @@ import tempfile
 import termios
 import time
 import types
+import unicodedata
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -136,6 +137,108 @@ MINIMAL_OPERATOR_ENVIRONMENT = {
     "TOC_OPERATOR_TTY_FD": "3",
 }
 SYNTHETIC_PTY_UNAVAILABLE = b"SYNTHETIC_PTY_CONTROLLING_TTY_UNAVAILABLE"
+
+
+class ReviewedGitEnvironmentTest(unittest.TestCase):
+    def test_private_path_key_normalizes_case_and_unicode(self):
+        composed = Path("/private/tmp/Operator-Caf\u00e9")
+        decomposed = Path(
+            unicodedata.normalize("NFD", os.fspath(composed))
+        )
+        self.assertEqual(
+            SESSION._portable_private_path_key(composed),
+            SESSION._portable_private_path_key(decomposed),
+        )
+        self.assertEqual(
+            SESSION._portable_private_path_key(composed),
+            SESSION._portable_private_path_key(
+                Path(os.fspath(composed).swapcase())
+            ),
+        )
+        self.assertEqual(
+            SESSION._portable_private_path_key(
+                Path("//private/tmp/Operator-Caf\u00e9")
+            ),
+            SESSION._portable_private_path_key(composed),
+        )
+
+    def test_double_slash_existing_and_future_paths_reject_before_resolve(self):
+        for must_exist in (False, True):
+            with self.subTest(must_exist=must_exist), mock.patch.object(
+                Path,
+                "resolve",
+                side_effect=AssertionError(
+                    "double-slash operator path was resolved"
+                ),
+            ) as resolve:
+                with self.assertRaisesRegex(
+                    SESSION.OperatorSessionError, "input_invalid"
+                ):
+                    SESSION._validate_absolute_path(
+                        "//private/tmp/operator-private-root",
+                        must_exist=must_exist,
+                    )
+                resolve.assert_not_called()
+
+    @unittest.skipUnless(
+        sys.platform == "darwin",
+        "requires a Unicode-normalization-insensitive macOS fixture volume",
+    )
+    def test_macos_repository_unicode_alias_is_rejected(self):
+        with tempfile.TemporaryDirectory(
+            prefix="operator-repository-alias."
+        ) as temporary:
+            repository = Path(temporary) / "Repository-Caf\u00e9"
+            repository.mkdir(mode=0o700)
+            private_root = repository / "private-root"
+            private_root.mkdir(mode=0o700)
+            alias = Path(
+                unicodedata.normalize("NFD", os.fspath(private_root))
+            )
+            if not alias.exists() or not os.path.samefile(
+                alias, private_root
+            ):
+                self.skipTest(
+                    "fixture volume is not Unicode-normalization-insensitive"
+                )
+            with mock.patch.object(SESSION, "REPO", repository):
+                with self.assertRaisesRegex(
+                    SESSION.OperatorSessionError, "input_invalid"
+                ):
+                    SESSION._assert_outside_repository((alias,))
+
+    def test_every_operator_git_call_path_disables_lazy_fetch(self):
+        calls: list[tuple[list[str], dict[str, object]]] = []
+
+        def reviewed_run(command, **kwargs):
+            calls.append((command, kwargs))
+            return mock.Mock(returncode=0, stdout=(GIT_A + "\n").encode("ascii"))
+
+        executable = mock.Mock(st_mode=stat.S_IFREG | 0o755)
+        with mock.patch.object(
+            SESSION.os, "lstat", return_value=executable
+        ), mock.patch.object(
+            SESSION.os, "access", return_value=True
+        ), mock.patch.object(
+            SESSION.subprocess, "run", side_effect=reviewed_run
+        ):
+            SESSION._reviewed_git(
+                os.fspath(ROOT),
+                ["rev-parse", "HEAD"],
+            )
+            SESSION._operator_session_procedure_identity(GIT_A)
+
+        self.assertGreater(len(calls), 1)
+        for command, kwargs in calls:
+            self.assertEqual(command[0], SESSION._REVIEWED_GIT)
+            self.assertEqual(
+                kwargs["env"]["GIT_NO_LAZY_FETCH"],
+                "1",
+            )
+            self.assertEqual(
+                kwargs["env"],
+                SESSION._REVIEWED_GIT_ENVIRONMENT,
+            )
 
 
 class KeyOnlyEnvironment:
@@ -2206,6 +2309,87 @@ class TocOperatorSessionTest(unittest.TestCase):
         self.assertFalse(self.annotation_root.exists())
         self.assertEqual(immutable_tree_snapshot(self.capture_root), capture_before)
 
+    def test_capture_overlap_rejects_before_private_roots_exist(self):
+        self.session_root = self.capture_root / "nested-session-root"
+        self.annotation_root = self.capture_root / "nested-annotation-root"
+        self.verified.operator_session_root_path = os.fspath(
+            self.session_root
+        )
+        capture_before = immutable_tree_snapshot(self.capture_root)
+
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(self.responses())
+
+        self.assertEqual(raised.exception.reason, "input_invalid")
+        self.assertFalse(self.session_root.exists())
+        self.assertFalse(self.annotation_root.exists())
+        self.assertEqual(
+            immutable_tree_snapshot(self.capture_root), capture_before
+        )
+
+    def test_case_aliased_capture_overlap_has_zero_side_effects(self):
+        actual_capture_root = self.capture_root
+        self.session_root = actual_capture_root / "nested-session-root"
+        self.annotation_root = actual_capture_root / "nested-annotation-root"
+        self.capture_root = Path(os.fspath(actual_capture_root).swapcase())
+        self.verified.operator_session_root_path = os.fspath(
+            self.session_root
+        )
+        capture_before = immutable_tree_snapshot(actual_capture_root)
+
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(self.responses())
+
+        self.assertEqual(raised.exception.reason, "input_invalid")
+        self.assertFalse(self.session_root.exists())
+        self.assertFalse(self.annotation_root.exists())
+        self.assertEqual(
+            immutable_tree_snapshot(actual_capture_root), capture_before
+        )
+
+    def test_unicode_aliased_capture_overlap_has_zero_side_effects(self):
+        actual_capture_root = self.root / "capture-caf\u00e9"
+        self.capture_root.rename(actual_capture_root)
+        self.session_root = actual_capture_root / "nested-session-root"
+        self.annotation_root = actual_capture_root / "nested-annotation-root"
+        self.capture_root = Path(
+            unicodedata.normalize("NFD", os.fspath(actual_capture_root))
+        )
+        self.verified.operator_session_root_path = os.fspath(
+            self.session_root
+        )
+        capture_before = immutable_tree_snapshot(actual_capture_root)
+
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(self.responses())
+
+        self.assertEqual(raised.exception.reason, "input_invalid")
+        self.assertFalse(self.session_root.exists())
+        self.assertFalse(self.annotation_root.exists())
+        self.assertEqual(
+            immutable_tree_snapshot(actual_capture_root), capture_before
+        )
+
+    def test_double_slash_capture_overlap_has_zero_side_effects(self):
+        actual_capture_root = self.capture_root
+        self.session_root = actual_capture_root / "nested-session-root"
+        self.annotation_root = actual_capture_root / "nested-annotation-root"
+        self.capture_root = Path("/" + os.fspath(actual_capture_root))
+        self.verified.operator_session_root_path = os.fspath(
+            self.session_root
+        )
+        capture_before = immutable_tree_snapshot(actual_capture_root)
+
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(self.responses())
+
+        self.assertEqual(raised.exception.reason, "input_invalid")
+        self.assertFalse(self.session_root.exists())
+        self.assertFalse(self.annotation_root.exists())
+        self.assertEqual(
+            immutable_tree_snapshot(actual_capture_root), capture_before
+        )
+
     def test_ack_failure_marks_session_indeterminate_and_never_initializes(self):
         with self.assertRaises(SESSION.OperatorSessionError) as raised:
             self.run_with_responses(self.responses(authorization_ack="wrong"))
@@ -2718,6 +2902,30 @@ class TocOperatorSessionTest(unittest.TestCase):
                 ),
             )
         self.assertEqual(raised.exception.reason, "history_conflict")
+
+    def test_predecessor_action_resume_generation_rejects_boolean_alias(self):
+        current, retired, action = self.predecessor_bearing_session()
+
+        def mutate(action_record):
+            action_record["resume"]["generation"] = True
+
+        replacement = self.replace_immediate_action_evidence(
+            current, retired, action, mutate
+        )
+        with self.assertRaises(SESSION.OperatorSessionError) as raised:
+            self.run_with_responses(
+                self.action_responses(
+                    "status", expected_state="PRIMARY_REVIEW_REQUIRED"
+                ),
+                execute_authoring_side_effect=AssertionError(
+                    "boolean-generation history dispatched"
+                ),
+            )
+        self.assertEqual(raised.exception.reason, "history_conflict")
+        self.assertTrue(replacement.exists())
+        self.assertTrue(
+            (self.session_root / "OPERATOR_SESSION_INDETERMINATE").exists()
+        )
         self.assertTrue(replacement.exists())
 
     def test_predecessor_action_session_substitution_is_rejected(self):

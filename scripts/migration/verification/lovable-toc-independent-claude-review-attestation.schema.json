@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Detached procedural evidence that a fresh Claude Code session reviewed the exact immutable approval bytes. The attestation is not a provider signature or privileged trust root; same-UID prelaunch replacement remains an accepted ceiling.",
+  "additionalProperties": false,
+  "properties": {
+    "audit_immutable_facts_json": {
+      "maxLength": 32768,
+      "minLength": 3,
+      "type": "string"
+    },
+    "audit_invocation_json": {
+      "maxLength": 32768,
+      "minLength": 3,
+      "type": "string"
+    },
+    "artifact_kind": {
+      "const": "lovable_toc_independent_claude_review_attestation"
+    },
+    "audit_bundle_id": { "$ref": "#/$defs/bundleId" },
+    "audit_nonce": { "$ref": "#/$defs/sha256" },
+    "audit_prompt": {
+      "maxLength": 98304,
+      "minLength": 1,
+      "type": "string"
+    },
+    "audit_record_json": {
+      "maxLength": 32768,
+      "minLength": 3,
+      "type": "string"
+    },
+    "audit_report": {
+      "maxLength": 131072,
+      "minLength": 1,
+      "type": "string"
+    },
+    "audit_raw_stream": {
+      "maxLength": 8388608,
+      "minLength": 1,
+      "type": "string"
+    },
+    "audit_settings_json": {
+      "maxLength": 32768,
+      "minLength": 3,
+      "type": "string"
+    },
+    "audit_spec": {
+      "maxLength": 65536,
+      "minLength": 1,
+      "type": "string"
+    },
+    "audit_stderr": {
+      "maxLength": 65536,
+      "type": "string"
+    },
+    "audit_wrapper_source": {
+      "maxLength": 65536,
+      "minLength": 1,
+      "type": "string"
+    },
+    "decision": { "const": "APPROVE FOR MERGE" },
+    "evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "audit_record_sha256": { "$ref": "#/$defs/sha256" },
+        "immutable_facts_sha256": { "$ref": "#/$defs/sha256" },
+        "invocation_sha256": { "$ref": "#/$defs/sha256" },
+        "prompt_sha256": { "$ref": "#/$defs/sha256" },
+        "raw_stream_sha256": { "$ref": "#/$defs/sha256" },
+        "report_sha256": { "$ref": "#/$defs/sha256" },
+        "settings_sha256": { "$ref": "#/$defs/sha256" },
+        "spec_sha256": { "$ref": "#/$defs/sha256" },
+        "stderr_sha256": { "$ref": "#/$defs/sha256" },
+        "wrapper_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": [
+        "audit_record_sha256",
+        "immutable_facts_sha256",
+        "invocation_sha256",
+        "prompt_sha256",
+        "raw_stream_sha256",
+        "report_sha256",
+        "settings_sha256",
+        "spec_sha256",
+        "stderr_sha256",
+        "wrapper_sha256"
+      ],
+      "type": "object"
+    },
+    "format_version": { "const": 1 },
+    "invariants": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_unchanged": { "const": true },
+        "clone_tree_unchanged": { "const": true },
+        "private_paths_accessed": { "const": false },
+        "raw_output_preserved_unchanged": { "const": true },
+        "source_mutated": { "const": false }
+      },
+      "required": [
+        "artifact_unchanged",
+        "clone_tree_unchanged",
+        "private_paths_accessed",
+        "raw_output_preserved_unchanged",
+        "source_mutated"
+      ],
+      "type": "object"
+    },
+    "repository": {
+      "additionalProperties": false,
+      "properties": {
+        "base_sha": { "$ref": "#/$defs/gitSha" },
+        "head_sha": { "$ref": "#/$defs/gitSha" },
+        "head_tree_sha": { "$ref": "#/$defs/gitSha" },
+        "name": { "const": "focus-flow-score" },
+        "owner": { "const": "starstruck86" }
+      },
+      "required": ["base_sha", "head_sha", "head_tree_sha", "name", "owner"],
+      "type": "object"
+    },
+    "reviewed_artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "approved_checkout_sha": { "$ref": "#/$defs/gitSha" },
+        "artifact_kind": {
+          "enum": [
+            "lovable_toc_operator_identity_recovery_approval",
+            "lovable_toc_operator_identity_recovery_metadata_approval"
+          ]
+        },
+        "filename": {
+          "pattern": "^lovable-toc-operator-identity-recovery(?:-metadata)?-approval-[0-9a-f]{40}-[0-9a-f]{16}[.]json$",
+          "type": "string"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size_bytes": {
+          "maximum": 524288,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "approved_checkout_sha",
+        "artifact_kind",
+        "filename",
+        "sha256",
+        "size_bytes"
+      ],
+      "type": "object"
+    },
+    "reviewer": {
+      "additionalProperties": false,
+      "properties": {
+        "audit_wrapper_sha256": { "$ref": "#/$defs/sha256" },
+        "client": { "const": "claude_code" },
+        "effective_model": { "const": "claude-fable-5" },
+        "fallback_observed": { "const": false },
+        "fresh_session": { "const": true },
+        "model_usage": {
+          "const": ["claude-fable-5"]
+        },
+        "requested_model": { "const": "fable" },
+        "requested_reasoning_effort": { "const": "max" },
+        "session_id": { "$ref": "#/$defs/safeToken" }
+      },
+      "required": [
+        "audit_wrapper_sha256",
+        "client",
+        "effective_model",
+        "fallback_observed",
+        "fresh_session",
+        "model_usage",
+        "requested_model",
+        "requested_reasoning_effort",
+        "session_id"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "audit_immutable_facts_json",
+    "audit_invocation_json",
+    "artifact_kind",
+    "audit_bundle_id",
+    "audit_nonce",
+    "audit_prompt",
+    "audit_raw_stream",
+    "audit_record_json",
+    "audit_report",
+    "audit_settings_json",
+    "audit_spec",
+    "audit_stderr",
+    "audit_wrapper_source",
+    "decision",
+    "evidence",
+    "format_version",
+    "invariants",
+    "repository",
+    "reviewed_artifact",
+    "reviewer"
+  ],
+  "type": "object",
+  "$defs": {
+    "bundleId": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "gitSha": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "safeToken": {
+      "maxLength": 160,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}

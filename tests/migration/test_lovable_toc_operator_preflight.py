@@ -105,6 +105,14 @@ def load_profile() -> dict:
     return PREFLIGHT.validate_profile(value)
 
 
+class ReviewedGitEnvironmentTest(unittest.TestCase):
+    def test_reviewed_git_disables_lazy_fetch(self) -> None:
+        self.assertEqual(
+            PREFLIGHT.REVIEWED_GIT_ENVIRONMENT["GIT_NO_LAZY_FETCH"],
+            "1",
+        )
+
+
 def procedure_identity(
     profile: dict, name: str, checkout: str, blobs: dict[str, str]
 ) -> str:
@@ -365,11 +373,73 @@ class ProfileContractTests(unittest.TestCase):
                 PREFLIGHT.validate_profile(altered)
             self.assertEqual(caught.exception.reason, "execution_profile_invalid")
 
+    def test_profile_rejects_noncanonical_python_paths(self):
+        profile = load_profile()
+        canonical = profile["python_policy"]["absolute_path"]
+        duplicate_separator = "/" + canonical[1:].replace("/", "//", 1)
+        for label, path in (
+            ("root", "/"),
+            ("double_leading", "/" + canonical),
+            ("duplicate_separator", duplicate_separator),
+            ("dot_component", "/./" + canonical.lstrip("/")),
+            ("dotdot_component", "/tmp/../" + canonical.lstrip("/")),
+            ("trailing_separator", canonical + "/"),
+            ("nul", canonical + "\x00"),
+            ("surrogate", canonical + "\ud800"),
+            ("overlong", "/" + "a" * 4096),
+        ):
+            with self.subTest(label=label):
+                changed = copy.deepcopy(profile)
+                changed["python_policy"]["absolute_path"] = path
+                with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+                    PREFLIGHT.validate_profile(changed)
+                self.assertEqual(
+                    caught.exception.reason, "execution_profile_invalid"
+                )
+
     def test_profile_rejects_non_self_closing_legacy_bridge(self):
         profile = load_profile()
         profile["compatibility_bridges"][0]["self_closing"]["single_use"] = False
         with self.assertRaises(PREFLIGHT.PreflightError):
             PREFLIGHT.validate_profile(profile)
+
+    def test_profile_rejects_boolean_integer_aliases_and_integer_booleans(self):
+        mutations = (
+            lambda value: value.__setitem__("format_version", True),
+            lambda value: value["record_versions"].__setitem__(
+                "checkpoint", [True]
+            ),
+            lambda value: value["checkout_policy"].__setitem__(
+                "same_uid_prelaunch_replacement_ceiling", 1
+            ),
+            lambda value: value["approval_discovery"].__setitem__(
+                "required_file_nlink", True
+            ),
+            lambda value: value["python_policy"].__setitem__(
+                "exact_nlink", True
+            ),
+            lambda value: value["compatibility_bridges"][0].__setitem__(
+                "generation", True
+            ),
+            lambda value: value["compatibility_bridges"][0][
+                "self_closing"
+            ].__setitem__(
+                "ordinary_exact_current_rules_after_success", 1
+            ),
+            lambda value: value["compatibility_bridges"][0][
+                "self_closing"
+            ].__setitem__("single_use", 1),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=repr(mutate)):
+                profile = copy.deepcopy(load_profile())
+                mutate(profile)
+                with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+                    PREFLIGHT.validate_profile(profile)
+                self.assertEqual(
+                    caught.exception.reason,
+                    "execution_profile_invalid",
+                )
 
     def test_profile_rejects_reviewed_file_omission_or_addition(self):
         for mutation in ("omit", "add"):
@@ -408,6 +478,68 @@ class ApprovalAndRepositoryTests(unittest.TestCase):
         self.assertFalse(
             any("synthetic/private/operator-session" in value for value in touched)
         )
+
+    def test_approval_rejects_boolean_format_versions(self):
+        for path in (
+            ("format_version",),
+            ("execution_profile", "format_version"),
+        ):
+            with self.subTest(path=path):
+                approval = copy.deepcopy(self.fixture.approval)
+                selected = approval
+                for component in path[:-1]:
+                    selected = selected[component]
+                selected[path[-1]] = True
+                with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+                    PREFLIGHT.validate_approval(
+                        approval,
+                        profile=self.fixture.profile,
+                        repository_root=self.fixture.repository,
+                    )
+                self.assertEqual(caught.exception.reason, "approval_invalid")
+
+        approval = copy.deepcopy(self.fixture.approval)
+        python_identity = approval["python_identity"]
+        python_identity["exact_nlink"] = True
+        unsigned = dict(python_identity)
+        unsigned.pop("identity_sha256")
+        python_identity["identity_sha256"] = PREFLIGHT.sha256_bytes(
+            PREFLIGHT.canonical_json_bytes(unsigned)
+        )
+        with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+            PREFLIGHT.validate_approval(
+                approval,
+                profile=self.fixture.profile,
+                repository_root=self.fixture.repository,
+            )
+        self.assertEqual(caught.exception.reason, "approval_invalid")
+
+    def test_approval_rejects_case_aliased_repository_descendant(self):
+        approval = copy.deepcopy(self.fixture.approval)
+        repository = Path("/private/tmp/Preflight-Repository")
+        approval["operator_session_root_path"] = (
+            os.fspath(repository).swapcase() + "/operator-session"
+        )
+        with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+            PREFLIGHT.validate_approval(
+                approval,
+                profile=self.fixture.profile,
+                repository_root=repository,
+            )
+        self.assertEqual(caught.exception.reason, "approval_invalid")
+
+    def test_approval_rejects_double_slash_private_root(self):
+        approval = copy.deepcopy(self.fixture.approval)
+        approval["operator_session_root_path"] = (
+            "//synthetic/private/operator-session"
+        )
+        with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+            PREFLIGHT.validate_approval(
+                approval,
+                profile=self.fixture.profile,
+                repository_root=self.fixture.repository,
+            )
+        self.assertEqual(caught.exception.reason, "approval_invalid")
 
     def test_profile_snapshot_rejects_same_byte_path_replacement_during_read(self):
         profile_path = self.fixture.repository / PREFLIGHT.PROFILE_RELATIVE_PATH
